@@ -53,6 +53,8 @@ export const PASSARELAS = {
   elo: { nome: 'Elo do Santuário', pts: [[8.8, -3.0, 0.8], [12.2, -4.8, 1.0], [15.6, -5.2, 0.9]], w: 0.6 },
   vila: { nome: 'Passarela da Vila', pts: [[16.2, 10.6, 0.7], [19.2, 9.8, 0.85], [22.8, 9.4, 0.8], [25.6, 10.0, 0.6]], w: 0.55 },
   frente: { nome: 'Caminho da Frente', pts: [[-19.0, 17.2, 0.12], [-12.0, 19.0, 0.12], [-4.0, 19.3, 0.12]], w: 0.8 },
+  anel: { nome: 'Passeio do Anel', pts: [[-21.8, 10.6, 0.25], [-19.6, 15.2, 0.55], [-14.2, 17.9, 0.6], [-7.6, 18.2, 0.5], [-3.2, 16.8, 0.35]], w: 0.55 },
+  santuario: { nome: 'Passeio do Santuário', pts: [[20.2, -3.4, 0.5], [24.6, -4.4, 0.8], [28.6, -6.8, 0.85], [30.4, -10.6, 0.7], [29.2, -14.6, 0.5]], w: 0.55 },
 };
 
 // Zonas de chão (pintura do terreno). 'quando' = id da etapa que faz a zona aparecer.

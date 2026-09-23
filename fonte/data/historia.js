@@ -10,7 +10,8 @@ export const CONSELHO = {
 
 export const ABERTURA = [
   ['iris', 'Boas-vindas ao Ateliê da Arcologia de Held. Esta maquete é o gêmeo vivo do projeto.'],
-  ['iris', 'Cada etapa que você aprovar aqui vira obra de verdade na antiga pastagem, cercada de mata.'],
+  ['iris', 'Em azul, a Composição Total que vamos erguer. Cada etapa aprovada aqui vira obra de verdade.'],
+  ['iris', 'Hoje é só pasto degradado cercado de mata. Vamos começar pelo canteiro de obras.'],
   ['nara', 'Uma regra só: nenhuma árvore da mata cai. Construímos nas clareiras e devolvemos vida a elas.'],
   ['tome', 'Tudo começa no canteiro, ali no canto da mesa. Vamos produzir os primeiros materiais.'],
 ];
@@ -28,7 +29,7 @@ export const CAPITULOS = [
     ],
     fala: [['iris', 'O Conselho viu a primeira volta do Anel de pé. Aprovado!'], ['cida', 'As primeiras famílias já perguntam quando podem se mudar.']],
     escolha: [{ id: 'usina+', txt: 'Usinas 15% mais rápidas', dica: 'Tomé prefere: mais matéria-prima.' }, { id: 'almox+', txt: '+25 vagas no Almoxarifado', dica: 'Íris prefere: menos aperto.' }] },
-  { n: 2, nome: 'Água que corre', sub: 'Lago vivo, praça e escola', abre: ['escola', 'campo', 'praca', 'pas_bulevar'],
+  { n: 2, nome: 'Água que corre', sub: 'Lago vivo, praça e escola', abre: ['escola', 'campo', 'praca', 'pas_bulevar', 'pas_anel'],
     metas: [
       { tipo: 'etapa', id: 'lago.e3', txt: 'Conclua a Estação natural de água' },
       { tipo: 'etapa', id: 'escola.e3', txt: 'Entregue a Escola com piscina' },
@@ -61,7 +62,7 @@ export const CAPITULOS = [
     ],
     fala: [['caio', 'Primeiro feixe no anel! E a central geotérmica já ajuda a rede.'], ['nara', 'Agora é a vez dos gigantes. O santuário espera.']],
     escolha: [{ id: 'usina+', txt: 'Usinas 15% mais rápidas', dica: 'Tomé prefere.' }, { id: 'xp+', txt: '+20% de experiência', dica: 'Íris prefere.' }] },
-  { n: 5, nome: 'Casa dos gigantes', sub: 'Santuário, savana, bioma e gorilas', abre: ['santuario', 'santuarioInt', 'savana', 'bioma', 'gorilas', 'pas_trilhaBioma', 'pas_elo'],
+  { n: 5, nome: 'Casa dos gigantes', sub: 'Santuário, savana, bioma e gorilas', abre: ['santuario', 'santuarioInt', 'savana', 'bioma', 'gorilas', 'pas_trilhaBioma', 'pas_elo', 'pas_santuario'],
     metas: [
       { tipo: 'etapa', id: 'santuarioInt.e2', txt: 'Receba a fauna resgatada no Santuário' },
       { tipo: 'etapa', id: 'savana.e4', txt: 'Complete os habitats da savana' },

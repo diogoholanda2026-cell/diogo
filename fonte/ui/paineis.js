@@ -44,11 +44,12 @@ export class Paineis {
       case 'cadeia': C.produzirCadeia(d.k); this._falta = null; this.render(); break;
       case 'ampliar': res(J.ampliar(d.p), () => C.hud.brinde('Novo espaço de produção!', 'subir')); break;
       case 'mutirao': res(J.mutirao(JSON.parse(d.alvo)), () => { C.hud.brinde('Mutirão! Pronto na hora.', 'mutirao'); C.sincronizar(); }); break;
-      case 'entregar': res(J.entregar(d.key, d.k), () => C.som.coleta()); C.sincronizar(); break;
+      case 'entregar': if (!(J.S.itens[d.k] > 0)) { C.irProdutor(d.k); break; } res(J.entregar(d.key, d.k), () => C.som.coleta()); C.sincronizar(); break;
+      case 'produtor': C.irProdutor(d.k); break;
       case 'entregarTudo': res(J.entregarTudo(d.key), () => C.som.coleta()); C.sincronizar(); break;
       case 'iniciar': res(J.iniciarEtapa(d.key), () => { C.som.obra(); C.vibra.sucesso(); }); C.sincronizar(); break;
       case 'aprovar': C.aprovarEtapa(d.key); break;
-      case 'melhorar': res(J.melhorarModulo(d.f, +d.i), () => { C.som.obra(); C.vibra.sucesso(); }); C.sincronizar(); break;
+      case 'melhorar': { const r = J.melhorarModulo(d.f, +d.i); if (r === 'servico') { const q = J.requisitosModulo(d.f, +d.i); C._dica(q.nivel >= 5 ? 'servicoSaneamento' : q.nivel >= 4 ? 'servicoEnergia' : 'servicoAgua'); } res(r, () => { C.som.obra(); C.vibra.sucesso(); }); C.sincronizar(); break; }
       case 'aprovarMod': C.aprovarModulo(d.f, +d.i); break;
       case 'ir': C.irPara(JSON.parse(d.alvo)); break;
       case 'aba': this.aba[this.atual.tipo] = d.v; this.render(); break;
@@ -120,8 +121,8 @@ export class Paineis {
       const req = { ...e.itens, ...(e.licencas || {}) }; const falta = J.faltaEtapa(key);
       corpo += `<div class="grade">${Object.entries(req).map(([k, n]) => { const ent = st.entregue?.[k] || 0; const ok = ent >= n; const tem = J.S.itens[k] || 0; return this.ficha(k, { cls: ok ? 'ok' : tem > 0 ? '' : 'falta', sub: `${ent}/${n} entregue`, extra: ok ? '' : `<small>no almox.: ${tem}</small>`, data: ok ? '' : `data-a="entregar" data-key="${key}" data-k="${k}"` }); }).join('')}</div>`;
       const pode = Object.keys(falta).every((k) => !J.temItem(k, 1)) ? false : true; const tudo = !Object.keys(falta).length;
-      corpo += `<div class="linha" style="margin-top:12px">${!tudo ? `<button class="botao azul" data-a="entregarTudo" data-key="${key}" ${pode ? '' : 'disabled'}>${img('almox')} Entregar o que tenho</button>` : ''}<button class="botao ouro" data-a="iniciar" data-key="${key}" ${tudo && J.S.creditos >= e.custo ? '' : 'disabled'}>${img('grua')} Iniciar obra · ${fmt(e.custo)} · ${dur(J.dur(e.t, 'obra') / 1000)}</button></div>`;
-      if (!tudo) corpo += `<p class="desc" style="margin-top:8px">A entrega pode ser feita aos poucos: a prancha guarda o que já chegou.</p>`;
+      corpo += `<div class="linha" style="margin-top:12px">${!tudo ? `<button class="botao azul" data-a="entregarTudo" data-key="${key}" ${pode ? '' : 'disabled'}>${img('almox')} Entregar o que tenho</button>` : ''}<button class="botao ouro ${tudo && J.S.creditos >= e.custo ? '' : 'fraco'}" data-a="iniciar" data-key="${key}">${img('grua')} Iniciar obra · ${fmt(e.custo)} · ${dur(J.dur(e.t, 'obra') / 1000)}</button></div>`;
+      if (!tudo) corpo += `<p class="desc" style="margin-top:8px">A entrega pode ser feita aos poucos: a prancha guarda o que já chegou. Toque num material que falta para ir até quem o produz.</p>`;
     } else if (s === 'obra') corpo += `<div class="linha" data-ini="${st.ini}" data-fim="${st.fim}"><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div><div class="linha" style="margin-top:10px"><button class="botao sec" data-a="mutirao" data-alvo='{"etapa":"${key}"}'>${img('mutirao')} Mutirão: terminar agora</button></div>`;
     else if (s === 'pronta') corpo += `<div class="linha"><button class="botao" data-a="aprovar" data-key="${key}">${img('ok')} Aprovar a etapa</button></div>`;
     else if (s === 'feita') { const nx = J.proximaEtapa(p); corpo += `<p class="desc">Etapa concluída.</p>${nx ? `<button class="botao sec" data-a="abrir" data-t="etapa" data-arg='"${pid}.${nx.e.id}"'>Próxima etapa: ${nx.e.nome}</button>` : ''}`; }
@@ -134,11 +135,11 @@ export class Paineis {
     let corpo = `<div class="passos">${Array.from({ length: M.max }, (_, k) => `<i class="${k < m.nivel ? 'f' : k === m.nivel ? 'a' : ''}"></i>`).join('')}</div><p class="desc">${M.sub}. Cada nível acrescenta um pavimento com terraço.</p>`;
     if (s === 'disponivel') {
       const r = J.requisitosModulo(f, i); const temTudo = Object.entries(r.itens).every(([k, n]) => J.temItem(k, n));
-      corpo += `<div class="grade">${Object.entries(r.itens).map(([k, n]) => this.ficha(k, { cls: J.temItem(k, n) ? 'ok' : 'falta', sub: `${J.S.itens[k] || 0}/${n}` })).join('')}</div>`;
+      corpo += `<div class="grade">${Object.entries(r.itens).map(([k, n]) => this.ficha(k, { cls: J.temItem(k, n) ? 'ok' : 'falta', sub: `${J.S.itens[k] || 0}/${n}`, data: J.temItem(k, n) ? '' : `data-a="produtor" data-k="${k}"` })).join('')}</div>`;
       const et = []; if (r.servico) for (const [lv, k] of Object.entries({ 3: 'agua', 4: 'energia', 5: 'saneamento' })) if (+lv <= r.nivel) { const ok = J.serv[k] >= r.popDepois; et.push(`<span class="etiq ${ok ? 'ok' : 'nao'}">${img(k)}${k === 'agua' ? 'Água' : k === 'energia' ? 'Energia' : 'Saneamento'} ${fmt(J.serv[k])}/${fmt(r.popDepois)}</span>`); }
       if (r.nivel >= 5) et.push(`<span class="etiq ${r.bemOk ? 'ok' : 'nao'}">${img('bem')}Bem-estar ${J.bem}% (mín. 60%)</span>`);
       et.push(`<span class="etiq">${img('pop')}+${fmt(Math.round(M.pop * (POP_NIVEL[r.nivel] - POP_NIVEL[m.nivel])))} moradores</span>`);
-      corpo += `<div class="linha" style="margin:10px 0">${et.join('')}</div><div class="linha"><button class="botao ouro" data-a="melhorar" data-f="${f}" data-i="${i}" ${temTudo && r.servOk && r.bemOk && J.S.creditos >= r.custo ? '' : 'disabled'}>${img('subir')} ${m.nivel ? 'Subir para o nível ' + r.nivel : 'Construir'} · ${fmt(r.custo)} · ${dur(J.dur(r.tempo, 'modulo') / 1000)}</button></div>`;
+      corpo += `<div class="linha" style="margin:10px 0">${et.join('')}</div><div class="linha"><button class="botao ouro ${temTudo && r.servOk && r.bemOk && J.S.creditos >= r.custo ? '' : 'fraco'}" data-a="melhorar" data-f="${f}" data-i="${i}">${img('subir')} ${m.nivel ? 'Subir para o nível ' + r.nivel : 'Construir'} · ${fmt(r.custo)} · ${dur(J.dur(r.tempo, 'modulo') / 1000)}</button></div>`;
       if (!r.servOk) corpo += `<p class="desc" style="margin-top:8px">Faltam serviços para os novos moradores. Conclua obras que dão água, energia ou saneamento.</p>`;
     } else if (s === 'limite') { const L = LIMITE_CAP[f]; let prox = ''; for (const [c, n] of Object.entries(L || {})) if (n > m.nivel && !prox) prox = c; corpo += `<p class="desc">Nível máximo por enquanto. O próximo pavimento abre no capítulo ${prox}.</p>`; }
     else if (s === 'bloqueado') corpo += `<p class="desc">${M.cap > J.S.cap ? 'Abre no capítulo ' + M.cap + '.' : f === 'anel' && J.S.cap === 1 ? 'Este lote abre no capítulo 2.' : 'Antes, conclua: ' + (M.requer || []).map(reqTxt).join(' · ')}</p>`;

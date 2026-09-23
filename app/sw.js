@@ -1,6 +1,6 @@
 // Service worker: joga offline. A página vem da rede quando possível (atualizações chegam logo);
 // os demais arquivos vêm do cache desta versão. Um cache novo por versão publicada.
-const CACHE = 'held-2.0.0-202609232055';
+const CACHE = 'held-2.0.0-202609232213';
 const ARQUIVOS = ['./', './index.html', './jogo.js', './manifest.webmanifest', './foto.webp', './icones/icone-192.png', './icones/icone-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).catch(() => {})); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

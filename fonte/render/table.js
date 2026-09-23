@@ -20,9 +20,9 @@ function woodBox(w, h, d, mat, x, y, z, L = 7) {
 export class ExhibitTable {
   constructor(engine) {
     this.e = engine; const g = (this.group = new THREE.Group()); g.name = 'mesa'; engine.scene.add(g);
-    const wood = tex.wood();
-    this.walnut = new THREE.MeshStandardMaterial({ color: 0xe6cfae, map: wood, roughness: 0.45, metalness: 0.0, envMapIntensity: 0.6 });
-    this.walnutDark = new THREE.MeshStandardMaterial({ color: 0x9a7c60, map: wood, roughness: 0.6, envMapIntensity: 0.4 });
+    const wood = tex.nogueira();
+    this.walnut = new THREE.MeshStandardMaterial({ color: 0xffffff, map: wood, roughness: 0.42, metalness: 0.0, envMapIntensity: 0.6 });
+    this.walnutDark = new THREE.MeshStandardMaterial({ color: 0x8a7462, map: wood, roughness: 0.6, envMapIntensity: 0.4 });
     const { t, topo, frente, base } = BORDA; const { x0, x1, z0, z1 } = MESA; const W = x1 - x0, D = z1 - z0;
     // paredes da bandeja
     g.add(woodBox(W + 2 * t, topo - base, t, this.walnut, (x0 + x1) / 2, (topo + base) / 2, z0 - t / 2));           // fundo
@@ -49,7 +49,7 @@ export class ExhibitTable {
     // placa de latão inclinada na face frontal
     const brass = new THREE.MeshStandardMaterial({ map: tex.brass(), roughness: 0.32, metalness: 0.85, envMapIntensity: 1.4, color: 0xffffff });
     const plate = new THREE.Mesh(new THREE.BoxGeometry(15, 3.75, 0.12), [M.steelDark, M.steelDark, M.steelDark, M.steelDark, brass, M.steelDark]);
-    plate.position.set(-1.5, -2.35, z1 + t + 0.32); plate.rotation.x = -0.32; plate.castShadow = true; g.add(plate);
+    plate.position.set(4.2, -2.35, z1 + t + 0.32); plate.rotation.x = -0.32; plate.castShadow = true; g.add(plate);
     this.plate = plate;
     // visitante em escala (figura de maquete) na borda da frente
     this.visitor = this._figure(); this.visitor.position.set(9.6, frente, z1 + t * 0.2); this.visitor.rotation.y = Math.PI + 0.25; g.add(this.visitor);

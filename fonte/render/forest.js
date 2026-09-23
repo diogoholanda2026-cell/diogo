@@ -113,7 +113,7 @@ export function treeGroup(list, opts = {}) {
       pos.set(t.x, y + lift, t.z); sc.set(s * (0.9 + hash(i, 1, 5) * 0.2), s * (k === 'conifera' ? 1.6 * h : 1) , s * (0.9 + hash(i, 2, 5) * 0.2));
       im.setMatrixAt(i, m4.compose(pos, q, sc));
       const pal = VERDES[t.pal || (k === 'conifera' ? 'conifera' : 'mata')]; const c = pal[(hash(i, 4, 11) * pal.length) | 0]; const v = 0.85 + hash(i, 5, 11) * 0.3;
-      col.setRGB(c[0] * v * 1.15, c[1] * v * 1.15, c[2] * v * 1.15); im.setColorAt(i, col);
+      col.setRGB(c[0] * v, c[1] * v, c[2] * v); im.setColorAt(i, col);
       if (t.trunk || k === 'palmeira' || (k === 'folha' && opts.trunks)) trunks.push({ x: t.x, z: t.z, y, len: k === 'palmeira' ? 1.55 * s * h : lift, r: k === 'palmeira' ? 0.6 : 1 });
     });
     im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;

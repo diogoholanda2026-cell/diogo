@@ -60,12 +60,12 @@ function lobo(P, pts, y0, nLev, lh, corte, seed) {
 
 export function ciencias() {
   const c = A.ciencias; const root = new THREE.Group(); root.name = 'ciencias'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group(), e4: new THREE.Group() };
-  const loboA = blob(c.c[0] + 2.2, c.c[1] - 0.2, 3.4, 2.1, c.rot - 0.15, 4);
-  const loboB = blob(c.c[0] - 3.6, c.c[1] + 0.4, 2.3, 1.5, c.rot + 0.25, 9);
-  lobo(P, loboA, 0.75, 3, 0.62, [0.1, 0.42], 1);
-  lobo(P, loboB, 0.6, 2, 0.6, [0.12, 0.36], 2);
+  const loboA = blob(c.c[0] + 2.6, c.c[1] - 0.9, 4.3, 2.7, c.rot - 0.12, 4);
+  const loboB = blob(c.c[0] - 3.2, c.c[1] - 1.6, 2.7, 1.8, c.rot + 0.3, 9);
+  lobo(P, loboA, 0.85, 3, 0.62, [0.1, 0.42], 1);
+  lobo(P, loboB, 0.7, 2, 0.6, [0.12, 0.36], 2);
   // espelho d'água redondo à frente (visível na foto)
-  const pond = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32), M.pool); pond.rotation.x = -Math.PI / 2; pond.position.set(c.c[0] + 1.6, 0.06, c.c[1] + 2.6); pond.scale.set(1.3, 1, 1); P.e4.add(pond);
+  const pond = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32), M.pool); pond.rotation.x = -Math.PI / 2; pond.position.set(c.c[0] + 2.4, 0.06, c.c[1] + 2.5); pond.scale.set(1.3, 1, 1); P.e4.add(pond);
   const pondR = new THREE.Mesh(new THREE.TorusGeometry(0.76, 0.05, 6, 40), M.whiteSmooth); pondR.rotation.x = -Math.PI / 2; pondR.scale.set(1.3, 1, 1); pondR.position.copy(pond.position); P.e4.add(pondR);
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'ciencias', root, partes: P, esqueletos: {}, grua: { e1: true, e3: true }, foco: { x: c.c[0], z: c.c[1] + 1, dist: 15 }, ancora: [c.c[0] + 1.5, 3.6, c.c[1]] };

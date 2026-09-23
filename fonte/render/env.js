@@ -23,7 +23,7 @@ const SKY_F = /* glsl */`
     float curtain = pow(max(0.0, sin(ang * 4.0 + w1 * 3.0 + t * 0.06) * 0.5 + 0.5), 3.0) * (0.6 + 0.4 * w2);
     float rays = pow(n2(vec2(ang * 40.0, t * 0.08)), 2.0);
     vec3 aur = mix(vec3(0.10, 0.85, 0.55), vec3(0.45, 0.25, 0.85), smoothstep(0.12, 0.5, y + w2 * 0.2));
-    col += aur * band * curtain * (0.35 + 0.65 * rays) * 0.55 * (1.0 - day);
+    col += aur * band * curtain * (0.35 + 0.65 * rays) * 1.1 * (1.0 - day);
     // estrelas
     vec2 sp = floor(vec2(ang * 90.0, y * 260.0)); float s = h(sp);
     float star = step(0.9965, s) * smoothstep(0.05, 0.2, y) * (0.55 + 0.45 * sin(t * 1.7 + s * 90.0));
@@ -71,16 +71,16 @@ export class Environment {
     const P = this.e.params;
     if (m === 'dia') {
       this.key.color.set(0xfff1dc); this.key.intensity = 3.4; this.hemi.color.set(0xbcd8ff); this.hemi.groundColor.set(0x5a4a38); this.hemi.intensity = 1.0;
-      this.rim.intensity = 0.4; this.skyMat.uniforms.day.value = 1; setNight(0.05); P.exposure = 0.95; P.bloomStrength = 0.45; this.keyDir.set(-0.35, 0.86, 0.36).normalize();
+      this.rim.intensity = 0.4; this.skyMat.uniforms.day.value = 1; setNight(0.05); P.exposure = 0.95; P.bloomStrength = 0.45; P.saturation = 1.1; P.contrast = 1.05; P.vignette = 0.5; this.keyDir.set(-0.35, 0.86, 0.36).normalize();
       this.e.scene.environmentIntensity = 1.0;
     } else if (m === 'noite') {
       this.key.color.set(0x9fb8ff); this.key.intensity = 0.55; this.hemi.color.set(0x3d5a8a); this.hemi.groundColor.set(0x1a140e); this.hemi.intensity = 0.35;
-      this.rim.intensity = 0.7; this.skyMat.uniforms.day.value = 0; setNight(1); P.exposure = 1.25; P.bloomStrength = 1.25; this.keyDir.set(0.3, 0.8, -0.5).normalize();
+      this.rim.intensity = 0.7; this.skyMat.uniforms.day.value = 0; setNight(1); P.exposure = 1.25; P.bloomStrength = 1.25; P.saturation = 1.1; P.contrast = 1.08; P.vignette = 0.8; this.keyDir.set(0.3, 0.8, -0.5).normalize();
       this.e.scene.environmentIntensity = 0.45;
     } else { // exposição: como na foto — maquete iluminada por refletores quentes sob o céu com aurora
-      this.key.color.set(0xffd6a6); this.key.intensity = 2.6; this.hemi.color.set(0x7fa0d8); this.hemi.groundColor.set(0x3a2a1c); this.hemi.intensity = 0.62;
-      this.rim.intensity = 0.55; this.skyMat.uniforms.day.value = 0; setNight(1); P.exposure = 1.22; P.bloomStrength = 0.9; this.keyDir.set(-0.42, 0.78, 0.46).normalize();
-      this.e.scene.environmentIntensity = 0.75;
+      this.key.color.set(0xffd6a4); this.key.intensity = 3.6; this.hemi.color.set(0x8aa8dc); this.hemi.groundColor.set(0x3a2a1c); this.hemi.intensity = 0.48;
+      this.rim.intensity = 0.55; this.skyMat.uniforms.day.value = 0; setNight(1); P.exposure = 1.3; P.bloomStrength = 0.9; P.saturation = 1.22; P.contrast = 1.12; P.vignette = 0.75; this.keyDir.set(-0.42, 0.78, 0.46).normalize();
+      this.e.scene.environmentIntensity = 0.55;
     }
     this.e.shadowDirty = true;
   }

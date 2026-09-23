@@ -22,11 +22,11 @@ export function instalarExtras(C, o) {
   C.apreciar = (on) => {
     C.modoApreciar = on; C.hud.visivel(!on); C.bolhas.visivel = !on; C.paineis.fechar(true);
     if (barra) { barra.remove(); barra = null; } foto.style.opacity = 0;
-    if (!on) { rig.roll = 0; rig.pitchFix = null; return; }
-    barra = el('div', 'apreciar'); barra.innerHTML = `<button class="botao sec" data-x="foto">${img('foto')} Vista da foto</button><label class="botao sec" style="gap:6px">${img('apreciar')}<span>Comparar</span><input class="deslize" type="range" min="0" max="100" value="0" data-x="comparar"></label><button class="botao sec" data-x="rotulos">Rótulos</button><button class="botao sec" data-x="luz">Luz</button><button class="botao" data-x="sair">Sair</button>`;
+    if (!on) { rig.roll = 0; rig.pitchFix = null; if (C._planta) { C._planta = false; C.mundo.mostrarFantasma(false); } return; }
+    barra = el('div', 'apreciar'); barra.innerHTML = `<button class="botao sec" data-x="foto">${img('foto')}<span>Foto</span></button><label class="botao sec" style="gap:6px">${img('apreciar')}<input class="deslize" type="range" min="0" max="100" value="0" data-x="comparar" aria-label="Comparar com a foto"></label><button class="botao sec" data-x="rotulos">Rótulos</button><button class="botao sec" data-x="planta">Planta</button><button class="botao sec" data-x="luz">Luz</button><button class="botao" data-x="sair">Sair</button>`;
     C.ui.appendChild(barra);
     barra.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; C.som.toque(); const x = b.dataset.x;
-      if (x === 'foto') C.vistaFoto(true); else if (x === 'rotulos') { cfg.rotulos = cfg.rotulos === false; gravarConfig(cfg); } else if (x === 'luz') { const m = { exposicao: 'noite', noite: 'dia', dia: 'exposicao' }[env.mode]; env.setMode(m); cfg.luz = m; gravarConfig(cfg); C.hud.brinde({ exposicao: 'Luz de exposição', noite: 'Noite', dia: 'Dia' }[m]); } else if (x === 'sair') C.apreciar(false); });
+      if (x === 'foto') C.vistaFoto(true); else if (x === 'rotulos') { cfg.rotulos = cfg.rotulos === false; gravarConfig(cfg); } else if (x === 'luz') { const m = { exposicao: 'noite', noite: 'dia', dia: 'exposicao' }[env.mode]; env.setMode(m); cfg.luz = m; gravarConfig(cfg); C.hud.brinde({ exposicao: 'Luz de exposição', noite: 'Noite', dia: 'Dia' }[m]); } else if (x === 'planta') { C._planta = !C._planta; C.mundo.mostrarFantasma(C._planta); } else if (x === 'sair') C.apreciar(false); });
     barra.querySelector('[data-x="comparar"]').addEventListener('input', (e) => { const k = +e.target.value / 100; foto.style.opacity = k; if (k > 0 && !C._naFoto) C.vistaFoto(true); });
     // tocar duas vezes no vazio esconde a barra
   };

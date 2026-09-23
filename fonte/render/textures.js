@@ -120,6 +120,11 @@ export const tex = {
     g.fillStyle = 'rgba(70,40,18,.28)'; for (let i = 0; i < 70; i++) { const y = hash(i, 1, 72) * h; g.fillRect(0, y, w, 1 + hash(i, 2, 72) * 2); }
     g.fillStyle = 'rgba(255,220,170,.10)'; for (let i = 0; i < 40; i++) g.fillRect(0, hash(i, 3, 72) * h, w, 1);
   }),
+  nogueira: () => canvasTex('nogueira', 1024, 256, (g, w, h) => {
+    noiseRect(g, w, h, [138, 100, 70], 18, 75, 2, 60);
+    for (let i = 0; i < 140; i++) { const y = hash(i, 1, 76) * h; const a = 0.08 + hash(i, 2, 76) * 0.18; g.strokeStyle = `rgba(70,44,26,${a})`; g.lineWidth = 0.6 + hash(i, 3, 76) * 2.2; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x * 0.01 + i) * 3 + (vnoise(x, i, 40, 77) - 0.5) * 6); g.stroke(); }
+    g.fillStyle = 'rgba(255,225,190,.07)'; for (let i = 0; i < 40; i++) g.fillRect(0, hash(i, 4, 76) * h, w, 1.5);
+  }, { aniso: 8 }),
   woodLight: () => canvasTex('woodl', 256, 64, (g, w, h) => {
     noiseRect(g, w, h, [205, 160, 106], 22, 73, 2, 26);
     g.fillStyle = 'rgba(120,80,40,.22)'; for (let i = 0; i < 30; i++) g.fillRect(0, hash(i, 1, 74) * h, w, 1);
@@ -163,10 +168,10 @@ export const tex = {
     const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#E9CF8E'); gr.addColorStop(0.5, '#C9A55A'); gr.addColorStop(1, '#A6823C'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
     g.strokeStyle = 'rgba(60,40,10,.6)'; g.lineWidth = 5; g.strokeRect(14, 14, w - 28, h - 28);
     g.fillStyle = '#3A2A0E'; g.textAlign = 'center';
-    g.font = '600 46px Georgia, serif'; g.fillText('COMPOSIÇÃO TOTAL DA ARCOLOGIA DE HELD', w / 2, 76);
+    const titulo = 'COMPOSIÇÃO TOTAL DA ARCOLOGIA DE HELD'; let fs = 46; g.font = `600 ${fs}px Georgia, serif`; while (g.measureText(titulo).width > w - 90 && fs > 20) { fs -= 2; g.font = `600 ${fs}px Georgia, serif`; } g.fillText(titulo, w / 2, 76);
     g.font = '400 23px Georgia, serif';
     const L = ['Integração de ciência, educação, conservação e convivência numa só arcologia sustentável.', 'Campus, biblioteca, acelerador, santuário e bioma aquático ligados por passarelas verdes,', 'operados com energia solar e reuso de água. Modelo vivo de sustentabilidade urbana.'];
-    L.forEach((l, i) => g.fillText(l, w / 2, 128 + i * 34));
+    L.forEach((l, i) => { let f2 = 23; g.font = `400 ${f2}px Georgia, serif`; while (g.measureText(l).width > w - 80 && f2 > 12) { f2 -= 1; g.font = `400 ${f2}px Georgia, serif`; } g.fillText(l, w / 2, 128 + i * 34); });
   }),
 };
 

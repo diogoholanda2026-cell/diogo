@@ -39,6 +39,9 @@ export const PROJETOS = [
   { id: 'pas_bulevar', nome: 'Bulevar Verde', cap: 2, icone: 'passarela', requer: ['praca.e1'], etapas: [
     E('e1', 'Passarela elevada', 'Deque branco sobre pilares finos, guarda-corpo de vidro e jardineiras.', 15, 5500, { perfil: 4, deque: 3, guarda: 2 }, { bem: 2 }),
   ] },
+  { id: 'pas_anel', nome: 'Passeio do Anel', cap: 2, icone: 'passarela', requer: ['anel.2', 'pas_frente.e1'], etapas: [
+    E('e1', 'Passarela elevada', 'Contorna a frente do Anel pela mata, sem tocar nas raízes.', 12, 4500, { deque: 3, perfil: 2, guarda: 1 }, { bem: 2 }),
+  ] },
   // ---------------- Capítulo 3 — Saber de madeira ----------------
   { id: 'biblioteca', nome: 'Biblioteca Central', cap: 3, icone: 'biblioteca', etapas: [
     E('e1', 'Fundações e núcleo', 'Estacas, radier e o núcleo de concreto com escadas e elevadores.', 15, 8000, { concreto: 6, perfil: 4, cimento: 4 }, { licencas: { estaca: 2, baliza: 1 } }),
@@ -130,6 +133,9 @@ export const PROJETOS = [
   ] },
   { id: 'pas_elo', nome: 'Elo do Santuário', cap: 5, icone: 'passarela', requer: ['savana.e1'], etapas: [
     E('e1', 'Passarela elevada', 'Liga a savana ao anel do santuário.', 20, 9000, { perfil: 5, deque: 4, guarda: 3 }),
+  ] },
+  { id: 'pas_santuario', nome: 'Passeio do Santuário', cap: 5, icone: 'passarela', requer: ['santuario.1', 'savana.e1'], etapas: [
+    E('e1', 'Passarela elevada', 'Um mirante contínuo sobre a mata do santuário.', 20, 9000, { perfil: 5, deque: 4, guarda: 3 }),
   ] },
   // ---------------- Epílogo ----------------
   { id: 'reflorestar', nome: 'Reflorestar o canteiro', cap: 6, icone: 'floresta', etapas: [

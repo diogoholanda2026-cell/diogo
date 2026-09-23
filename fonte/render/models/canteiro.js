@@ -11,7 +11,7 @@ export const LOTES = {
   usina1: { x: -28.9, z: 17.6, r: 0 }, usina2: { x: -28.9, z: 14.8, r: 0 }, usina3: { x: -28.9, z: 12.0, r: 0 },
   carpintaria: { x: -25.4, z: 14.9, r: 0 }, concreto: { x: -22.9, z: 14.7, r: 0.1 },
   serralheria: { x: -25.4, z: 12.2, r: 0 }, vidracaria: { x: -22.9, z: 12.1, r: 0.1 },
-  eletrica: { x: -21.0, z: 15.4, r: 0.3 }, horto: { x: -27.3, z: 10.9, r: 0 },
+  eletrica: { x: -21.0, z: 15.4, r: 0.3 }, horto: { x: -27.3, z: 10.9, r: 0 }, laboratorio: { x: -24.3, z: 11.0, r: 0 },
 };
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
 const B = (w, h, d, m, x, y, z) => { const o = mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y + h / 2, z); return o; };
@@ -62,6 +62,10 @@ export function predioCanteiro(tipo) {
   } else if (tipo === 'eletrica') {
     g.add(galpao(1.3, 1.0, 0.48, M.white)); for (let i = 0; i < 3; i++) { const r = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12), M.woodFrame); r.rotation.x = Math.PI / 2; r.position.set(-0.4 + i * 0.3, 0.12, 0.72); g.add(r); }
     const sp = mesh(new THREE.BoxGeometry(0.9, 0.02, 0.5), M.blue); sp.position.set(0, 0.62, 0); sp.rotation.x = 0.3; g.add(sp);
+  } else if (tipo === 'laboratorio') {
+    g.add(galpao(1.5, 1.0, 0.5, M.whiteSmooth)); const d = mesh(new THREE.SphereGeometry(0.34, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), M.whiteSmooth); d.position.set(0.45, 0.62, -0.1); g.add(d);
+    const fx = mesh(new THREE.BoxGeometry(0.1, 0.36, 0.02), M.dark); fx.position.set(0.45, 0.8, 0.2); fx.rotation.x = -0.4; g.add(fx);
+    const tanques = []; for (let i = 0; i < 3; i++) { const t = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.3, 10), M.teal); t.position.set(-0.9 + i * 0.2, 0.15, 0.7); g.add(t); }
   } else if (tipo === 'horto') {
     const gh = mesh(new THREE.BoxGeometry(1.8, 0.5, 0.9), dupla(M.glass), false); gh.position.y = 0.25; g.add(gh);
     const roof = new THREE.CylinderGeometry(0.46, 0.46, 1.82, 12, 1, true, 0, Math.PI); roof.rotateZ(Math.PI / 2); roof.rotateX(Math.PI / 2); const rm = mesh(roof, dupla(M.glass), false); rm.position.y = 0.5; g.add(rm);

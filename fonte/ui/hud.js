@@ -31,7 +31,7 @@ export class Hud {
   atualizar() {
     const J = this.J, S = J.S; const q = (s) => this.topo.querySelector(s);
     const a = XP_NIVEL[S.nivel] || 0, b = XP_NIVEL[S.nivel + 1] || a + 1; const p = Math.max(0, Math.min(1, (S.xp - a) / (b - a)));
-    q('.anel').style.setProperty('--p', (p * 100).toFixed(1) + '%'); q('.anel b').textContent = S.nivel; q('.nome').textContent = 'Nível ' + S.nivel; q('.xp').textContent = fmt(S.xp - a) + ' / ' + fmt(b - a) + ' XP';
+    q('.anel').style.setProperty('--p', (p * 100).toFixed(1) + '%'); q('.anel b').textContent = S.nivel; q('.nome').textContent = 'Nível ' + S.nivel; q('.xp').textContent = fmt(Math.max(0, S.xp - a)) + ' / ' + fmt(b - a) + ' XP';
     const v = J.vida(); q('.vv').textContent = v.toFixed(v < 10 ? 1 : 0) + '%'; q('.vida .trilho i').style.width = v + '%';
     q('.pp').textContent = fmt(J.pop); q('.bb').textContent = J.bem + '%'; q('.cc').textContent = fmt(S.creditos); q('.mm').textContent = S.mutirao + '/5';
   }

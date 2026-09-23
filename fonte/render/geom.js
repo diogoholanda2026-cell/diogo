@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { hash, TAU } from '../core/util.js';
 
-export const FH = 0.46;              // altura de um andar (unidades de mundo)
+export const FH = 0.4;               // altura de um andar (unidades de mundo)
 export const BAY = 0.34;             // largura de um vão de janela
 
 export const V3 = (x, y, z) => new THREE.Vector3(x, y, z);

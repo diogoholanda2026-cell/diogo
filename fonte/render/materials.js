@@ -29,7 +29,7 @@ export function makeMaterials() {
   M.pavers = std({ color: 0xffffff, map: tex.pavers(), roughness: 0.86 });
   M.sand = std({ color: 0xffffff, map: tex.sand(), roughness: 1 });
   M.soil = std({ color: 0xffffff, map: tex.soil(), roughness: 1 });
-  M.rock = std({ color: 0xd8b48a, map: tex.rock(), roughness: 0.95 });
+  M.rock = std({ color: 0xb49c88, map: tex.rock(), roughness: 0.95 });
   M.wood = std({ color: 0xffffff, map: tex.wood(), roughness: 0.72 });
   M.woodLight = std({ color: 0xffffff, map: tex.woodLight(), roughness: 0.6 });
   M.woodFrame = std({ color: 0xd9a868, roughness: 0.55 });
@@ -38,13 +38,13 @@ export function makeMaterials() {
   M.canopyGrid = std({ color: 0xffffff, map: cg, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 0.55, emissive: 0x6a4a20, emissiveMap: cg, emissiveIntensity: 0.25 });
   M.mesh = std({ color: 0xffffff, map: tex.mesh(), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.4 });
   M.glass = std({ color: 0xa9d8ee, roughness: 0.06, metalness: 0.25, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 });
-  M.glassDome = std({ color: 0xbfe6f5, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.8 });
+  M.glassDome = std({ color: 0xd6eef8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.9 });
   M.glassRail = std({ color: 0xcfe9f5, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.2 });
   M.glassWarm = std({ color: 0xffe2b0, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.55, depthWrite: false, emissive: 0xffb45a, emissiveIntensity: 0.6, side: THREE.DoubleSide });
   const wn = tex.waterNormal(); wn.repeat.set(6, 6);
   M.water = std({ color: 0x2f7f93, roughness: 0.08, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), transparent: true, opacity: 0.9, envMapIntensity: 1.4 });
   M.waterDeep = std({ color: 0x1f7fa0, roughness: 0.05, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.25, 0.25), transparent: true, opacity: 0.82, emissive: 0x0d6788, emissiveIntensity: 0.55, envMapIntensity: 1.3 });
-  M.pool = std({ color: 0x2f7d8e, roughness: 0.06, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.2, 0.2), emissive: 0x0b4654, emissiveIntensity: 0.3, envMapIntensity: 1.3 });
+  M.pool = std({ color: 0x2a6f80, roughness: 0.06, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.2, 0.2), emissive: 0x0b4654, emissiveIntensity: 0.3, envMapIntensity: 1.3 });
   M.yellow = std({ color: 0xf2bf2a, roughness: 0.5 });
   M.orange = std({ color: 0xee7f33, roughness: 0.5 });
   M.red = std({ color: 0xd4503e, roughness: 0.55 });

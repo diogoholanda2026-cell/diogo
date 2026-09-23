@@ -10,6 +10,7 @@ import { CameraRig } from './render/camera.js';
 import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
 import { MESA, VISTA_FOTO } from './data/planta.js';
+import { PROJETOS } from './data/obras.js';
 import { novoEstado, Jogo, VERSAO_SAVE } from './sim/estado.js';
 import { Controle } from './jogo.js';
 import { instalarExtras } from './ui/extras.js';
@@ -60,6 +61,8 @@ async function iniciar() {
   const telaCheia = async (alternar) => { try { if (alternar && document.fullscreenElement) { await document.exitFullscreen(); return; } if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); await screen.orientation?.lock?.('landscape'); } catch (_) {} };
   instalarExtras(C, { engine, env, rig, cfg, fotoURL: FOTO, versao: VERSAO, qualidadeAuto: auto.id, telaCheia, get instalar() { return promptInstalar ? () => { promptInstalar.prompt(); promptInstalar = null; } : null; } });
   C.vistaFoto(false);
+  // ajustes de luz pela URL (para comparar com a foto): exp, sat, con, key, hemi, envi, bloom
+  for (const [k, f] of Object.entries({ exp: (v) => (engine.params.exposure = v), sat: (v) => (engine.params.saturation = v), con: (v) => (engine.params.contrast = v), key: (v) => (env.key.intensity = v), hemi: (v) => (env.hemi.intensity = v), envi: (v) => (engine.scene.environmentIntensity = v), bloom: (v) => (engine.params.bloomStrength = v), vin: (v) => (engine.params.vignette = v) })) if (qs.has(k)) f(+qs.get(k));
   const V = qs.get('vista'); if (V && V !== 'foto') { const [x, z, d, y, p, f] = V.split(',').map(Number); rig.pitchFix = null; rig.roll = 0; rig.target.set(x, 0, z); rig.dist = d; rig.yaw = y; rig.tilt = p || 0; if (f) rig.fov = f; rig.apply(); }
   if (qs.get('tudo')) { mundo.tudoPronto(); for (const g of Object.values(mundo.predios)) g.visible = false; mundo.canteiro.visible = false; forest.setReflorestamento(1); ground.flags.reflorestado = true; ground.paint(); }
   await passo(92);
@@ -78,7 +81,7 @@ async function iniciar() {
     if (engine.shouldRender(t)) { engine.render(t); frames++; if (frames === 3) window.__pronto = true; }
   };
   requestAnimationFrame(loop);
-  window.__held = { engine, rig, env, ground, forest, table, mundo, obras, J, C, THREE };
+  window.__held = { engine, rig, env, ground, forest, table, mundo, obras, J, C, THREE }; window.__PROJ = PROJETOS;
   // entrada: o primeiro toque libera som, tela cheia, orientação e tela sempre acesa
   const entrar = async () => {
     carga.style.opacity = 0; setTimeout(() => carga.remove(), 800);
@@ -87,7 +90,10 @@ async function iniciar() {
     if (qs.get('tudo')) return;
     C.iniciar();
     if (TESTE) return;
-    if (!S.dicas.voo) { S.dicas.voo = 1; setTimeout(() => rig.flyTo({ x: -24.5, z: 18.5, dist: 16, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 2600), 900); setTimeout(() => { rig.pitchFix = null; }, 3600); }
+    if (!S.dicas.voo) { // primeira vez: a planta holográfica mostra a meta, depois a câmera desce ao canteiro
+      S.dicas.voo = 1; ui.classList.add('intro'); mundo.mostrarFantasma(true, 1600);
+      setTimeout(() => { mundo.mostrarFantasma(false, 1400); rig.flyTo({ x: -24.5, z: 18.5, dist: 16, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 2800); }, 12500); setTimeout(() => { rig.pitchFix = null; ui.classList.remove('intro'); }, 15400);
+    }
     else { rig.pitchFix = null; rig.roll = 0; rig.flyTo({ x: -24.5, z: 16.5, dist: 22, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 1400); }
   };
   const bt = carga.querySelector('.toque'); bt.classList.add('vis'); bt.addEventListener('click', entrar, { once: true });

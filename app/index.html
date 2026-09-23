@@ -137,7 +137,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .botao.sec{background:rgba(255,255,255,.1);color:var(--txt);box-shadow:none}
 .botao.ouro{background:linear-gradient(180deg,#f5d58f,#d9a441);color:#2a1d05;box-shadow:0 6px 16px rgba(217,164,65,.3)}
 .botao.azul{background:linear-gradient(180deg,#9ad7fb,#4a9fd6);color:#062538}
-.botao[disabled]{filter:grayscale(1);opacity:.5}
+.botao[disabled],.botao.fraco{filter:grayscale(1);opacity:.5}
 .barra{height:10px;border-radius:10px;background:rgba(255,255,255,.1);overflow:hidden;flex:1}
 .barra i{display:block;height:100%;background:linear-gradient(90deg,var(--ouro2),var(--ouro))}
 .barra.cheia i{background:linear-gradient(90deg,#e0584a,#ff9a6a)}
@@ -186,11 +186,13 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .apreciar{position:absolute;left:50%;bottom:calc(12px + var(--safeB));transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:var(--vidro);border:1px solid var(--borda);border-radius:24px;padding:8px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .apreciar .botao{height:40px;padding:0 14px;font-size:13px}
 #foto-ref{position:absolute;inset:0;background:center/contain no-repeat;pointer-events:none;opacity:0;transition:opacity .2s}
-.deslize{width:160px;accent-color:var(--ouro)}
+.deslize{width:clamp(90px,16vw,170px);accent-color:var(--ouro)}
+.apreciar .botao{white-space:nowrap}
 /* ---------- utilidades ---------- */
 .cred{color:#ffe29a;font-weight:800}
 .tempo{color:var(--azul);font-weight:700}
 #ui.painel-aberto .esq,#ui.painel-aberto .proximo{display:none}
+#ui.intro .topo,#ui.intro .dir,#ui.intro .proximo,#ui.intro .cap,#ui.intro .balao{display:none!important}
 @media (max-height:520px){.folha{max-height:62vh;width:min(760px,calc(100vw - 96px - var(--safeL) - var(--safeR)));left:calc(50% - 38px);border-radius:20px}.folha header{padding:8px 12px 6px}.folha header .ic{width:38px;height:38px;border-radius:12px}.folha header .ic img{width:28px;height:28px}.folha header h2{font-size:16px}.folha header .x{width:36px;height:36px}.folha .corpo{padding:2px 12px 10px}.grade{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px}.ficha{min-height:80px;padding:6px 4px 4px;border-radius:14px}.ficha img{width:32px;height:32px}.ficha b{font-size:10.5px}.vaga{width:56px;height:56px;border-radius:14px}.vaga img{width:32px;height:32px}.botao{height:40px;padding:0 14px;font-size:13px}.topo{top:calc(6px + var(--safeT))}.nivel .anel{width:34px;height:34px}.stat{min-height:32px;padding:4px 10px 4px 5px}.stat img{width:20px;height:20px}.redondo{width:38px;height:38px}.esq{top:calc(50px + var(--safeT))}.cap h2{font-size:15px}.cap li{font-size:11.5px}.conselho .fala{font-size:12px}.retrato{flex-basis:38px;height:38px;font-size:17px}}
 @media (max-height:420px){.bt{width:50px;height:50px;border-radius:17px}.bt img{width:28px;height:28px}.dir{gap:8px}.esq{width:min(230px,24vw)}.folha{max-height:82vh}.ficha{min-height:86px}.ficha img{width:36px;height:36px}.nivel .anel{width:36px;height:36px}}
 @media (orientation:portrait){#gire{display:flex!important}}

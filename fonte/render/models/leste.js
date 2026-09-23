@@ -180,7 +180,7 @@ export function acelerador() {
   P.e4 = new THREE.Group(); // Centro de Física Avançada: pavilhão curvo de vidro na borda de trás
   const back = new THREE.Group(); P.e4.add(back);
   for (let f = 0; f < 2; f++) { back.add(ellWall(cx, cz - 0.1, a.rx + 0.55, a.rz + 0.5, f * 0.46 + 0.05, 0.4, M.fac_lab, Math.PI * 1.05, Math.PI * 1.95, 40)); back.add(ellWall(cx, cz - 0.1, a.rx + 0.58, a.rz + 0.53, f * 0.46, 0.06, M.fascia, Math.PI * 1.03, Math.PI * 1.97, 40)); }
-  const roofB = sector(a.rx + 0.1, a.rx + 0.62, Math.PI * 0.04, Math.PI * 0.96, 0.06, 0.92, M.roof); roofB.scale.set(1, 1, a.rz / a.rx); roofB.position.set(cx, 0, cz - 0.1); back.add(roofB);
+  const roofB = sector(a.rx + 0.1, a.rx + 0.62, Math.PI * 1.04, Math.PI * 1.96, 0.06, 0.92, M.roof); roofB.scale.set(1, 1, a.rz / a.rx); roofB.position.set(cx, 0, cz - 0.1); back.add(roofB);
   const rail = ellWall(cx, cz, a.rx + 0.12, a.rz + 0.12, 0.18, 0.28, M.glassRail, Math.PI * 0.05, Math.PI * 0.95, 40); rail.castShadow = false; P.e4.add(rail);
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'acelerador', root, partes: P, esqueletos: {}, grua: { e4: true }, foco: { x: cx, z: cz + 0.5, dist: 9 }, ancora: [cx, 1.4, cz] };

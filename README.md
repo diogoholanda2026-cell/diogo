@@ -1,92 +1,123 @@
-# Arcologia de Held — maquete viva
+# Arcologia de Held: composição total
 
-Jogo de construção de cidade **em 3D** para celular (e navegador de computador), com a **mecânica do SimCity BuildIt** e as construções da **Arcologia de Held** modeladas em 3D a partir das seis maquetes de referência em `arte/originais`.
+Jogo de construção no estilo **SimCity BuildIt**, em 3D, feito para celular (testado para o Poco X7) e que também roda no computador. A única obra do jogo é a **Composição Total da Arcologia de Held**, a maquete da foto em `arte/originais/composicao-total-arcologia-de-held.png`. Ela começa como pasto degradado cercado de mata e cresce etapa por etapa, com canteiro, andaimes, grua e operários, até ficar igual à foto.
 
-**Jogar online:** https://diogoholanda2026-cell.github.io/diogo/ (publicado pelo GitHub Pages a cada push).
+**Jogar:** https://diogoholanda2026-cell.github.io/diogo/ (atualiza sozinho a cada envio ao GitHub).
 
-Ou abra `arcologia-de-held.html` em qualquer navegador com WebGL: é um único arquivo, funciona offline, salva sozinho no aparelho e continua rendendo enquanto você está fora.
+| Composição total (Vista da foto) | Planta holográfica no início |
+|---|---|
+| ![](arte/telas/01-composicao-total.png) | ![](arte/telas/02-planta-holografica.png) |
 
-| Início | Cidade crescendo | De perto |
+| Obra em andamento | Prancha de entrega | Usina de materiais |
 |---|---|---|
-| ![](arte/telas/02-inicio.png) | ![](arte/telas/06-cidade.png) | ![](arte/telas/07-cidade-perto.png) |
+| ![](arte/telas/03-obra.png) | ![](arte/telas/04-prancha.png) | ![](arte/telas/05-usina.png) |
 
-| Arcologia Circular (Modelo-01) | Santuário Expandido | Arcologia de Held |
-|---|---|---|
-| ![](arte/telas/11-arcologia-circular.png) | ![](arte/telas/12-santuario.png) | ![](arte/telas/13-arcologia-de-held.png) |
+![Comparação com a foto de referência](arte/telas/06-comparacao.png)
 
-## Câmera e controles
+![Biblioteca Central, etapa por etapa](arte/telas/07-etapas-biblioteca.png)
 
-Como no BuildIt: **um dedo** arrasta o mapa; **dois dedos** aproximam (pinça), **giram** (torcendo) e **inclinam** (subindo ou descendo os dois dedos). No computador: arrastar move, roda do mouse aproxima, **botão direito** gira e inclina, `Q`/`E` giram, `+`/`-` aproximam, `Esc` fecha o que estiver aberto. Toque numa construção para abrir a ficha (melhorar, produzir, mover, demolir).
+## Instalar no celular (recomendado)
 
-## Como o jogo funciona (o mesmo ciclo do SimCity BuildIt)
+O melhor formato para este jogo é um **app instalável (PWA) servido pelo GitHub Pages**. No Poco X7:
 
-1. **Ruas.** Toda construção precisa encostar numa rua ligada à rodovia que entra pela esquerda. Ruas têm três níveis (rua, avenida, via expressa); trechos com muitas construções ficam congestionados e derrubam a felicidade. A **Estação Transit** amplia a capacidade das ruas em volta.
-2. **Zonas Residenciais.** Cada zona começa como *Vila Estudantil* e evolui por **7 estágios**, cada um com um modelo 3D diferente (blocos brancos → terraços do anel → curvas de vidro → torre espiral → anel residencial). Para melhorar, a moradia **pede itens**; ao entregar, você ganha créditos, XP e mais habitantes.
-3. **Fábricas** produzem matérias-primas numa fila sequencial. **Lojas** transformam matérias-primas em produtos. Itens prontos aparecem numa bolha sobre a construção: toque para coletar. O **armazém** tem limite; amplia-se com créditos e peças.
-4. **Serviços.** Energia, água e reciclagem têm capacidade (barras no topo). Segurança, saúde e educação cobrem um raio. Parques e santuários dão felicidade.
-5. **Felicidade e impostos.** A felicidade de cada moradia depende dos serviços, do trânsito e dos parques por perto. Os impostos acumulam na **Sede da Holding** (até 6 h): toque na moeda para coletar.
-6. **Comércio.** *Depósito comercial* (no Armazém) vende itens em minutos; a **Torre do Comércio Global** abre o *Mercado Global* com ofertas de outras cidades.
-7. **Terminal de Cargas.** Encomendas pedem itens; despache o comboio para ganhar **chaves** (parques grandes e marcos) e **peças de expansão** (terreno e armazém).
-8. **Pedidos dos moradores**, **cristais** (compram itens que faltam e aceleram filas; ganhos por nível e metas, sem loja) e **marcos**: Arco da Holding, Arcologia Circular, Ciência e Educação, Santuário Expandido, Holding e Santuário Global e a composição total **Arcologia de Held**.
+1. Abra o link acima no **Chrome**.
+2. Menu ⋮ → **Instalar app** (ou "Adicionar à tela inicial"). Se nada acontecer, dê ao Chrome a permissão **Atalhos na tela inicial** nas configurações do HyperOS.
+3. Abra pelo ícone. O jogo roda em **tela cheia, em paisagem**, **funciona sem internet** e se atualiza sozinho quando houver versão nova.
+4. Em Configurações do jogo, confira se aparece "Armazenamento protegido": assim o Chrome não apaga o progresso quando o celular enche.
 
-## A obra, passo a passo
+Para jogar a **120 qps**: o Chrome para Android limita jogos a 60 qps em telas de 120 Hz. Até o Chrome 156 (que libera 120 Hz em tela cheia), desative `chrome://flags/#throttle-main-thread-to-60hz`, deixe a tela do celular em 120 Hz e escolha 120 nas configurações do jogo. 60 qps esquenta menos e gasta menos bateria.
 
-![Fases da obra](arte/telas/15-fases-da-obra.png)
+### Por que PWA e não um app próprio (APK)
 
-Cada construção nova passa por fases visíveis, com **operários** e máquinas em 3D: terraplanagem (trator empurrando terra, operários de pá) → fundação (laje crescendo, betoneira com tambor girando) → estrutura **andar por andar** (esqueleto de aço, depois o andar concreto sobe por um plano de corte) com andaime de postes e travessas, guindaste girando e içando painéis, operários andando, carregando, martelando e soldando (com faíscas) → acabamento (andaime e guindaste somem, confete). Melhorias de moradia reconstroem o novo estágio por cima do antigo com o mesmo canteiro.
+| | Navegador | **PWA instalada** | APK (Capacitor/TWA) | Motor nativo (Unity/Godot) |
+|---|---|---|---|---|
+| Desempenho 3D | igual | **igual** | igual (mesmo Chromium) | um pouco melhor |
+| Tela cheia e paisagem travada | limitado | **sim** | sim | sim |
+| Offline | não | **sim** | sim | sim |
+| Atualização | automática | **automática** | reinstalar APK | reinstalar APK |
+| Instalação no Poco X7 | nenhuma | **um toque** | sideload (o Google anunciou verificação obrigatória de desenvolvedores no Brasil a partir de 30/09/2026) | sideload |
+| Salvamento | pode ser apagado | **protegido** (`storage.persist`) | "transitório" (WebView) | arquivo local |
 
-## Como as construções são feitas
+A PWA usa o mesmo renderizador que um APK usaria, sem o atrito de instalar APK, e recebe cada melhoria assim que o código é enviado. Um motor nativo exigiria reescrever tudo por um ganho pequeno.
 
-Não há modelos importados: cada construção é **gerada por código** (`codigo-fonte/js/05c-modelos.js`) a partir de peças paramétricas inspiradas nas maquetes: anéis e arcos brancos com terraços verdes e faixas de vidro iluminado, torres curvas de vidro, torre em degraus com rampa em espiral, cúpulas geodésicas, telhados-flor solares, torre bioclimática com cobertura em pétalas, biblioteca em treliça de madeira, laboratórios em corte, lagos com fontes, campos, anfiteatro, recintos com gorilas, hipopótamos, elefantes e girafas, aviário de tela, viadutos e pontes. As fotos das maquetes continuam nas fichas e no menu como referência.
+## Como jogar
+
+O ciclo é o do SimCity BuildIt, adaptado a uma obra fixa:
+
+1. **Usinas de Materiais** (até 3) produzem matérias-primas em paralelo: madeira certificada, brita reciclada, aço reciclado, argila, sementes nativas, vidro, cobre e fibra de bambu.
+2. **Oficinas** (Carpintaria, Central de Concreto, Horto, Serralheria, Vidraçaria, Oficina Elétrica e Laboratório de Campo) transformam tudo em produtos, **um de cada vez, em fila**: vigas laminadas, concreto, lajes pré-moldadas, painéis de vidro, vidro solar, painéis de cúpula, estantes, jardins verticais, kits veterinários e outros 25 itens. "Produzir o que falta" lança a cadeia inteira de um item.
+3. **Almoxarifado** tem limite. Amplie com estrados, etiquetas e cadeados, que caem ao coletar produção.
+4. **Obras (marcos):** cada estrutura da foto tem de 1 a 5 etapas. Toque na placa da obra para abrir a **prancha**: entregue os materiais aos poucos, pague os créditos e inicie. A obra sobe no mapa com esqueleto de concreto, acabamento e andaimes. No fim, toque em **Aprovar**.
+5. **Módulos:** os edifícios-fita em terraços (Anel do Campus, Campus Universitário, Anel da Biblioteca, Santuário e as casas da Vila) crescem **um pavimento por nível**, como as zonas residenciais do BuildIt. Cada nível pede três itens e traz moradores.
+6. **Serviços:** a partir do nível 3 os moradores pedem **água** (lago), no nível 4 **energia** (fachada solar da Sede, dossel da Biblioteca, central geotérmica) e no nível 5 **saneamento** (jardins filtrantes da praça, biodigestor do santuário).
+7. **Bem-estar e repasses:** escola, praça, biblioteca, bioma e outros marcos aumentam o bem-estar. A Holding repassa créditos conforme os moradores e o bem-estar; colete na Sede.
+8. **Pedidos da comunidade** trocam materiais por créditos, experiência e itens especiais. O **Depósito de Trocas** compra matéria-prima e vende sobras.
+9. **Mutirão:** fichas (até 5) que terminam qualquer cronômetro na hora. Ganham-se ao subir de nível, em capítulos e em pedidos.
+10. **Licenças:** obras grandes pedem topografia (estacas, balizas e trenas) antes da terraplenagem.
+
+Tudo segue rodando com o jogo fechado: ao voltar, é só coletar.
+
+### A história e a ordem da obra
+
+Cinco capítulos e um epílogo, com conselheiros (Íris, arquiteta-chefe; Tomé, engenheiro de materiais; Nara, bióloga; Caio, físico; Dona Cida, voz dos moradores). A ordem segue a lógica de uma obra real: primeiro o acesso, a água e a administração; depois moradia, escola e praça; em seguida biblioteca e faculdades; o acelerador subterrâneo e a vila; por fim os habitats dos animais. Cada capítulo termina com uma apresentação ao Conselho da Holding e uma escolha de incentivo.
+
+1. **Fundação:** canteiro, Caminho da Frente, desassoreamento do Lago Central, Sede da Holding e os primeiros módulos do Anel.
+2. **Água que corre:** margens vivas e estação natural de água, Escola e Campus para Jovens, campo, Praça Central com jardins filtrantes, Bulevar Verde, anel de vidro solar da Sede.
+3. **Saber de madeira:** Biblioteca Central (núcleo, andares, pilares-árvore, dossel), Centro de Recursos Digitais, Faculdades de Humanidades, Engenharia e Ciências, Instituto de Estudos Urbanos, Campus Universitário, Ala em Onda, pontes.
+4. **Energia escondida:** Acelerador de Partículas (poço, anel, detectores, Centro de Física), anfiteatro e casas da Vila Estudantil.
+5. **Casa dos gigantes:** Santuário, habitats da savana com elefantes, girafas e rinocerontes, Bioma Aquático (cúpula geodésica com aquário) e Recinto dos Gorilas.
+6. **Composição total:** as oficinas descem para galpões sob o acelerador e o canteiro vira mata. A maquete fica igual à foto.
+
+Um robô de teste (`ferramentas/simular.mjs`) joga do início ao fim e confirma que não existe trava. Jogando algumas vezes por dia, a composição inteira leva de uma a duas semanas; em Configurações, **Ritmo da obra 2× ou 4×** encurta todos os cronômetros.
+
+## Controles
+
+- **Um dedo:** arrasta o mapa (com inércia). **Pinça:** aproxima. **Torcer dois dedos:** gira. **Dois dedos para cima/baixo:** inclina.
+- **Toque** numa construção, num lote ou num balão. **Toque duplo:** aproxima naquele ponto. Arrastar o dedo por vários balões de coleta recolhe todos.
+- **Próximo:** leva até a próxima coisa a fazer.
+- **Apreciar:** esconde a interface. A barra de baixo tem **Foto** (volta ao enquadramento exato da foto), um **controle deslizante** que põe a foto por cima da maquete com transparência ajustável, **Rótulos** da maquete, **Planta** holográfica e **Luz** (exposição, noite ou dia).
+- No computador: arrastar move, roda do mouse aproxima, botão direito gira e inclina.
+
+## Gráficos
+
+Feitos para o Mali-G615 MC2 do Poco X7, com resolução que se ajusta sozinha para manter a fluidez:
+
+- Obras com esqueleto de concreto, plano de corte com borda incandescente, andaimes que sobem junto e contornam o prédio, grua, betoneira e operários.
+- Renderização em alta faixa dinâmica com MSAA 4×, **bloom** com filtro de Karis, **profundidade de campo de maquete** (tilt-shift), tonemapping ACES, gradação de cor, vinheta e pontilhado.
+- Sombras suaves que só são recalculadas quando algo muda; reflexos de uma "sala de exposição"; céu noturno com **aurora**.
+- Fachadas com luz interna, terraços verdes, floresta instanciada com vento, água com normal animada.
+- Tudo o que fica pronto é **fundido em poucas malhas por material** (cerca de 150 chamadas de desenho com a composição inteira, contando sombras).
+- Perfis **Ultra, Alta, Média e Leve**, escolhidos automaticamente pelo processador gráfico; limite de 30, 60 ou 120 qps; 30 qps quando a tela fica parada.
 
 ## Estrutura do código
 
 ```
-arcologia-de-held.html          jogo montado (único arquivo, abre direto)
-arte/originais/                 as seis imagens da Arcologia de Held
-arte/telas/                     capturas de tela
-codigo-fonte/
-  estilo-e-cabecalho.html       CSS e <head>
-  estrutura.html                HTML da interface e ícones SVG
-  imagens.js                    recortes das maquetes (fichas e menu), gerado
-  lib/three.min.js              Three.js r158 (licença MIT em lib/LICENSE-three.txt)
-  js/01-base.js                 constantes e utilidades
-  js/02-dados.js                itens, receitas, construções, níveis, metas
-  js/03-mundo.js                terreno, ruas, trânsito, estado e recálculo
-  js/04-simulacao.js            produção, melhorias, impostos, mercado, cargas, tempo offline
-  js/05a-materiais.js           texturas procedurais, materiais e utilidades de geometria
-  js/05b-cena.js                renderizador, câmera orbital, céu, mesa, terreno, ruas, árvores, carros
-  js/05c-modelos.js             geradores 3D de todas as construções
-  js/05d-obra.js                canteiro de obras: operários, máquinas, andaime, plano de corte
-  js/05e-quadro.js              sincronização estado→cena, seleção, fantasma, overlay 2D
-  js/06-entrada.js              toque, mouse, câmera, posicionar e traçar ruas
-  js/07-interface.js            HUD, menu de construção, fichas e painéis
-  js/08-salvar.js               salvamento local e na nuvem (quando disponível)
-  js/09-inicio.js               laço principal e boot
-  ferramentas/preparar-imagens.py   recorta as maquetes e gera imagens.js
-  ferramentas/montar.py             junta tudo em arcologia-de-held.html
-  ferramentas/testar.js             teste de fumaça com Playwright (WebGL por software)
+app/                         o jogo montado (PWA publicada no GitHub Pages)
+arcologia-de-held.html       o mesmo jogo num arquivo único (abre direto, sem servidor)
+arte/originais/              imagens de referência (a foto da composição total)
+arte/telas/                  capturas de tela
+fonte/
+  main.js                    carregamento, motor, mundo, save, primeiro toque
+  jogo.js                    liga simulação, mundo 3D e interface
+  core/                      utilidades, som procedural, vibração, salvamento (IndexedDB)
+  data/                      planta traçada da foto, itens, obras e etapas, história, rótulos
+  sim/estado.js              simulação: produção, filas, prancha, módulos, serviços, capítulos
+  render/                    motor (pós-processamento), câmera, céu, terreno, floresta, mesa,
+                             canteiro animado, figuras, animais e o mundo
+  render/models/             cada estrutura da foto, por etapas
+  ui/                        HUD, painéis, balões, ícones desenhados em código, configurações
+  web/                       HTML, manifesto, service worker, ícones e a foto em WebP
+ferramentas/
+  montar.mjs                 empacota fonte/ com esbuild em app/ e no arquivo único
+  simular.mjs                robô que joga do início ao fim (equilíbrio da economia)
+  testar.mjs                 capturas de tela no Chromium (WebGL por software)
 ```
-
-### Montar depois de mudar algo
 
 ```bash
-pip install pillow                                              # só para os recortes
-python3 codigo-fonte/ferramentas/preparar-imagens.py --folha    # gera imagens.js (+ folha de contato)
-python3 codigo-fonte/ferramentas/montar.py                      # gera arcologia-de-held.html
+npm install
+npm run montar            # gera app/ e arcologia-de-held.html
+node ferramentas/simular.mjs 30 1   # robô: verifica cada 30 min, ritmo 1×
+npm run testar -- /tmp/tela.png "vista=foto&tudo=1"
 ```
 
-Para mudar um modelo 3D, edite a função correspondente em `MODEL` (`js/05c-modelos.js`): cada uma devolve um `Group` com o chão em y = 0 e a origem no centro do lote; o jogo encaixa o modelo no lote automaticamente.
-
-### Teste automático
-
-```bash
-npm install playwright
-node codigo-fonte/ferramentas/testar.js
-```
-
-O teste abre o jogo num celular simulado com WebGL por software, exercita construção, produção, melhoria, ruas, mercado, terminal, expansão e salvamento, e lista qualquer erro de execução.
-
-### Desempenho
-
-O painel da cidade (engrenagem) tem a opção **Gráficos: Leve**, que desliga as sombras e reduz a resolução para aparelhos mais fracos. A cena usa malhas mescladas por material, árvores e carros instanciados e sombras em mapa único.
+Three.js (licença MIT) vai embutido no pacote; o aviso de licença fica no fim de `app/jogo.js`.

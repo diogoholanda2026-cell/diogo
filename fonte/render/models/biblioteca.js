@@ -20,13 +20,13 @@ function andares(f0, f1, R) {
   const g = new THREE.Group(); const esq = new THREE.Group();
   for (let f = f0; f < f1; f++) {
     const y = f * FHB; const w = 0.18 * Math.sin(f * 1.7 + 0.4); const rx = R + 0.1 + w, rz = R + 0.1 - w * 0.6; const rot = f * 0.35;
-    g.add(slab(rx, rz, 0.1, M.whiteSmooth, y, rot));                                 // laje branca ondulada
-    g.add(slab(rx + 0.02, rz + 0.02, 0.05, M.fascia, y + 0.1, rot));                  // friso
-    const ri = R - 0.32; g.add(tubeCyl(ri, FHB - 0.1, M.fac_madeira, 48, (2 * Math.PI * ri) / (0.34 * 32), 0.5, y + 0.1)); // estantes iluminadas
+    g.add(slab(rx, rz, 0.07, M.whiteSmooth, y, rot));                                 // laje branca ondulada
+    g.add(slab(rx + 0.02, rz + 0.02, 0.03, M.fascia, y + 0.07, rot));                 // friso
+    const ri = R - 0.26; g.add(tubeCyl(ri, FHB - 0.07, M.fac_madeira, 48, (2 * Math.PI * ri) / (0.34 * 32), 0.5, y + 0.07)); // estantes iluminadas
     const rail = tubeCyl(Math.min(rx, rz) - 0.03, 0.16, M.glassRail, 40, 1, 1, y + 0.1); rail.castShadow = false; g.add(rail); // guarda-corpo
     // aletas verticais de madeira (brises)
-    const fins = []; const n = 36; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + f * 0.09; const r = ri + 0.06; fins.push([[Math.cos(a) * r, y + 0.1, Math.sin(a) * r], [Math.cos(a) * r, y + FHB, Math.sin(a) * r]]); }
-    g.add(beams(fins, 0.025, M.woodFrame, 4));
+    const fins = []; const n = 56; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + f * 0.09; const r = ri + 0.06; fins.push([[Math.cos(a) * r, y + 0.1, Math.sin(a) * r], [Math.cos(a) * r, y + FHB, Math.sin(a) * r]]); }
+    g.add(beams(fins, 0.03, M.woodFrame, 4));
     esq.add(slab(R + 0.05, R + 0.05, 0.1, M.concreto, y, 0));
     const cols = []; for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; cols.push([[Math.cos(a) * (R - 0.4), y, Math.sin(a) * (R - 0.4)], [Math.cos(a) * (R - 0.4), y + FHB, Math.sin(a) * (R - 0.4)]]); }
     esq.add(beams(cols, 0.06, M.concreto, 6));

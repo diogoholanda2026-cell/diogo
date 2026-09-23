@@ -143,7 +143,7 @@ export class Ground {
     // 6) praça central (pavimento) ou área gramada provisória
     c.save(); path(A.praca.poly);
     if (flags.praca) { c.fillStyle = pat(tex.pavers()); c.fill(); c.strokeStyle = 'rgba(120,96,70,.35)'; c.lineWidth = 3; const [cx, cy] = P(4.8, 15.6); for (let r = 1; r < 5; r++) { c.beginPath(); c.arc(cx, cy, r * 1.1 * S, 0, 7); c.stroke(); } }
-    else { c.fillStyle = pat(tex.grass()); c.fill(); }
+    else { c.fillStyle = pat(tex.pasto()); c.fill(); }
     c.restore();
     // 7) canteiro de obras (terra batida) ou reflorestamento
     c.save(); path(A.canteiro.poly);

@@ -20,7 +20,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const page = await browser.newPage({ viewport: { width: +W, height: +H }, deviceScaleFactor: 1 });
 const logs = [];
 page.on('console', (m) => logs.push(m.type() + ': ' + m.text()));
-page.on('pageerror', (e) => logs.push('ERRO: ' + e.message));
+page.on('pageerror', (e) => logs.push('ERRO: ' + e.message + ' | ' + (e.stack || '').split('\n').slice(1, 4).join(' <- ')));
 const t0 = Date.now();
 await page.goto(`http://localhost:${porta}/?${consulta}`);
 try { await page.waitForFunction(() => window.__pronto === true, null, { timeout: 180000 }); } catch (e) { logs.push('sem __pronto: ' + e.message); }
@@ -28,6 +28,7 @@ if (script) { try { await page.evaluate(script); } catch (e) { logs.push('script
 await page.waitForTimeout(+espera);
 await page.screenshot({ path: saida });
 const st = await page.evaluate(() => { const e = window.__held?.engine; return e ? { ...e.stats, gpu: e.gpu, q: e.q.id, W: e.W, H: e.H } : null; });
-console.log(JSON.stringify({ ms: Date.now() - t0, st }));
+const res = await page.evaluate(() => window.__resultado || null);
+console.log(JSON.stringify({ ms: Date.now() - t0, st, res }));
 for (const l of logs) console.log(l);
 await browser.close(); srv.close();
