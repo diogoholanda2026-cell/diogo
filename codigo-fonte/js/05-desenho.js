@@ -76,10 +76,18 @@ function makeSprite(k) {
   mg.save(); mg.shadowColor = '#000'; mg.shadowBlur = f * 1.6; mg.fillStyle = '#000';
   mg.fillRect(f * 1.1, f * 1.1, w - f * 2.2, h - f * 2.2); mg.fillRect(f * 1.1, f * 1.1, w - f * 2.2, h - f * 2.2); mg.restore();
   g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0); g.globalCompositeOperation = 'source-over';
-  SPR[k] = { c, ar: h / w };
+  // versão "concreto" (cinza-azulada) usada enquanto o andar está em obra
+  const gc = document.createElement('canvas'); gc.width = w; gc.height = h; const gg = gc.getContext('2d');
+  gg.drawImage(c, 0, 0);
+  try {
+    const id = gg.getImageData(0, 0, w, h), d = id.data;
+    for (let i = 0; i < d.length; i += 4) { const l = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11; d[i] = l * 0.72 + 22; d[i + 1] = l * 0.74 + 24; d[i + 2] = l * 0.8 + 32; }
+    gg.putImageData(id, 0, 0);
+  } catch (_) { gg.globalCompositeOperation = 'source-atop'; gg.fillStyle = 'rgba(90,95,110,.8)'; gg.fillRect(0, 0, w, h); }
+  SPR[k] = { c, g: gc, ar: h / w };
 }
-function spriteRect(b) {
-  const t = TYPES[b.t]; const img = t.res ? RES_STAGES[b.lvl - 1].img : t.img;
+function spriteRect(b, lvl) {
+  const t = TYPES[b.t]; const img = t.res ? RES_STAGES[(lvl || b.lvl) - 1].img : t.img;
   const meta = ASSETS.meta[img] || [t.w, t.h, t.h / t.w]; const ar = meta[2];
   const W = t.w * TW, H = W * ar, X = b.x * TW, Yb = (b.y + t.h) * TH;
   return { img, X, Y: Yb - H, W, H, Yb };
@@ -283,34 +291,103 @@ function groundShadow(b) {
   const t = TYPES[b.t]; const X = b.x * TW, Y = b.y * TH, W = t.w * TW, H = t.h * TH;
   ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(X + W / 2 + 3, Y + H * 0.6, W * 0.5, H * 0.5, 0, 0, TAU); ctx.fill();
 }
+/* ---------------- canteiro de obras (animação passo a passo) ----------------
+   Fases de uma obra nova (f = fração concluída):
+     A 0,00–0,18 terraplanagem: terra, trator indo e voltando, operários com pá
+     B 0,18–0,30 fundação: laje crescendo, betoneira girando
+     C 0,30–0,90 estrutura: o prédio sobe andar por andar (vigas → concreto → fachada),
+                 com andaime, guindaste içando painéis, operários martelando e soldando
+     D 0,90–1,00 acabamento: andaime e guindaste saem, operários vão embora
+   A melhoria de uma moradia usa as fases C e D por cima da maquete antiga.
+*/
+const VESTS = ['#F08A3C', '#F2C230', '#5BC0EB', '#FF6A5C'];
+function floorsOf(sr) { return clamp(Math.round(sr.H / (TH * 0.62)), 4, 10); }
+function drawWorker(x, y, h, t, act, vest, flip) {
+  // figura simples: pernas, colete, braços, cabeça e capacete; y = pés
+  ctx.save(); ctx.translate(x, y); if (flip) ctx.scale(-1, 1);
+  ctx.lineCap = 'round';
+  const step = act === 'walk' ? Math.sin(t * 9) * h * 0.13 : 0;
+  ctx.strokeStyle = '#242A36'; ctx.lineWidth = Math.max(1.3, h * 0.11); ctx.beginPath();
+  ctx.moveTo(0, -h * 0.46); ctx.lineTo(-h * 0.09 + step, 0); ctx.moveTo(0, -h * 0.46); ctx.lineTo(h * 0.09 - step, 0); ctx.stroke();
+  ctx.fillStyle = vest; rr(ctx, -h * 0.16, -h * 0.8, h * 0.32, h * 0.38, h * 0.07); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = '#E8C39E'; ctx.lineWidth = Math.max(1.2, h * 0.09); ctx.beginPath();
+  if (act === 'hammer') {
+    const a = Math.max(0, Math.sin(t * 11));
+    ctx.moveTo(h * 0.14, -h * 0.72); ctx.lineTo(h * 0.38, -h * 0.72 - a * h * 0.34); ctx.stroke();
+    ctx.fillStyle = '#8B8F98'; ctx.fillRect(h * 0.32, -h * 0.82 - a * h * 0.34, h * 0.16, h * 0.11);
+  } else if (act === 'carry') {
+    ctx.moveTo(-h * 0.14, -h * 0.72); ctx.lineTo(-h * 0.14, -h * 1.02); ctx.moveTo(h * 0.14, -h * 0.72); ctx.lineTo(h * 0.14, -h * 1.02); ctx.stroke();
+    ctx.fillStyle = '#B8865A'; ctx.fillRect(-h * 0.5, -h * 1.1, h * 1.0, h * 0.11);
+  } else if (act === 'shovel') {
+    const a = Math.sin(t * 5) * 0.5 + 0.5;
+    ctx.moveTo(-h * 0.12, -h * 0.7); ctx.lineTo(h * 0.2, -h * 0.5 + a * h * 0.15); ctx.stroke();
+    ctx.strokeStyle = '#6B6F78'; ctx.lineWidth = Math.max(1, h * 0.06); ctx.beginPath(); ctx.moveTo(h * 0.2, -h * 0.5 + a * h * 0.15); ctx.lineTo(h * 0.5, -h * 0.05 + a * h * 0.12); ctx.stroke();
+    ctx.fillStyle = '#8B8F98'; ctx.beginPath(); ctx.ellipse(h * 0.52, -h * 0.03 + a * h * 0.12, h * 0.1, h * 0.06, 0.6, 0, TAU); ctx.fill();
+  } else if (act === 'weld') {
+    ctx.moveTo(h * 0.14, -h * 0.72); ctx.lineTo(h * 0.36, -h * 0.62); ctx.stroke();
+    ctx.fillStyle = '#5B6270'; ctx.fillRect(h * 0.34, -h * 0.66, h * 0.1, h * 0.08);
+  } else {
+    ctx.moveTo(-h * 0.14, -h * 0.72); ctx.lineTo(-h * 0.24 - step, -h * 0.48); ctx.moveTo(h * 0.14, -h * 0.72); ctx.lineTo(h * 0.24 + step, -h * 0.48); ctx.stroke();
+  }
+  ctx.fillStyle = '#E8C39E'; ctx.beginPath(); ctx.arc(0, -h * 0.9, h * 0.11, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#F2C230'; ctx.beginPath(); ctx.arc(0, -h * 0.92, h * 0.135, Math.PI, TAU); ctx.fill(); ctx.fillRect(-h * 0.16, -h * 0.925, h * 0.32, h * 0.035);
+  ctx.restore();
+}
+function drawMixer(x, y, now) {
+  // betoneira com tambor girando; (x, y) = base do caminhão
+  const s = TW * 0.42;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x + s * 0.5, y + 3, s * 0.55, s * 0.16, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#2A2F3A'; ctx.fillRect(x, y - s * 0.22, s, s * 0.14);
+  ctx.fillStyle = '#F08A3C'; rr(ctx, x + s * 0.72, y - s * 0.5, s * 0.28, s * 0.36, 3); ctx.fill();
+  ctx.fillStyle = '#9FD9F2'; ctx.fillRect(x + s * 0.78, y - s * 0.46, s * 0.16, s * 0.13);
+  ctx.save(); ctx.translate(x + s * 0.36, y - s * 0.42); ctx.rotate(-0.25);
+  ctx.fillStyle = '#C9CED8'; ctx.beginPath(); ctx.ellipse(0, 0, s * 0.34, s * 0.2, 0, 0, TAU); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.ellipse(0, 0, s * 0.34, s * 0.2, 0, 0, TAU); ctx.clip();
+  ctx.strokeStyle = '#F08A3C'; ctx.lineWidth = s * 0.07; ctx.beginPath();
+  const ph = (now / 260) % 1;
+  for (let i = -2; i <= 2; i++) { const px = (i + ph) * s * 0.26; ctx.moveTo(px - s * 0.1, -s * 0.25); ctx.lineTo(px + s * 0.1, s * 0.25); }
+  ctx.stroke(); ctx.restore(); ctx.restore();
+  ctx.fillStyle = '#15181F';
+  for (const wx of [x + s * 0.18, x + s * 0.5, x + s * 0.84]) { ctx.beginPath(); ctx.arc(wx, y - s * 0.06, s * 0.09, 0, TAU); ctx.fill(); }
+}
+function drawSign(x, y) {
+  const w = TW * 0.28, h = TH * 0.3;
+  ctx.fillStyle = '#2A2F3A'; ctx.fillRect(x + w / 2 - 1, y - h - 6, 2, h + 6);
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y - h - 8, w, h); ctx.clip();
+  ctx.fillStyle = '#F2F2F2'; ctx.fillRect(x, y - h - 8, w, h);
+  ctx.fillStyle = '#F08A3C'; for (let i = -1; i < 5; i++) { ctx.beginPath(); ctx.moveTo(x + i * 6, y - 8); ctx.lineTo(x + i * 6 + 3, y - 8); ctx.lineTo(x + i * 6 + 3 + h, y - h - 8); ctx.lineTo(x + i * 6 + h, y - h - 8); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
 function drawSite(b, now, z, f) {
-  // canteiro de obras em fases: terraplanagem (terra + trator) → fundação (laje) → estrutura
   const t = TYPES[b.t]; const X = b.x * TW, Y = b.y * TH, W = t.w * TW, H = t.h * TH;
   ctx.fillStyle = '#5C4A36'; rr(ctx, X + 2, Y + 2, W - 4, H - 4, 4); ctx.fill();
   ctx.fillStyle = 'rgba(0,0,0,.18)';
   for (let i = 0; i < t.w * 2; i++) { const mx = X + W * (0.12 + 0.76 * hash(i, b.id, 31)), my = Y + H * (0.2 + 0.6 * hash(i, b.id, 32)); ctx.beginPath(); ctx.ellipse(mx, my, TW * 0.14, TH * 0.12, 0, 0, TAU); ctx.fill(); }
-  if (f > 0.12) {
-    // laje de fundação crescendo
-    const g = clamp((f - 0.12) / 0.16, 0, 1);
+  if (f > 0.16) {
+    const g = clamp((f - 0.16) / 0.14, 0, 1);
     ctx.fillStyle = '#8E8C84'; rr(ctx, X + W * 0.08, Y + H * 0.14, (W * 0.84) * g, H * 0.72, 3); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.beginPath();
     for (let x = X + W * 0.08 + 8; x < X + W * 0.08 + W * 0.84 * g; x += 10) { ctx.moveTo(x, Y + H * 0.16); ctx.lineTo(x, Y + H * 0.84); }
     ctx.stroke();
   }
-  if (f < 0.3) {
-    // trator indo e voltando
+  if (f < 0.18) {
     const u = 0.5 + 0.5 * Math.sin(now / 700 + b.id); const tx = X + W * (0.15 + 0.7 * u), ty = Y + H * 0.55;
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(tx, ty + 6, 12, 5, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#F2C230'; rr(ctx, tx - 9, ty - 7, 18, 11, 3); ctx.fill();
-    ctx.fillStyle = '#2A2A2A'; ctx.fillRect(tx - 10, ty + 3, 20, 4); ctx.fillStyle = '#7A7A7A'; ctx.fillRect(tx + (Math.cos(now / 700 + b.id) > 0 ? 9 : -14), ty - 4, 5, 10);
+    const dir = Math.cos(now / 700 + b.id) > 0;
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(tx, ty + 6, 13, 5, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#F2C230'; rr(ctx, tx - 9, ty - 8, 18, 12, 3); ctx.fill();
+    ctx.fillStyle = '#2A2A2A'; ctx.fillRect(tx - 10, ty + 3, 20, 4); ctx.fillStyle = '#7A7A7A'; ctx.fillRect(tx + (dir ? 9 : -14), ty - 5, 5, 11);
+    if (!quiet && Math.random() < 0.25) parts.push({ x: tx + (dir ? 12 : -12), y: ty + 2, vx: rnd(-10, 10), vy: rnd(-25, -8), t: 0, life: 0.6, c: 'rgba(160,140,110,.6)', r: 2.5 });
   }
   ctx.strokeStyle = '#D9C27A'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.strokeRect(X + 2, Y + 2, W - 4, H - 4); ctx.setLineDash([]);
   ctx.fillStyle = '#F08A3C';
-  for (const [px, py] of [[X + 6, Y + H - 6], [X + W - 6, Y + H - 6], [X + W / 2, Y + 6]]) { ctx.beginPath(); ctx.moveTo(px - 3, py + 2); ctx.lineTo(px + 3, py + 2); ctx.lineTo(px, py - 6); ctx.closePath(); ctx.fill(); }
+  for (const [px, py] of [[X + 6, Y + H - 6], [X + W - 6, Y + H - 6]]) { ctx.beginPath(); ctx.moveTo(px - 3, py + 2); ctx.lineTo(px + 3, py + 2); ctx.lineTo(px, py - 6); ctx.closePath(); ctx.fill(); }
+  drawSign(X + W - TW * 0.36, Y + H - 2);
 }
 function drawScaffold(X, Y, W, H, alpha, now) {
+  if (H <= 2 || alpha <= 0.01) return;
   ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = '#D6D3C8'; ctx.lineWidth = 1.2; ctx.beginPath();
-  const sx = Math.max(10, W / Math.round(W / 14)), sy = Math.max(9, H / Math.round(H / 12));
+  const sx = Math.max(10, W / Math.round(W / 14)), sy = Math.max(9, H / Math.max(1, Math.round(H / 12)));
   for (let x = X; x <= X + W + 0.5; x += sx) { ctx.moveTo(x, Y); ctx.lineTo(x, Y + H); }
   for (let y = Y; y <= Y + H + 0.5; y += sy) { ctx.moveTo(X, y); ctx.lineTo(X + W, y); }
   ctx.stroke();
@@ -318,53 +395,153 @@ function drawScaffold(X, Y, W, H, alpha, now) {
   for (let x = X; x < X + W; x += sx * 2) { ctx.moveTo(x, Y + H); ctx.lineTo(x + sx * 2, Y + H - sy * 2); }
   ctx.stroke(); ctx.restore();
 }
-function drawCrane(X, Y, W, H, f, now, alpha) {
-  // guindaste amarelo à direita, lança girando devagar
-  const bx = X + W * 0.86, base = Y + H, top = Y - TH * 0.6;
-  const swing = Math.sin(now / 900) * 0.08;
+function drawFrame3(X, Y, W, H, grow) {
+  // estrutura metálica de um andar: pilares, viga e contraventamento
+  ctx.save(); ctx.strokeStyle = '#1B1508'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+  const cols = Math.max(3, Math.round(W / 26)); const yb = Y + H, yt = yb - H * grow;
+  for (let pass = 0; pass < 2; pass++) {
+    if (pass) { ctx.strokeStyle = '#D8B45A'; ctx.lineWidth = 2; }
+    ctx.beginPath();
+    for (let i = 0; i <= cols; i++) { const x = X + 4 + (W - 8) * i / cols; ctx.moveTo(x, yb); ctx.lineTo(x, yt); }
+    if (grow > 0.95) { ctx.moveTo(X + 4, yt); ctx.lineTo(X + W - 4, yt); }
+    for (let i = 0; i < cols; i++) { const x0 = X + 4 + (W - 8) * i / cols, x1 = X + 4 + (W - 8) * (i + 1) / cols; ctx.moveTo(x0, yb); ctx.lineTo(x1, yt); }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawCrane(X, W, groundY, topY, now, alpha, liftTo) {
+  // guindaste amarelo à direita; a lança gira devagar e o gancho iça um painel até o andar atual
+  const bx = X + W * 0.9, base = groundY, top = topY;
+  const swing = Math.sin(now / 900) * 0.1;
   ctx.save(); ctx.globalAlpha = alpha;
   ctx.strokeStyle = '#1B1508'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(bx, base); ctx.lineTo(bx, top); ctx.stroke();
   ctx.strokeStyle = '#F2C230'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bx, base); ctx.lineTo(bx, top); ctx.stroke();
-  const jl = W * 0.7; const jx = bx - Math.cos(swing) * jl, jy = top + Math.sin(swing) * jl * 0.2;
+  ctx.strokeStyle = 'rgba(27,21,8,.5)'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let y = base - 8; y > top + 4; y -= 8) { ctx.moveTo(bx - 3, y); ctx.lineTo(bx + 3, y - 6); }
+  ctx.stroke();
+  const jl = W * 0.72; const jx = bx - Math.cos(swing) * jl, jy = top + Math.sin(swing) * jl * 0.2;
   ctx.strokeStyle = '#1B1508'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(bx + W * 0.1, top); ctx.lineTo(jx, jy); ctx.stroke();
   ctx.strokeStyle = '#F2C230'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bx + W * 0.1, top); ctx.lineTo(jx, jy); ctx.stroke();
-  const hx = bx - Math.cos(swing) * jl * 0.62, hy = top + Math.sin(swing) * jl * 0.12; const drop = H * (0.25 + 0.5 * (0.5 + 0.5 * Math.sin(now / 1300)));
-  ctx.strokeStyle = 'rgba(236,231,218,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx, hy + drop); ctx.stroke();
-  ctx.fillStyle = '#C3CDDF'; ctx.fillRect(hx - 5, hy + drop, 10, 6);
-  ctx.fillStyle = '#F2C230'; ctx.fillRect(bx - 4, top - 4, 8, 8);
+  const hx = bx - Math.cos(swing) * jl * 0.6, hy = top + Math.sin(swing) * jl * 0.12;
+  const u = 0.5 + 0.5 * Math.sin(now / 1500); const hookY = liftTo + (base - liftTo) * u;
+  ctx.strokeStyle = 'rgba(236,231,218,.85)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx, hookY); ctx.stroke();
+  ctx.fillStyle = '#C3CDDF'; ctx.fillRect(hx - 7, hookY, 14, 7); ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.strokeRect(hx - 7, hookY, 14, 7);
+  ctx.fillStyle = '#F2C230'; ctx.fillRect(bx - 4, top - 4, 8, 8); ctx.fillStyle = '#1B1508'; ctx.fillRect(bx + W * 0.08, top - 3, 10, 6);
   ctx.restore();
 }
+function phaseLabel(b) {
+  const f = 1 - b.b / b.tt;
+  if (!b.up) { if (f < 0.18) return 'Terraplanagem'; if (f < 0.3) return 'Fundação'; }
+  const sr = spriteRect(b, b.up || b.lvl); const K = floorsOf(sr);
+  const p = clamp(((b.up ? f : (f - 0.3) / 0.6)) * K, 0, K);
+  if (f < 0.9) return `Andar ${Math.min(K, Math.floor(p) + 1)} de ${K}`;
+  return 'Acabamento';
+}
 function drawProgress(b, X, W, Yb, z) {
-  const f = 1 - b.b / b.tt; const bw = Math.min(W - 10, 110 / Math.max(z, 0.7)), bx0 = X + W / 2 - bw / 2, by0 = Yb - TH * 0.45;
+  const f = 1 - b.b / b.tt; const bw = Math.min(W - 10, 120 / Math.max(z, 0.7)), bx0 = X + W / 2 - bw / 2, by0 = Yb - TH * 0.45;
   ctx.fillStyle = 'rgba(5,9,19,.85)'; rr(ctx, bx0 - 3, by0 - 3, bw + 6, 12 / Math.max(z, 0.7) + 2, 6); ctx.fill();
   ctx.fillStyle = b.up ? '#8C7CFF' : '#46E3B5'; rr(ctx, bx0, by0, Math.max(4, bw * f), 6 / Math.max(z, 0.7) + 2, 4); ctx.fill();
   if (z > 0.55) {
     ctx.fillStyle = '#ECE7DA'; ctx.font = `700 ${10 / z}px "Barlow Semi Condensed", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText((b.up ? 'Melhorando · ' : 'Em obras · ') + dur(b.b), X + W / 2, by0 - 3);
+    ctx.fillText(`${phaseLabel(b)} · ${dur(b.b)}`, X + W / 2, by0 - 3);
+  }
+}
+function drawSlice(sp, sr, K, i, gray, alpha, scale) {
+  // desenha o andar i (0 = térreo) do sprite; gray = versão "concreto"
+  const fh = sr.H / K, sh = sp.c.height / K; const dy = sr.Yb - (i + 1) * fh, sy = sp.c.height - (i + 1) * sh;
+  ctx.save(); ctx.globalAlpha = alpha;
+  if (scale !== 1) { ctx.translate(sr.X + sr.W / 2, dy + fh); ctx.scale(scale, scale); ctx.translate(-(sr.X + sr.W / 2), -(dy + fh)); }
+  ctx.drawImage(gray ? sp.g : sp.c, 0, sy, sp.c.width, sh, sr.X, dy, sr.W, fh + 0.6);
+  ctx.restore();
+}
+function drawConstruction(b, now, z, f, sr, sp, upgrade) {
+  // fases C e D: o prédio sobe andar por andar dentro de sr, com andaime, guindaste e operários
+  const t = TYPES[b.t]; const X = b.x * TW, Y = b.y * TH, W = t.w * TW, H = t.h * TH; const ground = Y + H - 3;
+  const K = floorsOf(sr); const fh = sr.H / K;
+  const c = upgrade ? clamp(f / 0.9, 0, 1) : clamp((f - 0.3) / 0.6, 0, 1);
+  const p = c * K; const built = Math.min(K, Math.floor(p)); const q = p - built;
+  const finishing = f >= 0.9; const d = finishing ? clamp((f - 0.9) / 0.1, 0, 1) : 0;
+  const ts = now / 1000; const wh = TH * 0.46;
+  if (b._floorSeen == null || b._floorSeen > built) b._floorSeen = built;
+  if (built > b._floorSeen) {
+    b._floorSeen = built; b._floorAt = now;
+    if (!quiet) for (let i = 0; i < 10; i++) parts.push({ x: sr.X + Math.random() * sr.W, y: sr.Yb - built * fh, vx: rnd(-25, 25), vy: rnd(-30, -5), t: 0, life: 0.7, c: 'rgba(200,190,170,.55)', r: 2 + Math.random() * 2.5 });
+  }
+  // andares prontos
+  for (let i = 0; i < built; i++) {
+    let sc = 1; if (i === built - 1 && b._floorAt) { const e = (now - b._floorAt) / 320; if (e < 1) sc = 1 + 0.06 * Math.sin(e * Math.PI); }
+    if (sp) drawSlice(sp, sr, K, i, false, 1, sc);
+  }
+  const topBuilt = sr.Yb - built * fh;
+  // andar em obra: vigas → concreto → fachada
+  if (built < K && sp && !finishing) {
+    const yTop = topBuilt - fh;
+    if (q < 0.35) drawFrame3(sr.X + 2, yTop, sr.W - 4, fh, q / 0.35);
+    else if (q < 0.7) { drawFrame3(sr.X + 2, yTop, sr.W - 4, fh, 1); drawSlice(sp, sr, K, built, true, clamp((q - 0.35) / 0.15, 0, 1) * 0.95, 1); }
+    else { drawSlice(sp, sr, K, built, true, 0.95, 1); drawSlice(sp, sr, K, built, false, clamp((q - 0.7) / 0.3, 0, 1), 1);
+      const sw = (q - 0.7) / 0.3; ctx.save(); ctx.globalAlpha = 0.35 * Math.sin(sw * Math.PI); ctx.fillStyle = '#FFF'; ctx.fillRect(sr.X + sr.W * sw - 6, yTop, 12, fh); ctx.restore(); }
+    // andaime nos dois andares de cima
+    drawScaffold(sr.X + 3, Math.max(sr.Y, yTop - fh * 0.6), sr.W - 6, fh * 1.6, 0.55, now);
+  } else if (finishing) {
+    if (sp) drawSlice(sp, sr, K, K - 1, false, 1, 1);
+    drawScaffold(sr.X + 3, sr.Y, sr.W - 6, fh * 1.2, 0.55 * (1 - d), now);
+  }
+  // guindaste
+  const craneTop = Math.min(topBuilt, sr.Y) - TH * 1.1;
+  drawCrane(sr.X, sr.W, ground, craneTop, now, finishing ? 1 - d : 1, Math.max(sr.Y, topBuilt - fh * 0.5));
+  // betoneira e placa
+  if (!upgrade && !finishing) drawMixer(X + 4, ground, now);
+  // operários (só quando dá para ver)
+  if (z > 0.42) {
+    ctx.save(); ctx.globalAlpha = finishing ? 1 - d : 1;
+    const seed = b.id * 7;
+    // no chão, na frente
+    for (let i = 0; i < 2; i++) {
+      const ph = hash(i, seed, 61) * TAU; const u = Math.sin(ts * (0.35 + 0.1 * i) + ph);
+      const wx = X + W * (0.5 + 0.38 * u); const dir = Math.cos(ts * (0.35 + 0.1 * i) + ph) < 0;
+      drawWorker(wx, ground - 1, wh, ts + i, i === 0 ? 'carry' : 'walk', VESTS[(i + b.id) % 4], dir);
+    }
+    // no andar em obra
+    const floorY = built > 0 ? topBuilt : ground - 2;
+    const n = built >= K ? 1 : 3;
+    for (let i = 0; i < n; i++) {
+      const ph = hash(i + 5, seed, 62); let act = ['hammer', 'walk', 'weld'][i % 3]; let wx;
+      if (act === 'walk') { const u = Math.sin(ts * 0.5 + ph * TAU); wx = sr.X + sr.W * (0.5 + 0.35 * u); }
+      else wx = sr.X + sr.W * (0.18 + 0.64 * ph);
+      const dir = act === 'walk' ? Math.cos(ts * 0.5 + ph * TAU) < 0 : ph > 0.5;
+      drawWorker(wx, floorY + (built > 0 ? 2 : 0), wh, ts + i * 1.7, act, VESTS[(i + b.id + 1) % 4], dir);
+      if (act === 'weld' && !quiet && !finishing && Math.random() < 0.3) {
+        const hx = wx + (dir ? -1 : 1) * wh * 0.4, hy = floorY - wh * 0.62;
+        for (let k = 0; k < 3; k++) parts.push({ x: hx, y: hy, vx: rnd(-40, 40), vy: rnd(-50, 10), t: 0, life: 0.25 + Math.random() * 0.2, c: Math.random() < 0.5 ? '#FFF6C8' : '#FFD34D', r: 1.2 + Math.random() });
+      }
+    }
+    ctx.restore();
   }
 }
 function drawBuilding(b, now, z) {
-  const t = TYPES[b.t]; const sr = spriteRect(b); const sp = SPR[sr.img];
+  const t = TYPES[b.t];
   let lift = 0;
   if (b.fx) { const e = (now - b.fx) / 650; if (e < 1) lift = Math.sin(e * Math.PI) * 8; else b.fx = 0; }
-  const building = b.b > 0 && !b.up;
-  if (building) {
-    const f = 1 - b.b / b.tt;
+  if (b.b > 0 && !b.up) {
+    // obra nova
+    const f = 1 - b.b / b.tt; const sr = spriteRect(b); const sp = SPR[sr.img];
     drawSite(b, now, z, f);
-    if (f > 0.28 && sp) {
-      const hf = clamp((f - 0.28) / 0.55, 0, 1); const a = f > 0.85 ? 0.75 + (f - 0.85) / 0.15 * 0.25 : 0.75;
-      ctx.save(); ctx.beginPath(); ctx.rect(sr.X - 20, sr.Yb - sr.H * hf, sr.W + 40, sr.H * hf + 4); ctx.clip();
-      ctx.globalAlpha = a; ctx.drawImage(sp.c, sr.X, sr.Y, sr.W, sr.H); ctx.restore();
-      if (f < 0.92) drawScaffold(sr.X + 3, sr.Yb - sr.H * hf, sr.W - 6, sr.H * hf, 0.55 * (1 - Math.max(0, (f - 0.8) / 0.12)), now);
-    }
-    if (f < 0.95) drawCrane(sr.X, sr.Y, sr.W, sr.H, f, now, f > 0.85 ? 1 - (f - 0.85) / 0.1 : 1);
+    if (f < 0.3) {
+      if (z > 0.42) {
+        const X = b.x * TW, Y = b.y * TH, W = t.w * TW, H = t.h * TH; const ground = Y + H - 3; const ts = now / 1000;
+        for (let i = 0; i < 2; i++) drawWorker(X + W * (0.3 + 0.4 * i), Y + H * (0.5 + 0.2 * i), TH * 0.46, ts + i, 'shovel', VESTS[(i + b.id) % 4], i === 1);
+        if (f >= 0.18) drawMixer(X + 4, ground, now);
+      }
+    } else drawConstruction(b, now, z, f, sr, sp, false);
     return;
   }
+  const sr = spriteRect(b); const sp = SPR[sr.img];
   if (sp) ctx.drawImage(sp.c, sr.X, sr.Y - lift, sr.W, sr.H);
   else { ctx.fillStyle = '#556'; ctx.fillRect(sr.X, sr.Y, sr.W, sr.H); }
   if (b.up) {
-    drawScaffold(sr.X + 3, sr.Y, sr.W - 6, sr.H, 0.5, now);
-    drawCrane(sr.X, sr.Y, sr.W, sr.H, 0.5, now, 0.95);
+    // melhoria: a nova maquete sobe andar por andar por cima da antiga
+    const f = 1 - b.b / b.tt; const nr = spriteRect(b, b.up); const np = SPR[nr.img];
+    drawConstruction(b, now, z, f, nr, np, true);
   }
   if (!b._on && b.b <= 0 && !b._con) { ctx.fillStyle = 'rgba(20,10,0,.25)'; ctx.fillRect(sr.X, sr.Y, sr.W, sr.H); }
   if (t.res && z > 0.5) {

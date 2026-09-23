@@ -27,7 +27,9 @@ Ou abra `arcologia-de-held.html` em qualquer navegador: é um único arquivo, fu
 9. **Cristais** compram itens que faltam e aceleram filas e obras. Você ganha cristais subindo de nível e cumprindo metas — não há loja nem espera paga.
 10. **Marcos (megaestruturas).** As maquetes inteiras — Arco da Holding, Arcologia Circular, Ciência e Educação, Santuário Expandido, Holding e Santuário Global e a composição total **Arcologia de Held** — custam chaves, créditos e produtos, e dão bônus para a cidade toda.
 
-Construir é **passo a passo**: terraplanagem com trator → laje de fundação → guindaste e andaimes enquanto a maquete sobe do chão → conclusão com confete. Melhorias de moradia repetem o andaime sobre a construção atual e revelam a nova maquete.
+Construir é **passo a passo, com operários**: terraplanagem (trator e operários de pá) → fundação (laje crescendo, betoneira girando) → o prédio sobe **andar por andar** (vigas de aço → concreto → fachada), com andaime, guindaste içando painéis, operários martelando, carregando e soldando (com faíscas) → acabamento e confete. Melhorias de moradia reconstroem por cima da maquete antiga, também andar por andar.
+
+![Fases da obra](arte/telas/11-fases-da-obra.png)
 
 Comandos: um dedo arrasta o mapa, dois dedos aproximam; toque numa construção para abrir a ficha (melhorar, produzir, mover, demolir). No computador, roda do mouse aproxima e `Esc` fecha o que estiver aberto.
 
