@@ -22,10 +22,10 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Montar o site (o jogo vira index.html)
+      - name: Montar o site (app instalável em app/)
         run: |
           mkdir -p site
-          cp arcologia-de-held.html site/index.html
+          cp -r app/. site/
           cp arcologia-de-held.html site/arcologia-de-held.html
           touch site/.nojekyll
       - uses: actions/configure-pages@v5
