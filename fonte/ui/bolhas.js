@@ -6,7 +6,7 @@ import { icone } from './icones.js';
 
 export class Bolhas {
   constructor(raiz, camera, engine) {
-    this.raiz = el('div', ''); this.raiz.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden'; raiz.appendChild(this.raiz);
+    this.raiz = el('div', ''); this.raiz.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden'; raiz.insertBefore(this.raiz, raiz.firstChild); // abaixo do HUD e dos painéis
     this.cam = camera; this.e = engine; this.mapa = new Map(); this._v = new THREE.Vector3(); this.visivel = true;
     this._colhendo = false;
     window.addEventListener('pointermove', (ev) => { if (!this._colhendo) return; const t = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.balao'); if (t && t._b && t._b.coletavel && !t._b._colhido) { t._b._colhido = true; t._b.acao(t); } }, { passive: true });
