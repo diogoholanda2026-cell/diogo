@@ -2,7 +2,9 @@
 
 Jogo de construção de cidade para celular (e navegador de computador), com a **mecânica do SimCity BuildIt** e as **construções recortadas das maquetes da Arcologia de Held** (as seis imagens em `arte/originais`).
 
-Abra `arcologia-de-held.html` em qualquer navegador: é um único arquivo, funciona offline, salva sozinho no aparelho e continua rendendo enquanto você está fora.
+**Jogar online:** https://diogoholanda2026-cell.github.io/diogo/ (publicado pelo GitHub Pages a cada push).
+
+Ou abra `arcologia-de-held.html` em qualquer navegador: é um único arquivo, funciona offline, salva sozinho no aparelho e continua rendendo enquanto você está fora.
 
 | Início | Cidade crescendo | Moradia pedindo itens |
 |---|---|---|
