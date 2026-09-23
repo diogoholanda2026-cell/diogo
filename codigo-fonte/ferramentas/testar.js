@@ -5,14 +5,15 @@ const { chromium, devices } = require('playwright');
 const path = require('path');
 const FILE = 'file://' + path.resolve(__dirname, '..', '..', 'arcologia-de-held.html');
 (async () => {
-  const opts = process.argv[2] ? { executablePath: process.argv[2] } : {};
+  const opts = { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] };
+  if (process.argv[2]) opts.executablePath = process.argv[2];
   const browser = await chromium.launch(opts);
   const ctx = await browser.newContext({ ...devices['Pixel 5'] });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
   page.on('console', m => { if (m.type() === 'error' && !/ERR_CERT|ERR_FILE|ERR_INTERNET|ERR_NAME/.test(m.text())) errors.push(m.text()); });
-  await page.goto(FILE); await page.waitForTimeout(1500);
+  await page.goto(FILE); await page.waitForTimeout(3500);
   const closeModal = () => page.evaluate(() => { for (let i = 0; i < 6; i++) { const b = document.querySelector('#mCard [data-close]'); if (b) b.click(); } });
   await closeModal();
   const r = await page.evaluate(() => {
@@ -38,7 +39,7 @@ const FILE = 'file://' + path.resolve(__dirname, '..', '..', 'arcologia-de-held.
     const a = h.serialize(); h.loadState(JSON.parse(JSON.stringify(a))); const b = h.serialize();
     out.salvamento = a.bld.length === b.bld.length && a.level === b.level && JSON.stringify(a.items) === JSON.stringify(b.items);
     h.catchUp(3600, true);
-    out.fim = { nivel: S.level, pop: h.D.pop, impostosAcumulados: Math.round(S.taxAcc) };
+    out.fim = { nivel: S.level, pop: h.D.pop, impostosAcumulados: Math.round(S.taxAcc), webgl: !!h.renderer, triangulos: h.renderer.info.render.triangles };
     return out;
   });
   console.log(JSON.stringify(r, null, 1));

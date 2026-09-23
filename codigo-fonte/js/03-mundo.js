@@ -229,5 +229,5 @@ function recalc() {
   }
   D.pop = pop; D.joy = pop ? joyW / pop : 0.5; D.taxH = taxH;
   D.used = 0; for (const k in S.items) D.used += S.items[k] || 0;
-  uiDirty = true;
+  uiDirty = true; worldDirty = true;
 }

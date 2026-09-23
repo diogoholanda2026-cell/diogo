@@ -1,5 +1,5 @@
 /* =========================================================
-   06 · entrada: toque, mouse, modos de posicionar e ruas
+   06 · entrada: toque, mouse, câmera orbital, modos de posicionar e ruas
    ========================================================= */
 let mode = 'normal', ghost = null, sel = null, roadTool = 'draw';
 
@@ -20,7 +20,7 @@ function spiralFind(t, cx, cy, ignoreId) {
 function startPlace(t, moving) {
   closeSheet(true); closeBuildMenu();
   mode = 'place';
-  const [cx, cy] = tileAt(vw / 2, vh / 2);
+  const [cx, cy] = [Math.round(cam.x), Math.round(cam.y)];
   ghost = { t, x: 0, y: 0, moving: moving || null, err: '' };
   const spot = moving ? [moving.x, moving.y] : spiralFind(t, cx, cy, 0) || [cx, cy];
   setGhost(spot[0], spot[1]);
@@ -31,9 +31,8 @@ function startPlace(t, moving) {
   banner('Arraste a construção ou toque no mapa onde quer colocá-la');
 }
 function centerOnGhost() {
-  const t = TYPES[ghost.t]; const cx = (ghost.x + t.w / 2) * TW, cy = (ghost.y + t.h / 2) * TH;
-  const [ax, ay] = s2w(40, 150), [bx, by] = s2w(vw - 40, vh - 170);
-  if (cx < ax || cx > bx || cy < ay || cy > by) { cam.x = cx; cam.y = cy; clampCam(); }
+  const t = TYPES[ghost.t]; const [sx, sy, sz] = project(ghost.x + t.w / 2, 0, ghost.y + t.h / 2);
+  if (sz > 1 || sx < 40 || sx > vw - 40 || sy < 150 || sy > vh - 170) lookAtTile(ghost.x + t.w / 2, ghost.y + t.h / 2);
 }
 function setGhost(x, y) {
   const t = TYPES[ghost.t];
@@ -86,7 +85,6 @@ function endPlace() {
 function startRoads() {
   closeSheet(true); closeBuildMenu(); mode = 'road'; roadTool = 'draw'; syncRoadTool();
   $('#dock').hidden = true; $('#side').hidden = true; $('#roadbar').hidden = false; $('#goal').hidden = true;
-  banner('Deslize um dedo para traçar · dois dedos movem o mapa');
 }
 function endRoads() { mode = 'normal'; $('#roadbar').hidden = true; $('#dock').hidden = false; $('#side').hidden = false; $('#goal').hidden = false; banner(''); recalc(); markDirty(); }
 function syncRoadTool() {
@@ -129,22 +127,21 @@ function roadLine(a, b) {
 const ptrs = new Map(); let gest = null; let needRecalc = false;
 function onGhost(sx, sy) {
   if (!ghost) return false; const [tx, ty] = tileAt(sx, sy); const t = TYPES[ghost.t];
-  return tx >= ghost.x - 1 && tx <= ghost.x + t.w && ty >= ghost.y - 2 && ty <= ghost.y + t.h;
+  return tx >= ghost.x - 1 && tx <= ghost.x + t.w && ty >= ghost.y - 1 && ty <= ghost.y + t.h;
 }
-function startPinch() {
+function twoFingerStart() {
   const [a, b] = [...ptrs.values()];
-  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; const [wx, wy] = s2w(mx, my);
-  gest = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: cam.z, wx, wy, moved: true };
+  gest = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, dist0: cam.dist, ang0: Math.atan2(b.y - a.y, b.x - a.x), rot0: cam.rot, my0: (a.y + b.y) / 2, tilt0: cam.tilt, moved: true };
 }
 cv.addEventListener('pointerdown', e => {
   try { cv.setPointerCapture(e.pointerId); } catch (_) {}
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 1) {
-    gest = { type: 'pending', sx: e.clientX, sy: e.clientY, moved: false };
-    if (mode === 'place' && onGhost(e.clientX, e.clientY)) {
-      const [tx, ty] = tileAt(e.clientX, e.clientY); gest.type = 'ghost'; gest.ox = tx - ghost.x; gest.oy = ty - ghost.y;
-    } else if (mode === 'road') { gest.type = 'road'; gest.lt = tileAt(e.clientX, e.clientY); gest.started = false; }
-  } else if (ptrs.size === 2) startPinch();
+    gest = { type: 'pending', sx: e.clientX, sy: e.clientY, moved: false, button: e.button, gp: groundPoint(e.clientX, e.clientY) };
+    if (e.button === 2 || e.button === 1) gest.type = 'orbit';
+    else if (mode === 'place' && onGhost(e.clientX, e.clientY)) { const [tx, ty] = tileAt(e.clientX, e.clientY); gest.type = 'ghost'; gest.ox = tx - ghost.x; gest.oy = ty - ghost.y; }
+    else if (mode === 'road') { gest.type = 'road'; gest.lt = tileAt(e.clientX, e.clientY); gest.started = false; }
+  } else if (ptrs.size === 2) twoFingerStart();
 });
 cv.addEventListener('pointermove', e => {
   const p = ptrs.get(e.pointerId); if (!p) return;
@@ -153,11 +150,13 @@ cv.addEventListener('pointermove', e => {
   if (gest.type === 'pinch') {
     if (ptrs.size < 2) return;
     const [a, b] = [...ptrs.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    cam.z = clamp(gest.z0 * d / gest.d0, minZ(), maxZ);
-    cam.x = gest.wx - (mx - vw / 2) / cam.z; cam.y = gest.wy - (my - vh / 2) / cam.z; clampCam(); return;
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; cam.dist = gest.dist0 * gest.d0 / d;
+    const ang = Math.atan2(b.y - a.y, b.x - a.x); cam.rot = gest.rot0 + (ang - gest.ang0);
+    cam.tilt = gest.tilt0 + ((a.y + b.y) / 2 - gest.my0) / vh * 1.6;
+    clampCam(); return;
   }
   if (Math.hypot(e.clientX - gest.sx, e.clientY - gest.sy) > 8) gest.moved = true;
+  if (gest.type === 'orbit') { cam.rot -= (e.clientX - px) * 0.006; cam.tilt += (e.clientY - py) * 0.005; clampCam(); return; }
   if (gest.type === 'ghost') { const [tx, ty] = tileAt(e.clientX, e.clientY); if (tx - gest.ox !== ghost.x || ty - gest.oy !== ghost.y) setGhost(tx - gest.ox, ty - gest.oy); }
   else if (gest.type === 'road') {
     if (!gest.moved) return;
@@ -166,7 +165,8 @@ cv.addEventListener('pointermove', e => {
     if (tl[0] !== gest.lt[0] || tl[1] !== gest.lt[1]) { roadLine(gest.lt, tl); gest.lt = tl; }
   } else if (gest.moved) {
     gest.type = 'pan'; cv.classList.add('drag');
-    cam.x -= (e.clientX - px) / cam.z; cam.y -= (e.clientY - py) / cam.z; clampCam();
+    const g0 = groundPoint(px, py), g1 = groundPoint(e.clientX, e.clientY);
+    if (g0 && g1) { cam.x -= g1[0] - g0[0]; cam.y -= g1[1] - g0[1]; clampCam(); }
   }
 });
 function endPtr(e, cancel) {
@@ -182,31 +182,34 @@ function endPtr(e, cancel) {
 }
 cv.addEventListener('pointerup', e => endPtr(e, false));
 cv.addEventListener('pointercancel', e => endPtr(e, true));
+cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('wheel', e => {
   e.preventDefault();
-  const [wx, wy] = s2w(e.clientX, e.clientY);
-  cam.z = clamp(cam.z * (e.deltaY < 0 ? 1.12 : 1 / 1.12), minZ(), maxZ);
-  cam.x = wx - (e.clientX - vw / 2) / cam.z; cam.y = wy - (e.clientY - vh / 2) / cam.z; clampCam();
+  cam.dist *= e.deltaY < 0 ? 1 / 1.12 : 1.12; clampCam();
 }, { passive: false });
 
-function buildingAt(wx, wy) {
-  // testa os sprites de frente para trás (o mais ao sul primeiro)
-  const list = S.bld.slice().sort((a, b) => (b.y + TYPES[b.t].h) - (a.y + TYPES[a.t].h) || b.x - a.x);
-  for (const b of list) { const sr = spriteRect(b); if (wx >= sr.X && wx <= sr.X + sr.W && wy >= sr.Y && wy <= sr.Yb) return b; }
-  return null;
+const _box = new T3.Box3();
+function buildingAt(sx, sy) {
+  _ndc.set(sx / vw * 2 - 1, -(sy / vh) * 2 + 1); _ray.setFromCamera(_ndc, camera);
+  let best = null, bestD = Infinity;
+  for (const [id, r] of sceneB) {
+    const g = r.group; const bb = g.userData.bb; if (!bb) continue;
+    _box.min.set(bb.min.x + g.position.x, Math.min(bb.min.y, 0), bb.min.z + g.position.z); _box.max.set(bb.max.x + g.position.x, Math.max(bb.max.y, 0.25), bb.max.z + g.position.z);
+    const hit = _ray.ray.intersectBox(_box, _hit); if (hit) { const d = _hit.distanceTo(camera.position); if (d < bestD) { bestD = d; best = r.b; } }
+  }
+  return best;
 }
 function tap(sx, sy, onG) {
-  const [tx, ty] = tileAt(sx, sy); const [wx, wy] = s2w(sx, sy);
+  const [tx, ty] = tileAt(sx, sy);
   if (mode === 'place') { if (!onG) { const t = TYPES[ghost.t]; setGhost(tx - Math.floor(t.w / 2), ty - Math.floor(t.h / 2)); } return; }
   if (buildOpen) { closeBuildMenu(); return; }
-  // bolhas
-  for (const h of hits) if (Math.hypot(wx - h.x, wy - h.y) <= h.r) {
+  for (const h of hits) if (Math.hypot(sx - h.sx, sy - h.sy) <= h.r) {
     if (h.kind === 'collect') { collect(h.b); return; }
     if (h.kind === 'tax') { collectTax(); return; }
     if (h.kind === 'cargo') { dispatchCargo(); return; }
     openInfo(h.b); return;
   }
-  const b = buildingAt(wx, wy);
+  const b = buildingAt(sx, sy);
   if (b) { openInfo(b); return; }
   if (!inb(tx, ty)) { closeSheet(); return; }
   if (!unlocked(tx, ty) && LAND[S.land + 1]) { openInfo(D.sede, 'land'); return; }
@@ -214,4 +217,6 @@ function tap(sx, sy, onG) {
 }
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (!$('#modal').hidden) nextModal(); else if (mode === 'place') endPlace(); else if (mode === 'road') endRoads(); else if (buildOpen) closeBuildMenu(); else closeSheet(); }
+  else if (e.key === 'q' || e.key === 'Q') { cam.rot += 0.12; } else if (e.key === 'e' || e.key === 'E') { cam.rot -= 0.12; }
+  else if (e.key === '+' || e.key === '=') { cam.dist /= 1.15; clampCam(); } else if (e.key === '-') { cam.dist *= 1.15; clampCam(); }
 });

@@ -426,6 +426,9 @@ function openCity() {
     const sp = el('div', 'box', `<h3>Ritmo do jogo</h3><p>Acelera obras, produção e impostos. Tudo é grátis — não existe loja nem espera paga.</p><div class="seg" role="group" aria-label="Ritmo">${[1, 2, 3].map(v => `<button data-sp="${v}" class="${S.speed === v ? 'on' : ''}">${v}×</button>`).join('')}</div>`);
     sp.querySelectorAll('[data-sp]').forEach(bt => bt.onclick = () => { S.speed = +bt.dataset.sp; markDirty(); openCity(); });
     body.append(sp);
+    const gq = el('div', 'box', `<h3>Gráficos</h3><p>"Leve" desliga as sombras e reduz a resolução: use se o jogo engasgar no seu aparelho.</p><div class="seg" role="group" aria-label="Gráficos"><button data-gfx="high" class="${gfxLow ? '' : 'on'}">Completo</button><button data-gfx="low" class="${gfxLow ? 'on' : ''}">Leve</button></div>`);
+    gq.querySelectorAll('[data-gfx]').forEach(bt => bt.onclick = () => { applyQuality(bt.dataset.gfx === 'low'); openCity(); });
+    body.append(gq);
     body.append(landBox(), storeBox());
     const sv = el('div', 'box', `<h3>Progresso salvo</h3><p data-sv></p><div class="row"><button class="btn sm" data-save>Salvar agora</button></div>`);
     sv.querySelector('[data-save]').onclick = () => { saveLocal(); cloudSave(); toast(`${icon('check')} Salvo.`, 'good'); };
@@ -439,13 +442,13 @@ function openCity() {
       <li>Os <b>impostos</b> acumulam na Sede: toque na moeda para coletar. Venda itens no <b>Depósito comercial</b> (Armazém) e compre no <b>Mercado Global</b>.</li>
       <li>O <b>Terminal de Cargas</b> traz encomendas: complete-as para ganhar <b>chaves</b> (parques e marcos) e <b>peças de expansão</b> (terreno e armazém).</li>
       <li><b>Cristais</b> compram itens que faltam ou aceleram filas. Você ganha cristais subindo de nível e cumprindo metas.</li>
-      <li>O jogo continua rendendo enquanto você está fora (até 10 horas). Dois dedos movem e aproximam o mapa.</li></ol>`);
+      <li>O jogo continua rendendo enquanto você está fora (até 10 horas). Um dedo arrasta o mapa; dois dedos aproximam, giram (torcendo) e inclinam (subindo ou descendo) a câmera. No computador: botão direito gira, roda do mouse aproxima, Q/E giram.</li></ol>`);
     body.append(help);
     const rs = el('div', 'box', `<h3>Recomeçar do zero</h3><p>Apaga a cidade atual neste aparelho e na nuvem.</p><div class="row"><button class="btn sm danger" data-reset>Recomeçar cidade</button></div>`);
     let armed = 0; const rb = rs.querySelector('[data-reset]');
     rb.onclick = () => {
       if (!armed) { armed = setTimeout(() => { armed = 0; rb.classList.remove('armed'); rb.textContent = 'Recomeçar cidade'; }, 3500); rb.classList.add('armed'); rb.textContent = 'Toque de novo para apagar tudo'; return; }
-      clearTimeout(armed); newGame(); const sd = D.sede; cam.x = (sd.x + 2.5) * TW; cam.y = (sd.y + 3) * TH; saveLocal(); cloudSave(); closeSheet(); toast('Nova cidade criada.', 'good');
+      clearTimeout(armed); newGame(); const sd = D.sede; lookAtTile(sd.x + 2.5, sd.y + 1.5); saveLocal(); cloudSave(); closeSheet(); toast('Nova cidade criada.', 'good');
     };
     body.append(rs);
     const refresh = () => {

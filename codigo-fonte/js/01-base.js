@@ -3,7 +3,7 @@
    01 · base: constantes e utilidades
    ========================================================= */
 const N = 48;             // mapa N x N quadrados (a mesa inteira)
-const TW = 64, TH = 40;   // tamanho de um quadrado em unidades de mundo (vista inclinada 3/4)
+const TW = 1, TH = 1;     // um quadrado = uma unidade de mundo no 3D
 const TAU = Math.PI * 2;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
