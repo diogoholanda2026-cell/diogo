@@ -28,7 +28,7 @@
 // J.servicoInfo(tipo) → {cap, uso} (tipo 'agua'|'energia'|'saneamento'); J.bemInfo() → {total, fontes[], pressao}.
 // Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera} com
 //   recompensa = {creditos, xp, itens?:{id:n}, bem?:{n,h}, disposicao?}; (creditos, xp, especial: cópias antigas).
-// Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, dica}; valem nos capítulos seguintes.
+// Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, porque, dica (as três juntas)}; valem nos capítulos seguintes.
 // Consultas com efeitos das escolhas: J.itensEtapa(p,e), J.custoEtapa(p,e), J.durEtapa(p,e), J.durItem(k),
 //   J.predioLiberado(id), J.vagasFila(id), J.requisitosModulo(f,i) → {…, servicos[], bemMin}.
 import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data/itens.js';

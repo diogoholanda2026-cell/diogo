@@ -44,8 +44,8 @@ export const TUTORIAL = [
 // tipos de meta: etapa ('proj.e'), modulos (faixa, quantidade, nível), predio (id), nivel (jogador).
 // obras: ids do que o capítulo abre; abre: os nomes (calculados no fim do arquivo).
 // A escolha feita no fim de um capítulo vale para os seguintes (EFEITOS): por isso o dilema
-// oferecido fala do que vem pela frente. Cada opção tem quem prefere, o ganho e o custo; a primeira
-// cuida das pessoas (bem-estar) e a segunda acelera a obra.
+// oferecido fala do que vem pela frente. Cada opção: {id, quem, txt, ganho, custo, porque} (+ dica pronta, no fim
+// do arquivo); a primeira cuida das pessoas (bem-estar) e a segunda acelera a obra.
 export const CAPITULOS = [
   { n: 1, nome: 'Fundação', sub: 'Terra nua, primeiros materiais', obras: ['pas_frente', 'lago', 'sede', 'anel'],
     metas: [
@@ -57,8 +57,8 @@ export const CAPITULOS = [
     ],
     fala: [['iris', 'O Conselho viu a primeira volta do Anel de pé. Aprovado!'], ['tome', 'Agora o canteiro precisa crescer com a obra. Como vamos organizá-lo?']],
     escolha: [
-      { id: 'compacto', quem: 'iris', txt: 'Canteiro compacto', ganho: '+6% de bem-estar', custo: '−20 vagas no Almoxarifado', dica: 'Íris prefere: menos caminhões perto da mata.' },
-      { id: 'amplo', quem: 'tome', txt: 'Canteiro amplo', ganho: '+40 vagas no Almoxarifado e +3 vagas na fila de cada oficina', custo: '−4% de bem-estar até o epílogo', dica: 'Tomé prefere: estoque folgado e oficinas que trabalham a noite toda.' },
+      { id: 'compacto', quem: 'iris', txt: 'Canteiro compacto', ganho: '+6% de bem-estar', custo: '−20 vagas no Almoxarifado', porque: 'Íris prefere: menos caminhões perto da mata.' },
+      { id: 'amplo', quem: 'tome', txt: 'Canteiro amplo', ganho: '+40 vagas no Almoxarifado e +3 vagas na fila de cada oficina', custo: '−4% de bem-estar até o epílogo', porque: 'Tomé prefere: estoque folgado e oficinas que trabalham a noite toda.' },
     ] },
   { n: 2, nome: 'Água que corre', sub: 'Lago vivo, praça e escola', obras: ['escola', 'campo', 'praca', 'pas_bulevar', 'pas_anel', 'pas_frente2'],
     metas: [
@@ -71,8 +71,8 @@ export const CAPITULOS = [
     ],
     fala: [['nara', 'A água do lago já volta limpa para a mata. Os martins-pescadores voltaram.'], ['iris', 'Agora, o coração do campus: a Biblioteca. O que abre primeiro?']],
     escolha: [
-      { id: 'biblio24h', quem: 'cida', txt: 'Biblioteca aberta dia e noite', ganho: '+6% de bem-estar', custo: '−1.500 de energia e 3 estantes a mais nos andares de leitura', dica: 'Dona Cida prefere: estudo não tem hora.' },
-      { id: 'labs', quem: 'caio', txt: 'Laboratórios primeiro', ganho: 'Laboratório de Campo liberado já; ele e a Oficina Elétrica 25% mais rápidos', custo: 'Dossel da Biblioteca 20% mais caro', dica: 'Caio prefere: pesquisa começa cedo.' },
+      { id: 'biblio24h', quem: 'cida', txt: 'Biblioteca aberta dia e noite', ganho: '+6% de bem-estar', custo: '−1.500 de energia e 3 estantes a mais nos andares de leitura', porque: 'Dona Cida prefere: estudo não tem hora.' },
+      { id: 'labs', quem: 'caio', txt: 'Laboratórios primeiro', ganho: 'Laboratório de Campo liberado já; ele e a Oficina Elétrica 25% mais rápidos', custo: 'Dossel da Biblioteca 20% mais caro', porque: 'Caio prefere: pesquisa começa cedo.' },
     ] },
   { n: 3, nome: 'Saber de madeira', sub: 'Biblioteca, faculdades e ciência', obras: ['biblioteca', 'crd', 'humanidades', 'engenharia', 'instituto', 'ciencias', 'onda', 'gramadoUni', 'uniElo', 'pas_ponte', 'ponteCoberta', 'pas_caracol', 'uni', 'anelBib'],
     metas: [
@@ -87,8 +87,8 @@ export const CAPITULOS = [
     ],
     fala: [['iris', 'O dossel da Biblioteca aparece de qualquer ponto do campus. Lindo.'], ['caio', 'E embaixo da terra cabe um acelerador inteiro. De onde vem a energia?']],
     escolha: [
-      { id: 'telhados', quem: 'nara', txt: 'Telhados solares', ganho: '+1.500 de energia e +3% de bem-estar', custo: 'Cada casa pede 1 painel solar a mais no 2º pavimento', dica: 'Nara prefere: nada de perfurar o aquífero.' },
-      { id: 'geotermia', quem: 'caio', txt: 'Geotermia profunda', ganho: '+3.000 de energia', custo: 'Centro de Física 30% mais demorado', dica: 'Caio prefere: o calor da terra não acaba.' },
+      { id: 'telhados', quem: 'nara', txt: 'Telhados solares', ganho: '+1.500 de energia e +3% de bem-estar', custo: 'Cada casa pede 1 painel solar a mais no 2º pavimento', porque: 'Nara prefere: nada de perfurar o aquífero.' },
+      { id: 'geotermia', quem: 'caio', txt: 'Geotermia profunda', ganho: '+3.000 de energia', custo: 'Centro de Física 30% mais demorado', porque: 'Caio prefere: o calor da terra não acaba.' },
     ] },
   { n: 4, nome: 'Energia escondida', sub: 'Acelerador e Vila Estudantil', obras: ['acelerador', 'anfiteatro', 'pas_vila', 'casas'],
     metas: [
@@ -99,8 +99,8 @@ export const CAPITULOS = [
     ],
     fala: [['caio', 'Primeiro feixe no anel! E a rede de energia aguenta a arcologia inteira.'], ['nara', 'Agora é a vez dos gigantes. Quem chega primeiro ao Santuário?']],
     escolha: [
-      { id: 'elefantes', quem: 'nara', txt: 'Elefantes primeiro', ganho: '+4% de bem-estar', custo: 'A cúpula do Bioma espera os elefantes chegarem', dica: 'Nara prefere: a manada está num zoológico fechado.' },
-      { id: 'aquario', quem: 'caio', txt: 'Aquário primeiro', ganho: 'A cúpula tem prioridade: Serralheria e Vidraçaria 25% mais rápidas e aquário com 40% menos itens', custo: 'Os elefantes esperam mais no zoológico: −2% de bem-estar', dica: 'Caio prefere: a baleia não pode esperar.' },
+      { id: 'elefantes', quem: 'nara', txt: 'Elefantes primeiro', ganho: '+4% de bem-estar', custo: 'A cúpula do Bioma espera os elefantes chegarem', porque: 'Nara prefere: a manada está num zoológico fechado.' },
+      { id: 'aquario', quem: 'caio', txt: 'Aquário primeiro', ganho: 'A cúpula tem prioridade: Serralheria e Vidraçaria 25% mais rápidas e aquário com 40% menos itens', custo: 'Os elefantes esperam mais no zoológico: −2% de bem-estar', porque: 'Caio prefere: a baleia não pode esperar.' },
     ] },
   { n: 5, nome: 'Casa dos gigantes', sub: 'Santuário, savana, bioma e gorilas', obras: ['santuario', 'santuarioInt', 'savana', 'bioma', 'gorilas', 'pas_trilhaBioma', 'pas_elo', 'pas_santuario'],
     metas: [
@@ -112,8 +112,8 @@ export const CAPITULOS = [
     ],
     fala: [['nara', 'Os gorilas olham para a passarela com curiosidade. Estão em casa.'], ['iris', 'Falta só o canteiro para a composição ficar igual à maquete. E a água do replantio?']],
     escolha: [
-      { id: 'tarifa', quem: 'cida', txt: 'Tarifa social da água', ganho: '+6% de bem-estar', custo: '−10% nos repasses', dica: 'Dona Cida prefere: água limpa para todos, pelo preço justo.' },
-      { id: 'aguaObra', quem: 'tome', txt: 'Água para a obra', ganho: 'Central de Concreto e Horto 20% mais rápidos', custo: '−2% de bem-estar', dica: 'Tomé prefere: o replantio pede muita rega.' },
+      { id: 'tarifa', quem: 'cida', txt: 'Tarifa social da água', ganho: '+6% de bem-estar', custo: '−10% nos repasses', porque: 'Dona Cida prefere: água limpa para todos, pelo preço justo.' },
+      { id: 'aguaObra', quem: 'tome', txt: 'Água para a obra', ganho: 'Central de Concreto e Horto 20% mais rápidos', custo: '−2% de bem-estar', porque: 'Tomé prefere: o replantio pede muita rega.' },
     ] },
   { n: 6, nome: 'Composição total', sub: 'Devolver o canteiro à mata', obras: ['reflorestar'],
     metas: [{ tipo: 'etapa', id: 'reflorestar.e0', txt: 'Desmonte o canteiro' }, { tipo: 'etapa', id: 'reflorestar.e1', txt: 'Replante a mata' }],
@@ -278,5 +278,9 @@ export const EPILOGO = {
   aguaObra: ['tome', 'O Horto regou o replantio inteiro sem faltar água. A mata pegou rápido.'],
 };
 
-// nomes do que cada capítulo abre (projetos que não existem nesta versão ficam de fora)
-for (const c of CAPITULOS) { c.obras = c.obras.filter((id) => PROJ[id] || MODULOS[id]); c.abre = c.obras.map((id) => PROJ[id]?.nome || MODULOS[id].nome); }
+// nomes do que cada capítulo abre (projetos que não existem nesta versão ficam de fora) e o texto pronto de cada
+// escolha (dica = ganho, custo e quem prefere, para quem mostra uma linha só)
+for (const c of CAPITULOS) {
+  c.obras = c.obras.filter((id) => PROJ[id] || MODULOS[id]); c.abre = c.obras.map((id) => PROJ[id]?.nome || MODULOS[id].nome);
+  for (const o of c.escolha || []) o.dica = `${o.ganho}. Custo: ${o.custo}. ${o.porque}`;
+}
