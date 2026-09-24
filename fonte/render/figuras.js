@@ -83,7 +83,8 @@ const angDif = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d
 // Multidão: instâncias que andam ao longo de caminhos (listas de pontos [x,y,z]) ou vão a postos de
 // trabalho (setPosto). Com { lod: true } (e update com a câmera), quem está longe usa a figura barata
 // (this.mesh) e quem está perto a figura inteira (this.perto, filho de this.mesh: 1 chamada a mais só
-// quando há alguém perto). Parado, a figura para de balançar; nas pontas de um vai e vem, pausa de 1,5 a 4 s.
+// quando há alguém perto; a de longe fica visível com count 0, que não desenha). Parado, a figura para
+// de balançar; nas pontas de um vai e vem, pausa de 1,5 a 4 s.
 export class Crowd {
   constructor(kind = 'pessoa', max = 200, o = {}) {
     const G = figureGeos(); this.lod = !!(o.lod && G[kind + 'Longe']);
@@ -180,7 +181,7 @@ export class Crowd {
       alvo.setMatrixAt(j, this._m); const A = an.array; A[j * 3] = w.fase; A[j * 3 + 1] = w.passo; A[j * 3 + 2] = w.trab;
     }
     if (!lod) { this.mesh.count = W.length; this.mesh.visible = true; this.mesh.instanceMatrix.needsUpdate = true; aL.needsUpdate = true; return; }
-    this.mesh.count = kl; this.mesh.visible = true; this.mesh.material.visible = kl > 0; this.perto.count = kp; this.perto.visible = kp > 0; // longe vazio: sem chamada (a de perto é filha da malha)
+    this.mesh.count = kl; this.mesh.visible = true; this.perto.count = kp; this.perto.visible = kp > 0; // longe vazio (count 0): o three não emite a chamada; o material é de todas as multidões, não se esconde
     if (kl) { this.mesh.instanceMatrix.needsUpdate = true; aL.needsUpdate = true; } if (kp) { this.perto.instanceMatrix.needsUpdate = true; aP.needsUpdate = true; }
   }
 }
