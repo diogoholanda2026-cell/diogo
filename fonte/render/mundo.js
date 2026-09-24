@@ -171,7 +171,7 @@ export class Mundo {
       const n = Math.floor(q.n * k + R());
       if (q.tipo === 'linha') { for (let i = 0; i < n; i++) C.add(q.pts, { speed: 0.12 + R() * 0.06, phase: R(), idle: R() < 0.3 ? 1 : 0 }); continue; }
       const { area, y = 0.03 } = q.P; let bx0 = 1e9, bz0 = 1e9, bx1 = -1e9, bz1 = -1e9; for (const [x, z] of area) { bx0 = Math.min(bx0, x); bz0 = Math.min(bz0, z); bx1 = Math.max(bx1, x); bz1 = Math.max(bz1, z); }
-      const livre = (a, c) => [0.25, 0.5, 0.75].every((t) => { const x = a[0] + (c[0] - a[0]) * t, z = a[1] + (c[1] - a[1]) * t; return inPoly(x, z, area) && !naAgua(x, z); }); // o trecho inteiro fora da água
+      const livre = (a, c) => { const n = Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / 0.2); for (let k = 1; k < n; k++) { const x = a[0] + ((c[0] - a[0]) * k) / n, z = a[1] + ((c[1] - a[1]) * k) / n; if (!inPoly(x, z, area) || naAgua(x, z)) return false; } return true; }; // o trecho inteiro fora da água (a cada 0,2)
       const ponto = () => { for (let t = 0; t < 40; t++) { const x = bx0 + R() * (bx1 - bx0), z = bz0 + R() * (bz1 - bz0); if (inPoly(x, z, area) && !naAgua(x, z)) return [x, z]; } return null; };
       for (let i = 0; i < n; i++) {
         const pts = []; let a = ponto(); if (!a) continue; pts.push([a[0], y, a[1]]);
