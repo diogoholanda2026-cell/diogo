@@ -1,0 +1,22 @@
+name: Robô de equilíbrio
+
+# A cada envio, o robô joga a partida inteira em várias combinações (sessões curtas, escolhas do
+# Conselho, Mutirão, Depósito, encomenda em cadeia e Meta em foco) e confere as faixas de ritmo.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simular:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Testes de regra, matriz de 8 combinações e dilemas
+        run: npm run simular:todos
