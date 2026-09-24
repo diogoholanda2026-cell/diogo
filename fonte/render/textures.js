@@ -136,13 +136,14 @@ export function facadeTextures(style = 'quente') {
   return out;
 }
 
-// texto e moldura gravados da placa da mesa (desenhados iguais na cor e no mapa de metal/rugosidade)
+// texto e moldura gravados da placa da mesa (desenhados iguais na cor e no mapa de metal/rugosidade):
+// título em caixa-alta grossa e três linhas curtas de corpo, grandes o bastante para ler na vista da foto
 function placa(g, w, h, cor) {
-  g.strokeStyle = cor; g.lineWidth = 5; g.strokeRect(14, 14, w - 28, h - 28); g.lineWidth = 1.5; g.strokeRect(24, 24, w - 48, h - 48);
-  g.fillStyle = cor; g.textAlign = 'center';
-  const titulo = 'COMPOSIÇÃO TOTAL DA ARCOLOGIA DE HELD'; let fs = 48; g.font = `700 ${fs}px Georgia, serif`; while (g.measureText(titulo).width > w - 100 && fs > 20) { fs -= 2; g.font = `700 ${fs}px Georgia, serif`; } g.fillText(titulo, w / 2, 80);
-  const L = ['Integração de ciência, educação, conservação e convivência numa só arcologia sustentável.', 'Campus, biblioteca, acelerador, santuário e bioma aquático ligados por passarelas verdes,', 'operados com energia solar e reuso de água. Modelo vivo de sustentabilidade urbana.'];
-  L.forEach((l, i) => { let f2 = 24; g.font = `600 ${f2}px Georgia, serif`; while (g.measureText(l).width > w - 90 && f2 > 12) { f2 -= 1; g.font = `600 ${f2}px Georgia, serif`; } g.fillText(l, w / 2, 132 + i * 34); });
+  g.strokeStyle = cor; g.lineWidth = 6; g.strokeRect(14, 14, w - 28, h - 28); g.lineWidth = 2; g.strokeRect(26, 26, w - 52, h - 52);
+  g.fillStyle = cor; g.textAlign = 'center'; g.lineJoin = 'round';
+  const escreve = (txt, y, fs, peso, borda) => { g.font = `${peso} ${fs}px sans-serif`; while (g.measureText(txt).width > w - 120 && fs > 20) { fs -= 1; g.font = `${peso} ${fs}px sans-serif`; } g.fillText(txt, w / 2, y); if (borda) { g.lineWidth = borda; g.strokeText(txt, w / 2, y); } };
+  escreve('COMPOSIÇÃO TOTAL DA ARCOLOGIA DE HELD', 96, 64, 800, 2);
+  ['Ciência, educação e conservação numa só arcologia sustentável:', 'campus, biblioteca, acelerador, santuário e bioma aquático', 'ligados por passarelas verdes, com energia solar e reuso de água.'].forEach((l, i) => escreve(l, 166 + i * 50, 38, 700, 0.8));
 }
 
 export const tex = {
@@ -269,14 +270,14 @@ export const tex = {
     }
     g.putImageData(img, 0, 0);
   }, { linear: true }),
-  // placa de latão escovado com o texto gravado; a cor do latão vem do material (0xc9a45c) e o
+  // placa de latão escovado com o texto gravado; a cor do latão vem do material (0xc0b494) e o
   // gravado é fosco e não metálico (tex.brassMR: rugosidade no verde, metal no azul)
-  brass: () => canvasTex('brass', 1280, 256, (g, w, h) => {
+  brass: () => canvasTex('brass', 1280, 320, (g, w, h) => {
     const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#f4efe4'); gr.addColorStop(0.55, '#e2d9c6'); gr.addColorStop(1, '#cfc4ae'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
     for (let i = 0; i < 260; i++) { g.fillStyle = hash(i, 1, 97) < 0.5 ? 'rgba(255,255,255,.10)' : 'rgba(90,80,60,.07)'; g.fillRect(0, hash(i, 2, 97) * h, w, 1); }
-    placa(g, w, h, '#3a3632');
-  }),
-  brassMR: () => canvasTex('brassMR', 1280, 256, (g, w, h) => { g.fillStyle = 'rgb(0,71,230)'; g.fillRect(0, 0, w, h); placa(g, w, h, 'rgb(0,204,26)'); }, { linear: true }),
+    placa(g, w, h, '#1e1a16');
+  }, { aniso: 8 }),
+  brassMR: () => canvasTex('brassMR', 1280, 320, (g, w, h) => { g.fillStyle = 'rgb(0,71,230)'; g.fillRect(0, 0, w, h); placa(g, w, h, 'rgb(0,204,26)'); }, { linear: true, aniso: 8 }),
 };
 
 // cobertura de nuvens de luz (spots) projetada no chão — "cookie" da luz principal
