@@ -45,29 +45,6 @@ function partida(o) {
     if (tipo === 'novoCapitulo') { nNovo++; if (d.cap.n === 6) nNovo6++; log.push(`${hora()} >>> capítulo ${d.cap.n} (${d.cap.nome})  nível ${S.nivel} créditos ${S.creditos} fichas ${S.mutirao} disp ${S.disposicao} vida ${J.vida().toFixed(0)}%`); }
     if (tipo === 'fimDeJogo') { nFim++; log.push(`${hora()} >>> fim de jogo`); }
   });
-  // -------- o que falta para as próximas obras (com os insumos, descontando o estoque)
-  function necessidades() {
-    const need = {}, extra = {}; const add = (o, k, n) => { if (ITENS[k].tipo !== 'especial') o[k] = (o[k] || 0) + n; };
-    for (const p of PROJETOS) { // etapa aberta de cada obra; a seguinte (ou a que está em obra) entra como planejamento
-      if (p.cap > S.cap) continue; let prox = 0;
-      for (const e of p.etapas) {
-        const k = p.id + '.' + e.id; const s = J.situacao(p, e); if (s === 'feita') continue;
-        if (!prox && (s === 'disponivel' || s === 'prancha')) { for (const [i, n] of Object.entries(J.faltaEtapa(k))) add(need, i, n); prox = 1; continue; }
-        if (!prox && (s === 'obra' || s === 'pronta')) { prox = 1; continue; }
-        if (prox && s === 'bloqueada' && o.previsao !== 0) { for (const [i, n] of Object.entries(J.itensEtapa(p, e))) add(extra, i, n); } else if (!prox && J.aceitaEntrega(p, e)) for (const [i, n] of Object.entries(J.faltaEtapa(k))) add(extra, i, n);
-        break;
-      }
-    }
-    for (const p of PROJETOS) if (p.cap > S.cap) for (const e of p.etapas) if (J.aceitaEntrega(p, e) && J.etapa(p.id + '.' + e.id).estado !== 'obra') for (const [i, n] of Object.entries(J.faltaEtapa(p.id + '.' + e.id))) add(extra, i, n);
-    for (const f of Object.keys(S.modulos)) S.modulos[f].forEach((mm, i) => { if (J.situacaoModulo(f, i) === 'disponivel') { const r = J.requisitosModulo(f, i); if (r.servOk && r.bemOk) for (const [k, n] of Object.entries(r.itens)) add(need, k, n); } });
-    const expandir = (base) => { const total = {}, bruto = {}; const est = { ...S.itens };
-      const exp = (k, n) => { const it = ITENS[k]; if (!it || it.tipo === 'especial' || n <= 0) return; const usa = Math.min(est[k] || 0, n); est[k] = (est[k] || 0) - usa; const f = n - usa; total[k] = (total[k] || 0) + n; if (!f) return; if (it.tipo === 'bruto') bruto[k] = (bruto[k] || 0) + f; else for (const [r, q] of Object.entries(it.req)) exp(r, q * f); };
-      for (const [k, n] of Object.entries(base)) exp(k, n); for (const [k, n] of Object.entries(total)) base[k] = Math.max(base[k] || 0, n); return bruto; };
-    const bruto = expandir(need); const brutoX = expandir(extra);
-    // licenças que faltam viram madeira, aço e cobre para o topógrafo
-    for (const p of PROJETOS) { const nx = J.proximaEtapa(p); if (!nx || !['disponivel', 'prancha'].includes(nx.s)) continue; const f = J.faltaEtapa(p.id + '.' + nx.e.id); for (const k of LIC) if (f[k]) for (const [i, q] of Object.entries(TOPOGRAFO[k].itens)) { bruto[i] = (bruto[i] || 0) + q * f[k]; need[i] = (need[i] || 0) + q * f[k]; } }
-    return { need, bruto, extra, brutoX };
-  }
   let acoes = 0; const conta = (r) => { if (r === 'ok') acoes++; return r; };
   const coletarTudo = () => { for (const u of USINAS) if (S.predios[u].ok) for (const i of J.prontosUsina(u)) conta(J.coletarUsina(u, i)); for (const x of OFICINAS) if (S.predios[x].ok) conta(J.coletarOficina(x)); J.coletarRepasse(); };
   const aprovarTudo = () => { for (const [k, st] of Object.entries(S.etapas)) if (st.estado === 'pronta') conta(J.aprovarEtapa(k)); for (const f of Object.keys(S.modulos)) S.modulos[f].forEach((mm, i) => { if (mm.obra?.estado === 'pronta') conta(J.aprovarModulo(f, i)); }); };
@@ -181,20 +158,20 @@ function partida(o) {
       const pl = J.planoMeta(); if (!pl || pl.acao === 'aguardar') break; const a = pl.alvo || {}; let r = 'x';
       if (pl.acao === 'apresentar') { escolher(); r = 'ok'; }
       else if (pl.acao === 'aprovar') r = a.etapa ? J.aprovarEtapa(a.etapa) : J.aprovarModulo(a.modulo[0], a.modulo[1]);
-      else if (pl.acao === 'coletar') { if (a.repasse) r = J.coletarRepasse(); else if (PREDIOS[a.predio].tipo === 'usina') { for (const i of J.prontosUsina(a.predio)) r = J.coletarUsina(a.predio, i); } else r = J.coletarOficina(a.predio); if (r === 'almox') { venderSobras(necessidades().need); r = 'x'; } }
+      else if (pl.acao === 'coletar') { if (a.repasse) r = J.coletarRepasse(); else if (PREDIOS[a.predio].tipo === 'usina') { for (const i of J.prontosUsina(a.predio)) r = J.coletarUsina(a.predio, i); } else r = J.coletarOficina(a.predio); if (r === 'almox') { venderSobras(plano(prioridades()).need); r = 'x'; } }
       else if (pl.acao === 'iniciar') r = a.etapa ? J.iniciarEtapa(a.etapa) : J.melhorarModulo(a.modulo[0], a.modulo[1]);
       else if (pl.acao === 'entregar') r = J.entregar(a.etapa, pl.item, pl.n);
       else if (pl.acao === 'construir') r = a.almox ? J.ampliarAlmox() : J.construirPredio(a.predio);
-      else if (pl.acao === 'vender') { const L = J.livre; venderSobras(necessidades().need); r = J.livre > L ? 'ok' : 'x'; }
+      else if (pl.acao === 'vender') { const L = J.livre; venderSobras(plano(prioridades()).need); r = J.livre > L ? 'ok' : 'x'; }
       else if (pl.acao === 'produzir') { if (a.topografo) r = J.encomendarLicenca(a.topografo); else for (let q = 0; q < Math.max(1, pl.n); q++) { const x = PREDIOS[a.predio].tipo === 'usina' ? J.produzir(a.predio, pl.item) : J.enfileirar(a.predio, pl.item); if (x !== 'ok') break; r = 'ok'; } }
-      if (r !== 'ok') { if (J.livre < 4) venderSobras(necessidades().need); break; } acoes++;
+      if (r !== 'ok') { if (J.livre < 4) venderSobras(plano(prioridades()).need); break; } acoes++;
     }
   }
   let fimSessao = false;
   function turno() {
     J.tick(t); acoes = 0; const c = m(cap()); o.aCadaTurno?.(J, S, t);
     coletarTudo(); aprovarTudo(); escolher();
-    if (o.robo === 'meta') { turnoMeta(); if (J.livre < 4) venderSobras(necessidades().need); } else turnoGuloso();
+    if (o.robo === 'meta') { turnoMeta(); if (J.livre < 4) venderSobras(plano(prioridades()).need); } else turnoGuloso();
     let ob = 0; for (const st of Object.values(S.etapas)) if (st.estado === 'obra') ob++; for (const arr of Object.values(S.modulos)) for (const x of arr) if (x.obra) ob++;
     c.obrasMax = Math.max(c.obrasMax, ob); c.obrasAm.push(ob);
     c.credMin = Math.min(c.credMin, S.creditos); c.credMax = Math.max(c.credMax, S.creditos); c.turnos++; if (!acoes) c.semAcao++;
