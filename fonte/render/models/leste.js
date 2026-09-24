@@ -235,7 +235,9 @@ function inPolyS(x, z, poly) { let ins = false; for (let i = 0, j = poly.length 
 export function santuarioInterior() {
   const s = A.santuario; const L = s.lago || { c: [s.c[0] + 0.4, s.c[1] - 1.5], rx: 2, rz: 1.15, rot: 0.2 }; const root = new THREE.Group(); root.name = 'santuarioInt'; const P = {};
   P.e1 = new THREE.Group(); // rochas em volta da lagoa e no pasto, mirantes
-  for (const [dx, dz, sc] of [[-2.7, -0.9, 0.45], [2.6, -1.2, 0.4], [1.2, -1.9, 0.3], [-1.6, 1.6, 0.35]]) { const x = L.c[0] + dx, z = L.c[1] + dz; P.e1.add(rocha(x, z, sc, (x * 11) | 0)); }
+  // na beira d'água (meio dentro da lagoa): fora dela a mata interna cobriria as pedras
+  const cr = Math.cos(L.rot || 0), sr = Math.sin(L.rot || 0);
+  for (const [a, k, sc] of [[3.3, 1.0, 0.45], [0.15, 1.02, 0.4], [4.6, 0.98, 0.32], [1.9, 1.0, 0.35]]) { const u = Math.cos(a) * L.rx * k, v = Math.sin(a) * L.rz * k; const x = L.c[0] + u * cr - v * sr, z = L.c[1] + u * sr + v * cr; P.e1.add(rocha(x, z, sc, (x * 11) | 0)); }
   const [gc, grx, grz] = SANTUARIO_GRAMADO.elipse; for (const [dx, dz, sc] of [[-2.8, 0.4, 0.4], [2.9, -0.3, 0.35]]) P.e1.add(rocha(gc[0] + dx, gc[1] + dz, sc, 60 + dx * 3));
   P.e2 = new THREE.Group(); // fauna resgatada: elefantes e rinocerontes no pasto atrás da pista
   const esq = [[gc[0] - grx * 0.85, gc[1] - grz * 0.4], [gc[0] - 0.3, gc[1] - grz * 0.75], [gc[0] - 0.3, gc[1] + grz * 0.75], [gc[0] - grx * 0.85, gc[1] + grz * 0.4]];
