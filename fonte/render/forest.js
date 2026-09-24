@@ -1,4 +1,4 @@
-// Árvores instanciadas: floresta ao redor da arcologia (em blocos, com descarte por visão e dois níveis
+// Árvores instanciadas: floresta ao redor da arcologia (em blocos, com descarte por visão e três níveis
 // de detalhe), e grupos de árvores de paisagismo usados pelos modelos (praças, pátios, savana).
 import * as THREE from 'three';
 import { MESA, A } from '../data/planta.js';
@@ -104,9 +104,11 @@ function mergeGeos(list) {
 export function treeGeos() {
   if (GEO) return GEO;
   const trunk = new THREE.CylinderGeometry(0.05, 0.08, 1, 5, 1, true); trunk.translate(0, 0.5, 0);
-  // três níveis da mesma copa: folhaPerto (lóbulos redondos), folha (lóbulos de 20 faces) e folhaLow
-  // (cacho alongado de 15 tri, para a mata vista de longe)
-  GEO = { folhaPerto: cachoGeo(3, lobosCacho(3), 0.2, ICO1), folha: cachoGeo(3, lobosCacho(3)), folha2: cachoGeo(11, lobosCacho(11)), folhaLow: cachoBaixo(5), conifera: coniferGeo(), palmeira: palmGeo(), tronco: trunk };
+  // três níveis de cada copa: folhaPerto (lóbulos redondos), folha (lóbulos de 20 faces) e folhaLow
+  // (cacho alongado de 15 tri, para a mata vista de longe); duas sementes, alternadas por bloco da mata
+  GEO = { folhaPerto: cachoGeo(3, lobosCacho(3), 0.2, ICO1), folha: cachoGeo(3, lobosCacho(3)), folhaLow: cachoBaixo(5),
+    folhaPerto2: cachoGeo(11, lobosCacho(11), 0.2, ICO1), folha2: cachoGeo(11, lobosCacho(11)), folhaLow2: cachoBaixo(13),
+    conifera: coniferGeo(), palmeira: palmGeo(), tronco: trunk };
   for (const g of Object.values(GEO)) g.userData.compartilhada = true; // não descartar com a peça
   return GEO;
 }
@@ -208,17 +210,19 @@ export function treeGroup(list, opts = {}) {
 }
 
 // ---------- floresta da mesa ----------
-// Blocos de 8 x 8 unidades (descarte por visão e nível de detalhe). Em cada bloco, as copas têm três
-// malhas que dividem as mesmas instâncias (matrizes e cores) e o mesmo material: o cacho de lóbulos
-// redondos bem de perto, o de lóbulos simples a meia distância e o alongado de longe. A troca segue o
-// raio da copa em pixels na tela (no ponto do bloco mais perto da câmera), com histerese.
-const BLOCO = 8, RAIO_COPA = 0.45;
+// Blocos de 16 x 10 unidades para o descarte por visão, cada um com três malhas de copa (lóbulos
+// redondos bem de perto, lóbulos simples a meia distância e cacho alongado de longe) no mesmo material.
+// O nível de detalhe é escolhido por célula de 8 x 5 dentro do bloco (raio da copa em pixels no ponto da
+// célula mais perto da câmera, com histerese): cada malha do bloco desenha só as células do seu nível,
+// e um bloco custa 1 chamada (2 ou 3 só quando mistura níveis). As coníferas ficam em 3 faixas (fundo e
+// laterais), uma chamada cada.
+const BLOCO_X = 16, BLOCO_Z = 10, CEL_X = 8, CEL_Z = 5, RAIO_COPA = 0.45;
 const LOD = [[12.5, 11.5], [28, 24]]; // [entra, sai] do nível 1 e do 2 (na vista da foto a 1376x768 só a frente fica no 1)
 export class Forest {
   constructor(engine) {
     this.e = engine; this.group = new THREE.Group(); this.group.name = 'floresta'; engine.scene.add(this.group);
-    this.chunks = []; this.lods = []; this.canteiro = null; this.cast = false; this.stats = { trocas: 0, alto: 0 };
-    this._build();
+    this.chunks = []; this.lods = []; this.canteiro = null; this.cast = false; this.stats = { trocas: 0, alto: 0, perto: 0, refeitos: 0 };
+    this._cam = [NaN, 0, 0, 0, 0]; this._build();
   }
   _build() {
     const step = 0.56; const R = rng(4242); const trees = []; const cant = [];
@@ -233,28 +237,47 @@ export class Forest {
         const big = 0.34 + dens * 0.26 + R() * 0.1; const s = big * (0.7 + 0.3 * clamp(edge / 1.5, 0, 1));
         const back = jz < -16.5 || jx > 29.5 || jx < -29.5; // bordas: mais coníferas (como no fundo da foto)
         const kind = back && R() < 0.45 ? 'conifera' : R() < 0.5 ? 'folha' : 'folha2';
-        const t = { x: jx, z: jz, s, kind, pal: kind === 'conifera' ? 'conifera' : R() < 0.006 ? 'outono' : 'mata', h: 0.9 + R() * 0.35, orla: inCant ? undefined : cl };
+        const t = { x: jx, z: jz, s, kind: inCant ? 'folha' : kind, pal: kind === 'conifera' ? 'conifera' : R() < 0.006 ? 'outono' : 'mata', h: 0.9 + R() * 0.35, orla: inCant ? undefined : cl };
         (inCant ? cant : trees).push(t);
       }
     }
-    const G = treeGeos(), mat = leafMaterial(); const map = new Map();
-    for (const t of trees) { const k = Math.floor((t.x - MESA.x0) / BLOCO) + ',' + Math.floor((t.z - MESA.z0) / BLOCO); if (!map.has(k)) map.set(k, []); map.get(k).push(t); }
-    for (const list of map.values()) {
-      const g = new THREE.Group(); g.name = 'mata'; const fol = list.filter((t) => t.kind !== 'conifera'), con = list.filter((t) => t.kind === 'conifera');
-      if (fol.length) {
-        const hi = new THREE.InstancedMesh(G.folha, mat, fol.length); preencher(hi, fol, 'folha');
-        const lo = new THREE.InstancedMesh(G.folhaLow, mat, fol.length), pe = new THREE.InstancedMesh(G.folhaPerto, mat, fol.length);
-        for (const m of [lo, pe]) { m.instanceMatrix = hi.instanceMatrix; m.instanceColor = hi.instanceColor; } // mesmas instâncias, um envio só
-        const niveis = [lo, hi, pe]; for (const m of niveis) { m.castShadow = this.cast; m.receiveShadow = true; m.computeBoundingSphere(); m.userData.kind = 'folha'; m.visible = m === lo; g.add(m); }
-        const bx = [1e9, -1e9, 1e9, -1e9]; for (const t of fol) { bx[0] = Math.min(bx[0], t.x); bx[1] = Math.max(bx[1], t.x); bx[2] = Math.min(bx[2], t.z); bx[3] = Math.max(bx[3], t.z); }
-        this.lods.push({ niveis, bx, n: 0, hi, lo });
-      }
-      if (con.length) { const cm = new THREE.InstancedMesh(G.conifera, mat, con.length); preencher(cm, con, 'conifera'); cm.castShadow = this.cast; cm.receiveShadow = true; cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); }
+    const G = treeGeos(), mat = leafMaterial();
+    const nova = (geo, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.castShadow = this.cast; m.receiveShadow = true; return m; };
+    // folhosas: blocos de descarte, com as árvores em ordem de célula
+    const blocos = new Map(), cel = (t) => Math.floor((t.x - MESA.x0) / CEL_X) * 64 + Math.floor((t.z - MESA.z0) / CEL_Z);
+    for (const t of trees) { if (t.kind === 'conifera') continue; const bx = Math.floor((t.x - MESA.x0) / BLOCO_X), bz = Math.floor((t.z - MESA.z0) / BLOCO_Z), k = bx * 64 + bz; if (!blocos.has(k)) blocos.set(k, { bx, bz, l: [] }); blocos.get(k).l.push(t); }
+    for (const { bx, bz, l } of blocos.values()) {
+      l.sort((a, b) => cel(a) - cel(b)); const n = l.length; const g = new THREE.Group(); g.name = 'mata';
+      const par = (bx + bz) & 1; // as duas formas de copa alternam por bloco (quebra a repetição sem chamada a mais)
+      const hi = nova(par ? G.folha2 : G.folha, n); preencher(hi, l, 'folha');
+      const lo = nova(par ? G.folhaLow2 : G.folhaLow, n), pe = nova(par ? G.folhaPerto2 : G.folhaPerto, n);
+      const M0 = hi.instanceMatrix.array.slice(), C0 = hi.instanceColor.array.slice(); // matrizes e cores de referência, em ordem de célula
+      for (const m of [lo, pe]) { m.instanceMatrix = new THREE.InstancedBufferAttribute(M0.slice(), 16); m.instanceColor = new THREE.InstancedBufferAttribute(C0.slice(), 3); }
+      const niveis = [lo, hi, pe]; for (const m of niveis) { m.computeBoundingSphere(); m.userData.kind = 'folha'; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.instanceColor.setUsage(THREE.DynamicDrawUsage); g.add(m); }
+      // células: faixa [a, b) das instâncias e caixa das árvores
+      const cels = []; for (let i = 0; i < n; i++) { const t = l[i]; let c = cels[cels.length - 1]; if (!c || c.k !== cel(t)) { c = { k: cel(t), a: i, b: i, bx: [1e9, -1e9, 1e9, -1e9], n: 0 }; cels.push(c); } c.b = i + 1; c.bx[0] = Math.min(c.bx[0], t.x); c.bx[1] = Math.max(c.bx[1], t.x); c.bx[2] = Math.min(c.bx[2], t.z); c.bx[3] = Math.max(c.bx[3], t.z); }
+      const L = { niveis, cels, M0, C0 }; this._preencher(L); this.lods.push(L);
       this.group.add(g); this.chunks.push(g);
     }
+    // coníferas: três faixas (fundo e laterais)
+    const faixas = [[], [], []]; for (const t of trees) if (t.kind === 'conifera') faixas[t.z < -16.5 ? 0 : t.x < 0 ? 1 : 2].push(t);
+    for (const l of faixas) { if (!l.length) continue; const g = new THREE.Group(); g.name = 'mata'; const cm = nova(G.conifera, l.length); preencher(cm, l, 'conifera'); cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); this.group.add(g); this.chunks.push(g); }
     this.count = trees.length;
     this.canteiro = treeGroup(cant, { name: 'reflorestamento', cast: this.cast }); this.canteiro.visible = false; this.group.add(this.canteiro);
     this.canteiroN = cant.length;
+  }
+  // cada malha do bloco recebe, em sequência, as células do seu nível (cópia das referências; sem alocar)
+  _preencher(L) {
+    for (let v = 0; v < 3; v++) {
+      const m = L.niveis[v], dm = m.instanceMatrix.array, dc = m.instanceColor.array; let k = 0;
+      for (const c of L.cels) {
+        if (c.n !== v) continue;
+        for (let i = c.a * 16, f = c.b * 16; i < f; i++) dm[k * 16 + i - c.a * 16] = L.M0[i];
+        for (let i = c.a * 3, f = c.b * 3; i < f; i++) dc[k * 3 + i - c.a * 3] = L.C0[i];
+        k += c.b - c.a;
+      }
+      m.count = k; m.visible = k > 0; if (k) { m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
+    }
   }
   setShadows(on) { this.cast = on; this.group.traverse((o) => { if (o.isInstancedMesh) o.castShadow = on; }); this.e.shadowDirty = true; }
   // crescimento do reflorestamento do canteiro (0..1)
@@ -263,17 +286,23 @@ export class Forest {
     this.canteiro.scale.setScalar(1); this.canteiro.traverse((o) => { if (o.isInstancedMesh) o.material = leafMaterial(); });
     this.canteiro.position.y = -(1 - k) * 1.4; this.e.shadowDirty = true;
   }
-  // nível de detalhe por bloco: raio de copa projetado (pixels da imagem renderizada) no ponto do
-  // bloco mais perto da câmera, com histerese; as duas malhas usam o mesmo programa
+  // nível de detalhe por célula: raio de copa projetado (pixels da imagem renderizada) no ponto da célula
+  // mais perto da câmera, com histerese; só recalcula quando a câmera anda, e só refaz o bloco que mudou
   _lod() {
-    const cam = this.e.camera; if (!cam) return; const p = cam.position; const hpx = this.e.H || 720;
-    const k = (RAIO_COPA * hpx * 0.5) / Math.tan((cam.fov * Math.PI) / 360); let alto = 0, perto = 0;
+    const cam = this.e.camera; if (!cam) return; const p = cam.position; const hpx = this.e.H || 720; const U = this._cam;
+    if (U[0] === p.x && U[1] === p.y && U[2] === p.z && U[3] === cam.fov && U[4] === hpx) return;
+    U[0] = p.x; U[1] = p.y; U[2] = p.z; U[3] = cam.fov; U[4] = hpx;
+    const k = (RAIO_COPA * hpx * 0.5) / Math.tan((cam.fov * Math.PI) / 360); let alto = 0, perto = 0; const dy = Math.max(p.y - 1.2, 0);
     for (const L of this.lods) {
-      const dx = Math.max(L.bx[0] - p.x, 0, p.x - L.bx[1]), dz = Math.max(L.bx[2] - p.z, 0, p.z - L.bx[3]), dy = Math.max(p.y - 1.2, 0);
-      const px = k / Math.max(0.5, Math.hypot(dx, dy, dz));
-      const n = px > LOD[1][L.n >= 2 ? 1 : 0] ? 2 : px > LOD[0][L.n >= 1 ? 1 : 0] ? 1 : 0;
-      if (n !== L.n) { L.niveis[L.n].visible = false; L.niveis[n].visible = true; L.n = n; this.stats.trocas++; }
-      if (n >= 1) alto++; if (n === 2) perto++;
+      let mudou = false;
+      for (const c of L.cels) {
+        const dx = Math.max(c.bx[0] - p.x, 0, p.x - c.bx[1]), dz = Math.max(c.bx[2] - p.z, 0, p.z - c.bx[3]);
+        const px = k / Math.max(0.5, Math.hypot(dx, dy, dz));
+        const n = px > LOD[1][c.n >= 2 ? 1 : 0] ? 2 : px > LOD[0][c.n >= 1 ? 1 : 0] ? 1 : 0;
+        if (n !== c.n) { c.n = n; mudou = true; this.stats.trocas++; }
+        if (n >= 1) alto++; if (n === 2) perto++;
+      }
+      if (mudou) { this._preencher(L); this.stats.refeitos++; }
     }
     this.stats.alto = alto; this.stats.perto = perto;
   }
