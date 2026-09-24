@@ -36,13 +36,6 @@ export function waterDepth(x, z) {
   const b = bebedouro(); const lp = ellDist(x, z, b.c[0], b.c[1], b.rx, b.rz, b.rot || 0); if (lp < 0) wd = Math.max(wd, smooth(clamp(-lp / 0.5, 0, 1)) * 0.6);
   return wd;
 }
-// distância com sinal até a margem da água visível (positiva dentro), para a cor da água
-function distAgua(x, z) {
-  let d = Math.min(-polyDist(x, z, A.lago), Math.hypot(x - A.ilha.c[0], z - A.ilha.c[1]) - (A.ilha.r - 0.05));
-  const s = lagoSant(); d = Math.max(d, -ellDist(x, z, s.c[0], s.c[1], s.rx + 0.05, s.rz + 0.05, s.rot || 0));
-  const b = bebedouro(); d = Math.max(d, -ellDist(x, z, b.c[0], b.c[1], b.rx + 0.05, b.rz + 0.05, b.rot || 0));
-  return d;
-}
 export function inPit(x, z) { const p = A.acelerador; return inEllipse(x, z, p.c[0], p.c[1], p.rx, p.rz); }
 export function heightAt(x, z) {
   const w = waterDepth(x, z); if (w > 0) return -0.42 * w;
@@ -137,9 +130,10 @@ export class Ground {
     const ell = ({ c: [cx, cz], rx, rz, rot = 0 }) => { const s = new THREE.Shape(); for (let i = 0; i <= 40; i++) { const a = (i / 40) * Math.PI * 2; const u = Math.cos(a) * (rx + 0.05), v = Math.sin(a) * (rz + 0.05); const x = cx + u * Math.cos(rot) - v * Math.sin(rot), z = cz + u * Math.sin(rot) + v * Math.cos(rot); i ? s.lineTo(x, -z) : s.moveTo(x, -z); } return s; };
     mk(ell(lagoSant()), this.waterMat, -0.08);
     mk(ell(bebedouro()), this.waterMat, -0.06);
-    // mapa da distância até a margem (0,25 unidade por texel; 0,5 = margem, ±2 unidades)
+    // mapa da altura do leito sob a água (0,25 unidade por texel; -0,45 a 0,05): a lâmina d'água é a
+    // altura da superfície menos o leito, então a margem acompanha o nível (lago assoreado ou cheio)
     const NX = 256, NZ = 160, dat = new Uint8Array(NX * NZ);
-    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = MESA.x0 + ((i + 0.5) * W) / NX, z = MESA.z0 + ((j + 0.5) * D) / NZ; dat[j * NX + i] = clamp(0.5 + distAgua(x, z) / 4, 0, 1) * 255; }
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = MESA.x0 + ((i + 0.5) * W) / NX, z = MESA.z0 + ((j + 0.5) * D) / NZ; const wd = waterDepth(x, z); dat[j * NX + i] = clamp(((wd > 0 ? -0.42 * wd : 0.05) + 0.45) / 0.5, 0, 1) * 255; }
     const t = new THREE.DataTexture(dat, NX, NZ, THREE.RedFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
     AGUA.tProf.value = t; AGUA.aguaOn.value = 1; this.agua = AGUA; // uniformes da água (cores e tempo), para ajuste
   }
@@ -193,8 +187,9 @@ export class Ground {
       c.restore();
     }
     // 4) margens e leitos d'água (areia clara nas bordas, fundo escuro sob a água)
-    c.save(); c.filter = 'blur(3px)'; c.lineWidth = 0.9 * S; c.strokeStyle = '#b9a47c'; path(A.lago); c.stroke(); c.fillStyle = '#1f4a4a'; path(A.lago); c.fill(); c.restore();
-    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#1f4a4a'; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); } c.restore();
+    // (o leito fica sob a água opaca; a faixa de areia cobre a encosta entre a linha d'água e a borda)
+    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#1f4a4a'; path(A.lago); c.fill(); for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); }
+    c.lineWidth = 0.9 * S; c.strokeStyle = '#b9a47c'; path(A.lago); c.stroke(); c.lineWidth = 0.5 * S; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx, l.rz, l.rot || 0); c.stroke(); } c.restore();
     // 5) trilhas de terra/cascalho pelos gramados e pela savana
     c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.filter = 'blur(1px)';
     c.strokeStyle = 'rgba(214,196,160,0.85)'; c.lineWidth = 0.32 * S;
@@ -231,14 +226,20 @@ export class Ground {
       c.clip();
       if (Z.id === 'praca') {
         const cam = caminhosPraca(); c.lineCap = 'round'; c.lineJoin = 'round';
-        // canteiros curvos entre os caminhos (grama com borda escura), fora dos espelhos d'água
-        const lagos = A.lagosPraca || [];
-        for (let i = 0; i < cam.length && i < 4; i++) {
-          const a = suave(cam[i]), b = suave(cam[(i + 1) % cam.length]); const pa = a[(a.length * 0.62) | 0], pb = b[(b.length * 0.62) | 0];
-          const x = (pa[0] + pb[0]) / 2, z = (pa[1] + pb[1]) / 2; if (!inPoly(x, z, Z.poly) || lagos.some((l) => inEllipse(x, z, l.c[0], l.c[1], l.rx + 0.9, l.rz + 0.9, l.rot || 0))) continue;
-          const ang = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]), L = Math.min(1.6, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]) * 0.42);
-          const [px, py] = P(x, z); c.save(); c.translate(px, py); c.rotate(ang); c.beginPath(); c.moveTo(-L * S, 0); c.quadraticCurveTo(0, -0.75 * S, L * S, 0); c.quadraticCurveTo(0, 0.35 * S, -L * S, 0); c.closePath();
-          c.fillStyle = pat(tex.grass()); c.fill(); c.strokeStyle = 'rgba(70,64,52,.55)'; c.lineWidth = 2; c.stroke(); c.restore();
+        // três canteiros curvos entre caminhos vizinhos (grama com borda escura), longe dos caminhos
+        // e dos espelhos d'água
+        const lagos = A.lagosPraca || [], lin = cam.map((p) => suave(p)); const o = cam[0][0];
+        const ang = (p) => Math.atan2(p[p.length - 1][1] - o[1], p[p.length - 1][0] - o[0]);
+        const ord = lin.map((p, i) => [ang(p), i]).sort((u, v) => u[0] - v[0]).map((u) => lin[u[1]]);
+        const dLin = (x, z, p) => { let d = 1e9; for (let i = 1; i < p.length; i++) { const [ax, az] = p[i - 1], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; };
+        let nc = 0;
+        for (let i = 0; i + 1 < ord.length && nc < 3; i++) for (const f of [0.6, 0.45, 0.75, 0.85]) {
+          const a = ord[i], b = ord[i + 1]; const pa = a[Math.min(a.length - 1, (a.length * f) | 0)], pb = b[Math.min(b.length - 1, (b.length * f) | 0)];
+          const x = (pa[0] + pb[0]) / 2, z = (pa[1] + pb[1]) / 2; const folga = Math.min(...lin.map((p) => dLin(x, z, p)));
+          if (!inPoly(x, z, Z.poly) || polyDist(x, z, Z.poly) > -0.7 || folga < 0.75 || lagos.some((l) => inEllipse(x, z, l.c[0], l.c[1], l.rx + 0.9, l.rz + 0.9, l.rot || 0))) continue;
+          const an = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]) + Math.PI / 2, L = Math.min(1.5, folga * 1.6);
+          const [px, py] = P(x, z); c.save(); c.translate(px, py); c.rotate(an); c.beginPath(); c.moveTo(-L * S, 0); c.quadraticCurveTo(0, -0.7 * folga * S, L * S, 0); c.quadraticCurveTo(0, 0.3 * folga * S, -L * S, 0); c.closePath();
+          c.fillStyle = pat(tex.grass()); c.fill(); c.strokeStyle = 'rgba(70,64,52,.55)'; c.lineWidth = 2; c.stroke(); c.restore(); nc++; break;
         }
         c.strokeStyle = 'rgba(214,204,188,.8)'; c.lineWidth = 0.5 * S; for (const pts of cam) linha(pts);
       }

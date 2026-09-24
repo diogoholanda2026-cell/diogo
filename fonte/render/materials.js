@@ -6,7 +6,7 @@ import { MESA } from '../data/planta.js';
 export const M = {};
 const litMats = []; // materiais com emissivo que variam com a noite
 export let nightLevel = 1, nightExtra = 0;
-// água dos lagos: mapa da distância com sinal até a margem (o terreno preenche) e o tempo em segundos
+// água dos lagos: mapa da altura do leito (o terreno preenche) e o tempo em segundos
 export const AGUA = { tProf: { value: null }, aguaOn: { value: 0 }, aguaT: { value: 0 }, aguaP: { value: new THREE.Vector4(MESA.x0, MESA.z0, 1 / (MESA.x1 - MESA.x0), 1 / (MESA.z1 - MESA.z0)) },
   raso: { value: new THREE.Color(0x94b0ac) }, fundo: { value: new THREE.Color(0x6a8890) }, margem: { value: new THREE.Color(0xcfd6c8) } }; // água turva cinza-esverdeada da foto (#647070)
 const MACRO = { tMacro: { value: null } };
@@ -43,15 +43,21 @@ function comGrade(mat) {
   mat.customProgramCacheKey = () => 'grade';
   return mat;
 }
-// lagos: cor pela profundidade (raso, fundo e margem clara) e duas camadas de ondas em direções diferentes
+// lagos: cor pela altura da lâmina d'água sobre o leito (raso, fundo e margem clara na linha d'água,
+// que acompanha o nível do lago) e duas camadas de ondas em direções diferentes
 function comAgua(mat) {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, AGUA);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vAguaW;').replace('#include <project_vertex>', '#include <project_vertex>\n' + VPOS('vAguaW'));
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vAguaW; uniform sampler2D tProf; uniform float aguaOn; uniform float aguaT; uniform vec4 aguaP; uniform vec3 raso; uniform vec3 fundo; uniform vec3 margem;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vAguaW;').replace('#include <project_vertex>', `#include <project_vertex>
+      { vec4 aw = vec4( transformed, 1.0 );
+        #ifdef USE_INSTANCING
+          aw = instanceMatrix * aw;
+        #endif
+        vAguaW = ( modelMatrix * aw ).xyz; }`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vAguaW; uniform sampler2D tProf; uniform float aguaOn; uniform float aguaT; uniform vec4 aguaP; uniform vec3 raso; uniform vec3 fundo; uniform vec3 margem;')
       .replace('#include <color_fragment>', `#include <color_fragment>
-        if ( aguaOn > 0.5 ) { float dq = ( texture2D( tProf, ( vAguaW - aguaP.xy ) * aguaP.zw ).r - 0.5 ) * 4.0;
-          diffuseColor.rgb = mix( mix( raso, fundo, smoothstep( 0.0, 0.8, dq ) ), margem, 0.35 * ( 1.0 - smoothstep( 0.02, 0.1, dq ) ) ); }`)
+        if ( aguaOn > 0.5 ) { float dq = vAguaW.y - ( texture2D( tProf, ( vAguaW.xz - aguaP.xy ) * aguaP.zw ).r * 0.5 - 0.45 );
+          diffuseColor.rgb = mix( mix( raso, fundo, smoothstep( 0.0, 0.2, dq ) ), margem, 0.35 * ( 1.0 - smoothstep( 0.0, 0.03, dq ) ) ); }`)
       .replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;', `vec3 mapN = texture2D( normalMap, vNormalMapUv + aguaT * vec2( 0.012, 0.008 ) ).xyz * 2.0 - 1.0;
         vec3 mapN2 = texture2D( normalMap, vNormalMapUv * 1.73 + aguaT * vec2( -0.007, 0.011 ) ).xyz * 2.0 - 1.0;
         mapN = normalize( vec3( mapN.xy + mapN2.xy, mapN.z * mapN2.z ) );`);
