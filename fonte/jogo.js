@@ -13,6 +13,8 @@ import { LOTES } from './render/models/canteiro.js';
 import { A } from './data/planta.js';
 import { M } from './render/materials.js';
 import { gravar } from './core/salvar.js';
+import { descartar } from './render/descartar.js';
+import { REGRAS } from './sim/estado.js';
 
 const FAIXA_PROJ = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
 
@@ -47,12 +49,14 @@ export class Controle {
   // ------------------------------------------------------------ sincronia simulação → mundo 3D
   nivelFaixaProj(p) { let n = 0; for (const e of p.etapas) if (e.nivel && this.J.feita(p.id + '.' + e.id)) n = Math.max(n, e.nivel); return n; }
   sincronizarMundo() {
-    const J = this.J, W = this.mundo;
+    const J = this.J, W = this.mundo; this.obras.rig = this.rig;
     for (const p of PROJETOS) {
       if (p.faixa) { const f = W.faixas[p.faixa]; const n = this.nivelFaixaProj(p); if (f.mods.some((m) => m.nivel !== n)) f.setTodos(n); }
       for (const e of p.etapas) { const key = p.id + '.' + e.id; const feita = J.feita(key); const emObra = this.sites.has('e:' + key); if (!(p.faixa && e.nivel) && !emObra) { const a = alvoEtapa(p, e); const pt = W.parte(a.modelo, a.parte); if (pt && !!pt.userData.feito !== feita) W.setEtapa(a.modelo, a.parte, feita); } if (e.extra) { const pt = W.parte(e.extra.modelo, e.extra.parte); if (pt && !!pt.userData.feito !== feita) W.setEtapa(e.extra.modelo, e.extra.parte, feita); } if (e.modo === 'reflorestar') this._reflorestado(feita); }
     }
-    this.ground.lake.position.y = J.feita('lago.e1') ? -0.1 : -0.32;
+    if (!this.sites.has('e:lago.e1')) this.ground.lake.position.y = J.feita('lago.e1') ? -0.1 : -0.32;
+    // canteiro: desmontado na etapa 'Desmontar o canteiro' (some quando ela é aprovada) e replantado depois
+    const desmontado = J.feita('reflorestar.e0') || J.feita('reflorestar.e1'); if (!this.sites.get('e:reflorestar.e0')?.concluindo) W.canteiro.visible = !desmontado;
     // chão: pasto degradado vira gramado quando a obra da área começa
     const verde = { anel: J.feita('anel.1'), uni: J.feita('uni.1'), ciencias: J.feita('ciencias.e1'), sede: J.feita('sede.e1'), biblio: J.feita('biblioteca.e1'), savana: J.feita('savana.e1'), bioma: J.feita('bioma.e1'), vila: J.feita('anfiteatro.e1'), gorilas: J.feita('gorilas.e1'), acelerador: J.feita('acelerador.e1'), santuario: J.feita('santuario.1') };
     const praca = J.feita('praca.e1'); const ck = JSON.stringify(verde) + praca;
@@ -75,50 +79,80 @@ export class Controle {
     this.povoar();
   }
   sincronizar() { this.sincronizarMundo(); this.calcBolhas(); this.hud.atualizar(); this.hud.capitulo(this._capMin); }
-  _reflorestado(on) { this.mundo.canteiro.visible = !on; this.forest.setReflorestamento(on ? 1 : 0); if (!!this.ground.flags.reflorestado !== on) { this.ground.flags.reflorestado = on; this.ground.paint(); } }
+  _reflorestado(on) { if (on) this.mundo.canteiro.visible = false; this.forest.setReflorestamento(on ? 1 : 0); if (!!this.ground.flags.reflorestado !== on) { this.ground.flags.reflorestado = on; this.ground.paint(); } }
   povoar() { const W = this.mundo; if (this._povoKey === this._chavePovo()) return; this._povoKey = this._chavePovo(); W.povoar(); }
   _chavePovo() { return ['praca.e3', 'pas_bulevar.e1', 'pas_ponte.e1', 'pas_vila.e1', 'pas_trilhaBioma.e1', 'pas_elo.e1', 'pas_frente.e1', 'pas_anel.e1', 'pas_santuario.e1'].map((k) => (this.J.feita(k) ? 1 : 0)).join(''); }
   // canteiro de uma etapa
   _siteEtapa(key) {
     const [pid, eid] = key.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const W = this.mundo; const st = this.S.etapas[key];
     const site = { tipo: 'etapa', key, ini: st.ini, fim: st.fim, extras: [] };
+    const ag = this.J.agora || Date.now(); const base = { itens: Object.keys(e.itens || {}), rig: this.rig, novo: ag - st.ini < 4000, p: clamp((ag - st.ini) / (st.fim - st.ini || 1), 0, 1) }; // novo: acabou de começar (monta o canteiro)
     let opts;
     if (p.faixa && e.nivel) {
       const F = W.faixas[p.faixa]; const cur = this.nivelFaixaProj(p); const G = new THREE.Group(), SK = new THREE.Group();
       F.mods.forEach((m, i) => { for (let f = cur; f < e.nivel; f++) { const a = F.andar(i, f, e.nivel); G.add(a.acabado); if (a.esqueleto) SK.add(a.esqueleto); } });
       W.root.add(G, SK); SK.visible = false; site.extras.push(G, SK); site.aoFim = () => F.setTodos(e.nivel);
-      opts = { alvo: G, esqueleto: SK, grua: true, caminho: { path: F.def.path, closed: F.def.closed, o: F.prof.o1 + 0.2 }, operarios: 12 };
+      opts = { ...base, alvo: G, esqueleto: SK, grua: true, caminho: { path: F.def.path, closed: F.def.closed, o: F.prof.o1 + 0.2, o0: F.prof.o0, o1: F.prof.o1 }, operarios: 12 };
     } else {
-      const a = alvoEtapa(p, e); const mod = W.modelos[a.modelo]; let alvo = W.parte(a.modelo, a.parte); const modo = e.modo || mod?.modos?.[a.parte] || 'subir';
-      if (modo === 'nivel') { alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(new THREE.Vector3(-8, -0.4, -12), new THREE.Vector3(6, 0.2, -4)); opts = { alvo, modo: 'terra', box: b, anim: (k) => { this.ground.lake.position.y = lerp(-0.32, -0.1, k); } }; }
-      else if (modo === 'reflorestar') { alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(new THREE.Vector3(-31, 0, 10.5), new THREE.Vector3(-20, 1.5, 19)); opts = { alvo, modo: 'terra', box: b, anim: (k) => { this.forest.setReflorestamento(k); W.canteiro.scale.y = Math.max(0.001, 1 - k * 0.98); W.canteiro.position.y = -k * 0.3; } }; site.aoFim = () => { W.canteiro.scale.y = 1; W.canteiro.position.y = 0; }; }
-      else {
+      const a = alvoEtapa(p, e); const mod = W.modelos[a.modelo]; let alvo = W.parte(a.modelo, a.parte); const modo0 = e.modo || mod?.modos?.[a.parte] || 'subir';
+      if (modo0 === 'nivel') { // desassoreamento: draga no lago, o nível sobe e a água clareia (AGUA.turvo segue o nível)
+        alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.lago) b.expandByPoint(new THREE.Vector3(x, -0.3, z)); b.max.y = 0.3;
+        opts = { ...base, alvo, modo: 'draga', box: b, operarios: 5, nivelAgua: () => this.ground.lake.position.y, anim: (k) => { this.ground.lake.position.y = lerp(-0.32, -0.1, k); } };
+        site.aoFim = () => { this.ground.lake.position.y = -0.1; };
+      } else if (modo0 === 'desmontar') { // os prédios do canteiro saem da fusão e são desmontados um a um
+        const pecas = []; for (const g of Object.values(W.predios)) if (g.userData.pronto || g.visible) { g.userData.animando = true; pecas.push(g); }
+        W.refundir?.(); for (const g of pecas) g.visible = true; const amb = W.canteiro.children.find((c) => c.name === 'canteiroAmb'); if (amb) pecas.push(amb);
+        const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.5;
+        opts = { ...base, alvo: W.canteiro, alvos: pecas, modo: 'desmontar', box: b, operarios: 8, acesso: A.vias?.[0]?.pts?.[0] || [-19.6, 16.4] };
+        site.aoFim = () => { W.canteiro.visible = false; for (const g of pecas) if (g.userData) { g.userData.animando = false; if (g.parent === W.canteiro && g !== amb) g.visible = false; } };
+      } else if (modo0 === 'reflorestar') { // replantio: mudas em linhas crescendo até virar a mata do canteiro
+        alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.2;
+        opts = { ...base, alvo, modo: 'replantar', box: b, floresta: this.forest, operarios: 9 };
+      } else {
+        let placa = false;
         if (alvo && alvo.children.length === 0 && alvo.userData.chao) { // piso pintado no terreno: placa de terra provisória
-          const poly = A.praca.poly; const s = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z))); const g = new THREE.ShapeGeometry(s); g.rotateX(-Math.PI / 2);
-          const terra = new THREE.Mesh(g, M.soil); terra.position.y = 0.02; terra.receiveShadow = true; alvo = new THREE.Group(); alvo.add(terra); W.root.add(alvo); site.extras.push(alvo);
+          const poly = A.praca.poly; const sh = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z))); const g = new THREE.ShapeGeometry(sh); g.rotateX(-Math.PI / 2);
+          const terra = new THREE.Mesh(g, M.soil); terra.position.y = 0.02; terra.receiveShadow = true; alvo = new THREE.Group(); alvo.add(terra); W.root.add(alvo); site.extras.push(alvo); placa = true;
         }
         const box = alvo ? new THREE.Box3().setFromObject(alvo) : null; if (box && box.isEmpty()) box.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
-        opts = { alvo, esqueleto: mod?.esqueletos?.[a.parte], modo: modo === 'terra' ? 'terra' : modo === 'surgir' || modo === 'crescer' ? 'crescer' : 'subir', grua: !!mod?.grua?.[a.parte], box, operarios: modo === 'surgir' ? 3 : 8, andaime: modo === 'surgir' ? false : undefined };
-        if (modo === 'terra' && alvo) opts.anim = (k) => { alvo.scale.y = Math.max(0.001, k); };
+        // passarelas e a ponte coberta avançam ao longo do trajeto; plantio e animais em caixas item a item
+        const linear = a.modelo.startsWith('pas_') || a.modelo === 'ponteCoberta';
+        let bichos = !!alvo?.userData.manadas; if (!bichos && modo0 === 'surgir') alvo?.traverse((o) => { if (o.isInstancedMesh) bichos = true; }); // bichos são sempre instanciados
+        const modo = linear ? 'caminho' : modo0 === 'terra' ? (placa ? 'pavimento' : 'terra') : modo0 === 'crescer' ? 'plantio' : bichos ? 'caixas' : modo0 === 'surgir' ? 'plantio' : 'subir';
+        opts = { ...base, alvo, esqueleto: mod?.esqueletos?.[a.parte], modo, grua: !!mod?.grua?.[a.parte], box, operarios: modo === 'caixas' ? 4 : modo === 'plantio' ? 5 : modo === 'caminho' ? 5 : 8,
+          caminho: linear && mod?.caminho ? { path3: mod.caminho } : undefined, poligono: modo === 'pavimento' ? A.praca.poly : undefined, centro: modo === 'pavimento' ? A.pracaCaminhos?.[0]?.[0] : undefined };
       }
     }
-    site.obra = this.obras.iniciar('e:' + key, opts); this.sites.set('e:' + key, site); this.e_shadow();
+    opts.obstaculos = this._obstaculos(opts.box || (opts.alvo ? new THREE.Box3().setFromObject(opts.alvo) : null), opts.alvo);
+    site.obra = this._iniciarObra('e:' + key, opts); this.sites.set('e:' + key, site); this.e_shadow();
     if (st.estado === 'pronta') this.obras.pronta('e:' + key);
+  }
+  // uma falha no desenho da obra não pode travar a sincronia do jogo: o erro sai no próximo tique (aparece nos testes)
+  _iniciarObra(k, opts) { try { return this.obras.iniciar(k, opts); } catch (e) { setTimeout(() => { throw e; }); try { this.obras.remover(k); } catch (_) {} return null; } }
+  // caixas das peças prontas perto da obra (a grua e o pátio ficam no lado mais livre)
+  _obstaculos(box, alvo) {
+    if (!box || box.isEmpty()) return []; const W = this.mundo, out = []; const c = box.getCenter(new THREE.Vector3()); this._cxObs = this._cxObs || new WeakMap();
+    for (const m of Object.values(W.modelos)) for (const pt of Object.values(m.partes)) {
+      if (pt === alvo || !pt.userData.feito || !pt.children.length) continue; let b = this._cxObs.get(pt); if (!b) { b = new THREE.Box3().setFromObject(pt); this._cxObs.set(pt, b); }
+      if (!b.isEmpty() && b.distanceToPoint(c) < 9) out.push(b);
+    }
+    return out;
   }
   _siteModulo(f, i) {
     const W = this.mundo; const m = this.S.modulos[f][i]; const F = f === 'casas' ? W.casas : W.faixas[f]; const para = m.obra.para;
     const a = F.andar(i, para - 1, para); const G = a.acabado; if (f === 'casas') { G.position.copy(F.group.position); G.rotation.copy(F.group.rotation); }
-    W.root.add(G); const site = { tipo: 'modulo', f, i, ini: m.obra.ini, fim: m.obra.fim, extras: [G] };
+    W.root.add(G); const site = { tipo: 'modulo', f, i, ini: m.obra.ini, fim: m.obra.fim, extras: [G] }; const c = a.caminho ? { ...a.caminho, o0: F.prof?.o0, o1: F.prof?.o1 } : undefined;
     if (a.esqueleto) { W.root.add(a.esqueleto); site.extras.push(a.esqueleto); }
     G.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(G);
     site.aoFim = () => { F.setNivel(i, para); if (F.mods[i]) F.mods[i].lote = false; };
-    site.obra = this.obras.iniciar(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: para >= 3 && f !== 'casas', caminho: a.caminho, operarios: 6 });
+    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: para >= 3 && f !== 'casas', caminho: c, operarios: 6, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
     this.sites.set(`m:${f}:${i}`, site); if (m.obra.estado === 'pronta') this.obras.pronta(`m:${f}:${i}`);
   }
-  _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) x.parent?.remove(x); this.sites.delete(k); }
-  _concluirSite(k, cb) {
+  _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); }
+  // aprovação coreografada: o = {aoImpacto, baque} (impacto em 380 ms; o callback vem em ~1200 ms)
+  _concluirSite(k, cb, o = {}) {
     const s = this.sites.get(k); if (!s) { cb && cb(); return; } s.concluindo = true;
-    this.obras.concluir(k, () => { for (const x of s.extras) x.parent?.remove(x); s.aoFim && s.aoFim(); this.sites.delete(k); cb && cb(); this.e_shadow(); });
+    this.obras.concluir(k, () => { for (const x of s.extras) { x.parent?.remove(x); descartar(x); } s.aoFim && s.aoFim(); this.sites.delete(k); cb && cb(); this.e_shadow(); }, { rig: this.rig, ...o });
   }
   e_shadow() { this.engine.shadowDirty = true; }
   agendar() { this._sujo = true; }
@@ -177,7 +211,8 @@ export class Controle {
     const falas = { 'lago.e1': ['nara', 'A água voltou a correr para o lago. Agora dá para abastecer os primeiros moradores.'], 'sede.e2': ['iris', 'A Sede já recebe os repasses da Holding. Toque nas moedas para coletar.'], 'biblioteca.e5': ['iris', 'O dossel está no lugar. É a imagem que a maquete do Conselho mostra.'], 'bioma.e4': ['nara', 'A baleia nadou a primeira volta no aquário. Quase choramos aqui.'], 'gorilas.e4': ['nara', 'A família de gorilas chegou. Olha o tamanho deles!'], 'acelerador.e3': ['caio', 'Detectores ligados. Primeiro feixe hoje à noite!'] };
     const f = falas[p.id + '.' + e.id]; if (f) this.hud.falar(f[0], f[1]);
   }
-  predioConstruido(id) { const g = this.mundo.predios[id]; g.userData.animando = true; g.userData.pronto = false; g.visible = true; g.scale.set(1, 0.01, 1); const t0 = performance.now(); const step = (t) => { const k = Math.min(1, (t - t0) / 600); const e = k < 0.7 ? (k / 0.7) * 1.1 : 1.1 - ((k - 0.7) / 0.3) * 0.1; g.scale.y = Math.max(0.01, e); if (k < 1) requestAnimationFrame(step); else { g.scale.y = 1; g.userData.animando = false; this.sincronizarMundo(); } }; requestAnimationFrame(step); this.e_shadow(); this.hud.brinde(PREDIOS[id].nome + ' pronto!', 'producao'); this.calcBolhas(); setTimeout(() => this.paineis.abrir(PREDIOS[id].tipo === 'usina' ? 'usina' : 'oficina', id), 700); }
+  // prédio novo do canteiro: sobe por um plano de corte em 3 lances (sem esticar)
+  predioConstruido(id) { const g = this.mundo.predios[id]; g.userData.animando = true; g.userData.pronto = false; g.visible = true; g.scale.set(1, 1, 1); const fim = () => { g.userData.animando = false; this.sincronizarMundo(); }; if (this.obras.erguer) this.obras.erguer(g, { ms: 1400, aoFim: fim }); else fim(); this.e_shadow(); this.hud.brinde(PREDIOS[id].nome + ' pronto!', 'producao'); this.calcBolhas(); setTimeout(() => this.paineis.abrir(PREDIOS[id].tipo === 'usina' ? 'usina' : 'oficina', id), 700); }
   falha(r, fx) {
     this.som.erro(); this.vibra.erro();
     const msg = { creditos: 'Créditos insuficientes', falta: 'Faltam materiais no almoxarifado', cheio: 'Todos os espaços estão ocupados', almox: 'Almoxarifado cheio', nivel: 'Nível insuficiente', bloqueado: 'Ainda não liberado', bloqueada: 'Etapa ainda não liberada', servico: 'Faltam serviços (água, energia ou saneamento)', bem: 'Bem-estar abaixo de 60%', sem: 'Sem fichas de Mutirão', max: 'Já está no máximo', nada: 'Nada para fazer aqui' }[r] || 'Não foi possível';
@@ -289,6 +324,12 @@ export class Controle {
     const c = this.J.capitulo(); const falas = (c?.fala || []).map(([q, t]) => `<div class="conselho" style="text-align:left;margin:8px 0"><div class="retrato" style="background:radial-gradient(circle at 35% 30%,#fff,${CONSELHO[q].cor})">${CONSELHO[q].ini}</div><div class="fala"><b>${CONSELHO[q].nome}</b>${t}</div></div>`).join('');
     setTimeout(() => this.modal(`<h3>Composição total</h3><h1>Arcologia de Held</h1><p>A maquete na mesa agora é igual à do Conselho. Cada etapa aprovada virou obra de verdade.</p>${falas}<p>Use <b>Comparar</b> no modo Apreciar para ver a foto por cima da maquete.</p><button class="botao ouro" data-fecha>Apreciar a composição</button>`, (m, fechar) => { m.querySelector('[data-fecha]').addEventListener('click', () => { if (this.J.capitulo()?.n === 6 && this.S.capEscolhas[6] === undefined) this.J.concluirCapitulo(null); }); }), 5200);
   }
+  // estado de produção de cada prédio do canteiro para a obra mostrar atividade (a cada 1 s, sem alocar)
+  _repasseProducao() {
+    if (!this.obras.producao) return; const S = this.S, ag = this.J.agora || Date.now(); const fora = !this.mundo.canteiro.visible || this.sites.has('e:reflorestar.e0');
+    for (const id of USINAS) { const st = S.predios[id]; let roda = false, pronto = false; if (st?.ok && !fora) for (const x of st.slots) { if (!x) continue; if (x.fim > ag) roda = true; else pronto = true; } this.obras.producao(id, !st?.ok || fora ? 'fora' : roda ? 'produzindo' : pronto ? 'cheio' : 'parado'); }
+    for (const id of OFICINAS) { const st = S.predios[id]; if (!st?.ok || fora) { this.obras.producao(id, 'fora'); continue; } const f = st.fila[0]; const roda = !!(f && !f.pend && f.fim && f.ini <= ag && f.fim > ag); this.obras.producao(id, st.prontos.length >= REGRAS.bandeja ? 'cheio' : roda ? 'produzindo' : 'parado'); }
+  }
   // ------------------------------------------------------------ quadro a quadro
   update(dt, t) {
     const J = this.J; const agora = Date.now();
@@ -302,6 +343,7 @@ export class Controle {
       const b = s.obra?.box; if (b) { const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2; perto = Math.max(perto, clamp(1 - Math.hypot(cx - tg.x, cz - tg.z) / (this.rig.dist * 0.8), 0, 1)); }
     }
     this.som.obraAtiva = perto;
+    this._tProd = (this._tProd || 0) + dt; if (this._tProd > 1) { this._tProd = 0; this._repasseProducao(); }
     this._tBolhas += dt; if (this._tBolhas > 0.5 || this._sujo) { this._tBolhas = 0; this._sujo = false; this.calcBolhas(); this.hud.atualizar(); }
     this._tPainel = (this._tPainel || 0) + dt; if (this._tPainel > 1) { this._tPainel = 0; this.paineis.tick(); if (this.paineis.atual && ['usina', 'oficina', 'pedidos'].includes(this.paineis.atual.tipo)) this.paineis.render(); }
     this.bolhas.atualizar();

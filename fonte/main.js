@@ -9,6 +9,7 @@ import { ExhibitTable } from './render/table.js';
 import { CameraRig } from './render/camera.js';
 import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
+import { modeloReflorestar } from './render/models/canteiro.js';
 import { MESA, VISTA_FOTO } from './data/planta.js';
 import { PROJETOS } from './data/obras.js';
 import { novoEstado, Jogo, prepararSave, VERSAO_SAVE } from './sim/estado.js';
@@ -51,10 +52,9 @@ async function iniciar() {
   forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(45);
   const table = new ExhibitTable(engine); const rig = new CameraRig(engine, canvas, MESA);
   const mundo = new Mundo(engine, ground, forest); await passo(70);
-  // compatibilidade: 'Desmontar o canteiro' ainda sem peça própria; a obra usa a área do canteiro e o canteiro
-  // baixa até 60% durante a desmontagem (no laço), até o modelo e o modo 'desmontar' chegarem
-  const desmonteProvisorio = !mundo.modelos.reflorestar;
-  if (desmonteProvisorio) { const root = new THREE.Group(); root.name = 'reflorestar'; const e0 = new THREE.Group(); const area = new THREE.Object3D(); area.geometry = new THREE.BoxGeometry(11, 1.5, 8.5).translate(-25.5, 0.75, 14.75); e0.add(area); root.add(e0); mundo.root.add(root); mundo.modelos.reflorestar = { id: 'reflorestar', root, partes: { e0 }, esqueletos: {}, grua: {}, foco: { x: -25.5, z: 15, dist: 16 }, ancora: [-25.5, 2.2, 15] }; }
+  // epílogo (desmontar o canteiro e replantar): etapas sem peça própria; o modelo só dá foco e âncora,
+  // e as obras (modos 'desmontar' e 'replantar') desmontam os prédios do canteiro e plantam a mata
+  if (!mundo.modelos.reflorestar) { const m = modeloReflorestar(); mundo.modelos.reflorestar = m; mundo.root.add(m.root); }
   const obras = new Obras(engine);
   // save: nunca recomeça por causa de versão; guarda uma cópia do save antes de migrar (e nunca grava a cópia
   // de um jogo por cima da de outro: um jogo novo depois de um save danificado não apaga a cópia boa)
@@ -86,7 +86,7 @@ async function iniciar() {
   await passo(92);
   engine.prepararHAO?.();
   try { await engine.renderer.compileAsync(engine.scene, engine.camera); } catch (_) {}
-  try { await obras.aquecer?.(); } catch (_) {}
+  try { await obras.aquecer?.(mundo); } catch (_) {}
   await passo(100);
   [...avisosSave(), ...avisosMigracao].forEach((m, i) => setTimeout(() => C.hud.brinde(m, null, 5000), 2500 + 5200 * i));
   // laço principal: só trabalha nos quadros que serão desenhados (numa tela de 120 Hz com limite de 60 qps,
@@ -100,16 +100,9 @@ async function iniciar() {
     ocioso = moveu || rig.g ? 0 : ocioso + dt; engine.ocioso = ocioso; engine.idle = ocioso > 8 && !rig.anim;
     env.update(t, rig.target, rig.dist * 1.15); ground.update(t); forest.update(t); mundo.update(dt, t); obras.update(dt, t);
     if (!qs.get('tudo')) C.update(dt, t);
-    if (desmonteProvisorio) desmontar();
     C.atualizarRotulos?.();
     engine.render(t); frames++; if (frames === 3) window.__pronto = true;
   };
-  // provisório: o canteiro baixa até 60% enquanto é desmontado e fica assim até o replantio (sem alocar nada)
-  function desmontar() {
-    const a = J.S.etapas['reflorestar.e0'], b = J.S.etapas['reflorestar.e1']; if (!a || a.estado === 'prancha' || b?.estado === 'feita' || !mundo.canteiro.visible) return;
-    const k = a.estado === 'obra' ? Math.min(1, Math.max(0, (Date.now() - a.ini) / Math.max(1, a.fim - a.ini))) : 1; const y = 1 - 0.4 * k;
-    if (mundo.canteiro.scale.y > y) mundo.canteiro.scale.y = y;
-  }
   requestAnimationFrame(loop);
   window.__held = { engine, rig, env, ground, forest, table, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal, importar, gravarImportado, importando } }; window.__PROJ = PROJETOS;
   // entrada: o primeiro toque libera som, tela cheia, orientação e tela sempre acesa
