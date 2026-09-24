@@ -18,6 +18,7 @@ function blob(cx, cz, rx, rz, rot, seed, n = 150) {
 }
 function shapeOf(pts) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); return s; }
 function plate(pts, y, h, mat) { const g = new THREE.ExtrudeGeometry(shapeOf(pts), { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); return mesh(g, mat); }
+const bordaD = (x, z, p) => { let d = 1e9; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [ax, az] = p[j], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; };
 const addMap = (grp, map, matFn) => { for (const [k, g] of map) grp.add(mesh(g, matFn(k))); };
 // banda arredondada (borda de laje "fluida"): w = largura no plano (para dentro), t = espessura;
 // o tampo recebe 'bandaTopo' (cinza claro da foto) e o resto 'borda' (branco liso)
@@ -28,6 +29,7 @@ function bandEdges(y, t = 0.3, out = 0.12, w = 0.45) {
     { a: [out, y + t * 0.25], b: [out + 0.02, y + t * 0.6], mat: 'borda', uv: 'run' },
     { a: [out + 0.02, y + t * 0.6], b: [0, y + t], mat: 'borda', uv: 'run' },
     { a: [0, y + t], b: [-w, y + t], mat: 'bandaTopo', uv: 'plan' },
+    { a: [-w, y + t], b: [-w, y], mat: 'borda', uv: 'run' }, // face interna (vista de dentro das células)
   ];
 }
 // banda transversal (dos dois lados arredondada), centrada no caminho
@@ -46,7 +48,7 @@ let _faixaLab = null;
 function faixaLabGeo() { if (_faixaLab) return _faixaLab; const g = new THREE.BoxGeometry(1, 1, 1); const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * 0.1, 0.3 + uv.getY(k) * 0.14); g.userData.compartilhada = true; return (_faixaLab = g); }
 // Um lóbulo da faculdade: armação de bandas grossas cinza-claras com 3 células abertas por cima, por onde se
 // veem os laboratórios (mini-prédios brancos) em dois pisos; tudo elevado em pilotis altos.
-function lobo(P, pts, y0, nLev, lh, corte, seed) {
+function lobo(P, pts, y0, nLev, lh, corte, seed, rotL) {
   const nor = normals(pts, true); const n = pts.length;
   const levels = []; for (let k = 0; k <= nLev; k++) { const f = 1 - 0.035 * k; let cx = 0, cz = 0; for (const [x, z] of pts) { cx += x; cz += z; } cx /= pts.length; cz /= pts.length; levels.push(pts.map(([x, z], i) => [cx + (x - cx) * f + nor[i][0] * 0.08 * Math.sin(k * 1.3 + i * 0.05), cz + (z - cz) * f + nor[i][1] * 0.08 * Math.sin(k * 1.3 + i * 0.05)])); }
   const pisos = Math.min(nLev, 2); // pisos só nos dois primeiros níveis; acima, só o anel da banda
@@ -58,10 +60,20 @@ function lobo(P, pts, y0, nLev, lh, corte, seed) {
   for (let k = 0; k < pisos; k++) P.e1.add(plate(levels[k], y0 + k * lh, 0.08, M.concreto));
   const lobby = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, y0, 24, 1, true), dupla(M.glassWarm)); lobby.scale.set(1, 1, 0.6); lobby.position.set(cx, y0 / 2, cz); P.e1.add(lobby);
   // e2: laboratórios (mini-prédios brancos com faixa de janelas) e telas acesas nos dois pisos
-  const labs = []; const R = rng(seed * 31 + 7);
-  for (let k = 0; k < pisos; k++) for (let q = 0; q < 26; q++) { const i = (R() * n) | 0; const [x, z] = levels[k][i]; const t = 0.18 + R() * 0.62; const px = cx + (x - cx) * t, pz = cz + (z - cz) * t; labs.push([px, y0 + k * lh + 0.08, pz, 0.25 + R() * 0.35, Math.min(lh - 0.14, 0.2 + R() * 0.25), 0.2 + R() * 0.25, R()]); }
+  // em grade com jitter (alinhada ao lóbulo) dentro do contorno de cada piso, longe do vidro: todas as células
+  // ficam cheias de mini-prédios, como na foto; o piso de cima (visto pelas células) é mais denso
+  const labs = []; const R = rng(seed * 31 + 7); const ca = Math.cos(rotL), sa = Math.sin(rotL);
+  for (let k = 0; k < pisos; k++) {
+    const lv = levels[k]; const passo = k === pisos - 1 ? 0.56 : 0.8; let umin = 1e9, umax = -1e9, vmin = 1e9, vmax = -1e9;
+    for (const [x, z] of lv) { const u = (x - cx) * ca + (z - cz) * sa, v = -(x - cx) * sa + (z - cz) * ca; umin = Math.min(umin, u); umax = Math.max(umax, u); vmin = Math.min(vmin, v); vmax = Math.max(vmax, v); }
+    for (let u = umin + passo / 2; u < umax; u += passo) for (let v = vmin + passo / 2; v < vmax; v += passo) {
+      const uu = u + (R() - 0.5) * passo * 0.3, vv = v + (R() - 0.5) * passo * 0.3; const px = cx + uu * ca - vv * sa, pz = cz + uu * sa + vv * ca;
+      if (!inPoly(px, pz, lv) || bordaD(px, pz, lv) < 0.5 || R() < 0.12) continue;
+      labs.push([px, y0 + k * lh + 0.08, pz, 0.26 + R() * 0.26, Math.min(lh - 0.14, 0.2 + R() * 0.3), 0.22 + R() * 0.2, rotL + (R() - 0.5) * 0.3]);
+    }
+  }
   const lb = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), M.whiteSmooth, labs.length); const fx = new THREE.InstancedMesh(faixaLabGeo(), M.fac_lab, labs.length); const sc = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), M.cyanGlow, labs.length); const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion(); const e = new THREE.Euler(); const v = new THREE.Vector3(), s3 = new THREE.Vector3(); let ns = 0;
-  labs.forEach(([x, y, z, w, h, d, r], i) => { q.setFromEuler(e.set(0, r * 3, 0)); lb.setMatrixAt(i, m4.compose(v.set(x, y + h / 2, z), q, s3.set(w, h, d))); fx.setMatrixAt(i, m4.compose(v.set(x, y + h * 0.55, z), q, s3.set(w + 0.012, h * 0.34, d + 0.012))); if (r < 0.4) sc.setMatrixAt(ns++, m4.compose(v.set(x, y + h + 0.04, z), q, s3.set(w * 0.5, 0.06, 0.012))); });
+  labs.forEach(([x, y, z, w, h, d, r], i) => { q.setFromEuler(e.set(0, -r, 0)); lb.setMatrixAt(i, m4.compose(v.set(x, y + h / 2, z), q, s3.set(w, h, d))); fx.setMatrixAt(i, m4.compose(v.set(x, y + h * 0.55, z), q, s3.set(w + 0.012, h * 0.34, d + 0.012))); if (hash(i, seed, 5) < 0.4) sc.setMatrixAt(ns++, m4.compose(v.set(x, y + h + 0.04, z), q, s3.set(w * 0.5, 0.06, 0.012))); });
   sc.count = ns; lb.castShadow = true; P.e2.add(lb, fx, sc);
   for (let k = 0; k < pisos; k++) P.e2.add(plate(levels[k], y0 + k * lh + 0.06, 0.03, M.whiteSmooth));
   // e3: a armação — bandas fluidas em cada nível, banda de topo larga e 2 bandas transversais (3 células)
@@ -76,7 +88,8 @@ function lobo(P, pts, y0, nLev, lh, corte, seed) {
   }
   // e4: vidro recuado (menos na fachada em corte, onde os laboratórios ficam à mostra) e luzes
   const glassPath = subPath(pts, true, corte[1], corte[0] + 1, 120);
-  for (let k = 0; k < nLev; k++) { const lv = subPath(levels[k], true, corte[1], corte[0] + 1, 120); addMap(P.e4, sweep(lv, false, [{ a: [-0.28, y0 + k * lh + 0.18], b: [-0.28, y0 + (k + 1) * lh - 0.02], mat: 'fac', uv: 'facade', vBase: y0 }], { caps: false }), () => M.fac_lab); }
+  // (as duas faces: de dentro, pelas células abertas e pela fachada em corte, o vidro dos fundos fecha a vista)
+  for (let k = 0; k < nLev; k++) { const lv = subPath(levels[k], true, corte[1], corte[0] + 1, 120); const ya = y0 + k * lh + 0.18, yb = y0 + (k + 1) * lh - 0.02; addMap(P.e4, sweep(lv, false, [{ a: [-0.28, ya], b: [-0.28, yb], mat: 'fac', uv: 'facade', vBase: y0 }, { a: [-0.28, yb], b: [-0.28, ya], mat: 'fac', uv: 'facade', vBase: y0 }], { caps: false }), () => M.fac_lab); }
   const glow = []; for (let k = 0; k < nLev; k++) { const lv = subPath(levels[k], true, corte[0], corte[1], 40); const nn = normals(lv, false); for (let i = 0; i < lv.length; i += 4) glow.push([lv[i][0] - nn[i][0] * 0.5, y0 + (k + 1) * lh - 0.06, lv[i][1] - nn[i][1] * 0.5]); }
   const gl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), M.lampGlow, glow.length); glow.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); P.e4.add(gl);
   return glassPath;
@@ -92,14 +105,14 @@ export function ciencias() {
   const c = A.ciencias; const root = new THREE.Group(); root.name = 'ciencias'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group(), e4: new THREE.Group() };
   const loboA = blob(c.c[0] + 2.6, c.c[1] - 0.9, 4.3, 2.7, c.rot - 0.12, 4);
   const loboB = blob(c.c[0] - 3.2, c.c[1] - 1.6, 2.7, 1.8, c.rot + 0.3, 9);
-  lobo(P, loboA, 1.25, 3, 0.7, [0.1, 0.42], 1);
-  lobo(P, loboB, 1.05, 2, 0.7, [0.12, 0.36], 2);
+  lobo(P, loboA, 1.25, 3, 0.7, [0.1, 0.42], 1, c.rot - 0.12);
+  lobo(P, loboB, 1.05, 2, 0.7, [0.12, 0.36], 2, c.rot + 0.3);
   // vale urbanizado à frente: espelho em gota com repuxo e o canal que desce até o bulevar
-  const g = A.ciencias.gota || { c: [5.0, 3.4], rx: 1.3, rz: 0.85, rot: 0.25 };
+  const g = A.ciencias.gota;
   P.e4.add(plate(gotaPts(g.c[0], g.c[1], g.rx + 0.14, g.rz + 0.14, g.rot), 0.0, 0.07, M.whiteSmooth));
   P.e4.add(plate(gotaPts(g.c[0], g.c[1], g.rx, g.rz, g.rot), 0.0, 0.075, M.pool));
   const rep = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 8, 1, true), dupla(M.glassRail)); rep.position.set(g.c[0], 0.3, g.c[1]); rep.castShadow = false; P.e4.add(rep);
-  const can = [[g.c[0] + 0.1, g.c[1] + g.rz * 0.9], [g.c[0] + 0.3, g.c[1] + 3.0], [5.2, 9.6]];
+  const can = [[g.c[0] + 0.1, g.c[1] + g.rz * 0.9], ...g.canal];
   const cp = curve(can, false, 40, 0.5);
   addMap(P.e4, sweep(cp, false, [{ a: [0.22, 0.0], b: [0.22, 0.07], mat: 'borda', uv: 'run' }, { a: [0.22, 0.07], b: [0.15, 0.07], mat: 'borda', uv: 'plan' }, { a: [0.15, 0.065], b: [-0.15, 0.065], mat: 'agua', uv: 'plan' }, { a: [-0.15, 0.07], b: [-0.22, 0.07], mat: 'borda', uv: 'plan' }, { a: [-0.22, 0.07], b: [-0.22, 0.0], mat: 'borda', uv: 'run' }], { caps: false }), (k) => (k === 'agua' ? M.pool : M.whiteSmooth));
   for (const k of Object.keys(P)) root.add(P[k]);

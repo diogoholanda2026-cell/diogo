@@ -26,7 +26,9 @@ export const A = {
     elo: [[-20.6, -2.2], [-18.4, -0.9], [-16.0, -0.2], [-14.2, 0.1]],
     campo: { c: [-18.0, -12.4], w: 4.6, d: 2.6, rot: -0.06 }, ala: { c: [-21.6, -10.6], w: 3.4, d: 1.2, rot: 0.62, andares: 8 } },
   // Faculdade de Ciências Avançadas e Tecnologia (forma orgânica com laboratórios em corte)
-  ciencias: { c: [-5.9, -1.7], rx: 7.4, rz: 3.0, rot: -0.12 }, // (z -1.7: a frente dos lóbulos não entra na fita do Anel)
+  ciencias: { c: [-5.9, -1.7], rx: 7.4, rz: 3.0, rot: -0.12, // (z -1.7: a frente dos lóbulos não entra na fita do Anel)
+    // espelho em gota do vale urbanizado (em (4.0, 3.8) batia na Ponte do Instituto) e o canal até o bulevar
+    gota: { c: [5.0, 3.4], rx: 1.3, rz: 0.85, rot: 0.25, canal: [[5.3, 6.4], [5.2, 9.6]] } },
   // Lago central (inteiro dentro da curva da Sede) e a ilha arborizada
   lago: [[-5.4, -9.2], [-3.8, -10.4], [-1.2, -11.0], [1.8, -10.9], [3.8, -10.2], [4.6, -9.2], [5.8, -8.0], [7.2, -6.9], [7.05, -5.0], [5.6, -4.0], [2.6, -3.6], [-0.8, -3.4], [-3.05, -4.0], [-4.8, -5.6], [-5.8, -7.4]],
   ilha: { c: [-1.0, -6.6], r: 1.3 },
