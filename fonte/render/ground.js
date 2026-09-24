@@ -198,7 +198,7 @@ export class Ground {
     // 3) savana em piquetes de pasto (terra batida escura e capim), com trilhas entre eles
     if (V.savana) {
       c.save(); const piq = A.savana.piquetes || [A.savana.poly];
-      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); c.globalCompositeOperation = 'multiply'; const k = [1, 0.94, 1.05][i % 3]; c.fillStyle = `rgb(${138 * k | 0},${130 * k | 0},${102 * k | 0})`; path(poly); c.fill(); c.globalCompositeOperation = 'source-over'; });
+      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); const k = [1, 0.92, 1.07][i % 3]; c.fillStyle = `rgba(${54 * k | 0},${64 * k | 0},${84 * k | 0},0.55)`; path(poly); c.fill(); }); // capim baixo cinza-oliva (#3b3928 na foto)
       c.restore();
     }
     // 4) margens e leitos d'água (areia clara nas bordas, fundo escuro sob a água)
