@@ -107,7 +107,8 @@ export class Bolhas {
       const sob = !d.borda && this._sob(d.x, d.y - BH / 2); if (sob !== d.ws) { d.ws = sob; n.classList.toggle('sob', sob); }
     }
   }
-  // centro do balão na tela (ou do grupo em que ele está); null se não aparece
-  posTela(id) { let d = this.mapa.get(id); if (!d || !d.show) return null; if (d.lider) d = d.lider; if (!d.vis) return null; return [d.x, d.y - (BH / 2 + 4) * d.esc]; }
+  // centro do balão na tela (ou do grupo em que ele está); null se não aparece. Chamado a cada quadro pelo guia:
+  // devolve sempre o mesmo array (quem guarda o ponto copia)
+  posTela(id) { let d = this.mapa.get(id); if (!d || !d.show) return null; if (d.lider) d = d.lider; if (!d.vis) return null; const p = this._pt || (this._pt = [0, 0]); p[0] = d.x; p[1] = d.y - (BH / 2 + 4) * d.esc; return p; }
   tela(pos) { const v = this._v.set(pos[0], pos[1], pos[2]).project(this.cam); return [(v.x * 0.5 + 0.5) * this.e.vw, (-v.y * 0.5 + 0.5) * this.e.vh]; }
 }

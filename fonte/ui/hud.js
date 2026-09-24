@@ -13,6 +13,9 @@ const retrato = (q, cls = '') => { const c = CONSELHO[q] || CONSELHO.iris; retur
 const pct = (v) => (v <= 0 ? '0%' : v.toLocaleString('pt-BR', { minimumFractionDigits: v < 10 ? 1 : 0, maximumFractionDigits: v < 10 ? 1 : 0 }) + '%');
 const nivelDe = (xp, max) => { let n = 1; while (n < max && xp >= XP_NIVEL[n + 1]) n++; return n; };
 export { retrato };
+// quando partes da interface aparecem (regras só da interface: a simulação não fecha o Depósito; as dela vêm de REGRAS)
+export const ABRE = { trocasCap: 2, depositoNivel: 3 };
+export const depositoAberto = (S) => S.nivel >= ABRE.depositoNivel || S.cap >= ABRE.trocasCap;
 
 export class Hud {
   constructor(raiz, J) {
@@ -34,7 +37,8 @@ export class Hud {
     this.cap = el('button', 'cartao cap pilula'); this.cap.dataset.a = 'capmin'; this.cap.setAttribute('aria-expanded', 'false');
     this.metas = el('div', 'cartao metas oculto');
     this.feita = el('div', 'cartao meta-feita oculto');
-    this.agora = el('div', 'cartao agora oculto'); this.agora.innerHTML = '<span class="tx"></span><button class="ir" data-a="agora" aria-label="Ir para a próxima ação">Ir</button>';
+    // "Agora": uma pílula só (toque em qualquer ponto leva à ação); com ela à vista a pílula do capítulo encolhe
+    this.agora = el('button', 'cartao agora oculto'); this.agora.dataset.a = 'agora'; this.agora.innerHTML = '<span class="tx"><b>Agora</b><span class="t"></span></span><i class="ir" aria-hidden="true">Ir</i>';
     this.esq.append(this.cap, this.metas, this.feita, this.agora);
     // doca do alto: fala do conselho e avisos empilhados (acompanha a área livre quando a folha está aberta)
     this.doca = el('div', 'doca');
@@ -64,7 +68,7 @@ export class Hud {
     this._contar('creditos', Math.max(0, S.creditos - this.ret.creditos));
     this._contar('xp', Math.max(0, S.xp - this.ret.xp));
     // trilho: pedidos e trocas só a partir do capítulo em que abrem
-    this._bt('pedidos', S.cap >= REGRAS.capPedidos); this._bt('trocas', S.cap >= 2);
+    this._bt('pedidos', S.cap >= REGRAS.capPedidos); this._bt('trocas', S.cap >= ABRE.trocasCap);
   }
   _bt(a, on) { const b = this.dir.querySelector(`[data-a="${a}"]`); if (!b) return; const era = this._dirVis[a]; if (era === on) return; this._dirVis[a] = on; b.classList.toggle('oculto', !on); if (on && era === false) { b.classList.add('novo'); setTimeout(() => b.classList.remove('novo'), 4000); } this._tRects = 0; }
   _txt(k, v) {
@@ -103,7 +107,8 @@ export class Hud {
   }
   _htmlMetas() {
     const J = this.J, c = J.capitulo(); if (!c) return;
-    const h = `<h3>Capítulo ${c.n} · ${c.nome}</h3>${c.metas.map((m, i) => { const f = J.metaFeita(m); const pr = J.metaProgresso?.(m); return `<button class="meta ${f ? 'ok' : ''} ${this._metaNova === i ? 'nova' : ''}" data-a="meta" data-i="${i}"><i></i><span>${m.txt}</span><small>${f ? '' : pr?.txt || ''}</small></button>`; }).join('')}`;
+    const ag = this._agoraTx ? `<p class="agora-txt"><b>Agora</b>${this._agoraTx}</p>` : '';
+    const h = `<h3>Capítulo ${c.n} · ${c.nome}</h3>${ag}${c.metas.map((m, i) => { const f = J.metaFeita(m); const pr = J.metaProgresso?.(m); return `<button class="meta ${f ? 'ok' : ''} ${this._metaNova === i ? 'nova' : ''}" data-a="meta" data-i="${i}"><i></i><span>${m.txt}</span><small>${f ? '' : pr?.txt || ''}</small></button>`; }).join('')}`;
     if (h !== this._metasH) { this._metasH = h; this.metas.innerHTML = h; }
   }
   alternarMetas(on = this.metas.classList.contains('oculto')) {
@@ -117,9 +122,9 @@ export class Hud {
   }
   // linha "Agora": plano = J.planoMeta() (ou null para esconder)
   meta(plano) {
-    if (!plano) { this.agora.classList.add('oculto'); this._agoraTx = null; return; }
-    this.agora.classList.remove('oculto'); const t = plano.texto || '';
-    if (t !== this._agoraTx) { this._agoraTx = t; this.agora.querySelector('.tx').innerHTML = `<b>Agora</b>${t}`; this.agora.title = t; }
+    if (!plano) { if (this._agoraTx != null) { this.agora.classList.add('oculto'); this.esq.classList.remove('com-agora'); this._agoraTx = null; this._tRects = 0; if (this.metasAbertas) this._htmlMetas(); } return; }
+    const t = plano.texto || ''; if (this._agoraTx == null) { this.agora.classList.remove('oculto'); this.esq.classList.add('com-agora'); this._tRects = 0; }
+    if (t !== this._agoraTx) { this._agoraTx = t; this.agora.querySelector('.t').textContent = t; this.agora.setAttribute('aria-label', 'Agora: ' + t); if (this.metasAbertas) this._htmlMetas(); }
     this.agora.classList.toggle('espera', plano.acao === 'aguardar');
   }
   conselho(on) { on = !!on; if (this._cons === on) return; this._cons = on; this.topo.querySelector('.aguarda').classList.toggle('oculto', !on); this._tRects = 0; }
@@ -167,11 +172,11 @@ export class Hud {
   fecharInfo() { clearTimeout(this._infoT); if (this._info) { this._info.remove(); this._info = null; } }
   // ------------------------------------------------ trilho, Próximo e guia
   ponto(botao, n) { const b = this.dir.querySelector(`[data-a="${botao}"]`); if (!b) return; let p = b.querySelector('.ponto'); if (!n) { p?.remove(); return; } if (!p) { p = el('i', 'ponto'); b.appendChild(p); } const t = n > 9 ? '9+' : String(n); if (p.textContent !== t) p.textContent = t; }
-  // o = {icone, verbo, pulsa} ou null (sem nada a fazer: some)
+  // o = {icone, verbo, pulsa, compacto (a linha Agora já diz o verbo: só o ícone)} ou null
   proximo(o) {
-    const k = o ? o.icone + '|' + o.verbo + '|' + !!o.pulsa : ''; if (k === this._proxK) return; this._proxK = k;
-    this.prox.classList.toggle('oculto', !o); if (!o) return;
-    this.prox.innerHTML = `${img(o.icone || 'subir')}<span>${o.verbo}</span>`; this.prox.classList.toggle('pulsa', !!o.pulsa); this.prox.setAttribute('aria-label', 'Próximo: ' + o.verbo);
+    const k = o ? o.icone + '|' + o.verbo + '|' + !!o.pulsa + '|' + !!o.compacto : ''; if (k === this._proxK) return; this._proxK = k;
+    this.prox.classList.toggle('oculto', !o); this._tRects = 0; if (!o) return;
+    this.prox.innerHTML = `${img(o.icone || 'subir')}<span>${o.verbo}</span>`; this.prox.classList.toggle('pulsa', !!o.pulsa); this.prox.classList.toggle('compacto', !!o.compacto); this.prox.setAttribute('aria-label', 'Próximo: ' + o.verbo);
   }
   // anel pulsante do tutorial sobre um ponto da tela (ou null)
   guia(x, y) {

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { el, fmt, lerp, clamp } from './core/util.js';
 import { img } from './ui/icones.js';
-import { Hud, retrato } from './ui/hud.js';
+import { Hud, retrato, ABRE } from './ui/hud.js';
 import { Paineis } from './ui/paineis.js';
 import { Bolhas } from './ui/bolhas.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS } from './data/itens.js';
@@ -71,9 +71,9 @@ export class Controle {
     const S = this.S;
     if (!S.dicas.abertura) { S.dicas.abertura = 1; const cap1 = () => this.S.cap === 1 && !this.J.feita('pas_frente.e1'); ABERTURA.forEach(([q, t]) => this.hud.falar(q, t, { se: cap1, grupo: 'abertura' })); }
     this._tutorial();
-    // capítulo concluído enquanto o jogo estava fechado
-    const c = this.J.capitulo(); if (this._capituloPronto(c)) this._fila(() => this.modalCapitulo(c), 1500, 'capitulo');
-    if (this._capituloPronto(c)) this.hud.conselho(true);
+    // capítulo concluído enquanto o jogo estava fechado (o último, sem escolha, conclui sozinho: vem o fim do jogo)
+    const c = this.J.capitulo(); if (this._capituloPronto(c)) { this._fila(() => this.modalCapitulo(c), 1500, 'capitulo'); this.hud.conselho(true); }
+    this._verCapSemEscolha(1500);
   }
   _bind() {
     this.ui.addEventListener('click', (e) => {
@@ -164,7 +164,6 @@ export class Controle {
         site.aoFim = () => { W.canteiro.visible = false; for (const g of pecas) if (g.userData) { g.userData.animando = false; if (g.parent === W.canteiro && g !== amb) g.visible = false; } };
         site.aoRemover = () => { let n = 0; for (const g of pecas) if (g !== amb && g.userData?.animando) { g.userData.animando = false; n++; } if (n) W.refundir?.(); }; // obra desfeita sem aprovar: as peças voltam à fusão
       } else if (modo0 === 'reflorestar') { // replantio: mudas em linhas crescendo até virar a mata do canteiro
-        W.canteiroSaindo = true; // o canteiro sai da fusão (o mundo não funde o que está saindo)
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.2;
         opts = { ...base, alvo, modo: 'replantar', box: b, floresta: this.forest, operarios: 9 };
       } else {
@@ -241,19 +240,22 @@ export class Controle {
   _evento(tipo, d) {
     const J = this.J;
     switch (tipo) {
-      case 'nivel': this.som.nivel(); this.vibra.sucesso(); this.hud.reter('creditos', d.creditos || 0); this._fila(() => this.modalNivel(d), 0, 'nivel' + (d.para ?? d.nivel)); break;
+      case 'nivel': { // os créditos do nível voam do modal; se ele demorar (folha aberta), o contador sobe sozinho
+        this.som.nivel(); this.vibra.sucesso(); const ret = { v: d.creditos || 0, aberto: false }; d._ret = ret; this.hud.reter('creditos', ret.v);
+        setTimeout(() => { if (!ret.aberto && ret.v) { this.hud.soltar('creditos', ret.v); ret.v = 0; } }, 4000);
+        this._fila(() => { ret.aberto = true; this.modalNivel(d); }, 0, 'nivel' + (d.para ?? d.nivel)); break; }
       case 'etapaIniciada': this._siteEtapa(d.key); this._dica('obraComecou'); break;
       case 'etapaPronta': this.obras.pronta('e:' + d.key); this.som.sino?.(); this.calcBolhas(); break;
       case 'moduloIniciado': this._siteModulo(d.faixa, d.i); this._dica('modulo'); break;
       case 'moduloPronto': this.obras.pronta(`m:${d.faixa}:${d.i}`); this.som.sino?.(); this.calcBolhas(); break;
-      case 'capituloCompleto': if (d.cap?.escolha) { if (this._depoisCap !== d.cap.n) this._fila(() => this.modalCapitulo(d.cap), 2200, 'capitulo'); } else if (d.cap) this._fila(() => { if (this.J.capitulo()?.n === d.cap.n && this.S.capEscolhas[d.cap.n] === undefined) this.J.concluirCapitulo(null); }, 2200, 'capitulo'); break;
+      case 'capituloCompleto': if (d.cap?.escolha) { if (this._depoisCap !== d.cap.n) this._fila(() => this.modalCapitulo(d.cap), 2200, 'capitulo'); } else this._verCapSemEscolha(2200); break;
       case 'novoCapitulo': this._novoCapitulo(d); break;
       case 'fimDeJogo': this.finalComposicao(); break;
       case 'dica': this._dica(d.id); break;
       case 'fala': setTimeout(() => this.hud.falar(d.quem, d.texto), d.atraso || 0); break;
       case 'aviso': this._aviso(d); break;
       case 'mutirao': this._mutiraoT = performance.now(); break;
-      case 'moduloFeito': if (d.nivel >= 4 && J.bem < bemMinimo(POP_NIVEL.length - 1)) this._dica('bemEstar'); break;
+      case 'moduloFeito': { const bm = bemMinimo(d.nivel + 1); if (bm && J.bem < bm) this._dica('bemEstar'); break; } // o próximo pavimento pede bem-estar
       case 'coleta': if (d.especial) setTimeout(() => this.hud.brinde(`Achado: ${ITENS[d.especial].nome}!`, d.especial, 2600), 500); break;
     }
     if (EV_PAINEL.has(tipo)) this.paineis.agendar();
@@ -262,7 +264,7 @@ export class Controle {
   _dica(id) { if (this.S.dicas[id]) return; const d = DICAS[id]; if (!d) return; this.S.dicas[id] = 1; this.hud.falar(d[0], d[1]); }
   // aviso da simulação: brinde; com créditos, as moedas voam até o contador (o número só sobe na chegada)
   _aviso(d) {
-    this.hud.brinde(d.texto, d.icone || null, 3000);
+    this.hud.brinde(d.texto, d.icone || null, 3000); if (d.creditos > 0 && this._somaAvisos) this._somaAvisos.v += d.creditos;
     if (d.creditos > 0) { const [x, y] = this._pontoCel || [innerWidth / 2, innerHeight * 0.45]; this._moedas(d.creditos, x, y, 6); }
   }
   _moedas(v, x, y, n = 5) {
@@ -429,14 +431,14 @@ export class Controle {
     // a primeira placa de obra à vista (fora do primeiro passo do tutorial) explica a prancha
     if (placaEtapa && S.cap === 1 && !this.S.dicas.primeiraEtapa && !(this._tutAtivo() && (S.dicas.guia || 0) < 1)) this._dica('primeiraEtapa');
     // Meta em foco e Próximo
-    const passo = this._passoTut(); this._plano = J.planoMeta ? J.planoMeta() : null;
-    this.hud.meta(!passo || passo.id === 'meta' ? this._plano : null);
-    this._prox = this._calcProximo(L, passo); this.hud.proximo(this._prox && { icone: this._prox.icone, verbo: this._prox.verbo, pulsa: L.some((b) => b.tipo === 'pronta' || b.tipo === 'coleta') });
+    const passo = this._passoTut(); this._plano = J.planoMeta ? J.planoMeta() : null; const agora = !passo || passo.id === 'meta' ? this._plano : null;
+    this.hud.meta(agora);
+    this._prox = this._calcProximo(L, passo); this.hud.proximo(this._prox && { icone: this._prox.icone, verbo: this._prox.verbo, pulsa: L.some((b) => b.tipo === 'pronta' || b.tipo === 'coleta'), compacto: !!(this._prox.plano && agora) });
   }
   // ------------------------------------------------------------ Próximo, Meta em foco e metas
   _calcProximo(L, passo) {
     if (passo) { for (const a of [].concat(passo.alvo)) { if (a.startsWith('balao:')) { const b = L.find((x) => x.id === a.slice(6)); if (b) return this._proxBalao(b); } else if (a.startsWith('bt:')) return { painel: a.slice(3), icone: a.slice(3), verbo: a.slice(3) === 'obras' ? 'Obras' : 'Abrir' }; } }
-    const pl = this._plano; if (pl && pl.alvo && pl.acao !== 'aguardar') return { alvo: pl.alvo, destaque: this._selPlano(pl), icone: pl.item && ITENS[pl.item] ? pl.item : ICONE_PLANO[pl.acao] || 'subir', verbo: pl.acao === 'iniciar' && pl.alvo.modulo ? 'Subir módulo' : VERBO_PLANO[pl.acao] || 'Ir' };
+    const pl = this._plano; if (pl && pl.alvo && pl.acao !== 'aguardar') return { alvo: pl.alvo, destaque: this._selPlano(pl), icone: pl.item && ITENS[pl.item] ? pl.item : ICONE_PLANO[pl.acao] || 'subir', verbo: pl.acao === 'iniciar' && pl.alvo.modulo ? 'Subir módulo' : VERBO_PLANO[pl.acao] || 'Ir', plano: true };
     for (const t of ['pronta', 'coleta', 'moedas', 'subir', 'placa', 'obra']) { const b = L.find((x) => x.tipo === t); if (b) return this._proxBalao(b); }
     return null;
   }
@@ -489,13 +491,21 @@ export class Controle {
     if (i < T.length && this._guiaFalou !== i) { this._guiaFalou = i; const p = T[i]; this.hud.falar(p.quem, p.fala, { se: () => this.S.cap === 1 && (this.S.dicas.guia || 0) === i, grupo: 'tutorial' }); }
   }
   // anel-guia: dentro do painel aberto, o controle que o passo pede; senão o balão, o botão ou a Meta em foco
+  // alvos do passo lidos uma vez por passo (o guia roda a cada quadro e não aloca): do último para o primeiro,
+  // cada um com o tipo e o id já separados, e os seletores procurados dentro do painel aberto
+  _alvosTut(p) {
+    const A = this._tutA; if (A && A.id === p.id) return A; const L = [].concat(p.alvo);
+    const rev = L.slice().reverse().map((a) => (a.startsWith('balao:') ? { a, tipo: 'balao', id: a.slice(6) } : a.startsWith('bt:') ? { a, tipo: 'bt', id: a.slice(3), sel: `[data-a="${a.slice(3)}"]:not(.oculto)` } : { a, tipo: a === 'meta' ? 'meta' : a.includes(':') ? 'nada' : 'sel', sel: '#ui ' + a }));
+    return (this._tutA = { id: p.id, rev, painel: TUT_PAINEL[p.id] || L.filter((a) => !a.includes(':') && a !== 'meta') });
+  }
   _guia(t) {
     const p = this._passoTut(); if (!p || !this.hud._visivel || this.modoApreciar || this._modais.length || this.ui.classList.contains('intro')) { this.hud.guia(null); return; }
-    let pt = null; const G = this._guiaCache;
-    if (this.paineis.el) { if (t - G.t > 200) { G.t = t; G.pt = null; for (const s of TUT_PAINEL[p.id] || [].concat(p.alvo).filter((a) => !a.includes(':') && a !== 'meta')) { const e = this.paineis.el.querySelector(s); if (e) { G.pt = centro(e); break; } } } pt = G.pt; }
-    if (!pt) for (const a of [].concat(p.alvo).reverse()) {
-      if (a.startsWith('balao:')) pt = this.bolhas.posTela(a.slice(6));
-      else if (t - G.t > 200 || G.a !== a) { G.t = t; G.a = a; const e = a.startsWith('bt:') ? this.hud.dir.querySelector(`[data-a="${a.slice(3)}"]:not(.oculto)`) : a === 'meta' ? (this.hud.agora.classList.contains('oculto') ? this.hud.cap : this.hud.agora) : a.includes(':') || this.paineis.el ? null : document.querySelector('#ui ' + a); G.pt = e && !(this.paineis.el && a.startsWith('bt:') && this.paineis.atual?.tipo === a.slice(3)) ? centro(e) : null; pt = G.pt; }
+    let pt = null; const G = this._guiaCache; const A = this._alvosTut(p);
+    if (this.paineis.el) { if (t - G.t > 200) { G.t = t; G.pt = null; for (let i = 0; i < A.painel.length; i++) { const e = this.paineis.el.querySelector(A.painel[i]); if (e) { G.pt = centro(e); break; } } } pt = G.pt; }
+    if (!pt) for (let i = 0; i < A.rev.length; i++) {
+      const r = A.rev[i];
+      if (r.tipo === 'balao') pt = this.bolhas.posTela(r.id);
+      else if (t - G.t > 200 || G.a !== r.a) { G.t = t; G.a = r.a; const e = r.tipo === 'bt' ? this.hud.dir.querySelector(r.sel) : r.tipo === 'meta' ? (this.hud.agora.classList.contains('oculto') ? this.hud.cap : this.hud.agora) : r.tipo === 'nada' || this.paineis.el ? null : document.querySelector(r.sel); G.pt = e && !(this.paineis.el && r.tipo === 'bt' && this.paineis.atual?.tipo === r.id) ? centro(e) : null; pt = G.pt; }
       else pt = G.pt;
       if (pt) break;
     }
@@ -568,28 +578,47 @@ export class Controle {
     const esp = (d.especiais?.length ? d.especiais : [d.especial]).filter((k) => ITENS[k]); const cont = {}; for (const k of esp) cont[k] = (cont[k] || 0) + 1;
     const cards = [`<div class="premio" data-p="creditos">${img('creditos')}<b>+${fmt(d.creditos || 0)}</b><small>créditos</small></div>`, ...Object.entries(cont).map(([k, q]) => `<div class="premio" data-p="${k}">${img(k)}<b>+${q}</b><small>${ITENS[k].nome}</small></div>`), ...(d.vagas || []).map((id) => `<div class="premio" data-p="predio:${id}">${img('predio:' + id)}<b>+1 vaga</b><small>${PREDIOS[id]?.nome || id}</small></div>`)].join('');
     const novos = [...(d.novos || []).map((k) => `<span class="etiq">${img(k)}${ITENS[k].nome}</span>`), ...(d.predios || []).map((k) => `<span class="etiq">${img('predio:' + k)}${PREDIOS[k].nome}</span>`)].join('');
-    let voou = false; const voar = (m) => {
-      if (voou) return; voou = true; const cs = m ? [...m.querySelectorAll('.premio')] : []; let t = 0;
-      for (const c of cs) { const r = c.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const p = c.dataset.p; setTimeout(() => { if (p === 'creditos') { const v = d.creditos || 0; const k = 6, parte = Math.floor(v / k); this.hud.voar('creditos', x, y, 'creditos', (i, vis, ult) => this.hud.soltar('creditos', ult ? v - parte * (vis - 1) : parte), { n: k }); this.som.moedas(); } else this.hud.voar(p, x, y, 'almox', null, { n: cont[p] || 1 }); }, t); t += 90; }
-      if (!cs.length) this.hud.soltar('creditos', d.creditos || 0);
+    // retido: o que ainda falta somar no contador (0 se ele já subiu enquanto o modal esperava na fila)
+    const ret = d._ret || { v: d.creditos || 0 }; let voou = false; const voar = (m) => {
+      if (voou) return; voou = true; const cs = m ? [...m.querySelectorAll('.premio')] : []; let t = 0; const v = ret.v; ret.v = 0;
+      for (const c of cs) { const r = c.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const p = c.dataset.p; setTimeout(() => { if (p === 'creditos') { const k = 6, parte = Math.floor(v / k); this.hud.voar('creditos', x, y, 'creditos', v ? (i, vis, ult) => this.hud.soltar('creditos', ult ? v - parte * (vis - 1) : parte) : null, { n: k }); this.som.moedas(); } else this.hud.voar(p, x, y, 'almox', null, { n: cont[p] || 1 }); }, t); t += 90; }
+      if (!cs.length && v) this.hud.soltar('creditos', v);
     };
     this.modal(`<div class="festa" aria-hidden="true"></div><h3>Subiu de nível</h3><h1>${tit}</h1><div class="premios">${cards}</div>${novos ? `<p class="lib">Liberado agora</p><div class="linha centro">${novos}</div>` : ''}<button class="botao ouro grande" data-continuar>Continuar</button>`,
       (m, fechar) => { m.querySelector('[data-continuar]').addEventListener('click', () => { voar(m); fechar(); }); this._modalNivelEl = m; },
-      { cls: 'festivo', aoFechar: () => { voar(this._modalNivelEl); if (de < 3 && para >= 3) setTimeout(() => this._dica('deposito'), 400); } });
+      { cls: 'festivo', aoFechar: () => { voar(this._modalNivelEl); if (de < ABRE.depositoNivel && para >= ABRE.depositoNivel) setTimeout(() => this._dica('deposito'), 400); } });
     this.calcBolhas();
   }
   _capituloPronto(c) { return !!(c && c.escolha && this.S.capEscolhas[c.n] === undefined && c.metas.every((m) => this.J.metaFeita(m))); }
+  // capítulo sem escolha (o epílogo) cumprido e ainda não concluído: conclui pela fila (também depois de recarregar)
+  _capSemEscolha() { const c = this.J.capitulo(); return !!(c && !c.escolha && this.S.capEscolhas[c.n] === undefined && c.metas.every((m) => this.J.metaFeita(m))); }
+  _verCapSemEscolha(atraso) { if (this._capSemEscolha()) this._fila(() => { if (this._capSemEscolha()) this._concluirCap(null, innerWidth / 2, innerHeight * 0.4); }, atraso, 'capitulo'); }
+  // conclui o capítulo e faz voar o que a Holding pagou (os marcos do capítulo seguinte já voam nos próprios avisos)
+  _concluirCap(esc, x, y) {
+    const J = this.J; const cr0 = J.S.creditos; const av = (this._somaAvisos = { v: 0 }); let r;
+    try { r = J.concluirCapitulo(esc); } finally { this._somaAvisos = null; }
+    if (r !== 'ok') return r; this.som.nivel(); this.vibra.sucesso(); this._moedas(J.S.creditos - cr0 - av.v, x, y, 8); return r;
+  }
+  // o que a apresentação paga, medido na própria regra: uma cópia do jogo, sem ouvintes, conclui o capítulo
+  _premioCap() {
+    const J = this.J; try {
+      const D = new J.constructor(structuredClone(J.S)); D.agora = J.agora; let marcos = 0; D.on((t, d) => { if (t === 'aviso' && d.creditos > 0) marcos += d.creditos; });
+      if (D.concluirCapitulo(null) !== 'ok') return null; return { creditos: D.S.creditos - J.S.creditos - marcos, fichas: D.S.mutirao - J.S.mutirao };
+    } catch (e) { return null; }
+  }
   _falasHtml(fala) { return (fala || []).map(([q, t]) => `<div class="conselho">${retrato(q)}<div class="fala"><b>${CONSELHO[q]?.nome || ''}</b>${t}</div></div>`).join(''); }
   // apresentação ao Conselho: não some com um toque fora; 'Decidir depois' deixa a pílula 'Conselho aguarda' no topo
   modalCapitulo(c) {
-    if (!c || this._modalCap || !c.escolha || this.S.capEscolhas[c.n] !== undefined) return; this._modalCap = true; this.hud.conselho(false); const J = this.J;
-    const prox = CAPITULOS[c.n]; const falas = this._falasHtml(c.fala);
+    if (!c || this._modalCap || !c.escolha || this.S.capEscolhas[c.n] !== undefined) return; this._modalCap = true; this.hud.conselho(false);
+    const prox = CAPITULOS[c.n]; const falas = this._falasHtml(c.fala); const pr = this._premioCap();
     const esc = c.escolha.map((o) => `<button class="escolha" data-esc="${o.id}">${retrato(o.quem, 'p32')}<div class="tx"><b>${o.txt}</b><span class="ganho">${o.ganho}</span><span class="custo">Custo: ${o.custo}</span><small>${o.porque}</small></div></button>`).join('');
-    this.modal(`<h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1><div class="linha centro"><span class="etiq ok">${img('ok')}Aprovado</span><span class="etiq">${img('creditos')}Créditos da Holding</span><span class="etiq">${img('mutirao')}Ficha de Mutirão</span></div><div class="falas">${falas}</div>${prox?.abre?.length ? `<p class="novas"><b>Novas obras:</b> ${prox.abre.join(', ')}</p>` : ''}<p class="pergunta"><span>O Conselho pede uma decisão. Ela vale para os próximos capítulos.</span><button class="botao sec depois" data-depois>Decidir depois</button></p><div class="escolhas">${esc}</div>`, (m, fechar) => {
+    const premio = `<span class="etiq">${img('creditos')}${pr?.creditos > 0 ? `<b class="cred">+${fmt(pr.creditos)}</b>&nbsp;da Holding` : 'Créditos da Holding'}</span>${!pr || pr.fichas > 0 ? `<span class="etiq">${img('mutirao')}${pr ? `+${pr.fichas} ficha${pr.fichas > 1 ? 's' : ''} de Mutirão` : 'Ficha de Mutirão'}</span>` : ''}`;
+    this.modal(`<h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1><div class="linha centro"><span class="etiq ok">${img('ok')}Aprovado</span>${premio}</div><div class="falas">${falas}</div>${prox?.abre?.length ? `<p class="novas"><b>Novas obras:</b> ${prox.abre.join(', ')}</p>` : ''}<p class="pergunta"><span>O Conselho pede uma decisão. Ela vale para os próximos capítulos.</span><button class="botao sec depois" data-depois>Decidir depois</button></p><div class="escolhas">${esc}</div>`, (m, fechar) => {
       m.addEventListener('click', (e) => {
         if (e.target.closest('[data-depois]')) { this._depoisCap = c.n; fechar(); return; } // não reabre sozinho: fica a pílula
         const b = e.target.closest('[data-esc]'); if (!b) return; const r = m.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height * 0.3;
-        const cr0 = J.S.creditos; J.concluirCapitulo(b.dataset.esc || null); this._modalCap = false; fechar(true); // conclui antes de fechar: o fechar não pode pôr a pílula de volta this.som.nivel(); this.vibra.sucesso(); const ganhou = J.S.creditos - cr0; this._moedas(ganhou, x, y, 8);
+        // conclui antes de fechar (o fechar não pode pôr a pílula de volta); som, vibração e moedas vêm na conclusão
+        const res = this._concluirCap(b.dataset.esc || null, x, y); this._modalCap = false; fechar(true); if (res !== 'ok') return;
         const o = c.escolha.find((q) => q.id === b.dataset.esc); if (o) this.hud.brinde(`Escolha do Conselho: ${o.txt}`, 'sede', 3200); this.hud.capitulo(); this.sincronizar();
       });
     }, { fixo: true, cls: 'larga capitulo', aoFechar: () => { this._modalCap = false; if (this._capituloPronto(this.J.capitulo())) this.hud.conselho(true); } });

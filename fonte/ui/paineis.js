@@ -8,6 +8,7 @@ import { img } from './icones.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS, BRUTOS, receitas } from '../data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP } from '../data/obras.js';
 import { REGRAS, TOPOGRAFO } from '../sim/estado.js';
+import { depositoAberto } from './hud.js';
 
 const nomeIt = (k) => ITENS[k]?.nome || k;
 const NOME_SERV = { agua: 'Água', energia: 'Energia', saneamento: 'Saneamento' };
@@ -23,10 +24,13 @@ export class Paineis {
     this._segura = false; this._pend = false; this._ultimoHtml = null; this._falta = null; this._faltaPed = null; this._lixo = null;
     const solta = () => { if (!this._segura) return; this._segura = false; if (this._pend) setTimeout(() => this.render(), 30); };
     window.addEventListener('pointerup', solta); window.addEventListener('pointercancel', solta);
+    this._medir(); window.addEventListener('resize', () => { this._medir(); if (this.el) this.C.painelMudou?.(true); });
   }
+  // largura da folha: até 412 px e 44% da largura, e a área (largura x altura útil) em no máximo 36% da tela;
+  // vai para o CSS em --folhaW (a doca de falas se centra no que sobra)
+  _medir() { const W = innerWidth, H = innerHeight; this._w = Math.floor(Math.min(412, W * 0.44, (0.36 * W * H) / Math.max(1, H - 62))); document.documentElement.style.setProperty('--folhaW', this._w + 'px'); return this._w; }
   get J() { return this.C.J; }
-  // largura da folha (a mesma conta do CSS: min(412px, 44vw))
-  get largura() { return Math.min(412, innerWidth * 0.44); }
+  get largura() { return this._w || this._medir(); }
   abrir(tipo, arg, o = {}) {
     const mesmo = this.atual && this.atual.tipo === tipo && JSON.stringify(this.atual.arg) === JSON.stringify(arg);
     if (mesmo && !o.forcar && !this._reabrir) { this._reabrir = false; if (o.destaque) this.destacar(o.destaque); else this.fechar(); return; }
@@ -95,7 +99,7 @@ export class Paineis {
       case 'aprovarMod': C.aprovarModulo(d.f, +d.i); break;
       case 'ir': this._empilhar = true; C.irPara(JSON.parse(d.alvo)); this._empilhar = false; break;
       case 'aba': this.aba[this.atual.tipo] = d.v; this.render(true); break;
-      case 'ampliarAlmox': res(J.ampliarAlmox(), () => C.hud.brinde('Almoxarifado ampliado: +20 vagas', 'almox')); break;
+      case 'ampliarAlmox': { const cap0 = J.capacidade; res(J.ampliarAlmox(), () => C.hud.brinde(`Almoxarifado ampliado: +${J.capacidade - cap0} vagas`, 'almox')); break; }
       case 'deposito': this.abrir('deposito', undefined, { pilha: true }); break;
       case 'comprar': res(J.comprar(d.k), () => { C.som.moedas(); const [x, y] = C._pontoTela(b); C.hud.voar(d.k, x, y, 'almox'); }); break;
       case 'vender': res(J.vender(d.k, 1), () => C.som.moedas()); break;
@@ -119,6 +123,15 @@ export class Paineis {
     C.som.moedas(); C.vibra.sucesso(); this._faltaPed = null; C.recompensa({ creditos: R.creditos, xp: R.xp, itens: R.itens }, x, y);
     this.render(true); C.calcBolhas();
   }
+  // números que a interface mostra medidos na própria simulação (sem copiar constantes): vagas que a próxima
+  // ampliação dá, hora em que a janela do Depósito vira e o início da espera de um pedido que está chegando
+  _passoAlmox() { const J = this.J; const P = Object.create(J); P.S = { ...J.S, almoxNivel: J.S.almoxNivel + 1 }; return P.capacidade - J.capacidade; }
+  _renovaDeposito() {
+    const J = this.J; if (typeof J._janela !== 'function') return null; const P = Object.create(J); const j0 = J._janela(); let a = J.agora, b = a + 36e5;
+    for (let k = 0; k < 8; k++) { P.agora = b; if (P._janela() !== j0) break; const d = b - a; a = b; b += d * 2; } P.agora = b; if (P._janela() === j0) return null;
+    while (b - a > 1000) { const m = (a + b) / 2; P.agora = m; if (P._janela() === j0) a = m; else b = m; } return b;
+  }
+  _iniPedido(p) { const M = (this._iniPed ||= new Map()); let t = M.get(p.id); if (t == null || t > p.espera) { t = Math.min(this.J.agora, p.espera); M.set(p.id, t); } return t; }
   // ---------- componentes ----------
   ficha(k, o = {}) {
     const tem = o.tem != null ? `<span class="tem">${o.tem}</span>` : '';
@@ -168,7 +181,7 @@ export class Paineis {
       corpo: `<div class="linha" style="margin-bottom:10px"><div class="barra ${p >= 0.95 ? 'cheia' : p >= 0.8 ? 'alerta' : ''}"><i style="width:${Math.min(100, p * 100)}%"></i></div><b class="num">${Math.round(p * 100)}%</b></div>
       <div class="abas">${[['bruto', 'Matérias-primas'], ['produto', 'Produtos'], ['especial', 'Especiais']].map(([v, t]) => `<button class="${aba === v ? 'on' : ''}" data-a="aba" data-v="${v}">${t}</button>`).join('')}</div>
       <div class="grade">${g}</div>
-      <div class="cartao ampliar"><b>Ampliar (+20 vagas)</b>${this.chips(req)}<div class="linha" style="margin-top:8px"><button class="botao ${pode ? '' : 'fraco'}" data-a="${pode ? 'ampliarAlmox' : 'fraco'}" data-motivo="falta">${img('subir')} Ampliar</button>${J.S.nivel >= 3 || J.S.cap >= 2 ? `<button class="botao sec" data-a="deposito">${img('troca')} Depósito de Trocas</button>` : ''}</div><p class="desc" style="margin-top:6px">Estrados, etiquetas e cadeados caem ao coletar produção, ao subir de nível e em pedidos da comunidade.</p></div>` };
+      <div class="cartao ampliar"><b>Ampliar (+${this._passoAlmox()} vagas)</b>${this.chips(req)}<div class="linha" style="margin-top:8px"><button class="botao ${pode ? '' : 'fraco'}" data-a="${pode ? 'ampliarAlmox' : 'fraco'}" data-motivo="falta">${img('subir')} Ampliar</button>${depositoAberto(J.S) ? `<button class="botao sec" data-a="deposito">${img('troca')} Depósito de Trocas</button>` : ''}</div><p class="desc" style="margin-top:6px">Estrados, etiquetas e cadeados caem ao coletar produção, ao subir de nível e em pedidos da comunidade.</p></div>` };
   }
   // ---------- prancha da etapa ----------
   r_etapa(key) {
@@ -269,13 +282,13 @@ export class Paineis {
     if (S.cap < capP) return { icone: 'pedidos', titulo: 'Pedidos da comunidade', sub: `Libera no capítulo ${capP}`, corpo: '<p class="desc">Vizinhos, cooperativas e escolas vão pedir materiais em troca de licenças, itens especiais, bem-estar e disposição.</p>' };
     const fp = this._faltaPed && performance.now() - this._faltaPed.t < 8000 ? this._faltaPed : null; const treme = fp && performance.now() - fp.t < 300;
     const cards = S.pedidos.map((p, i) => {
-      if (!p.itens) return `<div class="pedido espera" data-ini="${p.espera - 180000}" data-fim="${p.espera}"><b>Novo pedido chegando</b><div class="linha"><div class="barra"><i style="width:0"></i></div><small class="tt"></small></div></div>`;
+      if (!p.itens) return `<div class="pedido espera" data-ini="${this._iniPedido(p)}" data-fim="${p.espera}"><b>Novo pedido chegando</b><div class="linha"><div class="barra"><i style="width:0"></i></div><small class="tt"></small></div></div>`;
       const ok = Object.entries(p.itens).every(([k, n]) => J.temItem(k, n)); const R = p.recompensa || { creditos: p.creditos || 0, xp: p.xp || 0, itens: p.especial ? { [p.especial]: 1 } : null };
       const its = Object.entries(p.itens).map(([k, n]) => { const t = S.itens[k] || 0; const tem = t >= n; return `<span class="it ${tem ? 'tem' : 'precisa'} ${!tem && treme && fp.i === i ? 'treme' : ''}" title="${nomeIt(k)}">${img(k)}<i>${Math.min(t, n)}/${n}</i></span>`; }).join('');
       const rec = [R.creditos ? `<span>${img('creditos')}${fmt(R.creditos)}</span>` : '', R.xp ? `<span>${img('xp')}${R.xp}</span>` : '', ...Object.entries(R.itens || {}).map(([k, n]) => `<span title="${nomeIt(k)}">${img(k)}${n > 1 ? n : ''}</span>`), R.bem ? `<span>${img('bem')}+${R.bem.n}%</span>` : '', R.disposicao ? `<span>${img('disposicao')}+${R.disposicao}</span>` : ''].join('');
       const conf = this._lixo?.i === i; const ini = (p.quem || '?').trim()[0];
       return `<div class="pedido ${ok ? 'pronto' : 'fraco'} ${fp?.i === i ? 'sel' : ''}" role="button" data-a="pedido" data-i="${i}" aria-label="Entregar pedido de ${p.quem || 'moradores'}">
-        <div class="pq"><div class="retrato mini" style="background:radial-gradient(circle at 35% 30%,#fff,${p.cor || '#9ad7fb'})">${ini}</div><div class="quem"><b>${p.quem || 'Moradores'}</b><small>${p.onde || ''}</small></div></div>
+        <div class="pq"><div class="retrato mini" style="background:radial-gradient(circle at 35% 30%,#fff,${p.cor || '#9ad7fb'})">${ini}</div><div class="quem ${(p.quem || '').length > 16 ? 'longo' : ''}"><b>${p.quem || 'Moradores'}</b><small>${p.onde || ''}</small></div></div>
         <button class="lixo ${conf ? 'conf' : ''}" data-a="descartar" data-i="${i}" aria-label="${conf ? 'Tocar de novo para descartar' : 'Descartar pedido'}">${conf ? '<span>Descartar?</span>' : img('lixo')}</button>
         ${p.fala ? `<p class="fala" title="${p.fala}">${p.fala}</p>` : ''}<div class="pl"><div class="its">${its}</div><div class="rec">${rec}</div></div></div>`;
     });
@@ -285,12 +298,12 @@ export class Paineis {
   // ---------- depósito ----------
   r_deposito() {
     const J = this.J; const aba = this.aba.deposito || 'comprar'; const est = (k) => (J.estoqueDeposito ? J.estoqueDeposito(k) : { n: 99, preco: J.precoCompra(k) });
-    const janela = 4 * 3600e3; const renova = hhmm(Math.ceil((J.agora + 1) / janela) * janela);
+    const rn = this._renovaDeposito(); const renova = rn ? ` às ${hhmm(rn)}` : ' em breve';
     let g;
     if (aba === 'comprar') g = BRUTOS.filter((k) => J.liberado(k)).map((k) => { const e = est(k); return this.ficha(k, { cls: e.n > 0 ? '' : 'bloq', cad: e.n > 0 ? '' : 'Esgotado', tem: e.n > 0 ? `${e.n} un.` : null, sub: `${fmt(e.preco)} créditos`, data: e.n > 0 ? `data-a="comprar" data-k="${k}"` : `data-a="fraco" data-motivo="esgotado"` }); }).join('');
     else g = Object.keys(ITENS).filter((k) => ITENS[k].tipo !== 'especial' && J.S.itens[k] > 0).map((k) => this.ficha(k, { sub: `${fmt(J.precoVenda(k))} cada`, tem: '×' + J.S.itens[k], data: `data-a="vender" data-k="${k}"` })).join('') || '<p class="desc">Nada para vender.</p>';
     const vd = J.vendasDeposito ? J.vendasDeposito() : null;
-    const rod = aba === 'comprar' ? `Estoque de cada matéria-prima renova às ${renova}; o preço sobe a cada compra.` : vd ? `Vendas nesta janela: ${vd.feitas}/${vd.max} (renova às ${renova}).` : '';
+    const rod = aba === 'comprar' ? `Estoque de cada matéria-prima renova${renova}; o preço sobe a cada compra.` : vd ? `Vendas nesta janela: ${vd.feitas}/${vd.max} (renova${renova}).` : '';
     return { icone: 'troca', titulo: 'Depósito de Trocas', sub: 'Compre matéria-prima ou venda o que sobrou', corpo: `<div class="abas">${[['comprar', 'Comprar'], ['vender', 'Vender']].map(([v, t]) => `<button class="${aba === v ? 'on' : ''}" data-a="aba" data-v="${v}">${t}</button>`).join('')}</div><div class="grade">${g}</div><p class="desc" style="margin-top:8px">${rod}</p>` };
   }
   // ---------- escritório / sede: repasses, serviços, bem-estar e topógrafo ----------
