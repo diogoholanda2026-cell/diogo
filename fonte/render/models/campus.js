@@ -102,16 +102,17 @@ export function campo() {
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'campo', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'terra', e2: 'crescer' }, foco: { x: c.c[0], z: c.c[1], dist: 11 }, ancora: [c.c[0], 1.2, c.c[1]] };
 }
-// Faculdade de Engenharia: 30+ blocos brancos de laboratório ao longo da borda interna da frente do Anel
+// Faculdade de Engenharia: ~22 blocos brancos de laboratório ao longo da borda interna da frente do Anel (com o
+// Instituto, ~40 blocos maiores e com pátios, como na foto)
 export function engenharia() {
-  const a = A.anel; const root = new THREE.Group(); root.name = 'engenharia'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.4, a.rz - 3.2, a.rot, 0.55, 1.75, 12, 3, 31, 2, 3);
+  const a = A.anel; const root = new THREE.Group(); root.name = 'engenharia'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.4, a.rz - 3.2, a.rot, 0.55, 1.75, 8, 3, 31, 2, 3);
   const P = { e1: b.low, e2: b.high }; root.add(P.e1, P.e2);
   const m = [a.c[0] + Math.cos(1.15) * (a.rx - 4.0), a.c[1] + Math.sin(1.15) * (a.rz - 3.8)];
   return { id: 'engenharia', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: m[0], z: m[1], dist: 11 }, ancora: [m[0], 1.8, m[1]] };
 }
 // Instituto de Estudos Urbanos: a mesma cidade de blocos, continuando pela borda interna da direita do Anel
 export function instituto() {
-  const a = A.anel; const root = new THREE.Group(); root.name = 'instituto'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.4, a.rz - 3.2, a.rot, -0.55, 0.5, 10, 3, 47, 2, 4);
+  const a = A.anel; const root = new THREE.Group(); root.name = 'instituto'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.4, a.rz - 3.2, a.rot, -0.55, 0.5, 6, 3, 47, 2, 4);
   const P = { e1: b.low, e2: b.high }; root.add(P.e1, P.e2);
   const m = [a.c[0] + (a.rx - 4.3) * Math.cos(a.rot), a.c[1] + (a.rx - 4.3) * Math.sin(a.rot)];
   return { id: 'instituto', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: m[0], z: m[1], dist: 10 }, ancora: [m[0], 2.2, m[1]] };
