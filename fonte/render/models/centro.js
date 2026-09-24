@@ -66,7 +66,7 @@ function lobo(P, pts, y0, nLev, lh, corte, seed) {
   for (let k = 0; k < pisos; k++) P.e2.add(plate(levels[k], y0 + k * lh + 0.06, 0.03, M.whiteSmooth));
   // e3: a armação — bandas fluidas em cada nível, banda de topo larga e 2 bandas transversais (3 células)
   const yT = y0 + nLev * lh - 0.02;
-  for (let k = 0; k < nLev; k++) addMap(P.e3, sweep(levels[k], true, bandEdges(y0 + k * lh - 0.02, 0.26, 0.14)), matBanda);
+  for (let k = 0; k < nLev; k++) addMap(P.e3, sweep(levels[k], true, bandEdges(y0 + k * lh - 0.02, 0.2, 0.1, 0.34)), matBanda); // lajes finas; a armação grossa é a do topo
   addMap(P.e3, sweep(levels[nLev], true, bandEdges(yT, 0.34, 0.14, 0.95)), matBanda);
   const L = levels[nLev];
   for (const [f0, f1, dob] of [[0.19, 0.79, 0.35], [0.31, 0.67, -0.3]]) {
@@ -76,7 +76,7 @@ function lobo(P, pts, y0, nLev, lh, corte, seed) {
   }
   // e4: vidro recuado (menos na fachada em corte, onde os laboratórios ficam à mostra) e luzes
   const glassPath = subPath(pts, true, corte[1], corte[0] + 1, 120);
-  for (let k = 0; k < nLev; k++) { const lv = subPath(levels[k], true, corte[1], corte[0] + 1, 120); addMap(P.e4, sweep(lv, false, [{ a: [-0.42, y0 + k * lh + 0.26], b: [-0.42, y0 + (k + 1) * lh - 0.02], mat: 'fac', uv: 'facade', vBase: y0 }], { caps: false }), () => M.fac_lab); }
+  for (let k = 0; k < nLev; k++) { const lv = subPath(levels[k], true, corte[1], corte[0] + 1, 120); addMap(P.e4, sweep(lv, false, [{ a: [-0.28, y0 + k * lh + 0.18], b: [-0.28, y0 + (k + 1) * lh - 0.02], mat: 'fac', uv: 'facade', vBase: y0 }], { caps: false }), () => M.fac_lab); }
   const glow = []; for (let k = 0; k < nLev; k++) { const lv = subPath(levels[k], true, corte[0], corte[1], 40); const nn = normals(lv, false); for (let i = 0; i < lv.length; i += 4) glow.push([lv[i][0] - nn[i][0] * 0.5, y0 + (k + 1) * lh - 0.06, lv[i][1] - nn[i][1] * 0.5]); }
   const gl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), M.lampGlow, glow.length); glow.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); P.e4.add(gl);
   return glassPath;
