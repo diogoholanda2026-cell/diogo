@@ -1,7 +1,9 @@
-// Som procedural (Web Audio): cliques de maquete, "plim" de coleta que sobe de tom em sequência,
-// marteladas do canteiro, carimbo de aprovação e uma trilha ambiente generativa bem baixa.
+// Som procedural (Web Audio): cliques de maquete, "plim" de coleta que sobe de tom em sequência, carimbo de
+// aprovação, sino de obra pronta e uma trilha ambiente generativa bem baixa. Os sons do canteiro seguem o que
+// a obra mostra (eventos da obra): martelo, grua pousando a carga, caminhão, andaimes caindo, confete e fogos;
+// a betoneira ronca baixinho perto de uma obra; no modo Apreciar, pássaros e água.
 export class Som {
-  constructor() { this.ctx = null; this.efeitos = true; this.musica = true; this.volEf = 0.8; this.volMu = 0.35; this.combo = 0; this._tc = 0; this.obraAtiva = 0; }
+  constructor() { this.ctx = null; this.efeitos = true; this.musica = true; this.volEf = 0.8; this.volMu = 0.35; this.combo = 0; this._tc = 0; this.obraAtiva = 0; this._tEv = -1e9; }
   iniciar() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -16,6 +18,7 @@ export class Som {
     this._ruido = c.createBuffer(1, c.sampleRate, c.sampleRate); const nd = this._ruido.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
     this._musica();
     this._marteladas();
+    this._betoneira();
   }
   setEfeitos(on) { this.efeitos = on; }
   setMusica(on) { this.musica = on; if (this.gMu) this.gMu.gain.setTargetAtTime(on ? this.volMu : 0, this.ctx.currentTime, 0.5); }
@@ -44,7 +47,39 @@ export class Som {
   }
   nivel() { if (!this._ok()) return; const t = this.ctx.currentTime; [392, 523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this._tom(f, t + i * 0.09, 0.7, 'triangle', 0.09, this.gEf, 0.01, 0.4)); }
   // marteladas distantes enquanto houver obra perto da câmera (0..1)
-  _marteladas() { const loop = () => { if (this._ok() && this.obraAtiva > 0.05 && Math.random() < 0.6) this._martelo(this.ctx.currentTime + Math.random() * 0.1), this._ruidoF(this.ctx.currentTime, 0.04, 1800, 5, 0.05 * this.obraAtiva); setTimeout(loop, 350 + Math.random() * 900); }; loop(); }
+  _marteladas() { const loop = () => { if (this._ok() && this.obraAtiva > 0.05 && performance.now() - this._tEv > 3000 && Math.random() < 0.6) this._martelo(this.ctx.currentTime + Math.random() * 0.1), this._ruidoF(this.ctx.currentTime, 0.04, 1800, 5, 0.05 * this.obraAtiva); setTimeout(loop, 350 + Math.random() * 900); }; loop(); } // reserva: sem os eventos da obra
+  // ---- canteiro (eventos da obra; p = quão perto da câmera, 0..1) ----
+  martelo(p = 1) { this._tEv = performance.now(); if (!this._ok()) return; const t = this.ctx.currentTime; const v = 0.35 + 0.65 * p; this._ruidoF(t, 0.05, 2400 + Math.random() * 800, 6, 0.12 * v); this._tom(1900 + Math.random() * 500, t, 0.08, 'triangle', 0.035 * v); if (Math.random() < 0.5) { this._ruidoF(t + 0.16, 0.04, 2600, 6, 0.08 * v); } }
+  // grua: guincho baixando e o baque surdo da carga na laje
+  pouso(p = 1) { this._tEv = performance.now(); if (!this._ok()) return; const t = this.ctx.currentTime; const v = 0.3 + 0.7 * p; const o = this._tom(220, t, 0.55, 'sawtooth', 0.018 * v, this.gEf, 0.05); o.frequency.linearRampToValueAtTime(150, t + 0.5); const b = this._tom(70, t + 0.52, 0.25, 'sine', 0.22 * v); b.frequency.exponentialRampToValueAtTime(42, t + 0.75); this._ruidoF(t + 0.52, 0.12, 500, 0.8, 0.08 * v, 'lowpass'); }
+  // caminhão: dois bipes de ré e a caçamba descarregando
+  caminhao(p = 1) { this._tEv = performance.now(); if (!this._ok()) return; const t = this.ctx.currentTime; const v = 0.3 + 0.7 * p; for (let i = 0; i < 2; i++) this._tom(1050, t + i * 0.42, 0.18, 'square', 0.02 * v); this._ruidoF(t + 0.9, 0.7, 700, 0.6, 0.07 * v, 'lowpass'); }
+  // montagem do canteiro: tubos e tábuas batendo
+  montagem(p = 1) { this._tEv = performance.now(); if (!this._ok()) return; const t = this.ctx.currentTime; const v = 0.3 + 0.7 * p; for (let i = 0; i < 4; i++) { this._ruidoF(t + i * 0.13, 0.06, 1600 + i * 300, 4, 0.08 * v); this._tom(880 + i * 90, t + i * 0.13, 0.12, 'triangle', 0.025 * v); } }
+  // andaimes desmontando (impacto da aprovação): tubos metálicos caindo
+  andaime() { if (!this._ok()) return; const t = this.ctx.currentTime; for (let i = 0; i < 6; i++) { const tt = t + 0.02 + i * 0.07 + Math.random() * 0.03; this._tom(1200 + Math.random() * 900, tt, 0.22, 'triangle', 0.03, this.gEf, 0.002, 0.2); this._ruidoF(tt, 0.05, 3200, 5, 0.05); } }
+  // obra pronta (etapa ou módulo): sino de duas notas
+  sino() { if (!this._ok()) return; const t = this.ctx.currentTime; for (const [f, d] of [[1318.5, 0], [1760, 0.16]]) { this._tom(f, t + d, 1.4, 'sine', 0.07, this.gEf, 0.004, 0.45); this._tom(f * 2.76, t + d, 0.5, 'sine', 0.012, this.gEf, 0.004, 0.3); } }
+  confete() { if (!this._ok()) return; const t = this.ctx.currentTime; this._ruidoF(t, 0.08, 1400, 1.2, 0.12); for (let i = 0; i < 5; i++) this._ruidoF(t + 0.05 + Math.random() * 0.25, 0.03, 4000 + Math.random() * 3000, 4, 0.04); }
+  fogos() { if (!this._ok()) return; const t = this.ctx.currentTime; const o = this._tom(600, t, 0.55, 'sine', 0.025, this.gEf, 0.05); o.frequency.exponentialRampToValueAtTime(1800, t + 0.5); this._ruidoF(t + 0.6, 0.5, 300, 0.7, 0.3, 'lowpass'); for (let i = 0; i < 8; i++) this._ruidoF(t + 0.65 + Math.random() * 0.5, 0.04, 5000, 3, 0.05); }
+  moeda() { if (!this._ok()) return; const t = this.ctx.currentTime; this._tom(2100 + Math.random() * 500, t, 0.1, 'square', 0.018, this.gEf, 0.002, 0.2); }
+  foto() { if (!this._ok()) return; const t = this.ctx.currentTime; this._ruidoF(t, 0.03, 5000, 2, 0.2); this._ruidoF(t + 0.09, 0.05, 3500, 2, 0.15); }
+  // betoneira: tambor girando (ruído grave pulsante), só perto de uma obra
+  _betoneira() {
+    const c = this.ctx, s = c.createBufferSource(); s.buffer = this._ruido; s.loop = true; const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 180; f.Q.value = 1.2;
+    const g = c.createGain(); g.gain.value = 0; const lfo = c.createOscillator(); lfo.frequency.value = 1.6; const lg = c.createGain(); lg.gain.value = 0.35; lfo.connect(lg); const am = c.createGain(); am.gain.value = 0.65; lg.connect(am.gain);
+    s.connect(f); f.connect(am); am.connect(g); g.connect(this.gEf); s.start(); lfo.start(); this._gBet = g;
+    const passo = () => { if (!this.ctx) return; const alvo = this._ok() && !this._amb ? 0.05 * Math.max(0, this.obraAtiva - 0.2) / 0.8 : 0; g.gain.setTargetAtTime(alvo, c.currentTime, 0.6); setTimeout(passo, 500); }; passo();
+  }
+  // modo Apreciar: pássaros (trinados curtos) e água correndo (ruído filtrado com ondulação lenta)
+  ambiente(on) {
+    this._amb = !!on; if (!this.ctx) return; const c = this.ctx;
+    if (!this._agua) { const s = c.createBufferSource(); s.buffer = this._ruido; s.loop = true; const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900; const g = c.createGain(); g.gain.value = 0; const lfo = c.createOscillator(); lfo.frequency.value = 0.13; const lg = c.createGain(); lg.gain.value = 250; lfo.connect(lg); lg.connect(f.frequency); s.connect(f); f.connect(g); g.connect(this.gEf); s.start(); lfo.start(); this._agua = g; }
+    this._agua.gain.setTargetAtTime(on && this.efeitos ? 0.035 : 0, c.currentTime, 1.2);
+    clearTimeout(this._tPass); if (!on) return;
+    const canto = () => { if (!this._amb) return; if (this._ok()) { const t = c.currentTime + 0.05; const f0 = 2600 + Math.random() * 1800, n = 2 + ((Math.random() * 4) | 0); for (let i = 0; i < n; i++) { const o = this._tom(f0, t + i * 0.11, 0.09, 'sine', 0.02, this.gEf, 0.005, 0.3); o.frequency.exponentialRampToValueAtTime(f0 * (1.25 + Math.random() * 0.3), t + i * 0.11 + 0.07); } } this._tPass = setTimeout(canto, 1800 + Math.random() * 4200); };
+    this._tPass = setTimeout(canto, 800);
+  }
   // trilha ambiente: acordes suaves que mudam devagar e sinos pentatônicos ocasionais
   _musica() {
     const c = this.ctx; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.connect(this.gMu); const rv = c.createGain(); rv.gain.value = 0.6; lp.connect(rv); rv.connect(this.rev);
