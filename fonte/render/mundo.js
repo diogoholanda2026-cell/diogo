@@ -110,7 +110,7 @@ export class Mundo {
     this.canteiro = new THREE.Group(); this.canteiro.name = 'canteiro'; this.root.add(this.canteiro); this.canteiro.add(ambienteCanteiro()); this.predios = {};
     for (const [id, l] of Object.entries(LOTES)) { const g = predioCanteiro(id.startsWith('usina') ? 'usina' : id); g.position.set(l.x, 0, l.z); g.rotation.y = l.r; g.visible = false; g.userData.pick = { tipo: 'predio', id }; this.canteiro.add(g); this.predios[id] = g; }
     // gente (praça, passarelas, terraços), aves e sombras de contato dos bichos
-    this.povo = new Crowd('pessoa', 280); this.povo.mesh.visible = false; this.povo.mesh.userData.semHAO = true; this.root.add(this.povo.mesh); this.povoAreas = [];
+    this.povo = new Crowd('pessoa', 280, { lod: true }); this.povo.mesh.visible = false; this.povo.mesh.userData.semHAO = true; this.root.add(this.povo.mesh); this.povoAreas = [];
     this.bando = new Bando(14); this.root.add(this.bando.mesh);
     this.blobs = sombrasContato(); this.root.add(this.blobs.mesh);
     this.animados = [];
@@ -380,7 +380,8 @@ export class Mundo {
   update(dt, t) {
     tempoAnimais.value = t / 1000;
     for (const p of this.animados) { if (p.userData.manadas) for (const m of p.userData.manadas) m.update(dt, t); if (p.userData.update) p.userData.update(t); }
-    if (this.povo.mesh.visible) this.povo.update(dt, t);
+    // gente: figura inteira só quando passaria de ~12 px de altura na tela (0,27 de altura)
+    if (this.povo.mesh.visible) { const c = this.e.camera; this.povo.update(dt, t, c.position, (0.27 * (this.e.H || 720)) / (2 * Math.tan((c.fov * Math.PI) / 360) * 12)); }
     const noite = this.e.modoLuz === 'noite'; this.bando.mesh.visible = !noite; if (!noite) this.bando.update(dt, t);
     this.blobs.mesh.material.uniforms.opac.value = noite ? 0.2 : 0.35;
   }
