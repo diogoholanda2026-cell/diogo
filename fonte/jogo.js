@@ -599,10 +599,11 @@ export class Controle {
     try { r = J.concluirCapitulo(esc); } finally { this._somaAvisos = null; }
     if (r !== 'ok') return r; this.som.nivel(); this.vibra.sucesso(); this._moedas(J.S.creditos - cr0 - av.v, x, y, 8); return r;
   }
-  // o que a apresentação paga, medido na própria regra: uma cópia do jogo, sem ouvintes, conclui o capítulo
+  // o que a apresentação paga, medido na própria regra: uma cópia do jogo, sem ouvintes, conclui o capítulo (com as
+  // metas dadas por cumpridas na cópia: o modal também abre por fora, nos testes e na vitrine)
   _premioCap() {
     const J = this.J; try {
-      const D = new J.constructor(structuredClone(J.S)); D.agora = J.agora; let marcos = 0; D.on((t, d) => { if (t === 'aviso' && d.creditos > 0) marcos += d.creditos; });
+      const D = new J.constructor(structuredClone(J.S)); D.agora = J.agora; D.metaFeita = () => true; let marcos = 0; D.on((t, d) => { if (t === 'aviso' && d.creditos > 0) marcos += d.creditos; });
       if (D.concluirCapitulo(null) !== 'ok') return null; return { creditos: D.S.creditos - J.S.creditos - marcos, fichas: D.S.mutirao - J.S.mutirao };
     } catch (e) { return null; }
   }
