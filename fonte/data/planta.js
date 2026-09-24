@@ -6,35 +6,16 @@ export const MESA = { x0: -32, x1: 32, z0: -20, z1: 20 };
 // Vista que reproduz o enquadramento da foto de referência.
 export const VISTA_FOTO = { x: 6.89, z: 6.84, dist: 54.9, yaw: 0.493, pitch: 0.612, fov: 32, roll: -0.172 };
 
-// Amostras de curvas sem depender do three (as zonas do chão acompanham as fitas).
-function catmull(ctrl, n = 10) { // Catmull-Rom uniforme aberta, n amostras por trecho
-  const out = []; const P = (i) => ctrl[Math.max(0, Math.min(ctrl.length - 1, i))];
-  for (let i = 0; i < ctrl.length - 1; i++) for (let k = 0; k < n; k++) {
-    const t = k / n, t2 = t * t, t3 = t2 * t; const a = P(i - 1), b = P(i), c = P(i + 1), d = P(i + 2);
-    out.push([0, 1].map((j) => 0.5 * (2 * b[j] + (-a[j] + c[j]) * t + (2 * a[j] - 5 * b[j] + 4 * c[j] - d[j]) * t2 + (-a[j] + 3 * b[j] - 3 * c[j] + d[j]) * t3)));
-  }
-  out.push(ctrl[ctrl.length - 1]); return out;
-}
-export function arcoPts(c, rx, rz, rot, a0, a1, n = 24) { // arco de elipse de a0 a a1
-  const co = Math.cos(rot), si = Math.sin(rot); const out = [];
-  for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; const x = Math.cos(a) * rx, z = Math.sin(a) * rz; out.push([c[0] + x * co - z * si, c[1] + x * si + z * co]); }
-  return out;
-}
 // pista (retângulo arredondado, superelipse) — o Santuário e a sua zona usam a mesma forma
 export function pistaPts(cx, cz, rx, rz, rot, n = 220) {
   const out = []; const c = Math.cos(rot), s = Math.sin(rot);
   for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const ca = Math.cos(a), sa = Math.sin(a); const k = 3.2; const x = Math.sign(ca) * Math.pow(Math.abs(ca), 2 / k) * rx, z = Math.sign(sa) * Math.pow(Math.abs(sa), 2 / k) * rz; out.push([cx + x * c - z * s, cz + x * s + z * c]); }
   return out;
 }
-// polígono em faixa em volta de uma polilinha aberta: 'lado' + vai para a normal (tz, -tx)
-function faixaPoly(pts, mais, menos) {
-  const nor = pts.map((p, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)]; const tx = b[0] - a[0], tz = b[1] - a[1], l = Math.hypot(tx, tz) || 1; return [tz / l, -tx / l]; });
-  const A1 = pts.map(([x, z], i) => [x + nor[i][0] * mais, z + nor[i][1] * mais]), B1 = pts.map(([x, z], i) => [x - nor[i][0] * menos, z - nor[i][1] * menos]);
-  return [...A1, ...B1.reverse()].map(([x, z]) => [+x.toFixed(2), +z.toFixed(2)]);
-}
-const r2 = (l) => l.map(([x, z]) => [+x.toFixed(2), +z.toFixed(2)]);
 
-// Âncoras de cada conjunto (usadas pelos modelos 3D, pelo terreno e pela floresta).
+// Âncoras de cada conjunto (usadas pelos modelos 3D, pelo terreno e pela floresta). Nos polígonos, cada ponto
+// tem ao menos uma coordenada fracionária: um par só de inteiros vira outro tipo de vetor no motor de JS e deixa
+// as consultas do terreno (feitas para cada vértice) mais de 2 vezes mais lentas.
 export const A = {
   // Anel do Campus: grande anel elíptico em terraços (Escola e Campus Jovem + faculdades)
   anel: { c: [-9.6, 8.4], rx: 11.4, rz: 9.2, rot: -0.1 },
@@ -47,7 +28,7 @@ export const A = {
   // Faculdade de Ciências Avançadas e Tecnologia (forma orgânica com laboratórios em corte)
   ciencias: { c: [-5.9, -1.7], rx: 7.4, rz: 3.0, rot: -0.12 }, // (z -1.7: a frente dos lóbulos não entra na fita do Anel)
   // Lago central (inteiro dentro da curva da Sede) e a ilha arborizada
-  lago: [[-5.4, -9.2], [-3.8, -10.4], [-1.2, -11.0], [1.8, -10.9], [3.8, -10.2], [4.6, -9.2], [5.8, -8.0], [7.2, -6.9], [7.0, -5.0], [5.6, -4.0], [2.6, -3.6], [-0.8, -3.4], [-3.0, -4.0], [-4.8, -5.6], [-5.8, -7.4]],
+  lago: [[-5.4, -9.2], [-3.8, -10.4], [-1.2, -11.0], [1.8, -10.9], [3.8, -10.2], [4.6, -9.2], [5.8, -8.0], [7.2, -6.9], [7.05, -5.0], [5.6, -4.0], [2.6, -3.6], [-0.8, -3.4], [-3.05, -4.0], [-4.8, -5.6], [-5.8, -7.4]],
   ilha: { c: [-1.0, -6.6], r: 1.3 },
   // Sede Administrativa da Holding Guarda-Chuva: fita aberta (arco de a0 a a1) que abraça o lago pelo
   // fundo e pela direita e encosta na ponta esquerda do Santuário; o0 = largura da fita (para dentro)
@@ -79,8 +60,8 @@ export const A = {
   lagosPraca: [{ c: [1.4, 17.9], rx: 2.2, rz: 1.0, rot: -0.1 }, { c: [7.2, 17.4], rx: 1.2, rz: 0.8, rot: 0.3 }],
   // caminhos curvos em leque saindo do bulevar (pintados no piso da praça)
   pracaCaminhos: [
-    [[2.2, 13.6], [4.6, 14.4], [6.8, 15.0], [9.0, 16.0]],
-    [[2.2, 13.6], [0.4, 13.6], [-1.0, 13.2], [-2.0, 13.0]],
+    [[2.2, 13.6], [4.6, 14.4], [6.8, 15.0], [9.05, 16.0]],
+    [[2.2, 13.6], [0.4, 13.6], [-1.0, 13.2], [-2.0, 13.05]],
     [[2.2, 13.6], [0.6, 15.0], [-1.6, 16.4], [-2.4, 17.6]],
     [[2.2, 13.6], [4.0, 15.6], [4.8, 17.6], [4.9, 19.4]],
     [[2.2, 13.6], [5.0, 13.2], [7.4, 12.8], [9.0, 12.6]],
@@ -93,14 +74,13 @@ export const A = {
   escarpa: [[20.9, 16.1], [22.47, 15.54], [23.77, 14.55], [25.39, 13.68], [26.8, 12.75], [27.5, 11.3], [27.9, 9.9]],
   // rochedos soltos de arenito
   rochas: [[21.8, 17.6, 0.7], [23.0, 9.6, 0.6], [30.2, 18.6, 0.8]],
+  // Vias cinzas no nível do chão (como na foto): a do canteiro, que contorna o Anel pelo oeste até o
+  // Campus Universitário, e a do leste, que desce do Santuário por fora do Bioma e da Vila até os gorilas
+  vias: [
+    { id: 'oeste', pts: [[-19.6, 16.4], [-21.4, 15.0], [-23.4, 13.2], [-25.4, 10.8], [-26.8, 7.4], [-26.6, 3.8], [-25.0, 1.2]], w: 0.45 },
+    { id: 'leste', pts: [[29.0, -2.4], [30.0, 1.2], [30.4, 5.4], [30.4, 9.0], [30.0, 12.2], [29.6, 14.8], [29.6, 17.8]], w: 0.45 },
+  ],
 };
-A.uni.pts = catmull(A.uni.path, 8); A.uni.eloPts = catmull(A.uni.elo, 8);
-// Vias cinzas no nível do chão (como na foto): a do canteiro, que contorna o Anel pelo oeste até o
-// Campus Universitário, e a do leste, que desce do Santuário por fora do Bioma e da Vila até os gorilas
-A.vias = [
-  { id: 'oeste', pts: [[-19.6, 16.4], [-21.4, 15.0], [-23.4, 13.2], [-25.4, 10.8], [-26.8, 7.4], [-26.6, 3.8], [-25.0, 1.2]], w: 0.45 },
-  { id: 'leste', pts: [[29.0, -2.4], [30.0, 1.2], [30.4, 5.4], [30.4, 9.0], [30.0, 12.2], [29.6, 14.8], [29.6, 17.8]], w: 0.45 },
-];
 
 // Passarelas elevadas (pontos x, z, altura). Cada uma começa e termina num ponto físico (prédio,
 // praça ou chão); 'frente2' e 'caracol' só aparecem com os projetos pas_frente2 e pas_caracol.
@@ -124,17 +104,16 @@ export const PASSARELAS = {
 export const SANTUARIO_GRAMADO = { elipse: [[15.8, -15.6], 4.2, 1.5, -0.06] };
 
 // Zonas de chão (pintura do terreno e clareiras da mata). 'quando' = id da etapa que faz a zona aparecer.
-const sd = A.sede, st = A.santuario;
-const anelSant = [...pistaPts(st.c[0], st.c[1], st.rx + 0.6, st.rz + 0.6, st.rot, 64), ...pistaPts(st.c[0], st.c[1], st.rx - 1.9, st.rz - 1.9, st.rot, 64).reverse()];
+// Só elipses e polígonos de poucos lados: o terreno e a mata consultam todas as zonas em cada ponto (a carga
+// fica tão rápida quanto antes). A fita do Santuário não precisa de clareira: é alta e fechada, e a mata
+// fica por dentro da pista, como na foto.
+const sd = A.sede;
 export const ZONAS = [
   { id: 'anel', tipo: 'grama', elipse: [A.anel.c, A.anel.rx + 0.8, A.anel.rz + 0.8, A.anel.rot] },
-  { id: 'uni', tipo: 'grama', poly: faixaPoly(A.uni.pts, 2.0, 2.0) },
-  { id: 'uni', tipo: 'grama', elipse: [A.uni.campo.c, A.uni.campo.w / 2 + 1.4, A.uni.campo.d / 2 + 1.4, A.uni.campo.rot] },
-  { id: 'uni', tipo: 'grama', elipse: [[-20.6, -10.2], 3.4, 4.0, 0.3] }, // pátio por dentro do "C" (gramado com a ala alta)
-  { id: 'uni', tipo: 'grama', poly: faixaPoly(A.uni.eloPts, 1.2, 1.2) },
+  { id: 'uni', tipo: 'grama', elipse: [[-20.4, -9.2], 6.0, 7.8, 0.2] }, // a fita em C, o pátio, a ala alta e o campo
+  { id: 'uni', tipo: 'grama', elipse: [[-17.4, -1.0], 3.6, 1.4, -0.35] }, // Elo Norte
   { id: 'ciencias', tipo: 'grama', elipse: [A.ciencias.c, A.ciencias.rx + 1.2, A.ciencias.rz + 1.6, A.ciencias.rot] },
-  { id: 'sede', tipo: 'grama', poly: faixaPoly(arcoPts(sd.c, sd.rx, sd.rz, sd.rot, sd.a0 - 0.06, sd.a1 + 0.06, 24), 1.2, 3.2) },
-  { id: 'santuario', tipo: 'grama', poly: r2(anelSant) },
+  { id: 'sede', tipo: 'grama', elipse: [sd.c, sd.rx + 1.2, sd.rz + 1.2, sd.rot] }, // a fita aberta e o pátio até o lago
   { id: 'santuarioPasto', tipo: 'pasto', elipse: SANTUARIO_GRAMADO.elipse },
   { id: 'biblio', tipo: 'grama', elipse: [A.biblio.c, 8.8, 8.2, 0] },
   { id: 'savana', tipo: 'pasto', poly: A.savana.poly },
@@ -143,6 +122,6 @@ export const ZONAS = [
   { id: 'gorilas', tipo: 'grama', elipse: [A.gorilas.c, A.gorilas.rx + 0.9, A.gorilas.rz + 0.9, 0] },
   { id: 'acelerador', tipo: 'grama', elipse: [A.acelerador.c, A.acelerador.rx + 1.6, A.acelerador.rz + 1.3, 0] },
   { id: 'praca', tipo: 'praca', poly: A.praca.poly },
-  { id: 'corredor', tipo: 'praca', poly: [[1.6, 1.2], [6.0, 1.0], [8.2, 4.6], [7.6, 9.8], [3.6, 10.6], [1.2, 6.0]] },
+  { id: 'corredor', tipo: 'praca', poly: [[1.6, 1.2], [6.05, 1.0], [8.2, 4.6], [7.6, 9.8], [3.6, 10.6], [1.2, 6.0]] },
   { id: 'canteiro', tipo: 'canteiro', poly: A.canteiro.poly },
 ];
