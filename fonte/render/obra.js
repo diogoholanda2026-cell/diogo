@@ -29,6 +29,7 @@ const SEM_TL = typeof location !== 'undefined' && new URLSearchParams(location.s
 const TAU = Math.PI * 2;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _c = new THREE.Color(), _fr = new THREE.Frustum(), _mf = new THREE.Matrix4(), _bx = new THREE.Box3(), _v = new THREE.Vector3();
+const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(); // rascunho próprio (mSeg e mEixo usam _x, _y, _z, _a e _b)
 const lin = (hex) => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
 const chao = (x, z) => Math.max(heightAt(x, z), 0);
 const angDif = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
@@ -142,15 +143,10 @@ const COR = {
   aco: lin(0x6b7482), muda: lin(0x4e7a38), bandeja: lin(0x3a2e22), lodo: lin(0x4a3f2e), terra: lin(0x6e5e4e), forma: lin(0xb8864b), caixa: lin(0xc4a27a), cinza: lin(0x7c8088), tubo: lin(0x9ea4aa), tabua: lin(0xa88a5e),
 };
 // tipo de volume de cada material entregue (pilhas, carga da grua e do caminhão)
-function tipoCarga(k) {
-  if (/^(madeira|viga|trelica|deque|estante)$/.test(k)) return 'madeira';
-  if (/^(cimento|concreto|brita|argila)$/.test(k)) return 'saco';
-  if (/^(premoldado|bloco)$/.test(k)) return 'laje';
-  if (/^(painel|duplo|cupula|acrilico|vidro|solar)$/.test(k)) return 'vidro';
-  if (/^(perfil|conector|aco|no|guarda|cobre)$/.test(k)) return 'aco';
-  if (/^(muda|grama|substrato|jardim|mudas)$/.test(k)) return 'muda';
-  return 'caixote';
-}
+const CARGA = Object.create(null);
+for (const [t, ks] of Object.entries({ madeira: 'madeira viga trelica deque estante', saco: 'cimento concreto brita argila', laje: 'premoldado bloco', vidro: 'painel duplo cupula acrilico vidro solar', aco: 'perfil conector aco no guarda cobre', muda: 'muda grama substrato jardim mudas' })) for (const k of ks.split(' ')) CARGA[k] = t;
+const tipoCarga = (k) => CARGA[k] || 'caixote';
+const tipoDe = (s, i) => { const n = s.tipos.length; return s.tipos[(((i + s.seed) % n) + n) % n]; }; // a semente pode ser negativa
 const ALT_CARGA = { madeira: 0.1, saco: 0.1, laje: 0.09, vidro: 0.17, aco: 0.08, muda: 0.07, caixote: 0.12 };
 
 // ---------------------------------------------------------------- lote de instâncias reescrito a cada quadro
@@ -215,7 +211,7 @@ class Pontos {
     for (let i = 0; i < max; i++) this.T.array[i * 4] = -1e6;
     this.mat = new THREE.ShaderMaterial({ vertexShader: PV, fragmentShader: PF, uniforms: { uT: { value: 0 }, uEsc: { value: 400 }, uPR: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
     this.mesh = new THREE.Points(g, this.mat); this.mesh.frustumCulled = false; this.mesh.visible = false; this.mesh.renderOrder = 6; this.mesh.name = 'obra-particulas'; this.mesh.userData.semHAO = true; g.userData.compartilhada = true;
-    this._ini = -1; this._n = 0;
+    this._ini = -1; this._n = 0; this._at = [[this.P0, 3], [this.V0, 3], [this.T, 4], [this.C, 3]];
   }
   // uma partícula: origem, velocidade, nascimento (s), vida, tamanho, tipo, cor
   add(x, y, z, vx, vy, vz, t0, vida, tam, tipo, cor) {
@@ -227,7 +223,7 @@ class Pontos {
   // envia só o trecho escrito neste quadro (o anel pode dar a volta: aí vai tudo)
   enviar(tNow) {
     if (this._n) { const volta = this._ini + this._n > this.max; const o = volta ? 0 : this._ini, n = volta ? this.max : this._n;
-      for (const [a, k] of [[this.P0, 3], [this.V0, 3], [this.T, 4], [this.C, 3]]) { a.clearUpdateRanges(); a.addUpdateRange(o * k, n * k); a.needsUpdate = true; } this._ini = -1; this._n = 0; }
+      for (const [a, k] of this._at) { a.clearUpdateRanges(); a.addUpdateRange(o * k, n * k); a.needsUpdate = true; } this._ini = -1; this._n = 0; }
     this.mat.uniforms.uT.value = tNow; this.mesh.visible = tNow < this.fim;
   }
 }
@@ -361,6 +357,7 @@ export class Obras {
     const box = opts.box ? opts.box.clone() : new THREE.Box3().setFromObject(alvo); if (box.isEmpty()) box.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
     s.box = box; s.y0 = box.min.y; s.y1 = box.max.y; s.H = Math.max(0.05, s.y1 - s.y0); s.cx = (box.min.x + box.max.x) / 2; s.cz = (box.min.z + box.max.z) / 2;
     s.nAnd = Math.max(1, Math.round(s.H / FH)); s.fh = s.H / s.nAnd; s.itens = (opts.itens && opts.itens.length ? opts.itens : ['concreto', 'viga', 'painel']).slice(0, 3);
+    s.tipos = s.itens.map(tipoCarga); s.concreto = s.itens.some((k) => k === 'concreto' || k === 'cimento'); // tipo de volume de cada item (pilha, gancho e caminhão), uma vez só
     s.casco = !opts.caminho && ['subir', 'plantio', 'caixas'].includes(modo) ? casco(alvo) : null;
     s.hull = s.casco || [[box.min.x, box.min.z], [box.max.x, box.min.z], [box.max.x, box.max.z], [box.min.x, box.max.z]];
     s.raio = 0; for (const [x, z] of s.hull) s.raio = Math.max(s.raio, Math.hypot(x - s.cx, z - s.cz));
@@ -481,10 +478,21 @@ export class Obras {
   // ---------------------------------------------------------------- caixas de transporte (animais)
   _prepCaixas(s) {
     const bichos = []; const al = s.alvo; al.updateWorldMatrix(true, true);
-    for (const md of al.userData.manadas || []) for (let i = 0; i < (md.a?.length || 0); i++) { const a = md.a[i]; const b = md.mesh.geometry.boundingBox; bichos.push({ md, i, x: a.x, z: a.z, tam: b ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) * a.s : 0.4, s0: a.s }); }
-    al.traverse((o) => { if (!o.isInstancedMesh || (al.userData.manadas || []).some((m) => m.mesh === o)) return; const b = o.geometry.boundingBox || (o.geometry.computeBoundingBox(), o.geometry.boundingBox); for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, _m); _m.premultiply(o.matrixWorld); _p.setFromMatrixPosition(_m); const k = _s.setFromMatrixScale(_m).x; bichos.push({ im: o, i, x: _p.x, z: _p.z, tam: Math.max(b.max.x - b.min.x, b.max.z - b.min.z) * k, M0: o.instanceMatrix.array.slice(i * 16, i * 16 + 16) }); } });
+    // tam: maior lado do bicho em planta; alt: altura do chão ao topo (com a escala da instância)
+    const med = (b, k) => (b ? { tam: Math.max(b.max.x - b.min.x, b.max.z - b.min.z) * k, alt: Math.max(0.1, b.max.y) * k } : { tam: 0.4, alt: 0.35 });
+    for (const md of al.userData.manadas || []) for (let i = 0; i < (md.a?.length || 0); i++) { const a = md.a[i]; bichos.push({ md, i, x: a.x, z: a.z, ...med(md.mesh.geometry.boundingBox, a.s), s0: a.s }); }
+    al.traverse((o) => { if (!o.isInstancedMesh || (al.userData.manadas || []).some((m) => m.mesh === o)) return; const b = o.geometry.boundingBox || (o.geometry.computeBoundingBox(), o.geometry.boundingBox); for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, _m); _m.premultiply(o.matrixWorld); _p.setFromMatrixPosition(_m); const k = _s.setFromMatrixScale(_m).x; bichos.push({ im: o, i, x: _p.x, z: _p.z, ...med(b, k), M0: o.instanceMatrix.array.slice(i * 16, i * 16 + 16) }); } });
     const ent = this._entrada(s); bichos.sort((a, b) => Math.hypot(a.x - ent[0], a.z - ent[1]) - Math.hypot(b.x - ent[0], b.z - ent[1]));
-    bichos.forEach((b, k) => { b.pi = 0.05 + (0.85 * (k + 0.5)) / bichos.length; b.tPop = -1; b.ang = hash(k, 3, s.seed) * TAU; b.w = clamp(b.tam * 0.8, 0.32, 0.62); b.y = chao(b.x, b.z); });
+    // o engradado é do tamanho do bicho (folga de 5% a 12%): um gorila vem num engradado de gorila. Se dois
+    // vizinhos se tocariam, os engradados se afastam e o bicho sai andando (a manada) ou deslizando até o
+    // seu lugar (o bicho parado, instanciado)
+    bichos.forEach((b, k) => { b.pi = 0.05 + (0.85 * (k + 0.5)) / bichos.length; b.tPop = -1; b.ang = hash(k, 3, s.seed) * TAU; b.w = Math.max(0.32, b.tam * 1.08); b.h = Math.max(0.28, b.alt * 1.05); b.cx = b.x; b.cz = b.z; b.yp = chao(b.x, b.z); });
+    for (let it = 0; it < 10; it++) for (let i = 0; i < bichos.length; i++) for (let j = i + 1; j < bichos.length; j++) {
+      const a = bichos[i], b = bichos[j]; const dx = b.cx - a.cx, dz = b.cz - a.cz, d = Math.hypot(dx, dz) || 1e-3, m = (a.w + b.w) * 0.72 + 0.06; if (d >= m) continue;
+      const e = (m - d) / 2, ux = dx / d, uz = dz / d; a.cx -= ux * e; a.cz -= uz * e; b.cx += ux * e; b.cz += uz * e;
+    }
+    for (const b of bichos) if (Math.hypot(b.cx - b.x, b.cz - b.z) > 0.05) b.ang = Math.atan2(b.z - b.cz, b.x - b.cx); // a porta do engradado afastado dá para o lugar do bicho
+    for (const b of bichos) b.y = chao(b.cx, b.cz);
     s.bichos = bichos; al.visible = false;
   }
   // ---------------------------------------------------------------- terra e pavimento (corte vertical, escavadeira)
@@ -538,7 +546,9 @@ export class Obras {
     s.pecas = alvos.map((o) => { const b = new THREE.Box3().setFromObject(o); const c = b.getCenter(new THREE.Vector3()); return { o, b, x: c.x, z: c.z, y0: Math.min(b.min.y, 0) - 0.02, y1: b.max.y + 0.02, d: Math.hypot(c.x - ac[0], c.z - ac[1]) }; })
       .filter((p) => !p.b.isEmpty()).sort((a, b) => a.d - b.d);
     const N = s.pecas.length || 1;
-    s.pecas.forEach((p, i) => { p.plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), p.y1); p.U = uniformes(); p.U.uCap.value.set(0x8e8a84); p.U.uEscuro.value = 0.8; p.U.uFormaK.value = 0; p.k0 = i / N; p.k1 = (i + 1) / N; this._cortar(s, p.o, [p.plane], p.U, 'clip', 'd' + i); p.o.visible = true; });
+    // com opts.soltar(lista) (o jogo tira a peça da fusão), cada peça só ganha o corte e vira malha solta na sua
+    // vez: as que esperam seguem no fundido (sem chamadas a mais) e as desmontadas somem
+    s.pecas.forEach((p, i) => { p.plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), p.y1); p.U = uniformes(); p.U.uCap.value.set(0x8e8a84); p.U.uEscuro.value = 0.8; p.U.uFormaK.value = 0; p.k0 = i / N; p.k1 = (i + 1) / N; p.i = i; p.solta = false; if (!s.opts.soltar) this._soltarPeca(s, p); });
     s.alvo = s.pecas[0]?.o || s.alvo;
   }
   // ---------------------------------------------------------------- replantar: mudas em linhas que crescem até virar a mata
@@ -598,19 +608,55 @@ export class Obras {
     let far = Math.hypot(pl.x - gx, pl.z - gz); const pts = s.arco ? s.arco.map((p) => [p[0], p[2]]) : s.hull; for (const [x, z] of pts) { const d = Math.hypot(x - gx, z - gz); if (d < 6.5) far = Math.max(far, d); }
     const jib = clamp(far + 0.4, 2.2, 6); const hm = Math.max(2.2, s.y1 - gy + 1.2);
     const aim = Math.atan2(-(s.cz - gz), s.cx - gx);
-    s.grua = { x: gx, z: gz, y: gy, hm, jib, aim, a: aim, r: jib * 0.5, hy: gy + hm - 0.5, fase: 7, tf: 0, carga: false, cargaT: 'caixote', thx: 0, thz: 0, wx: 0, wz: 0, pvx: 0, pvz: 0, ax: 0, az: 0, px: null, pz: 0, k: 0, de: { a: aim, r: jib * 0.5, hy: gy + hm - 0.5 }, para: {} };
-    this._gruaAlvo(s);
+    s.grua = { x: gx, z: gz, y: gy, hm, jib, aim, a: aim, r: jib * 0.5, hy: gy + hm - 0.5, fase: 7, altoMin: 0, setores: [], daGiro: 0, tf: 0, carga: false, cargaT: 'caixote', thx: 0, thz: 0, wx: 0, wz: 0, pvx: 0, pvz: 0, ax: 0, az: 0, px: null, pz: 0, k: 0, de: { a: aim, r: jib * 0.5, hy: gy + hm - 0.5, da: 0 }, para: { da: 0 } };
+    // peça pronta mais alta que a lança no raio de giro (a torre da Biblioteca no meio do anel): a lança não
+    // gira por ali (setor proibido, como o limitador de giro de uma grua de verdade) e a carga só pousa no resto.
+    // Se não sobra setor útil (a pilha ou todo o prédio atrás da peça), a torre sobe acima dela.
+    const g = s.grua; const S = this._setores(s, g); const aL = S && (this._angLivre(S, aim, 0.4) ?? this._angLivre(S, aim)); // estacionada bem longe da torre
+    if (S && aL !== null) { g.setores = S; g.a = g.aim = g.de.a = aL; }
+    if (!S || aL === null || !this._livreAng(S, Math.atan2(-(s.pilha.z - gz), s.pilha.x - gx)) || !this._gruaAlvo(s)) {
+      let h = hm; for (const b of this._obsGrua(s)) if (distCaixa(gx, gz, b) < jib + 0.3) h = Math.max(h, b.max.y - gy + 0.9);
+      g.hm = h; g.hy = g.de.hy = gy + h - 0.5; g.setores = []; g.a = g.aim = g.de.a = aim; g.aDrop = undefined; this._gruaAlvo(s);
+    }
   }
-  // novo ponto de pouso: casco a 60% do raio (ou um ponto do caminho) ao alcance da lança
+  // setores de giro proibidos [início, largura] (radianos, no sentido do ângulo da grua): caixas acima da faixa da
+  // carga ao alcance da lança; a contralança (1,2 para trás) proíbe a meia volta. null: a torre está dentro de uma
+  _setores(s, g) {
+    const out = [], Ty = g.y + g.hm;
+    for (const b of this._obsGrua(s)) {
+      if (b.max.y < Ty - 0.8) continue; const d = distCaixa(g.x, g.z, b); if (d > g.jib + 0.25) continue; if (d < 0.3) return null;
+      const ac = Math.atan2(-((b.min.z + b.max.z) / 2 - g.z), (b.min.x + b.max.x) / 2 - g.x); let lo = 0, hi = 0;
+      for (let k = 0; k < 4; k++) { const x = k === 1 || k === 2 ? b.max.x : b.min.x, z = k >= 2 ? b.max.z : b.min.z; const da = angDif(ac, Math.atan2(-(z - g.z), x - g.x)); lo = Math.min(lo, da); hi = Math.max(hi, da); }
+      const m = Math.asin(Math.min(1, 0.45 / Math.max(0.45, d))); out.push([ac + lo - m, hi - lo + 2 * m]); // 0,45 de folga
+      if (d < 1.5) out.push([ac + lo - m + Math.PI, hi - lo + 2 * m]);
+    }
+    return out;
+  }
+  _livreAng(S, a) { for (const [ini, w] of S) { let x = (a - ini) % TAU; if (x < 0) x += TAU; if (x < w) return false; } return true; }
+  _angLivre(S, a, folga = 0) { for (let k = 0; k < 126; k++) { const b = a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.05; if (folga ? this._arcoLivre(S, b - folga, 2 * folga) : this._livreAng(S, b)) return b; } return null; } // o livre mais perto de a (com folga dos dois lados)
+  _arcoLivre(S, a0, da) { const n = Math.ceil(Math.abs(da) / 0.04) + 1; for (let i = 0; i <= n; i++) if (!this._livreAng(S, a0 + (da * i) / n)) return false; return true; }
+  // giro de a0 para a1 pelo lado livre: o curto, senão a volta longa (sem setores, o curto)
+  _giroLivre(g, a0, a1) { const c = angDif(a0, a1), S = g.setores; if (!S.length || this._arcoLivre(S, a0, c)) return c; const l = c - Math.sign(c || 1) * TAU; return this._arcoLivre(S, a0, l) ? l : c; }
+  // caixas que a grua precisa respeitar: peças prontas em volta e as outras obras
+  _obsGrua(s) { const L = this._obsL || (this._obsL = []); L.length = 0; for (const b of s.opts.obstaculos || []) L.push(b); for (const o of this.sites.values()) if (o !== s && o.box) L.push(o.box); return L; }
+  // novo ponto de pouso: casco a 60% do raio (ou um ponto do caminho) ao alcance da lança e fora das peças
+  // prontas (a torre no meio do anel); a carga sobe acima do que houver no giro de ida e volta
   _gruaAlvo(s) {
-    const g = s.grua; let x, z;
-    for (let k = 0; k < 8; k++) {
+    const g = s.grua; let x, z, ok = false; const obs = this._obsGrua(s), P = s.pilha, aPick = Math.atan2(-(P.z - g.z), P.x - g.x);
+    for (let k = 0; k < 24 && !ok; k++) { // as 16 primeiras só pelo giro curto (sem dar a volta por trás da torre)
       if (s.arco) { const p = s.arco[(rnd(s) * s.arco.length) | 0]; const f = Math.min(1, (s.U.uArcS.value + 0.2) / s.arcoL); const q = s.arco[Math.min(s.arco.length - 1, Math.round(f * (s.arco.length - 1)))]; x = lerp(p[0], q[0], 0.7); z = lerp(p[2], q[2], 0.7); }
       else { const h = s.hull[(rnd(s) * s.hull.length) | 0]; x = s.cx + (h[0] - s.cx) * 0.6; z = s.cz + (h[1] - s.cz) * 0.6; }
-      if (Math.hypot(x - g.x, z - g.z) < g.jib - 0.15) break;
+      let dentro = false; for (const b of obs) if (b.max.y > s.y0 + 0.3 && distCaixa(x, z, b) < 0.2) dentro = true;
+      const da = g.setores.length ? this._giroLivre(g, aPick, Math.atan2(-(z - g.z), x - g.x)) : 0;
+      ok = !dentro && Math.hypot(x - g.x, z - g.z) < g.jib - 0.15 && (!g.setores.length || ((k >= 16 || Math.abs(da) <= Math.PI) && this._arcoLivre(g.setores, aPick, da)));
     }
+    if (!ok && g.aDrop !== undefined) return false; // nenhum ponto novo: repete o último
     const d = Math.hypot(x - g.x, z - g.z); g.aDrop = Math.atan2(-(z - g.z), x - g.x); g.rDrop = clamp(d, 0.6, g.jib - 0.15);
-    const p = s.pilha; g.aPick = Math.atan2(-(p.z - g.z), p.x - g.x); g.rPick = clamp(Math.hypot(p.x - g.x, p.z - g.z), 0.5, g.jib - 0.15);
+    g.aPick = aPick; g.rPick = clamp(Math.hypot(P.x - g.x, P.z - g.z), 0.5, g.jib - 0.15); g.daGiro = this._giroLivre(g, g.aPick, g.aDrop);
+    // trajeto da carga no giro (ângulo e carrinho andam juntos): altura mínima sobre as caixas que ele cruza
+    let am = 0; const da = g.daGiro;
+    for (let i = 0; i <= 12; i++) { const u = i / 12, a = g.aPick + da * u, r = lerp(g.rPick, g.rDrop, u), px = g.x + Math.cos(a) * r, pz = g.z - Math.sin(a) * r; for (const b of obs) if (distCaixa(px, pz, b) < 0.3) am = Math.max(am, b.max.y + 0.3); }
+    g.altoMin = am; return ok;
   }
   _prepCaminhao(s) {
     const P = s.patio, tipo = s.modo === 'terra' || s.modo === 'pavimento' || s.modo === 'draga' || s.modo === 'desmontar' ? 'basculante' : 'plataforma';
@@ -662,8 +708,12 @@ export class Obras {
       const q = A2.pts[b]; C.setPosto(w, [q[0], this._yDeck(s), q[1]], 'trabalhar', { olhar: [s.cx, s.cz], dur }); return;
     }
     if (w.cat === 'laje' && s.modo === 'subir') {
-      const h = s.hull[(rnd(s) * s.hull.length) | 0]; const dx = h[0] - s.cx, dz = h[1] - s.cz, d = Math.hypot(dx, dz) || 1; const u = rnd(s) * Math.max(0, (d - 0.35) / d);
-      C.setPosto(w, [s.cx + dx * u, this._yLaje(s), s.cz + dz * u], 'trabalhar', { dur }); return;
+      let x = s.cx, z = s.cz; const ob = s.opts.obstaculos || [];
+      for (let k = 0; k < 5; k++) { // ponto da laje fora das peças prontas que atravessam a obra (a torre no meio do anel)
+        const h = s.hull[(rnd(s) * s.hull.length) | 0]; const dx = h[0] - s.cx, dz = h[1] - s.cz, d = Math.hypot(dx, dz) || 1; const u = rnd(s) * Math.max(0, (d - 0.35) / d);
+        x = s.cx + dx * u; z = s.cz + dz * u; let livre = true; for (const b of ob) if (b.max.y > s.y0 + 0.3 && distCaixa(x, z, b) < 0.15) livre = false; if (livre) break;
+      }
+      C.setPosto(w, [x, this._yLaje(s), z], 'trabalhar', { dur }); return;
     }
     if (w.cat === 'frente') { const f = this._frente(s, w); if (f) { C.setPosto(w, f, 'trabalhar', { olhar: f.olhar, dur: f.dur ?? dur }); return; } }
     // pátio: entre a pilha e o caminhão
@@ -677,7 +727,7 @@ export class Obras {
   _frente(s, w) {
     const r = () => rnd(s) - 0.5;
     if (s.modo === 'caminho') { const f = Math.min(s.arcoL, s.U.uArcS.value); const q = this._noArco(s, f + r() * 0.4); return Object.assign([q[0] + r() * 0.3, q[1] + 0.012, q[2] + r() * 0.3], { olhar: [q[0], q[2]] }); }
-    if (s.modo === 'plantio' || s.modo === 'caixas') { const L = s.itensP?.peq || s.bichos || []; const k = L.findIndex((x) => x.pi > s.pv); const x = L[k < 0 ? L.length - 1 : Math.min(L.length - 1, k + ((rnd(s) * 3) | 0))]; if (!x) return null; const a = rnd(s) * TAU; return Object.assign([x.x + Math.cos(a) * 0.22, chao(x.x, x.z), x.z + Math.sin(a) * 0.22], { olhar: [x.x, x.z] }); }
+    if (s.modo === 'plantio' || s.modo === 'caixas') { const L = s.itensP?.peq || s.bichos || []; const k = L.findIndex((x) => x.pi > s.pv); const x = L[k < 0 ? L.length - 1 : Math.min(L.length - 1, k + ((rnd(s) * 3) | 0))]; if (!x) return null; const a = rnd(s) * TAU, cx = x.cx ?? x.x, cz = x.cz ?? x.z, r = x.w ? x.w * 0.72 + 0.08 : 0.22; return Object.assign([cx + Math.cos(a) * r, chao(cx, cz), cz + Math.sin(a) * r], { olhar: [cx, cz] }); } // fora do engradado
     if (s.modo === 'terra' || s.modo === 'pavimento') {
       if (s.modo === 'pavimento' && s.piso && s.pv > 0.4) { const a = rnd(s) * TAU, R2 = s.piso.U.uR.value + 0.1; const x = s.piso.c[0] + Math.cos(a) * R2, z = s.piso.c[1] + Math.sin(a) * R2; if (inPoly(x, z, s.opts.poligono || s.hull)) return Object.assign([x, 0.03, z], { olhar: [s.piso.c[0], s.piso.c[1]] }); }
       const fx = s.plane.constant; const z = s.box.min.z + rnd(s) * (s.box.max.z - s.box.min.z); return Object.assign([fx - 0.25 - rnd(s) * 0.5, chao(fx, z) + 0.02, z], { olhar: [fx + 1, z] });
@@ -835,14 +885,14 @@ export class Obras {
   // caixas dos animais: tampa abre (280 ms, quique), bicho aparece (420 ms) e anda 0,5 para fora, 160 ms entre eles
   _abreCaixas(s) {
     s.caixasAbrindo = true; s.tCaixa = 0; s.tc0 = null;
-    for (const b of s.bichos || []) { if (b.md) { const a = b.md.a[b.i]; if (a) { a.s = 0.0001; a.wait = 99; } } else if (b.im) { escalaPivo(b.M0, 0, b.im.instanceMatrix.array, b.i * 16, 0.0001, b.x, b.y, b.z); b.im.instanceMatrix.needsUpdate = true; } }
+    for (const b of s.bichos || []) { if (b.md) { const a = b.md.a[b.i]; if (a) { a.s = 0.0001; a.wait = 99; a.x = b.cx; a.z = b.cz; a.ang = -b.ang; a.anda = 0; /* de frente para a porta (a manada anda em (cos, -sen)) */ } } else if (b.im) { escalaPivo(b.M0, 0, b.im.instanceMatrix.array, b.i * 16, 0.0001, b.x, b.yp, b.z); b.im.instanceMatrix.needsUpdate = true; } }
   }
   _caixasFesta(s, tNow) {
     if (!s.caixasAbrindo) return; if (s.tc0 == null) s.tc0 = tNow; s.tCaixa = (tNow - s.tc0) / 1000; const B = s.bichos || []; const t = s.tCaixa;
     B.forEach((b, k) => {
       const t0 = 0.15 + k * 0.16; const kt = fatia(t, t0 + 0.2, t0 + 0.62); const ks = kt > 0 ? easeOutBack(kt) : 0;
-      if (b.md) { const a = b.md.a[b.i]; if (!a) return; a.s = Math.max(0.0001, b.s0 * ks); if (kt > 0 && !b.saiu) { b.saiu = true; const dx = Math.cos(b.ang), dz = Math.sin(b.ang); a.tx = b.x + dx * 0.5; a.tz = b.z + dz * 0.5; a.wait = 0; } if (kt >= 1) a.s = b.s0; }
-      else if (b.im) { escalaPivo(b.M0, 0, b.im.instanceMatrix.array, b.i * 16, Math.max(0.0001, ks), b.x, b.y, b.z); b.im.instanceMatrix.needsUpdate = true; }
+      if (b.md) { const a = b.md.a[b.i]; if (!a) return; a.s = Math.max(0.0001, b.s0 * ks); if (kt > 0 && !b.saiu) { b.saiu = true; const dx = Math.cos(b.ang), dz = Math.sin(b.ang), sai = Math.max(b.w * 0.5 + b.tam * 0.5 + 0.12, Math.hypot(b.x - b.cx, b.z - b.cz)); a.tx = b.cx + dx * sai; a.tz = b.cz + dz * sai; a.wait = 0; /* sai pela porta até ficar fora do engradado */ } if (kt >= 1) a.s = b.s0; }
+      else if (b.im) { const A2 = b.im.instanceMatrix.array, j = b.i * 16; escalaPivo(b.M0, 0, A2, j, Math.max(0.0001, ks), b.x, b.yp, b.z); const r = 1 - easeInOutSine(fatia(t, t0 + 0.5, t0 + 1.3)); A2[j + 12] += (b.cx - b.x) * r; A2[j + 13] += (b.y - b.yp) * r; A2[j + 14] += (b.cz - b.z) * r; b.im.instanceMatrix.needsUpdate = true; } // nasce no engradado e vai ao seu lugar
     });
     if (t > 0.15 + B.length * 0.16 + 1.4) { s.caixasAbrindo = false; for (const b of B) if (b.im) { b.im.instanceMatrix.array.set(b.M0, b.i * 16); b.im.instanceMatrix.needsUpdate = true; } else if (b.md?.a[b.i]) b.md.a[b.i].s = b.s0; }
   }
@@ -979,12 +1029,12 @@ export class Obras {
     g.k = kM; const hm = g.hm * kM; const Ty = g.y + hm;
     // estados: ciclo de 14 s; pronta e festa: estaciona (lança no rumo do prédio, gancho no alto)
     const parar = s.estado !== 'obra' || tm < 1600;
-    if (parar) { if (g.fase !== 9) { g.fase = 9; g.tf = 0; g.de.a = g.a; g.de.r = g.r; g.de.hy = g.hy; } g.tf += dt; const k = easeInOutSine(Math.min(1, g.tf / (s.estado === 'fim' ? 0.68 : 1.2))); g.a = g.de.a + angDif(g.de.a, g.aim) * k; g.r = lerp(g.de.r, 0.7, k); g.hy = lerp(g.de.hy, Ty - 0.35, k); g.carga = false; }
+    if (parar) { if (g.fase !== 9) { g.fase = 9; g.tf = 0; g.de.a = g.a; g.de.r = g.r; g.de.hy = g.hy; g.de.da = this._giroLivre(g, g.a, g.aim); } g.tf += dt; const k = easeInOutSine(Math.min(1, g.tf / (s.estado === 'fim' ? 0.68 : 1.2))); g.a = g.de.a + g.de.da * k; g.r = lerp(g.de.r, 0.7, k); g.hy = lerp(g.de.hy, Ty - 0.35, k); g.carga = false; }
     else {
       if (g.fase === 9) { g.fase = 7; g.tf = DUR_GRUA[7]; }
       g.tf += dts; if (g.tf >= DUR_GRUA[g.fase]) { g.tf = 0; g.fase = (g.fase + 1) % 8; this._gruaFase(s); }
       const k = g.tf / DUR_GRUA[g.fase], d = g.de, q = g.para; const ke = g.fase === 2 || g.fase === 6 ? easeInOutSine(k) : easeInOutCubic(k);
-      if (q.a !== undefined) { g.a = d.a + angDif(d.a, q.a) * ke; g.r = lerp(d.r, q.r, ke); g.hy = lerp(d.hy, q.hy, ke); }
+      if (q.a !== undefined) { g.a = d.a + q.da * ke; g.r = lerp(d.r, q.r, ke); g.hy = lerp(d.hy, q.hy, ke); }
     }
     g.hy = Math.min(g.hy, Ty - 0.3);
     // carrinho e pêndulo: θ'' = -(g/L)θ - 2ζω θ' - a/L (semi-implícito)
@@ -1024,17 +1074,18 @@ export class Obras {
   }
   _gruaFase(s) {
     const g = s.grua, F = g.fase, Ty = g.y + g.hm; const pilhaTop = chao(s.pilha.x, s.pilha.z) + 0.25; const nivel = Math.max(s.wl, s.y0) + 0.02;
-    const alto = Math.min(Ty - 0.45, Math.max(nivel + 0.9, pilhaTop + 0.6));
+    const alto = Math.min(Ty - 0.45, Math.max(nivel + 0.9, pilhaTop + 0.6, g.altoMin));
     const de = g.de, pa = g.para; de.a = g.a; de.r = g.r; de.hy = g.hy;
     const vai = vaiPara; vaiPara.pa = pa; // sem fechamento novo a cada fase
     if (F === 0) vai(g.aPick, g.rPick, pilhaTop + 0.15); // pegar
-    else if (F === 1) { if (s.pilha.n > 0) { s.pilha.n--; g.carga = true; g.cargaT = tipoCarga(s.itens[(s.pilha.n + s.seed) % s.itens.length] || 'caixote'); } vai(g.aPick, g.rPick, alto); } // içar
+    else if (F === 1) { if (s.pilha.n > 0) { s.pilha.n--; g.carga = true; g.cargaT = tipoDe(s, s.pilha.n); } vai(g.aPick, g.rPick, alto); } // içar
     else if (F === 2) vai(g.aDrop, g.rDrop, alto); // girar
     else if (F === 3) vai(g.aDrop, g.rDrop, nivel + 0.08 + (g.carga ? ALT_CARGA[g.cargaT] + 0.08 : 0)); // baixar
     else if (F === 4) vai(g.aDrop, g.rDrop, g.hy); // soltar
     else if (F === 5) { if (g.carga) { g.carga = false; this._evento('pouso', s.key); } vai(g.aDrop, g.rDrop, alto); } // subir vazio
     else if (F === 6) vai(g.aPick, g.rPick, alto); // voltar
     else { vai(g.aPick, g.rPick, alto); this._gruaAlvo(s); } // pausa
+    pa.da = this._giroLivre(g, g.a, pa.a); // pelo lado livre (a torre no caminho: a volta longa)
   }
   // ---------------------------------------------------------------- caminhão (24 s: entra 4, ré 1,2, descarga 6, sai 4, fora 8,8)
   _caminhao(s, dts, dt) {
@@ -1043,12 +1094,11 @@ export class Obras {
     else if (c.fase === 'fora') { c.vis = false; if (c.t > 8.8 && s.estado === 'obra') this._caminhaoVem(s); }
     else if (c.fase === 'entra' || c.fase === 're' || c.fase === 'sai') {
       const dur = c.fase === 'entra' ? 4 : c.fase === 're' ? 1.2 : c.saiRapido ? 0.9 : 4; const k = Math.min(1, c.t / dur); const kk = c.fase === 'entra' ? easeOutCubic(k) : c.fase === 're' ? easeInOutSine(k) : c.saiRapido ? easeInQuad(k) : easeInCubic(k);
-      const cur = c[c.fase]; const L = cur.getLength(); cur.getPointAt(kk, _a); cur.getTangentAt(Math.min(0.999, Math.max(0.001, kk)), _b);
+      const cur = c[c.fase]; cur.getPointAt(kk, _a); cur.getPointAt(Math.min(1, kk + 0.002), _b); cur.getPointAt(Math.max(0, kk - 0.002), _w1); _b.sub(_w1); // rumo sem alocar (getTangentAt cria vetores)
       const ds = Math.hypot(_a.x - c.x, _a.z - c.z); c.x = _a.x; c.z = _a.z; c.roda += (c.fase === 're' ? -ds : ds) / 0.045;
       c.h = c.fase === 're' ? Math.atan2(_b.z, -_b.x) : Math.atan2(-_b.z, _b.x); c.vis = true;
       if (c.saiRapido && c.fase === 'sai') { c.x = lerp(c.U[0], c.U[0] + P.ox * 1.5, kk); c.z = lerp(c.U[1], c.U[1] + P.oz * 1.5, kk); c.h = Math.atan2(-P.oz, P.ox); }
       if (k >= 1) { if (c.fase === 'entra') { c.fase = 're'; c.t = 0; } else if (c.fase === 're') { c.fase = 'descarga'; c.t = 0; this._evento('caminhao', s.key); } else { c.fase = 'fora'; c.t = 0; c.vis = false; if (c.saiRapido) c.fim = true; } }
-      void L;
     } else if (c.fase === 'descarga') {
       c.vis = true;
       if (c.tipo === 'plataforma') { const n0 = c.carga; if (c.t > 1 && n0 === 3 || c.t > 3 && n0 === 2 || c.t > 5 && n0 === 1) { c.carga--; const p = s.pilha; if (p.n < 12) { p.pop[p.n] = this._tl; p.n++; } } }
@@ -1063,8 +1113,8 @@ export class Obras {
   }
   _caminhaoVem(s) {
     const c = s.cam; c.ciclo++; c.fase = 'entra'; c.t = 0; c.enche = 0; c.saiRapido = false;
-    const concreto = s.itens.some((k) => /concreto|cimento/.test(k)); const p = s.pilha, cap = Math.round(12 * (1 - 0.85 * s.pv));
-    if (c.tipo === 'plataforma' || c.tipo === 'betoneira') { c.tipo = concreto && c.ciclo % 2 === 0 ? 'betoneira' : 'plataforma'; c.carga = c.tipo === 'plataforma' ? (p.n >= cap ? 0 : 3) : 0; c.tipoCarga = tipoCarga(s.itens[c.ciclo % s.itens.length]); }
+    const concreto = s.concreto; const p = s.pilha, cap = Math.round(12 * (1 - 0.85 * s.pv));
+    if (c.tipo === 'plataforma' || c.tipo === 'betoneira') { c.tipo = concreto && c.ciclo % 2 === 0 ? 'betoneira' : 'plataforma'; c.carga = c.tipo === 'plataforma' ? (p.n >= cap ? 0 : 3) : 0; c.tipoCarga = s.tipos[c.ciclo % s.tipos.length]; }
     if (c.tipo === 'basculante') { if (s.escav) { const e = s.escav; this._rotaCaminhao(s, e.x - 0.95, e.z, [-1, 0]); } /* atrás da escavadeira, no lado já cortado */ else if (s.draga) this._rotaCaminhao(s, s.draga.monte[0] + s.patio.lx * 0.9, s.draga.monte[1] + s.patio.lz * 0.9); else if (s.pecaAtual) { const pc = s.pecaAtual, ac = s.opts.acesso || [-19.6, 16.4]; const dx = ac[0] - pc.x, dz = ac[1] - pc.z, d = Math.hypot(dx, dz) || 1; const r = Math.max(pc.b.max.x - pc.b.min.x, pc.b.max.z - pc.b.min.z) / 2 + 0.5; this._rotaCaminhao(s, pc.x + (dx / d) * r, pc.z + (dz / d) * r, [dx / d, dz / d]); } }
     c.x = c.entra.points[0].x; c.z = c.entra.points[0].z;
   }
@@ -1106,7 +1156,7 @@ export class Obras {
     const cap = s.estado === 'fim' ? p.n : Math.round(12 * (1 - 0.85 * s.pv)); if (p.n > cap) p.n = cap;
     const P = s.patio, ang = Math.atan2(-P.lz, P.lx); const kf = s.estado === 'fim' ? 1 - easeInQuad(fatia(s.tf, 1300, 1800)) : 1; if (kf <= 0.01) return;
     for (let i = 0; i < p.n; i++) { const col = i % 3, row = ((i / 3) | 0) % 2, lay = (i / 6) | 0; const ox = (col - 1) * 0.3, oz = (row - 0.5) * 0.28; const x = p.x + P.lx * ox + P.ox * oz, z = p.z + P.lz * ox + P.oz * oz;
-      const tipo = tipoCarga(s.itens[(i + s.seed) % s.itens.length] || 'caixote'); const kp = p.pop[i] > 0 ? easeOutBack(fatia(this._tl - p.pop[i], 0, 0.2), 1.7) : 1;
+      const tipo = tipoDe(s, i); const kp = p.pop[i] > 0 ? easeOutBack(fatia(this._tl - p.pop[i], 0, 0.2), 1.7) : 1;
       this._unidade(x, chao(x, z) + lay * (ALT_CARGA[tipo] + 0.04) * kf, z, ang, tipo, Math.max(0.01, kp * kf)); }
   }
   // ---------------------------------------------------------------- chão de obra (entra em 600 ms, sai na festa)
@@ -1186,18 +1236,19 @@ export class Obras {
   _caixasDesenha(s, abrindo) {
     const Cx = this.L.caixa; const tc = s.tCaixa || 0;
     for (let k = 0; k < s.bichos.length; k++) { const b = s.bichos[k];
-      if (!abrindo && !b.pop) continue; const kp = abrindo ? 1 : easeOutBack(fatia(this._tl - b.tPop, 0, 0.35), 1.7); const w = b.w * kp, hgt = w * 0.9, d = w * 0.8;
+      if (!abrindo && !b.pop) continue; const kp = abrindo ? 1 : easeOutBack(fatia(this._tl - b.tPop, 0, 0.35), 1.7); const w = b.w * kp, hgt = b.h * kp, d = w, ep = Math.max(0.03, b.w * 0.04);
       const t0 = 0.15 + k * 0.16; const kt = abrindo ? easeOutBounce(fatia(tc, t0, t0 + 0.28)) : 0; const some = abrindo ? 1 - fatia(tc, t0 + 1.0, t0 + 1.4) : 1; if (some <= 0.01) continue;
       const c = Math.cos(b.ang), sn = Math.sin(b.ang); const y = b.y; const W2 = w * some;
       // caixa aberta de um lado (a frente vira rampa): fundos, laterais e porta que cai 90° para fora
       // eixos locais com giro -b.ang: x local = (c, sn) (frente, para onde o bicho sai), z local = (-sn, c)
       const bd = d * 0.45 * some, hs = hgt * some;
-      Cx.put(mCaixa(b.x - c * bd, y + hs * 0.5, b.z - sn * bd, 0.03 * some, hs, W2, -b.ang), COR.caixa);
-      for (const sg of LADOS) Cx.put(mCaixa(b.x - sn * sg * W2 * 0.5, y + hs * 0.5, b.z + c * sg * W2 * 0.5, d * some, hs, 0.03 * some, -b.ang), COR.caixa);
-      const fa = kt * Math.PI / 2; const fx = b.x + c * bd, fz = b.z + sn * bd; const sf = Math.sin(fa) * hs * 0.5;
-      _e.set(0, -b.ang, -fa, 'YXZ'); _q.setFromEuler(_e); _p.set(fx + c * sf, y + Math.cos(fa) * hs * 0.5, fz + sn * sf); _m.compose(_p, _q, _s.set(0.03 * some, hs, W2)); Cx.put(_m, COR.caixa); _e.order = 'XYZ';
-      Cx.put(mCaixa(b.x, y + hgt * some + 0.012, b.z, d * some, 0.025 * some, W2, -b.ang), COR.viga);
-      if (!abrindo) this.L.sombra.put(mCaixa(b.x, y + 0.01, b.z, d * 1.3, 1, W2 * 1.3, -b.ang), 0.7, 0, 0);
+      const bx = b.cx, bz = b.cz, e = ep * some;
+      Cx.put(mCaixa(bx - c * bd, y + hs * 0.5, bz - sn * bd, e, hs, W2, -b.ang), COR.caixa);
+      for (const sg of LADOS) Cx.put(mCaixa(bx - sn * sg * W2 * 0.5, y + hs * 0.5, bz + c * sg * W2 * 0.5, d * some, hs, e, -b.ang), COR.caixa);
+      const fa = kt * Math.PI / 2; const fx = bx + c * bd, fz = bz + sn * bd; const sf = Math.sin(fa) * hs * 0.5;
+      _e.set(0, -b.ang, -fa, 'YXZ'); _q.setFromEuler(_e); _p.set(fx + c * sf, y + Math.cos(fa) * hs * 0.5, fz + sn * sf); _m.compose(_p, _q, _s.set(e, hs, W2)); Cx.put(_m, COR.caixa); _e.order = 'XYZ';
+      Cx.put(mCaixa(bx, y + hs + 0.012, bz, d * some, Math.max(0.025, b.w * 0.03) * some, W2, -b.ang), COR.viga);
+      if (!abrindo) this.L.sombra.put(mCaixa(bx, y + 0.01, bz, d * 1.3, 1, W2 * 1.3, -b.ang), 0.7, 0, 0);
     }
   }
   // ---------------------------------------------------------------- draga
@@ -1213,7 +1264,7 @@ export class Obras {
     let v = W(0, 0.03, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.9, 0.1, 0.4, h), COR.branco);
     v = W(-0.25, 0.16, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.26, 0.16, 0.22, h), COR.branco); v = W(-0.13, 0.18, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.02, 0.07, 0.18, h), COR.vidroC);
     v = W(0.25, 0.2, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.05, 0.3, 0.32, h), COR.laranja);
-    const sw = Math.sin(D.t * 0.9) * 0.35; const ex = fx * Math.cos(sw) + rx * Math.sin(sw), ez = fz * Math.cos(sw) + rz * Math.sin(sw); const p0 = W(0.4, 0.08, 0).clone();
+    const sw = Math.sin(D.t * 0.9) * 0.35; const ex = fx * Math.cos(sw) + rx * Math.sin(sw), ez = fz * Math.cos(sw) + rz * Math.sin(sw); const p0 = _w2.copy(W(0.4, 0.08, 0));
     Cx.put(mSeg(p0.x, p0.y, p0.z, p0.x + ex * 0.55, y - 0.12, p0.z + ez * 0.55, 0.05, 0.06, true), COR.laranja); Ci.put(mEixo(p0.x + ex * 0.6, y - 0.08, p0.z + ez * 0.6, ex, 0, ez, 0.09, 0.12, D.t * 6), COR.escuro);
     for (const sg of LADOS) { v = W(-0.42, 0.15, sg * 0.15); Ci.put(mEixo(v.x, v.y, v.z, 0, 1, 0, 0.035, 0.5), COR.escuro); }
     this.L.sombra.put(mCaixa(D.x, y + 0.01, D.z, 1.0, 1, 0.5, h), 0.5, 0, 0);
@@ -1226,9 +1277,15 @@ export class Obras {
     if (s.cam) s.cam.lodo = true;
   }
   // ---------------------------------------------------------------- desmontar
+  _soltarPeca(s, pc) { pc.solta = true; this._cortar(s, pc.o, [pc.plane], pc.U, 'clip', 'd' + pc.i); pc.o.visible = true; }
   _desmontar(s, p, dts) {
     const fim = s.estado !== 'obra'; let atual = null;
+    // a peça sai da fusão quando começa a descer (num salto de time-lapse, várias de uma vez: uma refusão só)
+    const L = this._soltasL || (this._soltasL = []); L.length = 0;
+    for (const pc of s.pecas) if (!pc.solta && (fim || p > pc.k0)) { L.push(pc.o); this._soltarPeca(s, pc); }
+    if (L.length) { try { s.opts.soltar?.(L); } catch (e) { setTimeout(() => { throw e; }); } L.length = 0; }
     for (const pc of s.pecas) {
+      if (!pc.solta) continue;
       const k = fim ? 1 : fatia(p, pc.k0, pc.k1); const n = k * 4; const f = n - Math.floor(n); const kk = (Math.floor(n) + (f < 0.6 ? 0 : easeInOutSine((f - 0.6) / 0.4))) / 4; // em 4 lances, peça por peça
       const y = lerp(pc.y1, pc.y0, kk); if (y !== pc.plane.constant) { pc.plane.constant = y; if (Math.abs(y - (pc.yS ?? 1e9)) > 0.05) { pc.yS = y; this._pedirSombra(false, s); } }
       pc.o.visible = k < 1; if (k > 0 && k < 1) atual = pc;
@@ -1273,7 +1330,7 @@ export class Obras {
     if (A2.n === 3) {
       A2.g.visible = true; A2.gs.visible = true; A2.ga.visible = true; mCaixa(0, -3, 0, 0.001, 0.001, 0.001);
       this.pontos.mesh.visible = true; if (this.atividade) this.atividade.pontos.visible = true; // pontos: o pipeline nasce num quadro normal, não na festa
-      for (const m of [...this._lotes.map((l) => l.mesh), this.crowd.mesh, this.crowd.perto]) if (!m.count) { m.count = 1; m.visible = true; m.material.visible = true; m.setMatrixAt(0, _m); m.instanceMatrix.needsUpdate = true; A2.ligados = (A2.ligados || []).concat(m); }
+      for (const m of [...this._lotes.map((l) => l.mesh), this.crowd.mesh, this.crowd.perto]) if (!m.count) { m.count = 1; m.visible = true; m.setMatrixAt(0, _m); m.instanceMatrix.needsUpdate = true; A2.ligados = (A2.ligados || []).concat(m); }
       this.e.shadowDirty = true;
     } else if (A2.n >= 5) {
       for (const g of [A2.g, A2.g2, A2.ga, A2.gs]) { this.group.remove(g); g.traverse((o) => { if (o.isInstancedMesh) o.dispose(); }); } A2.geoS.dispose(); for (const c of A2.temp) descartar(c);

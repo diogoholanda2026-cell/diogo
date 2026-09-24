@@ -16,6 +16,20 @@ import { gravar } from './core/salvar.js';
 import { descartar } from './render/descartar.js';
 import { REGRAS } from './sim/estado.js';
 
+// caixas de uma malha no mundo: a base (todos os vértices até 30% da altura) e o que sobe acima disso, quando
+// o que sobe ocupa menos de 60% da planta; senão a caixa inteira. Instanciada: a caixa das instâncias.
+function caixasMalha(o, L) {
+  if (o.isInstancedMesh) { const b = o.boundingBox || (o.computeBoundingBox(), o.boundingBox); if (b && !b.isEmpty()) L.push(b.clone().applyMatrix4(o.matrixWorld)); return; }
+  const pa = o.geometry.attributes.position; if (!pa) return; const v = new THREE.Vector3(), b = new THREE.Box3();
+  for (let i = 0; i < pa.count; i++) b.expandByPoint(v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld));
+  if (b.isEmpty()) return; const H = b.max.y - b.min.y; if (H < 1) { L.push(b); return; }
+  const y1 = b.min.y + 0.3 * H, alto = new THREE.Box3(), baixo = new THREE.Box3();
+  for (let i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld); (v.y >= y1 ? alto : baixo).expandByPoint(v); }
+  const area = (x) => (x.max.x - x.min.x) * (x.max.z - x.min.z);
+  if (alto.isEmpty() || baixo.isEmpty() || area(alto) > 0.6 * area(b)) { L.push(b); return; }
+  alto.min.y = b.min.y; L.push(alto, baixo);
+}
+
 const FAIXA_PROJ = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
 
 export class Controle {
@@ -79,7 +93,7 @@ export class Controle {
     this.povoar();
   }
   sincronizar() { this.sincronizarMundo(); this.calcBolhas(); this.hud.atualizar(); this.hud.capitulo(this._capMin); }
-  _reflorestado(on) { if (on) this.mundo.canteiro.visible = false; this.forest.setReflorestamento(on ? 1 : 0); if (!!this.ground.flags.reflorestado !== on) { this.ground.flags.reflorestado = on; this.ground.paint(); } }
+  _reflorestado(on) { this.mundo.canteiro.visible = !on; this.forest.setReflorestamento(on ? 1 : 0); if (!!this.ground.flags.reflorestado !== on) { this.ground.flags.reflorestado = on; this.ground.paint(); } }
   povoar() { const W = this.mundo; if (this._povoKey === this._chavePovo()) return; this._povoKey = this._chavePovo(); W.povoar(); }
   _chavePovo() { return ['praca.e3', 'pas_bulevar.e1', 'pas_ponte.e1', 'pas_vila.e1', 'pas_trilhaBioma.e1', 'pas_elo.e1', 'pas_frente.e1', 'pas_anel.e1', 'pas_santuario.e1'].map((k) => (this.J.feita(k) ? 1 : 0)).join(''); }
   // canteiro de uma etapa
@@ -99,12 +113,13 @@ export class Controle {
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.lago) b.expandByPoint(new THREE.Vector3(x, -0.3, z)); b.max.y = 0.3;
         opts = { ...base, alvo, modo: 'draga', box: b, operarios: 5, nivelAgua: () => this.ground.lake.position.y, anim: (k) => { this.ground.lake.position.y = lerp(-0.32, -0.1, k); } };
         site.aoFim = () => { this.ground.lake.position.y = -0.1; };
-      } else if (modo0 === 'desmontar') { // os prédios do canteiro saem da fusão e são desmontados um a um
-        const pecas = []; for (const g of Object.values(W.predios)) if (g.userData.pronto || g.visible) { g.userData.animando = true; pecas.push(g); }
-        W.refundir?.(); for (const g of pecas) g.visible = true; const amb = W.canteiro.children.find((c) => c.name === 'canteiroAmb'); if (amb) pecas.push(amb);
+      } else if (modo0 === 'desmontar') { // os prédios do canteiro são desmontados um a um; cada um sai da fusão só na sua vez
+        const pecas = []; for (const g of Object.values(W.predios)) if (g.userData.pronto || g.visible) pecas.push(g); const amb = W.canteiro.children.find((c) => c.name === 'canteiroAmb'); if (amb) pecas.push(amb);
+        const soltar = (lista) => { let n = 0; for (const g of lista) if (g !== amb && g.userData && !g.userData.animando) { g.userData.animando = true; n++; } if (n) W.refundir?.(); for (const g of lista) g.visible = true; };
         const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.5;
-        opts = { ...base, alvo: W.canteiro, alvos: pecas, modo: 'desmontar', box: b, operarios: 8, acesso: A.vias?.[0]?.pts?.[0] || [-19.6, 16.4] };
+        opts = { ...base, alvo: W.canteiro, alvos: pecas, soltar, modo: 'desmontar', box: b, operarios: 8, acesso: A.vias?.[0]?.pts?.[0] || [-19.6, 16.4] };
         site.aoFim = () => { W.canteiro.visible = false; for (const g of pecas) if (g.userData) { g.userData.animando = false; if (g.parent === W.canteiro && g !== amb) g.visible = false; } };
+        site.aoRemover = () => { let n = 0; for (const g of pecas) if (g !== amb && g.userData?.animando) { g.userData.animando = false; n++; } if (n) W.refundir?.(); }; // obra desfeita sem aprovar: as peças voltam à fusão
       } else if (modo0 === 'reflorestar') { // replantio: mudas em linhas crescendo até virar a mata do canteiro
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.2;
         opts = { ...base, alvo, modo: 'replantar', box: b, floresta: this.forest, operarios: 9 };
@@ -129,12 +144,15 @@ export class Controle {
   }
   // uma falha no desenho da obra não pode travar a sincronia do jogo: o erro sai no próximo tique (aparece nos testes)
   _iniciarObra(k, opts) { try { return this.obras.iniciar(k, opts); } catch (e) { setTimeout(() => { throw e; }); try { this.obras.remover(k); } catch (_) {} return null; } }
-  // caixas das peças prontas perto da obra (a grua e o pátio ficam no lado mais livre)
+  // caixas das peças prontas perto da obra (a grua e o pátio ficam no lado mais livre). Uma por malha; malha alta
+  // de base larga (a laje e o núcleo da Biblioteca fundidos numa só) vira duas: a base baixa e o que sobe dela.
+  // Assim a lança só evita a torre, e não a laje em volta. Calculadas uma vez por peça.
   _obstaculos(box, alvo) {
     if (!box || box.isEmpty()) return []; const W = this.mundo, out = []; const c = box.getCenter(new THREE.Vector3()); this._cxObs = this._cxObs || new WeakMap();
     for (const m of Object.values(W.modelos)) for (const pt of Object.values(m.partes)) {
-      if (pt === alvo || !pt.userData.feito || !pt.children.length) continue; let b = this._cxObs.get(pt); if (!b) { b = new THREE.Box3().setFromObject(pt); this._cxObs.set(pt, b); }
-      if (!b.isEmpty() && b.distanceToPoint(c) < 9) out.push(b);
+      if (pt === alvo || !pt.userData.feito || !pt.children.length) continue; let L = this._cxObs.get(pt);
+      if (!L) { L = []; pt.updateWorldMatrix(true, true); pt.traverse((o) => { if (o.isMesh && o.geometry) caixasMalha(o, L); }); this._cxObs.set(pt, L); }
+      for (const b of L) if (b.distanceToPoint(c) < 9) out.push(b);
     }
     return out;
   }
@@ -148,7 +166,7 @@ export class Controle {
     site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: para >= 3 && f !== 'casas', caminho: c, operarios: 6, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
     this.sites.set(`m:${f}:${i}`, site); if (m.obra.estado === 'pronta') this.obras.pronta(`m:${f}:${i}`);
   }
-  _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); }
+  _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); s.aoRemover?.(); }
   // aprovação coreografada: o = {aoImpacto, baque} (impacto em 380 ms; o callback vem em ~1200 ms)
   _concluirSite(k, cb, o = {}) {
     const s = this.sites.get(k); if (!s) { cb && cb(); return; } s.concluindo = true;
@@ -299,7 +317,7 @@ export class Controle {
   }
   proximo() {
     const L = this._listaBolhas || []; const ordem = ['pronta', 'coleta', 'moedas', 'subir', 'placa', 'obra'];
-    for (const t of ordem) { const b = L.find((x) => x.tipo === t); if (b) { const [x, , z] = b.pos; this.rig.pitchFix = null; this.rig.flyTo({ x, z: z + 3, dist: 13, tilt: 0 }, 800); setTimeout(() => { if (b.coletavel) b.acao(null); else b.acao(null); }, 850); return; } }
+    for (const t of ordem) { const b = L.find((x) => x.tipo === t); if (b) { const [x, , z] = b.pos; this.rig.pitchFix = null; this.rig.flyTo({ x, z: z + 3, dist: 13, tilt: 0, done: () => b.acao(null) }); return; } } // a ação vem quando a câmera chega (a duração depende da distância)
     this.hud.brinde('Tudo em dia! Produza materiais para as próximas obras.', 'ok');
   }
   // ------------------------------------------------------------ modais e efeitos
