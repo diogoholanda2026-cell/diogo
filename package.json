@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "montar": "node ferramentas/montar.mjs",
-    "testar": "node ferramentas/testar.mjs"
+    "testar": "node ferramentas/testar.mjs",
+    "simular": "node ferramentas/simular.mjs 3 1",
+    "simular:todos": "node ferramentas/simular.mjs --todos",
+    "simular:testes": "node ferramentas/simular.mjs --testes"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
