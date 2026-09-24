@@ -8,7 +8,7 @@ import { beams, merge } from '../geom.js';
 import { treeGroup } from '../forest.js';
 import { hash } from '../../core/util.js';
 
-export const FHB = 0.85; // pé-direito da biblioteca (6 andares: o dossel fica a ~5.4, como na foto)
+export const FHB = 0.83; // pé-direito da biblioteca (6 andares: a cobertura fica a ~5.1, logo abaixo do dossel)
 const raioAndar = (R, f) => R * (0.84 + 0.035 * f); // torre em vaso: mais estreita embaixo
 function tubeCyl(r, h, mat, seg, uRep, vRep, y) {
   const g = new THREE.CylinderGeometry(r, r, h, seg, 1, true); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * uRep, uv.getY(i) * vRep);
@@ -23,8 +23,10 @@ function anelPlano(rx, rz, w, mat, y, rot = 0, seg = 56) {
   const g = new THREE.RingGeometry(1 - w / Math.min(rx, rz), 1, seg, 1); g.rotateX(-Math.PI / 2); g.scale(rx, 1, rz); g.rotateY(rot); g.translate(0, y, 0);
   const m = new THREE.Mesh(g, mat); m.receiveShadow = true; return m;
 }
+// (a fusão do mundo junta as malhas de cada parte por material; as aletas, os pilares e os arbustos de todos os
+// andares da parte vão num só grupo de instâncias cada, para a obra não custar uma chamada por andar)
 function andares(f0, f1, R, cx, cz) {
-  const g = new THREE.Group(); const esq = new THREE.Group(); const arb = [];
+  const g = new THREE.Group(); const esq = new THREE.Group(); const arb = [], fins = [], cols = [];
   for (let f = f0; f < f1; f++) {
     const y = f * FHB; const Rf = raioAndar(R, f); const w = 0.3 * Math.sin(f * 1.7 + 0.4); const rx = Rf + 0.1 + w, rz = Rf + 0.1 - w * 0.6; const rot = f * 0.35;
     g.add(slab(rx, rz, 0.07, M.whiteSmooth, y, rot));                                 // fita branca ondulada (laje)
@@ -33,15 +35,14 @@ function andares(f0, f1, R, cx, cz) {
     const ri = Rf - 0.26; g.add(tubeCyl(ri, FHB - 0.07, M.fac_madeira, 48, (2 * Math.PI * ri) / (0.34 * 32), 0.5, y + 0.07)); // estantes iluminadas
     const rail = tubeCyl(Math.min(rx, rz) - 0.15, 0.16, M.glassRail, 40, 1, 1, y + 0.1); rail.castShadow = false; g.add(rail); // guarda-corpo
     // aletas verticais de madeira (brises)
-    const fins = []; const n = 56; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + f * 0.09; const r = ri + 0.06; fins.push([[Math.cos(a) * r, y + 0.1, Math.sin(a) * r], [Math.cos(a) * r, y + FHB, Math.sin(a) * r]]); }
-    g.add(beams(fins, 0.03, M.woodFrame, 4));
+    const n = 56; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + f * 0.09; const r = ri + 0.06; fins.push([[Math.cos(a) * r, y + 0.1, Math.sin(a) * r], [Math.cos(a) * r, y + FHB, Math.sin(a) * r]]); }
     // 18 arbustos na floreira (seguem a elipse girada da laje)
     const c = Math.cos(rot), s = Math.sin(rot);
     for (let i = 0; i < 18; i++) { const a = (i / 18) * Math.PI * 2 + hash(i, f, 311) * 0.25; const u = Math.cos(a) * (rx - 0.07), v = Math.sin(a) * (rz - 0.07); arb.push({ x: cx + u * c + v * s, z: cz - u * s + v * c, y: y + 0.1, s: 0.08 + hash(i, f, 312) * 0.04, pal: 'jardim', h: 0.8 }); }
     esq.add(slab(Rf + 0.05, Rf + 0.05, 0.1, M.concreto, y, 0));
-    const cols = []; for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; cols.push([[Math.cos(a) * (Rf - 0.4), y, Math.sin(a) * (Rf - 0.4)], [Math.cos(a) * (Rf - 0.4), y + FHB, Math.sin(a) * (Rf - 0.4)]]); }
-    esq.add(beams(cols, 0.06, M.concreto, 6));
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; cols.push([[Math.cos(a) * (Rf - 0.4), y, Math.sin(a) * (Rf - 0.4)], [Math.cos(a) * (Rf - 0.4), y + FHB, Math.sin(a) * (Rf - 0.4)]]); }
   }
+  g.add(beams(fins, 0.03, M.woodFrame, 4)); esq.add(beams(cols, 0.06, M.concreto, 6));
   const ag = treeGroup(arb, { cast: false }); ag.position.set(-cx, 0, -cz); g.add(ag);
   esq.visible = false;
   return { g, esq };

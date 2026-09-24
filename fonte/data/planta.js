@@ -34,9 +34,11 @@ export const A = {
   // fundo e pela direita e encosta na ponta esquerda do Santuário; o0 = largura da fita (para dentro)
   sede: { c: [2.4, -8.2], rx: 10.6, rz: 5.9, rot: 0.04, a0: 4.0, a1: 6.9, o0: -1.9, piscina: { c: [6.3, -10.0], r: 0.95 } },
   // Biblioteca Central (torre) + Centro de Recursos Digitais (abóbada) + anel em terraços
-  // (dossel de 5.8 de lado girado ~55° e apoiado no topo da torre, a 5.3: medido nos cantos do dossel na foto;
-  // torre em vaso de raio 2.4, como a largura da foto; o CRD fica à frente, com posição própria)
-  biblio: { c: [14.9, 8.1], r: 2.4, canopy: 5.8, canopyRot: 0.95, canopyY: 5.3, crd: { c: [14.2, 12.9], rot: -0.32 } },
+  // (dossel quadrado de 6.5 de lado a 5.2 de altura, girado 0.66: na câmera da foto os cantos da esquerda e da
+  // direita caem a 2 px dos da foto e a largura dá 255 px, como na foto; os cantos de cima e de baixo ficam
+  // ~23 px mais abertos, porque na foto o dossel é um losango achatado que nenhum quadrado reproduz.
+  // Torre em vaso de raio 2.75: ~160 px de largura, como na foto. O CRD fica à frente, com posição própria)
+  biblio: { c: [14.9, 8.1], r: 2.75, canopy: 6.5, canopyRot: 0.66, canopyY: 5.2, crd: { c: [14.2, 12.9], rot: -0.32 } },
   anelBib: { c: [14.9, 8.1], r0: 3.7, r1: 6.5, a0: 2.9, a1: 4.6 }, // do lado esquerdo ao fundo (a frente fica com o CRD)
   // Santuário de Animais e Centro de Conservação (pista de 4 andares; lagoa por dentro, pasto atrás)
   santuario: { c: [21.4, -7.8], rx: 8.4, rz: 5.0, rot: -0.04, lago: { c: [21.8, -9.3], rx: 2.0, rz: 1.15, rot: 0.2 } },
@@ -89,7 +91,7 @@ export const PASSARELAS = {
   ponte: { nome: 'Ponte do Instituto', pts: [[1.5, 4.7, 0.8], [4.8, 5.4, 1.0], [8.5, 6.1, 0.8]], w: 0.55 },
   trilhaBioma: { nome: 'Trilha do Bioma', pts: [[25.2, -2.95, 0.8], [28.2, 0.6, 0.85], [29.0, 5.4, 0.9], [29.1, 10.4, 0.85], [28.8, 13.6, 0.5], [29.4, 15.4, 0.1]], w: 0.6 },
   elo: { nome: 'Elo do Santuário', pts: [[14.0, 2.0, 0.8], [14.6, 0.2, 0.9], [15.6, -1.6, 0.9], [17.2, -2.75, 0.8]], w: 0.6 },
-  vila: { nome: 'Passarela da Vila', pts: [[16.3, 9.6, 1.0], [19.2, 9.0, 0.9], [22.6, 8.6, 0.8], [25.2, 9.4, 0.45], [26.4, 9.9, 0.1]], w: 0.55 },
+  vila: { nome: 'Passarela da Vila', pts: [[16.47, 9.78, 0.93], [19.2, 9.0, 0.9], [22.6, 8.6, 0.8], [25.2, 9.4, 0.45], [26.4, 9.9, 0.1]], w: 0.55 },
   frente: { nome: 'Caminho da Frente', pts: [[-19.6, 17.8, 0.12], [-17.0, 18.4, 0.12], [-14.0, 18.88, 0.12], [-10.0, 19.28, 0.12], [-7.6, 19.3, 0.12], [-4.0, 19.35, 0.12], [-0.4, 19.35, 0.12]], w: 0.6 },
   anel: { nome: 'Passeio do Anel', pts: [[-21.8, 10.6, 0.1], [-20.2, 13.4, 0.4], [-17.6, 15.9, 0.55], [-14.0, 17.68, 0.6], [-10.0, 18.08, 0.55], [-7.6, 17.75, 0.5], [-5.6, 17.1, 0.35], [-3.8, 16.3, 0.1]], w: 0.5 },
   santuario: { nome: 'Passeio do Santuário', pts: [[27.4, -3.2, 0.8], [29.8, -4.6, 0.85], [31.0, -7.8, 0.85], [30.4, -11.8, 0.8], [28.0, -14.4, 0.5], [24.6, -15.4, 0.25], [21.6, -15.6, 0.1]], w: 0.55 },
