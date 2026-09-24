@@ -25,7 +25,7 @@ export function rodar(o = {}) {
 }
 function partida(o) {
   const passo = (o.passo ?? 3) * 60000; const T0 = DIA0 + 7 * H; let t = T0;
-  const S = novoEstado(t); S.ritmo = o.ritmo ?? 1; const J = new Jogo(S);
+  const S = o.estado ? prepararSave(JSON.parse(JSON.stringify(o.estado)), t) : novoEstado(t); S.ritmo = o.ritmo ?? 1; const J = new Jogo(S); // o.estado: continua um save (inclusive antigo)
   const janelas = o.sessoes ? o.sessoes.split(',').map((s) => s.split('-').map((h) => { const [a, b] = h.split(':').map(Number); return a * 60 + (b || 0); })) : null;
   const minDia = () => ((t - DIA0) / 60000) % 1440; const dentro = () => !janelas || janelas.some(([a, b]) => minDia() >= a && minDia() < b);
   const proxJanela = () => { const m = minDia(); let d = Infinity; for (const [a] of janelas) { const x = a > m ? a - m : a + 1440 - m; d = Math.min(d, x); } return t + d * 60000; };
@@ -280,7 +280,9 @@ function testes() {
       const c0 = v1(6, { capEscolhas: { 1: 'usina+', 2: 'repasse+', 3: 'bem+', 4: 'xp+', 5: 'mutirao2' } }); c0.etapas['reflorestar.e1'] = { estado: 'prancha', entregue: { muda: 15, substrato: 2 } }; const muda0 = c0.itens.muda;
       const c = prepararSave(c0, T); f(c.etapas['reflorestar.e1'].entregue.muda === 8 && c.itens.muda === muda0 + 7 && !c.etapas['reflorestar.e0'], 'epílogo antigo: entrega acima do pedido volta ao almoxarifado');
       const d = prepararSave(prepararSave(v1(2), T), T); f(d.v === 2 && !d._orfaos?.x, 'normalizar é idempotente');
-      const e = prepararSave({ v: 1, itens: { madeira: 'x' }, modulos: {}, etapas: { 'nada.e1': {} } }, T); f(new Jogo(e).ocupado === 0 && e._orfaos.etapas['nada.e1'], 'save quebrado vira jogo válido'); }
+      const e = prepararSave({ v: 1, itens: { madeira: 'x' }, modulos: {}, etapas: { 'nada.e1': {} } }, T); f(new Jogo(e).ocupado === 0 && e._orfaos.etapas['nada.e1'], 'save quebrado vira jogo válido');
+      // o robô continua cada save migrado até o fim, sem trava
+      for (const [nome, v] of [['início', v1(1)], ['capítulo 3', b0], ['epílogo', c0]]) { const R = rodar({ estado: v, passo: 5, semente: 3 }); f(R.terminou && !R.travou, `robô a partir do save v1 (${nome}): ${R.travou || 'não terminou'}`); } }
     // depósito: estoque de 10, preço sobe; venda até 20 por janela
     { const S = novoEstado(T); const J = new Jogo(S); J.agora = T; S.creditos = 1e6; S.nivel = 5; const p0 = J.precoCompra('madeira'); for (let i = 0; i < 12; i++) J.comprar('madeira'); f(S.itens.madeira === 16 && J.estoqueDeposito('madeira').n === 0 && J.comprar('madeira') === 'esgotado' && J.precoCompra('madeira') > p0, 'estoque do depósito');
       S.itens.brita = 40; J.vender('brita', 30); f(S.itens.brita === 20 && J.vender('brita', 1) === 'limite', 'limite de vendas'); J.agora = T + 4 * H; J.tick(T + 4 * H); f(J.estoqueDeposito('madeira').n === 10, 'estoque renova na janela seguinte'); }
