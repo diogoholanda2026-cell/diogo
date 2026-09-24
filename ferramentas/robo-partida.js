@@ -1,4 +1,5 @@
-// Robô de partida completa no navegador: joga do início ao fim pela API do Controle, abre painéis e fecha modais.
+// Robô de partida completa no navegador: joga do início ao fim pela API do Controle, abre painéis e fecha modais
+// (os automáticos entram numa fila: nenhum abre com painel aberto, outro modal ou a festa de uma aprovação).
 // Uso: node ferramentas/testar.mjs /tmp/robo.png "teste=1&novo=1&q=leve&pr=1" 700 400 2000 "$(cat ferramentas/robo-partida.js)"
 // Resultado em window.__resultado: capítulo, nível, vida, população, etapas e módulos pendentes.
 (async () => {
@@ -17,9 +18,10 @@
     for (const f of Object.keys(J.S.modulos)) J.S.modulos[f].forEach((m, i) => { if (J.situacaoModulo(f, i) === 'disponivel') { const r = J.requisitosModulo(f, i); for (const [k, n] of Object.entries(r.itens)) J.S.itens[k] = (J.S.itens[k] || 0) + n; if (J.melhorarModulo(f, i) === 'ok') C.sincronizar(); } });
     if (volta % 7 === 0) { const t = paineis[(volta / 7) % paineis.length | 0]; C.paineis.abrir(t); await esp(30); C.paineis.fechar(true); }
     if (volta % 11 === 0) { C.paineis.abrir('usina', 'usina1'); await esp(20); C.paineis.fechar(true); C.paineis.abrir('oficina', 'carpintaria'); await esp(20); C.paineis.fechar(true); C.paineis.abrir('modulo', ['anel', 0]); await esp(20); C.paineis.fechar(true); }
-    // fecha modais e escolhe a primeira opção dos capítulos
-    for (const v of document.querySelectorAll('.veu')) { const e = v.querySelector('[data-esc]'); if (e) e.click(); else v.querySelector('[data-fecha]')?.click(); }
-    C.update(0.3, performance.now());
+    // fecha modais (nível: Continuar; final: data-fecha) e escolhe a primeira opção dos capítulos; a festa da
+    // aprovação segura a fila de modais por 2,6 s, e o robô aprova quase todo turno: ele libera a fila
+    for (const v of document.querySelectorAll('.veu:not(.sai)')) { const e = v.querySelector('[data-esc]'); if (e) e.click(); else (v.querySelector('[data-continuar]') || v.querySelector('[data-fecha]'))?.click(); }
+    C._festaAte = 0; C.update(0.3, performance.now());
     await esp(120);
     log.push(J.S.cap); if (J.S.etapas['reflorestar.e1']?.estado === 'feita') { await esp(6000); break; }
   }
