@@ -105,7 +105,7 @@ export class Mundo {
     const list = [biblioteca(), crd(), bioma(), anfiteatro(), gorilas(), acelerador(), savana(), santuarioInterior(), ciencias(), lago(ground), sedePatio(), escola(), campo(), engenharia(), instituto(), gramadoUni(), praca(), ponteCoberta()];
     for (const id of Object.keys(PASSARELAS)) list.push(passarela(id));
     const PROJ_DE = { sedePatio: 'sede' };
-    this.modelos = {}; for (const m of list) { this.modelos[m.id] = m; this.root.add(m.root); m.root.userData.pick = { tipo: 'proj', id: PROJ_DE[m.id] || m.id }; for (const p of Object.values(m.partes)) { bake(p); p.visible = false; } for (const s of Object.values(m.esqueletos || {})) { bake(s); s.visible = false; } }
+    this.modelos = {}; for (const m of list) { this.modelos[m.id] = m; this.root.add(m.root); m.root.userData.pick = { tipo: 'proj', id: PROJ_DE[m.id] || m.id }; for (const p of Object.values(m.partes)) { bake(p); p.visible = false; p.userData.feito = false; } for (const s of Object.values(m.esqueletos || {})) { bake(s); s.visible = false; } }
     // canteiro de obras
     this.canteiro = new THREE.Group(); this.canteiro.name = 'canteiro'; this.root.add(this.canteiro); this.canteiro.add(ambienteCanteiro()); this.predios = {};
     for (const [id, l] of Object.entries(LOTES)) { const g = predioCanteiro(id.startsWith('usina') ? 'usina' : id); g.position.set(l.x, 0, l.z); g.rotation.y = l.r; g.visible = false; g.userData.pick = { tipo: 'predio', id }; this.canteiro.add(g); this.predios[id] = g; }
@@ -171,10 +171,11 @@ export class Mundo {
       const n = Math.floor(q.n * k + R());
       if (q.tipo === 'linha') { for (let i = 0; i < n; i++) C.add(q.pts, { speed: 0.12 + R() * 0.06, phase: R(), idle: R() < 0.3 ? 1 : 0 }); continue; }
       const { area, y = 0.03 } = q.P; let bx0 = 1e9, bz0 = 1e9, bx1 = -1e9, bz1 = -1e9; for (const [x, z] of area) { bx0 = Math.min(bx0, x); bz0 = Math.min(bz0, z); bx1 = Math.max(bx1, x); bz1 = Math.max(bz1, z); }
+      const livre = (a, c) => [0.25, 0.5, 0.75].every((t) => { const x = a[0] + (c[0] - a[0]) * t, z = a[1] + (c[1] - a[1]) * t; return inPoly(x, z, area) && !naAgua(x, z); }); // o trecho inteiro fora da água
       const ponto = () => { for (let t = 0; t < 40; t++) { const x = bx0 + R() * (bx1 - bx0), z = bz0 + R() * (bz1 - bz0); if (inPoly(x, z, area) && !naAgua(x, z)) return [x, z]; } return null; };
       for (let i = 0; i < n; i++) {
         const pts = []; let a = ponto(); if (!a) continue; pts.push([a[0], y, a[1]]);
-        for (let s = 0; s < 3; s++) { let b = null; for (let t = 0; t < 12 && !b; t++) { const c = ponto(); if (c && !naAgua((a[0] + c[0]) / 2, (a[1] + c[1]) / 2) && inPoly((a[0] + c[0]) / 2, (a[1] + c[1]) / 2, area)) b = c; } if (!b) break; pts.push([b[0], y, b[1]]); a = b; }
+        for (let s = 0; s < 3; s++) { let b = null; for (let t = 0; t < 12 && !b; t++) { const c = ponto(); if (c && livre(a, c)) b = c; } if (!b) break; pts.push([b[0], y, b[1]]); a = b; }
         if (pts.length > 1) C.add(pts, { speed: 0.1 + R() * 0.08, idle: 1, phase: R() });
       }
     }
@@ -209,7 +210,7 @@ export class Mundo {
   _chave(k, quad) { const kq = k + ':' + quad; return this._grandes.has(kq) ? kq : k; }
   _malha(fk, b, blocos) {
     const { geo, faixas } = fundirLista(blocos); const mesh = new THREE.Mesh(geo, b.mat); mesh.castShadow = b.cast; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.raycast = () => {};
-    mesh.userData.chave = fk; mesh.userData.base = b.base; mesh.userData.faixas = faixas; if (b.sem) mesh.userData.semHAO = true;
+    mesh.userData.chave = fk; mesh.userData.base = b.base; mesh.userData.faixas = faixas; mesh.userData.cullCaixa = geo.boundingBox; if (b.sem) mesh.userData.semHAO = true;
     this._malhas.set(fk, mesh); for (const [f] of faixas) { let n = this._naFusao.get(f); if (!n) this._naFusao.set(f, (n = { ass: null, chaves: new Set() })); n.chaves.add(fk); }
     return mesh;
   }
