@@ -21,7 +21,8 @@ const srv = createServer((req, res) => {
 }).listen(0);
 const porta = srv.address().port;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const indice = []; const erros = [];
+const arqIndice = join(saida, 'indice.json'); const anterior = existsSync(arqIndice) ? JSON.parse(readFileSync(arqIndice, 'utf8')) : { indice: [] };
+const indice = anterior.indice.slice(); const erros = [];
 const espera = (pg, ms) => pg.waitForTimeout(ms);
 async function abre(q, W, H, movel = false) {
   const pg = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1, ...(movel ? { isMobile: true, hasTouch: true } : {}) });
@@ -31,7 +32,7 @@ async function abre(q, W, H, movel = false) {
   return pg;
 }
 async function foto(pg, nome, desc, ms = 1200) {
-  await espera(pg, ms); const arq = join(saida, nome + '.png'); await pg.screenshot({ path: arq });
+  await espera(pg, ms); const arq = join(saida, nome + '.png'); await pg.screenshot({ path: arq, timeout: 240000 });
   const st = await pg.evaluate(() => { const e = window.__held.engine; return { calls: e.stats.calls, tris: e.stats.tris }; });
   indice.push({ arquivo: nome + '.png', desc, ...st }); console.log(nome, JSON.stringify(st));
 }
@@ -41,7 +42,7 @@ const camera = (pg, [x, z, dist, yaw, pitch, fov = 38]) => pg.evaluate(([x, z, d
 }, [x, z, dist, yaw, pitch, fov]);
 
 try {
-  if (grupos.has('composicao')) {
+  if (grupos.has('composicao')) try {
     const pg = await abre('vista=foto&tudo=1&q=alta&pr=1', 1376, 768);
     await pg.evaluate(() => { document.getElementById('ui').style.display = 'none'; });
     await foto(pg, 'c01-foto-exposicao', 'Composição completa, enquadramento da foto, luz de exposição', 2500);
@@ -51,8 +52,8 @@ try {
     await camera(pg, [2, 2, 62, -0.55, 0.78, 36]); await foto(pg, 'c04-geral-outro-angulo', 'Composição completa vista do outro lado', 2000);
     await camera(pg, [4, 0, 44, 0.2, 1.35, 36]); await foto(pg, 'c05-planta-de-cima', 'Composição quase de cima (leitura da planta)', 2000);
     await pg.close();
-  }
-  if (grupos.has('closes')) {
+  } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }
+  if (grupos.has('closes')) try {
     const pg = await abre('vista=foto&tudo=1&q=alta&pr=1', 1200, 675);
     await pg.evaluate(() => { document.getElementById('ui').style.display = 'none'; });
     const closes = [
@@ -73,8 +74,8 @@ try {
     ];
     for (const [nome, desc, cam] of closes) { await camera(pg, cam); await foto(pg, nome, desc, 1500); }
     await pg.close();
-  }
-  if (grupos.has('obra')) {
+  } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }
+  if (grupos.has('obra')) try {
     const pg = await abre('teste=1&novo=1&q=alta&pr=1', 1232, 555);
     await pg.evaluate(() => { const H = window.__held, J = H.J, C = H.C; J.S.cap = 3; J.S.nivel = 16; J.S.xp = 9420; J.S.creditos = 9840;
       for (const k of ['lago.e1', 'sede.e1', 'sede.e2', 'pas_frente.e1', 'biblioteca.e1']) J.S.etapas[k] = { estado: 'feita', entregue: {} };
@@ -100,8 +101,8 @@ try {
     await pg.evaluate(() => { const H = window.__held, J = H.J; J.S.etapas['praca.e1'] = { estado: 'obra', entregue: {}, ini: Date.now() - 100000, fim: Date.now() + 100000 }; H.C.sincronizar(); });
     await camera(pg, [4.4, 15.6, 12, 0.45, null]); await foto(pg, 'o12-terraplenagem-praca', 'Praça em terraplenagem (escavadeira, caminhão)', 3000);
     await pg.close();
-  }
-  if (grupos.has('celular')) {
+  } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }
+  if (grupos.has('celular')) try {
     const pg = await abre('teste=1&novo=1&q=media&pr=1', 986, 443, true);
     await foto(pg, 'm01-inicio', 'Celular 986x443: início do jogo com HUD', 2000);
     await pg.evaluate(() => { const H = window.__held, J = H.J, C = H.C; J.S.nivel = 9; J.S.xp = 1700; J.S.creditos = 12000; J.S.predios.carpintaria.ok = true; J.S.predios.concreto.ok = true; J.S.predios.usina2.ok = true;
@@ -113,8 +114,9 @@ try {
     await pg.evaluate(() => { document.querySelector('.veu')?.remove(); const C = window.__held.C; C.modalCapitulo(C.J.capitulo()); }); await foto(pg, 'm12-modal-capitulo', 'Celular: apresentação ao Conselho (fim de capítulo)', 1000);
     await pg.evaluate(() => { document.querySelector('.veu')?.remove(); window.__held.C._modalCap = false; window.__held.C.apreciar(true); }); await foto(pg, 'm13-apreciar', 'Celular: modo Apreciar', 1500);
     await pg.close();
-  }
+  } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }
 } catch (e) { erros.push('vitrine: ' + e.message); }
-writeFileSync(join(saida, 'indice.json'), JSON.stringify({ indice, erros }, null, 1));
+const vistos = new Set(); const unico = indice.reverse().filter((x) => !vistos.has(x.arquivo) && vistos.add(x.arquivo)).reverse();
+writeFileSync(arqIndice, JSON.stringify({ indice: unico, erros }, null, 1));
 console.log(erros.length ? 'ERROS:\n' + erros.join('\n') : 'sem erros');
 await browser.close(); srv.close();
