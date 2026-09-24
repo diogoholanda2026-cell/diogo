@@ -146,7 +146,7 @@ function placa(g, w, h, cor) {
 }
 
 export const tex = {
-  concrete: () => canvasTex('concrete', 256, 256, (g, w, h) => noiseRect(g, w, h, [234, 231, 222], 10, 61, 2, 30)),
+  concrete: () => canvasTex('concrete', 256, 256, (g, w, h) => noiseRectP(g, w, [234, 231, 222], 10, 61, 2, 9)),
   // cobertura verde de maquete: tufos com sombra e volume, poucas flores miúdas; o relevo sai do
   // mesmo desenho (Sobel) e vai no normalMap (tex.roofNormal)
   roof: () => {
@@ -180,23 +180,23 @@ export const tex = {
     g.putImageData(img, 0, 0);
   }, { linear: true }),
   grass: () => canvasTex('grass', 512, 512, (g, w, h) => {
-    noiseRect(g, w, h, [60, 92, 46], 24, 31, 2, 24);
+    noiseRectP(g, w, [60, 92, 46], 24, 31, 2, 21);
     for (let i = 0; i < 5000; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(20,55,20,.28)' : 'rgba(150,200,110,.18)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
   }),
   pasto: () => canvasTex('pasto', 512, 512, (g, w, h) => {
-    noiseRect(g, w, h, [100, 102, 66], 22, 57, 2, 28);
-    for (let i = 0; i < 90; i++) { const x = hash(i, 1, 58) * w, y = hash(i, 2, 58) * h, r = 6 + hash(i, 3, 58) * 26; g.fillStyle = `rgba(${112 + hash(i, 4, 58) * 20},${96 + hash(i, 5, 58) * 14},${64},0.32)`; g.beginPath(); g.ellipse(x, y, r, r * 0.7, hash(i, 6, 58) * 3, 0, 7); g.fill(); }
+    noiseRectP(g, w, [100, 102, 66], 22, 57, 2, 18);
+    for (let i = 0; i < 90; i++) { const x = hash(i, 1, 58) * w, y = hash(i, 2, 58) * h, r = 6 + hash(i, 3, 58) * 26; g.fillStyle = `rgba(${112 + hash(i, 4, 58) * 20},${96 + hash(i, 5, 58) * 14},${64},0.32)`; envolve(w, h, x, y, r, (px, py) => { g.beginPath(); g.ellipse(px, py, r, r * 0.7, hash(i, 6, 58) * 3, 0, 7); g.fill(); }); }
     for (let i = 0; i < 2600; i++) { const x = hash(i, 7, 58) * w, y = hash(i, 8, 58) * h; g.fillStyle = hash(i, 9, 58) < 0.5 ? 'rgba(80,90,40,.35)' : 'rgba(170,150,90,.25)'; g.fillRect(x, y, 1 + hash(i, 10, 58) * 2, 2 + hash(i, 11, 58) * 3); }
   }),
-  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRect(g, w, h, [40, 62, 34], 28, 35, 3, 40)),
+  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [40, 62, 34], 28, 35, 2, 13)),
   pavers: () => canvasTex('pavers', 512, 512, (g, w, h) => {
-    noiseRect(g, w, h, [200, 186, 164], 16, 51, 2, 20);
+    noiseRectP(g, w, [200, 186, 164], 16, 51, 2, 26);
     g.strokeStyle = 'rgba(90,70,50,.18)'; g.lineWidth = 1.2;
     for (let y = 0; y < h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); const off = (y / 16) % 2 ? 16 : 0; for (let x = off; x < w; x += 32) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 16); g.stroke(); } }
     for (let i = 0; i < 220; i++) { g.fillStyle = `rgba(${hash(i, 1, 52) < 0.5 ? '255,245,225' : '120,100,80'},.10)`; g.fillRect(((hash(i, 2, 52) * 32) | 0) * 16, ((hash(i, 3, 52) * 32) | 0) * 16, 32, 16); }
   }),
   sand: () => canvasTex('sand', 256, 256, (g, w, h) => {
-    noiseRect(g, w, h, [196, 170, 120], 26, 41, 2, 22);
+    noiseRectP(g, w, [196, 170, 120], 26, 41, 2, 12);
     for (let i = 0; i < 600; i++) { g.fillStyle = hash(i, 1, 42) < 0.5 ? 'rgba(120,140,60,.35)' : 'rgba(150,120,80,.3)'; g.fillRect(hash(i, 2, 42) * w, hash(i, 3, 42) * h, 2, 2 + hash(i, 4, 42) * 3); }
   }),
   // terra batida: grão fino, sem manchas grandes, com pares de marcas de pneu em arco
