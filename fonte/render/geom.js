@@ -122,8 +122,15 @@ function capEnds(path, nor, edges, out, widthFn, ends, polyIn) {
 export function terraceProfile(o) {
   const E = []; for (let f = 0; f < o.floors; f++) E.push(...terraceFloor(f, o.floors, o)); return E;
 }
+// Passeio claro na cobertura de um bloco com F andares: [o de fora, o de dentro] da faixa do meio (verde 35%,
+// passeio 30%, verde 35%), ou null se a cobertura (com os beirais) tem 0.5 ou menos de largura. A cobertura
+// (terraceFloor) e o caminho das pessoas (Faixa.caminhoTeto) usam o mesmo critério.
+export function passeioTeto(F, { o0, o1, setOut = 0, setIn = 0, lip = 0.06 }) {
+  const outer = o1 - setOut * (F - 1), inner = o0 + setIn * (F - 1), w = outer - inner + 2 * lip;
+  return w > 0.5 ? [outer + lip - w * 0.35, outer + lip - w * 0.65] : null;
+}
 // Um andar f de um bloco com F andares (o último recebe a cobertura verde; com o telhado 'roof' e largura
-// suficiente, a cobertura ganha o passeio claro no meio: verde 35%, passeio 30%, verde 35%).
+// suficiente, a cobertura ganha o passeio claro no meio).
 export function terraceFloor(f, F, { o0, o1, setOut = 0, setIn = 0, roof = 'roof', fac = 'fac_quente', facIn = null, slab = 0.09, lip = 0.06, planter = true, vBase = 0, y0: base = 0, fh = FH, passeio = true }) {
   const E = []; const fi = facIn || fac;
   const y0 = base + f * fh, y1 = y0 + fh;
@@ -142,8 +149,8 @@ export function terraceFloor(f, F, { o0, o1, setOut = 0, setIn = 0, roof = 'roof
     if (nInner > inner + 0.01) { E.push({ a: [nInner, y1], b: [inner, y1], mat: roof, uv: 'plan' }); if (planter) E.push({ a: [inner, y1 + 0.07], b: [inner, y1], mat: 'planter', uv: 'run' }); }
   } else {
     E.push({ a: [outer + lip, y1], b: [outer + lip, y1 + 0.08], mat: 'fascia', uv: 'run' });
-    const yT = y1 + 0.08, w = outer - inner + 2 * lip;
-    if (roof === 'roof' && passeio && w > 0.5) { const p0 = outer + lip - w * 0.35, p1 = outer + lip - w * 0.65; E.push({ a: [outer + lip, yT], b: [p0, yT], mat: roof, uv: 'plan' }, { a: [p0, yT], b: [p1, yT], mat: 'caminhoTeto', uv: 'plan' }, { a: [p1, yT], b: [inner - lip, yT], mat: roof, uv: 'plan' }); }
+    const yT = y1 + 0.08; const pt = roof === 'roof' && passeio ? passeioTeto(F, { o0, o1, setOut, setIn, lip }) : null;
+    if (pt) { const [p0, p1] = pt; E.push({ a: [outer + lip, yT], b: [p0, yT], mat: roof, uv: 'plan' }, { a: [p0, yT], b: [p1, yT], mat: 'caminhoTeto', uv: 'plan' }, { a: [p1, yT], b: [inner - lip, yT], mat: roof, uv: 'plan' }); }
     else E.push({ a: [outer + lip, yT], b: [inner - lip, yT], mat: roof, uv: 'plan' });
     E.push({ a: [inner - lip, y1 + 0.08], b: [inner - lip, y1], mat: 'fascia', uv: 'run' });
   }

@@ -1,7 +1,7 @@
 // Edifício-fita em terraços dividido em módulos (como as zonas residenciais do BuildIt):
 // cada módulo sobe um andar por nível. Os módulos estáveis são fundidos por material.
 import * as THREE from 'three';
-import { sweep, terraceFloor, terraceOutline, skeletonFloor, subPath, pathLength, normals, merge, beamGeo, beamMatrix, FH } from '../geom.js';
+import { sweep, terraceFloor, terraceOutline, passeioTeto, skeletonFloor, subPath, pathLength, normals, merge, beamGeo, beamMatrix, FH } from '../geom.js';
 import { M } from '../materials.js';
 import { treeGroup } from '../forest.js';
 import { hash } from '../../core/util.js';
@@ -111,10 +111,10 @@ export class Faixa {
     const p = this.prof; if (p.roof !== 'roof' || p.passeio === false) return [];
     const fh = p.fh || FH; const out = []; let cur = null, nivCur = -1;
     for (const m of this.mods) {
-      const F = m.nivel; if (F <= 0) { cur = null; continue; }
-      const ou = p.o1 - (p.setOut || 0) * (F - 1), inn = p.o0 + (p.setIn || 0) * (F - 1); if (ou - inn < 0.5) { cur = null; continue; }
-      const o = (ou + inn) / 2, y = (p.y0 || 0) + F * fh + 0.09; const nor = normals(m.path, false);
-      const pts = []; for (let k = 0; k < m.path.length; k += 2) { const [x, z] = m.path[k]; pts.push([+(x + nor[k][0] * o).toFixed(3), y, +(z + nor[k][1] * o).toFixed(3)]); }
+      const F = m.nivel; const pt = F > 0 ? passeioTeto(F, p) : null; if (!pt) { cur = null; nivCur = -1; continue; }
+      const o = (pt[0] + pt[1]) / 2, y = (p.y0 || 0) + F * fh + 0.09; const nor = normals(m.path, false); const N = m.path.length;
+      const ks = []; for (let k = 0; k < N - 1; k += 2) ks.push(k); ks.push(N - 1); // um ponto a cada 2, e sempre o último
+      const pts = ks.map((k) => [+(m.path[k][0] + nor[k][0] * o).toFixed(3), y, +(m.path[k][1] + nor[k][1] * o).toFixed(3)]);
       if (cur && nivCur === F) cur.push(...pts.slice(1)); else { cur = pts; out.push(cur); } nivCur = F;
     }
     if (this.def.closed && out.length > 1 && this.mods[0].nivel === this.mods[this.mods.length - 1].nivel && this.mods[0].nivel > 0) { const ult = out.pop(); out[0] = [...ult, ...out[0].slice(1)]; }
