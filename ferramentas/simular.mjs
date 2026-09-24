@@ -3,14 +3,15 @@
 // Uso: node ferramentas/simular.mjs [passo_min=3] [ritmo=1]
 //   SESSOES='7:30-7:45,12:30-12:45,18:30-18:45,22:00-22:15'  joga só nessas janelas (fora delas o tempo passa)
 //   ESCOLHA=0|1|alt  opção do Conselho   MUTIRAO=1 usa fichas   DEPOSITO=1 compra matéria-prima
-//   ROBO=meta  só coleta e segue J.planoMeta()   CADEIA=1 encomenda em cadeia   SEMENTE=n sorteios fixos
+//   ROBO=meta  só coleta e segue J.planoMeta() (Meta em foco)   CADEIA=1 encomenda em cadeia   SEMENTE=n sorteios fixos
 //   ETAPAS=1 registra cada etapa e módulo      RELATORIO=1 detalhes por capítulo
 // npm run simular:todos (node ferramentas/simular.mjs --todos): testes de regra, matriz de 8 combinações e
 // dilemas; sai com código 1 se houver TRAVADO ou algum número fora das faixas.
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO } from '../fonte/sim/estado.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS, receitas } from '../fonte/data/itens.js';
-import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP, SERVICO_NIVEL, BEM_NIVEL } from '../fonte/data/obras.js';
+import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../fonte/data/obras.js';
 import { CAPITULOS, FALAS_ETAPA, EFEITOS, TUTORIAL } from '../fonte/data/historia.js';
 
 const DIA0 = Date.UTC(2026, 0, 1); const H = 3600e3;
@@ -109,7 +110,9 @@ function partida(o) {
     // licenças: o topógrafo resolve o que faltar (uma por vez)
     for (const p of PROJETOS) { const nx = J.proximaEtapa(p); if (!nx || !['disponivel', 'prancha'].includes(nx.s)) continue; const f = J.faltaEtapa(p.id + '.' + nx.e.id); for (const k of LIC) if (f[k] && !S.topografo) conta(J.encomendarLicenca(k)); }
     // obras: primeiro as das metas; as outras só com reserva para as metas que ainda esperam material
+    // (e, na reta final do capítulo 5, com o custo do epílogo guardado, como faz quem vê a prancha do replantio)
     const bloq = new Set(); let reserva = 0;
+    if (S.cap === 5 && (S.marcos[5] || 0) >= 2) for (const e of PROJ.reflorestar.etapas) reserva += J.custoEtapa(PROJ.reflorestar, e);
     const tentar = (p, meta) => {
       if (p.cap > S.cap) { for (const e of p.etapas) if (J.aceitaEntrega(p, e)) J.entregarTudo(p.id + '.' + e.id); return; }
       for (const e of p.etapas) {
@@ -136,7 +139,9 @@ function partida(o) {
     for (const x of OFICINAS) {
       const o2 = S.predios[x]; if (!o2.ok) continue;
       const cand = pl.prod.filter(([k]) => ITENS[k].oficina === x && J.liberado(k)).sort((a, b) => a[2] - b[2] || b[3] - a[3]).map(([k, d]) => [k, d]);
-      for (let volta = 0; volta < 12 && o2.fila.length < J.vagasFila(x); volta++) { let fez = false; for (const cd of cand) { if (cd[1] <= 0 || o2.fila.length >= J.vagasFila(x)) continue; if (conta(J.enfileirar(x, cd[0], !!o.cadeia)) === 'ok') { cd[1]--; fez = true; } } if (!fez) break; }
+      // como um jogador: o insumo que uma encomenda mais importante espera não vai para uma menos importante
+      const espera = new Set();
+      for (let volta = 0; volta < 12 && o2.fila.length < J.vagasFila(x); volta++) { let fez = false; for (const cd of cand) { if (cd[1] <= 0 || o2.fila.length >= J.vagasFila(x)) continue; const req = Object.keys(ITENS[cd[0]].req); if (req.some((r) => espera.has(r))) continue; const r = conta(J.enfileirar(x, cd[0], !!o.cadeia)); if (r === 'ok') { cd[1]--; fez = true; } else if (r === 'falta') for (const k of req) espera.add(k); } if (!fez) break; }
     }
     // usinas: matérias-primas do plano (metas primeiro); sem plano, só se sobrar espaço no almoxarifado
     const raws = []; for (const [k, d, pr] of pl.bruto.sort((a, b) => a[2] - b[2])) if (J.liberado(k)) { const r = raws.find((x) => x[0] === k); if (r) r[1] += d; else raws.push([k, d]); }
@@ -161,7 +166,7 @@ function partida(o) {
       else if (pl.acao === 'coletar') { if (a.repasse) r = J.coletarRepasse(); else if (PREDIOS[a.predio].tipo === 'usina') { for (const i of J.prontosUsina(a.predio)) r = J.coletarUsina(a.predio, i); } else r = J.coletarOficina(a.predio); if (r === 'almox') { venderSobras(plano(prioridades()).need); r = 'x'; } }
       else if (pl.acao === 'iniciar') r = a.etapa ? J.iniciarEtapa(a.etapa) : J.melhorarModulo(a.modulo[0], a.modulo[1]);
       else if (pl.acao === 'entregar') r = J.entregar(a.etapa, pl.item, pl.n);
-      else if (pl.acao === 'construir') r = a.almox ? J.ampliarAlmox() : J.construirPredio(a.predio);
+      else if (pl.acao === 'construir') r = a.almox ? J.ampliarAlmox() : a.ampliar ? J.ampliar(a.ampliar) : J.construirPredio(a.predio);
       else if (pl.acao === 'vender') { const L = J.livre; venderSobras(plano(prioridades()).need); r = J.livre > L ? 'ok' : 'x'; }
       else if (pl.acao === 'produzir') { if (a.topografo) r = J.encomendarLicenca(a.topografo); else for (let q = 0; q < Math.max(1, pl.n); q++) { const x = PREDIOS[a.predio].tipo === 'usina' ? J.produzir(a.predio, pl.item) : J.enfileirar(a.predio, pl.item); if (x !== 'ok') break; r = 'ok'; } }
       if (r !== 'ok') { if (J.livre < 4) venderSobras(plano(prioridades()).need); break; } acoes++;
@@ -182,11 +187,11 @@ function partida(o) {
   const acabou = () => J.feita('reflorestar.e1');
   while (t < limite && !acabou()) {
     if (dentro()) { t += passo; fimSessao = !!janelas && !dentro(); t -= passo; turno(); t += passo; } else t = proxJanela();
-    if (S.cap !== capAnt) { const c = m(capAnt); c.dur = (t - c.ini) / H; c.credFim = S.creditos; c.bemFim = J.bem; capAnt = S.cap; m(S.cap).ini = t; }
+    if (S.cap !== capAnt) { const c = m(capAnt); c.dur = (t - c.ini) / H; c.credFim = S.creditos; c.bemFim = J.bem; c.popFim = J.pop; capAnt = S.cap; m(S.cap).ini = t; }
     const v = J.vida(); if (Math.abs(v - vidaAnt) > 1e-6) { vidaAnt = v; tVida = t; }
     if (t - tVida > (janelas ? 72 : 24) * H) { travou = `TRAVADO no capítulo ${S.cap}, nível ${S.nivel}, créditos ${S.creditos}, vida ${v.toFixed(1)}%`; log.push(`${hora()} ${travou}`); break; }
   }
-  { const c = m(capAnt); c.dur = (t - c.ini) / H; c.credFim = S.creditos; c.bemFim = J.bem; }
+  { const c = m(capAnt); c.dur = (t - c.ini) / H; c.credFim = S.creditos; c.bemFim = J.bem; c.popFim = J.pop; }
   const fimT = t; const oficinas = {}; for (const id of [...USINAS, ...OFICINAS]) if (desde[id] != null && S.predios[id].ok) oficinas[id] = (util[id] || 0) / Math.max(1, fimT - desde[id]);
   for (const c of Object.values(M)) { const a = c.obrasAm.slice().sort((x, y) => x - y); c.obrasP95 = a.length ? a[Math.floor(a.length * 0.95)] : 0; delete c.obrasAm; }
   return { o, log, M, horas: (fimT - T0) / H, dias: (fimT - T0) / (24 * H), terminou: acabou(), travou, S, J, oficinas, nNovo, nNovo6, nFim, nNivelEv,
@@ -194,7 +199,7 @@ function partida(o) {
 }
 
 // ------------------------------------------------------------------ relatório
-const custoCap = {}; for (const p of PROJETOS) for (const e of p.etapas) { const c = e.cap || p.cap; custoCap[c] = (custoCap[c] || 0) + e.custo; }
+const custoSeguinte = (J, k) => { let v = 0; for (const p of PROJETOS) for (const e of p.etapas) if (J.capEtapa(p, e) === k + 1) v += J.custoEtapa(p, e); return v; };
 function relatorio(R, det = true) {
   const L = [...R.log];
   L.push(`FIM ${R.horas.toFixed(1)} h (${R.dias.toFixed(1)} dias) nível ${R.S.nivel} créditos ${R.S.creditos} fichas ${R.S.mutirao} pop ${R.J.pop} bem ${R.J.bem}% serv ${JSON.stringify(R.J.serv)}`);
@@ -219,8 +224,9 @@ function faixasSessoes(R, nome, falhas, o = {}) {
     if (+k === 1) f(c.dur <= 36, `capítulo 1 em ${(c.dur / 24).toFixed(2)} dias (o começo é rápido: máx. 1,5)`);
     else if (+k <= 5) f(c.dur >= 36 && c.dur <= 96, `capítulo ${k} em ${(c.dur / 24).toFixed(2)} dias (faixa 1,5 a 4)`);
     else f(c.dur <= 8, `epílogo em ${c.dur.toFixed(1)} h (máx. 8)`);
-    // o epílogo é curto de propósito (uma festa, não uma moagem): a regra de inflação vale para os capítulos 1 a 4
-    if (+k <= 4) f(c.credFim <= 1.5 * custoCap[+k + 1], `créditos no fim do capítulo ${k}: ${c.credFim} > 1,5 × ${custoCap[+k + 1]}`);
+    // inflação: o que sobra no fim de um capítulo não passa de 1,5 × o custo do seguinte (com os efeitos das escolhas),
+    // inclusive no fim do capítulo 5, diante do epílogo
+    if (+k <= 5) { const cs = custoSeguinte(R.J, +k); f(c.credFim <= 1.5 * cs, `créditos no fim do capítulo ${k}: ${c.credFim} > 1,5 × ${cs}`); }
   }
   const of = Object.entries(R.oficinas).filter(([k]) => PREDIOS[k].tipo === 'oficina'); const media = of.reduce((a, [, v]) => a + v, 0) / Math.max(1, of.length);
   f(media >= 0.15, `oficinas ocupadas ${(media * 100).toFixed(0)}% em média (mín. 15%)`);
@@ -241,7 +247,7 @@ export function invariantes() {
     let piorBem = 0, piorEnergia = 0; for (let k = 1; k < c; k++) { const op = CAPITULOS[k - 1].escolha || []; const v = (id, q) => { let s = 0; for (const parte of [EFEITOS[id]?.bonus, EFEITOS[id]?.custo]) if (parte && !(parte.ateCap && c >= parte.ateCap)) s += parte[q] || 0; return s; }; if (op.length) { piorBem += Math.min(...op.map((x) => v(x.id, 'bem'))); piorEnergia += Math.min(...op.map((x) => v(x.id, 'energia'))); } }
     serv.energia += piorEnergia; const niveis = Math.max(...Object.entries(MODULOS).filter(([, M]) => M.cap <= c).map(([f, M]) => Math.min(M.max, lim(f))));
     for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (niveis >= +lv) for (const k of ks) if (serv[k] < pop) erros.push(`capítulo ${c}: ${k} ${serv[k]} < população possível ${pop}`);
-    for (const [lv, b] of Object.entries(BEM_NIVEL)) if (niveis >= +lv) { const v = 35 + bem + piorBem - (pop - min5) / 250; if (v < b) erros.push(`capítulo ${c}: bem-estar no último pavimento ${v.toFixed(1)} < ${b} com a pior escolha`); }
+    for (const [lv, b] of Object.entries(BEM_NIVEL)) if (niveis >= +lv) { const v = 35 + bem + piorBem - (pop - min5) / PRESSAO_MORADIA; if (v < b) erros.push(`capítulo ${c}: bem-estar no último pavimento ${v.toFixed(1)} < ${b} com a pior escolha`); }
   }
   return erros;
 }
@@ -274,15 +280,26 @@ function testes() {
       const a = prepararSave(v1(1), T); const Ja = new Jogo(a); f(Number.isFinite(Ja.ocupado) && a.v === 2 && a.itens.estaca === 0 && a._orfaos?.itens?.nó === 3 && a._orfaos?.predios?.velho && a._orfaos?.modulos?.anel && a.dicas.guia === 1, 'migração do início');
       const b0 = v1(3, { mutirao: 5, capEscolhas: { 1: 'usina+', 2: 'mutirao2' }, bonus: { usina: 0.15, oficina: 0, almox: 0, repasse: 0, bem: 0, xp: 0 }, nivel: 16, xp: 9000, creditos: 50000 }); b0.itens.kitvet = 2; b0.predios.laboratorio = { ok: true, fila: [{ item: 'racao', ini: T - 1000, fim: T + 1000 }], prontos: [], nFila: 4 }; b0.etapas['biblioteca.e1'] = { estado: 'feita', entregue: {} }; b0.modulos.anel.forEach((x) => (x.nivel = 3));
       const b = prepararSave(b0, T); const Jb = new Jogo(b); Jb.agora = T;
-      f(b.mutirao === 3 && b.disposicao === 100 && Jb.ef.usina === 0.15 && b.capEscolhas[1] === 'legado:usina+' && b.creditos === 50000 && b.nivel === 16 && b.feita !== 0 && Jb.feita('biblioteca.e1') && b.modulos.anel.every((x) => x.nivel === 3), 'migração do capítulo 3 (bônus, fichas, progresso)');
+      f(b.mutirao === 3 && b.disposicao === 100 && Jb.ef.usina === 0.15 && b.capEscolhas[1] === 'legado:usina+' && b.creditos === 50000 + 4500 && b._avisos?.length === 1 && b.nivel === 16 && b.feita !== 0 && Jb.feita('biblioteca.e1') && b.modulos.anel.every((x) => x.nivel === 3), 'migração do capítulo 3 (bônus, fichas, progresso)');
       f(Jb.liberado('racao') === false || b.legado.includes('racao'), 'item do capítulo 5 na fila continua liberado'); f(b.predios.laboratorio.fila.length === 1, 'fila preservada');
       f(Math.abs(Jb.durItem('bloco') - ITENS.bloco.t0 * 1000 * F_PRODUTO) < 1 && Jb.fObra(3) === 0.7, 'ritmo novo entra em rampa');
       const c0 = v1(6, { capEscolhas: { 1: 'usina+', 2: 'repasse+', 3: 'bem+', 4: 'xp+', 5: 'mutirao2' } }); c0.etapas['reflorestar.e1'] = { estado: 'prancha', entregue: { muda: 15, substrato: 2 } }; const muda0 = c0.itens.muda;
       const c = prepararSave(c0, T); f(c.etapas['reflorestar.e1'].entregue.muda === 8 && c.itens.muda === muda0 + 7 && !c.etapas['reflorestar.e0'], 'epílogo antigo: entrega acima do pedido volta ao almoxarifado');
       const d = prepararSave(prepararSave(v1(2), T), T); f(d.v === 2 && !d._orfaos?.x, 'normalizar é idempotente');
+      const d2 = prepararSave({ ...novoEstado(T), mutirao: 7, disposicao: 250, creditos: -5 }, T); f(d2.mutirao === 3 && d2.disposicao === 100 && d2.creditos === 0, 'normalizar limita fichas, disposição e créditos');
       const e = prepararSave({ v: 1, itens: { madeira: 'x' }, modulos: {}, etapas: { 'nada.e1': {} } }, T); f(new Jogo(e).ocupado === 0 && e._orfaos.etapas['nada.e1'], 'save quebrado vira jogo válido');
+      let g = null; try { g = prepararSave({ v: 1, cap: 2, itens: {}, modulos: { anel: 5 }, predios: { carpintaria: { ok: true, fila: 5, prontos: 'x' }, x: { fila: 5 } }, pedidos: [{ itens: 5 }], etapas: { 'reflorestar.e1': 5 } }, T); const Jg = new Jogo(g); Jg.tick(T + H); } catch (err) { g = null; } f(g && g.predios.carpintaria.ok && g.predios.carpintaria.fila.length === 0, 'save com listas quebradas não pode lançar exceção');
+      let h = null; try { const h0 = JSON.parse(JSON.stringify(novoEstado(T))); h0.etapas['constructor.e1'] = { estado: 'feita' }; h0.itens.toString = 3; h0.predios.hasOwnProperty = { ok: true }; h0.topografo = { k: 'valueOf' }; h0.capEscolhas = { 1: 'constructor' }; h = prepararSave(h0, T); new Jogo(h).tick(T + H); } catch (err) { h = null; }
+      f(h && h._orfaos?.etapas?.['constructor.e1'] && h.topografo === null && !Object.hasOwn(h.itens, 'toString'), "save com chaves como 'constructor' não pode lançar exceção");
       // o robô continua cada save migrado até o fim, sem trava
       for (const [nome, v] of [['início', v1(1)], ['capítulo 3', b0], ['epílogo', c0]]) { const R = rodar({ estado: v, passo: 5, semente: 3 }); f(R.terminou && !R.travou, `robô a partir do save v1 (${nome}): ${R.travou || 'não terminou'}`); } }
+    // recarregar não dá vagas de fila de graça nem devolve material entregue a mais por causa de uma escolha
+    { let S = novoEstado(T); S.cap = 3; S.capEscolhas = { 1: 'amplo', 2: 'biblio24h' }; S.predios.carpintaria.ok = true; S.predios.carpintaria.fila = Array.from({ length: 6 }, () => ({ item: 'viga', ini: 0, fim: 0 }));
+      S.etapas['biblioteca.e1'] = { estado: 'feita', entregue: {} }; S.etapas['biblioteca.e2'] = { estado: 'feita', entregue: {} }; S.etapas['biblioteca.e3'] = { estado: 'prancha', entregue: { estante: 8, trelica: 3 } }; S.etapas['crd.e1'] = { estado: 'obra', entregue: { premoldado: 5 }, ini: T, fim: T + H }; // em obra o material já foi usado (mesmo acima do pedido-base)
+      const est0 = S.itens.estante, pre0 = S.itens.premoldado; for (let i = 0; i < 3; i++) S = prepararSave(JSON.parse(JSON.stringify(S)), T); const J = new Jogo(S);
+      f(S.predios.carpintaria.nFila === 3 && J.vagasFila('carpintaria') === 6, `recarregar com 'amplo' deu vagas de graça (nFila ${S.predios.carpintaria.nFila})`);
+      f(S.etapas['biblioteca.e3'].entregue.estante === 8 && S.itens.estante === est0 && !J.faltaEtapa('biblioteca.e3').estante, 'recarregar devolveu estantes pedidas pela escolha biblio24h');
+      f(S.etapas['crd.e1'].entregue.premoldado === 5 && S.itens.premoldado === pre0, 'recarregar devolveu material de etapa em obra'); }
     // depósito: estoque de 10, preço sobe; venda até 20 por janela
     { const S = novoEstado(T); const J = new Jogo(S); J.agora = T; S.creditos = 1e6; S.nivel = 5; const p0 = J.precoCompra('madeira'); for (let i = 0; i < 12; i++) J.comprar('madeira'); f(S.itens.madeira === 16 && J.estoqueDeposito('madeira').n === 0 && J.comprar('madeira') === 'esgotado' && J.precoCompra('madeira') > p0, 'estoque do depósito');
       S.itens.brita = 40; J.vender('brita', 30); f(S.itens.brita === 20 && J.vender('brita', 1) === 'limite', 'limite de vendas'); J.agora = T + 4 * H; J.tick(T + 4 * H); f(J.estoqueDeposito('madeira').n === 10, 'estoque renova na janela seguinte'); }
@@ -294,7 +311,16 @@ function testes() {
     { const S = novoEstado(T); const J = new Jogo(S); const ev = []; J.on((t, d) => ev.push([t, d])); S.predios.carpintaria.ok = true; J._verCapitulo(); S.etapas['pas_frente.e1'] = { estado: 'feita', entregue: {} }; J._verCapitulo(); f(S.marcos[1] === 1 && ev.some(([t]) => t === 'fala'), 'marco em 1/3 das metas');
       S.cap = 2; S.nivel = 8; J._derivar(); J.tick(T + 1000); f(S.pedidos.length === 3 && S.pedidos.every((p) => p.itens && p.quem && p.fala && p.recompensa), 'pedidos no capítulo 2: 3 cartões com rosto'); S.cap = 4; J.tick(T + 2000); f(S.pedidos.length === 6, '6 cartões do capítulo 4');
       S.cap = 5; J._derivar(); S.itens.muda = 10; f(J.entregar('reflorestar.e1', 'muda') === 'ok' && S.etapas['reflorestar.e1'].entregue.muda === 8, 'prancha do epílogo aceita entregas no capítulo 5'); f(J.iniciarEtapa('reflorestar.e1') === 'bloqueada', 'epílogo só inicia no capítulo 6');
-      const S3 = novoEstado(T); const J3 = new Jogo(S3); const pl = J3.planoMeta(); f(pl && pl.acao !== 'aguardar' && pl.texto, 'planoMeta no início: ' + JSON.stringify(pl)); f(J3.metaProgresso(CAPITULOS[0].metas[4]).txt === '0/3', 'metaProgresso de módulos'); }
+      const S3 = novoEstado(T); const J3 = new Jogo(S3); const pl = J3.planoMeta(); f(pl && pl.acao !== 'aguardar' && pl.texto, 'planoMeta no início: ' + JSON.stringify(pl)); f(J3.metaProgresso(CAPITULOS[0].metas[4]).txt === '0/3', 'metaProgresso de módulos');
+      // bandeja cheia de outro produto: a Meta em foco manda coletar (a fila parada nunca entrega as vigas)
+      const S4 = novoEstado(T); const J4 = new Jogo(S4); J4.agora = T; S4.nivel = 5; S4.predios.carpintaria.ok = true; for (const k of ['pas_frente.e1', 'lago.e1', 'sede.e1']) S4.etapas[k] = { estado: 'feita', entregue: {} }; S4.modulos.anel.slice(0, 3).forEach((x) => (x.nivel = 2)); S4.etapas['sede.e2'] = { estado: 'prancha', entregue: { concreto: 3 } };
+      const o4 = S4.predios.carpintaria; o4.prontos = Array(9).fill('deque'); o4.fila = Array.from({ length: 3 }, () => ({ item: 'viga', ini: 0, fim: 0 })); S4.itens.viga = 0; J4._derivar();
+      const p4 = J4.planoMeta(); f(p4?.acao === 'coletar' && p4.alvo?.predio === 'carpintaria', 'bandeja cheia: a Meta em foco deveria mandar coletar (' + p4?.texto + ')');
+      J4.coletarOficina('carpintaria'); J4.tick(T + 3 * H); f(S4.predios.carpintaria.prontos.filter((k) => k === 'viga').length === 3, 'depois da coleta as vigas saem');
+      // encomenda em cadeia sem insumos: o plano pede os insumos, não mais uma encomenda do mesmo produto
+      const S5 = novoEstado(T); const J5 = new Jogo(S5); J5.agora = T; S5.nivel = 5; S5.predios.carpintaria.ok = true; for (const k of ['pas_frente.e1', 'lago.e1', 'sede.e1']) S5.etapas[k] = { estado: 'feita', entregue: {} }; S5.modulos.anel.slice(0, 3).forEach((x) => (x.nivel = 2)); S5.etapas['sede.e2'] = { estado: 'prancha', entregue: { concreto: 3 } };
+      S5.itens.madeira = 0; S5.itens.viga = 0; S5.predios.carpintaria.fila = Array.from({ length: 4 }, () => ({ item: 'viga', ini: 0, fim: 0, pend: true, desde: T })); J5._derivar();
+      const p5 = J5.planoMeta(); f(p5?.acao === 'produzir' && p5.item === 'madeira', 'vigas pendentes: a Meta em foco deveria pedir madeira (' + p5?.texto + ')'); }
     // tutorial: cada passo tem fala e teste
     f(TUTORIAL.every((p) => p.id && p.quem && p.fala && p.alvo && typeof p.feito === 'function'), 'tutorial incompleto');
   } catch (e) { falhas.push('teste: exceção ' + (e.stack || e.message)); }
@@ -307,7 +333,7 @@ function todos() {
   const falhas = [...invariantes().map((x) => 'invariante: ' + x), ...testes()]; const sem = 1; const linhas = [];
   const roda = (nome, o) => { const t0 = Date.now(); const R = rodar({ semente: sem, ...o }); linhas.push(`\n=== ${nome} (${((Date.now() - t0) / 1000).toFixed(1)} s)\n${relatorio(R, !!process.env.RELATORIO)}`); if (R.travou || !R.terminou) falhas.push(`${nome}: ${R.travou || 'não terminou'}`); return R; };
   const A = roda('contínuo, passo 1 min, escolha 0', { passo: 1, escolha: 0 });
-  if (A.M[1]) { const h = A.M[1].dur; if (h > 1) falhas.push(`contínuo: capítulo 1 em ${(h * 60).toFixed(0)} min (máx. 60)`); linhas.push(`capítulo 1 em ${(h * 60).toFixed(0)} min (meta 30 a 45)`); }
+  if (A.M[1]) { const min = A.M[1].dur * 60; if (min < 30 || min > 45) falhas.push(`contínuo: capítulo 1 em ${min.toFixed(0)} min (faixa 30 a 45)`); linhas.push(`capítulo 1 em ${min.toFixed(0)} min (faixa 30 a 45)`); }
   const B = roda('contínuo, passo 2 min, escolha 1', { passo: 2, escolha: 1 });
   for (const [k, c] of Object.entries(B.M)) if (c.parado / Math.max(1, c.turnos) > 0.35) falhas.push(`contínuo passo 2: capítulo ${k} com ${((100 * c.parado) / c.turnos).toFixed(0)}% de turnos parados (máx. 35%)`);
   const ses = { sessoes: SESSOES_PADRAO, passo: 1 };
@@ -318,21 +344,36 @@ function todos() {
   if (E.terminou && F.terminou && E.horas < 0.85 * F.horas) falhas.push(`depósito encurta o jogo demais: ${E.dias.toFixed(1)} contra ${F.dias.toFixed(1)} dias (máx. 15%)`);
   const G = roda('sessões, encomenda em cadeia', { ...ses, escolha: 0, cadeia: 1 }); faixasSessoes(G, 'sessões cadeia', falhas);
   const H = roda('sessões, robô da Meta em foco', { ...ses, escolha: 0, robo: 'meta' });
+  // quem só segue a Meta em foco (que também manda adiantar produção, subir módulos em paralelo, pré-entregar o epílogo
+  // e ampliar o que trava) termina na mesma faixa de 12 a 16 dias, com o epílogo em até 8 h
+  if (H.terminou && C.terminou) { const ep = H.M[6]?.dur ?? 0; linhas.push(`Meta em foco: ${H.dias.toFixed(1)} dias (${(H.dias / C.dias).toFixed(2)} × o robô normal; faixa 12 a 16), epílogo ${ep.toFixed(1)} h, créditos no fim ${H.S.creditos}`);
+    if (H.dias < 12 || H.dias > 16 || H.dias > 1.5 * C.dias) falhas.push(`Meta em foco: ${H.dias.toFixed(1)} dias (faixa 12 a 16, máx. 1,5 × ${C.dias.toFixed(1)})`); if (ep > 8) falhas.push(`Meta em foco: epílogo em ${ep.toFixed(1)} h (máx. 8)`); }
+  // bem-estar: ~77% no fim do capítulo 3 (média das sessões) e sem saturar antes do capítulo 5, para a pressão de
+  // moradia e as opções de bem-estar dos dilemas pesarem
+  const b3 = [C, D, E, F, G].filter((R) => R.M[3]).map((R) => R.M[3].bemFim); const mb3 = b3.reduce((a, b) => a + b, 0) / Math.max(1, b3.length);
+  linhas.push(`bem-estar no fim do capítulo 3: ${b3.join(', ')} (média ${mb3.toFixed(0)}%, faixa 70 a 85); fim dos capítulos 2 a 4: ${[C, D, E, F, G].map((R) => [2, 3, 4].map((k) => R.M[k]?.bemFim).join('/')).join(', ')}`);
+  if (mb3 < 70 || mb3 > 85 || b3.some((x) => x < 55 || x > 90)) falhas.push(`bem-estar no fim do capítulo 3: ${b3.join(', ')} (média ${mb3.toFixed(0)}%)`);
+  for (const R of [A, B, C, D, E, F, G]) for (const k of [2, 3, 4]) if (R.M[k]?.bemFim >= 100) falhas.push(`bem-estar saturou em 100% no fim do capítulo ${k}`);
   const san = [C, D, E, F, G].flatMap((R) => Object.values(R.M).map((c) => (c.bloqTurnos['serv:saneamento'] || 0) / Math.max(1, c.turnos))); linhas.push(`bloqueio por saneamento: até ${(Math.max(...san) * 100).toFixed(0)}% dos turnos de um capítulo`);
   if (!san.some((x) => x > 0) || san.some((x) => x >= 0.2)) falhas.push(`saneamento: bloqueio de ${(Math.max(...san) * 100).toFixed(0)}% (precisa ser > 0 e < 20%)`);
   const lic = [C, D, E, F, G, H].reduce((a, R) => a + Object.values(R.M).reduce((b, c) => b + (c.bloq['etapa:licenca'] || 0), 0), 0); linhas.push(`bloqueio por licença nas sessões: ${lic} min`); if (!lic) falhas.push('licenças nunca faltaram (a topografia não pesa)');
   // dilemas: só a escolha do capítulo k muda (a opção 0 cuida das pessoas, a 1 acelera a obra); compara o capítulo seguinte
   // e o resto do jogo no ritmo de trabalho contínuo (passo 2 min, 3 sementes fixas), onde a escolha não some no intervalo
-  // entre sessões. O dilema do capítulo 5 só vale para o epílogo, que é curto de propósito, e fica de fora da conta.
+  // entre sessões. O dilema do capítulo 5 pesa no epílogo, que é curto de propósito: conta como os outros (≥ 8% no epílogo),
+  // e a armadilha ali é o epílogo passar de 3 h no contínuo (nas sessões, cada opção tem de fechá-lo em 8 h).
   const SEM = [1, 2, 3]; const cont = { passo: 2 }; const base = SEM.map((x) => rodar({ semente: x, ...cont, escolha: 0 })); const difs = []; const med = (L, f) => L.reduce((a, R) => a + f(R), 0) / L.length;
-  for (let k = 1; k <= 4; k++) {
+  for (let k = 1; k <= 5; k++) {
     const V = SEM.map((x) => rodar({ semente: x, ...cont, escolha: 0, escolhas: { [k]: 1 } })); if (V.some((R) => !R.terminou)) { falhas.push(`dilema ${k}: opção 1 não terminou`); continue; }
     const cap = (R) => R.M[k + 1]?.dur || 0, resto = (R) => R.horas - Object.entries(R.M).filter(([c]) => +c <= k).reduce((x, [, c]) => x + c.dur, 0);
-    const a = med(base, cap), b = med(V, cap), ra = med(base, resto), rb = med(V, resto); const d = Math.abs(b - a) / Math.max(a, b), dr = Math.abs(rb - ra) / Math.max(ra, rb); difs.push([d, dr]);
-    linhas.push(`dilema do capítulo ${k}: capítulo ${k + 1} ${a.toFixed(1)} × ${b.toFixed(1)} h (${(d * 100).toFixed(0)}%), resto do jogo ${ra.toFixed(0)} × ${rb.toFixed(0)} h (${(dr * 100).toFixed(0)}%)`);
+    const a = med(base, cap), b = med(V, cap), ra = med(base, resto), rb = med(V, resto); const d = Math.abs(b - a) / Math.max(a, b), dr = Math.abs(rb - ra) / Math.max(ra, rb);
+    if (k === 5) { linhas.push(`dilema do capítulo 5: epílogo ${(a * 60).toFixed(0)} × ${(b * 60).toFixed(0)} min (${(d * 100).toFixed(0)}%)`); difs.push([d, 0]); if (Math.max(...base.map(cap), ...V.map(cap)) > 3) falhas.push('dilema 5: epílogo passou de 3 h no contínuo (armadilha)'); continue; }
+    difs.push([d, dr]); linhas.push(`dilema do capítulo ${k}: capítulo ${k + 1} ${a.toFixed(1)} × ${b.toFixed(1)} h (${(d * 100).toFixed(0)}%), resto do jogo ${ra.toFixed(0)} × ${rb.toFixed(0)} h (${(dr * 100).toFixed(0)}%)`);
   }
-  const pesam = difs.filter(([d, dr]) => Math.max(d, dr) >= 0.08).length; if (pesam < 3) falhas.push(`dilemas: só ${pesam} com diferença ≥ 8% (mín. 3)`);
+  const pesam = difs.filter(([d, dr]) => Math.max(d, dr) >= 0.08).length; if (pesam < 3) falhas.push(`dilemas: só ${pesam} com diferença ≥ 8% (mín. 3)`); linhas.push(`dilemas que pesam (≥ 8%): ${pesam} de ${difs.length}`);
   if (difs.some(([d, dr]) => Math.max(d, dr) > 0.2)) falhas.push('dilemas: alguma opção muda o tempo em mais de 20% (armadilha)');
+  // projetos condicionais (pas_frente2, pas_caracol): com passarelas de mentira na planta, entram no jogo e o robô termina
+  const pr = spawnSync(process.execPath, ['--import', new URL('./passarelas-teste.mjs', import.meta.url).href, fileURLToPath(import.meta.url), '--passarelas'], { encoding: 'utf8' });
+  linhas.push('passarelas condicionais: ' + (pr.stdout || pr.stderr || '').trim().split('\n').join(' | ')); if (pr.status !== 0) falhas.push('passarelas condicionais: ' + (pr.stdout || pr.stderr || '').trim());
   console.log(linhas.join('\n'));
   console.log(falhas.length ? `\nFALHAS (${falhas.length}):\n- ` + falhas.join('\n- ') : '\nTudo nas faixas.');
   process.exitCode = falhas.length ? 1 : 0;
@@ -341,6 +382,12 @@ function todos() {
 // ------------------------------------------------------------------ linha de comando
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes('--todos')) todos();
+  else if (process.argv.includes('--passarelas')) { // com a pré-carga passarelas-teste.mjs
+    const f = []; if (!PROJ.pas_frente2 || !PROJ.pas_caracol) f.push('pas_frente2/pas_caracol não entraram (rode com --import ./ferramentas/passarelas-teste.mjs)');
+    else { f.push(...invariantes()); const R = rodar({ passo: 3, semente: 1 }); if (R.travou || !R.terminou) f.push(R.travou || 'não terminou'); for (const k of ['pas_frente2.e1', 'pas_caracol.e1']) if (!R.J.feita(k)) f.push(k + ' não foi feita');
+      if (!f.length) console.log(`ok (${R.dias.toFixed(1)} dias no contínuo, as duas passarelas feitas)`); }
+    if (f.length) console.log(f.join('; ')); process.exitCode = f.length ? 1 : 0;
+  }
   else if (process.argv.includes('--testes')) { const f = [...invariantes(), ...testes()]; console.log(f.length ? f.join('\n') : 'testes ok'); process.exitCode = f.length ? 1 : 0; }
   else {
     const E = process.env; const R = rodar({ passo: +(process.argv[2] || 3), ritmo: +(process.argv[3] || 1), sessoes: E.SESSOES === '1' ? SESSOES_PADRAO : E.SESSOES, escolha: E.ESCOLHA || 0, mutirao: !!+E.MUTIRAO, deposito: !!+E.DEPOSITO, robo: E.ROBO, cadeia: !!+E.CADEIA, semente: E.SEMENTE != null ? +E.SEMENTE : undefined, etapas: !!E.ETAPAS });
