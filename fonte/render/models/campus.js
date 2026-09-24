@@ -3,12 +3,13 @@
 import * as THREE from 'three';
 import { A } from '../../data/planta.js';
 import { M, dupla } from '../materials.js';
-import { curve, beams, FH } from '../geom.js';
+import { curve, beams, sweep, FH } from '../geom.js';
 import { treeGroup } from '../forest.js';
 import { hash, rng } from '../../core/util.js';
 import { Faixa } from './faixa.js';
 
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
+const addMap = (grp, map, matFn) => { for (const [k, g] of map) grp.add(mesh(g, matFn(k))); };
 function blobPts(cx, cz, rx, rz, rot, seed, n = 60) { const out = []; const c = Math.cos(rot), s = Math.sin(rot); const p1 = hash(seed, 1, 5) * 6; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const k = 1 + 0.12 * Math.sin(2 * a + p1) + 0.06 * Math.sin(3 * a + p1 * 2); const x = Math.cos(a) * rx * k, z = Math.sin(a) * rz * k; out.push([cx + x * c - z * s, cz + x * s + z * c]); } return out; }
 function plate(pts, y, h, mat) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); return mesh(g, mat); }
 
@@ -25,22 +26,41 @@ function playground(cx, cz, y, seed) {
   return g;
 }
 // aglomerado de blocos brancos (laboratórios / institutos), dividido em duas etapas
-function blocos(cx, cz, w, d, rot, nx, nz, seed) {
+// um bloco branco de laboratório com faixa de janelas e cobertura (painéis solares em parte deles)
+function bloco(low, high, solar, x, z, ry, bx, bz, floors, R) {
+  for (let f = 0; f < floors; f++) {
+      const grp = f === 0 ? low : high; const sw = f ? 0.88 : 1;
+      const b = mesh(new THREE.BoxGeometry(bx * sw, FH - 0.04, bz * sw), f % 2 ? M.white : M.whiteSmooth); b.position.set(x, f * FH + FH / 2, z); b.rotation.y = ry; grp.add(b);
+      const win = mesh(new THREE.BoxGeometry(bx * sw * 1.01, FH * 0.36, bz * sw * 1.01), M.fac_lab, false); win.position.set(x, f * FH + FH * 0.52, z); win.rotation.y = ry; const uv = win.geometry.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * 0.12, 0.3 + uv.getY(k) * 0.12); grp.add(win);
+      if (f === floors - 1) { if (R() < 0.6) solar.push([x, (f + 1) * FH, z, bx * sw * 0.7, bz * sw * 0.6, ry]); const cap = mesh(new THREE.BoxGeometry(bx * sw + 0.03, 0.03, bz * sw + 0.03), M.fascia); cap.position.set(x, (f + 1) * FH - 0.01, z); cap.rotation.y = ry; grp.add(cap); }
+  }
+}
+function paineis(high, solar) {
+  const sp = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.02, 1), M.blue, solar.length); const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion(); const e = new THREE.Euler(); const v = new THREE.Vector3(), s3 = new THREE.Vector3();
+  solar.forEach(([x, y, z, a, b, ry], i) => sp.setMatrixAt(i, m4.compose(v.set(x, y + 0.05, z), q.setFromEuler(e.set(0.25, ry, 0, 'YXZ')), s3.set(a, 1, b)))); high.add(sp);
+}
+// aglomerado retangular de blocos (institutos), dividido em duas etapas (térreo / andares de cima)
+function blocos(cx, cz, w, d, rot, nx, nz, seed, fMin = 1, fMax = 3) {
   const R = rng(seed); const low = new THREE.Group(), high = new THREE.Group(); const c = Math.cos(rot), s = Math.sin(rot);
   const bw = w / nx, bd = d / nz; const solar = [];
   for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
     if (R() < 0.12) continue; const u = -w / 2 + bw * (i + 0.5), v = -d / 2 + bd * (j + 0.5); const x = cx + u * c - v * s, z = cz + u * s + v * c;
-    const floors = 1 + ((R() * 3) | 0); const bx = bw * (0.72 + R() * 0.2), bz = bd * (0.72 + R() * 0.2);
-    for (let f = 0; f < floors; f++) {
-      const grp = f === 0 ? low : high; const sw = f ? 0.88 : 1;
-      const b = mesh(new THREE.BoxGeometry(bx * sw, FH - 0.04, bz * sw), f % 2 ? M.white : M.whiteSmooth); b.position.set(x, f * FH + FH / 2, z); b.rotation.y = -rot; grp.add(b);
-      const win = mesh(new THREE.BoxGeometry(bx * sw * 1.01, FH * 0.36, bz * sw * 1.01), M.fac_lab, false); win.position.set(x, f * FH + FH * 0.52, z); win.rotation.y = -rot; const uv = win.geometry.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * 0.12, 0.3 + uv.getY(k) * 0.12); grp.add(win);
-      if (f === floors - 1) { if (R() < 0.6) solar.push([x, (f + 1) * FH, z, bx * sw * 0.7, bz * sw * 0.6]); const cap = mesh(new THREE.BoxGeometry(bx * sw + 0.03, 0.03, bz * sw + 0.03), M.fascia); cap.position.set(x, (f + 1) * FH - 0.01, z); cap.rotation.y = -rot; grp.add(cap); }
-    }
+    const floors = fMin + ((R() * (fMax - fMin + 1)) | 0); const bx = bw * (0.72 + R() * 0.2), bz = bd * (0.72 + R() * 0.2);
+    bloco(low, high, solar, x, z, -rot, bx, bz, floors, R);
   }
-  const sg = new THREE.BoxGeometry(1, 0.02, 1); const sp = new THREE.InstancedMesh(sg, M.blue, solar.length); const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.25, -rot, 0));
-  solar.forEach(([x, y, z, a, b], i) => sp.setMatrixAt(i, m4.compose(new THREE.Vector3(x, y + 0.05, z), q, new THREE.Vector3(a, 1, b)))); high.add(sp);
-  return { low, high };
+  paineis(high, solar); return { low, high };
+}
+// blocos ao longo de um arco de elipse (t0..t1 rad), girados pela tangente, em nAcross fileiras para dentro
+function blocosArco(cx, cz, rx, rz, rot, t0, t1, nAlong, nAcross, seed, fMin = 2, fMax = 3, passo = 0.62) {
+  const R = rng(seed); const low = new THREE.Group(), high = new THREE.Group(); const c = Math.cos(rot), s = Math.sin(rot); const solar = [];
+  for (let i = 0; i < nAlong; i++) for (let j = 0; j < nAcross; j++) {
+    if (R() < 0.08) continue; const a = t0 + ((t1 - t0) * (i + 0.5 + (j % 2) * 0.35)) / nAlong; const k = 1 - (j * passo) / Math.min(rx, rz);
+    const u = Math.cos(a) * rx * k, v = Math.sin(a) * rz * k; const x = cx + u * c - v * s, z = cz + u * s + v * c;
+    const tu = -Math.sin(a) * rx, tv = Math.cos(a) * rz; const tx = tu * c - tv * s, tz = tu * s + tv * c; const ry = -Math.atan2(tz, tx);
+    const L = (Math.hypot(tx, tz) * (t1 - t0)) / nAlong * k; const floors = fMin + ((R() * (fMax - fMin + 1)) | 0);
+    bloco(low, high, solar, x, z, ry, L * (0.66 + R() * 0.18), passo * (0.7 + R() * 0.15), floors, R);
+  }
+  paineis(high, solar); return { low, high };
 }
 
 export function escola() {
@@ -48,8 +68,10 @@ export function escola() {
   // e1: bloco escolar em "S" (3 andares) — é uma fita própria
   const bloco = new Faixa({ id: 'escolaBloco', closed: false, path: curve([[-17.0, 10.4], [-15.4, 12.0], [-13.4, 11.7], [-11.9, 12.8]], false, 60), modulos: 1, prof: { o0: -0.45, o1: 0.45, setIn: 0.1, setOut: 0.1, fac: 'fac_quente' }, niveis: 3, arbustos: false });
   bloco.setTodos(3); P.e1.add(bloco.group);
-  // e2: pátios em plataformas e parquinhos
+  // e2: pátios em plataformas e parquinhos, sobre praças de piso terracota
+  const terracota = M.terracota || M.pavers; // piso de praça (sem material novo: nenhuma chamada a mais)
   for (const [x, z, rx, rz, r, sd] of [[-16.9, 6.4, 1.6, 0.95, 0.9, 11], [-15.2, 9.0, 1.35, 0.85, 0.4, 12]]) {
+    P.e2.add(plate(blobPts(x, z, rx * 1.3, rz * 1.3, r, sd + 5), 0.0, 0.02, terracota));
     const pts = blobPts(x, z, rx, rz, r, sd); P.e2.add(plate(pts, 0.0, 0.3, M.whiteSmooth)); P.e2.add(plate(blobPts(x, z, rx - 0.08, rz - 0.08, r, sd), 0.3, 0.02, M.sand)); P.e2.add(playground(x, z, 0.32, sd));
   }
   // e3: piscina com deque
@@ -59,33 +81,64 @@ export function escola() {
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'escola', root, partes: P, esqueletos: {}, grua: { e1: true }, foco: { x: -15.2, z: 8.6, dist: 12 }, ancora: [-15.2, 2.2, 9] };
 }
+// setor de coroa circular (degrau curvo) no plano, de r0 a r1 e de a0 a a1, com altura h
+function setor(r0, r1, a0, a1, h, y, mat, seg = 16) {
+  const s = new THREE.Shape(); for (let i = 0; i <= seg; i++) { const a = a0 + ((a1 - a0) * i) / seg; i ? s.lineTo(Math.cos(a) * r1, -Math.sin(a) * r1) : s.moveTo(Math.cos(a) * r1, -Math.sin(a) * r1); }
+  for (let i = seg; i >= 0; i--) { const a = a0 + ((a1 - a0) * i) / seg; s.lineTo(Math.cos(a) * r0, -Math.sin(a) * r0); }
+  const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
+  const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2);
+  return mesh(g, mat);
+}
 export function campo() {
   const c = A.campo; const root = new THREE.Group(); root.name = 'campo'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
   const g = new THREE.PlaneGeometry(c.w + 0.6, c.d + 0.6); g.rotateX(-Math.PI / 2);
   const soil = mesh(g, M.soil, false); soil.position.set(c.c[0], 0.03, c.c[1]); soil.rotation.y = -c.rot; P.e1.add(soil);
   const f = new THREE.PlaneGeometry(c.w, c.d); f.rotateX(-Math.PI / 2); const field = mesh(f, M.field, false); field.position.set(c.c[0], 0.045, c.c[1]); field.rotation.y = -c.rot; P.e2.add(field);
-  // arquibancada em degraus ao longo do lado de trás e torres de luz
+  // arquibancada: 8 degraus curvos de frente para o campo (grama e concreto alternados) e torres de luz
   const st = new THREE.Group(); st.position.set(c.c[0], 0, c.c[1]); st.rotation.y = -c.rot; P.e3.add(st);
-  for (let k = 0; k < 5; k++) { const b = mesh(new THREE.BoxGeometry(c.w * 0.8, 0.07 * (k + 1), 0.2), k % 2 ? M.grey : M.concreto); b.position.set(0, 0.035 * (k + 1), -c.d / 2 - 0.35 - k * 0.2); st.add(b); }
+  const deg = A.campo.degraus || [2.25, 3.55];
+  for (let k = 0; k < 8; k++) st.add(setor(3.2 + k * 0.16, 3.2 + k * 0.16 + 0.14, deg[0], deg[1], 0.06 * (k + 1), 0, k % 2 ? M.concreto : M.lawn));
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const px = (x * c.w) / 2 + x * 0.25, pz = (z * c.d) / 2 + z * 0.25; st.add(beams([[[px, 0, pz], [px, 1.3, pz]]], 0.025, M.steel, 5)); const l = mesh(new THREE.BoxGeometry(0.2, 0.08, 0.05), M.lampGlow, false); l.position.set(px, 1.32, pz); l.lookAt(0, 0, 0); st.add(l); }
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'campo', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'terra', e2: 'crescer' }, foco: { x: c.c[0], z: c.c[1], dist: 11 }, ancora: [c.c[0], 1.2, c.c[1]] };
 }
+// Faculdade de Engenharia: ~22 blocos brancos de laboratório ao longo da borda interna da frente do Anel (com o
+// Instituto, ~40 blocos maiores e com pátios, como na foto)
 export function engenharia() {
-  const root = new THREE.Group(); root.name = 'engenharia'; const b = blocos(-3.3, 12.0, 4.6, 1.7, -0.42, 6, 2, 31);
+  const a = A.anel; const root = new THREE.Group(); root.name = 'engenharia'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.4, a.rz - 3.2, a.rot, 0.55, 1.75, 8, 3, 31, 2, 3);
   const P = { e1: b.low, e2: b.high }; root.add(P.e1, P.e2);
-  return { id: 'engenharia', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: -3.3, z: 12, dist: 10 }, ancora: [-3.3, 1.8, 12] };
+  const m = [a.c[0] + Math.cos(1.15) * (a.rx - 4.0), a.c[1] + Math.sin(1.15) * (a.rz - 3.8)];
+  return { id: 'engenharia', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: m[0], z: m[1], dist: 11 }, ancora: [m[0], 1.8, m[1]] };
 }
+// Instituto de Estudos Urbanos: a mesma cidade de blocos, continuando pela borda interna da direita do Anel
 export function instituto() {
-  const root = new THREE.Group(); root.name = 'instituto'; const b = blocos(-0.1, 6.9, 2.1, 4.4, 0.38, 3, 6, 47);
+  const a = A.anel; const root = new THREE.Group(); root.name = 'instituto'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.4, a.rz - 3.2, a.rot, -0.55, 0.5, 6, 3, 47, 2, 4);
   const P = { e1: b.low, e2: b.high }; root.add(P.e1, P.e2);
-  return { id: 'instituto', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: -0.1, z: 6.9, dist: 10 }, ancora: [-0.1, 1.8, 6.9] };
+  const m = [a.c[0] + (a.rx - 4.3) * Math.cos(a.rot), a.c[1] + (a.rx - 4.3) * Math.sin(a.rot)];
+  return { id: 'instituto', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: m[0], z: m[1], dist: 10 }, ancora: [m[0], 2.2, m[1]] };
 }
-// Gramado do Campus Universitário (campo e pista dentro do "C")
+// retângulo arredondado (planta da ala alta), em coordenadas do mundo
+function retRed(c, w, d, rot, r = 0.45, n = 6) {
+  const out = []; const co = Math.cos(rot), si = Math.sin(rot); const hx = w / 2 - r, hz = d / 2 - r;
+  for (const [cx, cz, a0] of [[hx, hz, 0], [-hx, hz, Math.PI / 2], [-hx, -hz, Math.PI], [hx, -hz, Math.PI * 1.5]]) for (let i = 0; i <= n; i++) { const a = a0 + (i / n) * (Math.PI / 2); const u = cx + Math.cos(a) * r, v = cz + Math.sin(a) * r; out.push([c[0] + u * co - v * si, c[1] + u * si + v * co]); }
+  return out;
+}
+// Gramado do Campus Universitário: o campo dentro do "C", árvores e a ala alta de 8 andares com brises
 export function gramadoUni() {
-  const u = A.uni; const root = new THREE.Group(); root.name = 'gramadoUni'; const P = { e1: new THREE.Group() };
-  const f = new THREE.PlaneGeometry(4.6, 2.6); f.rotateX(-Math.PI / 2); const field = mesh(f, M.field, false); field.position.set(u.c[0] + 1.2, 0.04, u.c[1] + 0.2); field.rotation.y = -u.rot; P.e1.add(field);
-  const tr = []; const R = rng(88); for (let i = 0; i < 12; i++) { const a = R() * 6.28; tr.push({ x: u.c[0] + 1.2 + Math.cos(a) * 3.2, z: u.c[1] + 0.2 + Math.sin(a) * 2.2, s: 0.22 + R() * 0.1, pal: 'jardim' }); }
-  P.e1.add(treeGroup(tr)); root.add(P.e1);
-  return { id: 'gramadoUni', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'crescer' }, foco: { x: u.c[0], z: u.c[1], dist: 14 }, ancora: [u.c[0] + 1, 1.2, u.c[1]] };
+  const u = A.uni, cp = u.campo, al = u.ala; const root = new THREE.Group(); root.name = 'gramadoUni'; const P = { e1: new THREE.Group() };
+  const f = new THREE.PlaneGeometry(cp.w, cp.d); f.rotateX(-Math.PI / 2); const field = mesh(f, M.field, false); field.position.set(cp.c[0], 0.04, cp.c[1]); field.rotation.y = -cp.rot; P.e1.add(field);
+  const tr = []; const R = rng(88); for (let i = 0, t = 0; i < 12 && t < 80; t++) { const a = R() * 6.28; const x = cp.c[0] + Math.cos(a) * (cp.w / 2 + 0.7), z = cp.c[1] + Math.sin(a) * (cp.d / 2 + 0.6); if (Math.hypot(x - al.c[0], z - al.c[1]) < al.w / 2 + 0.6) continue; tr.push({ x, z, s: 0.22 + R() * 0.1, pal: 'jardim' }); i++; }
+  P.e1.add(treeGroup(tr));
+  // ala alta: 8 andares de vidro de laboratório com lajes brancas, brises verticais e o último andar mais alto
+  const plano = retRed(al.c, al.w, al.d, al.rot); const n = al.andares || 8; let y = 0;
+  for (let f = 0; f < n; f++) {
+    const h = f === n - 1 ? FH * 1.15 : FH;
+    addMap(P.e1, sweep(plano, true, [{ a: [0.05, y], b: [0.05, y + 0.07], mat: 'laje', uv: 'run' }, { a: [0, y + 0.07], b: [0, y + h], mat: 'fac', uv: 'facade', vBase: 0 }]), (k) => (k === 'laje' ? M.fascia : M.fac_lab));
+    y += h;
+  }
+  const tampa = new THREE.Shape(plano.map(([x, z]) => new THREE.Vector2(x, -z))); const tg = new THREE.ExtrudeGeometry(tampa, { depth: 0.1, bevelEnabled: false, curveSegments: 1 }); tg.rotateX(-Math.PI / 2); tg.translate(0, y, 0); P.e1.add(mesh(tg, M.whiteSmooth));
+  const bri = []; const L = plano.length; let acc = 0; for (let i = 1; i <= L; i++) { const a = plano[i - 1], b = plano[i % L]; const d = Math.hypot(b[0] - a[0], b[1] - a[1]); let t = (0.3 - acc) / d; while (t <= 1) { const x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t; const cx = x - al.c[0], cz = z - al.c[1], l = Math.hypot(cx, cz) || 1; bri.push([[x + (cx / l) * 0.06, 0, z + (cz / l) * 0.06], [x + (cx / l) * 0.06, y + 0.1, z + (cz / l) * 0.06]]); t += 0.3 / d; } acc = (acc + d) % 0.3; }
+  P.e1.add(beams(bri, 0.02, M.whiteSmooth, 4));
+  root.add(P.e1);
+  return { id: 'gramadoUni', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'crescer' }, foco: { x: (cp.c[0] + al.c[0]) / 2, z: (cp.c[1] + al.c[1]) / 2, dist: 14 }, ancora: [al.c[0], y + 0.8, al.c[1]] };
 }

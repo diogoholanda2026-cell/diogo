@@ -97,16 +97,17 @@ export function sweep(path, closed, edges, opts = {}) {
       if (dot >= 0) B.i.push(a0, b0, a1, b0, b1, a1); else B.i.push(a0, a1, b0, b0, a1, b1);
     }
   }
-  if (!closed && opts.caps !== false) capEnds(path, nor, edges, out, widthFn);
+  // tampas: true = as duas pontas, 'ini'/'fim' = só uma; capPoly = contorno [o, y] do perfil (anti-horário)
+  if (!closed && opts.caps !== false) capEnds(path, nor, edges, out, widthFn, opts.caps === 'ini' ? [0] : opts.caps === 'fim' ? [N - 1] : [0, N - 1], opts.capPoly);
   const res = new Map(); for (const [k, b] of out) res.set(k, b.geo());
   return res;
 }
 // tampa as pontas de caminhos abertos com o polígono do perfil
-function capEnds(path, nor, edges, out, widthFn) {
-  const poly = []; for (const e of edges) { poly.push(e.a); } if (edges.length) poly.push(edges[edges.length - 1].b);
+function capEnds(path, nor, edges, out, widthFn, ends, polyIn) {
+  const poly = polyIn || []; if (!polyIn) { for (const e of edges) { poly.push(e.a); } if (edges.length) poly.push(edges[edges.length - 1].b); }
   if (poly.length < 3) return;
   const mat = edges.find((e) => e.cap)?.mat || edges[0].mat; const B = out.get(mat) || new Buf(); out.set(mat, B);
-  for (const end of [0, path.length - 1]) {
+  for (const end of ends) {
     const [px, pz] = path[end], [nx, nz] = nor[end]; const wf = widthFn ? widthFn(end ? 1 : 0, end) : 1;
     const q = path[end === 0 ? 1 : end - 1]; let tx = px - q[0], tz = pz - q[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
     const shape = new THREE.Shape(poly.map(([o, y]) => new THREE.Vector2(o * wf, y)));
@@ -121,8 +122,16 @@ function capEnds(path, nor, edges, out, widthFn) {
 export function terraceProfile(o) {
   const E = []; for (let f = 0; f < o.floors; f++) E.push(...terraceFloor(f, o.floors, o)); return E;
 }
-// Um andar f de um bloco com F andares (o último recebe a cobertura verde).
-export function terraceFloor(f, F, { o0, o1, setOut = 0, setIn = 0, roof = 'roof', fac = 'fac_quente', facIn = null, slab = 0.09, lip = 0.06, planter = true, vBase = 0, y0: base = 0, fh = FH }) {
+// Passeio claro na cobertura de um bloco com F andares: [o de fora, o de dentro] da faixa do meio (verde 35%,
+// passeio 30%, verde 35%), ou null se a cobertura (com os beirais) tem 0.5 ou menos de largura. A cobertura
+// (terraceFloor) e o caminho das pessoas (Faixa.caminhoTeto) usam o mesmo critério.
+export function passeioTeto(F, { o0, o1, setOut = 0, setIn = 0, lip = 0.06 }) {
+  const outer = o1 - setOut * (F - 1), inner = o0 + setIn * (F - 1), w = outer - inner + 2 * lip;
+  return w > 0.5 ? [outer + lip - w * 0.35, outer + lip - w * 0.65] : null;
+}
+// Um andar f de um bloco com F andares (o último recebe a cobertura verde; com o telhado 'roof' e largura
+// suficiente, a cobertura ganha o passeio claro no meio).
+export function terraceFloor(f, F, { o0, o1, setOut = 0, setIn = 0, roof = 'roof', fac = 'fac_quente', facIn = null, slab = 0.09, lip = 0.06, planter = true, vBase = 0, y0: base = 0, fh = FH, passeio = true }) {
   const E = []; const fi = facIn || fac;
   const y0 = base + f * fh, y1 = y0 + fh;
   const outer = o1 - setOut * f, inner = o0 + setIn * f;
@@ -140,10 +149,22 @@ export function terraceFloor(f, F, { o0, o1, setOut = 0, setIn = 0, roof = 'roof
     if (nInner > inner + 0.01) { E.push({ a: [nInner, y1], b: [inner, y1], mat: roof, uv: 'plan' }); if (planter) E.push({ a: [inner, y1 + 0.07], b: [inner, y1], mat: 'planter', uv: 'run' }); }
   } else {
     E.push({ a: [outer + lip, y1], b: [outer + lip, y1 + 0.08], mat: 'fascia', uv: 'run' });
-    E.push({ a: [outer + lip, y1 + 0.08], b: [inner - lip, y1 + 0.08], mat: roof, uv: 'plan' });
+    const yT = y1 + 0.08; const pt = roof === 'roof' && passeio ? passeioTeto(F, { o0, o1, setOut, setIn, lip }) : null;
+    if (pt) { const [p0, p1] = pt; E.push({ a: [outer + lip, yT], b: [p0, yT], mat: roof, uv: 'plan' }, { a: [p0, yT], b: [p1, yT], mat: 'caminhoTeto', uv: 'plan' }, { a: [p1, yT], b: [inner - lip, yT], mat: roof, uv: 'plan' }); }
+    else E.push({ a: [outer + lip, yT], b: [inner - lip, yT], mat: roof, uv: 'plan' });
     E.push({ a: [inner - lip, y1 + 0.08], b: [inner - lip, y1], mat: 'fascia', uv: 'run' });
   }
   return E;
+}
+// Contorno do perfil em terraços (para tampar as pontas de uma fita aberta sem estilhaços): sobe pela fachada
+// externa degrau a degrau, cruza a cobertura e desce pela interna. f0..f1 = andares incluídos.
+export function terraceOutline(F, { o0, o1, setOut = 0, setIn = 0, y0: base = 0, fh = FH }, f0 = 0, f1 = F) {
+  const P = []; const top = base + f1 * fh + (f1 === F ? 0.08 : 0);
+  for (let f = f0; f < f1; f++) { const o = o1 - setOut * f; P.push([o, base + f * fh], [o, f === f1 - 1 ? top : base + (f + 1) * fh]); }
+  for (let f = f1 - 1; f >= f0; f--) { const o = o0 + setIn * f; P.push([o, f === f1 - 1 ? top : base + (f + 1) * fh], [o, base + f * fh]); }
+  // tira pontos repetidos e colineares (a triangulação fica limpa)
+  const Q = P.filter((p, i) => { const a = P[(i - 1 + P.length) % P.length]; return Math.hypot(p[0] - a[0], p[1] - a[1]) > 1e-4; });
+  return Q.filter((p, i) => { const a = Q[(i - 1 + Q.length) % Q.length], b = Q[(i + 1) % Q.length]; return Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) > 1e-6; });
 }
 // Esqueleto de concreto de um andar (laje + borda), para a fase de estrutura da obra.
 export function skeletonFloor(f, { o0, o1, setOut = 0, setIn = 0, y0: base = 0, fh = FH }) {
@@ -169,7 +190,8 @@ export function subPath(path, closed, s0, s1, n = 0) {
   const P = closed ? [...path, path[0]] : path; const cum = [0];
   for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
   const L = cum[cum.length - 1]; const a = s0 * L, b = s1 * L;
-  const at = (d) => { d = ((d % L) + L) % L; let i = 1; while (i < cum.length - 1 && cum[i] < d) i++; const t = (d - cum[i - 1]) / (cum[i] - cum[i - 1] || 1); return [P[i - 1][0] + (P[i][0] - P[i - 1][0]) * t, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * t]; };
+  // caminho aberto: a ponta final fica no fim (sem dar a volta até o começo)
+  const at = (d) => { d = closed ? ((d % L) + L) % L : Math.min(L, Math.max(0, d)); let i = 1; while (i < cum.length - 1 && cum[i] < d) i++; const t = (d - cum[i - 1]) / (cum[i] - cum[i - 1] || 1); return [P[i - 1][0] + (P[i][0] - P[i - 1][0]) * t, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * t]; };
   const cnt = n || Math.max(4, Math.ceil((b - a) / 0.25));
   const out = []; for (let k = 0; k <= cnt; k++) out.push(at(a + ((b - a) * k) / cnt));
   return out;

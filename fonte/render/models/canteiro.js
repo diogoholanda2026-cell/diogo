@@ -13,6 +13,16 @@ export const LOTES = {
   serralheria: { x: -25.4, z: 12.2, r: 0 }, vidracaria: { x: -22.9, z: 12.1, r: 0.1 },
   eletrica: { x: -21.0, z: 15.4, r: 0.3 }, horto: { x: -27.3, z: 10.9, r: 0 }, laboratorio: { x: -24.3, z: 11.0, r: 0 },
 };
+// Pontos de produção de cada prédio (para a obra/atividade mostrar fumaça, esteira, serra, betoneira e faíscas
+// quando o prédio estiver produzindo). Coordenadas do mundo, já com a posição e o giro do lote.
+const LOCAIS = {
+  usina: [['chamine', 1.45, 1.32, -0.4], ['esteira', 1.1, 0.52, 0.4]], carpintaria: [['serra', 0.2, 0.3, 0.75]], concreto: [['betoneira', 0.95, 0.32, 0.45], ['chamine', 0.95, 1.22, -0.2]],
+  serralheria: [['faisca', 0.0, 0.26, 0.75]], vidracaria: [['chamine', -0.5, 0.62, -0.3]], eletrica: [['faisca', -0.1, 0.15, 0.72]], laboratorio: [['chamine', 0.45, 1.0, 0.2]],
+};
+export const PONTOS_ATIVOS = Object.fromEntries(Object.entries(LOTES).map(([id, l]) => {
+  const tipo = id.startsWith('usina') ? 'usina' : id; const c = Math.cos(l.r), s = Math.sin(l.r);
+  return [id, (LOCAIS[tipo] || []).map(([t, x, y, z]) => ({ tipo: t, pos: [+(l.x + x * c + z * s).toFixed(3), y, +(l.z - x * s + z * c).toFixed(3)] }))];
+}));
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
 const B = (w, h, d, m, x, y, z) => { const o = mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y + h / 2, z); return o; };
 let MT = null;
