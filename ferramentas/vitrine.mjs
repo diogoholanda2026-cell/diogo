@@ -43,16 +43,24 @@ async function abre(q, W, H, movel = false) {
 async function foto(pg, nome, desc, ms = 1200, assentar = true) {
   await espera(pg, ms); if (assentar) await assenta(pg); const arq = join(saida, nome + '.png'); await pg.screenshot({ path: arq, timeout: 240000 });
   const st = await pg.evaluate(() => { const e = window.__held.engine; return { calls: e.stats.calls, tris: e.stats.tris }; });
-  indice.push({ arquivo: nome + '.png', desc, ...st }); console.log(nome, JSON.stringify(st));
+  indice.push({ arquivo: nome + '.png', desc, ...st, ...(pg._alvo ? { alvo: pg._alvo } : {}) }); console.log(nome, JSON.stringify(st), pg._alvo ? JSON.stringify(pg._alvo) : '');
 }
 // câmera livre: alvo (x,z), distância, giro, inclinação fixa opcional (rad), campo de visão
-// alvo: [x, z] fixo, ou { modelo } / { faixa, i } lido do mundo (com [x, z] de reserva)
-const camera = (pg, [x, z, dist, yaw, pitch, fov = 38], alvo = null) => pg.evaluate(([x, z, dist, yaw, pitch, fov, alvo]) => {
-  const H = window.__held, r = H.rig, W = H.mundo;
-  if (alvo?.modelo) { const f = W?.modelos?.[alvo.modelo]?.foco; if (f && isFinite(f.x) && isFinite(f.z)) { x = f.x; z = f.z; } }
-  if (alvo?.faixa) { const F = W?.faixas?.[alvo.faixa]; const c = F?.centro?.(alvo.i ?? 0); if (c && isFinite(c[0])) { x = c[0]; z = c[2] ?? c[1]; } }
+// alvo: [x, z] fixo, ou { modelo } / { faixa, i } lido do mundo (com [x, z] de reserva; i: 'perto' escolhe o
+// módulo da fita mais perto da reserva, o mesmo quadro de antes enquanto a planta não muda). O alvo usado
+// vai para o indice.json (campo alvo: x, z e a origem), para a comparação entre versões saber se o quadro mudou
+const camera = async (pg, [x, z, dist, yaw, pitch, fov = 38], alvo = null) => { pg._alvo = await pg.evaluate(([x, z, dist, yaw, pitch, fov, alvo]) => {
+  const H = window.__held, r = H.rig, W = H.mundo; let de = 'fixo';
+  if (alvo?.modelo) { const f = W?.modelos?.[alvo.modelo]?.foco; if (f && isFinite(f.x) && isFinite(f.z)) { x = f.x; z = f.z; de = 'modelo:' + alvo.modelo; } }
+  if (alvo?.faixa) {
+    const F = W?.faixas?.[alvo.faixa]; let i = alvo.i ?? 0;
+    if (i === 'perto' && F?.mods?.length) { let d = 1e9; F.mods.forEach((m, k) => { const c = F.centro(k); const dd = Math.hypot(c[0] - x, (c[2] ?? c[1]) - z); if (dd < d) { d = dd; i = k; } }); }
+    const c = typeof i === 'number' ? F?.centro?.(i) : null; if (c && isFinite(c[0])) { x = c[0]; z = c[2] ?? c[1]; de = 'faixa:' + alvo.faixa + ':' + i; }
+  }
+  if (alvo?.de) de = alvo.de;
   r.roll = 0; r.pitchFix = pitch ?? null; r.target.set(x, 0, z); r.dist = dist; r.yaw = yaw; r.tilt = 0; r.fov = fov; r.apply(); H.engine.shadowDirty = true;
-}, [x, z, dist, yaw, pitch, fov, alvo]);
+  return { x: +x.toFixed(2), z: +z.toFixed(2), de };
+}, [x, z, dist, yaw, pitch, fov, alvo]); };
 
 try {
   if (grupos.has('composicao')) try {
@@ -70,7 +78,7 @@ try {
     const pg = await abre('vista=foto&tudo=1&q=alta&pr=1', 1200, 675);
     await pg.evaluate(() => { document.getElementById('ui').style.display = 'none'; });
     const closes = [
-      ['k01-anel-campus', 'Anel do Campus (edifício-fita em terraços)', [-9.6, 8.4, 16, 0.5, null], null],
+      ['k01-anel-campus', 'Anel do Campus (edifício-fita em terraços)', [-9.6, 8.4, 16, 0.5, null], { faixa: 'anel', i: 'perto' }],
       ['k02-campus-universitario', 'Campus Universitário e faculdades', [-19.5, -10.8, 15, 0.45, null], { modelo: 'gramadoUni' }],
       ['k03-sede-holding', 'Sede da Holding e pátio', [4.8, -14.2, 15, 0.5, null], { modelo: 'sedePatio' }],
       ['k04-biblioteca', 'Biblioteca Central com dossel', [13.4, 7.9, 15, 0.5, null], { modelo: 'biblioteca' }],
@@ -86,7 +94,7 @@ try {
       ['k14-rua-anel', 'Vista baixa junto ao Anel do Campus', [-6.0, 12.0, 6, 0.3, 0.28, 45]],
     ];
     const meio = await pg.evaluate(() => { const W = window.__held.mundo, a = W?.modelos?.santuarioInt?.foco, b = W?.modelos?.savana?.foco; return a && b ? [(a.x + b.x) / 2, (a.z + b.z) / 2] : null; });
-    if (meio) { closes[8][2][0] = meio[0]; closes[8][2][1] = meio[1]; }
+    if (meio) { closes[8][2][0] = meio[0]; closes[8][2][1] = meio[1]; closes[8][3] = { de: 'meio:santuarioInt+savana' }; }
     for (const [nome, desc, cam, alvo] of closes) { await camera(pg, cam, alvo); await foto(pg, nome, desc, 1500); }
     await pg.close();
   } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }
