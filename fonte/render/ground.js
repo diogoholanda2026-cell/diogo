@@ -131,10 +131,14 @@ export class Ground {
     mk(ell(lagoSant()), this.waterMat, -0.08);
     mk(ell(bebedouro()), this.waterMat, -0.06);
     // mapa da altura do leito sob a água (0,25 unidade por texel; -0,45 a 0,05): a lâmina d'água é a
-    // altura da superfície menos o leito, então a margem acompanha o nível (lago assoreado ou cheio)
-    const NX = 256, NZ = 160, dat = new Uint8Array(NX * NZ);
-    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = MESA.x0 + ((i + 0.5) * W) / NX, z = MESA.z0 + ((j + 0.5) * D) / NZ; const wd = waterDepth(x, z); dat[j * NX + i] = clamp(((wd > 0 ? -0.42 * wd : 0.05) + 0.45) / 0.5, 0, 1) * 255; }
-    const t = new THREE.DataTexture(dat, NX, NZ, THREE.RedFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+    // altura da superfície menos o leito, então a margem acompanha o nível (lago assoreado ou cheio);
+    // no verde, a máscara do lago central (o único que assoreia)
+    const NX = 256, NZ = 160, dat = new Uint8Array(NX * NZ * 2);
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+      const x = MESA.x0 + ((i + 0.5) * W) / NX, z = MESA.z0 + ((j + 0.5) * D) / NZ; const wd = waterDepth(x, z), k = (j * NX + i) * 2;
+      dat[k] = clamp(((wd > 0 ? -0.42 * wd : 0.05) + 0.45) / 0.5, 0, 1) * 255; dat[k + 1] = polyDist(x, z, A.lago) < 0.3 ? 255 : 0;
+    }
+    const t = new THREE.DataTexture(dat, NX, NZ, THREE.RGFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
     AGUA.tProf.value = t; AGUA.aguaOn.value = 1; this.agua = AGUA; // uniformes da água (cores e tempo), para ajuste
   }
   // Pede uma nova pintura do chão (feita no próximo quadro, no máximo uma por quadro).
@@ -158,6 +162,7 @@ export class Ground {
     const zona = (Z, g = c, k = 1, m = 0) => { if (Z.poly) path(Z.poly, g, k); else { const [cc, rx, rz, rot] = Z.elipse; ell(cc, rx + m, rz + m, rot, g, k); } };
     const linha = (pts, g = c) => { g.beginPath(); suave(pts).forEach(([x, z], i) => { const [px, py] = P(x, z); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke(); };
     const V = flags.verde || {}; const ligado = (id) => !!(V[id] || Object.keys(V).some((k) => V[k] && id.startsWith(k)));
+    const pronta = (Z) => (Z.id === 'praca' ? !!flags.praca : ligado(Z.id) || (Z.id === 'corredor' && !!V.ciencias)); // zona pavimentada já feita
     // 1) chão de floresta (copas escuras vistas de cima), da camada fixa
     c.filter = 'none'; c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
     c.drawImage(this._camadaFixa(), 0, 0, w, h);
@@ -168,7 +173,8 @@ export class Ground {
     for (const Z of ZONAS) { zona(Z, zc, 0.25, Z.poly ? 0 : 0.5); zc.fill(); }
     zc.filter = 'none'; c.drawImage(this._zonas, 0, 0, w, h);
     c.save(); c.globalAlpha = 0.95;
-    for (const Z of ZONAS) { if (Z.tipo === 'praca' || Z.tipo === 'canteiro') continue; const on = ligado(Z.id); if (Z.tipo === 'areia' && on) continue; c.fillStyle = pat(on && Z.tipo === 'grama' ? tex.grass() : tex.pasto()); zona(Z); c.fill(); }
+    // (praça por fazer = pasto)
+    for (const Z of ZONAS) { if (Z.tipo === 'canteiro' || (Z.tipo === 'praca' && pronta(Z))) continue; const on = ligado(Z.id) && Z.tipo !== 'praca'; if (Z.tipo === 'areia' && on) continue; c.fillStyle = pat(on && Z.tipo === 'grama' ? tex.grass() : tex.pasto()); zona(Z); c.fill(); }
     { const [cc, rx, rz, rot] = SANTUARIO_GRAMADO.elipse; c.fillStyle = pat(V.santuario ? tex.grass() : tex.pasto()); ell(cc, rx, rz, rot); c.fill(); }
     c.restore();
     // 2b) variação ampla nas clareiras: manchas de 3 a 8 unidades (±10%), mais verdes nas baixadas (os
@@ -182,9 +188,10 @@ export class Ground {
       c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, 6, 601) * 3); c.scale(1, 0.55 + hash(i, 5, 601) * 0.45); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
     }
     // 2c) pasto degradado (antes da obra de cada área): manchas de terra nua, capim seco e rebrota de
-    //     1 a 3 unidades, que somem quando a área vira gramado
+    //     1 a 3 unidades, que somem quando a área vira gramado (zonas de grama ligadas e o pasto do
+    //     Santuário, coberto pelo gramado dele)
     for (const [zi, Z] of ZONAS.entries()) {
-      if (!(Z.tipo === 'grama' || Z.tipo === 'pasto' || Z.tipo === 'areia') || (ligado(Z.id) && Z.tipo === 'grama')) continue;
+      if (!(Z.tipo === 'grama' || Z.tipo === 'pasto' || Z.tipo === 'areia' || (Z.tipo === 'praca' && !pronta(Z))) || (ligado(Z.id) && (Z.tipo === 'grama' || Z.id.startsWith('santuario')))) continue;
       const dentro = Z.poly ? (x, z) => inPoly(x, z, Z.poly) : (x, z) => inEllipse(x, z, Z.elipse[0][0], Z.elipse[0][1], Z.elipse[1], Z.elipse[2], Z.elipse[3]);
       let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9; if (Z.poly) for (const [x, z] of Z.poly) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); bz0 = Math.min(bz0, z); bz1 = Math.max(bz1, z); } else { const [[cx, cz], rx, rz] = Z.elipse; const r = Math.max(rx, rz); bx0 = cx - r; bx1 = cx + r; bz0 = cz - r; bz1 = cz + r; }
       const n = Math.min(60, Math.max(5, ((bx1 - bx0) * (bz1 - bz0)) / 3)) | 0;
@@ -198,7 +205,7 @@ export class Ground {
     // 3) savana em piquetes de pasto (terra batida escura e capim), com trilhas entre eles
     if (V.savana) {
       c.save(); const piq = A.savana.piquetes || [A.savana.poly];
-      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); const k = [1, 0.92, 1.07][i % 3]; c.fillStyle = `rgba(${54 * k | 0},${64 * k | 0},${84 * k | 0},0.55)`; path(poly); c.fill(); }); // capim baixo cinza-oliva (#3b3928 na foto)
+      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); const k = [1, 0.86, 1.13][i % 3], q = [1, 1.06, 0.95][i % 3]; c.fillStyle = `rgba(${54 * k * q | 0},${64 * k | 0},${84 * k / q | 0},0.55)`; path(poly); c.fill(); }); // capim baixo cinza-oliva (#3b3928 na foto)
       c.restore();
     }
     // 4) margens e leitos d'água (areia clara nas bordas, fundo escuro sob a água)
@@ -231,12 +238,10 @@ export class Ground {
       c.restore();
     }
     // 6) praça central e demais zonas pavimentadas (vale urbanizado): piso cinza-rosado com caminhos
-    //    curvos em leque e canteiros; antes da obra, pasto
+    //    curvos em leque e canteiros; antes da obra, o pasto degradado dos passos 2 e 2c
     for (const Z of ZONAS) {
-      if (Z.tipo !== 'praca') continue;
-      const pronta = Z.id === 'praca' ? flags.praca : ligado(Z.id) || (Z.id === 'corredor' && V.ciencias);
+      if (Z.tipo !== 'praca' || !pronta(Z)) continue;
       c.save(); zona(Z);
-      if (!pronta) { c.fillStyle = pat(tex.pasto()); c.fill(); c.restore(); continue; }
       c.fillStyle = pat(tex.pavers()); c.fill(); c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(214,214,227)'; c.fill(); c.globalCompositeOperation = 'source-over';
       c.clip();
       if (Z.id === 'praca') {
@@ -267,5 +272,11 @@ export class Ground {
     this.tex.needsUpdate = true;
     this.stats.pinturas++; this.stats.ms = performance.now() - t0;
   }
-  update(t) { AGUA.aguaT.value = t / 1000; if (this._sujo) { this._sujo = false; this._pintar(); } }
+  // tempo da água, turbidez do lago central pelo nível (assoreado em -0,32, limpo em -0,1), ondas dos
+  // espelhos d'água e do aquário pelo offset do mapa de normais, e a pintura pendente
+  update(t) {
+    AGUA.aguaT.value = t / 1000; AGUA.turvo.value = clamp((-0.1 - this.lake.position.y) / 0.2, 0, 1);
+    const n = this.e.mats.pool?.normalMap; if (n) { n.offset.x = t * 0.000012; n.offset.y = t * 0.000008; }
+    if (this._sujo) { this._sujo = false; this._pintar(); }
+  }
 }

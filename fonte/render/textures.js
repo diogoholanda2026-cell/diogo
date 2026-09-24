@@ -200,13 +200,14 @@ export const tex = {
     noiseRectP(g, w, [196, 170, 120], 26, 41, 2, 12);
     for (let i = 0; i < 600; i++) { g.fillStyle = hash(i, 1, 42) < 0.5 ? 'rgba(120,140,60,.35)' : 'rgba(150,120,80,.3)'; g.fillRect(hash(i, 2, 42) * w, hash(i, 3, 42) * h, 2, 2 + hash(i, 4, 42) * 3); }
   }),
-  // terra batida: grão fino, sem manchas grandes, com pares de marcas de pneu em arco
+  // terra batida pardo-acinzentada (não alaranjada): grão fino, sem manchas grandes, com pares de
+  // marcas de pneu em arco
   soil: () => canvasTex('soil', 256, 256, (g, w, h) => {
-    noiseRectP(g, w, [120, 92, 66], 20, 81, 1, 43);
+    noiseRectP(g, w, [110, 94, 78], 18, 81, 1, 43);
     g.lineCap = 'round';
     for (let i = 0; i < 5; i++) {
       const cx = hash(i, 1, 82) * w, cy = hash(i, 2, 82) * h, R = 60 + hash(i, 3, 82) * 90, a0 = hash(i, 4, 82) * 6.28, da = 0.6 + hash(i, 5, 82) * 0.9;
-      for (const dr of [0, 11]) envolve(w, h, cx, cy, R + 20, (x, y) => { g.strokeStyle = 'rgba(70,50,34,.25)'; g.lineWidth = 3.8; g.beginPath(); g.arc(x, y, R + dr, a0, a0 + da); g.stroke(); g.strokeStyle = 'rgba(170,140,104,.14)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y, R + dr + 2.4, a0, a0 + da); g.stroke(); });
+      for (const dr of [0, 11]) envolve(w, h, cx, cy, R + 20, (x, y) => { g.strokeStyle = 'rgba(66,54,42,.25)'; g.lineWidth = 3.8; g.beginPath(); g.arc(x, y, R + dr, a0, a0 + da); g.stroke(); g.strokeStyle = 'rgba(160,144,120,.14)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y, R + dr + 2.4, a0, a0 + da); g.stroke(); });
     }
   }),
   // arenito cinza-bege com estratos horizontais

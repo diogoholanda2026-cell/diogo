@@ -8,7 +8,8 @@ const litMats = []; // materiais com emissivo que variam com a noite
 export let nightLevel = 1, nightExtra = 0;
 // água dos lagos: mapa da altura do leito (o terreno preenche) e o tempo em segundos
 export const AGUA = { tProf: { value: null }, aguaOn: { value: 0 }, aguaT: { value: 0 }, aguaP: { value: new THREE.Vector4(MESA.x0, MESA.z0, 1 / (MESA.x1 - MESA.x0), 1 / (MESA.z1 - MESA.z0)) },
-  raso: { value: new THREE.Color(0x94b0ac) }, fundo: { value: new THREE.Color(0x6a8890) }, margem: { value: new THREE.Color(0xcfd6c8) } }; // água turva cinza-esverdeada da foto (#647070)
+  raso: { value: new THREE.Color(0x94b0ac) }, fundo: { value: new THREE.Color(0x6a8890) }, margem: { value: new THREE.Color(0xcfd6c8) }, // água turva cinza-esverdeada da foto (#647070)
+  turvo: { value: 0 }, lodo: { value: new THREE.Color(0x6b6650) } }; // lago assoreado (turvo 1): lodo pardo, mais escuro e fosco
 const MACRO = { tMacro: { value: null } };
 const LAMP = new THREE.Color(0xffd9a0);
 
@@ -44,7 +45,8 @@ function comGrade(mat) {
   return mat;
 }
 // lagos: cor pela altura da lâmina d'água sobre o leito (raso, fundo e margem clara na linha d'água,
-// que acompanha o nível do lago) e duas camadas de ondas em direções diferentes
+// que acompanha o nível do lago) e duas camadas de ondas em direções diferentes. O canal verde do mapa
+// marca o lago central: assoreado (AGUA.turvo), ele fica pardo, mais escuro e fosco
 function comAgua(mat) {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, AGUA);
@@ -54,10 +56,12 @@ function comAgua(mat) {
           aw = instanceMatrix * aw;
         #endif
         vAguaW = ( modelMatrix * aw ).xyz; }`);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vAguaW; uniform sampler2D tProf; uniform float aguaOn; uniform float aguaT; uniform vec4 aguaP; uniform vec3 raso; uniform vec3 fundo; uniform vec3 margem;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vAguaW; uniform sampler2D tProf; uniform float aguaOn; uniform float aguaT; uniform vec4 aguaP; uniform vec3 raso; uniform vec3 fundo; uniform vec3 margem; uniform float turvo; uniform vec3 lodo;')
       .replace('#include <color_fragment>', `#include <color_fragment>
-        if ( aguaOn > 0.5 ) { float dq = vAguaW.y - ( texture2D( tProf, ( vAguaW.xz - aguaP.xy ) * aguaP.zw ).r * 0.5 - 0.45 );
-          diffuseColor.rgb = mix( mix( raso, fundo, smoothstep( 0.0, 0.2, dq ) ), margem, 0.35 * ( 1.0 - smoothstep( 0.0, 0.03, dq ) ) ); }`)
+        float tvAgua = 0.0;
+        if ( aguaOn > 0.5 ) { vec2 tp = texture2D( tProf, ( vAguaW.xz - aguaP.xy ) * aguaP.zw ).rg; float dq = vAguaW.y - ( tp.r * 0.5 - 0.45 ); tvAgua = turvo * tp.g;
+          diffuseColor.rgb = mix( mix( mix( raso, fundo, smoothstep( 0.0, 0.2, dq ) ), lodo, tvAgua ), margem, 0.35 * ( 1.0 - smoothstep( 0.0, 0.03, dq ) ) ); }`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix( roughnessFactor, 0.5, tvAgua );')
       .replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;', `vec3 mapN = texture2D( normalMap, vNormalMapUv + aguaT * vec2( 0.012, 0.008 ) ).xyz * 2.0 - 1.0;
         vec3 mapN2 = texture2D( normalMap, vNormalMapUv * 1.73 + aguaT * vec2( -0.007, 0.011 ) ).xyz * 2.0 - 1.0;
         mapN = normalize( vec3( mapN.xy + mapN2.xy, mapN.z * mapN2.z ) );`);
@@ -90,7 +94,7 @@ export function makeMaterials() {
   M.track = std({ color: 0xffffff, map: tex.track(), roughness: 0.9 });
   M.pavers = std({ color: 0xffffff, map: tex.pavers(), roughness: 0.86 });
   M.sand = std({ color: 0xffffff, map: tex.sand(), roughness: 1 });
-  M.soil = std({ color: 0xffffff, map: tex.soil(), roughness: 1 });
+  M.soil = std({ color: 0xffffff, map: tex.soil(), roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }); // placa de terra provisória vence o terreno logo abaixo
   M.rock = std({ color: 0x8d8170, map: tex.rock(), roughness: 0.95 });
   M.wood = std({ color: 0xffffff, map: tex.wood(), roughness: 0.72 });
   M.woodLight = std({ color: 0xffffff, map: tex.woodLight(), roughness: 0.6 });
@@ -105,8 +109,9 @@ export function makeMaterials() {
   M.glassWarm = std({ color: 0xffe2b0, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.55, depthWrite: false, emissive: 0xffb45a, emissiveIntensity: 0.6, side: THREE.DoubleSide });
   M.vidroDossel = std({ color: 0xcfc9bd, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
   const wn = tex.waterNormal(); wn.repeat.set(6, 6);
-  // lagos opacos: o leito não aparece, a profundidade vem do mapa de distância à margem
-  M.water = comAgua(std({ color: 0x40605f, roughness: 0.1, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 1.2 }));
+  // lagos opacos: o leito não aparece, a profundidade vem do mapa do leito; as ondas andam no shader
+  // (cópia do mapa de normais, com a mesma imagem), enquanto espelhos d'água e aquário andam pelo offset
+  M.water = comAgua(std({ color: 0x40605f, roughness: 0.1, metalness: 0.1, normalMap: wn.clone(), normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 1.2 }));
   // aquário do Bioma: continua translúcido (a fauna nada dentro do volume de água)
   M.waterDeep = std({ color: 0x1f7fa0, roughness: 0.05, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.25, 0.25), transparent: true, opacity: 0.82, emissive: 0x0d6788, emissiveIntensity: 0.08, envMapIntensity: 1.3 });
   M.pool = std({ color: 0x4c6a6a, roughness: 0.4, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.2, 0.2), envMapIntensity: 1.2 }); // espelhos d'água escuros (#3e4d43 na foto)
