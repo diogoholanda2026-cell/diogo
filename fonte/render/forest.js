@@ -17,26 +17,33 @@ const ICO = (() => {
   for (let i = 0; i < 5; i++) { const a = 1 + i, b = 1 + ((i + 1) % 5), c = 6 + i, d = 6 + ((i + 1) % 5); f.push([0, b, a], [a, b, c], [b, d, c], [11, c, d]); }
   return { v, f };
 })();
+// o mesmo icosaedro subdividido uma vez (42 vértices, 80 faces): lóbulos redondos para a copa de perto
+const ICO1 = (() => {
+  const v = ICO.v.map((p) => p.slice()), f = [], meio = new Map();
+  const m = (a, b) => { const k = a < b ? a + ',' + b : b + ',' + a; if (!meio.has(k)) { const p = [0, 1, 2].map((i) => (v[a][i] + v[b][i]) / 2); const l = Math.hypot(...p); v.push(p.map((x) => x / l)); meio.set(k, v.length - 1); } return meio.get(k); };
+  for (const [a, b, c] of ICO.f) { const ab = m(a, b), bc = m(b, c), ca = m(c, a); f.push([a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]); }
+  return { v, f };
+})();
 // Copa em cacho: lóbulos de icosaedro (20 tri) com normais esféricas, sem as faces de baixo (invisíveis
 // de cima) nem as enterradas noutro lóbulo; vértices dentro de outro lóbulo escurecem (cavidade).
 // lobos: [[x, y, z, r], ...]
-function cachoGeo(seed, lobos, lump = 0.16) {
+function cachoGeo(seed, lobos, lump = 0.16, B = ICO) {
   const P = [], N = [], C = [], I = [];
   const dentro = (x, y, z, j, k) => lobos.some((o, i) => i !== j && Math.hypot(x - o[0], y - o[1], z - o[2]) < o[3] * k);
   lobos.forEach(([cx, cy, cz, r], j) => {
     const base = P.length / 3; const vs = [];
-    ICO.v.forEach(([x, y, z], i) => {
+    B.v.forEach(([x, y, z], i) => {
       const n = noise3(x + j, y, z, seed); const kk = 1 + (n - 0.5) * 2 * lump;
       const px = cx + x * r * kk, py = cy + y * r * kk * 0.9, pz = cz + z * r * kk; vs.push([px, py, pz]);
       // normal esférica inclinada para cima: copa macia sob a luz
       let nx = x, ny = y + 0.35, nz = z; const l = Math.hypot(nx, ny, nz); P.push(px, py, pz); N.push(nx / l, ny / l, nz / l);
-      const t = clamp((py + 0.4) / 1.3, 0, 1), sp = 0.93 + hash(i + j * 12, seed, 5) * 0.14; let v = (0.42 + 0.66 * t) * sp; if (dentro(px, py, pz, j, 0.98)) v *= 0.7; // a textura de folhagem faz o resto
+      const t = clamp((py + 0.4) / 1.3, 0, 1), sp = 0.93 + hash(i + j * 64, seed, 5) * 0.14; let v = (0.42 + 0.66 * t) * sp; if (dentro(px, py, pz, j, 0.98)) v *= 0.7; // a textura de folhagem faz o resto
       C.push(v * 0.94, v, v * 0.9);
     });
-    for (const [a, b, c] of ICO.f) {
-      const A = vs[a], B = vs[b], Cc = vs[c];
-      if (a === 11 || b === 11 || c === 11 || (A[1] < -0.3 && B[1] < -0.3 && Cc[1] < -0.3)) continue; // calota de baixo
-      if (dentro(...A, j, 0.97) && dentro(...B, j, 0.97) && dentro(...Cc, j, 0.97)) continue; // enterrada
+    for (const [a, b, c] of B.f) {
+      const A = vs[a], Bv = vs[b], Cc = vs[c];
+      if (a === 11 || b === 11 || c === 11 || (A[1] < -0.3 && Bv[1] < -0.3 && Cc[1] < -0.3)) continue; // calota de baixo
+      if (dentro(...A, j, 0.97) && dentro(...Bv, j, 0.97) && dentro(...Cc, j, 0.97)) continue; // enterrada
       I.push(base + a, base + b, base + c);
     }
   });
@@ -97,8 +104,9 @@ function mergeGeos(list) {
 export function treeGeos() {
   if (GEO) return GEO;
   const trunk = new THREE.CylinderGeometry(0.05, 0.08, 1, 5, 1, true); trunk.translate(0, 0.5, 0);
-  // folhaLow: nível simples da mata vista de longe (cacho alongado de 15 tri)
-  GEO = { folha: cachoGeo(3, lobosCacho(3)), folha2: cachoGeo(11, lobosCacho(11)), folhaLow: cachoBaixo(5), conifera: coniferGeo(), palmeira: palmGeo(), tronco: trunk };
+  // três níveis da mesma copa: folhaPerto (lóbulos redondos), folha (lóbulos de 20 faces) e folhaLow
+  // (cacho alongado de 15 tri, para a mata vista de longe)
+  GEO = { folhaPerto: cachoGeo(3, lobosCacho(3), 0.2, ICO1), folha: cachoGeo(3, lobosCacho(3)), folha2: cachoGeo(11, lobosCacho(11)), folhaLow: cachoBaixo(5), conifera: coniferGeo(), palmeira: palmGeo(), tronco: trunk };
   for (const g of Object.values(GEO)) g.userData.compartilhada = true; // não descartar com a peça
   return GEO;
 }
@@ -139,6 +147,11 @@ export function leafMaterial() {
       .replace('#include <color_fragment>', `#include <color_fragment>
         float fo = texture(tFolha, vFolhaW * ${(1 / (0.16 * 32)).toFixed(4)}).r * 0.6 + texture(tFolha, vFolhaW * ${(1 / (0.37 * 32)).toFixed(4)} + 0.37).r * 0.4;
         diffuseColor.rgb *= 0.62 + 0.76 * fo;`)
+      // de perto, a mesma folhagem vira relevo (normal perturbada pela derivada na tela; some de longe)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        { float wb = 1.0 - smoothstep(0.012, 0.04, length(fwidth(vFolhaW)));
+          if (wb > 0.0) { vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition); vec3 r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1);
+            vec2 dh = vec2(dFdx(fo), dFdy(fo)) * 0.05 * wb; normal = normalize(abs(det) * normal - sign(det) * (dh.x * r1 + dh.y * r2)); } }`)
       .replace('#include <lights_physical_pars_fragment>', LUZ_FOLHA);
   };
   LEAF.customProgramCacheKey = () => 'folha2';
@@ -195,10 +208,12 @@ export function treeGroup(list, opts = {}) {
 }
 
 // ---------- floresta da mesa ----------
-// Blocos de 8 x 8 unidades (descarte por visão e nível de detalhe). Em cada bloco, as copas têm duas
-// malhas que dividem as mesmas instâncias (matrizes e cores) e o mesmo material: o cacho de três
-// lóbulos de perto e o de dois lóbulos de longe. A troca segue o raio da copa em pixels na tela.
-const BLOCO = 8, LOD_ALTO = 12, LOD_BAIXO = 9.5, RAIO_COPA = 0.45;
+// Blocos de 8 x 8 unidades (descarte por visão e nível de detalhe). Em cada bloco, as copas têm três
+// malhas que dividem as mesmas instâncias (matrizes e cores) e o mesmo material: o cacho de lóbulos
+// redondos bem de perto, o de lóbulos simples a meia distância e o alongado de longe. A troca segue o
+// raio da copa em pixels na tela (no ponto do bloco mais perto da câmera), com histerese.
+const BLOCO = 8, RAIO_COPA = 0.45;
+const LOD = [[12.5, 11.5], [28, 24]]; // [entra, sai] do nível 1 e do 2 (na vista da foto a 1376x768 só a frente fica no 1)
 export class Forest {
   constructor(engine) {
     this.e = engine; this.group = new THREE.Group(); this.group.name = 'floresta'; engine.scene.add(this.group);
@@ -228,10 +243,11 @@ export class Forest {
       const g = new THREE.Group(); g.name = 'mata'; const fol = list.filter((t) => t.kind !== 'conifera'), con = list.filter((t) => t.kind === 'conifera');
       if (fol.length) {
         const hi = new THREE.InstancedMesh(G.folha, mat, fol.length); preencher(hi, fol, 'folha');
-        const lo = new THREE.InstancedMesh(G.folhaLow, mat, fol.length); lo.instanceMatrix = hi.instanceMatrix; lo.instanceColor = hi.instanceColor; // mesmas instâncias, um envio só
-        for (const m of [hi, lo]) { m.castShadow = this.cast; m.receiveShadow = true; m.computeBoundingSphere(); m.userData.kind = 'folha'; g.add(m); }
+        const lo = new THREE.InstancedMesh(G.folhaLow, mat, fol.length), pe = new THREE.InstancedMesh(G.folhaPerto, mat, fol.length);
+        for (const m of [lo, pe]) { m.instanceMatrix = hi.instanceMatrix; m.instanceColor = hi.instanceColor; } // mesmas instâncias, um envio só
+        const niveis = [lo, hi, pe]; for (const m of niveis) { m.castShadow = this.cast; m.receiveShadow = true; m.computeBoundingSphere(); m.userData.kind = 'folha'; m.visible = m === lo; g.add(m); }
         const bx = [1e9, -1e9, 1e9, -1e9]; for (const t of fol) { bx[0] = Math.min(bx[0], t.x); bx[1] = Math.max(bx[1], t.x); bx[2] = Math.min(bx[2], t.z); bx[3] = Math.max(bx[3], t.z); }
-        hi.visible = false; this.lods.push({ hi, lo, bx, alto: false });
+        this.lods.push({ niveis, bx, n: 0, hi, lo });
       }
       if (con.length) { const cm = new THREE.InstancedMesh(G.conifera, mat, con.length); preencher(cm, con, 'conifera'); cm.castShadow = this.cast; cm.receiveShadow = true; cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); }
       this.group.add(g); this.chunks.push(g);
@@ -251,14 +267,15 @@ export class Forest {
   // bloco mais perto da câmera, com histerese; as duas malhas usam o mesmo programa
   _lod() {
     const cam = this.e.camera; if (!cam) return; const p = cam.position; const hpx = this.e.H || 720;
-    const k = (RAIO_COPA * hpx * 0.5) / Math.tan((cam.fov * Math.PI) / 360); let alto = 0;
+    const k = (RAIO_COPA * hpx * 0.5) / Math.tan((cam.fov * Math.PI) / 360); let alto = 0, perto = 0;
     for (const L of this.lods) {
       const dx = Math.max(L.bx[0] - p.x, 0, p.x - L.bx[1]), dz = Math.max(L.bx[2] - p.z, 0, p.z - L.bx[3]), dy = Math.max(p.y - 1.2, 0);
-      const px = k / Math.max(0.5, Math.hypot(dx, dy, dz)); const quer = L.alto ? px > LOD_BAIXO : px > LOD_ALTO;
-      if (quer !== L.alto) { L.alto = quer; L.hi.visible = quer; L.lo.visible = !quer; this.stats.trocas++; }
-      if (L.alto) alto++;
+      const px = k / Math.max(0.5, Math.hypot(dx, dy, dz));
+      const n = px > LOD[1][L.n >= 2 ? 1 : 0] ? 2 : px > LOD[0][L.n >= 1 ? 1 : 0] ? 1 : 0;
+      if (n !== L.n) { L.niveis[L.n].visible = false; L.niveis[n].visible = true; L.n = n; this.stats.trocas++; }
+      if (n >= 1) alto++; if (n === 2) perto++;
     }
-    this.stats.alto = alto;
+    this.stats.alto = alto; this.stats.perto = perto;
   }
   update(t) { windU.value = t / 1000; this._lod(); }
 }
