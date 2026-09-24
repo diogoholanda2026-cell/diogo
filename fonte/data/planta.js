@@ -34,7 +34,8 @@ export const A = {
   ilha: { c: [-1.0, -6.6], r: 1.3 },
   // Sede Administrativa da Holding Guarda-Chuva: fita aberta (arco de a0 a a1) que abraça o lago pelo
   // fundo e pela direita e encosta na ponta esquerda do Santuário; o0 = largura da fita (para dentro)
-  sede: { c: [2.4, -8.2], rx: 10.6, rz: 5.9, rot: 0.04, a0: 4.0, a1: 6.9, o0: -1.9, piscina: { c: [6.3, -10.0], r: 0.95 } },
+  // repasse = onde aparece o balão dos repasses: sobre o meio do 2º módulo (= W.faixas.sede.centro(1)), acima do teto
+  sede: { c: [2.4, -8.2], rx: 10.6, rz: 5.9, rot: 0.04, a0: 4.0, a1: 6.9, o0: -1.9, piscina: { c: [6.3, -10.0], r: 0.95 }, repasse: [4.5, 2.3, -13.0] },
   // Biblioteca Central (torre) + Centro de Recursos Digitais (abóbada) + anel em terraços
   // (dossel quadrado de 6.5 de lado a 5.2 de altura, girado 0.66: na câmera da foto os cantos da esquerda e da
   // direita caem a 2 px dos da foto e a largura dá 255 px, como na foto; os cantos de cima e de baixo ficam
@@ -94,14 +95,18 @@ export const PASSARELAS = {
   trilhaBioma: { nome: 'Trilha do Bioma', pts: [[25.2, -2.95, 0.8], [28.2, 0.6, 0.85], [29.0, 5.4, 0.9], [29.1, 10.4, 0.85], [28.8, 13.6, 0.5], [29.4, 15.4, 0.1]], w: 0.6 },
   elo: { nome: 'Elo do Santuário', pts: [[14.0, 2.0, 0.8], [14.6, 0.2, 0.9], [15.6, -1.6, 0.9], [17.2, -2.75, 0.8]], w: 0.6 },
   vila: { nome: 'Passarela da Vila', pts: [[16.47, 9.78, 0.93], [19.2, 9.0, 0.9], [22.6, 8.6, 0.8], [25.2, 9.4, 0.45], [26.4, 9.9, 0.1]], w: 0.55 },
-  frente: { nome: 'Caminho da Frente', pts: [[-19.6, 17.8, 0.12], [-17.0, 18.4, 0.12], [-14.0, 18.88, 0.12], [-10.0, 19.28, 0.12], [-7.6, 19.3, 0.12], [-4.0, 19.35, 0.12], [-0.4, 19.35, 0.12]], w: 0.6 },
+  frente: { nome: 'Caminho da Frente', pts: [[-20.45, 17.72, 0.12], [-17.0, 18.4, 0.12], [-14.0, 18.88, 0.12], [-10.0, 19.28, 0.12], [-7.6, 19.3, 0.12], [-4.0, 19.35, 0.12], [-0.4, 19.35, 0.12]], w: 0.6 },
   anel: { nome: 'Passeio do Anel', pts: [[-21.8, 10.6, 0.1], [-20.2, 13.4, 0.4], [-17.6, 15.9, 0.55], [-14.0, 17.68, 0.6], [-10.0, 18.08, 0.55], [-7.6, 17.75, 0.5], [-5.6, 17.1, 0.35], [-3.8, 16.3, 0.1]], w: 0.5 },
-  santuario: { nome: 'Passeio do Santuário', pts: [[27.4, -3.2, 0.8], [29.8, -4.6, 0.85], [31.0, -7.8, 0.85], [30.4, -11.8, 0.8], [28.0, -14.4, 0.5], [24.6, -15.4, 0.25], [21.6, -15.6, 0.1]], w: 0.55 },
+  // desce por trás da pista até o pasto dos animais (o pé fica dentro da clareira do pasto)
+  santuario: { nome: 'Passeio do Santuário', pts: [[27.4, -3.2, 0.8], [29.8, -4.6, 0.85], [31.0, -7.8, 0.85], [30.4, -11.8, 0.8], [28.0, -14.4, 0.55], [24.6, -15.35, 0.35], [21.6, -15.6, 0.18], [19.4, -15.62, 0.1]], w: 0.55 },
   // fita elevada da frente: sai do chão ao lado do canteiro, corre entre o Passeio do Anel e o Caminho da Frente
   // (as três fitas em camadas da foto) e desce até o piso da praça
   frente2: { nome: 'Fita da Frente', pts: [[-20.2, 15.9, 0.1], [-17.4, 17.1, 0.6], [-14.0, 18.26, 0.95], [-10.0, 18.65, 1.0], [-6.8, 18.55, 0.95], [-4.2, 17.6, 0.7], [-2.4, 16.6, 0.1]], w: 0.45 },
-  // rampa em "S" do chão do vale até o terraço do 3º pavimento do Anel, pelo lado de fora
-  caracol: { nome: 'Caracol do Anel', pts: [[3.9, 11.2, 0.1], [4.4, 9.6, 0.35], [3.0, 8.8, 0.6], [4.2, 7.6, 0.85], [2.9, 6.9, 1.05], [2.05, 7.4, 1.2]], w: 0.45 },
+  // rampa em "S" do piso do vale (ao lado do fim do canal) até o Anel, pelo lado de fora: termina num patamar
+  // próprio sobre pilares, encostado no módulo 7 do Anel a 1.28 (o terraço do teto com 3 andares, ou o piso do
+  // 4º andar com 4 ou 5)
+  caracol: { nome: 'Caracol do Anel', pts: [[4.5, 10.2, 0.08], [4.65, 9.3, 0.3], [3.0, 8.8, 0.6], [4.2, 7.6, 0.85], [2.9, 6.9, 1.08], [2.05, 7.4, 1.28]], w: 0.45,
+    patamar: { c: [2.09, 7.46], w: 1.0, d: 0.56, rot: -0.03, em: 'anel' } },
 };
 
 // Pasto dos animais resgatados, atrás da pista do Santuário (clareira com cerca)
@@ -119,10 +124,12 @@ export const ZONAS = [
   { id: 'ciencias', tipo: 'grama', elipse: [A.ciencias.c, A.ciencias.rx + 1.2, A.ciencias.rz + 1.6, A.ciencias.rot] },
   { id: 'sede', tipo: 'grama', elipse: [sd.c, sd.rx + 1.2, sd.rz + 1.2, sd.rot] }, // a fita aberta e o pátio até o lago
   { id: 'santuarioPasto', tipo: 'pasto', elipse: SANTUARIO_GRAMADO.elipse },
+  { id: 'santuarioPasto', tipo: 'pasto', elipse: [[22.0, -15.5], 2.8, 0.75, 0.02] }, // o pé do Passeio do Santuário
   { id: 'biblio', tipo: 'grama', elipse: [A.biblio.c, 8.8, 8.2, 0] },
   { id: 'savana', tipo: 'pasto', poly: A.savana.poly },
   { id: 'bioma', tipo: 'grama', elipse: [A.bioma.c, A.bioma.r + 1.2, A.bioma.r + 1.2, 0] },
   { id: 'vila', tipo: 'grama', elipse: [[21.6, 13.6], 5.4, 2.8, 0] },
+  { id: 'vila', tipo: 'grama', elipse: [[24.95, 11.94], 3.4, 1.5, -0.62] }, // a fileira na diagonal e o pé da Passarela da Vila
   { id: 'gorilas', tipo: 'grama', elipse: [A.gorilas.c, A.gorilas.rx + 0.9, A.gorilas.rz + 0.9, 0] },
   { id: 'acelerador', tipo: 'grama', elipse: [A.acelerador.c, A.acelerador.rx + 1.6, A.acelerador.rz + 1.3, 0] },
   { id: 'praca', tipo: 'praca', poly: A.praca.poly },

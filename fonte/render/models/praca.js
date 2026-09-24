@@ -43,8 +43,19 @@ export function deck(pts, w, o = {}) {
   return g;
 }
 
+// patamar sobre pilares no fim de uma rampa, encostado numa fachada: laje e guarda-corpo nos lados
+function patamar(pt, y) {
+  const g = new THREE.Group(); g.position.set(pt.c[0], 0, pt.c[1]); g.rotation.y = -pt.rot; const { w, d } = pt; // local: x para fora da fachada
+  const laje = mesh(new THREE.BoxGeometry(d, 0.07, w), M.whiteSmooth); laje.position.set(0, y - 0.035, 0); g.add(laje);
+  const gc = []; for (const s of [-1, 1]) gc.push([-d / 2, s * w / 2, d / 2, s * w / 2]);
+  const rg = new THREE.Group(); for (const [x0, z0, x1] of gc) { const r = mesh(new THREE.BoxGeometry(x1 - x0, 0.13, 0.015), M.glassRail, false); r.position.set((x0 + x1) / 2, y + 0.065, z0); r.renderOrder = 3; rg.add(r); } g.add(rg);
+  const cols = []; for (const s of [-1, 1]) { const x = d / 2 - 0.08, z = s * (w / 2 - 0.08); cols.push([[x, -0.05, z], [x, y - 0.07, z]]); } g.add(beams(cols, 0.04, M.whiteSmooth, 6));
+  return g;
+}
+
 export function passarela(id) {
   const d = PASSARELAS[id]; const root = new THREE.Group(); root.name = 'passarela-' + id; const P = { e1: deck(d.pts, d.w) }; root.add(P.e1);
+  if (d.patamar) { const f = d.pts[d.pts.length - 1]; P.e1.add(patamar(d.patamar, Math.max(heightAt(f[0], f[1]), 0) + f[2])); }
   const m = d.pts[(d.pts.length / 2) | 0];
   return { id: 'pas_' + id, root, partes: P, esqueletos: {}, grua: {}, foco: { x: m[0], z: m[1], dist: 10 }, ancora: [m[0], m[2] + 1.2, m[1]], caminho: P.e1.userData.caminho };
 }
