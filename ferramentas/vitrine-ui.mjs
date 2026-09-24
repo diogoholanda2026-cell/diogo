@@ -60,6 +60,7 @@ const CENAS = {
   inicio: () => {},
   metas: (H) => H.C.hud.alternarMetas(true),
   agora: (H) => { H.S.dicas.guia = H.TUTORIAL.length; H.S.dicas.abertura = 1; H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.C.calcBolhas(); },
+  'metas-agora': (H) => { CENAS.agora(H); H.C.hud.alternarMetas(true); },
   'guia-painel': (H) => { H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.C.irPara({ predio: 'usina1' }); },
   usina: (H) => { base(H); H.C.paineis.abrir('usina', 'usina1'); },
   oficina: (H) => { base(H); H.J.enfileirar('carpintaria', 'viga'); H.C.paineis.abrir('oficina', 'carpintaria'); },
