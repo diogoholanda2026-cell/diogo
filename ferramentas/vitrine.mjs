@@ -28,7 +28,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const arqIndice = join(saida, 'indice.json'); const anterior = existsSync(arqIndice) ? JSON.parse(readFileSync(arqIndice, 'utf8')) : { indice: [] };
 const indice = anterior.indice.slice(); const erros = [];
 const espera = (pg, ms) => pg.waitForTimeout(ms);
-const SEM_ANIMACAO = '*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;transition-duration:1ms!important;transition-delay:0s!important}';
+// sem animação nenhuma (e não só curta): uma animação que começa no quadro da foto sairia no estado inicial
+const SEM_ANIMACAO = '*,*::before,*::after{animation:none!important;transition:none!important}';
 // espera o mundo assentar: refusão adiada e time-lapse da obra (se o jogo os expuser)
 const assenta = (pg) => pg.waitForFunction(() => { const H = window.__held; return !H || (!H.mundo?.refusaoPendente && !H.obras?.timelapseAtivo); }, null, { timeout: 60000 }).catch(() => {});
 async function abre(q, W, H, movel = false) {

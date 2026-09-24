@@ -18,7 +18,8 @@ const srv = createServer((req, res) => {
   res.writeHead(200, { 'content-type': tipos[extname(f)] || 'application/octet-stream' }); res.end(readFileSync(f));
 }).listen(0);
 const porta = srv.address().port;
-const SEM_ANIMACAO = '*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;transition-duration:1ms!important;transition-delay:0s!important}';
+// sem animação nenhuma (e não só curta): uma animação que começa no quadro da foto sairia no estado inicial
+const SEM_ANIMACAO = '*,*::before,*::after{animation:none!important;transition:none!important}';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: +W, height: +H }, deviceScaleFactor: 1 });
 const logs = [];
