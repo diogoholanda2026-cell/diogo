@@ -53,7 +53,8 @@ export const A = {
   // fundo e pela direita e encosta na ponta esquerda do Santuário; o0 = largura da fita (para dentro)
   sede: { c: [2.4, -8.2], rx: 10.6, rz: 5.9, rot: 0.04, a0: 4.0, a1: 6.9, o0: -1.9, piscina: { c: [6.3, -10.0], r: 0.95 } },
   // Biblioteca Central (torre) + Centro de Recursos Digitais (abóbada) + anel em terraços
-  // (dossel de ~6 de lado girado ~55°, apoiado no topo da torre a 5.4: medido nos cantos do dossel na foto)
+  // (dossel de 5.8 de lado girado ~55° e apoiado no topo da torre, a 5.3: medido nos cantos do dossel na foto;
+  // torre em vaso de raio 2.4, como a largura da foto; o CRD fica à frente, com posição própria)
   biblio: { c: [14.9, 8.1], r: 2.4, canopy: 5.8, canopyRot: 0.95, canopyY: 5.3, crd: { c: [14.2, 12.9], rot: -0.32 } },
   anelBib: { c: [14.9, 8.1], r0: 3.7, r1: 6.5, a0: 2.9, a1: 4.6 }, // do lado esquerdo ao fundo (a frente fica com o CRD)
   // Santuário de Animais e Centro de Conservação (pista de 4 andares; lagoa por dentro, pasto atrás)
