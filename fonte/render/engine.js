@@ -217,7 +217,7 @@ export class Engine {
     this.pr = this.fixedPR || this._degrau(Math.min(this.q.prMax, window.devicePixelRatio || 1));
     this._msaa = this.q.msaa;
     // valores padrão = luz de exposição (env.setMode reescreve)
-    this.params = { bloomStrength: 0.9, threshold: 1.0, knee: 0.55, exposure: 1.05, focusBand: 0.2, focusFall: 0.75, dofMax: 0.55, vignette: 0.35, saturation: 0.75, contrast: 1.08,
+    this.params = { bloomStrength: 0.9, threshold: 1.0, knee: 0.55, exposure: 1.05, focusBand: 0.2, focusFall: 0.75, dofMax: 0.55, vignette: 0.35, saturation: 0.7, contrast: 1.08,
       wb: new THREE.Vector3(1.03, 1.0, 0.93), shadowTint: new THREE.Vector3(0, 0.002, 0.004), highTint: new THREE.Vector3(0.012, 0.004, -0.010) };
     this.focus = 20;
     this.fade = 0; this.fadeColor = new THREE.Vector3(0.02, 0.03, 0.06);
