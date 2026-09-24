@@ -57,8 +57,8 @@ export const CAPITULOS = [
     ],
     fala: [['iris', 'O Conselho viu a primeira volta do Anel de pé. Aprovado!'], ['tome', 'Agora o canteiro precisa crescer com a obra. Como vamos organizá-lo?']],
     escolha: [
-      { id: 'compacto', quem: 'iris', txt: 'Canteiro compacto', ganho: '+6% de bem-estar', custo: '−20 vagas no Almoxarifado', porque: 'Íris prefere: menos caminhões perto da mata.' },
-      { id: 'amplo', quem: 'tome', txt: 'Canteiro amplo', ganho: '+40 vagas no Almoxarifado e +3 vagas na fila de cada oficina', custo: '−4% de bem-estar até o epílogo', porque: 'Tomé prefere: estoque folgado e oficinas que trabalham a noite toda.' },
+      { id: 'compacto', quem: 'iris', txt: 'Canteiro compacto', ganho: '+4% de bem-estar', custo: '−20 vagas no Almoxarifado', porque: 'Íris prefere: menos caminhões perto da mata.' },
+      { id: 'amplo', quem: 'tome', txt: 'Canteiro amplo', ganho: '+40 vagas no Almoxarifado e +3 vagas na fila de cada oficina', custo: '−3% de bem-estar até o epílogo', porque: 'Tomé prefere: estoque folgado e oficinas que trabalham a noite toda.' },
     ] },
   { n: 2, nome: 'Água que corre', sub: 'Lago vivo, praça e escola', obras: ['escola', 'campo', 'praca', 'pas_bulevar', 'pas_anel', 'pas_frente2'],
     metas: [
@@ -112,8 +112,8 @@ export const CAPITULOS = [
     ],
     fala: [['nara', 'Os gorilas olham para a passarela com curiosidade. Estão em casa.'], ['iris', 'Falta só o canteiro para a composição ficar igual à maquete. E a água do replantio?']],
     escolha: [
-      { id: 'tarifa', quem: 'cida', txt: 'Tarifa social da água', ganho: '+6% de bem-estar', custo: '−10% nos repasses', porque: 'Dona Cida prefere: água limpa para todos, pelo preço justo.' },
-      { id: 'aguaObra', quem: 'tome', txt: 'Água para a obra', ganho: 'Central de Concreto e Horto 20% mais rápidos', custo: '−2% de bem-estar', porque: 'Tomé prefere: o replantio pede muita rega.' },
+      { id: 'tarifa', quem: 'cida', txt: 'Tarifa social da água', ganho: '+6% de bem-estar', custo: 'A obra paga a água a preço cheio: Replantar a mata custa 30% mais', porque: 'Dona Cida prefere: água limpa para todos, pelo preço justo.' },
+      { id: 'aguaObra', quem: 'tome', txt: 'Água para a obra', ganho: 'Horto 20% mais rápido e o replantio 40% mais curto', custo: '−3% de bem-estar', porque: 'Tomé prefere: o replantio pede muita rega.' },
     ] },
   { n: 6, nome: 'Composição total', sub: 'Devolver o canteiro à mata', obras: ['reflorestar'],
     metas: [{ tipo: 'etapa', id: 'reflorestar.e0', txt: 'Desmonte o canteiro' }, { tipo: 'etapa', id: 'reflorestar.e1', txt: 'Replante a mata' }],
@@ -127,16 +127,17 @@ export const CAPITULOS = [
 // semRequer: prédio sem pré-requisito; modulo: {faixa: {nível: itens a mais}}; ateCap: vale até esse capítulo.
 // 'legado:<id>' são as escolhas de saves antigos: o mesmo bônus de antes, sem custo.
 export const EFEITOS = {
-  compacto: { bonus: { bem: 6 }, custo: { almox: -20 } },
-  amplo: { bonus: { almox: 40, fila: 3 }, custo: { bem: -4, ateCap: 6 } },
+  compacto: { bonus: { bem: 4 }, custo: { almox: -20 } },
+  amplo: { bonus: { almox: 40, fila: 3 }, custo: { bem: -3, ateCap: 6 } },
   biblio24h: { bonus: { bem: 6 }, custo: { energia: -1500, maisItens: { 'biblioteca.e3': { estante: 3 } } } },
   labs: { bonus: { semRequer: { laboratorio: 1 }, oficinas: { eletrica: 0.25, laboratorio: 0.25 } }, custo: { custoEtapa: { 'biblioteca.e5': 0.2 } } },
   geotermia: { bonus: { energia: 3000 }, custo: { tempoEtapa: { 'acelerador.e4': 0.3 } } },
   telhados: { bonus: { energia: 1500, bem: 3 }, custo: { modulo: { casas: { 2: { solar: 1 } } } } },
   elefantes: { bonus: { bem: 4 }, custo: { requer: { 'bioma.e2': ['savana.e3'] } } },
   aquario: { bonus: { itensEtapa: { 'bioma.e4': 0.6 }, oficinas: { serralheria: 0.25, vidracaria: 0.25 } }, custo: { bem: -2 } },
-  tarifa: { bonus: { bem: 6 }, custo: { repasse: -0.1 } },
-  aguaObra: { bonus: { oficinas: { concreto: 0.2, horto: 0.2 } }, custo: { bem: -2 } },
+  // o dilema do capítulo 5 pesa no epílogo: o replantio (itens e tempo) e o bem-estar com que a composição termina
+  tarifa: { bonus: { bem: 6 }, custo: { custoEtapa: { 'reflorestar.e1': 0.3 } } },
+  aguaObra: { bonus: { oficinas: { horto: 0.2 }, tempoEtapa: { 'reflorestar.e1': -0.4 } }, custo: { bem: -3 } },
   'legado:usina+': { bonus: { usina: 0.15 } },
   'legado:almox+': { bonus: { almox: 25 } },
   'legado:repasse+': { bonus: { repasse: 0.15 } },
