@@ -27,12 +27,13 @@ const SKY_F = /* glsl */`
     vec3 col = mix(night, dayc, day);
     // azimute em voltas (0..1): senos com frequência inteira e ruído periódico (np), sem costura
     float u = atan(d.x, d.z) * 0.15915494;
-    // aurora em fitas horizontais, concentrada atrás da mesa (lado -z)
-    float yc = 0.30 + 0.08 * sin(u * 12.566371 + t * 0.03) + 0.05 * np(u * 19.0, t * 0.02, 19.0);
+    // aurora em fitas horizontais, concentrada atrás da mesa (lado -z); as fases põem a fita e a dobra
+    // no enquadramento da foto como estavam antes (u = ±0,5 atrás da mesa)
+    float yc = 0.30 + 0.08 * sin(u * 12.566371 - 0.93 + t * 0.03) + 0.05 * np(u * 19.0, t * 0.02, 19.0);
     // raios das cortinas: brilho e altura variam pouco de um raio para o outro (fita, não colunas)
     float nr = np(u * 239.0 + t * 0.12, 0.0, 239.0), nr2 = np(u * 609.0 - t * 0.2, 3.0, 609.0);
     float raios = 0.6 + 0.45 * nr * nr + 0.15 * nr2; float k = 10.0 - 3.5 * nr;
-    float dobra = 0.5 + 0.5 * sin(u * 12.566371 + 4.0 * np(u * 13.0, t * 0.01, 13.0));
+    float dobra = 0.5 + 0.5 * sin(u * 12.566371 + 0.94 + 4.0 * np(u * 13.0, t * 0.01, 13.0));
     float mask = smoothstep(-0.2, 0.6, -d.z);
     col += (fita(y, yc, k) + fita(y, yc + 0.12, k) * 0.5) * raios * dobra * mask * aur * (1.0 - day);
     // estrelas com brilhos variados
