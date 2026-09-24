@@ -40,7 +40,7 @@ const SKY_F = /* glsl */`
 // luz e gradação de cada modo
 const MODOS = {
   exposicao: { key: [0xffd6a4, 2.6], dir: [-0.30, 0.90, 0.30], sombra: 0.85, hemi: [0x8aa8dc, 0x6a4a2c, 0.95], envI: 0.8, rim: [0x6fdcc0, 0.35], night: [1, 0], day: 0, off: 0.62, aur: 0.24,
-    P: { exposure: 1.05, saturation: 0.82, contrast: 1.08, vignette: 0.35, wb: [1.03, 1.0, 0.93], shadowTint: [0, 0.002, 0.004], highTint: [0.012, 0.004, -0.010], threshold: 1.0, bloomStrength: 0.9 } },
+    P: { exposure: 1.05, saturation: 0.75, contrast: 1.08, vignette: 0.35, wb: [1.03, 1.0, 0.93], shadowTint: [0, 0.002, 0.004], highTint: [0.012, 0.004, -0.010], threshold: 1.0, bloomStrength: 0.9 } },
   dia: { key: [0xfff1dc, 3.0], dir: [-0.35, 0.86, 0.36], sombra: 0.8, hemi: [0xbcd8ff, 0x6a5a44, 1.1], envI: 1.0, rim: [0x9fc4ff, 0.3], night: [0.05, 0], day: 1, off: 0, aur: 0,
     P: { exposure: 1.0, saturation: 0.9, contrast: 1.06, vignette: 0.25, wb: [0.98, 1.0, 1.02], shadowTint: [0, 0.001, 0.003], highTint: [0.006, 0.003, -0.004], threshold: 1.0, bloomStrength: 0.45 } },
   noite: { key: [0x9fb8ff, 0.9], dir: [0.3, 0.8, -0.5], sombra: 0.7, hemi: [0x2a3f6a, 0x1a140e, 0.7], envI: 0.45, rim: [0x5fe0b0, 0.4], night: [1, 1], day: 0, off: 0.62, aur: 0.2,

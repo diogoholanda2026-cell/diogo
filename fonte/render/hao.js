@@ -80,11 +80,12 @@ export class HAO {
   get ativo() { return this._ativo; }
   // gancho em todos os materiais da cena (menos obras em andamento)
   prepararCena() { const n = { v: 0 }; const anda = (o) => { if (o.name === 'obras') return; if (o.material) for (const m of [].concat(o.material)) if (haoPatch(m)) n.v++; for (const c of o.children) anda(c); }; anda(this.e.scene); return n.v; }
-  // quem entra no mapa: opacos das raízes registradas (terreno, mata, mundo) e as paredes da bandeja;
-  // ficam de fora gente, bichos, obras, transparentes, cortados e tudo com userData.semHAO
+  // quem entra no mapa: os opacos das raízes registradas (terreno, mata, mundo); ficam de fora gente,
+  // bichos, obras, transparentes, materiais cortados e tudo com userData.semHAO (a queda nos cantos
+  // cuida da borda da bandeja)
   _entrada() {
     const marca = (o, ok) => {
-      if (o.userData.semHAO || o.name === 'obras') ok = false;
+      if (o.userData.semHAO || o.name === 'obras' || o.userData.feito === false) ok = false; // peça ainda em obra: só entra aprovada
       if (o.isMesh) {
         const ms = [].concat(o.material); const opaco = ms.every((m) => m && !m.transparent && !m.userData.semHAO && !(m.clippingPlanes && m.clippingPlanes.length));
         if (ok && opaco) o.layers.enable(CAMADA_HAO); else o.layers.disable(CAMADA_HAO);
@@ -92,8 +93,6 @@ export class HAO {
       for (const c of o.children) marca(c, ok);
     };
     for (const r of this.e.haoRaizes || []) marca(r, true);
-    const mesa = this.e.scene.getObjectByName('mesa'); // só as paredes da bandeja (filhos diretos, madeira)
-    if (mesa) for (const c of mesa.children) { const big = c.geometry?.parameters?.width >= 100; if (c.isMesh && !c.isInstancedMesh && !c.userData.semHAO && !big && !Array.isArray(c.material) && !c.material.transparent && c.position.y > -3) c.layers.enable(CAMADA_HAO); }
   }
   calcular() {
     const e = this.e, r = e.renderer, scene = e.scene;
