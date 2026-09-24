@@ -64,7 +64,7 @@ Cinco capítulos e um epílogo, com conselheiros (Íris, arquiteta-chefe; Tomé,
 
 No fim de cada capítulo o Conselho apresenta um **dilema** sobre o que vem pela frente: a primeira opção cuida das pessoas (bem-estar), a segunda acelera a obra, e cada uma tem um custo. Canteiro compacto × amplo; Biblioteca aberta dia e noite × Laboratórios primeiro; Telhados solares × Geotermia profunda; Elefantes × Aquário primeiro; e, para o replantio do epílogo, Tarifa social da água (+6% de bem-estar, replantio 30% mais caro) × Água para a obra (Horto 20% mais rápido e replantio 40% mais curto, −3% de bem-estar). O epílogo lembra as escolhas.
 
-1. **Fundação:** canteiro, Caminho da Frente, desassoreamento do Lago Central, Sede da Holding e os primeiros módulos do Anel. Um tutorial curto (4 a 6 minutos) leva da primeira brita ao primeiro módulo (os passos já estão nos dados; a interface nova os mostra).
+1. **Fundação:** canteiro, Caminho da Frente, desassoreamento do Lago Central, Sede da Holding e os primeiros módulos do Anel. Um tutorial curto (4 a 6 minutos) leva da primeira brita ao primeiro módulo: um anel dourado pulsa sobre o que tocar (o balão, o botão ou o controle dentro do painel) e o conselheiro explica cada passo.
 2. **Água que corre:** margens vivas e estação natural de água, Escola e Campus para Jovens, campo, Praça Central com jardins filtrantes, Bulevar Verde, anel de vidro solar da Sede.
 3. **Saber de madeira:** Biblioteca Central (núcleo, andares, pilares-árvore, dossel), Centro de Recursos Digitais, Faculdades de Humanidades, Engenharia e Ciências, Instituto de Estudos Urbanos, Campus Universitário, Ala em Onda, pontes.
 4. **Energia escondida:** Acelerador de Partículas (poço, anel, detectores, Centro de Física), anfiteatro e casas da Vila Estudantil.
@@ -82,18 +82,36 @@ No fim de cada capítulo o Conselho apresenta um **dilema** sobre o que vem pela
 - a encomenda em cadeia termina sem trava; a "Meta em foco" (o robô que só segue `J.planoMeta()`, que também manda coletar a bandeja cheia, subir módulos em paralelo, adiantar produção, pré-entregar o epílogo e ampliar o que trava) termina na mesma faixa de 12 a 16 dias, com o epílogo em até 8 horas;
 - ao menos 3 dos 5 dilemas mudam o tempo em 8% ou mais e nenhum passa de 20%; o do capítulo 5 é medido no epílogo, que não pode passar de 3 horas no contínuo.
 
-O mesmo robô roda no GitHub Actions a cada envio. As consultas e eventos que a interface usa (tutorial, Meta em foco, progresso das metas, falas, avisos, disposição, topógrafo, depósito, serviços, pedidos e escolhas) estão descritos no começo de `fonte/sim/estado.js`. Parte disso ainda está só na simulação e nos dados: a interface atual não mostra o tutorial, a linha da Meta em foco, a barra de disposição, o Topógrafo, o estoque do Depósito nem o rosto e a fala dos pedidos; isso vem com a interface nova.
+O mesmo robô roda no GitHub Actions a cada envio. As consultas e eventos que a interface usa (tutorial, Meta em foco, progresso das metas, falas, avisos, disposição, topógrafo, depósito, serviços, pedidos e escolhas) estão descritos no começo de `fonte/sim/estado.js`, e a interface mostra todos eles (veja **Interface**).
 
 ### Salvamento
 
 O jogo grava no navegador a cada 12 segundos e ao sair, esconder ou congelar a aba: primeiro no localStorage (na hora) e depois no IndexedDB; ao abrir, lê os dois e fica com o gravado por último. Importar um arquivo (ou apagar o progresso) trava a gravação até a página recarregar, para o jogo da memória não gravar por cima. Um save de versão antiga é **migrado** (com uma cópia de segurança antes) e nunca recomeça o jogo; um save danificado fica guardado à parte e o jogo avisa. Em Configurações dá para exportar e importar o save em arquivo.
 
+## Interface
+
+Pensada para a tela 20:9 em paisagem (986x443 no Poco X7): a maquete fica sempre à vista e tudo que se toca tem pelo menos 44 px.
+
+- **Barra de cima:** nível (o anel enche com a experiência), composição concluída, moradores, bem-estar, créditos e **Mutirão** (fichas e a barra de disposição), Apreciar e Configurações. Tocar no bem-estar mostra as três maiores fontes e a pressão de moradia; tocar no Mutirão explica que cada ficha reduz até 2 h de uma obra. Os números contam até o valor novo quando as moedas e estrelas chegam voando.
+- **Capítulo:** uma pílula (`Cap. 1 · Fundação · 1/5`) que abre as metas com o progresso de cada uma (`3/8`, `etapa 2/5`); tocar numa meta leva até o prédio, a obra ou o módulo. Meta cumprida pisca em verde.
+- **Agora (Meta em foco):** a próxima ação concreta para as metas do capítulo ("Produzir 2 Concreto na Central de Concreto"), com o botão **Ir**, que leva a câmera, abre o painel e destaca o controle certo.
+- **Próximo** (embaixo, à direita): ícone e verbo da próxima coisa a fazer (Coletar, Aprovar, Produzir, Obra…). Só leva a câmera e abre o painel; pulsa quando há algo para coletar ou aprovar e some quando não há nada.
+- **Falas do conselho** aparecem numa doca no alto, também com painel aberto; o tempo de leitura depende do tamanho do texto, para enquanto há um modal e tem o botão **Pular**. Avisos curtos empilham logo abaixo (até três).
+- **Painéis** abrem numa folha à esquerda (36% da tela) e a câmera desloca a maquete para a área livre, de modo que o prédio operado fica à direita da folha. Painéis abertos de dentro de outro têm o botão **‹** para voltar.
+- **Prancha da obra:** cada material mostra entregue/necessário com um anel (ouro: entregue; ouro claro: no almoxarifado). Com tudo à mão, um toque só: **Entregar e iniciar**; a folha fecha e a câmera mostra o canteiro montando. Licença que falta pode ser encomendada ao **Topógrafo** ali mesmo, com cronômetro.
+- **Pedidos:** grade de cartões com quem pede, onde mora, a fala e a recompensa; o cartão inteiro entrega. Se faltar algo, os itens tremem e aparece o que falta com o atalho **Produzir**. A lixeira pede dois toques.
+- **Balões** entram com mola, pulam cada um no seu ritmo e os de coletar e aprovar chamam atenção. Fora da tela, os importantes ficam presos à borda com uma seta (tocar leva até lá); balões muito próximos viram um grupo com `+n` (tocar aproxima). Módulo que precisa de água, energia, saneamento ou bem-estar mostra um balão cinza com o ícone do que falta.
+- **Aprovar:** o balão sai, o carimbo APROVADO cai e bate no mesmo instante em que o andaime desmonta; depois vêm o aviso da medição, as estrelas de experiência e, na última etapa de um projeto, uma volta de câmera com barras de cinema. Um modal só abre depois da festa, sem painel aberto e um de cada vez.
+- **Conselho:** a apresentação do fim de capítulo não some com um toque fora; **Decidir depois** deixa a pílula **Conselho aguarda** no alto. Cada escolha mostra ganho, custo e quem prefere.
+- **Configurações** em quatro colunas, sem rolar; **Recomeçar** pede dois toques. **Importar** usa o arquivo exportado e recarrega o jogo (avisos de migração aparecem num aviso).
+- `ferramentas/vitrine-ui.mjs` captura a interface no celular (986x443 e 915x412) sem WebGL, cena por cena, e mede alvos de toque, tamanho de texto, área do HUD e da folha.
+
 ## Controles
 
 - **Um dedo:** arrasta o mapa (com inércia). **Pinça:** aproxima. **Torcer dois dedos:** gira. **Dois dedos para cima/baixo:** inclina.
 - **Toque** numa construção, num lote ou num balão. **Toque duplo:** aproxima naquele ponto. Arrastar o dedo por vários balões de coleta recolhe todos.
-- **Próximo:** leva até a próxima coisa a fazer.
-- **Apreciar:** esconde a interface. A barra de baixo tem **Foto** (volta ao enquadramento exato da foto), um **controle deslizante** que põe a foto por cima da maquete com transparência ajustável, **Rótulos** da maquete, **Planta** holográfica e **Luz** (exposição, noite ou dia).
+- **Próximo** e **Ir** levam até a próxima ação. Tocar na maquete fecha a folha e o cartão das metas.
+- **Apreciar** (ícone de câmera no alto): esconde a interface e a câmera passeia devagar; a barra de baixo some sozinha depois de 3,5 s e volta com um toque. Tem **Vista da foto** (o enquadramento exato da foto), **Comparar** (a foto por cima da maquete, com transparência ajustável), **Rótulos** e **Planta** (ligados ficam dourados), **Luz** (mostra o modo: Exposição, Noite ou Dia), **Fotografar** (salva ou compartilha um JPEG do quadro) e **Sair**. Com som ligado, pássaros e água ao fundo.
 - No computador: arrastar move, roda do mouse aproxima, botão direito gira e inclina.
 
 ## Gráficos
@@ -123,13 +141,15 @@ fonte/
   render/                    motor (pós-processamento), câmera, céu, terreno, floresta, mesa,
                              canteiro animado, figuras, animais e o mundo
   render/models/             cada estrutura da foto, por etapas
-  ui/                        HUD, painéis, balões, ícones desenhados em código, configurações
+  ui/                        HUD, painéis (folha lateral), balões, ícones desenhados em código,
+                             configurações e modo Apreciar
   web/                       HTML, manifesto, service worker, ícones e a foto em WebP
 ferramentas/
   montar.mjs                 empacota fonte/ com esbuild em app/ e no arquivo único
   simular.mjs                robô que joga do início ao fim (sessões, escolhas, faixas do equilíbrio)
   robo-partida.js            robô que joga a partida inteira no navegador (pela interface)
   testar.mjs                 capturas de tela no Chromium (WebGL por software)
+  vitrine-ui.mjs             capturas e medidas da interface no celular, sem WebGL
 ```
 
 ```bash
