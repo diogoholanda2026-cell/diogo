@@ -5,6 +5,27 @@ export const lerp = (a, b, t) => a + (b - a) * t;
 export const smooth = (t) => t * t * (3 - 2 * t);
 export const smoothstep = (a, b, x) => smooth(clamp((x - a) / (b - a), 0, 1));
 export const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
+// curvas de animação (t de 0 a 1)
+export const easeOutQuint = (t) => 1 - Math.pow(1 - t, 5);
+export const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+export const easeInCubic = (t) => t * t * t;
+export const easeInQuad = (t) => t * t;
+export const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+export const easeInOutSine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
+export const easeOutBack = (t, s = 1.70158) => { const u = t - 1; return 1 + (s + 1) * u * u * u + s * u * u; };
+export function easeOutBounce(t) {
+  const n = 7.5625, d = 2.75;
+  if (t < 1 / d) return n * t * t; if (t < 2 / d) return n * (t -= 1.5 / d) * t + 0.75;
+  if (t < 2.5 / d) return n * (t -= 2.25 / d) * t + 0.9375; return n * (t -= 2.625 / d) * t + 0.984375;
+}
+// fatia de 0 a 1 de um intervalo [a, b] (tempo local de uma etapa da animação)
+export const fatia = (x, a, b) => clamp((x - a) / (b - a), 0, 1);
+// mola amortecida (semi-implícita) no estado s = {x, v}, rumo a alvo; omega em rad/s, zeta 1 = crítica
+export function mola(s, alvo, omega, zeta, dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.012)), h = dt / n;
+  for (let i = 0; i < n; i++) { s.v += (-omega * omega * (s.x - alvo) - 2 * zeta * omega * s.v) * h; s.x += s.v * h; }
+  return s.x;
+}
 export const rnd = (a, b) => a + Math.random() * (b - a);
 export const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 export const $ = (s, r = document) => r.querySelector(s);
