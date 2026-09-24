@@ -10,6 +10,10 @@ const SKY_F = /* glsl */`
   uniform float t; uniform float day; uniform float off; uniform float aur; varying vec3 vDir;
   float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
   float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+  // ruído periódico no azimute: a volta inteira tem N células (a rede em x é tomada módulo N), então
+  // o céu não tem costura em lugar nenhum, qualquer que seja a origem do ângulo
+  float np(float u, float v, float N){ float i = floor(u), f = fract(u); vec2 j = vec2(floor(v), fract(v)); f = f*f*(3.0-2.0*f); j.y = j.y*j.y*(3.0-2.0*j.y);
+    float a = mod(i, N), b = mod(i + 1.0, N); return mix(mix(h(vec2(a, j.x)), h(vec2(b, j.x)), f), mix(h(vec2(a, j.x + 1.0)), h(vec2(b, j.x + 1.0)), f), j.y); }
   // fita de aurora: borda de baixo nítida, topo difuso, verde embaixo e violeta em cima
   vec3 fita(float y, float yc, float k) { float dy = y - yc; float base = smoothstep(-0.02, 0.0, dy) * exp(-max(dy, 0.0) * k);
     return mix(vec3(0.12, 0.95, 0.5), vec3(0.55, 0.25, 0.9), smoothstep(0.0, 0.18, dy)) * base; }
@@ -21,17 +25,18 @@ const SKY_F = /* glsl */`
     // dia: parede clara de galeria (#b9c4cc embaixo, #e6e2da no alto)
     vec3 dayc = mix(vec3(0.485, 0.552, 0.604), vec3(0.791, 0.762, 0.701), smoothstep(-0.35, 0.45, y));
     vec3 col = mix(night, dayc, day);
-    float ang = atan(d.x, d.z);
+    // azimute em voltas (0..1): senos com frequência inteira e ruído periódico (np), sem costura
+    float u = atan(d.x, d.z) * 0.15915494;
     // aurora em fitas horizontais, concentrada atrás da mesa (lado -z)
-    float yc = 0.30 + 0.08 * sin(ang * 1.7 + t * 0.03) + 0.05 * n2(vec2(ang * 3.0, t * 0.02));
-    // raios verticais das cortinas: brilho e altura variam de um raio para o outro
-    float nr = n2(vec2(ang * 38.0 + t * 0.12, 0.0)), nr2 = n2(vec2(ang * 97.0 - t * 0.2, 3.0));
-    float raios = 0.2 + 0.8 * nr * nr + 0.25 * nr2; float k = 9.0 - 5.0 * nr;
-    float dobra = 0.5 + 0.5 * sin(ang * 2.3 + 4.0 * n2(vec2(ang * 2.0, t * 0.01)));
+    float yc = 0.30 + 0.08 * sin(u * 12.566371 + t * 0.03) + 0.05 * np(u * 19.0, t * 0.02, 19.0);
+    // raios das cortinas: brilho e altura variam pouco de um raio para o outro (fita, não colunas)
+    float nr = np(u * 239.0 + t * 0.12, 0.0, 239.0), nr2 = np(u * 609.0 - t * 0.2, 3.0, 609.0);
+    float raios = 0.6 + 0.45 * nr * nr + 0.15 * nr2; float k = 10.0 - 3.5 * nr;
+    float dobra = 0.5 + 0.5 * sin(u * 12.566371 + 4.0 * np(u * 13.0, t * 0.01, 13.0));
     float mask = smoothstep(-0.2, 0.6, -d.z);
     col += (fita(y, yc, k) + fita(y, yc + 0.12, k) * 0.5) * raios * dobra * mask * aur * (1.0 - day);
     // estrelas com brilhos variados
-    vec2 sp = floor(vec2(ang * 90.0, y * 260.0)); float s = h(sp), s2 = h(sp + 17.31);
+    vec2 sp = vec2(mod(floor(u * 565.0), 565.0), floor(y * 260.0)); float s = h(sp), s2 = h(sp + 17.31);
     float star = step(0.9975, s) * pow(s2, 8.0) * smoothstep(0.05, 0.2, y) * (0.6 + 0.4 * sin(t * 1.7 + s * 90.0));
     col += vec3(star) * 3.0 * (1.0 - day);
     gl_FragColor = vec4(col, 1.0);

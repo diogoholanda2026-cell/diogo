@@ -2,7 +2,11 @@
 // desfocado; cada fragmento compara a própria altura com a do entorno e escurece a luz indireta
 // (e um pouco da direta). Na mesma injeção vão a queda de luz nos cantos da mesa (poça do refletor)
 // e um véu leve de distância. O mapa só é refeito quando a construção muda, nunca pela câmera.
+// O canal G guarda a cobertura (1 onde há maquete). A oclusão só vale dentro da bandeja, onde há
+// cobertura e acima do fundo do poço do acelerador: bordas e face da mesa, placa, pedestal e piso
+// ficam com occ = 1 (só a queda nos cantos e o véu). Material com userData.semHAO nem recebe o gancho.
 import * as THREE from 'three';
+import { MESA } from '../data/planta.js';
 
 export const CAMADA_HAO = 5;                 // só o que tem esta camada entra no mapa de alturas
 const X0 = -34, X1 = 34, Z0 = -22, Z1 = 22;  // a mesa + 2 unidades
@@ -20,8 +24,11 @@ const VS_POS = /* glsl */`
 const FS_DECL = 'varying vec3 vHaoW; uniform sampler2D tHAO; uniform vec4 haoP; uniform float haoOn;';
 const FS_AO = /* glsl */`
   if ( haoOn > 0.5 ) {
-    float hb = texture2D( tHAO, ( vHaoW.xz - haoP.xy ) * haoP.zw ).r;
-    float occ = clamp( 1.0 - max( hb - vHaoW.y, 0.0 ) * 0.6, 0.35, 1.0 );
+    vec2 hc = texture2D( tHAO, ( vHaoW.xz - haoP.xy ) * haoP.zw ).rg; // R altura·cobertura, G cobertura
+    vec2 dm = abs( vHaoW.xz - vec2( ${((MESA.x0 + MESA.x1) / 2).toFixed(2)}, ${((MESA.z0 + MESA.z1) / 2).toFixed(2)} ) ) - vec2( ${((MESA.x1 - MESA.x0) / 2).toFixed(2)}, ${((MESA.z1 - MESA.z0) / 2).toFixed(2)} );
+    float cob = smoothstep( 0.1, 0.4, hc.g ) * step( max( dm.x, dm.y ), 0.0 ) * smoothstep( -3.2, -2.8, vHaoW.y );
+    float hb = hc.r / max( hc.g, 0.1 ); // média das alturas cobertas (o vazio limpo com 0 não puxa para baixo)
+    float occ = mix( 1.0, clamp( 1.0 - max( hb - vHaoW.y, 0.0 ) * 0.6, 0.35, 1.0 ), cob );
     reflectedLight.indirectDiffuse *= occ; reflectedLight.indirectSpecular *= occ;
     reflectedLight.directDiffuse *= mix( 1.0, occ, 0.35 );
     reflectedLight.directDiffuse *= 1.0 - 0.22 * smoothstep( 0.45, 1.05, length( vHaoW.xz / vec2( 34.0, 22.0 ) ) );
@@ -32,7 +39,7 @@ const FS_VEU = /* glsl */`
 // Encadeia o gancho no material (MeshStandard/Physical). Idempotente; a chave do programa passa a
 // incluir '|hao' para não dividir programa com um material sem o gancho.
 export function haoPatch(mat) {
-  if (!mat || !mat.isMeshStandardMaterial || corrigidos.has(mat)) return false;
+  if (!mat || !mat.isMeshStandardMaterial || corrigidos.has(mat) || mat.userData.semHAO) return false;
   if (mat.clippingPlanes && mat.clippingPlanes.length) return false; // clones de obra (temporários)
   corrigidos.add(mat);
   const own = (k) => Object.prototype.hasOwnProperty.call(mat, k);
@@ -56,17 +63,17 @@ const HV = /* glsl */`varying float vY; void main() { vec4 p = vec4(position, 1.
     p = instanceMatrix * p;
   #endif
   vec4 w = modelMatrix * p; vY = w.y; gl_Position = projectionMatrix * viewMatrix * w; }`;
-const HF = /* glsl */`varying float vY; void main() { gl_FragColor = vec4(vY, 0.0, 0.0, 1.0); }`;
+const HF = /* glsl */`varying float vY; void main() { gl_FragColor = vec4(vY, 1.0, 0.0, 1.0); }`; // R altura, G cobertura
 const BV = /* glsl */`varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const BF = /* glsl */`uniform sampler2D tMap; uniform vec2 dir; varying vec2 vUv;
-  void main() { float s = 0.0, w = 0.0; for (int i = -6; i <= 6; i++) { float k = exp(-float(i * i) / 18.0); s += texture2D(tMap, vUv + dir * float(i)).r * k; w += k; } gl_FragColor = vec4(s / w, 0.0, 0.0, 1.0); }`;
+  void main() { vec2 s = vec2(0.0); float w = 0.0; for (int i = -6; i <= 6; i++) { float k = exp(-float(i * i) / 18.0); s += texture2D(tMap, vUv + dir * float(i)).rg * k; w += k; } gl_FragColor = vec4(s / w, 0.0, 1.0); }`;
 
 export class HAO {
   constructor(engine) {
     this.e = engine; const r = engine.renderer; this.ativo = false;
     this.ok = !!(r.extensions.has('EXT_color_buffer_float') || r.extensions.has('EXT_color_buffer_half_float'));
     if (!this.ok) return;
-    const o = { type: THREE.HalfFloatType, format: THREE.RedFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping };
+    const o = { type: THREE.HalfFloatType, format: THREE.RGFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping };
     this.A = new THREE.WebGLRenderTarget(512, 320, { ...o, depthBuffer: true });
     this.B = new THREE.WebGLRenderTarget(256, 160, { ...o, depthBuffer: false }); this.C = new THREE.WebGLRenderTarget(256, 160, { ...o, depthBuffer: false });
     this.cam = new THREE.OrthographicCamera(X0, X1, -Z0, -Z1, 1, 120); this.cam.position.set(0, 60, 0); this.cam.up.set(0, 0, -1); this.cam.lookAt(0, 0, 0); this.cam.updateMatrixWorld(); this.cam.layers.set(CAMADA_HAO);
@@ -81,13 +88,13 @@ export class HAO {
   // gancho em todos os materiais da cena (menos obras em andamento)
   prepararCena() { const n = { v: 0 }; const anda = (o) => { if (o.name === 'obras') return; if (o.material) for (const m of [].concat(o.material)) if (haoPatch(m)) n.v++; for (const c of o.children) anda(c); }; anda(this.e.scene); return n.v; }
   // quem entra no mapa: os opacos das raízes registradas (terreno, mata, mundo); ficam de fora gente,
-  // bichos, obras, transparentes, materiais cortados e tudo com userData.semHAO (a queda nos cantos
-  // cuida da borda da bandeja)
+  // bichos, obras, transparentes, materiais cortados, tudo com userData.semHAO e material que se move
+  // no shader (userData.movel: recebe a oclusão, mas não a projeta)
   _entrada() {
     const marca = (o, ok) => {
       if (o.userData.semHAO || o.name === 'obras' || o.userData.feito === false) ok = false; // peça ainda em obra: só entra aprovada
       if (o.isMesh) {
-        const ms = [].concat(o.material); const opaco = ms.every((m) => m && !m.transparent && !m.userData.semHAO && !(m.clippingPlanes && m.clippingPlanes.length));
+        const ms = [].concat(o.material); const opaco = ms.every((m) => m && !m.transparent && !m.userData.semHAO && !m.userData.movel && !(m.clippingPlanes && m.clippingPlanes.length));
         if (ok && opaco) o.layers.enable(CAMADA_HAO); else o.layers.disable(CAMADA_HAO);
       }
       for (const c of o.children) marca(c, ok);

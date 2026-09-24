@@ -179,7 +179,7 @@ const COMPOSITE = /* glsl */`
     if (useGrade > 0.5) {
       col *= exposure * wb;
       vec2 q = (vUv - 0.5) * vec2(aspect, 1.0); float r = length(q) / length(vec2(aspect, 1.0) * 0.5);
-      col *= mix(1.0, smoothstep(1.15, 0.35, r), vignette);
+      col *= mix(1.0, 1.0 - smoothstep(0.35, 1.15, r), vignette); // (bordas em ordem: GLSL ES 3.00 §8.3)
       col = 0.18 * exp2(log2(max(col, vec3(1e-6)) / 0.18) * contrast);
       float L = dot(col, LUMA); col = max(vec3(L) + (col - vec3(L)) * saturation, vec3(0.0));
       col = neutral(col);
