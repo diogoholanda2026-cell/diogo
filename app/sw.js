@@ -1,15 +1,26 @@
-// Service worker: joga offline. A página vem da rede quando possível (atualizações chegam logo);
-// os demais arquivos vêm do cache desta versão. Um cache novo por versão publicada.
-const CACHE = 'held-2.0.0-202609232223';
-const ARQUIVOS = ['./', './index.html', './jogo.js', './manifest.webmanifest', './foto.webp', './icones/icone-192.png', './icones/icone-512.png'];
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).catch(() => {})); });
+// Service worker: joga offline sem misturar versões. Cada publicação tem um cache próprio com o
+// index.html e o jogo.<carimbo>.js daquela versão (o nome do arquivo muda a cada publicação, então o
+// index sempre pede o jogo certo). A instalação baixa tudo sem o cache HTTP e falha inteira se faltar
+// um arquivo (o SW antigo continua valendo). A página vem da rede (até 3 s) e cai no cache offline.
+const CACHE = 'held-2.0.0-20260924145309';
+const ARQUIVOS = ['./', './index.html', './jogo.20260924145309.js', './manifest.webmanifest', './foto.webp', './icones/icone-192.png', './icones/icone-512.png'];
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS.map((u) => new Request(u, { cache: 'reload' }))))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('message', (e) => { if (e.data === 'atualizar') self.skipWaiting(); });
+const doCache = (req) => caches.open(CACHE).then((c) => c.match(req, { ignoreSearch: true }));
 self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then((r) => { const c = r.clone(); caches.open(CACHE).then((k) => k.put('./index.html', c)); return r; }).catch(() => caches.match('./index.html')));
+    // rede primeiro (revalidando o cache HTTP), com limite de 3 s; sem rede, o index desta versão
+    e.respondWith((async () => {
+      try {
+        const r = await Promise.race([fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }), new Promise((_, n) => setTimeout(() => n(new Error('tempo')), 3000))]);
+        if (r.ok && !r.redirected) return r;
+      } catch (_) {}
+      return (await doCache('./index.html')) || (await doCache('./')) || fetch(req);
+    })());
     return;
   }
-  e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((r) => { if (r.ok) { const c = r.clone(); caches.open(CACHE).then((k) => k.put(req, c)); } return r; })));
+  // arquivos: só do cache desta versão; o que não estiver nele vem da rede (sem gravar no cache)
+  e.respondWith(doCache(req).then((hit) => hit || fetch(req)));
 });
