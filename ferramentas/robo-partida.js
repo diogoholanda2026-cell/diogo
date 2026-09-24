@@ -5,7 +5,7 @@
   const H = window.__held, C = H.C, J = H.J; const esp = (ms) => new Promise((r) => setTimeout(r, ms));
   const log = []; const t0 = Date.now(); J.S.ritmo = 4000; J.S.creditos = 200000; J.S.mutirao = 5;
   const paineis = ['obras', 'producao', 'almox', 'pedidos', 'deposito', 'escritorio'];
-  for (let volta = 0; volta < 1600; volta++) {
+  for (let volta = 0; volta < 5000; volta++) { // para assim que o canteiro é replantado
     J.S.creditos = 1e7; J.tick(Date.now());
     for (const u of ['usina1', 'usina2', 'usina3']) if (J.S.predios[u].ok) C.coletarUsina(u, -1, null);
     for (const o of ['carpintaria', 'concreto', 'horto', 'serralheria', 'vidracaria', 'eletrica', 'laboratorio']) if (J.S.predios[o].ok && J.S.predios[o].prontos.length) C.coletarOficina(o, null);
@@ -21,10 +21,10 @@
     for (const v of document.querySelectorAll('.veu')) { const e = v.querySelector('[data-esc]'); if (e) e.click(); else v.querySelector('[data-fecha]')?.click(); }
     C.update(0.3, performance.now());
     await esp(120);
-    if (J.S.etapas['reflorestar.e1']?.estado === 'feita') { await esp(6000); break; }
+    log.push(J.S.cap); if (J.S.etapas['reflorestar.e1']?.estado === 'feita') { await esp(6000); break; }
   }
   const pend = []; for (const p of window.__PROJ) { const nx = J.proximaEtapa(p); if (nx) pend.push(p.id + '.' + nx.e.id + ':' + nx.s); }
   const mods = Object.entries(J.S.modulos).map(([f, a]) => f + ':' + a.map((m, i) => m.nivel + (m.obra ? '(' + m.obra.estado + ')' : '') + J.situacaoModulo(f, i)[0]).join(','));
   const sites = [...C.sites.entries()].map(([k, s]) => k + (s.concluindo ? '*' : ''));
-  window.__resultado = { cap: J.S.cap, nivel: J.S.nivel, vida: J.vida().toFixed(1), pop: J.pop, ms: Date.now() - t0, sites, draws: H.engine.stats.calls, pend: pend.slice(0, 40), mods, capEsc: J.S.capEscolhas, metas: J.capitulo()?.metas.map((m) => m.txt + ':' + J.metaFeita(m)) };
+  window.__resultado = { voltas: log.length, cap: J.S.cap, nivel: J.S.nivel, vida: J.vida().toFixed(1), pop: J.pop, ms: Date.now() - t0, sites, draws: H.engine.stats.calls, pend: pend.slice(0, 40), mods, capEsc: J.S.capEscolhas, metas: J.capitulo()?.metas.map((m) => m.txt + ':' + J.metaFeita(m)) };
 })();
