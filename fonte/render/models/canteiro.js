@@ -91,3 +91,70 @@ export function ambienteCanteiro() {
   const tape = mesh(new THREE.BoxGeometry(10.6, 0.05, 0.01), M.stripes, false); tape.position.set(-25.7, 0.2, 10.05); g.add(tape);
   return g;
 }
+
+// ---------------------------------------------------------------- canteiro vivo
+// Usinas e oficinas mostram quando estão produzindo: fumaça nas chaminés, brita subindo a esteira, pó de
+// serra, pó de cimento na betoneira, faíscas de solda, luz âmbar na porta (roxa de cultivo no horto) e,
+// com a bandeja cheia, uma luz vermelha piscando no telhado. Tudo num só THREE.Points animado no shader
+// (cada partícula nasce de novo a cada volta); a CPU só suaviza a intensidade de cada emissor (1 chamada).
+const TIPO = { chamine: 0, esteira: 1, serra: 2, betoneira: 3, faisca: 4, luz: 5, alerta: 6, cultivo: 7 };
+const POR = [10, 6, 8, 6, 12, 1, 1, 1]; // partículas por emissor
+const GALPAO = { usina: [1.5, 0.7], carpintaria: [1.1, 0.5], concreto: [1.1, 0.5], serralheria: [1.1, 0.5], vidracaria: [1.1, 0.5], eletrica: [1.0, 0.48], laboratorio: [1.0, 0.5] }; // [fundo, altura]
+const AV = /* glsl */`
+  attribute vec3 aOrig; attribute vec3 aDir; attribute vec3 aInfo; // tipo, semente, emissor
+  uniform float uT; uniform float uOn[ 48 ]; uniform float uEsc; uniform float uPR;
+  varying vec3 vCor; varying float vA; varying float vAdd; varying float vQuad;
+  void main() {
+    int e = int( aInfo.z + 0.5 ); float on = uOn[ e ]; float tipo = aInfo.x, sd = aInfo.y; vAdd = 0.0; vQuad = 0.0;
+    vec3 p = aOrig; float tam = 0.1; float mundo = 1.0; vA = on;
+    if ( tipo < 0.5 ) { float u = fract( uT / 3.2 + sd ); p += vec3( 0.25 * u + 0.05 * sin( sd * 40.0 ), 1.0 * u, 0.12 * sin( u * 3.0 + sd * 9.0 ) ); tam = mix( 0.12, 0.42, u ); vA *= 0.32 * ( 1.0 - u ) * smoothstep( 0.0, 0.12, u ); vCor = vec3( 0.8, 0.78, 0.74 ); }
+    else if ( tipo < 1.5 ) { float u = fract( uT / 2.0 + sd ); p += aDir * ( u - 0.5 ) * 1.0 + vec3( 0.0, 0.035, 0.0 ); tam = 0.05; vA *= smoothstep( 0.0, 0.08, u ) * ( 1.0 - smoothstep( 0.92, 1.0, u ) ); vCor = vec3( 0.42, 0.4, 0.37 ); vQuad = 1.0; }
+    else if ( tipo < 2.5 ) { float u = fract( uT / 0.9 + sd ); float t = u * 0.9; float a = sd * 37.0; p += vec3( cos( a ) * 0.35 * t, 0.5 * t - 1.2 * t * t, sin( a ) * 0.35 * t + 0.25 * t ); tam = 0.025; vA *= 0.85 * ( 1.0 - u ); vCor = vec3( 0.86, 0.72, 0.48 ); }
+    else if ( tipo < 3.5 ) { float u = fract( uT / 2.4 + sd ); p += vec3( 0.1 * sin( sd * 20.0 ), 0.45 * u, 0.1 * cos( sd * 20.0 ) ); tam = mix( 0.06, 0.2, u ); vA *= 0.3 * ( 1.0 - u ); vCor = vec3( 0.72, 0.72, 0.7 ); }
+    else if ( tipo < 4.5 ) { float u = fract( uT / 0.7 + sd ); float t = u * 0.7; float a = sd * 53.0; p += vec3( cos( a ) * 0.5 * t, 0.6 * t - 2.4 * t * t, sin( a ) * 0.5 * t ); mundo = 0.0; tam = 2.5; vA *= ( 1.0 - u ) * step( 0.3, fract( sd * 7.0 + floor( uT * 3.0 ) * 0.37 ) ); vCor = vec3( 1.7, 1.05, 0.45 ); vAdd = 1.0; }
+    else if ( tipo < 5.5 ) { tam = 0.55; vA *= 0.5 * ( 0.9 + 0.1 * sin( uT * 7.0 + sd * 30.0 ) ); vCor = vec3( 1.2, 0.72, 0.32 ); vAdd = 1.0; }
+    else if ( tipo < 6.5 ) { tam = 0.16; vA *= step( 0.5, fract( uT ) ); vCor = vec3( 2.2, 0.25, 0.18 ); vAdd = 1.0; }
+    else { tam = 0.9; vA *= 0.45; vCor = vec3( 0.9, 0.45, 1.2 ); vAdd = 1.0; }
+    vec4 mv = modelViewMatrix * vec4( p, 1.0 ); gl_Position = projectionMatrix * mv;
+    gl_PointSize = vA < 0.003 ? 0.0 : ( mundo > 0.5 ? tam * uEsc / -mv.z : tam * uPR );
+  }`;
+const AF = /* glsl */`
+  varying vec3 vCor; varying float vA; varying float vAdd; varying float vQuad;
+  void main() { vec2 q = gl_PointCoord * 2.0 - 1.0; float r = dot( q, q ); if ( vQuad < 0.5 && r > 1.0 ) discard;
+    float a = vA * ( vQuad > 0.5 ? 1.0 : 1.0 - smoothstep( 0.1, 1.0, r ) ); gl_FragColor = vec4( vCor * a, a * ( 1.0 - vAdd ) ); }`;
+export class AtividadeCanteiro {
+  constructor() {
+    this.estado = {}; this.em = []; // emissores: {id, tipo, k}
+    const O = [], D = [], I = [];
+    const add = (id, tipo, pos, dir = [0, 0, 0]) => { const e = this.em.length; if (e >= 48) return; this.em.push({ id, tipo, k: 0 }); for (let i = 0; i < POR[TIPO[tipo]]; i++) { O.push(...pos); D.push(...dir); I.push(TIPO[tipo], (i + 0.5) / POR[TIPO[tipo]] + (e * 0.137) % 1, e); } };
+    for (const [id, l] of Object.entries(LOTES)) {
+      const tipo = id.startsWith('usina') ? 'usina' : id; const c = Math.cos(l.r), s = Math.sin(l.r); const W = (x, y, z) => [l.x + x * c + z * s, y, l.z - x * s + z * c];
+      for (const p of PONTOS_ATIVOS[id] || []) add(id, p.tipo, p.pos, p.tipo === 'esteira' ? [0.878 * c, 0.479, -0.878 * s] : [0, 0, 0]);
+      const g = GALPAO[tipo]; if (g) { add(id, 'luz', W(0, g[1] * 0.35, g[0] / 2 + 0.07)); add(id, 'alerta', W(0, g[1] + (tipo === 'usina' ? 0.3 : 0.28), 0)); }
+      if (tipo === 'horto') { add(id, 'cultivo', W(0, 0.28, 0)); add(id, 'alerta', W(0.8, 0.62, 0)); }
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(O, 3)); geo.setAttribute('aOrig', new THREE.Float32BufferAttribute(O, 3)); geo.setAttribute('aDir', new THREE.Float32BufferAttribute(D, 3)); geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(I, 3));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(-25.6, 0.8, 14.8), 8);
+    this.on = new Float32Array(48);
+    this.mat = new THREE.ShaderMaterial({ vertexShader: AV, fragmentShader: AF, uniforms: { uT: { value: 0 }, uOn: { value: this.on }, uEsc: { value: 400 }, uPR: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
+    this.pontos = new THREE.Points(geo, this.mat); this.pontos.name = 'canteiro-vivo'; this.pontos.renderOrder = 5; this.pontos.userData.semHAO = true; this.pontos.visible = false;
+    this.group = new THREE.Group(); this.group.name = 'atividade'; this.group.add(this.pontos);
+  }
+  // 'produzindo' | 'parado' | 'cheio' | 'fora'
+  set(id, estado) { this.estado[id] = estado; }
+  update(dt, t, engine) {
+    let algum = false; const k = 1 - Math.exp(-2.5 * dt);
+    for (let i = 0; i < this.em.length; i++) {
+      const e = this.em[i], st = this.estado[e.id]; const alvo = e.tipo === 'alerta' ? (st === 'cheio' ? 1 : 0) : st === 'produzindo' ? 1 : 0;
+      e.k += (alvo - e.k) * k; if (e.k < 0.002 && alvo === 0) e.k = 0; this.on[i] = e.k; if (e.k > 0) algum = true;
+    }
+    this.pontos.visible = algum; if (!algum) return;
+    const c = engine.camera; const U = this.mat.uniforms; U.uT.value = t / 1000; U.uPR.value = engine.pr || 1; U.uEsc.value = (engine.H || 720) / (2 * Math.tan((c.fov * Math.PI) / 360));
+  }
+}
+
+// Modelo do epílogo (etapas sem peça própria): foco e âncora sobre o canteiro, para a prancha e os balões
+export function modeloReflorestar() {
+  const root = new THREE.Group(); root.name = 'reflorestar'; const e0 = new THREE.Group(), e1 = new THREE.Group(); root.add(e0, e1);
+  return { id: 'reflorestar', root, partes: { e0, e1 }, esqueletos: {}, grua: {}, foco: { x: -25.5, z: 15, dist: 16 }, ancora: [-25.5, 2.2, 15] };
+}
