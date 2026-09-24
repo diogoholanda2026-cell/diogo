@@ -171,14 +171,29 @@ export class Ground {
     for (const Z of ZONAS) { if (Z.tipo === 'praca' || Z.tipo === 'canteiro') continue; const on = ligado(Z.id); if (Z.tipo === 'areia' && on) continue; c.fillStyle = pat(on && Z.tipo === 'grama' ? tex.grass() : tex.pasto()); zona(Z); c.fill(); }
     { const [cc, rx, rz, rot] = SANTUARIO_GRAMADO.elipse; c.fillStyle = pat(V.santuario ? tex.grass() : tex.pasto()); ell(cc, rx, rz, rot); c.fill(); }
     c.restore();
-    // 2b) variação ampla nas clareiras: manchas de 3 a 8 unidades (±10%), mais verdes nas baixadas;
+    // 2b) variação ampla nas clareiras: manchas de 3 a 8 unidades (±10%), mais verdes nas baixadas (os
+    //     gradientes são criados na origem porque a mancha é desenhada já transladada e girada);
     //     o raio encolhe perto da borda para a mancha não invadir a mata
     for (let i = 0, n = 0; i < 400 && n < 60; i++) {
       const x = MESA.x0 + hash(i, 1, 601) * W, z = MESA.z0 + hash(i, 2, 601) * D; const cl = clearance(x, z); if (cl > -0.3) continue; n++;
       const r = Math.min((3 + hash(i, 3, 601) * 5) * 0.5, 0.6 - cl) * S, [px, py] = P(x, z); const baixo = heightAt(x, z) < 0 || waterDepth(x, z) > 0;
       const cor = baixo ? '70,110,44' : hash(i, 4, 601) < 0.5 ? '255,250,220' : '20,24,10'; const a = baixo ? 0.14 : 0.1;
-      const gr = c.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(1, `rgba(${cor},0)`);
+      const gr = c.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(1, `rgba(${cor},0)`);
       c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, 6, 601) * 3); c.scale(1, 0.55 + hash(i, 5, 601) * 0.45); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
+    }
+    // 2c) pasto degradado (antes da obra de cada área): manchas de terra nua, capim seco e rebrota de
+    //     1 a 3 unidades, que somem quando a área vira gramado
+    for (const [zi, Z] of ZONAS.entries()) {
+      if (!(Z.tipo === 'grama' || Z.tipo === 'pasto' || Z.tipo === 'areia') || (ligado(Z.id) && Z.tipo === 'grama')) continue;
+      const dentro = Z.poly ? (x, z) => inPoly(x, z, Z.poly) : (x, z) => inEllipse(x, z, Z.elipse[0][0], Z.elipse[0][1], Z.elipse[1], Z.elipse[2], Z.elipse[3]);
+      let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9; if (Z.poly) for (const [x, z] of Z.poly) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); bz0 = Math.min(bz0, z); bz1 = Math.max(bz1, z); } else { const [[cx, cz], rx, rz] = Z.elipse; const r = Math.max(rx, rz); bx0 = cx - r; bx1 = cx + r; bz0 = cz - r; bz1 = cz + r; }
+      const n = Math.min(60, Math.max(5, ((bx1 - bx0) * (bz1 - bz0)) / 3)) | 0;
+      for (let i = 0, k = 0; i < n * 4 && k < n; i++) {
+        const x = bx0 + hash(i, zi, 611) * (bx1 - bx0), z = bz0 + hash(i, zi, 612) * (bz1 - bz0); if (!dentro(x, z)) continue; k++;
+        const [px, py] = P(x, z), r = (0.8 + hash(i, zi, 613) * 1.8) * S, t = hash(i, zi, 614); const cor = t < 0.4 ? '112,86,54' : t < 0.75 ? '184,168,116' : '60,94,36'; const a = 0.26 + hash(i, zi, 615) * 0.14;
+        const gr = c.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(0.6, `rgba(${cor},${a * 0.6})`); gr.addColorStop(1, `rgba(${cor},0)`);
+        c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, zi, 616) * 3); c.scale(1, 0.5 + hash(i, zi, 617) * 0.5); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
+      }
     }
     // 3) savana em piquetes de pasto (terra batida escura e capim), com trilhas entre eles
     if (V.savana) {
@@ -187,9 +202,9 @@ export class Ground {
       c.restore();
     }
     // 4) margens e leitos d'água (areia clara nas bordas, fundo escuro sob a água)
-    // (o leito fica sob a água opaca; a faixa de areia cobre a encosta entre a linha d'água e a borda)
-    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#1f4a4a'; path(A.lago); c.fill(); for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); }
-    c.lineWidth = 0.9 * S; c.strokeStyle = '#b9a47c'; path(A.lago); c.stroke(); c.lineWidth = 0.5 * S; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx, l.rz, l.rot || 0); c.stroke(); } c.restore();
+    // (o leito, lodo, só aparece na encosta do lago assoreado; a faixa de areia cobre a margem)
+    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#5a5642'; path(A.lago); c.fill(); for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); }
+    c.lineWidth = 0.75 * S; c.strokeStyle = '#b9a47c'; path(A.lago); c.stroke(); c.lineWidth = 0.5 * S; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx, l.rz, l.rot || 0); c.stroke(); } c.restore();
     // 5) trilhas de terra/cascalho pelos gramados e pela savana
     c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.filter = 'blur(1px)';
     c.strokeStyle = 'rgba(214,196,160,0.85)'; c.lineWidth = 0.32 * S;
