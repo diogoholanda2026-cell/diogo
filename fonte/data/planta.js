@@ -55,7 +55,7 @@ export const A = {
   // Biblioteca Central (torre) + Centro de Recursos Digitais (abóbada) + anel em terraços
   // (dossel de ~6 de lado girado ~55°, apoiado no topo da torre a 5.4: medido nos cantos do dossel na foto)
   biblio: { c: [14.9, 8.1], r: 2.4, canopy: 5.8, canopyRot: 0.95, canopyY: 5.3, crd: { c: [14.2, 12.9], rot: -0.32 } },
-  anelBib: { c: [14.9, 8.1], r0: 3.7, r1: 6.5, a0: 1.5, a1: 4.6 },
+  anelBib: { c: [14.9, 8.1], r0: 3.7, r1: 6.5, a0: 2.9, a1: 4.6 }, // do lado esquerdo ao fundo (a frente fica com o CRD)
   // Santuário de Animais e Centro de Conservação (pista de 4 andares; lagoa por dentro, pasto atrás)
   santuario: { c: [21.4, -7.8], rx: 8.4, rz: 5.0, rot: -0.04, lago: { c: [21.8, -9.3], rx: 2.0, rz: 1.15, rot: 0.2 } },
   // Habitats expandidos (piquetes de pasto entre o Santuário, a Biblioteca e o Bioma)
@@ -104,8 +104,8 @@ A.vias = [
 // Passarelas elevadas (pontos x, z, altura). Cada uma começa e termina num ponto físico (prédio,
 // praça ou chão); 'frente2' e 'caracol' só aparecem com os projetos pas_frente2 e pas_caracol.
 export const PASSARELAS = {
-  bulevar: { nome: 'Bulevar Verde', pts: [[-1.8, 16.0, 0.08], [2.2, 13.6, 0.7], [6.4, 12.4, 0.75], [9.7, 12.25, 0.5]], w: 0.9 },
-  ponte: { nome: 'Ponte do Instituto', pts: [[1.5, 4.7, 0.8], [4.8, 5.3, 1.0], [7.9, 5.9, 0.8]], w: 0.55 },
+  bulevar: { nome: 'Bulevar Verde', pts: [[-1.8, 16.0, 0.08], [2.2, 13.6, 0.7], [6.4, 12.4, 0.75], [9.7, 12.25, 0.6]], w: 0.9 },
+  ponte: { nome: 'Ponte do Instituto', pts: [[1.5, 4.7, 0.8], [4.8, 5.4, 1.0], [8.5, 6.1, 0.8]], w: 0.55 },
   trilhaBioma: { nome: 'Trilha do Bioma', pts: [[25.2, -2.95, 0.8], [28.2, 0.6, 0.85], [29.0, 5.4, 0.9], [29.1, 10.4, 0.85], [28.8, 13.6, 0.5], [29.4, 15.4, 0.1]], w: 0.6 },
   elo: { nome: 'Elo do Santuário', pts: [[14.0, 2.0, 0.8], [14.6, 0.2, 0.9], [15.6, -1.6, 0.9], [17.2, -2.75, 0.8]], w: 0.6 },
   vila: { nome: 'Passarela da Vila', pts: [[16.3, 9.6, 1.0], [19.2, 9.0, 0.9], [22.6, 8.6, 0.8], [25.2, 9.4, 0.45], [26.4, 9.9, 0.1]], w: 0.55 },
