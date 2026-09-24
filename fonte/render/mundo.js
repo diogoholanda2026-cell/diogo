@@ -115,7 +115,7 @@ export class Mundo {
     this.blobs = sombrasContato(); this.root.add(this.blobs.mesh);
     this.animados = [];
     // fusão: fontes fundidas (com assinatura), soltas à espera da refusão e cache das contribuições
-    this.fundido = null; this._malhas = new Map(); this._naFusao = new Map(); this._soltas = new Set(); this._cache = new Map(); this._grandes = new Set(); this._caixas = new WeakMap();
+    this.fundido = null; this._malhas = new Map(); this._naFusao = new Map(); this._soltas = new Set(); this._cache = new Map(); this._grandes = new Set(); this._caixas = new WeakMap(); this._vivos = new WeakMap();
     this.refusaoPendente = false; this.stats = { refundirMs: 0, refusaoMs: 0, rayMs: 0 };
     // toque: caixas de seleção (o fundido e os originais escondidos não entram no raycast da cena)
     this.picks = []; this.picksFuturos = []; this._picksSujo = true; this._proxies = new Map(); this._hits = []; this._nor = new WeakMap(); this._grades = new WeakMap();
@@ -123,6 +123,7 @@ export class Mundo {
     // oclusão: terreno, mata e o mundo entram no mapa de alturas
     engine.haoRaizes?.add(ground.group); engine.haoRaizes?.add(forest.group); engine.haoRaizes?.add(this.root);
     engine.aoQualidade?.push(() => { if (this.povo.walkers.length) this.povoar(); });
+    this._animados(); // as partes nascem escondidas: some a sombra de contato das manadas delas
   }
   parte(modelo, etapa) { return this.modelos[modelo]?.partes[etapa]; }
   setEtapa(modelo, etapa, feito) {
@@ -185,11 +186,18 @@ export class Mundo {
   // fontes que podem ser fundidas, com uma assinatura que muda quando o conteúdo muda
   _fontes() {
     const F = new Map();
-    for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) if (p.userData.feito && !p.userData.manadas && !p.userData.update) F.set(p, 'p' + p.children.length);
+    for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) if (p.userData.feito && !p.userData.manadas && !p.userData.update && !this._vivo(p)) F.set(p, 'p' + p.children.length);
     for (const f of Object.values(this.faixas)) { F.set(f.merged, filhos(f.merged)); F.set(f.extras, filhos(f.extras)); }
     F.set(this.casas.group, this.casas.mods.map((m) => (m.g ? m.g.uuid : '-')).join());
     if (this.canteiro.visible) for (const g of Object.values(this.predios)) if (g.userData.pronto && !g.userData.animando) F.set(g, 'q');
     return F;
+  }
+  // peça com bicho animado no shader (respiração, cauda, asas: material com userData.movel) fica
+  // solta: o fundido perderia o aMembro e o índice da instância
+  _vivo(p) {
+    const n = p.children.length; let c = this._vivos.get(p);
+    if (!c || c.n !== n) { let v = false; p.traverse((o) => { if (o.material && [].concat(o.material).some((m) => m?.userData.movel)) v = true; }); this._vivos.set(p, (c = { n, v })); }
+    return c.v;
   }
   _caixa(o, nova = false) { let b = nova ? null : this._caixas.get(o); if (!b) { b = new THREE.Box3().setFromObject(o); if (!nova) this._caixas.set(o, b); } return b; }
   // o que a fonte põe em cada material (cache pela assinatura); quadrante pelo centro da caixa
@@ -258,7 +266,7 @@ export class Mundo {
       const g = mesh.geometry, idx = g.index, arr = idx.array; const nov = []; let w = 0, ini = -1;
       for (const [f, i0, i1] of mesh.userData.faixas) { if (fora.has(f)) { if (ini < 0) ini = w; continue; } if (w !== i0) arr.copyWithin(w, i0, i1); nov.push([f, w, w + i1 - i0]); w += i1 - i0; }
       mesh.userData.faixas = nov; g.setDrawRange(0, w); mesh.visible = w > 0;
-      if (ini >= 0 && w > ini) { idx.clearUpdateRanges(); idx.addUpdateRange(ini, w - ini); idx.needsUpdate = true; }
+      if (ini >= 0 && w > ini) { idx.addUpdateRange(ini, w - ini); idx.needsUpdate = true; } // sem limpar: dois recortes antes do desenho enviam as duas faixas (o three junta e limpa)
     }
   }
   _agendar() {

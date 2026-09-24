@@ -32,8 +32,9 @@ const par = (x, z) => ((x > 0) === (z > 0) ? PERNA_A : PERNA_B);
 // Gorila de maquete: preto, sela prateada no dorso. Em pé anda sobre os nós dos dedos (ombros mais
 // altos que o quadril, tronco inclinado para a frente); a variante sentada tem o tronco ereto.
 function gorila(sentado) {
-  // quase preto e um pouco azulado (a luz de exposição é quente): na foto, #1a1a20
-  const gc = [0.018, 0.019, 0.034], gp = [0.06, 0.058, 0.07], prata = [0.26, 0.27, 0.32]; const out = [];
+  // quase preto, azulado no albedo para sair neutro sob a luz quente de exposição (medido na k11: corpo
+  // perto de #1a1a20 e sela prateada em cinza de luminância 70 a 90, como o dorso da foto)
+  const gc = [0.035, 0.046, 0.075], gp = [0.06, 0.062, 0.075], prata = [0.10, 0.12, 0.17]; const out = [];
   if (!sentado) {
     const tronco = ell(0.36, 0.30, 0.28); tronco.rotateZ(0.5); out.push(memb(colorize(T(tronco, 0.05, 0.55, 0), gc), TORAX, 0.05, 0.55));
     out.push(memb(colorize(T(ell(0.22, 0.2, 0.24), 0.18, 0.5, 0), gc), TORAX, 0.05, 0.55)); // peito
@@ -172,7 +173,9 @@ function comGancho(m, passo) {
   };
   m.customProgramCacheKey = () => (passo ? 'animalPasso' : 'animal');
   if (passo) m.defines = { USE_GAIT: '' };
-  m.userData.semHAO = true; // bicho se move: fica fora do mapa de alturas
+  // bicho se move no shader: fora do mapa de alturas (mas recebe a oclusão) e fora da fusão do mundo
+  // (o fundido não leva aMembro nem gl_InstanceID)
+  m.userData.movel = true;
   return m;
 }
 let MAT = null, MATP = null;
