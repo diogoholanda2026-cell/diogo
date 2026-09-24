@@ -103,11 +103,11 @@ export function facadeTextures(style = 'quente') {
       } else {
         // interior visto pelo vidro: tom neutro e quente, mais escuro que a luz; a cor âmbar vem do
         // emissivo, forte na luminária do forro e suave no resto da sala. Sala apagada = penumbra.
-        if (dark) { c = PEN; k = 0.32; }
+        if (dark) { c = [(PEN[0] + c[0]) / 2, (PEN[1] + c[1]) / 2, (PEN[2] + c[2]) / 2]; k = 0.32; } // sala na penumbra, não buraco
         const cm = [c[0] * 0.45 + 118 * 0.55, c[1] * 0.45 + 112 * 0.55, c[2] * 0.45 + 106 * 0.55];
         const g1 = m.createLinearGradient(0, top, 0, bot); g1.addColorStop(0, rgb(cm, dark ? 0.75 : 0.5 + k * 0.25)); g1.addColorStop(1, rgb(cm, dark ? 0.5 : 0.32 + k * 0.2));
         m.fillStyle = g1; m.fillRect(x, top, bw, bot - top);
-        const g2 = e.createLinearGradient(0, top, 0, bot); g2.addColorStop(0, rgb(c, dark ? k : k * 0.6)); g2.addColorStop(1, rgb(c, dark ? k * 0.6 : k * 0.3));
+        const g2 = e.createLinearGradient(0, top, 0, bot); g2.addColorStop(0, rgb(c, dark ? 0.42 : k * 0.6)); g2.addColorStop(1, rgb(c, dark ? 0.25 : k * 0.3));
         e.fillStyle = g2; e.fillRect(x, top, bw, bot - top);
         if (!dark) {
           // luminária linear no forro
@@ -152,16 +152,17 @@ export const tex = {
   roof: () => {
     if (cache.has('roof')) return cache.get('roof');
     const w = 512, c = document.createElement('canvas'); c.width = c.height = w; const g = c.getContext('2d');
-    noiseRectP(g, w, [76, 74, 48], 22, 21, 2, 13);
+    noiseRectP(g, w, [76, 74, 48], 14, 21, 2, 13);
     // verde-oliva de maquete (medido na foto: #554427 no telhado do Anel)
-    const PAL = ['#67733f', '#797f46', '#526236', '#8e864e', '#9f8143'];
+    const PAL = ['#67733f', '#737d44', '#526236', '#7f8249', '#857a46'];
     const tom = (hex, k) => { const n = parseInt(hex.slice(1), 16); return `rgb(${clamp(((n >> 16) & 255) * k, 0, 255) | 0},${clamp(((n >> 8) & 255) * k, 0, 255) | 0},${clamp((n & 255) * k, 0, 255) | 0})`; };
+    // tufo = touceira de 3 a 5 bolotas sobrepostas (sombra primeiro, depois o volume)
     for (let i = 0; i < 1600; i++) {
       const x = hash(i, 1, 22) * w, y = hash(i, 2, 22) * w, r = 3 + hash(i, 3, 22) * 6, cor = PAL[(hash(i, 4, 22) * PAL.length) | 0];
+      const nb = 3 + ((hash(i, 5, 22) * 3) | 0), bs = []; for (let k = 0; k < nb; k++) { const a = hash(i, 10 + k, 22) * 6.28, d = r * 0.45 * hash(i, 20 + k, 22); bs.push([Math.cos(a) * d, Math.sin(a) * d * 0.8, r * (0.5 + 0.3 * hash(i, 30 + k, 22))]); }
       envolve(w, w, x, y, r + 3, (px, py) => {
-        g.fillStyle = 'rgba(15,30,10,.45)'; g.beginPath(); g.arc(px + 1.5, py + 1.5, r, 0, 7); g.fill();
-        const gr = g.createRadialGradient(px - r * 0.3, py - r * 0.3, 0, px, py, r); gr.addColorStop(0, tom(cor, 1.18)); gr.addColorStop(1, tom(cor, 0.7));
-        g.fillStyle = gr; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
+        g.fillStyle = 'rgba(15,30,10,.3)'; for (const [dx, dy, rr] of bs) { g.beginPath(); g.arc(px + dx + 1.5, py + dy + 1.5, rr, 0, 7); g.fill(); }
+        for (const [dx, dy, rr] of bs) { const cx = px + dx, cy = py + dy; const gr = g.createRadialGradient(cx - rr * 0.3, cy - rr * 0.3, 0, cx, cy, rr); gr.addColorStop(0, tom(cor, 1.07)); gr.addColorStop(1, tom(cor, 0.84)); g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.fill(); }
       });
     }
     // altura para o relevo: luminância dos tufos (centro claro = alto, sombra = baixo)
