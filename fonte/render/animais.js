@@ -30,22 +30,30 @@ function limb(a, b, r0, r1, seg = 6) { const A = new THREE.Vector3(...a), B = ne
 const par = (x, z) => ((x > 0) === (z > 0) ? PERNA_A : PERNA_B);
 
 // Gorila de maquete: preto, sela prateada no dorso. Em pé anda sobre os nós dos dedos (ombros mais
-// altos que o quadril, tronco inclinado); a variante sentada tem o tronco ereto e as mãos nos joelhos.
+// altos que o quadril, tronco inclinado para a frente); a variante sentada tem o tronco ereto.
 function gorila(sentado) {
-  const gc = [0.035, 0.033, 0.038], gp = [0.12, 0.11, 0.11], prata = [0.32, 0.32, 0.34]; const out = [];
+  // quase preto e um pouco azulado (a luz de exposição é quente): na foto, #1a1a20
+  const gc = [0.018, 0.019, 0.034], gp = [0.06, 0.058, 0.07], prata = [0.26, 0.27, 0.32]; const out = [];
   if (!sentado) {
     const tronco = ell(0.36, 0.30, 0.28); tronco.rotateZ(0.5); out.push(memb(colorize(T(tronco, 0.05, 0.55, 0), gc), TORAX, 0.05, 0.55));
+    out.push(memb(colorize(T(ell(0.22, 0.2, 0.24), 0.18, 0.5, 0), gc), TORAX, 0.05, 0.55)); // peito
+    out.push(memb(colorize(T(ell(0.18, 0.18, 0.22), -0.2, 0.45, 0), gc), TORAX, 0.05, 0.55)); // quadril
     out.push(memb(colorize(T(ell(0.2, 0.1, 0.18), -0.08, 0.72, 0), prata), TORAX, 0.05, 0.55)); // sela prateada
-    out.push(memb(colorize(T(ell(0.13, 0.14, 0.13), 0.34, 0.78, 0), gc), TORAX, 0.05, 0.55));
-    out.push(colorize(T(ell(0.08, 0.06, 0.1), 0.3, 0.9, 0), gc)); // crista
-    out.push(colorize(T(ell(0.07, 0.07, 0.09), 0.44, 0.73, 0), gp)); // focinho
-    for (const s of [-1, 1]) {
-      out.push(memb(colorize(limb([0.22, 0.72, s * 0.24], [0.36, 0, s * 0.3], 0.09, 0.07), gc), par(1, s), 0.22, 0.72));
-      out.push(memb(colorize(T(ell(0.06, 0.04, 0.07, 6), 0.38, 0.03, s * 0.3), gp), par(1, s), 0.22, 0.72)); // nós dos dedos
-      out.push(memb(colorize(limb([-0.2, 0.4, s * 0.16], [-0.14, 0, s * 0.2], 0.1, 0.08), gc), par(-1, s), -0.2, 0.4));
-      out.push(memb(colorize(T(ell(0.09, 0.03, 0.06, 6), -0.1, 0.02, s * 0.2), gp), par(-1, s), -0.2, 0.4));
+    out.push(colorize(T(ell(0.13, 0.14, 0.13), 0.34, 0.78, 0), gc));
+    out.push(colorize(T(ell(0.08, 0.07, 0.08), 0.3, 0.9, 0), gc)); // crista
+    out.push(colorize(T(ell(0.05, 0.03, 0.11), 0.42, 0.83, 0), gc)); // arco das sobrancelhas
+    out.push(colorize(T(ell(0.07, 0.065, 0.09), 0.44, 0.74, 0), gp)); // focinho
+    for (const s of [-1, 1]) { // braços longos com cotovelo, apoiados nos nós dos dedos; pernas curtas dobradas
+      const A = par(1, s), B = par(-1, s);
+      out.push(memb(colorize(T(ell(0.12, 0.12, 0.12), 0.22, 0.72, s * 0.22), gc), A, 0.22, 0.72));
+      out.push(memb(colorize(limb([0.22, 0.72, s * 0.24], [0.3, 0.36, s * 0.3], 0.095, 0.085), gc), A, 0.22, 0.72));
+      out.push(memb(colorize(limb([0.3, 0.36, s * 0.3], [0.36, 0.04, s * 0.3], 0.085, 0.07), gc), A, 0.22, 0.72));
+      out.push(memb(colorize(T(ell(0.07, 0.04, 0.08, 6), 0.38, 0.03, s * 0.3), gp), A, 0.22, 0.72)); // nós dos dedos
+      out.push(memb(colorize(limb([-0.2, 0.42, s * 0.17], [-0.06, 0.22, s * 0.2], 0.1, 0.085), gc), B, -0.2, 0.42));
+      out.push(memb(colorize(limb([-0.06, 0.22, s * 0.2], [-0.14, 0.03, s * 0.2], 0.08, 0.07), gc), B, -0.2, 0.42));
+      out.push(memb(colorize(T(ell(0.1, 0.03, 0.06, 6), -0.08, 0.02, s * 0.2), gp), B, -0.2, 0.42));
     }
-  } else {
+  } else { // sentado: tronco ereto, mãos nos joelhos
     const tronco = ell(0.27, 0.34, 0.27); tronco.rotateZ(-0.15); out.push(memb(colorize(T(tronco, 0.0, 0.5, 0), gc), TORAX, 0, 0.5));
     out.push(memb(colorize(T(ell(0.12, 0.17, 0.2), -0.14, 0.44, 0), prata), TORAX, 0, 0.5));
     out.push(colorize(T(ell(0.22, 0.15, 0.25), -0.02, 0.17, 0), gc)); // quadril
@@ -53,8 +61,10 @@ function gorila(sentado) {
     out.push(colorize(T(ell(0.08, 0.06, 0.1), 0.03, 1.04, 0), gc));
     out.push(colorize(T(ell(0.06, 0.065, 0.085), 0.16, 0.88, 0), gp));
     for (const s of [-1, 1]) {
-      out.push(colorize(limb([0.02, 0.74, s * 0.25], [0.3, 0.2, s * 0.24], 0.085, 0.065), gc));
-      out.push(colorize(T(ell(0.06, 0.04, 0.07, 6), 0.32, 0.18, s * 0.24), gp));
+      out.push(colorize(T(ell(0.11, 0.11, 0.11), 0.02, 0.74, s * 0.24), gc));
+      out.push(colorize(limb([0.02, 0.74, s * 0.25], [0.16, 0.44, s * 0.3], 0.09, 0.08), gc));
+      out.push(colorize(limb([0.16, 0.44, s * 0.3], [0.3, 0.22, s * 0.24], 0.08, 0.065), gc));
+      out.push(colorize(T(ell(0.06, 0.04, 0.07, 6), 0.32, 0.2, s * 0.24), gp));
       out.push(colorize(limb([0.0, 0.2, s * 0.15], [0.28, 0.26, s * 0.2], 0.1, 0.085), gc));
       out.push(colorize(limb([0.28, 0.26, s * 0.2], [0.34, 0.02, s * 0.2], 0.08, 0.07), gc));
       out.push(colorize(T(ell(0.1, 0.03, 0.06, 6), 0.38, 0.02, s * 0.2), gp));
