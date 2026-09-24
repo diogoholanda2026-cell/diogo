@@ -1,20 +1,20 @@
-// Controle do jogo: liga a simulação ao mundo 3D e à interface (balões, painéis, HUD,
-// canteiros animados, toques no mundo, câmera, falas, capítulos, som e salvamento automático).
+// Controle do jogo: liga a simulação ao mundo 3D e à interface (balões, painéis, HUD, canteiros animados,
+// toques no mundo, câmera, falas, tutorial, Meta em foco, capítulos, fila de modais, som e salvamento automático).
 import * as THREE from 'three';
 import { el, fmt, lerp, clamp } from './core/util.js';
 import { img } from './ui/icones.js';
-import { Hud } from './ui/hud.js';
+import { Hud, retrato } from './ui/hud.js';
 import { Paineis } from './ui/paineis.js';
 import { Bolhas } from './ui/bolhas.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS } from './data/itens.js';
-import { PROJETOS, PROJ, MODULOS, alvoEtapa } from './data/obras.js';
-import { CAPITULOS, DICAS, ABERTURA, CONSELHO } from './data/historia.js';
+import { PROJETOS, PROJ, MODULOS, POP_NIVEL, alvoEtapa } from './data/obras.js';
+import { CAPITULOS, DICAS, ABERTURA, CONSELHO, TUTORIAL } from './data/historia.js';
 import { LOTES } from './render/models/canteiro.js';
 import { A } from './data/planta.js';
 import { M } from './render/materials.js';
 import { gravar } from './core/salvar.js';
 import { descartar } from './render/descartar.js';
-import { REGRAS } from './sim/estado.js';
+import { REGRAS, bemMinimo } from './sim/estado.js';
 
 // caixas de uma malha no mundo: a base (todos os vértices até 30% da altura) e o que sobe acima disso, quando
 // o que sobe ocupa menos de 60% da planta; senão a caixa inteira. Instanciada: a caixa das instâncias.
@@ -31,35 +31,77 @@ function caixasMalha(o, L) {
 }
 
 const FAIXA_PROJ = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
+// eventos da simulação que mudam o painel aberto (o redesenho só acontece se o HTML mudar)
+const EV_PAINEL = new Set(['produto', 'coleta', 'enfileirar', 'produzir', 'pedido', 'troca', 'entregar', 'etapaIniciada', 'etapaPronta', 'etapaFeita', 'moduloIniciado', 'moduloPronto', 'moduloFeito', 'topografo', 'mutirao', 'ampliar', 'almox', 'repasse', 'predio', 'novoCapitulo', 'aviso']);
+// passarelas e a praça povoam as vias (a chave muda quando uma delas fica pronta)
+const POVO = [...PROJETOS.filter((p) => p.id.startsWith('pas_')).flatMap((p) => p.etapas.map((e) => p.id + '.' + e.id)), 'praca.e3'];
+const VERBO = { pronta: 'Aprovar', coleta: 'Coletar', moedas: 'Moedas', subir: 'Subir módulo', bloq: 'Módulo', obra: 'Obra' };
+const VERBO_PLANO = { aprovar: 'Aprovar', coletar: 'Coletar', iniciar: 'Iniciar', entregar: 'Entregar', produzir: 'Produzir', construir: 'Construir', apresentar: 'Conselho', vender: 'Vender' };
+const ICONE_PLANO = { aprovar: 'ok', coletar: 'repasse', iniciar: 'grua', entregar: 'almox', produzir: 'producao', construir: 'grua', apresentar: 'sede', vender: 'troca', aguardar: 'obras' };
+// o que o anel-guia do tutorial procura dentro do painel aberto, por passo
+// (presos à obra do passo: a prancha de outra obra não recebe o anel)
+const TUT_PAINEL = { brita: ['[data-a=produzir][data-k=brita]'], caminho: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=entregarIniciar][data-key="pas_frente.e1"]', '[data-a=entregarTudo][data-key="pas_frente.e1"]'], coletar: ['[data-a=coletarU]', '[data-a=coletarO]'],
+  aprovar: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=aprovar][data-key="pas_frente.e1"]'], carpintaria: ['[data-a=construir][data-p=carpintaria]', '[data-a=enfileirar][data-k=viga]'],
+  lago: ['.item-lista[data-alvo*="lago.e1"]', '[data-a=entregarIniciar][data-key="lago.e1"]', '[data-a=entregarTudo][data-key="lago.e1"]', '[data-a=mutirao][data-alvo*="lago.e1"]'], anel: ['[data-a=melhorar][data-f=anel]'] };
+const curto = (s, n = 14) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
+const centro = (e) => { const r = e.getBoundingClientRect(); return r.width && r.height && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth ? [r.left + r.width / 2, r.top + r.height / 2] : null; };
 
 export class Controle {
   constructor(o) {
     Object.assign(this, o); // engine, rig, env, ground, forest, table, mundo, obras, J, som, vibra, ui, cfg
     this.hud = new Hud(this.ui, this.J); this.paineis = new Paineis(this.ui, this); this.bolhas = new Bolhas(this.ui, this.engine.camera, this.engine);
-    this.sites = new Map(); this._tBolhas = 0; this._tSim = 0; this._tSalvar = 0; this._capMin = false; this.fantasmas = [];
+    this.bolhas.onBorda = (b) => this._irMundo(b.pos, b.alvo); this.bolhas.onGrupo = (b) => this._irMundo(b.pos, null, 0.6);
+    this.sites = new Map(); this._tBolhas = 0; this._tSim = 0; this._tSalvar = 0; this._tFila = 0; this.fantasmas = [];
+    this._modais = []; this._filaModais = []; this._festaAte = 0; this._aprovando = new Set(); this._guiaCache = { t: -1e9, pt: null };
     this._bind();
     this.J.on((tipo, d) => this._evento(tipo, d));
+    // obra: sons ligados ao que se vê e o brinde do time-lapse (encadeados a quem já estiver ouvindo)
+    if (this.obras) {
+      const ev0 = this.obras.onEvento; this.obras.onEvento = (t, k, d) => { ev0?.(t, k, d); this._eventoObra(t, k, d); };
+      const tl0 = this.obras.onTimelapse; this.obras.onTimelapse = (k, de, para) => { tl0?.(k, de, para); this._timelapse(k, de, para); };
+    }
+    // desfoque atrás da folha só no perfil ultra (custa caro no Mali)
+    const q = (p) => document.body.classList.toggle('q-ultra', p?.id === 'ultra'); q(this.engine.q);
+    if (Array.isArray(this.engine.aoQualidade)) this.engine.aoQualidade.push(q); else { const f = this.engine.onQuality; this.engine.onQuality = (p) => { f?.(p); q(p); }; }
   }
   get S() { return this.J.S; }
   // ------------------------------------------------------------ início
   iniciar() {
-    this.J.tick(Date.now()); this.sincronizarMundo(); this.hud.atualizar(); this.hud.capitulo(this._capMin); this.calcBolhas();
-    if (!this.S.dicas.abertura) { this.S.dicas.abertura = 1; ABERTURA.forEach(([q, t]) => this.hud.falar(q, t, 6500)); }
+    this.J.tick(Date.now()); this.sincronizarMundo(); this.hud.atualizar(); this.hud.capitulo(); this.calcBolhas();
+    const S = this.S;
+    if (!S.dicas.abertura) { S.dicas.abertura = 1; const cap1 = () => this.S.cap === 1 && !this.J.feita('pas_frente.e1'); ABERTURA.forEach(([q, t]) => this.hud.falar(q, t, { se: cap1, grupo: 'abertura' })); }
+    this._tutorial();
     // capítulo concluído enquanto o jogo estava fechado
-    const c = this.J.capitulo(); if (c && this.S.capEscolhas[c.n] === undefined && c.metas.every((m) => this.J.metaFeita(m))) setTimeout(() => this.modalCapitulo(c), 1500);
+    const c = this.J.capitulo(); if (this._capituloPronto(c)) this._fila(() => this.modalCapitulo(c), 1500, 'capitulo');
+    if (this._capituloPronto(c)) this.hud.conselho(true);
   }
   _bind() {
     this.ui.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-a]'); if (!b || this.paineis.el?.contains(b)) return; const a = b.dataset.a;
-      this.som.toque(); this.vibra.tique();
-      if (a === 'obras') this.paineis.abrir('obras'); else if (a === 'producao') this.paineis.abrir('producao'); else if (a === 'almox') { this.paineis.abrir('almox'); this.irPara({ predio: 'almox' }, false); }
-      else if (a === 'pedidos') { this.paineis.abrir('pedidos'); this._dica('pedidos'); } else if (a === 'apreciar') this.apreciar(true); else if (a === 'config') this.config?.();
-      else if (a === 'proximo') this.proximo(); else if (a === 'capmin') { this._capMin = !this._capMin; this.hud.capitulo(this._capMin); }
-      else if (a === 'creditos' || a === 'nivel') this.paineis.abrir('escritorio'); else if (a === 'vida') this.paineis.abrir('obras'); else if (a === 'mutirao') this.hud.brinde(`Mutirão: ${this.S.mutirao} ficha(s). Termina qualquer cronômetro na hora.`, 'mutirao', 3000);
-      else if (a === 'pop' || a === 'bem') this.paineis.abrir('escritorio');
+      const b = e.target.closest('[data-a]'); if (!b || this.paineis.el?.contains(b) || b.closest('.veu')) return; const a = b.dataset.a;
+      this.som.toque(); if (a !== 'meta' && a !== 'agora') this.vibra.tique();
+      switch (a) {
+        case 'obras': case 'producao': this.paineis.abrir(a); break;
+        case 'almox': this.paineis.abrir('almox'); this.irPara({ predio: 'almox' }, false); break;
+        case 'pedidos': this.paineis.abrir('pedidos'); if (this.S.cap >= REGRAS.capPedidos) this._dica('pedidos'); break;
+        case 'trocas': this.paineis.abrir('deposito'); this._dica('deposito'); break;
+        case 'apreciar': this.apreciar?.(true); break;
+        case 'config': this.config?.(); break;
+        case 'proximo': this.proximo(); break;
+        case 'capmin': this.hud.alternarMetas(); break;
+        case 'meta': this._irMeta(+b.dataset.i); break;
+        case 'agora': this.S.dicas.metaFoco = 1; this._irPlano(this._plano); break;
+        case 'conselho': this.modalCapitulo(this.J.capitulo()); break;
+        case 'creditos': case 'nivel': case 'pop': this.paineis.abrir('escritorio'); break;
+        case 'vida': this.paineis.abrir('obras'); break;
+        case 'bem': this._infoBem(); break;
+        case 'mutirao': this._infoMutirao(); break;
+      }
     });
     this.rig.onTap = (x, y) => this.toque(x, y);
   }
+  // folha aberta: o centro da imagem vai para a área livre e o motor limita a 60 qps
+  painelMudou(on) { this.rig.deslocAlvo = on ? (this.paineis.largura + 8 - 70) / 2 : 0; if (on) { this.hud.alternarMetas(false); this.hud.fecharInfo(); } this._ocupado(); this.hud._tRects = 0; }
+  _ocupado() { this.engine.ocupado = this._modais.length ? 'modal' : this.paineis.el ? 'painel' : null; }
   // ------------------------------------------------------------ sincronia simulação → mundo 3D
   nivelFaixaProj(p) { let n = 0; for (const e of p.etapas) if (e.nivel && this.J.feita(p.id + '.' + e.id)) n = Math.max(n, e.nivel); return n; }
   sincronizarMundo() {
@@ -87,15 +129,16 @@ export class Controle {
     for (const [key, st] of Object.entries(this.S.etapas)) if (st.estado === 'obra' || st.estado === 'pronta') { vivos.add('e:' + key); if (!this.sites.has('e:' + key)) this._siteEtapa(key); }
     for (const [f, arr] of Object.entries(this.S.modulos)) arr.forEach((m, i) => { if (m.obra) { vivos.add(`m:${f}:${i}`); if (!this.sites.has(`m:${f}:${i}`)) this._siteModulo(f, i); } });
     for (const k of [...this.sites.keys()]) if (!vivos.has(k) && !this.sites.get(k).concluindo) this._removerSite(k);
-    // tudo que ficou pronto vira uma malha só por material
-    const ass = JSON.stringify([Object.entries(this.S.etapas).filter(([, v]) => v.estado === 'feita').map(([k]) => k).sort(), Object.values(this.S.modulos).map((a) => a.map((m) => m.nivel).join('')), Object.entries(this.S.predios).filter(([k, v]) => v.ok && !W.predios[k]?.userData.animando).map(([k]) => k)]);
+    // tudo que ficou pronto vira uma malha só por material (a visibilidade do canteiro entra na conta: os prédios dele
+    // saem da fusão quando ele some)
+    const ass = JSON.stringify([Object.entries(this.S.etapas).filter(([, v]) => v.estado === 'feita').map(([k]) => k).sort(), Object.values(this.S.modulos).map((a) => a.map((m) => m.nivel).join('')), Object.entries(this.S.predios).filter(([k, v]) => v.ok && !W.predios[k]?.userData.animando).map(([k]) => k), !!W.canteiro.visible]);
     if (ass !== this._assinatura) { this._assinatura = ass; W.refundir(); }
     this.povoar();
   }
-  sincronizar() { this.sincronizarMundo(); this.calcBolhas(); this.hud.atualizar(); this.hud.capitulo(this._capMin); }
+  sincronizar() { this.sincronizarMundo(); this.calcBolhas(); this.hud.atualizar(); this.hud.capitulo(); this.hud.revalidarFalas(); }
   _reflorestado(on) { this.mundo.canteiro.visible = !on; this.forest.setReflorestamento(on ? 1 : 0); if (!!this.ground.flags.reflorestado !== on) { this.ground.flags.reflorestado = on; this.ground.paint(); } }
-  povoar() { const W = this.mundo; if (this._povoKey === this._chavePovo()) return; this._povoKey = this._chavePovo(); W.povoar(); }
-  _chavePovo() { return ['praca.e3', 'pas_bulevar.e1', 'pas_ponte.e1', 'pas_vila.e1', 'pas_trilhaBioma.e1', 'pas_elo.e1', 'pas_frente.e1', 'pas_anel.e1', 'pas_santuario.e1'].map((k) => (this.J.feita(k) ? 1 : 0)).join(''); }
+  povoar() { const W = this.mundo; const k = this._chavePovo(); if (this._povoKey === k) return; this._povoKey = k; W.povoar(); }
+  _chavePovo() { return POVO.map((k) => (this.J.feita(k) ? 1 : 0)).join(''); }
   // canteiro de uma etapa
   _siteEtapa(key) {
     const [pid, eid] = key.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const W = this.mundo; const st = this.S.etapas[key];
@@ -121,6 +164,7 @@ export class Controle {
         site.aoFim = () => { W.canteiro.visible = false; for (const g of pecas) if (g.userData) { g.userData.animando = false; if (g.parent === W.canteiro && g !== amb) g.visible = false; } };
         site.aoRemover = () => { let n = 0; for (const g of pecas) if (g !== amb && g.userData?.animando) { g.userData.animando = false; n++; } if (n) W.refundir?.(); }; // obra desfeita sem aprovar: as peças voltam à fusão
       } else if (modo0 === 'reflorestar') { // replantio: mudas em linhas crescendo até virar a mata do canteiro
+        W.canteiroSaindo = true; // o canteiro sai da fusão (o mundo não funde o que está saindo)
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.2;
         opts = { ...base, alvo, modo: 'replantar', box: b, floresta: this.forest, operarios: 9 };
       } else {
@@ -167,144 +211,321 @@ export class Controle {
     this.sites.set(`m:${f}:${i}`, site); if (m.obra.estado === 'pronta') this.obras.pronta(`m:${f}:${i}`);
   }
   _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); s.aoRemover?.(); }
-  // aprovação coreografada: o = {aoImpacto, baque} (impacto em 380 ms; o callback vem em ~1200 ms)
+  // aprovação coreografada: o = {aoImpacto, baque} (impacto em 380 ms; o callback vem em ~1200 ms). Sem canteiro
+  // (obra que não chegou a montar) a mesma linha do tempo roda com temporizadores.
   _concluirSite(k, cb, o = {}) {
-    const s = this.sites.get(k); if (!s) { cb && cb(); return; } s.concluindo = true;
+    const s = this.sites.get(k); if (!s) { if (o.aoImpacto) { setTimeout(o.aoImpacto, 380); setTimeout(() => cb && cb(), 1200); } else cb && cb(); return; } s.concluindo = true;
     this.obras.concluir(k, () => { for (const x of s.extras) { x.parent?.remove(x); descartar(x); } s.aoFim && s.aoFim(); this.sites.delete(k); cb && cb(); this.e_shadow(); }, { rig: this.rig, ...o });
   }
   e_shadow() { this.engine.shadowDirty = true; }
   agendar() { this._sujo = true; }
-  // planta fantasma (azul) da etapa enquanto a prancha está aberta
+  // planta fantasma (azul) da etapa enquanto a prancha está aberta; a das fitas (geometria própria) fica guardada
+  // para a mesma prancha e é descartada quando outra toma o lugar
   aoAbrir(tipo, arg) {
     this._limparFantasma(); if (tipo !== 'etapa') return; const [pid, eid] = arg.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const s = this.J.situacao(p, e);
-    if (!['disponivel', 'prancha', 'bloqueada', 'futura'].includes(s)) return; let g = null;
-    if (p.faixa && e.nivel) { const F = this.mundo.faixas[p.faixa]; const cur = this.nivelFaixaProj(p); g = new THREE.Group(); F.mods.forEach((m, i) => { for (let f = cur; f < e.nivel; f++) g.add(F.andar(i, f, e.nivel).acabado); }); }
-    else { const a = alvoEtapa(p, e); const part = this.mundo.parte(a.modelo, a.parte); if (part && part.children.length) { g = part.clone(true); g.visible = true; part.parent.updateMatrixWorld(true); g.applyMatrix4(part.parent.matrixWorld); } }
-    if (!g) return; g.traverse((o) => { if (o.isMesh || o.isInstancedMesh) { o.material = M.blueprint; o.castShadow = false; o.receiveShadow = false; } }); g.renderOrder = 5; this.mundo.root.add(g); this.fantasmas.push(g);
+    if (!['disponivel', 'prancha', 'bloqueada', 'futura'].includes(s)) return;
+    const faixa = p.faixa && e.nivel; const cur = faixa ? this.nivelFaixaProj(p) : 0; const chave = arg + ':' + cur; let g = null;
+    if (this._prev?.chave === chave) g = this._prev.g;
+    else {
+      if (this._prev?.proprio) descartar(this._prev.g); this._prev = null;
+      if (faixa) { const F = this.mundo.faixas[p.faixa]; g = new THREE.Group(); F.mods.forEach((m, i) => { for (let f = cur; f < e.nivel; f++) { const a = F.andar(i, f, e.nivel); g.add(a.acabado); if (a.esqueleto) descartar(a.esqueleto); } }); }
+      else { const a = alvoEtapa(p, e); const part = this.mundo.parte(a.modelo, a.parte); if (part && part.children.length) { g = part.clone(true); g.visible = true; part.parent.updateMatrixWorld(true); g.applyMatrix4(part.parent.matrixWorld); } }
+      if (!g) return; g.traverse((o) => { if (o.isMesh || o.isInstancedMesh) { o.material = M.blueprint; o.castShadow = false; o.receiveShadow = false; } }); g.renderOrder = 5;
+      this._prev = { chave, g, proprio: !!faixa };
+    }
+    this.mundo.root.add(g); this.fantasmas.push(g);
   }
   aoFechar() { this._limparFantasma(); }
   _limparFantasma() { for (const g of this.fantasmas) g.parent?.remove(g); this.fantasmas.length = 0; }
   // ------------------------------------------------------------ eventos da simulação
   _evento(tipo, d) {
     const J = this.J;
-    if (tipo === 'nivel') { this.som.nivel(); this.vibra.sucesso(); this.modalNivel(d); }
-    else if (tipo === 'etapaIniciada') { this._siteEtapa(d.key); this._dica('primeiraEtapa'); }
-    else if (tipo === 'etapaPronta') { this.obras.pronta('e:' + d.key); this.calcBolhas(); }
-    else if (tipo === 'moduloIniciado') { this._siteModulo(d.faixa, d.i); this._dica('modulo'); }
-    else if (tipo === 'moduloPronto') { this.obras.pronta(`m:${d.faixa}:${d.i}`); this.calcBolhas(); }
-    else if (tipo === 'capituloCompleto') setTimeout(() => this.modalCapitulo(d.cap), 2200);
-    else if (tipo === 'dica') this._dica(d.id);
-    else if (tipo === 'nivel') { if (d.nivel === 3) this._dica('deposito'); if (d.nivel === 4) this._dica('pedidos'); }
-    else if (tipo === 'moduloFeito' && d.nivel >= 2) { if (this.J.bem < 60 && d.nivel >= 4) this._dica('bemEstar'); }
-    else if (tipo === 'coleta' && d.especial) setTimeout(() => this.hud.brinde(`Achado: ${ITENS[d.especial].nome}!`, d.especial, 2600), 500);
-    if (tipo !== 'xp') { this._sujo = true; }
+    switch (tipo) {
+      case 'nivel': this.som.nivel(); this.vibra.sucesso(); this.hud.reter('creditos', d.creditos || 0); this._fila(() => this.modalNivel(d), 0, 'nivel' + (d.para ?? d.nivel)); break;
+      case 'etapaIniciada': this._siteEtapa(d.key); this._dica('obraComecou'); break;
+      case 'etapaPronta': this.obras.pronta('e:' + d.key); this.som.sino?.(); this.calcBolhas(); break;
+      case 'moduloIniciado': this._siteModulo(d.faixa, d.i); this._dica('modulo'); break;
+      case 'moduloPronto': this.obras.pronta(`m:${d.faixa}:${d.i}`); this.som.sino?.(); this.calcBolhas(); break;
+      case 'capituloCompleto': if (d.cap?.escolha) { if (this._depoisCap !== d.cap.n) this._fila(() => this.modalCapitulo(d.cap), 2200, 'capitulo'); } else if (d.cap) this._fila(() => { if (this.J.capitulo()?.n === d.cap.n && this.S.capEscolhas[d.cap.n] === undefined) this.J.concluirCapitulo(null); }, 2200, 'capitulo'); break;
+      case 'novoCapitulo': this._novoCapitulo(d); break;
+      case 'fimDeJogo': this.finalComposicao(); break;
+      case 'dica': this._dica(d.id); break;
+      case 'fala': setTimeout(() => this.hud.falar(d.quem, d.texto), d.atraso || 0); break;
+      case 'aviso': this._aviso(d); break;
+      case 'mutirao': this._mutiraoT = performance.now(); break;
+      case 'moduloFeito': if (d.nivel >= 4 && J.bem < bemMinimo(POP_NIVEL.length - 1)) this._dica('bemEstar'); break;
+      case 'coleta': if (d.especial) setTimeout(() => this.hud.brinde(`Achado: ${ITENS[d.especial].nome}!`, d.especial, 2600), 500); break;
+    }
+    if (EV_PAINEL.has(tipo)) this.paineis.agendar();
+    if (tipo !== 'xp') this._sujo = true;
   }
-  _dica(id) { if (this.S.dicas[id]) return; const d = DICAS[id]; if (!d) return; this.S.dicas[id] = 1; this.hud.falar(d[0], d[1], 8000); }
+  _dica(id) { if (this.S.dicas[id]) return; const d = DICAS[id]; if (!d) return; this.S.dicas[id] = 1; this.hud.falar(d[0], d[1]); }
+  // aviso da simulação: brinde; com créditos, as moedas voam até o contador (o número só sobe na chegada)
+  _aviso(d) {
+    this.hud.brinde(d.texto, d.icone || null, 3000);
+    if (d.creditos > 0) { const [x, y] = this._pontoCel || [innerWidth / 2, innerHeight * 0.45]; this._moedas(d.creditos, x, y, 6); }
+  }
+  _moedas(v, x, y, n = 5) {
+    if (!(v > 0)) return; this.hud.reter('creditos', v); const k = Math.min(8, n); const parte = Math.floor(v / k);
+    this.hud.voar('creditos', x, y, 'creditos', (i, vis, ult) => { this.hud.soltar('creditos', ult ? v - parte * (vis - 1) : parte); if (i % 2 === 0) this.som.moeda?.(); }, { n: k, passo: 70 });
+  }
+  _estrelas(xp, x, y, n = 5) {
+    if (!(xp > 0)) return; this.hud.reter('xp', xp); const parte = Math.floor(xp / n);
+    this.hud.voar('xp', x, y, 'xp', (i, vis, ult) => this.hud.soltar('xp', ult ? xp - parte * (vis - 1) : parte), { n, passo: 70 });
+  }
+  // recompensa de um pedido (ou outra entrega): moedas, estrelas e itens voam do ponto (x, y)
+  recompensa(R, x, y) { if (!R) return; this._moedas(R.creditos, x, y, 5); setTimeout(() => this._estrelas(R.xp, x, y, 3), 120); let d = 240; for (const [k, n] of Object.entries(R.itens || {})) { setTimeout(() => this.hud.voar(k, x, y, 'almox', null, { n }), d); d += 90; } this.hud.atualizar(); }
+  _novoCapitulo(d) {
+    const n = d.cap; this.hud.capitulo(); this.sincronizar(); if (!n) return;
+    this.hud.brinde(`Capítulo ${n.n}: ${n.nome}`, 'obras', 3600); this._introCap(n);
+    if (n.n >= REGRAS.capPedidos) this._dica('pedidos');
+  }
+  // ------------------------------------------------------------ obra: sons e time-lapse
+  _pertoObra(k) {
+    const s = this.sites.get(k); const b = s?.obra?.box; if (!b) return 0.5; const tg = this.rig.target;
+    return clamp(1 - Math.hypot((b.min.x + b.max.x) / 2 - tg.x, (b.min.z + b.max.z) / 2 - tg.z) / (this.rig.dist * 0.9), 0, 1);
+  }
+  _eventoObra(tipo, k) {
+    if (this.modoApreciar && tipo === 'martelo') return;
+    switch (tipo) {
+      case 'martelo': { const p = this._pertoObra(k); if (p > 0.05) this.som.martelo?.(p); break; }
+      case 'pouso': { const p = this._pertoObra(k); if (p > 0.05) this.som.pouso?.(p); break; }
+      case 'caminhao': { const p = this._pertoObra(k); if (p > 0.05) this.som.caminhao?.(p); break; }
+      case 'montagem': { const p = this._pertoObra(k); if (p > 0.05) this.som.montagem?.(p); break; }
+      case 'impacto': this.som.andaime?.(); break;
+      case 'confete': this.som.confete?.(); break;
+      case 'fogos': this.som.fogos?.(); break;
+    }
+  }
+  _nomeSite(k) { if (k.startsWith('e:')) { const [pid, eid] = k.slice(2).split('.'); const p = PROJ[pid]; const e = p?.etapas.find((x) => x.id === eid); return p ? `${p.nome}${e ? ' (' + e.nome + ')' : ''}` : k; } const [, f, i] = k.split(':'); return `${MODULOS[f]?.nome || f}, módulo ${+i + 1}`; }
+  _timelapse(k, de, para) {
+    const n = Math.round((para - de) * 100); if (n < 5) return; const mut = performance.now() - (this._mutiraoT || -1e9) < 4000;
+    this.hud.brinde(`${mut ? 'Mutirão' : 'Enquanto você esteve fora'}: +${n}% na obra ${this._nomeSite(k)}`, mut ? 'mutirao' : 'grua', 3600);
+  }
   // ------------------------------------------------------------ ações com efeitos
+  _voarItens(itens, x, y) { const cont = {}; for (const k of itens) cont[k] = (cont[k] || 0) + 1; let d = 0; for (const [k, n] of Object.entries(cont)) { setTimeout(() => this.hud.voar(k, x, y, 'almox', () => this.som.coleta(), { n }), d); d += 90; } }
   coletarUsina(id, i, elBalao) {
-    const J = this.J; const idx = i >= 0 ? [i] : J.prontosUsina(id); let n = 0; const [x, y] = this._pontoTela(elBalao, LOTES[id]);
-    for (const k of idx) { const it = J.S.predios[id].slots[k]?.item; const r = J.coletarUsina(id, k); if (r === 'ok') { n++; setTimeout(() => this.hud.voar(it, x, y, 'almox', () => this.hud.atualizar()), n * 90); this.som.coleta(); } else if (r === 'almox') { this.falha('almox'); break; } }
-    if (n) { this.vibra.tique(); this._dica('primeiraColeta'); } this.calcBolhas(); this.paineis.render();
+    const J = this.J; const idx = i >= 0 ? [i] : J.prontosUsina(id); const [x, y] = this._pontoTela(elBalao, LOTES[id]); const itens = [];
+    for (const k of idx) { const it = J.S.predios[id].slots[k]?.item; const r = J.coletarUsina(id, k); if (r === 'ok') itens.push(it); else if (r === 'almox') { this.falha('almox'); break; } }
+    if (itens.length) { this._voarItens(itens, x, y); this.vibra.tique(); this._dica('primeiraColeta'); } this.calcBolhas(); this.paineis.agendar();
   }
   coletarOficina(id, elBalao) {
     const J = this.J; const itens = J.S.predios[id].prontos.slice(); const r = J.coletarOficina(id); const [x, y] = this._pontoTela(elBalao, LOTES[id]);
-    if (r === 'ok') { const n = itens.length - J.S.predios[id].prontos.length; for (let k = 0; k < n; k++) setTimeout(() => { this.hud.voar(itens[k], x, y, 'almox', () => this.hud.atualizar()); this.som.coleta(); }, k * 110); this.vibra.tique(); }
-    else if (r === 'almox') this.falha('almox'); this.calcBolhas(); this.paineis.render();
+    if (r === 'ok') { const n = itens.length - J.S.predios[id].prontos.length; this._voarItens(itens.slice(0, n), x, y); this.vibra.tique(); this._dica('primeiraColeta'); }
+    else if (r === 'almox') this.falha('almox'); this.calcBolhas(); this.paineis.agendar();
   }
-  coletarRepasse(elBalao) { const v = Math.floor(this.S.repasse.acum); if (this.J.coletarRepasse() !== 'ok') return; const pos = this._posRepasse(); const [x, y] = this._pontoTela(elBalao, { x: pos[0], z: pos[2] }); for (let k = 0; k < 5; k++) setTimeout(() => this.hud.voar('creditos', x, y, 'creditos', () => this.hud.atualizar()), k * 70); this.som.moedas(); this.vibra.tique(); this.hud.brinde(`+${fmt(v)} créditos de repasse`, 'creditos'); this.calcBolhas(); }
+  coletarRepasse(elBalao) {
+    const v = Math.floor(this.S.repasse.acum); if (this.J.coletarRepasse() !== 'ok') return; const pos = this._posRepasse(); const [x, y] = this._pontoTela(elBalao, { x: pos[0], z: pos[2] });
+    this._moedas(v, x, y, 6); this.som.moedas(); this.vibra.tique(); this.hud.brinde(`+${fmt(v)} créditos de repasse`, 'creditos'); this.calcBolhas(); this.paineis.agendar();
+  }
   _pontoTela(elB, lote) { if (elB?.getBoundingClientRect) { const r = elB.getBoundingClientRect(); if (r.width) return [r.left + r.width / 2, r.top + r.height / 2]; } if (lote) return this.bolhas.tela([lote.x, 1.2, lote.z]); return [innerWidth / 2, innerHeight / 2]; }
+  // ponto da tela sobre a obra (as estrelas e moedas da aprovação saem dele)
+  _pontoSite(k, reserva) { const a = this.obras.ancora?.(k) || reserva; if (!a) return [innerWidth / 2, innerHeight * 0.45]; const [x, y] = this.bolhas.tela(a); return [clamp(x, 40, innerWidth - 40), clamp(y, 80, innerHeight - 40)]; }
+  // linha do tempo: balão sai (120 ms), carimbo cai (380 ms), impacto (som, vibração, anel e achatamento),
+  // obra festeja; aos ~1200 ms a simulação aprova, vêm o aviso e as estrelas; modal de nível só depois de 2,6 s
   aprovarEtapa(key) {
-    const J = this.J; if (J.etapa(key).estado !== 'pronta' || this.sites.get('e:' + key)?.concluindo) return; this.paineis.fechar(true);
-    const [pid, eid] = key.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e);
-    this._carimbo(); this.som.aprovado(); this.vibra.sucesso();
-    this._concluirSite('e:' + key, () => { J.aprovarEtapa(key); if (!(p.faixa && e.nivel)) this.mundo.setEtapa(a.modelo, a.parte, true); if (e.extra) this.mundo.setEtapa(e.extra.modelo, e.extra.parte, true); if (e.modo === 'reflorestar') { this._reflorestado(true); this.finalComposicao(); } this.sincronizar(); this._celebrar(p, e); });
+    const J = this.J; if (J.etapa(key).estado !== 'pronta' || this.sites.get('e:' + key)?.concluindo || this._aprovando.has(key)) return; this.paineis.fechar(true); this._aprovando.add(key);
+    const [pid, eid] = key.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e); const ultima = p.etapas[p.etapas.length - 1] === e;
+    this._festaAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite('e:' + key, this.ancoraEtapa(p, e));
+    const carimbo = this._carimbo(); const box = this.sites.get('e:' + key)?.obra?.box?.clone();
+    this._concluirSite('e:' + key, () => {
+      this._aprovando.delete(key); const xp0 = J.S.xp; J.aprovarEtapa(key); if (!(p.faixa && e.nivel)) this.mundo.setEtapa(a.modelo, a.parte, true); if (e.extra) this.mundo.setEtapa(e.extra.modelo, e.extra.parte, true);
+      if (e.modo === 'reflorestar') this._reflorestado(true);
+      this.sincronizar(); this._celebrar(p, e); const [x, y] = this._pontoCel; this._estrelas(J.S.xp - xp0, x, y, 5);
+      if (ultima && !this.modoApreciar && e.modo !== 'reflorestar') this._cine(box); // o fim do jogo tem a sua própria câmera (vista da foto)
+    }, { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); } });
   }
   aprovarModulo(f, i) {
-    const J = this.J; if (J.S.modulos[f][i].obra?.estado !== 'pronta' || this.sites.get(`m:${f}:${i}`)?.concluindo) return; this.paineis.fechar(true); this.som.aprovado(); this.vibra.sucesso();
-    this._concluirSite(`m:${f}:${i}`, () => { J.aprovarModulo(f, i); this.sincronizar(); const m = J.S.modulos[f][i]; this.hud.brinde(`${MODULOS[f].nome}: módulo ${i + 1} no nível ${m.nivel}`, 'subir'); });
+    const J = this.J, k = `m:${f}:${i}`; if (J.S.modulos[f][i].obra?.estado !== 'pronta' || this.sites.get(k)?.concluindo || this._aprovando.has(k)) return; this.paineis.fechar(true); this._aprovando.add(k);
+    this._festaAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite(k, this.ancoraModulo(f, i)); const carimbo = this._carimbo();
+    this._concluirSite(k, () => { this._aprovando.delete(k); const xp0 = J.S.xp; J.aprovarModulo(f, i); this.sincronizar(); const m = J.S.modulos[f][i]; this.hud.brinde(`${MODULOS[f].nome}: módulo ${i + 1} no nível ${m.nivel}`, 'subir'); const [x, y] = this._pontoCel; this._estrelas(J.S.xp - xp0, x, y, 5); },
+      { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); } });
   }
   _celebrar(p, e) {
     this.hud.brinde(`${p.nome}: ${e.nome}`, 'ok', 3000);
-    if (e.servico) { const s = Object.entries(e.servico).map(([k, v]) => `+${fmt(v)} ${k === 'agua' ? 'de água' : k === 'energia' ? 'de energia' : 'de saneamento'}`).join(', '); setTimeout(() => this.hud.brinde(s, Object.keys(e.servico)[0], 2800), 1600); }
-    const falas = { 'lago.e1': ['nara', 'A água voltou a correr para o lago. Agora dá para abastecer os primeiros moradores.'], 'sede.e2': ['iris', 'A Sede já recebe os repasses da Holding. Toque nas moedas para coletar.'], 'biblioteca.e5': ['iris', 'O dossel está no lugar. É a imagem que a maquete do Conselho mostra.'], 'bioma.e4': ['nara', 'A baleia nadou a primeira volta no aquário. Quase choramos aqui.'], 'gorilas.e4': ['nara', 'A família de gorilas chegou. Olha o tamanho deles!'], 'acelerador.e3': ['caio', 'Detectores ligados. Primeiro feixe hoje à noite!'] };
-    const f = falas[p.id + '.' + e.id]; if (f) this.hud.falar(f[0], f[1]);
+    if (e.servico) { const s = Object.entries(e.servico).map(([k, v]) => `+${fmt(v)} ${k === 'agua' ? 'de água' : k === 'energia' ? 'de energia' : 'de saneamento'}`).join(', '); setTimeout(() => this.hud.brinde(s, Object.keys(e.servico)[0], 2800), 700); }
+  }
+  // última etapa de um projeto: órbita de cinema com barras (um toque na tela cancela)
+  _cine(box) {
+    if (this._cineEl) return; const c = el('div', 'cine passa', '<i></i><i></i>'); this.ui.appendChild(c); this.ui.classList.add('cine-on'); this._cineEl = c; this._cineT0 = performance.now(); this.engine.acordar?.(4200);
+    const fim = () => { if (this._cineEl !== c) return; this._cineEl = null; this.ui.classList.remove('cine-on'); c.classList.add('sai'); setTimeout(() => c.remove(), 320); };
+    const orbita = () => { if (this._cineEl === c) this.rig.orbitaCine?.(3200, 0.5, fim); else fim(); };
+    if (box) { const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2; this.rig.flyTo({ x: cx, z: cz, cine: true, done: orbita }, 700); } else orbita();
+    this._cineFim = fim;
   }
   // prédio novo do canteiro: sobe por um plano de corte em 3 lances (sem esticar)
-  predioConstruido(id) { const g = this.mundo.predios[id]; g.userData.animando = true; g.userData.pronto = false; g.visible = true; g.scale.set(1, 1, 1); const fim = () => { g.userData.animando = false; this.sincronizarMundo(); }; if (this.obras.erguer) this.obras.erguer(g, { ms: 1400, aoFim: fim }); else fim(); this.e_shadow(); this.hud.brinde(PREDIOS[id].nome + ' pronto!', 'producao'); this.calcBolhas(); setTimeout(() => this.paineis.abrir(PREDIOS[id].tipo === 'usina' ? 'usina' : 'oficina', id), 700); }
-  falha(r, fx) {
+  predioConstruido(id) { const g = this.mundo.predios[id]; g.userData.animando = true; g.userData.pronto = false; g.visible = true; g.scale.set(1, 1, 1); const fim = () => { g.userData.animando = false; this.sincronizarMundo(); }; if (this.obras.erguer) this.obras.erguer(g, { ms: 1400, aoFim: fim }); else fim(); this.e_shadow(); this.hud.brinde(PREDIOS[id].nome + ' pronto!', 'predio:' + id); this.calcBolhas(); setTimeout(() => this.paineis.abrir(PREDIOS[id].tipo === 'usina' ? 'usina' : 'oficina', id), 700); }
+  falha(r, fx = {}) {
     this.som.erro(); this.vibra.erro();
-    const msg = { creditos: 'Créditos insuficientes', falta: 'Faltam materiais no almoxarifado', cheio: 'Todos os espaços estão ocupados', almox: 'Almoxarifado cheio', nivel: 'Nível insuficiente', bloqueado: 'Ainda não liberado', bloqueada: 'Etapa ainda não liberada', servico: 'Faltam serviços (água, energia ou saneamento)', bem: 'Bem-estar abaixo de 60%', sem: 'Sem fichas de Mutirão', max: 'Já está no máximo', nada: 'Nada para fazer aqui' }[r] || 'Não foi possível';
-    this.hud.brinde(msg, r === 'creditos' ? 'creditos' : r === 'almox' ? 'almox' : null);
+    const serv = (fx.servicos || []).map((k) => ({ agua: 'água', energia: 'energia', saneamento: 'saneamento' }[k])).filter(Boolean).join(', ');
+    const msg = { creditos: 'Créditos insuficientes', falta: 'Faltam materiais no almoxarifado', faltaPrancha: 'Entregue todos os materiais na prancha', nadaEntregar: 'Nada no almoxarifado para esta prancha: toque num material para produzir', cheio: 'Todos os espaços estão ocupados', almox: 'Almoxarifado cheio', nivel: 'Nível insuficiente', requer: 'Antes, conclua a obra que libera este prédio', bloqueado: 'Ainda não liberado', bloqueada: 'Etapa ainda não liberada', fechado: 'Construa o prédio primeiro',
+      servico: `Faltam serviços para os novos moradores${serv ? ': ' + serv : ''}`, bem: `Bem-estar abaixo de ${fx.bemMin || 'mínimo'}${fx.bemMin ? '%' : ''}`, sem: 'Sem fichas de Mutirão: a disposição da comunidade enche a próxima', max: 'Já está no máximo', nada: 'Nada para fazer aqui', ja: 'Já construído', esgotado: 'Esgotado nesta janela: o estoque renova em breve', limite: 'Limite de vendas desta janela', ocupado: 'O Topógrafo já está fazendo uma licença', nao: 'Este item não é vendido', limiteCap: 'Nível máximo por enquanto' }[r] || 'Não foi possível';
+    this.hud.brinde(msg, r === 'creditos' ? 'creditos' : r === 'almox' ? 'almox' : r === 'sem' ? 'mutirao' : null, 2800);
   }
-  // leva até quem produz um item (usina ou oficina) e abre o painel
+  // leva até quem produz um item (usina, oficina ou o topógrafo) e abre o painel com a ficha destacada
   irProdutor(k) {
-    const I = ITENS[k]; if (!I) return; if (I.tipo === 'especial') { this.hud.brinde(I.grupo === 'licenca' ? 'Licenças caem ao coletar produção e ao subir de nível' : 'Itens de ampliação caem ao coletar produção', k, 3000); this._dica(I.grupo === 'licenca' ? 'licenca' : 'almoxCheio'); return; }
-    const id = I.tipo === 'bruto' ? (USINAS.find((u) => this.S.predios[u].ok) || 'usina1') : I.oficina;
-    if (I.nivel > this.S.nivel) { this.hud.brinde(`${I.nome} libera no nível ${I.nivel}`, k, 2600); return; }
-    this.paineis.fechar(true); this.irPara({ predio: id }); this.hud.brinde(`${I.nome}: produzido aqui`, k, 2200);
+    const I = ITENS[k]; if (!I) return; const S = this.S;
+    if (I.tipo === 'especial') { if (I.grupo === 'licenca') { this.paineis._empilhar = true; this.irPara({ predio: 'escritorio' }, true, `[data-a=topografo][data-k=${k}]`); this._dica('licenca'); return; } this.hud.brinde('Estrados, etiquetas e cadeados caem ao coletar produção, ao subir de nível e nos pedidos', k, 3200); this._dica('almoxCheio'); return; }
+    if ((I.cap || 1) > S.cap && !S.legado?.includes(k)) { this.hud.brinde(`${I.nome} libera no capítulo ${I.cap}`, k, 2600); return; }
+    if (I.nivel > S.nivel) { this.hud.brinde(`${I.nome} libera no nível ${I.nivel}`, k, 2600); return; }
+    const id = I.tipo === 'bruto' ? (USINAS.find((u) => S.predios[u].ok) || 'usina1') : I.oficina;
+    this.paineis._empilhar = !!this.paineis.el; this.irPara({ predio: id }, true, `[data-k="${k}"]`); this.paineis._empilhar = false;
+    this.hud.brinde(S.predios[id]?.ok ? `${I.nome}: produzido aqui` : `${I.nome}: construa ${PREDIOS[id].nome}`, k, 2200);
   }
-  // produz automaticamente a cadeia de um item (sub-itens nas oficinas e matéria-prima nas usinas)
-  produzirCadeia(k) {
+  // produz a cadeia de um item (sub-itens nas oficinas e matéria-prima nas usinas); naFila: o item já entrou em espera
+  produzirCadeia(k, naFila = false) {
     const J = this.J; const falta = {}; const conta = (it, n) => { const I = ITENS[it]; const tem = J.S.itens[it] || 0; const f = Math.max(0, n - tem); if (!f) return; if (I.tipo === 'bruto') { falta[it] = (falta[it] || 0) + f; return; } for (const [r, q] of Object.entries(I.req)) conta(r, q * f); falta[it] = (falta[it] || 0) + f; };
     for (const [r, q] of Object.entries(ITENS[k].req)) conta(r, q);
-    let feitos = 0; for (const [it, n] of Object.entries(falta)) { const I = ITENS[it]; for (let c = 0; c < n; c++) { let r = 'x'; if (I.tipo === 'bruto') { for (const u of USINAS) if (J.S.predios[u].ok && (r = J.produzir(u, it)) === 'ok') break; } else r = J.enfileirar(I.oficina, it); if (r === 'ok') feitos++; else break; } }
-    this.hud.brinde(feitos ? `${feitos} pedido(s) de produção lançados na cadeia` : 'Sem espaço livre nas usinas e oficinas', feitos ? 'producao' : null, 2600); this.calcBolhas();
+    let feitos = 0; for (const [it, n] of Object.entries(falta)) { const I = ITENS[it]; for (let c = 0; c < n; c++) { let r = 'x'; if (I.tipo === 'bruto') { for (const u of USINAS) if (J.S.predios[u].ok && (r = J.produzir(u, it)) === 'ok') break; } else r = J.enfileirar(I.oficina, it, true); if (r === 'ok') feitos++; else break; } }
+    this.hud.brinde(naFila ? `${ITENS[k].nome} na fila${feitos ? ` e ${feitos} insumo(s) encomendados` : ': espera os insumos'}` : feitos ? `${feitos} pedido(s) de produção lançados na cadeia` : 'Sem espaço livre nas usinas e oficinas', naFila || feitos ? k : null, 3000); this.calcBolhas(); this.paineis.agendar();
   }
   // ------------------------------------------------------------ balões
-  _posRepasse() { if (this.J.feita('sede.e2')) { const s = A.sede; return [s.c[0], 2.6, s.c[1] + s.rz]; } const l = LOTES.escritorio; return [l.x, 1.6, l.z]; }
+  _posRepasse() {
+    if (this.J.feita('sede.e2')) { const F = this.mundo.faixas?.sede; if (F?.centro && F.alturaTopo) { const [x, z] = F.centro(Math.min(1, F.mods.length - 1)); return [x, F.alturaTopo(this.nivelFaixaProj(PROJ.sede)) + 0.6, z]; } if (A.sede.repasse) return A.sede.repasse.slice(); const s = A.sede; return [s.c[0], 2.6, s.c[1] + s.rz]; }
+    const l = LOTES.escritorio; return [l.x, 1.6, l.z];
+  }
   ancoraEtapa(p, e) {
     const W = this.mundo; if (p.faixa) { const F = W.faixas[p.faixa]; const n = Math.max(e.nivel || 0, this.nivelFaixaProj(p)); const i = (F.mods.length / 2) | 0; const [x, z] = F.centro(Math.min(i, F.mods.length - 1)); return [x, F.alturaTopo(n) + 0.8, z]; }
     const a = alvoEtapa(p, e); const m = W.modelos[a.modelo]; return m?.ancora || [0, 2, 0];
   }
   ancoraModulo(f, i) { const W = this.mundo; const F = f === 'casas' ? W.casas : W.faixas[f]; const [x, z] = F.centro(i); const m = this.S.modulos[f][i]; return [x, F.alturaTopo(Math.max(1, m.obra ? m.obra.para : m.nivel)) + 0.5, z]; }
   calcBolhas() {
-    const J = this.J, S = this.S, L = [];
-    for (const id of USINAS) { const st = S.predios[id]; if (!st.ok) continue; const pr = J.prontosUsina(id); const l = LOTES[id]; if (pr.length) L.push({ id: 'u' + id, tipo: 'coleta', icone: st.slots[pr[0]].item, n: pr.length, pos: [l.x, 1.5, l.z], coletavel: true, acao: (el) => this.coletarUsina(id, -1, el) }); else if (!st.slots.some(Boolean)) L.push({ id: 'u' + id, tipo: 'placa', icone: 'producao', pos: [l.x, 1.5, l.z], acao: () => { this.paineis.abrir('usina', id); } }); }
-    for (const id of OFICINAS) { const st = S.predios[id]; const l = LOTES[id]; const P = PREDIOS[id];
-      if (st.ok) { if (st.prontos.length) L.push({ id: 'o' + id, tipo: 'coleta', icone: st.prontos[0], n: st.prontos.length, pos: [l.x, 1.3, l.z], coletavel: true, acao: (el) => this.coletarOficina(id, el) }); }
-      else if (P.nivel <= S.nivel && (!P.requer || J.feita(P.requer)) && !this.J.feita('reflorestar.e1')) L.push({ id: 'o' + id, tipo: 'placa', icone: 'grua', pos: [l.x, 1.0, l.z], acao: () => { this.paineis.abrir('oficina', id); this.irPara({ predio: id }, false); } }); }
-    for (const id of USINAS) { const P = PREDIOS[id]; if (!S.predios[id].ok && P.nivel <= S.nivel) { const l = LOTES[id]; L.push({ id: 'n' + id, tipo: 'placa', icone: 'grua', pos: [l.x, 1.0, l.z], acao: () => { this.paineis.abrir('usina', id); this.irPara({ predio: id }, false); } }); } }
+    const J = this.J, S = this.S, W = this.mundo, L = [];
+    // canteiro desmontado (ou sendo desmontado): sem balões de produção sobre a mata
+    const semCanteiro = !W.canteiro.visible || this.sites.has('e:reflorestar.e0') || J.feita('reflorestar.e0') || J.feita('reflorestar.e1');
+    if (!semCanteiro) {
+      for (const id of USINAS) { const st = S.predios[id]; if (!st.ok) continue; const pr = J.prontosUsina(id); const l = LOTES[id]; if (pr.length) L.push({ id: 'u' + id, tipo: 'coleta', icone: st.slots[pr[0]].item, n: pr.length, pos: [l.x, 1.5, l.z], coletavel: true, alvo: { predio: id }, acao: (el) => this.coletarUsina(id, -1, el) }); else if (!st.slots.some(Boolean)) L.push({ id: 'u' + id, tipo: 'placa', icone: 'producao', pos: [l.x, 1.5, l.z], alvo: { predio: id }, verbo: 'Produzir', acao: () => this.irPara({ predio: id }) }); }
+      for (const id of OFICINAS) { const st = S.predios[id]; const l = LOTES[id];
+        if (st.ok) { if (st.prontos.length) L.push({ id: 'o' + id, tipo: 'coleta', icone: st.prontos[0], n: st.prontos.length, pos: [l.x, 1.3, l.z], coletavel: true, alvo: { predio: id }, acao: (el) => this.coletarOficina(id, el) }); }
+        else if (J.predioLiberado ? J.predioLiberado(id) : PREDIOS[id].nivel <= S.nivel) L.push({ id: 'o' + id, tipo: 'placa', icone: 'grua', pos: [l.x, 1.0, l.z], alvo: { predio: id }, verbo: 'Construir', acao: () => this.irPara({ predio: id }) }); }
+      for (const id of USINAS) { const P = PREDIOS[id]; if (!S.predios[id].ok && P.nivel <= S.nivel) { const l = LOTES[id]; L.push({ id: 'n' + id, tipo: 'placa', icone: 'grua', pos: [l.x, 1.0, l.z], alvo: { predio: id }, verbo: 'Construir', acao: () => this.irPara({ predio: id }) }); } }
+    }
+    let placaEtapa = false;
     for (const p of PROJETOS) {
-      if (p.cap > S.cap) continue; const nx = J.proximaEtapa(p); if (!nx) continue; const key = p.id + '.' + nx.e.id; const pos = this.ancoraEtapa(p, nx.e);
-      if (nx.s === 'pronta') L.push({ id: 'e' + key, tipo: 'pronta', icone: 'ok', pos, acao: () => this.aprovarEtapa(key) });
-      else if (nx.s === 'obra') { const st = J.etapa(key); L.push({ id: 'e' + key, tipo: 'obra', icone: 'grua', p: (J.agora - st.ini) / (st.fim - st.ini), pos, acao: () => { this.paineis.abrir('etapa', key); } }); }
-      else if (nx.s === 'disponivel' || nx.s === 'prancha') L.push({ id: 'e' + key, tipo: 'placa', icone: 'placa', pos, acao: () => this.irPara({ etapa: key }) });
+      if (p.cap > S.cap) continue; const nx = J.proximaEtapa(p); if (!nx) continue; const key = p.id + '.' + nx.e.id; const site = this.sites.get('e:' + key); if (site?.concluindo || this._aprovando.has(key)) continue;
+      const pos = (site && this.obras.ancora?.('e:' + key)) || this.ancoraEtapa(p, nx.e); const alvo = { etapa: key };
+      if (nx.s === 'pronta') L.push({ id: 'e' + key, tipo: 'pronta', icone: 'ok', pos, alvo, acao: () => this.aprovarEtapa(key) });
+      else if (nx.s === 'obra') { const st = J.etapa(key); L.push({ id: 'e' + key, tipo: 'obra', icone: 'grua', p: (J.agora - st.ini) / (st.fim - st.ini), pos, alvo, verbo: 'Obra: ' + curto(p.nome), acao: () => this.irPara(alvo) }); }
+      else if (nx.s === 'disponivel' || nx.s === 'prancha') { placaEtapa = true; L.push({ id: 'e' + key, tipo: 'placa', icone: 'placa', pos, alvo, verbo: 'Obra: ' + curto(p.nome), acao: () => this.irPara(alvo) }); }
     }
     for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => {
-      const s = J.situacaoModulo(f, i); const pos = this.ancoraModulo(f, i);
-      if (s === 'pronta') L.push({ id: `m${f}${i}`, tipo: 'pronta', icone: 'ok', pos, acao: () => this.aprovarModulo(f, i) });
-      else if (s === 'obra') L.push({ id: `m${f}${i}`, tipo: 'obra', icone: 'grua', p: (J.agora - m.obra.ini) / (m.obra.fim - m.obra.ini), pos, acao: () => this.paineis.abrir('modulo', [f, i]) });
-      else if (s === 'disponivel') { const r = J.requisitosModulo(f, i); const ok = r.servOk && r.bemOk && S.creditos >= r.custo && Object.entries(r.itens).every(([k, n]) => J.temItem(k, n)); if (ok || m.nivel === 0) L.push({ id: `m${f}${i}`, tipo: ok ? 'subir' : 'placa', icone: ok ? 'subir' : 'placa', pos, acao: () => this.irPara({ modulo: [f, i] }) }); }
+      const s = J.situacaoModulo(f, i); const k = `m:${f}:${i}`; const site = this.sites.get(k); if (site?.concluindo || this._aprovando.has(k)) return;
+      const pos = (site && this.obras.ancora?.(k)) || this.ancoraModulo(f, i); const alvo = { modulo: [f, i] };
+      if (s === 'pronta') L.push({ id: `m${f}${i}`, tipo: 'pronta', icone: 'ok', pos, alvo, acao: () => this.aprovarModulo(f, i) });
+      else if (s === 'obra') L.push({ id: `m${f}${i}`, tipo: 'obra', icone: 'grua', p: (J.agora - m.obra.ini) / (m.obra.fim - m.obra.ini), pos, alvo, acao: () => this.irPara(alvo) });
+      else if (s === 'disponivel') {
+        const r = J.requisitosModulo(f, i); const ok = r.servOk && r.bemOk && S.creditos >= r.custo && Object.entries(r.itens).every(([k2, n]) => J.temItem(k2, n));
+        if (!r.servOk || !r.bemOk) { const falta = r.servOk ? 'bem' : (r.servicos || []).find((x) => (J.servicoInfo ? J.servicoInfo(x).cap : J.serv[x]) < r.popDepois) || 'agua'; L.push({ id: `m${f}${i}`, tipo: 'bloq', icone: falta, pos, alvo, acao: () => this.irPara(alvo) }); }
+        else if (ok || m.nivel === 0) L.push({ id: `m${f}${i}`, tipo: ok ? 'subir' : 'placa', icone: ok ? 'subir' : 'placa', pos, alvo, verbo: ok ? 'Subir módulo' : 'Módulo', acao: () => this.irPara(alvo) });
+      }
     });
-    const r = S.repasse; if (r.acum >= Math.max(15, J.taxaRepasse() * 4)) L.push({ id: 'repasse', tipo: 'moedas', icone: 'repasse', pos: this._posRepasse(), coletavel: true, acao: (el) => this.coletarRepasse(el) });
-    this.bolhas.definir(L);
+    const r = S.repasse; if (r.acum >= Math.max(15, J.taxaRepasse() * 4)) L.push({ id: 'repasse', tipo: 'moedas', icone: 'repasse', pos: this._posRepasse(), coletavel: true, alvo: { repasse: true }, acao: (el) => this.coletarRepasse(el) });
+    this.bolhas.definir(L); this._listaBolhas = L;
     // pontos nos botões
     let prontos = 0; for (const id of USINAS) prontos += J.prontosUsina(id).length; for (const id of OFICINAS) prontos += S.predios[id].prontos.length; this.hud.ponto('producao', prontos);
     let aprov = 0; for (const p of PROJETOS) { const nx = J.proximaEtapa(p); if (nx && nx.s === 'pronta') aprov++; } this.hud.ponto('obras', aprov);
-    this.hud.ponto('pedidos', S.nivel >= 4 ? S.pedidos.filter((p) => p.itens && Object.entries(p.itens).every(([k, n]) => J.temItem(k, n))).length : 0);
+    this.hud.ponto('pedidos', S.cap >= REGRAS.capPedidos ? S.pedidos.filter((p) => p.itens && Object.entries(p.itens).every(([k, n]) => J.temItem(k, n))).length : 0);
     const pc = J.ocupado / J.capacidade; this.hud.ponto('almox', pc >= 0.95 ? '!' : 0);
-    this._listaBolhas = L;
+    // a primeira placa de obra à vista (fora do primeiro passo do tutorial) explica a prancha
+    if (placaEtapa && S.cap === 1 && !this.S.dicas.primeiraEtapa && !(this._tutAtivo() && (S.dicas.guia || 0) < 1)) this._dica('primeiraEtapa');
+    // Meta em foco e Próximo
+    const passo = this._passoTut(); this._plano = J.planoMeta ? J.planoMeta() : null;
+    this.hud.meta(!passo || passo.id === 'meta' ? this._plano : null);
+    this._prox = this._calcProximo(L, passo); this.hud.proximo(this._prox && { icone: this._prox.icone, verbo: this._prox.verbo, pulsa: L.some((b) => b.tipo === 'pronta' || b.tipo === 'coleta') });
+  }
+  // ------------------------------------------------------------ Próximo, Meta em foco e metas
+  _calcProximo(L, passo) {
+    if (passo) { for (const a of [].concat(passo.alvo)) { if (a.startsWith('balao:')) { const b = L.find((x) => x.id === a.slice(6)); if (b) return this._proxBalao(b); } else if (a.startsWith('bt:')) return { painel: a.slice(3), icone: a.slice(3), verbo: a.slice(3) === 'obras' ? 'Obras' : 'Abrir' }; } }
+    const pl = this._plano; if (pl && pl.alvo && pl.acao !== 'aguardar') return { alvo: pl.alvo, destaque: this._selPlano(pl), icone: pl.item && ITENS[pl.item] ? pl.item : ICONE_PLANO[pl.acao] || 'subir', verbo: pl.acao === 'iniciar' && pl.alvo.modulo ? 'Subir módulo' : VERBO_PLANO[pl.acao] || 'Ir' };
+    for (const t of ['pronta', 'coleta', 'moedas', 'subir', 'placa', 'obra']) { const b = L.find((x) => x.tipo === t); if (b) return this._proxBalao(b); }
+    return null;
+  }
+  _proxBalao(b) { return { alvo: b.alvo, icone: b.tipo === 'obra' || b.tipo === 'placa' ? (b.alvo?.etapa ? PROJ[b.alvo.etapa.split('.')[0]]?.icone || b.icone : b.icone) : b.icone, verbo: b.verbo || VERBO[b.tipo] || 'Ir', destaque: b.tipo === 'pronta' ? '[data-a=aprovar],[data-a=aprovarMod]' : b.tipo === 'coleta' ? '[data-a=coletarU],[data-a=coletarO]' : null }; }
+  // elemento do painel que corresponde ao passo do plano
+  _selPlano(pl) {
+    if (!pl) return null; const k = pl.item;
+    switch (pl.acao) {
+      case 'produzir': return pl.alvo?.topografo ? `[data-a=topografo][data-k=${pl.alvo.topografo}]` : k ? `[data-k="${k}"]` : null;
+      case 'coletar': return pl.alvo?.repasse ? '[data-a=repasse]' : '[data-a=coletarU],[data-a=coletarO]';
+      case 'entregar': case 'iniciar': return pl.alvo?.modulo ? '[data-a=melhorar]' : '[data-a=entregarIniciar],[data-a=entregarTudo]';
+      case 'aprovar': return '[data-a=aprovar],[data-a=aprovarMod]';
+      case 'construir': return pl.alvo?.almox ? '[data-a=ampliarAlmox]' : pl.alvo?.ampliar ? '[data-a=ampliar]' : '[data-a=construir]';
+    }
+    return null;
+  }
+  proximo() { const P = this._prox; if (!P) { this.hud.brinde('Tudo em dia! As obras seguem sozinhas.', 'ok'); return; } if (P.painel) { this.paineis.abrir(P.painel); return; } this._irAlvo(P.alvo, P.destaque); }
+  _irPlano(pl) { if (!pl) return; this._irAlvo(pl.alvo, this._selPlano(pl)); }
+  _irAlvo(alvo, destaque) {
+    if (!alvo) { this.paineis.abrir('producao'); return; }
+    if (alvo.etapa || alvo.modulo || alvo.predio) return this.irPara(alvo, true, destaque);
+    if (alvo.repasse) { const p = this._posRepasse(); this._irMundo(p); this.paineis.abrir('escritorio', undefined, { destaque: destaque || '[data-a=repasse]' }); return; }
+    if (alvo.topografo) return this.irPara({ predio: 'escritorio' }, true, `[data-a=topografo][data-k=${alvo.topografo}]`);
+    if (alvo.capitulo) return this.modalCapitulo(this.J.capitulo());
+    if (alvo.almox) return this.irPara({ predio: 'almox' }, true, '[data-a=ampliarAlmox]');
+    if (alvo.deposito) return this.paineis.abrir('deposito', undefined, { destaque: destaque });
+    if (alvo.ampliar) return this.irPara({ predio: alvo.ampliar }, true, '[data-a=ampliar]');
+  }
+  _irMeta(i) {
+    const J = this.J, c = J.capitulo(); const m = c?.metas[i]; if (!m) return; this.S.dicas.metaFoco = 1; this.hud.alternarMetas(false);
+    if (m.tipo === 'predio') this.irPara({ predio: m.id }, true, '[data-a=construir]');
+    else if (m.tipo === 'etapa') { const [pid] = m.id.split('.'); const nx = J.proximaEtapa(PROJ[pid]); this.irPara({ etapa: nx ? pid + '.' + nx.e.id : m.id }); }
+    else if (m.tipo === 'modulos') { const arr = J.S.modulos[m.faixa]; let k = arr.findIndex((x, q) => x.nivel < m.nivel && ['pronta', 'disponivel', 'obra'].includes(J.situacaoModulo(m.faixa, q))); if (k < 0) k = Math.max(0, arr.findIndex((x) => x.nivel < m.nivel)); this.irPara({ modulo: [m.faixa, k] }); }
+    else this.paineis.abrir('producao');
+  }
+  _infoBem() {
+    const J = this.J; const bi = J.bemInfo?.(); if (!bi) { this.paineis.abrir('escritorio'); return; }
+    const f = bi.fontes.slice(0, 3).map((x) => `<li><b>+${x.v}%</b>${x.txt}</li>`).join('');
+    this.hud.info('[data-a="bem"]', `<h4>Bem-estar ${bi.total}%</h4><ul><li><b>${bi.base}%</b>Base</li>${f}${bi.pressao ? `<li class="nao"><b>−${bi.pressao}%</b>Pressão de moradia</li>` : ''}</ul><small>Mais bem-estar aumenta os repasses. O último pavimento dos módulos pede ${bemMinimo(POP_NIVEL.length - 1)}%.</small>`);
+  }
+  _infoMutirao() {
+    const S = this.S; this.hud.info('[data-a="mutirao"]', `<h4>Mutirão ${S.mutirao}/${REGRAS.fichasMax}</h4><p>Cada ficha reduz até ${REGRAS.mutiraoH} h de uma obra (na usina, de todos os espaços; na oficina, do item atual).</p><div class="linha"><div class="barra"><i style="width:${S.disposicao || 0}%"></i></div><b class="num">${Math.round(S.disposicao || 0)}/100</b></div><small>Disposição da comunidade: obras aprovadas, módulos e pedidos enchem a barra; cheia, vira uma ficha.</small>`);
+  }
+  // ------------------------------------------------------------ tutorial (primeiros passos)
+  _tutAtivo() { const T = TUTORIAL || []; return this.S.cap === 1 && (this.S.dicas.guia || 0) < T.length; }
+  _passoTut() { return this._tutAtivo() ? TUTORIAL[this.S.dicas.guia || 0] : null; }
+  _tutorial() {
+    const S = this.S, T = TUTORIAL || []; if (S.cap !== 1) return; let i = S.dicas.guia || 0; while (i < T.length && T[i].feito(this.J)) i++;
+    if (i !== (S.dicas.guia || 0) || S.dicas.guia === undefined) S.dicas.guia = i;
+    if (i < T.length && this._guiaFalou !== i) { this._guiaFalou = i; const p = T[i]; this.hud.falar(p.quem, p.fala, { se: () => this.S.cap === 1 && (this.S.dicas.guia || 0) === i, grupo: 'tutorial' }); }
+  }
+  // anel-guia: dentro do painel aberto, o controle que o passo pede; senão o balão, o botão ou a Meta em foco
+  _guia(t) {
+    const p = this._passoTut(); if (!p || !this.hud._visivel || this.modoApreciar || this._modais.length || this.ui.classList.contains('intro')) { this.hud.guia(null); return; }
+    let pt = null; const G = this._guiaCache;
+    if (this.paineis.el) { if (t - G.t > 200) { G.t = t; G.pt = null; for (const s of TUT_PAINEL[p.id] || [].concat(p.alvo).filter((a) => !a.includes(':') && a !== 'meta')) { const e = this.paineis.el.querySelector(s); if (e) { G.pt = centro(e); break; } } } pt = G.pt; }
+    if (!pt) for (const a of [].concat(p.alvo).reverse()) {
+      if (a.startsWith('balao:')) pt = this.bolhas.posTela(a.slice(6));
+      else if (t - G.t > 200 || G.a !== a) { G.t = t; G.a = a; const e = a.startsWith('bt:') ? this.hud.dir.querySelector(`[data-a="${a.slice(3)}"]:not(.oculto)`) : a === 'meta' ? (this.hud.agora.classList.contains('oculto') ? this.hud.cap : this.hud.agora) : a.includes(':') || this.paineis.el ? null : document.querySelector('#ui ' + a); G.pt = e && !(this.paineis.el && a.startsWith('bt:') && this.paineis.atual?.tipo === a.slice(3)) ? centro(e) : null; pt = G.pt; }
+      else pt = G.pt;
+      if (pt) break;
+    }
+    this.hud.guia(pt ? pt[0] : null, pt ? pt[1] : null);
   }
   // ------------------------------------------------------------ câmera e seleção
-  irPara(alvo, abrir = true) {
-    const J = this.J; let foco = null;
-    if (alvo.etapa) { const [pid, eid] = alvo.etapa.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e); const m = this.mundo.modelos[a.modelo]; const an = this.ancoraEtapa(p, e); foco = m?.foco && !p.faixa ? m.foco : { x: an[0], z: an[2] + 1.5, dist: 16 }; if (abrir) this.paineis.abrir('etapa', alvo.etapa); }
-    else if (alvo.modulo) { const [f, i] = alvo.modulo; const an = this.ancoraModulo(f, i); foco = { x: an[0], z: an[2] + 1, dist: 11 }; if (abrir) this.paineis.abrir('modulo', alvo.modulo); }
-    else if (alvo.predio) { const l = LOTES[alvo.predio]; foco = { x: l.x + 0.8, z: l.z, dist: 13 }; if (abrir) this.paineis.abrir(PREDIOS[alvo.predio].tipo === 'usina' ? 'usina' : PREDIOS[alvo.predio].tipo === 'oficina' ? 'oficina' : alvo.predio === 'almox' ? 'almox' : 'escritorio', alvo.predio); }
-    if (foco) { this.rig.pitchFix = null; const k = this.paineis.el ? foco.dist * 0.2 : 0; this.rig.flyTo({ x: foco.x + Math.sin(this.rig.yaw) * k, z: foco.z + Math.cos(this.rig.yaw) * k, dist: foco.dist, tilt: 0, yaw: this.rig.yaw, fov: 38 }, 900); }
+  irPara(alvo, abrir = true, destaque = null) {
+    let foco = null; const o = destaque ? { destaque } : {};
+    if (alvo.etapa) { const [pid, eid] = alvo.etapa.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e); const m = this.mundo.modelos[a.modelo]; const an = this.ancoraEtapa(p, e); foco = m?.foco && !p.faixa ? m.foco : { x: an[0], z: an[2] + 1.5, dist: 16 }; if (abrir) this.paineis.abrir('etapa', alvo.etapa, o); }
+    else if (alvo.modulo) { const [f, i] = alvo.modulo; const an = this.ancoraModulo(f, i); foco = { x: an[0], z: an[2] + 1, dist: 11 }; if (abrir) this.paineis.abrir('modulo', alvo.modulo, o); }
+    else if (alvo.predio) { const l = LOTES[alvo.predio]; if (l) foco = { x: l.x + 0.8, z: l.z, dist: 13 }; if (abrir) this.paineis.abrir(PREDIOS[alvo.predio].tipo === 'usina' ? 'usina' : PREDIOS[alvo.predio].tipo === 'oficina' ? 'oficina' : alvo.predio === 'almox' ? 'almox' : 'escritorio', alvo.predio, o); }
+    else if (alvo.repasse) return this._irAlvo(alvo, destaque);
+    if (foco) { this.rig.pitchFix = null; this.rig.flyTo({ x: foco.x, z: foco.z, dist: foco.dist, tilt: 0, yaw: this.rig.yaw, fov: 38 }); }
   }
+  // leva a câmera até um ponto do mundo (balão na borda; grupo de balões: aproxima para separar)
+  _irMundo(pos, alvo, k) { if (!pos) return; this.rig.pitchFix = null; if (k) { this.rig.flyTo({ x: pos[0], z: pos[2] + 0.6, dist: Math.max(this.rig.minDist || 4, this.rig.dist * k) }); return; } this.rig.flyTo({ x: pos[0], z: pos[2] + 1.5, dist: Math.min(this.rig.dist, 16), tilt: 0 }); }
   toque(x, y) {
-    if (this.modoApreciar) return;
-    const ray = this.rig.ray(x, y); const hits = ray.intersectObjects([this.mundo.root], true);
-    let p = null; for (const h of hits) { let o = h.object; while (o && !o.userData.pick) o = o.parent; if (o && o.visible) { p = { pick: o.userData.pick, point: h.point }; break; } }
+    if (this.modoApreciar) { this.aoToqueApreciar?.(); return; }
+    this.hud.alternarMetas(false); this.hud.fecharInfo(); if (this._cineEl) this._cineFim?.();
+    const ray = this.rig.ray(x, y); let p = null;
+    if (this.mundo.pick) { const h = this.mundo.pick(ray); if (h) p = { pick: h.pick, point: h.point }; }
+    else { const hits = ray.intersectObjects([this.mundo.root], true); for (const h of hits) { let o = h.object; while (o && !o.userData.pick) o = o.parent; if (o && o.visible) { p = { pick: o.userData.pick, point: h.point }; break; } } }
     const g = p?.point || this.rig.ground(x, y); if (!g) { this.paineis.fechar(); return; }
     const alvo = p ? this._pickAlvo(p.pick, g) : this._maisProximo(g);
-    if (alvo) { this.som.toque(); this.vibra.tique(); if (alvo.predio) this.irPara(alvo, true); else this.irPara(alvo, true); } else this.paineis.fechar();
+    if (alvo) { this.som.toque(); this.vibra.tique(); this.irPara(alvo, true); } else this.paineis.fechar();
   }
   _pickAlvo(pick, pt) {
-    if (pick.tipo === 'predio') return { predio: pick.id };
+    if (pick.tipo === 'predio') return this.mundo.canteiro.visible ? { predio: pick.id } : null;
     if (pick.tipo === 'modulos') { const F = pick.id === 'casas' ? this.mundo.casas : this.mundo.faixas[pick.id]; let best = 0, bd = 1e9; F.mods.forEach((m, i) => { const [x, z] = F.centro(i); const d = Math.hypot(x - pt.x, z - pt.z); if (d < bd) { bd = d; best = i; } }); return { modulo: [pick.id, best] }; }
-    if (pick.tipo === 'proj') { const p = PROJ[pick.id]; if (!p) return null; const nx = this.J.proximaEtapa(p) || { e: p.etapas[p.etapas.length - 1] }; return { etapa: p.id + '.' + nx.e.id }; }
+    if (pick.tipo === 'proj') { const p = PROJ[pick.id]; if (!p) return this._maisProximo(pt); const nx = this.J.proximaEtapa(p) || { e: p.etapas[p.etapas.length - 1] }; return { etapa: p.id + '.' + nx.e.id }; }
     return this._maisProximo(pt);
   }
   _maisProximo(g) {
@@ -315,32 +536,71 @@ export class Controle {
     for (const [pid, fid] of Object.entries(FAIXA_PROJ)) { const p = PROJ[pid]; if (p.cap > this.S.cap) continue; const F = this.mundo.faixas[fid]; const nx = this.J.proximaEtapa(p); const e = nx ? nx.e : p.etapas[p.etapas.length - 1]; F.mods.forEach((m, i) => { const [x, z] = F.centro(i); cand(Math.hypot(x - g.x, z - g.z), { etapa: p.id + '.' + e.id }, 2.2); }); }
     return best;
   }
-  proximo() {
-    const L = this._listaBolhas || []; const ordem = ['pronta', 'coleta', 'moedas', 'subir', 'placa', 'obra'];
-    for (const t of ordem) { const b = L.find((x) => x.tipo === t); if (b) { const [x, , z] = b.pos; this.rig.pitchFix = null; this.rig.flyTo({ x, z: z + 3, dist: 13, tilt: 0, done: () => b.acao(null) }); return; } } // a ação vem quando a câmera chega (a duração depende da distância)
-    this.hud.brinde('Tudo em dia! Produza materiais para as próximas obras.', 'ok');
+  // ------------------------------------------------------------ modais (fila: nenhum abre com painel, outro modal ou festa)
+  _fila(fn, atraso = 0, chave = null) { if (chave && (this._filaModais.some((x) => x.chave === chave) || (chave === 'capitulo' && this._modalCap))) return; this._filaModais.push({ fn, t: performance.now() + atraso, chave }); }
+  _verModais() {
+    for (const r of [...this._modais]) if (!r.v.isConnected) r.fechar(true, true); // tirado do DOM por fora (testes): limpa como fechar
+    this._ocupado(); const q = this._filaModais; if (!q.length) return; const t = performance.now();
+    if (this._modais.length || this.paineis.el || t < this._festaAte || this.ui.classList.contains('intro')) return;
+    const i = q.findIndex((x) => x.t <= t); if (i < 0) return; const [x] = q.splice(i, 1); x.fn();
   }
-  // ------------------------------------------------------------ modais e efeitos
-  _carimbo() { const c = el('div', 'carimbo', 'APROVADO'); this.ui.appendChild(c); setTimeout(() => { c.style.transition = 'opacity .5s'; c.style.opacity = 0; }, 1300); setTimeout(() => c.remove(), 1900); }
-  modal(html, aoMontar) { const v = el('div', 'veu'); v.innerHTML = `<div class="modal">${html}</div>`; this.ui.appendChild(v); this.som.abrir(); const fechar = () => { v.remove(); this.som.fechar(); }; v.addEventListener('click', (e) => { if (e.target === v) fechar(); const b = e.target.closest('[data-fecha]'); if (b) fechar(); }); aoMontar && aoMontar(v.querySelector('.modal'), fechar); return fechar; }
+  _carimbo() {
+    const c = el('div', 'carimbo', '<span>APROVADO</span>'); this.ui.appendChild(c);
+    setTimeout(() => c.classList.add('some'), 1300); setTimeout(() => c.remove(), 1900); return c;
+  }
+  // o = {fixo (o véu não fecha; o modal treme), aoFechar, cls}
+  modal(html, aoMontar, o = {}) {
+    const v = el('div', 'veu'); v.innerHTML = `<div class="modal ${o.cls || ''}" role="dialog" aria-modal="true">${html}</div>`; this.ui.appendChild(v); this.som.abrir();
+    const m = v.querySelector('.modal'); const reg = { v, o }; this._modais.push(reg); this._ocupado(); this.hud.alternarMetas(false); this.hud.fecharInfo(); this.engine.acordar?.(400);
+    let feito = false;
+    const fechar = (quieto, jaFora) => {
+      if (feito) return; feito = true; this._modais = this._modais.filter((x) => x !== reg); this._ocupado();
+      if (!jaFora) { v.classList.add('sai'); const fim = (e) => { if (!e || e.target === v) v.remove(); }; v.addEventListener('animationend', fim); setTimeout(() => v.remove(), 200); }
+      if (!quieto) this.som.fechar(); try { o.aoFechar?.(); } catch (e) { console.error(e); }
+    };
+    reg.fechar = fechar;
+    v.addEventListener('click', (e) => { if (e.target === v) { if (o.fixo) { m.classList.remove('treme'); void m.offsetWidth; m.classList.add('treme'); this.vibra.erro(); } else fechar(); return; } if (e.target.closest('[data-fecha]')) fechar(); });
+    aoMontar && aoMontar(m, fechar); return fechar;
+  }
+  // subiu de nível: raios, cartões de recompensa; 'Continuar' faz as recompensas voarem para o HUD
   modalNivel(d) {
-    const novos = [...d.novos.map((k) => `<span class="etiq">${img(k)}${ITENS[k].nome}</span>`), ...d.predios.map((k) => `<span class="etiq">${img('grua')}${PREDIOS[k].nome}</span>`)].join(' ');
-    this.modal(`<h3>Subiu de nível</h3><h1>Nível ${d.nivel}</h1><div class="linha" style="justify-content:center;margin:10px 0"><span class="etiq">${img('creditos')}+${fmt(d.creditos)}</span><span class="etiq">${img('mutirao')}+1 Mutirão</span><span class="etiq">${img(d.especial)}${ITENS[d.especial].nome}</span></div>${novos ? `<p>Liberado agora:</p><div class="linha" style="justify-content:center">${novos}</div>` : ''}<p></p><button class="botao ouro" data-fecha>Continuar</button>`);
+    const de = d.de ?? d.nivel - 1, para = d.para ?? d.nivel; const n = para - de; const tit = n > 2 ? `Níveis ${de + 1} a ${para}` : n === 2 ? `Níveis ${de + 1} e ${para}` : `Nível ${para}`;
+    const esp = (d.especiais?.length ? d.especiais : [d.especial]).filter((k) => ITENS[k]); const cont = {}; for (const k of esp) cont[k] = (cont[k] || 0) + 1;
+    const cards = [`<div class="premio" data-p="creditos">${img('creditos')}<b>+${fmt(d.creditos || 0)}</b><small>créditos</small></div>`, ...Object.entries(cont).map(([k, q]) => `<div class="premio" data-p="${k}">${img(k)}<b>+${q}</b><small>${ITENS[k].nome}</small></div>`), ...(d.vagas || []).map((id) => `<div class="premio" data-p="predio:${id}">${img('predio:' + id)}<b>+1 vaga</b><small>${PREDIOS[id]?.nome || id}</small></div>`)].join('');
+    const novos = [...(d.novos || []).map((k) => `<span class="etiq">${img(k)}${ITENS[k].nome}</span>`), ...(d.predios || []).map((k) => `<span class="etiq">${img('predio:' + k)}${PREDIOS[k].nome}</span>`)].join('');
+    let voou = false; const voar = (m) => {
+      if (voou) return; voou = true; const cs = m ? [...m.querySelectorAll('.premio')] : []; let t = 0;
+      for (const c of cs) { const r = c.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const p = c.dataset.p; setTimeout(() => { if (p === 'creditos') { const v = d.creditos || 0; const k = 6, parte = Math.floor(v / k); this.hud.voar('creditos', x, y, 'creditos', (i, vis, ult) => this.hud.soltar('creditos', ult ? v - parte * (vis - 1) : parte), { n: k }); this.som.moedas(); } else this.hud.voar(p, x, y, 'almox', null, { n: cont[p] || 1 }); }, t); t += 90; }
+      if (!cs.length) this.hud.soltar('creditos', d.creditos || 0);
+    };
+    this.modal(`<div class="festa" aria-hidden="true"></div><h3>Subiu de nível</h3><h1>${tit}</h1><div class="premios">${cards}</div>${novos ? `<p class="lib">Liberado agora</p><div class="linha centro">${novos}</div>` : ''}<button class="botao ouro grande" data-continuar>Continuar</button>`,
+      (m, fechar) => { m.querySelector('[data-continuar]').addEventListener('click', () => { voar(m); fechar(); }); this._modalNivelEl = m; },
+      { cls: 'festivo', aoFechar: () => { voar(this._modalNivelEl); if (de < 3 && para >= 3) setTimeout(() => this._dica('deposito'), 400); } });
     this.calcBolhas();
   }
+  _capituloPronto(c) { return !!(c && c.escolha && this.S.capEscolhas[c.n] === undefined && c.metas.every((m) => this.J.metaFeita(m))); }
+  _falasHtml(fala) { return (fala || []).map(([q, t]) => `<div class="conselho">${retrato(q)}<div class="fala"><b>${CONSELHO[q]?.nome || ''}</b>${t}</div></div>`).join(''); }
+  // apresentação ao Conselho: não some com um toque fora; 'Decidir depois' deixa a pílula 'Conselho aguarda' no topo
   modalCapitulo(c) {
-    if (this._modalCap) return; if (!c.escolha && c.n === 6) return; this._modalCap = true; const J = this.J;
-    const falas = c.fala.map(([q, t]) => `<div class="conselho" style="text-align:left;margin:8px 0"><div class="retrato" style="background:radial-gradient(circle at 35% 30%,#fff,${CONSELHO[q].cor})">${CONSELHO[q].ini}</div><div class="fala"><b>${CONSELHO[q].nome}</b>${t}</div></div>`).join('');
-    const esc = c.escolha ? `<p>O Conselho da Holding oferece um incentivo. Escolha um:</p><div class="escolhas">${c.escolha.map((o) => `<button class="escolha" data-esc="${o.id}"><b>${o.txt}</b><small>${o.dica}</small></button>`).join('')}</div>` : `<button class="botao ouro" data-esc="">Continuar</button>`;
-    this.modal(`<h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1><p>Aprovado! ${fmt(2000 * c.n)} créditos e 1 ficha de Mutirão.</p>${falas}${esc}`, (m, fechar) => {
-      m.addEventListener('click', (e) => { const b = e.target.closest('[data-esc]'); if (!b) return; this._modalCap = false; fechar(); J.concluirCapitulo(b.dataset.esc || null); this.som.nivel(); const n = J.capitulo(); this.hud.capitulo(this._capMin); this.sincronizar(); if (n && n.n !== c.n) { this.hud.brinde(`Capítulo ${n.n}: ${n.nome}`, 'obras', 3200); this._introCap(n); } });
-    });
+    if (!c || this._modalCap || !c.escolha || this.S.capEscolhas[c.n] !== undefined) return; this._modalCap = true; this.hud.conselho(false); const J = this.J;
+    const prox = CAPITULOS[c.n]; const falas = this._falasHtml(c.fala);
+    const esc = c.escolha.map((o) => `<button class="escolha" data-esc="${o.id}">${retrato(o.quem, 'p32')}<div class="tx"><b>${o.txt}</b><span class="ganho">${o.ganho}</span><span class="custo">Custo: ${o.custo}</span><small>${o.porque}</small></div></button>`).join('');
+    this.modal(`<h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1><div class="linha centro"><span class="etiq ok">${img('ok')}Aprovado</span><span class="etiq">${img('creditos')}Créditos da Holding</span><span class="etiq">${img('mutirao')}Ficha de Mutirão</span></div><div class="falas">${falas}</div>${prox?.abre?.length ? `<p class="novas"><b>Novas obras:</b> ${prox.abre.join(', ')}</p>` : ''}<p class="pergunta"><span>O Conselho pede uma decisão. Ela vale para os próximos capítulos.</span><button class="botao sec depois" data-depois>Decidir depois</button></p><div class="escolhas">${esc}</div>`, (m, fechar) => {
+      m.addEventListener('click', (e) => {
+        if (e.target.closest('[data-depois]')) { this._depoisCap = c.n; fechar(); return; } // não reabre sozinho: fica a pílula
+        const b = e.target.closest('[data-esc]'); if (!b) return; const r = m.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height * 0.3;
+        const cr0 = J.S.creditos; J.concluirCapitulo(b.dataset.esc || null); this._modalCap = false; fechar(true); // conclui antes de fechar: o fechar não pode pôr a pílula de volta this.som.nivel(); this.vibra.sucesso(); const ganhou = J.S.creditos - cr0; this._moedas(ganhou, x, y, 8);
+        const o = c.escolha.find((q) => q.id === b.dataset.esc); if (o) this.hud.brinde(`Escolha do Conselho: ${o.txt}`, 'sede', 3200); this.hud.capitulo(); this.sincronizar();
+      });
+    }, { fixo: true, cls: 'larga capitulo', aoFechar: () => { this._modalCap = false; if (this._capituloPronto(this.J.capitulo())) this.hud.conselho(true); } });
   }
-  _introCap(c) { const t = { 2: ['iris', 'Agora o Anel pode crescer e a praça sai do papel. Veja as novas obras no botão Obras.'], 3: ['iris', 'Chegou a vez da Biblioteca Central, das faculdades e da Faculdade de Ciências.'], 4: ['caio', 'Um acelerador de partículas debaixo da praça. E a Vila Estudantil ao lado.'], 5: ['nara', 'Santuário, savana, bioma aquático e gorilas. É a parte mais delicada.'], 6: ['iris', 'Último passo: desmontar o canteiro e devolver a área à mata.'] }[c.n]; if (t) this.hud.falar(t[0], t[1], 9000); }
+  _introCap(c) { const t = { 2: ['iris', 'Agora o Anel pode crescer e a praça sai do papel. Veja as novas obras no botão Obras.'], 3: ['iris', 'Chegou a vez da Biblioteca Central, das faculdades e da Faculdade de Ciências.'], 4: ['caio', 'Um acelerador de partículas debaixo da praça. E a Vila Estudantil ao lado.'], 5: ['nara', 'Santuário, savana, bioma aquático e gorilas. É a parte mais delicada.'], 6: ['iris', 'Último passo: desmontar o canteiro e devolver a área à mata.'] }[c.n]; if (t) this.hud.falar(t[0], t[1]); }
+  // fim do jogo (evento 'fimDeJogo'): vista da foto no modo Apreciar e o modal da composição total
   finalComposicao() {
-    setTimeout(() => { this.apreciar(true); this.vistaFoto?.(true); }, 1500);
-    const c = this.J.capitulo(); const falas = (c?.fala || []).map(([q, t]) => `<div class="conselho" style="text-align:left;margin:8px 0"><div class="retrato" style="background:radial-gradient(circle at 35% 30%,#fff,${CONSELHO[q].cor})">${CONSELHO[q].ini}</div><div class="fala"><b>${CONSELHO[q].nome}</b>${t}</div></div>`).join('');
-    setTimeout(() => this.modal(`<h3>Composição total</h3><h1>Arcologia de Held</h1><p>A maquete na mesa agora é igual à do Conselho. Cada etapa aprovada virou obra de verdade.</p>${falas}<p>Use <b>Comparar</b> no modo Apreciar para ver a foto por cima da maquete.</p><button class="botao ouro" data-fecha>Apreciar a composição</button>`, (m, fechar) => { m.querySelector('[data-fecha]').addEventListener('click', () => { if (this.J.capitulo()?.n === 6 && this.S.capEscolhas[6] === undefined) this.J.concluirCapitulo(null); }); }), 5200);
+    if (this._final) return; this._final = true;
+    setTimeout(() => { this.apreciar?.(true); this.vistaFoto?.(true); }, 1500);
+    const c = CAPITULOS[CAPITULOS.length - 1]; const falas = this._falasHtml(c?.fala);
+    this._fila(() => this.modal(`<div class="festa" aria-hidden="true"></div><h3>Composição total</h3><h1>Arcologia de Held</h1><p>A maquete na mesa agora é igual à do Conselho. Cada etapa aprovada virou obra de verdade.</p>${falas}<p>Use <b>Comparar</b> no modo Apreciar para ver a foto por cima da maquete.</p><button class="botao ouro grande" data-fecha>Apreciar a composição</button>`, null, { fixo: true, cls: 'festivo larga', aoFechar: () => { this._modalCap = false; } }), 5200, 'final');
   }
   // estado de produção de cada prédio do canteiro para a obra mostrar atividade (a cada 1 s, sem alocar)
   _repasseProducao() {
@@ -360,11 +620,15 @@ export class Controle {
       const p = clamp((agora - ini) / (fim - ini || 1), 0, 1); this.obras.progresso(k, p);
       const b = s.obra?.box; if (b) { const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2; perto = Math.max(perto, clamp(1 - Math.hypot(cx - tg.x, cz - tg.z) / (this.rig.dist * 0.8), 0, 1)); }
     }
-    this.som.obraAtiva = perto;
+    this.som.obraAtiva = this.modoApreciar ? 0 : perto;
     this._tProd = (this._tProd || 0) + dt; if (this._tProd > 1) { this._tProd = 0; this._repasseProducao(); }
-    this._tBolhas += dt; if (this._tBolhas > 0.5 || this._sujo) { this._tBolhas = 0; this._sujo = false; this.calcBolhas(); this.hud.atualizar(); }
-    this._tPainel = (this._tPainel || 0) + dt; if (this._tPainel > 1) { this._tPainel = 0; this.paineis.tick(); if (this.paineis.atual && ['usina', 'oficina', 'pedidos'].includes(this.paineis.atual.tipo)) this.paineis.render(); }
-    this.bolhas.atualizar();
+    this._tBolhas += dt; if (this._tBolhas > 0.5 || this._sujo) { this._tBolhas = 0; this._sujo = false; this.calcBolhas(); this.hud.atualizar(); this.hud.capitulo(); this._tutorial(); this.hud.conselho(this._capituloPronto(J.capitulo()) && !this._modalCap && !this._filaModais.some((x) => x.chave === 'capitulo')); }
+    this._tPainel = (this._tPainel || 0) + dt; if (this._tPainel > 1) { this._tPainel = 0; this.paineis.tick(); }
+    const tf = performance.now(); if (tf - this._tFila > 250) { this._tFila = tf; this._verModais(); } // relógio de parede: com poucos quadros por segundo a fila não atrasa
+    // balões: retângulos do HUD (apagam o que fica por baixo) e o cartão das metas aberto (empurra a borda)
+    this.bolhas.rects = this.hud.retangulos(t); this.bolhas.cartao = this.hud.metasAbertas ? Math.min(300, innerWidth * 0.34) + 18 : 0;
+    this.bolhas.atualizar(); this._guia(t);
+    if (this._cineEl && !this.rig.anim && !this.rig._orb && t - this._cineT0 > 900) this._cineFim?.(); // o toque cancelou a órbita
     this._tSalvar += dt; if (this._tSalvar > 12) { this._tSalvar = 0; if (!this.naoSalvar) gravar(this.S); }
   }
 }
