@@ -1,9 +1,22 @@
 // Salvamento: localStorage primeiro (síncrono, sobrevive a um fechamento brusco) e IndexedDB depois,
-// numa conexão só; ao carregar, lê os dois e fica com o mais novo (maior S.t). Save danificado nunca é
-// descartado: vai para uma chave própria e o jogo avisa. Também exporta/importa arquivo e pede
-// armazenamento persistente (o Chrome não apaga os dados do jogo quando o celular enche).
+// numa conexão só; ao carregar, lê os dois e fica com o gravado por último (S.gravado, carimbado a cada gravação;
+// saves antigos usam S.t). Save danificado nunca é descartado: vai para uma chave própria e o jogo avisa.
+// Importar e apagar travam a gravação até a página recarregar: o pagehide do reload não pode gravar o jogo
+// da memória por cima do arquivo importado. Também exporta/importa arquivo e pede armazenamento persistente
+// (o Chrome não apaga os dados do jogo quando o celular enche).
+// Contrato da importação (para a interface): `const S = await importar(); await gravarImportado(S); location.reload()`
+// (ou só gravar(S): importar() já trava). Até o reload, gravar/gravarLocal de qualquer outro objeto não fazem nada e
+// sessionStorage['held-importando'] fica marcado; main.js não salva no pagehide/visibilitychange/freeze com a marca
+// e a apaga (fimImportacao) depois de carregar o save importado.
 const DB = 'arcologia-de-held', LOJA = 'saves', CHAVE = 'jogo', LS = 'held-save-v2', CORROMPIDO = 'held-save-corrompido-';
+export const IMPORTANDO = 'held-importando';
 let dbP = null; // conexão única com o IndexedDB
+let trava = null; // depois de importar (o save importado) ou apagar ({}), só esse objeto pode ser gravado
+const bloqueado = (S) => trava !== null && S !== trava;
+const travar = (S) => { trava = S; try { sessionStorage.setItem(IMPORTANDO, '1'); } catch (_) {} };
+export function importando() { if (trava !== null) return true; try { return !!sessionStorage.getItem(IMPORTANDO); } catch (_) { return false; } }
+export function fimImportacao() { try { sessionStorage.removeItem(IMPORTANDO); } catch (_) {} }
+const quando = (S) => Math.max(+S.gravado || 0, +S.t || 0);
 function abrir() {
   if (dbP) return dbP;
   dbP = new Promise((ok, erro) => {
@@ -17,7 +30,7 @@ function abrir() {
 }
 const avisos = []; // mensagens para a interface mostrar depois de carregar
 export function avisosSave() { return avisos.splice(0); }
-function guardarCorrompido(txt) { // guarda a cópia danificada (as três mais recentes) em vez de apagar
+export function guardarCorrompido(txt) { // guarda a cópia danificada (as três mais recentes) em vez de apagar
   try {
     const velhos = Object.keys(localStorage).filter((k) => k.startsWith(CORROMPIDO)).sort(); while (velhos.length >= 3) localStorage.removeItem(velhos.shift());
     localStorage.setItem(CORROMPIDO + Date.now(), txt);
@@ -32,22 +45,26 @@ export async function carregar() {
   let ls = null; try { ls = localStorage.getItem(LS); } catch (_) {}
   const idb = await lerIDB();
   const a = ler(ls), b = idb && idb !== ls ? ler(idb) : null;
-  if (a && b) return (+b.t || 0) > (+a.t || 0) ? b : a;
+  if (a && b) return quando(b) > quando(a) ? b : a;
   return a || b;
 }
 // grava no localStorage na hora (síncrono) e depois no IndexedDB
-export function gravarLocal(S, txt = JSON.stringify(S)) { try { localStorage.setItem(LS, txt); return true; } catch (_) { return false; } }
+export function gravarLocal(S, txt) {
+  if (bloqueado(S)) return false; if (txt == null) { S.gravado = Date.now(); txt = JSON.stringify(S); }
+  try { localStorage.setItem(LS, txt); return true; } catch (_) { return false; }
+}
 export function gravar(S) {
-  const txt = JSON.stringify(S); gravarLocal(S, txt);
+  if (bloqueado(S)) return Promise.resolve(); S.gravado = Date.now(); const txt = JSON.stringify(S); gravarLocal(S, txt);
   return abrir().then((db) => new Promise((ok, erro) => { const t = db.transaction(LOJA, 'readwrite', { durability: 'relaxed' }); t.objectStore(LOJA).put(txt, CHAVE); t.oncomplete = ok; t.onerror = () => erro(t.error); t.onabort = () => erro(t.error); })).catch(() => {});
 }
-export async function apagar() { try { const db = await abrir(); await new Promise((ok) => { const t = db.transaction(LOJA, 'readwrite'); t.objectStore(LOJA).delete(CHAVE); t.oncomplete = ok; t.onerror = ok; }); } catch (_) {} try { localStorage.removeItem(LS); } catch (_) {} }
+export function gravarImportado(S) { S.gravado = Date.now(); travar(S); return gravar(S); } // grava o save importado e trava o resto
+export async function apagar() { travar({}); try { const db = await abrir(); await new Promise((ok) => { const t = db.transaction(LOJA, 'readwrite'); t.objectStore(LOJA).delete(CHAVE); t.oncomplete = ok; t.onerror = ok; }); } catch (_) {} try { localStorage.removeItem(LS); } catch (_) {} }
 export function exportar(S) {
   const b = new Blob([JSON.stringify(S)], { type: 'application/json' }); const a = document.createElement('a'); const d = new Date();
   a.href = URL.createObjectURL(b); a.download = `arcologia-de-held-${d.toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 export function importar() {
-  return new Promise((ok, erro) => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/json,.json'; i.onchange = () => { const f = i.files[0]; if (!f) return erro(new Error('nenhum arquivo')); f.text().then((t) => { try { const S = JSON.parse(t); if (!S || !S.itens || !S.modulos) throw new Error('arquivo inválido'); ok(S); } catch (e) { erro(e); } }); }; i.click(); });
+  return new Promise((ok, erro) => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/json,.json'; i.onchange = () => { const f = i.files[0]; if (!f) return erro(new Error('nenhum arquivo')); f.text().then((t) => { try { const S = JSON.parse(t); if (!S || !S.itens || !S.modulos) throw new Error('arquivo inválido'); S.gravado = Date.now(); travar(S); ok(S); } catch (e) { erro(e); } }); }; i.click(); });
 }
 export async function persistir() { try { if (navigator.storage?.persisted && (await navigator.storage.persisted())) return true; if (navigator.storage?.persist) return await navigator.storage.persist(); } catch (_) {} return false; }
 // configurações do aparelho (separadas do save)

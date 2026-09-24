@@ -11,12 +11,12 @@ import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
 import { MESA, VISTA_FOTO } from './data/planta.js';
 import { PROJETOS } from './data/obras.js';
-import { novoEstado, Jogo, prepararSave } from './sim/estado.js';
+import { novoEstado, Jogo, prepararSave, VERSAO_SAVE } from './sim/estado.js';
 import { Controle } from './jogo.js';
 import { instalarExtras } from './ui/extras.js';
 import { Som } from './core/audio.js';
 import { vibra } from './core/vibra.js';
-import { carregar, gravar, gravarLocal, avisosSave, lerConfig, persistir } from './core/salvar.js';
+import { carregar, gravar, gravarLocal, importar, gravarImportado, importando, fimImportacao, avisosSave, guardarCorrompido, lerConfig, persistir } from './core/salvar.js';
 import * as ICONES from './ui/icones.js';
 import { el } from './core/util.js';
 
@@ -51,14 +51,23 @@ async function iniciar() {
   forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(45);
   const table = new ExhibitTable(engine); const rig = new CameraRig(engine, canvas, MESA);
   const mundo = new Mundo(engine, ground, forest); await passo(70);
-  // compatibilidade: 'Desmontar o canteiro' ainda sem peça própria; a obra usa a área do canteiro
-  if (!mundo.modelos.reflorestar) { const root = new THREE.Group(); root.name = 'reflorestar'; const e0 = new THREE.Group(); const area = new THREE.Object3D(); area.geometry = new THREE.BoxGeometry(11, 1.5, 8.5).translate(-25.5, 0.75, 14.75); e0.add(area); root.add(e0); mundo.root.add(root); mundo.modelos.reflorestar = { id: 'reflorestar', root, partes: { e0 }, esqueletos: {}, grua: {}, foco: { x: -25.5, z: 15, dist: 16 }, ancora: [-25.5, 2.2, 15] }; }
+  // compatibilidade: 'Desmontar o canteiro' ainda sem peça própria; a obra usa a área do canteiro e o canteiro
+  // baixa até 60% durante a desmontagem (no laço), até o modelo e o modo 'desmontar' chegarem
+  const desmonteProvisorio = !mundo.modelos.reflorestar;
+  if (desmonteProvisorio) { const root = new THREE.Group(); root.name = 'reflorestar'; const e0 = new THREE.Group(); const area = new THREE.Object3D(); area.geometry = new THREE.BoxGeometry(11, 1.5, 8.5).translate(-25.5, 0.75, 14.75); e0.add(area); root.add(e0); mundo.root.add(root); mundo.modelos.reflorestar = { id: 'reflorestar', root, partes: { e0 }, esqueletos: {}, grua: {}, foco: { x: -25.5, z: 15, dist: 16 }, ancora: [-25.5, 2.2, 15] }; }
   const obras = new Obras(engine);
-  // save: nunca recomeça por causa de versão; guarda uma cópia do save antes de migrar
-  let S = qs.has('novo') ? null : await carregar();
-  if (S) { try { localStorage.setItem('held-save-backup-v' + (S.v || 1), JSON.stringify(S)); } catch (_) {} try { S = prepararSave(S, Date.now()); } catch (e) { console.error(e); try { localStorage.setItem('held-save-corrompido-' + Date.now(), JSON.stringify(S)); } catch (_) {} S = null; } }
+  // save: nunca recomeça por causa de versão; guarda uma cópia do save antes de migrar (e nunca grava a cópia
+  // de um jogo por cima da de outro: um jogo novo depois de um save danificado não apaga a cópia boa)
+  // (se o save não abrir, o original vai inteiro para 'held-save-corrompido-<t>', com aviso, antes do jogo novo)
+  let S = qs.has('novo') ? null : await carregar(), J0 = null; fimImportacao(); // o save importado já foi lido: a gravação volta ao normal
+  if (S) {
+    const txt0 = JSON.stringify(S);
+    try { const k = 'held-save-backup-v' + (S.v || 1); const b = JSON.parse(localStorage.getItem(k) || 'null'); if (!b || b.criado === S.criado || (S.v || 1) < VERSAO_SAVE) localStorage.setItem(k, txt0); } catch (_) {}
+    try { S = prepararSave(S, Date.now()); J0 = new Jogo(S); } catch (e) { console.error(e); guardarCorrompido(txt0); S = J0 = null; }
+  }
   if (!S) S = novoEstado(Date.now());
-  const J = new Jogo(S); await passo(80);
+  const avisosMigracao = S._avisos || []; delete S._avisos;
+  const J = J0 || new Jogo(S); await passo(80);
   try { await ICONES.prepararIcones?.(); } catch (_) {}
   const som = new Som(); som.efeitos = cfg.efeitos !== false; som.musica = cfg.musica !== false; vibra.on = cfg.vibra !== false;
   const ui = document.getElementById('ui');
@@ -79,7 +88,7 @@ async function iniciar() {
   try { await engine.renderer.compileAsync(engine.scene, engine.camera); } catch (_) {}
   try { await obras.aquecer?.(); } catch (_) {}
   await passo(100);
-  for (const m of avisosSave()) setTimeout(() => C.hud.brinde(m, null, 5000), 2500);
+  [...avisosSave(), ...avisosMigracao].forEach((m, i) => setTimeout(() => C.hud.brinde(m, null, 5000), 2500 + 5200 * i));
   // laço principal: só trabalha nos quadros que serão desenhados (numa tela de 120 Hz com limite de 60 qps,
   // simulação, multidões e interface andam 60 vezes por segundo, não 120)
   let last = performance.now(), frames = 0, ocioso = 0;
@@ -91,11 +100,18 @@ async function iniciar() {
     ocioso = moveu || rig.g ? 0 : ocioso + dt; engine.ocioso = ocioso; engine.idle = ocioso > 8 && !rig.anim;
     env.update(t, rig.target, rig.dist * 1.15); ground.update(t); forest.update(t); mundo.update(dt, t); obras.update(dt, t);
     if (!qs.get('tudo')) C.update(dt, t);
+    if (desmonteProvisorio) desmontar();
     C.atualizarRotulos?.();
     engine.render(t); frames++; if (frames === 3) window.__pronto = true;
   };
+  // provisório: o canteiro baixa até 60% enquanto é desmontado e fica assim até o replantio (sem alocar nada)
+  function desmontar() {
+    const a = J.S.etapas['reflorestar.e0'], b = J.S.etapas['reflorestar.e1']; if (!a || a.estado === 'prancha' || b?.estado === 'feita' || !mundo.canteiro.visible) return;
+    const k = a.estado === 'obra' ? Math.min(1, Math.max(0, (Date.now() - a.ini) / Math.max(1, a.fim - a.ini))) : 1; const y = 1 - 0.4 * k;
+    if (mundo.canteiro.scale.y > y) mundo.canteiro.scale.y = y;
+  }
   requestAnimationFrame(loop);
-  window.__held = { engine, rig, env, ground, forest, table, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal } }; window.__PROJ = PROJETOS;
+  window.__held = { engine, rig, env, ground, forest, table, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal, importar, gravarImportado, importando } }; window.__PROJ = PROJETOS;
   // entrada: o primeiro toque libera som, tela cheia, orientação e tela sempre acesa
   const entrar = async () => {
     carga.style.opacity = 0; setTimeout(() => { carga.remove(); engine.carregando = false; }, 800);
@@ -113,8 +129,9 @@ async function iniciar() {
   const bt = carga.querySelector('.toque'); bt.classList.add('vis'); bt.addEventListener('click', entrar, { once: true });
   if (TESTE) entrar();
   // salvar ao sair, esconder ou congelar (o Android congela abas em segundo plano)
-  const salvar = () => { if (!C.naoSalvar) gravar(J.S); };
-  salvarAgora = () => { if (!C.naoSalvar) gravarLocal(J.S); };
+  // com uma importação pendente (sessionStorage 'held-importando'), nada grava o jogo da memória até o reload
+  const salvar = () => { if (!C.naoSalvar && !importando()) gravar(J.S); };
+  salvarAgora = () => { if (!C.naoSalvar && !importando()) gravarLocal(J.S); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvar(); else { J.tick(Date.now()); C.sincronizar?.(); } });
   window.addEventListener('pagehide', salvar); document.addEventListener('freeze', salvar);
   engine.onLost = () => { salvarAgora(); salvar(); };
