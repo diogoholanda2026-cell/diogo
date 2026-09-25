@@ -1,6 +1,8 @@
-// Balões presos a pontos do mundo 3D (coletar, aprovar, obra disponível, obra em andamento, módulo bloqueado).
-// Arrastar o dedo por vários balões de coleta recolhe todos de uma vez. Os balões entram com mola e pulam no
-// compositor (transform), cada um na sua fase; os de coletar e aprovar chamam atenção de tempos em tempos.
+// Balões presos a pontos do mundo 3D (coletar, aprovar, obra disponível, obra em andamento, módulo bloqueado),
+// como os do BuildIt: círculo branco com aro colorido, ícone grande, ponta embaixo e sombra. Arrastar o dedo por
+// vários balões de coleta recolhe todos de uma vez. Os balões entram com mola e pulam no compositor (transform),
+// cada um na sua fase; os de coletar e aprovar chamam atenção de tempos em tempos, o item da coleta pula dentro do
+// balão, uma moeda sobe do balão de repasse e um brilho pisca nos que pedem toque (só transform e opacity).
 // Os importantes (aprovar, coletar, moedas, subir) fora da tela ficam presos à borda com uma seta; balões a
 // menos de 40 px viram um grupo com '+n' (fica o de maior prioridade). Sob o HUD ficam apagados e sem toque.
 // O DOM só é escrito quando algo muda (posição > 0,3 px, escala > 0,005): com a câmera parada, nada.
@@ -16,6 +18,7 @@ const BW = 52, BH = 62; // tamanho do balão (o ponto preso ao mundo é a ponta,
 export class Bolhas {
   constructor(raiz, camera, engine) {
     this.raiz = el('div', 'bolhas'); raiz.insertBefore(this.raiz, raiz.firstChild); // abaixo do HUD e dos painéis
+    this.raiz.style.setProperty('--moeda', `url("${icone('creditos')}")`); // a moeda que sobe do balão de repasse
     this.cam = camera; this.e = engine; this.mapa = new Map(); this._v = new THREE.Vector3(); this.visivel = true; this._vis = true;
     this._colhendo = false; this._ord = []; this._vistos = new Set(); this._t = 0; this.rects = null; this.cartao = 0;
     this.onBorda = null; this.onGrupo = null; this.safeL = 0; this._safe(); addEventListener('resize', () => this._safe());
@@ -31,7 +34,7 @@ export class Bolhas {
   _membros(d) { const out = []; for (const m of this.mapa.values()) if (m.lider === d) out.push(m); return out; }
   _criar(b, k) {
     const n = el('div', 'balao ' + b.tipo); const dl = -(hashId(b.id) % 1600);
-    n.innerHTML = `<div class="ent" style="animation-delay:${k * 40}ms"><div class="flut" style="animation-delay:${dl}ms"><div class="corpo" style="animation-delay:${dl}ms"><img alt="" draggable="false"></div><i class="ponta"></i><span class="n"></span><span class="mais"></span></div></div><i class="seta"></i>`;
+    n.innerHTML = `<div class="ent" style="animation-delay:${k * 40}ms"><div class="flut" style="animation-delay:${dl}ms"><i class="ponta"></i><div class="corpo" style="animation-delay:${dl}ms"><img alt="" draggable="false" style="animation-delay:${dl}ms"><i class="brilho" style="animation-delay:${dl}ms"></i></div><span class="n"></span><span class="mais"></span></div></div><i class="seta"></i>`;
     this.raiz.appendChild(n);
     const d = { el: n, img: n.querySelector('img'), corpo: n.querySelector('.corpo'), nEl: n.querySelector('.n'), maisEl: n.querySelector('.mais'), seta: n.querySelector('.seta'), tipo: b.tipo, cur: null, pos: null, vis: null, wx: -1e9, wy: -1e9, we: -1e9, wz: NaN, wa: -1e9, wm: 0, wb: false, ws: false, membros: 0, lider: null };
     n._d = d;

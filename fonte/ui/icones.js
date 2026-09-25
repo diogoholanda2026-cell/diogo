@@ -303,7 +303,7 @@ const D = {
   disposicao(c) { c.beginPath(); c.ellipse(48, 78, 30, 7, 0, 0, 7); c.fillStyle = '#eef2f6'; c.fill(); contorno(c, 1.6); c.beginPath(); c.moveTo(24, 40); c.lineTo(68, 40); c.quadraticCurveTo(68, 76, 46, 76); c.quadraticCurveTo(24, 76, 24, 40); c.closePath(); c.fillStyle = lin(c, 24, 0, 68, 0, [[0, '#ff8a6a'], [1, '#d0381e']]); c.fill(); contorno(c);
     c.beginPath(); c.ellipse(46, 41, 21, 4, 0, 0, 7); c.fillStyle = '#5a3418'; c.fill(); c.beginPath(); c.arc(72, 52, 9, -1.3, 1.3); c.lineWidth = 5; c.strokeStyle = '#e0503a'; c.stroke(); c.lineWidth = 1.6; c.strokeStyle = 'rgba(22,28,50,.6)'; c.beginPath(); c.arc(72, 52, 11.5, -1.3, 1.3); c.stroke();
     c.lineCap = 'round'; c.strokeStyle = 'rgba(255,255,255,.95)'; c.lineWidth = 3.5; for (const x of [38, 50]) { c.beginPath(); c.moveTo(x, 34); c.bezierCurveTo(x - 7, 26, x + 7, 22, x, 12); c.stroke(); } },
-  // horas do dia no Apreciar: ciclo automático, manhã, meio-dia, pôr do sol, noite e maquete
+  // horas do dia no Apreciar: ciclo automático, manhã, meio-dia, pôr do sol e noite
   ciclo(c) {
     c.save(); c.beginPath(); c.arc(48, 48, 36, 0, 7); c.clip();
     c.fillStyle = lin(c, 14, 14, 82, 82, [[0, '#9ae0ff'], [0.49, '#48aef2'], [0.51, '#2c3c8a'], [1, '#141c50']]); c.fillRect(0, 0, 96, 96); c.restore();
@@ -315,16 +315,6 @@ const D = {
   sol(c) { sol(c, 48, 48, 21, ['#fffce0', '#ffdc1a', '#f69a00'], 12); reflexo(c, 41, 40, 8, 5, 0.8); },
   por(c) { sol(c, 48, 60, 19, ['#fff0b0', '#ff8a2a', '#e0441a']); c.beginPath(); c.rect(6, 62, 84, 24); c.fillStyle = lin(c, 0, 62, 0, 86, [[0, '#7a5ad8'], [1, '#3a2a8a']]); c.fill(); contorno(c, 2.2); c.strokeStyle = 'rgba(255,190,120,.9)'; c.lineWidth = 3; c.lineCap = 'round'; for (const [x0, x1, y] of [[30, 66, 70], [38, 58, 77], [44, 52, 83]]) { c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke(); } },
   lua(c) { c.save(); c.beginPath(); c.rect(0, 0, 96, 96); c.arc(62, 40, 25, 0, 7, true); c.clip(); c.beginPath(); c.arc(44, 52, 30, 0, 7); c.fillStyle = rad(c, 30, 52, 2, 34, [[0, '#fffbe0'], [1, '#ffd24a']]); c.fill(); c.restore(); for (const [x, y, r] of [[74, 66, 8], [78, 20, 6], [58, 82, 4.5]]) { estrela(c, x, y, r * 0.42, r); c.fillStyle = '#fff6b0'; c.fill(); contorno(c, 1.2); } },
-  // maquete de exposição: a arcologia sobre a mesa de nogueira
-  maquete(c) {
-    c.beginPath(); c.moveTo(8, 62); c.lineTo(48, 48); c.lineTo(88, 62); c.lineTo(48, 76); c.closePath(); c.fillStyle = lin(c, 0, 48, 0, 76, [[0, '#8ad86a'], [1, '#3a8a2a']]); c.fill(); contorno(c, 2);
-    c.beginPath(); c.moveTo(8, 62); c.lineTo(48, 76); c.lineTo(88, 62); c.lineTo(88, 72); c.lineTo(48, 86); c.lineTo(8, 72); c.closePath(); c.fillStyle = lin(c, 0, 62, 0, 86, [[0, '#c07a40'], [1, '#6a3414']]); c.fill(); contorno(c, 2);
-    c.beginPath(); c.moveTo(32, 58); c.lineTo(32, 34); c.quadraticCurveTo(48, 26, 64, 34); c.lineTo(64, 58); c.quadraticCurveTo(48, 66, 32, 58); c.fillStyle = lin(c, 32, 0, 64, 0, [[0, '#fff6e2'], [1, '#d8a468']]); c.fill(); contorno(c, 1.8);
-    for (const y of [42, 50]) { c.beginPath(); c.ellipse(48, y, 16, 5, 0, 0.35, Math.PI - 0.35); c.strokeStyle = '#ffac24'; c.lineWidth = 3; c.stroke(); }
-    c.beginPath(); c.ellipse(48, 34, 16, 5.5, 0, 0, 7); c.fillStyle = '#5cbc3a'; c.fill(); contorno(c, 1.4);
-    for (const [x, y] of [[18, 62], [76, 60], [60, 70]]) { c.beginPath(); c.arc(x, y - 4, 5, 0, 7); c.fillStyle = '#2e9a22'; c.fill(); contorno(c, 1.2); }
-    rr(c, 36, 10, 24, 10, 3); c.fillStyle = lin(c, 0, 10, 0, 20, [[0, '#7a8aa0'], [1, '#3a4660']]); c.fill(); contorno(c, 1.4); c.beginPath(); c.moveTo(48, 20); c.lineTo(48, 26); c.strokeStyle = '#3a4660'; c.lineWidth = 2; c.stroke();
-  },
 };
 // usinas: prédio de reciclagem com chaminé; o número de chaminés distingue I, II e III
 function usina(c, n) {
