@@ -22,13 +22,15 @@ export const ABERTURA = [
 // feito(J): o passo está cumprido (também vale se o jogador já passou dele por conta própria).
 const naObra = (J, k) => ['obra', 'pronta', 'feita'].includes(J.etapa(k).estado);
 // cada passo tem a fala do conselheiro (fica igual) e o cartão persistente na pílula Agora: 'curto' (frase de até
-// ~30 caracteres) e 'icone'. feito(J, C) recebe também o controlador (o passo 'caminhoA' cumpre ao abrir Obras).
+// ~30 caracteres) e 'icone'. feito(J, C) recebe também o controlador (o passo 'caminhoA' cumpre ao abrir Obras);
+// os dois subpassos do Caminho dividem a mesma fala (dita uma vez).
+const FALA_CAMINHO = 'Abra Obras, escolha o Caminho da Frente e toque em Entregar e iniciar.';
 export const TUTORIAL = [
   { id: 'brita', quem: 'tome', fala: 'Toque na Usina de Materiais e produza Brita reciclada: é o piso do primeiro caminho. Com + e − dá para fazer até 10 de uma vez.', alvo: 'balao:uusina1', curto: 'Produza brita na Usina', icone: 'brita',
     feito: (J) => J.S.predios.usina1.slots.some((s) => s?.item === 'brita') || J.S.stats.coletas > 0 || naObra(J, 'pas_frente.e1') },
-  { id: 'caminhoA', quem: 'iris', fala: 'Abra Obras, escolha o Caminho da Frente e toque em Entregar e iniciar.', alvo: 'bt:obras', curto: 'Abra Obras', icone: 'obras',
+  { id: 'caminhoA', quem: 'iris', fala: FALA_CAMINHO, alvo: 'bt:obras', curto: 'Abra Obras', icone: 'obras',
     feito: (J, C) => ['obras', 'etapa'].includes(C?.paineis?.atual?.tipo) || naObra(J, 'pas_frente.e1') },
-  { id: 'caminhoB', quem: 'iris', fala: 'Escolha o Caminho da Frente e toque em Entregar e iniciar.', alvo: ['bt:obras', '[data-a=entregarIniciar]'], curto: 'Entregue e inicie o Caminho', icone: 'grua',
+  { id: 'caminhoB', quem: 'iris', fala: FALA_CAMINHO, alvo: ['bt:obras', '[data-a=entregarIniciar]'], curto: 'Entregue e inicie o Caminho', icone: 'grua',
     feito: (J) => naObra(J, 'pas_frente.e1') },
   { id: 'coletar', quem: 'tome', fala: 'Cada lote pronto vai sozinho para o Almoxarifado. Marque um espaço como automático e ele repete o mesmo lote sem parar.', alvo: 'balao:uusina1', curto: 'Aguarde o lote de brita', icone: 'almox',
     feito: (J) => J.S.stats.coletas >= 1 },

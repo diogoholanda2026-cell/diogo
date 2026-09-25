@@ -41,7 +41,7 @@ const ICONE_PLANO = { aprovar: 'check', coletar: 'repasse', iniciar: 'grua', ent
 // o que o anel-guia do tutorial procura dentro do painel aberto, por passo
 // (presos à obra do passo: a prancha de outra obra não recebe o anel; botão esmaecido por falta de material: o anel vai
 // para a ficha vermelha do material que falta, no mesmo painel)
-const TUT_PAINEL = { brita: ['[data-a=produzir][data-k=brita]'], caminho: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=entregarIniciar][data-key="pas_frente.e1"]', '[data-a=entregarTudo][data-key="pas_frente.e1"]'],
+const TUT_PAINEL = { brita: ['[data-a=produzir][data-k=brita]'],
   caminhoA: ['.item-lista[data-alvo*="pas_frente.e1"]'], caminhoB: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=entregarIniciar][data-key="pas_frente.e1"]', '[data-a=entregarTudo][data-key="pas_frente.e1"]'], coletar: ['[data-a=coletarU]', '[data-a=coletarO]', '[data-a=produzir][data-k=brita]'],
   aprovar: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=aprovar][data-key="pas_frente.e1"]'], carpintaria: ['[data-a=construir][data-p=carpintaria]', '[data-a=enfileirar][data-k=viga]'],
   lago: ['.item-lista[data-alvo*="lago.e1"]', '[data-a=entregarIniciar][data-key="lago.e1"]', '[data-a=entregarTudo][data-key="lago.e1"]', '[data-a=mutirao][data-alvo*="lago.e1"]'], anel: ['[data-a=melhorar][data-f=anel]'] };
@@ -349,10 +349,8 @@ export class Controle {
       this.sincronizar(); this._celebrar(p, e, { vida: J.vida() - vida0, pop: J.pop - pop0 }); const [x, y] = this._pontoCel; this._estrelas(J.S.xp - xp0, x, y, 5);
       const nx = J.proximaEtapa(p); this._voarCarimbo(carimbo, nx ? 'e' + p.id + '.' + nx.e.id : null);
       if (ultima && !this.modoApreciar && e.modo !== 'reflorestar') this._cine(box); // o fim do jogo tem a sua própria câmera (vista da foto)
-    }, { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); if (!ultima) this._arcoCamera(this._pontoSiteMundo('e:' + key, this.ancoraEtapa(p, e))); } });
+    }, { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); if (!ultima) this._arcoCamera(this.obras.ancora?.('e:' + key) || this.ancoraEtapa(p, e)); } });
   }
-  // ponto do mundo sobre a obra (a âncora do canteiro ou a da etapa)
-  _pontoSiteMundo(k, reserva) { return this.obras.ancora?.(k) || reserva; }
   // arco curto de câmera na aprovação: aproxima 7% na direção da obra e volta (só quando a obra está longe do centro)
   _arcoCamera(pt) {
     const rig = this.rig; if (!pt || !rig || rig.ptrs?.size || this.modoApreciar) return; const tg = rig.target; const dx = pt[0] - tg.x, dz = pt[2] - tg.z; if (Math.hypot(dx, dz) < 3) return;
@@ -368,9 +366,9 @@ export class Controle {
   }
   aprovarModulo(f, i) {
     const J = this.J, k = `m:${f}:${i}`; if (J.S.modulos[f][i].obra?.estado !== 'pronta' || this.sites.get(k)?.concluindo || this._aprovando.has(k)) return; this.paineis.fechar(true); this._aprovando.add(k);
-    this._festaAte = this.ground.adiarAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite(k, this.ancoraModulo(f, i)); const carimbo = this._carimbo(`${MODULOS[f].nome} ${i + 1}`); const pop0 = J.pop, vida0 = J.vida();
-    this._concluirSite(k, () => { this._aprovando.delete(k); const xp0 = J.S.xp; J.aprovarModulo(f, i); this.sincronizar(); const m = J.S.modulos[f][i]; const dp = J.pop - pop0, dv = J.vida() - vida0; this.hud.brinde(dp > 0 ? `+${fmt(dp)} moradores · ${MODULOS[f].nome} ${i + 1} no nível ${m.nivel}` : `${MODULOS[f].nome} ${i + 1} no nível ${m.nivel}`, 'subir'); if (dv > 0.05) setTimeout(() => this.hud.brinde(`+${dv.toFixed(1).replace('.', ',')}% da composição`, 'vida', 2600), 600); const [x, y] = this._pontoCel; this._estrelas(J.S.xp - xp0, x, y, 5); this._voarCarimbo(carimbo, `m${f}${i}`); },
-      { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); this._arcoCamera(this._pontoSiteMundo(k, this.ancoraModulo(f, i))); } });
+    this._festaAte = this.ground.adiarAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite(k, this.ancoraModulo(f, i)); const carimbo = this._carimbo(`${MODULOS[f].nome} ${i + 1}`); const pop0 = J.pop;
+    this._concluirSite(k, () => { this._aprovando.delete(k); const xp0 = J.S.xp; J.aprovarModulo(f, i); this.sincronizar(); const m = J.S.modulos[f][i]; const dp = J.pop - pop0; this.hud.brinde(`${dp > 0 ? `+${fmt(dp)} moradores · ` : ''}${MODULOS[f].nome} ${i + 1} no nível ${m.nivel}`, 'subir'); const [x, y] = this._pontoCel; this._estrelas(J.S.xp - xp0, x, y, 5); this._voarCarimbo(carimbo, `m${f}${i}`); },
+      { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); this._arcoCamera(this.obras.ancora?.(k) || this.ancoraModulo(f, i)); } });
   }
   // brinde da aprovação diz o ganho (+N moradores, +X% da composição) em vez de repetir o nome da etapa
   _celebrar(p, e, g = {}) {
@@ -530,7 +528,8 @@ export class Controle {
     const S = this.S, T = TUTORIAL || []; if (S.cap !== 1) return; const i0 = S.dicas.guia || 0; let i = i0; while (i < T.length && T[i].feito(this.J, this)) i++;
     if (i !== i0 || S.dicas.guia === undefined) S.dicas.guia = i;
     if (i > i0 && i0 < T.length && this._guiaFalou === i0) { this._tutFeito = { passo: T[i0], i: i0, ate: performance.now() + 800 }; setTimeout(() => { this._sujo = true; }, 850); } // o passo cumprido mostra o check por 800 ms
-    if (i < T.length && this._guiaFalou !== i) { this._guiaFalou = i; const p = T[i]; this.hud.falar(p.quem, p.fala, { se: () => this.S.cap === 1 && (this.S.dicas.guia || 0) === i, grupo: 'tutorial' }); }
+    // (dois subpassos com a mesma fala, como os do Caminho, só a dizem uma vez)
+    if (i < T.length && this._guiaFalou !== i) { const p = T[i]; const repete = this._guiaFalou === i - 1 && T[i - 1]?.fala === p.fala; this._guiaFalou = i; if (!repete) this.hud.falar(p.quem, p.fala, { se: () => this.S.cap === 1 && (this.S.dicas.guia || 0) === i, grupo: 'tutorial' }); }
   }
   // anel-guia: dentro do painel aberto, o controle que o passo pede; senão o balão, o botão ou a Meta em foco
   // alvos do passo lidos uma vez por passo (o guia roda a cada quadro e não aloca): do último para o primeiro,

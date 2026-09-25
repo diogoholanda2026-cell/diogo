@@ -43,33 +43,29 @@ export const rendaHoraDe = (J) => (typeof J.rendaHora === 'function' ? J.rendaHo
 export const premioNivel = (n) => 300 + 50 * n;
 // cartão do toque longo, por controle: [título, o que é, onde conseguir]. A interface é o manual.
 const INFO = {
-  nivel: ['Nível', 'Sobe com a experiência das obras, coletas e pedidos.', 'Cada nível paga créditos e libera itens e prédios.'],
-  pop: ['Moradores', 'Quem já vive nos módulos do Anel e nas casas.', 'Cada morador rende créditos por hora, conforme o bem-estar.'],
-  bem: ['Bem-estar', 'A qualidade de vida na arcologia.', 'Sobe com obras aprovadas e serviços; os pavimentos altos pedem um mínimo.'],
-  vida: ['Composição concluída', 'Quanto da Composição Total já está de pé.', 'Aprove etapas e módulos para avançar. Toque curto abre Obras.'],
-  calendario: ['Calendário', 'Um dia do jogo dura 20 s; a virada do ano renova o limite de empréstimo.', 'Toque curto abre as Finanças.'],
-  creditos: ['Créditos', 'O caixa da arcologia.', 'Vêm dos moradores, das etapas aprovadas e dos pedidos. Toque curto abre o Escritório.'],
-  deposito: ['Trocas', 'Compra de matéria-prima e venda de produtos no Depósito de Trocas.', `Abre no capítulo ${ABRE.trocasCap} ou no nível ${ABRE.depositoNivel}.`],
-  mutirao: ['Mutirão', 'Fichas que adiantam obras e produção.', 'A disposição da comunidade enche com obras, módulos e pedidos; cheia, vira uma ficha.'],
-  apreciar: ['Apreciar', 'Passeio pela arcologia sem a interface.', 'Compare com a foto de referência e fotografe.'],
-  config: ['Configurações', 'Vídeo, som, jogo, salvamento e acessibilidade.', 'Tamanho da interface, movimento e contraste ficam aqui.'],
-  producao: ['Produção', 'Usinas e oficinas: o que está sendo feito agora.', 'Toque numa linha para abrir o prédio.'],
+  nivel: ['Nível', 'Sobe com a experiência de obras, coletas e pedidos.', 'Cada nível paga créditos e libera itens e prédios.'],
+  pop: ['Moradores', 'Quem já vive no Anel e nas casas.', 'Cada um rende créditos por hora, conforme o bem-estar.'],
+  bem: ['Bem-estar', 'A qualidade de vida na arcologia.', 'Sobe com obras e serviços; pavimentos altos pedem um mínimo.'],
+  vida: ['Composição', 'Quanto da Composição Total já está de pé.', 'Aprove etapas e módulos. Toque curto abre Obras.'],
+  calendario: ['Calendário', 'Um dia do jogo dura 20 s; o ano renova o limite de empréstimo.', 'Toque curto abre as Finanças.'],
+  creditos: ['Créditos', 'O caixa da arcologia.', 'Vêm dos moradores, das etapas e dos pedidos. Toque curto abre o Escritório.'],
+  mutirao: ['Mutirão', 'Fichas que adiantam obras e produção.', 'Obras, módulos e pedidos enchem a disposição; cheia, vira ficha.'],
+  producao: ['Produção', 'O que as usinas e oficinas estão fazendo.', 'Toque numa linha para abrir o prédio.'],
   almox: ['Almoxarifado', 'O estoque de materiais e produtos.', 'Toque num item para ir a quem produz.'],
-  pedidos: ['Pedidos da comunidade', 'Entregas que pagam créditos, experiência e disposição.', `Abrem no capítulo ${REGRAS.capPedidos}.`],
+  pedidos: ['Pedidos da comunidade', 'Entregas que pagam créditos, XP e disposição.', `Abrem no capítulo ${REGRAS.capPedidos}.`],
   trocas: ['Depósito de Trocas', 'Compra de matéria-prima e venda de produtos.', `Abre no capítulo ${ABRE.trocasCap}.`],
-  obras: ['Obras', 'Todas as etapas da Composição Total, da prancha à aprovação.', 'Verde: pronta; laranja: faltam materiais; azul: em obra.'],
+  obras: ['Obras', 'As etapas da Composição Total, da prancha à aprovação.', 'Verde: pronta; laranja: faltam materiais; azul: em obra.'],
   capmin: ['Capítulo', 'As metas do capítulo e o prêmio da Holding.', 'Com todas cumpridas, apresente ao Conselho.'],
-  proximo: ['Próximo', 'O passo mais útil agora.', 'Toque para ir até ele.'],
-  agora: ['Agora', 'A bússola: o próximo passo até a apresentação ao Conselho.', 'Toque para ir até ele.'],
-  vaga: ['Espaço de produção', 'Um lote por espaço; pronto, vai sozinho para o Almoxarifado.', 'Novo espaço custa créditos; o Mutirão adianta o tempo.'],
+  vaga: ['Espaço de produção', 'Um lote por espaço; pronto, vai sozinho ao Almoxarifado.', 'Novo espaço custa créditos; o Mutirão adianta.'],
 };
+INFO.deposito = ['Trocas', INFO.trocas[1], `Abre no capítulo ${ABRE.trocasCap} ou no nível ${ABRE.depositoNivel}.`];
 
 export class Hud {
   constructor(raiz, J) {
     this.J = J; this.raiz = raiz;
     this.topo = el('div', 'topo');
     this.topo.innerHTML = `
-      <div class="nivel" data-a="nivel" role="button" aria-label="Nível 1"><i class="anel"></i>${img('nivel', 'selo')}<b class="nv">1</b><small class="xp">0/40</small></div>
+      <div class="nivel" data-a="nivel" role="button" aria-label="Nível 1"><i class="anel"></i>${img('nivel', 'selo')}<b class="nv">1</b></div>
       <div class="stat pop" data-a="pop" role="button" aria-label="Moradores e renda por hora">${img('pop')}<span class="pp">0</span><small class="ph">+0/h</small></div>
       <div class="stat bem" data-a="bem" role="button" aria-label="Bem-estar">${img('bem-medio')}<span class="bb">35%</span></div>
       <div class="stat vida" data-a="vida" role="button" aria-label="Composição concluída"><i class="anel-vida" style="--p:0%">${img('vida')}</i><span class="vv">0%</span></div>
@@ -141,13 +137,10 @@ export class Hud {
   // o clique que vem logo depois de um toque longo não deve abrir nada (o controlador e os painéis consultam isto)
   longoRecente() { return performance.now() < this._longoAte; }
   _infoLongo(e) {
-    const a = e.classList.contains('vaga') ? 'vaga' : e.dataset.a; const I = INFO[a]; if (!I) return; const S = this.S; let extra = '';
-    if (a === 'nivel') { const n = S.nivel, prox = XP_NIVEL[n + 1]; extra = prox ? `<ul><li><b>${fmt(Math.max(0, prox - S.xp))} XP</b>para o nível ${n + 1}: +${fmt(premioNivel(n + 1))} créditos</li></ul>` : ''; }
-    else if (a === 'creditos') extra = `<ul><li><b>${fmt(S.creditos)}</b>em caixa</li></ul>`;
-    else if (a === 'mutirao') extra = `<ul><li><b>${S.mutirao}/${REGRAS.fichasMax}</b>fichas · disposição ${Math.round(S.disposicao || 0)}/100</li></ul>`;
+    const a = e.classList.contains('vaga') ? 'vaga' : e.dataset.a; const I = INFO[a]; if (!I) return;
     // com a janela de clique fechada, o toque longo só informa: quem chega aqui pelo clique curto segue o caminho normal
     const come = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; window.addEventListener('click', come, { capture: true, once: true }); setTimeout(() => window.removeEventListener('click', come, { capture: true }), 800);
-    this.info(e, `<h4>${I[0]}</h4><p>${I[1]}</p>${extra}<small>${I[2]}</small>`, 5000);
+    this.info(e, `<h4>${I[0]}</h4><p>${I[1]}</p><small>${I[2]}</small>`, 5000);
   }
   // ------------------------------------------------ barra superior
   atualizar() {
@@ -171,13 +164,12 @@ export class Hud {
     this._bt('pedidos', S.cap >= REGRAS.capPedidos); this._bt('trocas', S.cap >= ABRE.trocasCap);
   }
   _bt(a, on) { const b = this.dir.querySelector(`[data-a="${a}"]`); if (!b) return; const era = this._dirVis[a]; if (era === on) return; this._dirVis[a] = on; b.classList.toggle('trancado', !on); b.setAttribute('aria-disabled', on ? 'false' : 'true'); if (on && era === false) this.pulsa(b); this._tRects = 0; }
-  trancado(a) { return this._dirVis[a] === false; }
   _txt(k, v) {
     if (k === 'creditos') { this.topo.querySelector('.cc').textContent = fmt(Math.round(v)); return; }
     const S = this.S; const xp = Math.round(v); const n = nivelDe(xp, S.nivel); const a = XP_NIVEL[n] || 0, b = XP_NIVEL[n + 1] || a + 1;
     const p = clamp((xp - a) / (b - a), 0, 1); const an = this.topo.querySelector('.anel'); const nv = this.topo.querySelector('.nivel');
     if (this._nv !== n) { const sobe = this._nv != null && n > this._nv; this._nv = n; an.classList.add('semtr'); an.style.setProperty('--p', (sobe ? 0 : p * 100).toFixed(1) + '%'); void an.offsetWidth; an.classList.remove('semtr'); nv.querySelector('.nv').textContent = n; if (sobe) this.pulsa(nv); }
-    an.style.setProperty('--p', (p * 100).toFixed(1) + '%'); nv.querySelector('.xp').textContent = fmt(Math.max(0, xp - a)) + '/' + fmt(b - a);
+    an.style.setProperty('--p', (p * 100).toFixed(1) + '%');
     nv.setAttribute('aria-label', `Nível ${n}: ${fmt(Math.max(0, xp - a))} de ${fmt(b - a)} de experiência`);
   }
   _contar(k, alvo) {
@@ -220,7 +212,7 @@ export class Hud {
     const pr = this._premio; const pronto = !!this.capituloPronto?.();
     const nv = this._mostraNivel && XP_NIVEL[S.nivel + 1] ? `<div class="meta nivel-prox"><i>${img('xp')}</i><span>Nível ${S.nivel + 1} em ${fmt(Math.max(0, XP_NIVEL[S.nivel + 1] - S.xp))} XP</span><small>+${fmt(premioNivel(S.nivel + 1))}</small></div>` : '';
     const rodape = pronto ? `<button class="botao apresentar" data-a="conselho">${img('sede')}Apresentar ao Conselho</button>`
-      : `<div class="premio-cap" aria-label="Prêmio do capítulo: ${pr ? fmt(pr.creditos) + ' créditos e ' + pr.fichas + ' ficha(s) de Mutirão' : 'créditos e ficha de Mutirão'}"><span>Prêmio do capítulo</span>${img('creditos')}<b>${pr && pr.creditos > 0 ? '+' + fmt(pr.creditos) : ''}</b>${!pr || pr.fichas > 0 ? `${img('mutirao')}<b>${pr ? '+' + pr.fichas : ''}</b>` : ''}</div>`;
+      : `<div class="premio-cap"><span>Prêmio do capítulo</span>${img('creditos')}<b>${pr && pr.creditos > 0 ? '+' + fmt(pr.creditos) : ''}</b>${!pr || pr.fichas > 0 ? `${img('mutirao')}<b>${pr ? '+' + pr.fichas : ''}</b>` : ''}</div>`;
     const h = `<h3><small>Capítulo ${c.n}</small>${c.nome}</h3><div class="lm">${nv}${c.metas.map((m, i) => { const f = J.metaFeita(m); const p = J.metaProgresso?.(m); return `<button class="meta ${f ? 'ok' : ''} ${this._metaNova === i ? 'nova' : ''}" data-a="meta" data-i="${i}"><i></i><span>${m.txt}</span><small>${f ? '' : p?.txt || ''}</small></button>`; }).join('')}</div>${rodape}`;
     if (h !== this._metasH) { this._metasH = h; this.metas.innerHTML = h; }
   }

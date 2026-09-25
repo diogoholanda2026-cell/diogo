@@ -83,7 +83,6 @@ img{-webkit-user-drag:none}
 .nivel .selo{position:absolute;left:4px;top:4px;width:54px;height:54px}
 .nivel .nv{position:absolute;left:0;right:0;top:15px;text-align:center;font-size:25px;line-height:1;font-weight:800;color:#fff;--cc:#5a4416}
 .nivel.ganho .nv{color:var(--lataoC)}
-.nivel .xp{display:none;font-size:12px}
 /* pílulas em vidro escuro fino com aro; o ícone de 40 px sai pela ponta esquerda; alvo real de 46 px pelo ::after */
 .stat{flex:none;display:flex;align-items:center;height:32px;margin:15px 0 0 20px;padding:0 12px 0 25px;border-radius:16px;background:var(--pilula);box-shadow:var(--vidro);color:#fff;transition:color .2s,background-color .2s}
 .stat::after{content:"";position:absolute;inset:-7px -2px -7px -22px}
