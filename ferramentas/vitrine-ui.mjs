@@ -50,7 +50,8 @@ C.iniciar();
 window.H = { C, J, S, TUTORIAL, THREE }; window.__pronto = true;
 `;
 const js = (await build({ stdin: { contents: entrada, resolveDir: join(raiz, 'fonte'), loader: 'js' }, bundle: true, format: 'esm', write: false, logLevel: 'error', target: ['chrome110'] })).outputFiles[0].text;
-const css = readFileSync(join(raiz, 'fonte/ui/estilo.css'), 'utf8');
+// a fonte entra no CSS em base64, como no arquivo único (a página abre por file://, onde a fonte externa é barrada)
+const css = readFileSync(join(raiz, 'fonte/ui/estilo.css'), 'utf8').replace(/url\(fontes\/([\w.-]+\.woff2)\)/g, (m, f) => `url(data:font/woff2;base64,${readFileSync(join(raiz, 'fonte/web/fontes', f)).toString('base64')})`);
 const semAnim = process.env.ANIMAR ? '' : '*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important}';
 writeFileSync(join(pasta, 'foto.webp'), readFileSync(join(raiz, 'fonte/web/foto.webp')));
 writeFileSync(join(pasta, 'vitrine-ui.html'), `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>${css}\nbody{background:#1a1d16 url(foto.webp) center/cover no-repeat}\n${semAnim}</style></head><body><canvas id="c" style="opacity:0"></canvas><div id="ui"></div><script type="module">${js.replace(/<\/script/g, '<\\/script')}</script></body></html>`);
@@ -84,6 +85,8 @@ const CENAS = {
   brindes: (H) => { H.C.hud.brinde('Medição aprovada: +1.260', 'creditos', 9000); H.C.hud.brinde('Caminho da Frente: Abrir o caminho', 'ok', 9000); H.C.hud.brinde('Achado: Etiqueta RFID!', 'etiqueta', 9000); },
   bem: (H) => { H.C._infoBem(); },
   mutirao: (H) => { H.S.disposicao = 45; H.C._infoMutirao(); },
+  // todos os tipos de balão: coleta (item pulando), obra pronta (check), repasse (moeda subindo), obra em andamento
+  baloes: (H) => { base(H); const t = Date.now(); H.S.etapas['pas_frente.e1'] = { estado: 'pronta', entregue: {}, ini: t - 9000, fim: t - 10 }; H.S.etapas['lago.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 60000 }; H.S.repasse.acum = 800; H.J._derivar(); H.C.calcBolhas(); },
   aprovacao: (H) => { H.S.etapas['pas_frente.e1'] = { estado: 'pronta', entregue: {}, ini: Date.now() - 1000, fim: Date.now() - 10 }; H.C.aprovarEtapa('pas_frente.e1'); },
 };
 function base(H) { H.S.nivel = 9; H.S.xp = 1700; H.S.creditos = 12000; H.S.predios.carpintaria.ok = true; H.S.predios.concreto.ok = true; H.S.predios.usina2.ok = true; H.J.produzir('usina1', 'madeira'); H.J.produzir('usina1', 'brita'); H.J.produzir('usina1', 'aco'); H.S.predios.usina1.slots[0].fim = Date.now() - 10; H.S.itens.viga = 2; H.S.itens.cimento = 3; H.S.dicas.guia = H.TUTORIAL.length; H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.J._derivar(); H.C.calcBolhas(); H.C.hud.atualizar(); }
@@ -108,13 +111,13 @@ for (const [w, h] of tamanhos) for (const nome of nomes) {
     const alvos = [...document.querySelectorAll('#ui button, #ui [data-a], #ui .balao, #ui input, #ui [data-x], #ui [data-y], #ui [data-esc], #ui [data-fecha]')].filter((e) => vis(e) && !escondido(e));
     const peq = alvos.map((e) => { const r = e.getBoundingClientRect(); const [fx, fy] = folga(e); return { c: (e.className?.baseVal ?? e.className) + '', a: e.dataset.a || e.dataset.x || e.dataset.y || e.dataset.v || '', t: (e.textContent || '').trim().slice(0, 20), w: Math.round(r.width + fx), h: Math.round(r.height + fy) }; }).filter((x) => x.w < 44 || x.h < 44);
     const fontes = {}; const wk = document.createTreeWalker(document.getElementById('ui'), NodeFilter.SHOW_TEXT); let n; while ((n = wk.nextNode())) { if (!n.textContent.trim()) continue; const p = n.parentElement; if (!vis(p) || escondido(p)) continue; const fs = parseFloat(getComputedStyle(p).fontSize); if (fs < 11) (fontes[fs.toFixed(1)] ||= []).push(n.textContent.trim().slice(0, 20)); }
-    const blocos = [...document.querySelectorAll('#ui .topo > *:not(.esp), #ui .esq > *, #ui .dir > .bt, #ui .proximo')].filter((e) => vis(e) && !escondido(e)).map((e) => { const r = e.getBoundingClientRect(); return r.width * r.height; });
+    const blocos = [...document.querySelectorAll('#ui .topo > *:not(.esp), #ui .esq > *, #ui .dir > .bt, #ui .obras-bt, #ui .proximo')].filter((e) => vis(e) && !escondido(e)).map((e) => { const r = e.getBoundingClientRect(); return r.width * r.height; });
     const f = document.querySelector('.folha:not(.sai)'); const fr = f?.getBoundingClientRect();
     const bal = [...document.querySelectorAll('.balao')].filter((e) => vis(e) && !e.classList.contains('sob')).map((e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
     let perto = 0; for (let i = 0; i < bal.length; i++) for (let j = i + 1; j < bal.length; j++) if (Math.hypot(bal[i][0] - bal[j][0], bal[i][1] - bal[j][1]) < 36) perto++;
     const m = document.querySelector('.modal'); const fd = document.querySelector('.fala-dock');
     return { peq, fontesPequenas: fontes, hudArea: Math.round(blocos.reduce((a, b) => a + b, 0)), hudPct: +((blocos.reduce((a, b) => a + b, 0) / (innerWidth * innerHeight)) * 100).toFixed(1), folha: fr ? { rect: [fr.left, fr.top, fr.width, fr.height].map(Math.round), pct: +((fr.width * fr.height) / (innerWidth * innerHeight) * 100).toFixed(1), html: f.innerHTML.length, rola: f.querySelector('.corpo').scrollHeight > f.querySelector('.corpo').clientHeight + 2 } : null,
-      modal: m ? { rola: m.scrollHeight > m.clientHeight + 2, rect: (() => { const r = m.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); })() } : null, fala: fd && vis(fd) && !escondido(fd), guia: (() => { const g = document.querySelector('.guia'); return g && vis(g) && !g.classList.contains('oculto') ? g.style.transform : null; })(), baloesPerto: perto, baloes: bal.length };
+      modal: m ? { rola: (() => { const c = m.querySelector('.mc') || m; return c.scrollHeight > c.clientHeight + 2; })(), rect: (() => { const r = m.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); })() } : null, fala: fd && vis(fd) && !escondido(fd), guia: (() => { const g = document.querySelector('.guia'); return g && vis(g) && !g.classList.contains('oculto') ? g.style.transform : null; })(), baloesPerto: perto, baloes: bal.length };
   });
   await pg.close();
 }

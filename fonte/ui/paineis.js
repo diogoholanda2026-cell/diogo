@@ -1,4 +1,6 @@
-// Painéis da folha lateral esquerda: usinas, oficinas, almoxarifado, prancha da obra, módulos, lista de obras,
+// Painéis da folha lateral esquerda, no estilo do BuildIt (cartão claro com faixa azul, X vermelho, cartões brancos
+// e botões com volume: verde para a ação principal, azul para a secundária, laranja para compra e aceleração):
+// usinas, oficinas, almoxarifado, prancha da obra (itens em círculos com o check), módulos, lista de obras,
 // produção, pedidos, depósito de trocas, escritório/sede (repasses, serviços, bem-estar, topógrafo) e prédios
 // novos. O HTML só é trocado quando muda (e nunca com o dedo na tela: o redesenho espera 30 ms depois de soltar);
 // cronômetros e barras andam no tick(). Nada fica "disabled": o que não pode ser feito aparece esmaecido e o
@@ -26,9 +28,9 @@ export class Paineis {
     window.addEventListener('pointerup', solta); window.addEventListener('pointercancel', solta);
     this._medir(); window.addEventListener('resize', () => { this._medir(); if (this.el) this.C.painelMudou?.(true); });
   }
-  // largura da folha: até 412 px e 44% da largura, e a área (largura x altura útil) em no máximo 36% da tela;
-  // vai para o CSS em --folhaW (a doca de falas se centra no que sobra)
-  _medir() { const W = innerWidth, H = innerHeight; this._w = Math.floor(Math.min(412, W * 0.44, (0.36 * W * H) / Math.max(1, H - 62))); document.documentElement.style.setProperty('--folhaW', this._w + 'px'); return this._w; }
+  // largura da folha: até 412 px e 44% da largura, e a área (largura x altura útil, abaixo do selo do nível) em no
+  // máximo 36% da tela; vai para o CSS em --folhaW (a doca de falas se centra no que sobra)
+  _medir() { const W = innerWidth, H = innerHeight; this._w = Math.floor(Math.min(412, W * 0.44, (0.36 * W * H) / Math.max(1, H - 80))); document.documentElement.style.setProperty('--folhaW', this._w + 'px'); return this._w; }
   get J() { return this.C.J; }
   get largura() { return this._w || this._medir(); }
   abrir(tipo, arg, o = {}) {
@@ -54,7 +56,7 @@ export class Paineis {
   render(forcar) {
     if (!this.el) return; if (this._segura && !forcar) { this._pend = true; return; } this._pend = false; this._precisa = false;
     const { tipo, arg } = this.atual; const r = this['r_' + tipo](arg); if (!r) { this.fechar(true); return; }
-    const html = `<header>${this.pilha.length ? '<button class="voltar" data-a="voltar" aria-label="Voltar">‹</button>' : ''}<div class="ic">${img(r.icone)}</div><div class="tt"><h2>${r.titulo}</h2><small>${r.sub || ''}</small></div><button class="x" data-a="fechar" aria-label="Fechar">×</button></header><div class="corpo">${r.corpo}</div>`;
+    const html = `<header>${this.pilha.length ? '<button class="voltar" data-a="voltar" aria-label="Voltar">‹</button>' : ''}<div class="ic">${img(r.icone)}</div><div class="tt"><h2>${r.titulo}</h2><small>${r.sub || ''}</small></div><button class="x" data-a="fechar" aria-label="Fechar"></button></header><div class="corpo">${r.corpo}</div>`;
     if (html !== this._ultimoHtml) {
       const sc = this._rolar || this.el.querySelector('.corpo')?.scrollTop || 0; this._rolar = 0;
       this.el.innerHTML = html; this._ultimoHtml = html; const c = this.el.querySelector('.corpo'); if (c && sc) c.scrollTop = sc;
@@ -136,12 +138,13 @@ export class Paineis {
   // ---------- componentes ----------
   ficha(k, o = {}) {
     const tem = o.tem != null ? `<span class="tem">${o.tem}</span>` : '';
-    return `<button class="ficha ${o.cls || ''}" data-k="${k}" ${o.data || ''}>${o.cad ? `<span class="cad">${o.cad}</span>` : ''}${tem}${o.aro != null ? `<span class="aro" style="--e:${o.aro[0]}%;--a:${o.aro[1]}%">${img(k)}</span>` : img(k)}<b>${o.nome ?? nomeIt(k)}</b>${o.sub ? `<small class="qtd">${o.sub}</small>` : ''}${o.extra || ''}</button>`;
+    const selo = o.selo === 'ok' ? '<i class="selo ok" aria-hidden="true"></i>' : o.selo === 'falta' ? '<i class="selo falta" aria-hidden="true">!</i>' : '';
+    return `<button class="ficha ${o.cls || ''}" data-k="${k}" ${o.data || ''}>${o.cad ? `<span class="cad">${o.cad}</span>` : ''}${tem}${selo}${o.aro != null ? `<span class="aro" style="--e:${o.aro[0]}%;--a:${o.aro[1]}%">${img(k)}</span>` : img(k)}<b>${o.nome ?? nomeIt(k)}</b>${o.sub ? `<small class="qtd">${o.sub}</small>` : ''}${o.extra || ''}</button>`;
   }
   chips(req, treme) { return `<div class="req">${Object.entries(req).map(([k, n]) => { const t = this.J.S.itens[k] || 0; const ok = t >= n; return `<span class="${ok ? '' : 'f'} ${!ok && treme ? 'treme' : ''}">${img(k)}${t}/${n}</span>`; }).join('')}</div>`; }
   vaga(o) { return `<div class="vaga ${o.cls || ''}" ${o.fim ? `data-ini="${o.ini}" data-fim="${o.fim}"` : ''} ${o.data || ''}>${o.icone ? img(o.icone) : ''}${o.txt ? `<small>${o.txt}</small>` : ''}${o.fim ? '<i class="pb" style="width:0"></i><small class="tt"></small>' : ''}</div>`; }
   motivoItem(k) { const I = ITENS[k], S = this.J.S; if ((I.cap || 1) > S.cap && !S.legado?.includes(k)) return `Cap. ${I.cap}`; if (I.nivel > S.nivel) return `Nível ${I.nivel}`; return ''; }
-  mutiraoBt(alvo, txt) { const S = this.J.S; return `<button class="botao sec ${S.mutirao > 0 ? '' : 'fraco'}" data-a="mutirao" data-alvo='${JSON.stringify(alvo)}'>${img('mutirao')} ${txt} · ${S.mutirao}/${REGRAS.fichasMax}</button>`; }
+  mutiraoBt(alvo, txt) { const S = this.J.S; return `<button class="botao ouro ${S.mutirao > 0 ? '' : 'fraco'}" data-a="mutirao" data-alvo='${JSON.stringify(alvo)}'>${img('mutirao')} ${txt} · ${S.mutirao}/${REGRAS.fichasMax}</button>`; }
   // ---------- usina ----------
   r_usina(id) {
     const J = this.J, st = J.S.predios[id], P = PREDIOS[id]; if (!st.ok) return this.r_predio(id);
@@ -160,7 +163,7 @@ export class Paineis {
     if (st.nFila < REGRAS.filaMax) v += `<button class="vaga mais ${J.S.creditos >= J.custoEspaco(id) ? '' : 'fraco'}" data-a="ampliar" data-p="${id}"><b>+</b><small>${fmt(J.custoEspaco(id))}</small></button>`;
     const cheia = st.prontos.length >= REGRAS.bandeja;
     const prontos = st.prontos.length ? `<div class="linha acoes"><button class="botao" data-a="coletarO" data-p="${id}">${img(st.prontos[0])} Coletar ${st.prontos.length}</button>${cheia ? '<span class="etiq nao">Bandeja cheia: a fila parou</span>' : ''}</div>` : '';
-    const falta = this._falta && ITENS[this._falta]?.oficina === id ? `<div class="cartao aviso-falta">${img(this._falta)}<div class="tx">Faltam insumos para <b>${nomeIt(this._falta)}</b>. Na cadeia, o item espera na fila e puxa os insumos quando ficarem prontos.</div><button class="botao ouro" data-a="cadeia" data-p="${id}" data-k="${this._falta}">Encomendar em cadeia</button></div>` : '';
+    const falta = this._falta && ITENS[this._falta]?.oficina === id ? `<div class="cartao aviso-falta">${img(this._falta)}<div class="tx">Faltam insumos para <b>${nomeIt(this._falta)}</b>. Na cadeia, o item espera na fila e puxa os insumos quando ficarem prontos.</div><button class="botao" data-a="cadeia" data-p="${id}" data-k="${this._falta}">Encomendar em cadeia</button></div>` : '';
     const g = receitas(id).map((k) => { const lib = J.liberado(k); const m = lib ? '' : this.motivoItem(k); return this.ficha(k, { cls: lib ? '' : 'bloq', sub: lib ? dur(J.durItem(k) / 1000) : '', cad: m, tem: lib && J.S.itens[k] ? '×' + J.S.itens[k] : null, extra: lib ? this.chips(ITENS[k].req) : '', data: lib ? `data-a="enfileirar" data-p="${id}" data-k="${k}"` : `data-a="fraco" data-motivo="nivel"` }); }).join('');
     const rodando = st.fila.length && st.fila[0].fim && st.fila[0].fim > J.agora;
     return { icone: 'predio:' + id, titulo: P.nome, sub: `Fila ${st.fila.length}/${vagas} · um de cada vez`, corpo: `<div class="vagas">${v}</div>${prontos}${falta}${rodando ? `<div class="linha acoes">${this.mutiraoBt({ oficina: id }, 'Adiantar o item atual')}</div>` : ''}<div class="grade">${g}</div>` };
@@ -200,18 +203,18 @@ export class Paineis {
       const fichas = Object.entries(req).map(([k, n]) => {
         const ent = st.entregue?.[k] || 0; const tem = S.itens[k] || 0; const f = Math.max(0, n - ent); faltam += f; posso += Math.min(f, tem); const ok = ent >= n; const real = ent + tem < n; if (real) podeTudo = false;
         if (real && ITENS[k]?.grupo === 'licenca') lic.push([k, n - ent - tem]);
-        return this.ficha(k, { cls: ok ? 'ok' : real ? 'falta' : '', aro: [(Math.min(1, ent / n) * 100).toFixed(0), (Math.min(1, (ent + tem) / n) * 100).toFixed(0)], sub: `${ent}/${n}`, data: ok ? '' : tem > 0 ? `data-a="entregar" data-key="${key}" data-k="${k}"` : `data-a="produtor" data-k="${k}"` });
+        return this.ficha(k, { cls: 'redonda ' + (ok ? 'ok' : real ? 'falta' : ''), selo: ok ? 'ok' : real ? 'falta' : '', aro: [(Math.min(1, ent / n) * 100).toFixed(0), (Math.min(1, (ent + tem) / n) * 100).toFixed(0)], sub: `${ent}/${n}`, data: ok ? '' : tem > 0 ? `data-a="entregar" data-key="${key}" data-k="${k}"` : `data-a="produtor" data-k="${k}"` });
       }).join('');
       corpo += `<div class="grade">${fichas}</div>`;
       // licença que falta: o topógrafo do Escritório faz uma por vez
       const tp = S.topografo;
       for (const [k, n] of lic) { const R = TOPOGRAFO?.[k]; if (!R) continue;
         if (tp?.k === k) corpo += `<div class="linha licenca" data-ini="${tp.ini}" data-fim="${tp.fim}">${img(k)}<span class="tx">Topógrafo fazendo ${nomeIt(k)}</span><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div>`;
-        else corpo += `<div class="linha licenca">${img(k)}<span class="tx"><small>Falta ${n}</small>${nomeIt(k)}</span><button class="botao sec ${tp ? 'fraco' : ''}" data-a="topografo" data-k="${k}">${tp ? `Topógrafo ocupado até ${hhmm(tp.fim)}` : `Encomendar ao topógrafo · ${fmt(R.creditos)}`}</button></div>`; }
+        else corpo += `<div class="linha licenca">${img(k)}<span class="tx"><small>Falta ${n}</small>${nomeIt(k)}</span><button class="botao ouro ${tp ? 'fraco' : ''}" data-a="topografo" data-k="${k}">${tp ? `Topógrafo ocupado até ${hhmm(tp.fim)}` : `Encomendar ao topógrafo · ${fmt(R.creditos)}`}</button></div>`; }
       if (s === 'disponivel' || s === 'prancha') {
         const caro = S.creditos < custo; const info = `${fmt(custo)} · ${dur(tempo / 1000)}`;
-        if (podeTudo) corpo += `<div class="linha acoes fixa"><button class="botao ouro grande ${caro ? 'fraco' : ''}" data-a="entregarIniciar" data-key="${key}">${img('grua')} ${faltam ? 'Entregar e iniciar' : 'Iniciar obra'} · ${info}</button></div>`;
-        else corpo += `<div class="linha acoes fixa"><small class="custo-obra">${img('creditos')}${fmt(custo)} · ${dur(tempo / 1000)}</small><button class="botao azul ${posso ? '' : 'fraco'}" data-a="entregarTudo" data-key="${key}">${img('almox')} Entregar o que tenho (${posso} de ${faltam})</button><button class="botao ouro fraco" data-a="iniciar" data-key="${key}">${img('grua')} Iniciar</button></div>`;
+        if (podeTudo) corpo += `<div class="linha acoes fixa"><button class="botao grande ${caro ? 'fraco' : ''}" data-a="entregarIniciar" data-key="${key}">${img('grua')} ${faltam ? 'Entregar e iniciar' : 'Iniciar obra'} · ${info}</button></div>`;
+        else corpo += `<div class="linha acoes fixa"><small class="custo-obra">${img('creditos')}${fmt(custo)} · ${dur(tempo / 1000)}</small><button class="botao azul ${posso ? '' : 'fraco'}" data-a="entregarTudo" data-key="${key}">${img('almox')} Entregar o que tenho (${posso} de ${faltam})</button><button class="botao fraco" data-a="iniciar" data-key="${key}">${img('grua')} Iniciar</button></div>`;
       } else corpo += `<p class="desc">A prancha já aceita materiais: a obra abre no capítulo ${J.capEtapa(p, e)}.</p>`;
     } else if (s === 'obra') corpo += `<div class="linha" data-ini="${st.ini}" data-fim="${st.fim}"><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div><div class="linha acoes">${this.mutiraoBt({ etapa: key }, `Mutirão: adiantar ${REGRAS.mutiraoH} h`)}</div>`;
     else if (s === 'pronta') corpo += `<div class="linha acoes fixa"><button class="botao grande" data-a="aprovar" data-key="${key}">${img('ok')} Aprovar a etapa</button></div>`;
@@ -231,14 +234,14 @@ export class Paineis {
       if (r.bemMin) et.push(`<span class="etiq ${r.bemOk ? 'ok' : 'nao'}">${img('bem')}Bem-estar ${J.bem}% (mín. ${r.bemMin}%)</span>`);
       et.push(`<span class="etiq">${img('pop')}+${fmt(Math.round(M.pop * (POP_NIVEL[r.nivel] - POP_NIVEL[m.nivel])))} moradores</span>`);
       const pode = temTudo && r.servOk && r.bemOk && J.S.creditos >= r.custo;
-      corpo += `<div class="linha etiqs">${et.join('')}</div><div class="linha acoes fixa"><button class="botao ouro grande ${pode ? '' : 'fraco'}" data-a="melhorar" data-f="${f}" data-i="${i}">${img('subir')} ${m.nivel ? 'Subir ao nível ' + r.nivel : 'Construir'} · ${fmt(r.custo)} · ${dur(J.dur(r.tempo, 'modulo') / 1000)}</button></div>`;
+      corpo += `<div class="linha etiqs">${et.join('')}</div><div class="linha acoes fixa"><button class="botao grande ${pode ? '' : 'fraco'}" data-a="melhorar" data-f="${f}" data-i="${i}">${img('subir')} ${m.nivel ? 'Subir ao nível ' + r.nivel : 'Construir'} · ${fmt(r.custo)} · ${dur(J.dur(r.tempo, 'modulo') / 1000)}</button></div>`;
       if (!r.servOk) { const k = (r.servicos || []).find((x) => (J.servicoInfo ? J.servicoInfo(x).cap : J.serv[x]) < r.popDepois); corpo += `<p class="desc">Faltam serviços para os novos moradores: conclua obras que dão ${(NOME_SERV[k] || 'serviços').toLowerCase()}.</p>`; }
       else if (!r.bemOk) corpo += `<p class="desc">O último pavimento pede ${r.bemMin}% de bem-estar: praças, escola e verde ajudam.</p>`;
     } else if (s === 'limite') { const L = LIMITE_CAP[f]; let prox = ''; for (const [c, n] of Object.entries(L || {})) if (n > m.nivel && !prox) prox = c; corpo += `<p class="desc">Nível máximo por enquanto. O próximo pavimento abre no capítulo ${prox}.</p>`; }
     else if (s === 'bloqueado') corpo += `<p class="desc">${M.cap > J.S.cap ? 'Abre no capítulo ' + M.cap + '.' : f === 'anel' && J.S.cap === 1 ? 'Este lote abre no capítulo 2.' : 'Antes, conclua: ' + (M.requer || []).map(reqTxt).join(' · ')}</p>`;
     else if (s === 'obra') corpo += `<div class="linha" data-ini="${m.obra.ini}" data-fim="${m.obra.fim}"><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div><div class="linha acoes">${this.mutiraoBt({ modulo: [f, i] }, `Mutirão: adiantar ${REGRAS.mutiraoH} h`)}</div>`;
     else if (s === 'pronta') corpo += `<div class="linha acoes"><button class="botao grande" data-a="aprovarMod" data-f="${f}" data-i="${i}">${img('ok')} Aprovar o pavimento</button></div>`;
-    else if (s === 'max') corpo += `<p class="desc">Módulo completo, igual à maquete.</p>`;
+    else if (s === 'max') corpo += `<p class="desc">Módulo completo, igual ao projeto.</p>`;
     return { icone: 'modulo', titulo: `${M.nome} · módulo ${i + 1}`, sub: `Nível ${m.nivel}/${M.max} · ${fmt(popAgora)} moradores`, corpo };
   }
   // ---------- lista de obras (o que pede ação primeiro) ----------
@@ -293,7 +296,7 @@ export class Paineis {
         <button class="lixo ${conf ? 'conf' : ''}" data-a="descartar" data-i="${i}" aria-label="${conf ? 'Tocar de novo para descartar' : 'Descartar pedido'}">${conf ? '<span>Descartar?</span>' : img('lixo')}</button>
         ${p.fala ? `<p class="fala" title="${p.fala}">${p.fala}</p>` : ''}<div class="pl"><div class="its">${its}</div><div class="rec">${rec}</div></div></div>`;
     });
-    const faltaHtml = fp ? `<div class="cartao aviso-falta fixo">${img(fp.falta[0][0])}<div class="tx">Falta: <b>${fp.falta.map(([k, n]) => `${n} ${nomeIt(k)}`).join(', ')}</b></div><button class="botao ouro" data-a="produtor" data-k="${fp.falta[0][0]}">Produzir</button></div>` : '';
+    const faltaHtml = fp ? `<div class="cartao aviso-falta fixo">${img(fp.falta[0][0])}<div class="tx">Falta: <b>${fp.falta.map(([k, n]) => `${n} ${nomeIt(k)}`).join(', ')}</b></div><button class="botao azul" data-a="produtor" data-k="${fp.falta[0][0]}">Produzir</button></div>` : '';
     return { icone: 'pedidos', titulo: 'Pedidos da comunidade', sub: 'Toque num cartão para entregar', corpo: `<div class="pedidos">${cards.join('')}</div>${faltaHtml}` };
   }
   // ---------- depósito ----------
@@ -317,9 +320,9 @@ export class Paineis {
     const topo = TOPOGRAFO ? Object.entries(TOPOGRAFO).map(([k, R]) => {
       if (tp?.k === k) return `<div class="linha licenca" data-ini="${tp.ini}" data-fim="${tp.fim}">${img(k)}<span class="tx">${nomeIt(k)}</span><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div>`;
       const custo = `${Object.entries(R.itens).map(([i, n]) => `${n} ${nomeIt(i)}`).join(', ')} + ${fmt(R.creditos)} · ${R.min} min`;
-      return `<div class="linha licenca">${img(k)}<span class="tx"><b>${nomeIt(k)}</b><small>${custo}</small></span><button class="botao sec ${tp ? 'fraco' : ''}" data-a="topografo" data-k="${k}">${tp ? 'Ocupado' : 'Encomendar'}</button></div>`;
+      return `<div class="linha licenca">${img(k)}<span class="tx"><b>${nomeIt(k)}</b><small>${custo}</small></span><button class="botao ouro ${tp ? 'fraco' : ''}" data-a="topografo" data-k="${k}">${tp ? 'Ocupado' : 'Encomendar'}</button></div>`;
     }).join('') : '';
     return { icone: sede ? 'sede' : 'repasse', titulo: sede ? 'Sede da Holding Guarda-Chuva' : 'Escritório de Obra', sub: `Repasses: ${fmt(t * 60)} créditos por hora · bem-estar ${J.bem}%`,
-      corpo: `<div class="linha"><span class="etiq">${img('repasse')}Acumulado: <b class="cred">${fmt(r.acum)}</b></span><button class="botao ouro ${r.acum >= 1 ? '' : 'fraco'}" data-a="${r.acum >= 1 ? 'repasse' : 'fraco'}" data-motivo="nada">${img('creditos')} Coletar</button></div><p class="desc" style="margin-top:8px">A Holding repassa créditos conforme os moradores e o bem-estar. O cofre guarda até ${REGRAS.cofreH} horas.</p>${titulo('Serviços')}${serv}${bi ? titulo(`Bem-estar ${bi.total}%`) + bem : ''}${topo ? titulo('Topógrafo: uma licença por vez') + topo : ''}` };
+      corpo: `<div class="linha"><span class="etiq">${img('repasse')}Acumulado: <b class="cred">${fmt(r.acum)}</b></span><button class="botao ${r.acum >= 1 ? '' : 'fraco'}" data-a="${r.acum >= 1 ? 'repasse' : 'fraco'}" data-motivo="nada">${img('creditos')} Coletar</button></div><p class="desc" style="margin-top:8px">A Holding repassa créditos conforme os moradores e o bem-estar. O cofre guarda até ${REGRAS.cofreH} horas.</p>${titulo('Serviços')}${serv}${bi ? titulo(`Bem-estar ${bi.total}%`) + bem : ''}${topo ? titulo('Topógrafo: uma licença por vez') + topo : ''}` };
   }
 }
