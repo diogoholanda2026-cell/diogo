@@ -50,7 +50,7 @@ const AJUDA = () => {
     relogio(ms) { O.relogio = (this._r0 ?? (this._r0 = performance.now())) + ms; },
     solta() { O.relogio = null; this._r0 = null; },
     zera() { this._r0 = performance.now() + 5000; O.relogio = this._r0; },
-    luz(m) { H.env.setMode(m); },
+    luz(m) { H.env.setHora(m === 'noite' ? 22 : 11); H.engine.shadowDirty = true; }, // 'dia' (11 h) ou 'noite' (22 h), com o ciclo parado
     quadros,
     stats() { const e = H.engine.stats; return { calls: e.calls, tris: e.tris, sombras: O.stats.sombras, obras: O.sites.size }; },
   };
@@ -63,6 +63,7 @@ async function abre(q, W, H) {
   await pg.waitForFunction(() => window.__pronto === true, null, { timeout: 240000 });
   await pg.addStyleTag({ content: SEM_ANIMACAO });
   await pg.evaluate(AJUDA);
+  await pg.evaluate(() => window.__cap.luz('dia')); // ciclo parado às 11 h: capturas repetíveis
   await pg.evaluate(() => window.__cap.quadros(6)); // aquecimento da sombra das obras
   return pg;
 }
@@ -92,7 +93,7 @@ try {
     await run(pg, () => { const a = window.__held.obras.ancora('e:biblioteca.e2'); window.__ancora = a; });
   } catch (e) { erros.push('filme: ' + e.message.split('\n').slice(0, 4).join(' | ')); }
   if (grupos.has('aprovacao')) try { // aprovação coreografada (dia) e fogos (noite)
-    for (const luz of ['exposicao', 'noite']) {
+    for (const luz of ['dia', 'noite']) {
       await run(pg, (luz) => { window.__cap.limpa(); window.__cap.luz(luz); window.__cap.zera(); window.__cap.foco('biblioteca', 16.5); window.__cap.obra('biblioteca.e2', 0.98); }, luz);
       await run(pg, () => window.__cap.relogio(4000)); await pg.evaluate(() => window.__cap.quadros(2));
       await run(pg, () => window.__cap.pronta('biblioteca.e2')); await run(pg, () => window.__cap.relogio(6000)); await pg.evaluate(() => window.__cap.quadros(2));
@@ -101,7 +102,7 @@ try {
       for (const ms of tempos) { await run(pg, (ms) => window.__cap.relogio(10000 + ms), ms); await foto(pg, `c-aprovacao-${luz}-${String(ms).padStart(4, '0')}`, `Aprovação (${luz}) aos ${ms} ms`); }
       await run(pg, () => window.__cap.relogio(16000)); await pg.evaluate(() => window.__cap.quadros(3));
     }
-    await run(pg, () => { window.__cap.luz('exposicao'); window.__cap.solta(); });
+    await run(pg, () => { window.__cap.luz('dia'); window.__cap.solta(); });
   } catch (e) { erros.push('aprovacao: ' + e.message.split('\n').slice(0, 4).join(' | ')); }
   if (grupos.has('modos')) try { // plantio, caixas, terra, pavimento, draga, módulo de fita
     const cenas = [
@@ -137,7 +138,7 @@ try {
       for (const o of ['carpintaria', 'concreto', 'serralheria', 'eletrica', 'horto']) J.S.predios[o].fila = [{ item: o === 'carpintaria' ? 'viga' : o === 'concreto' ? 'cimento' : o === 'serralheria' ? 'perfil' : o === 'eletrica' ? 'fiacao' : 'grama', ini: ag, fim: ag + 1e7 }];
       J.S.predios.vidracaria.prontos = Array(9).fill('painel'); J._derivar(); H.C.sincronizar(); H.C._repasseProducao?.(); window.__cap.cam(-25.2, 15, 13, 0.4); });
     await foto(pg, 'g-canteiro-vivo', 'Canteiro produzindo: fumaça, esteira, serra, faíscas, luz nas portas; bandeja cheia com luz vermelha', 4);
-    await run(pg, () => window.__cap.luz('noite')); await foto(pg, 'g-canteiro-vivo-noite', 'Canteiro produzindo à noite', 3); await run(pg, () => window.__cap.luz('exposicao'));
+    await run(pg, () => window.__cap.luz('noite')); await foto(pg, 'g-canteiro-vivo-noite', 'Canteiro produzindo à noite', 3); await run(pg, () => window.__cap.luz('dia'));
     await run(pg, () => { for (const k of Object.keys(window.__held.J.S.etapas)) if (!window.__held.J.S.etapas[k].estado) delete window.__held.J.S.etapas[k]; window.__cap.cam(-25.5, 15, 16, 0.4); });
     for (const p of [0.1, 0.5, 0.9]) { await run(pg, (p) => { if (p === 0.1) window.__cap.obra('reflorestar.e0', p); else window.__cap.progresso('reflorestar.e0', p); }, p); await foto(pg, `g-desmontar-${Math.round(p * 100)}`, `Desmontar o canteiro com ${Math.round(p * 100)}% (prédios descem um a um)`, 3); }
     await run(pg, () => { window.__cap.pronta('reflorestar.e0'); window.__held.C.aprovarEtapa('reflorestar.e0'); }); await pg.evaluate(() => window.__cap.quadros(4));

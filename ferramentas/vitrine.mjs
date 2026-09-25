@@ -6,6 +6,8 @@
 // aprovação (o08/o09). Os closes miram o foco de cada modelo (mundo.modelos[id].foco e o centro das
 // fitas), com os números antigos como reserva; antes de cada foto a vitrine espera a refusão adiada e o
 // time-lapse da obra terminarem (quando o jogo expõe mundo.refusaoPendente e obras.timelapseAtivo).
+// O ciclo de dia e noite fica parado às 11 h (env.setHora) para as fotos se repetirem entre versões; a
+// composição também sai em quatro horas (7, 12, 18 e 22 h) na vista geral de abertura do jogo.
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
@@ -32,14 +34,16 @@ const espera = (pg, ms) => pg.waitForTimeout(ms);
 const SEM_ANIMACAO = '*,*::before,*::after{animation:none!important;transition:none!important}';
 // espera o mundo assentar: refusão adiada e time-lapse da obra (se o jogo os expuser)
 const assenta = (pg) => pg.waitForFunction(() => { const H = window.__held; return !H || (!H.mundo?.refusaoPendente && !H.obras?.timelapseAtivo); }, null, { timeout: 60000 }).catch(() => {});
-async function abre(q, W, H, movel = false) {
+async function abre(q, W, H, movel = false, hora = 11) {
   const pg = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1, ...(movel ? { isMobile: true, hasTouch: true } : {}) });
   pg.on('pageerror', (e) => erros.push(`${q}: ${e.message} | ${(e.stack || '').split('\n').slice(1, 3).join(' <- ')}`));
   await pg.goto(`http://localhost:${porta}/?${q}`);
   await pg.waitForFunction(() => window.__pronto === true, null, { timeout: 240000 });
   pg._semAnim = await pg.addStyleTag({ content: SEM_ANIMACAO });
+  await pg.evaluate((h) => window.__held.env.setHora?.(h), hora); // ciclo parado: fotos repetíveis
   return pg;
 }
+const hora = (pg, h) => pg.evaluate((h) => { window.__held.env.setHora?.(h); window.__held.engine.shadowDirty = true; }, h);
 async function foto(pg, nome, desc, ms = 1200, assentar = true) {
   await espera(pg, ms); if (assentar) await assenta(pg); const arq = join(saida, nome + '.png'); await pg.screenshot({ path: arq, timeout: 240000 });
   const st = await pg.evaluate(() => { const e = window.__held.engine; return { calls: e.stats.calls, tris: e.stats.tris }; });
@@ -66,12 +70,16 @@ try {
   if (grupos.has('composicao')) try {
     const pg = await abre('vista=foto&tudo=1&q=alta&pr=1', 1376, 768);
     await pg.evaluate(() => { document.getElementById('ui').style.display = 'none'; });
-    await foto(pg, 'c01-foto-exposicao', 'Composição completa, enquadramento da foto, luz de exposição', 2500);
-    await pg.evaluate(() => window.__held.env.setMode('noite')); await foto(pg, 'c02-foto-noite', 'Composição completa, noite', 2000);
-    await pg.evaluate(() => window.__held.env.setMode('dia')); await foto(pg, 'c03-foto-dia', 'Composição completa, dia', 2000);
-    await pg.evaluate(() => window.__held.env.setMode('exposicao'));
+    // (c01 mantém o nome antigo: a luz de exposição e a mesa saíram do jogo; é o enquadramento da foto, de dia)
+    await foto(pg, 'c01-foto-exposicao', 'Composição completa, enquadramento da foto (11 h), para comparar com a foto', 2500);
+    await hora(pg, 22); await foto(pg, 'c02-foto-noite', 'Composição completa, enquadramento da foto, noite (22 h)', 3000);
+    await hora(pg, 15); await foto(pg, 'c03-foto-dia', 'Composição completa, enquadramento da foto, tarde (15 h)', 3000);
+    await hora(pg, 11);
     await camera(pg, [2, 2, 62, -0.55, 0.78, 36]); await foto(pg, 'c04-geral-outro-angulo', 'Composição completa vista do outro lado', 2000);
     await camera(pg, [4, 0, 44, 0.2, 1.35, 36]); await foto(pg, 'c05-planta-de-cima', 'Composição quase de cima (leitura da planta)', 2000);
+    // o ciclo de dia e noite na vista geral de abertura (C.vistaGeral): amanhecer, meio-dia, pôr do sol e noite
+    await pg.evaluate(() => window.__held.C.vistaGeral?.(false));
+    for (const [n, h, d] of [['c06-geral-07h', 7, 'amanhecer'], ['c07-geral-12h', 12, 'meio-dia'], ['c08-geral-18h', 18, 'pôr do sol'], ['c09-geral-22h', 22, 'noite']]) { await hora(pg, h); await foto(pg, n, `Composição completa na vista geral, ${d} (${h} h)`, 3000); }
     await pg.close();
   } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }
   if (grupos.has('closes')) try {
