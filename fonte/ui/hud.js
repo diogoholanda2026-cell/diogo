@@ -5,6 +5,9 @@
 // vermelhos; embaixo à direita, o botão grande de Obras e o "Próximo"; embaixo à esquerda, a medalha do capítulo
 // (abre as metas) e a linha "Agora" (Meta em foco). A fala do conselho sai num balão com retrato redondo (fora do
 // trilho, visível com painel aberto), com avisos empilhados, anel-guia do tutorial e voo de ícones com contagem.
+// Economia nova: a pílula de moradores mostra a renda por hora ("+7.500/h"; o toque abre o popover da renda), o
+// calendário pequeno tem o anel de progresso do dia (20 s) e abre as Finanças, e a pílula do Mutirão mostra o
+// contador de aceleradores. Os toques novos são ligados por extras.js (aoCalendario, aoPop).
 import { el, fmt, clamp, easeOutCubic, easeInCubic } from '../core/util.js';
 import { img, icone } from './icones.js';
 import { CONSELHO } from '../data/historia.js';
@@ -23,6 +26,16 @@ export { retrato };
 // quando partes da interface aparecem (regras só da interface: a simulação não fecha o Depósito; as dela vêm de REGRAS)
 export const ABRE = { trocasCap: 2, depositoNivel: 3 };
 export const depositoAberto = (S) => S.nivel >= ABRE.depositoNivel || S.cap >= ABRE.trocasCap;
+// calendário do jogo (1 dia = 20 s, mês de 30 dias, ano de 12 meses): o da simulação ou, enquanto ela não o tiver,
+// o mesmo cálculo a partir do início do save (S.calendario.inicio ou S.criado)
+const DIA_MS = 20000;
+export function calendarioDe(J) {
+  const c = J.calendario?.(); if (c) return c;
+  const S = J.S; const ini = S.calendario?.inicio ?? S.criado ?? J.agora; const t = Math.max(0, (J.agora || Date.now()) - ini);
+  const dia = Math.floor(t / DIA_MS); return { dia, diaDoMes: (dia % 30) + 1, mes: (Math.floor(dia / 30) % 12) + 1, ano: Math.floor(dia / 360) + 1, progDia: (t % DIA_MS) / DIA_MS, diaMs: DIA_MS };
+}
+// renda dos moradores por hora real (a nova, por faixa de bem-estar; ou a taxa antiga de repasse por minuto × 60)
+export const rendaHoraDe = (J) => (typeof J.rendaHora === 'function' ? J.rendaHora() : Math.round((J.taxaRepasse?.() || 0) * 60));
 
 export class Hud {
   constructor(raiz, J) {
@@ -30,13 +43,14 @@ export class Hud {
     this.topo = el('div', 'topo');
     this.topo.innerHTML = `
       <div class="nivel" data-a="nivel" role="button" aria-label="Nível 1"><i class="anel"></i>${img('nivel', 'selo')}<b class="nv">1</b><small class="xp">0/40</small></div>
-      <div class="stat pop" data-a="pop" role="button" aria-label="Moradores">${img('pop')}<span class="pp">0</span></div>
+      <div class="stat pop" data-a="pop" role="button" aria-label="Moradores e renda por hora">${img('pop')}<span class="pp">0</span><small class="ph">+0/h</small></div>
       <div class="stat bem" data-a="bem" role="button" aria-label="Bem-estar">${img('bem-medio')}<span class="bb">35%</span></div>
       <div class="stat vida" data-a="vida" role="button" aria-label="Composição concluída">${img('vida')}<span class="vv">0%</span></div>
+      <div class="stat cal" data-a="calendario" role="button" aria-label="Calendário: dia 1, mês 1, ano 1"><i class="anel-dia" style="--p:0%">${img('calendario')}</i><span class="cd"><b class="longo">Dia 1 · Mês 1 · Ano 1</b><b class="curto">1/1 · A1</b></span></div>
       <button class="pilula aguarda oculto" data-a="conselho">${img('sede')}<span>Conselho aguarda</span></button>
       <div class="esp"></div>
       <div class="stat creditos" data-a="creditos" role="button" aria-label="Créditos">${img('creditos')}<span class="cc">0</span><button class="mais" data-a="deposito" aria-label="Depósito de Trocas: comprar matéria-prima"><i></i></button></div>
-      <div class="stat mutirao" data-a="mutirao" role="button" aria-label="Mutirão e disposição">${img('mutirao')}<span class="mm">0/3</span><div class="disp"><i></i></div></div>
+      <div class="stat mutirao" data-a="mutirao" role="button" aria-label="Mutirão e disposição">${img('mutirao')}<span class="mm">0/3</span><div class="disp"><i></i></div><span class="ac oculto" aria-label="Aceleradores">${img('acelerar')}<b>0</b></span></div>
       <button class="redondo" data-a="apreciar" aria-label="Apreciar a cidade">${img('apreciar')}</button>
       <button class="redondo" data-a="config" aria-label="Configurações">${img('config')}</button>`;
     // embaixo à esquerda: medalha do capítulo, metas (cartão acima dela) e a linha "Agora"
@@ -63,6 +77,10 @@ export class Hud {
     raiz.append(this.topo, this.esq, this.doca, this.dir, this.obrasBt, this.prox, this.guiaEl);
     this.filaFalas = []; this._falaAtual = null; this._falaResta = 0; this._falaT = 0;
     this.fala.addEventListener('click', (e) => { e.stopPropagation(); const pular = e.target.closest('.pular'); this._pularFala(!!pular); });
+    // toques que o controlador não conhece (calendário e renda dos moradores): tratados aqui quando alguém liga
+    // aoCalendario / aoPop (extras.js); sem eles, o toque segue o caminho de sempre (abre o Escritório)
+    this.aoCalendario = null; this.aoPop = null;
+    this.topo.addEventListener('click', (e) => { const b = e.target.closest('[data-a="calendario"],[data-a="pop"]'); if (!b) return; const fn = b.dataset.a === 'calendario' ? this.aoCalendario : this.aoPop; if (!fn) return; e.stopPropagation(); fn(b); });
     // cartão de metas: tocar ou rolar dentro dele adia o fechamento automático (6 s contados da última interação)
     const armar = () => { if (this.metasAbertas) this._armarMetas(); }; this.metas.addEventListener('pointerdown', armar); this.metas.addEventListener('scroll', armar, { passive: true });
     // números: valor mostrado separado do real (o que está voando fica retido) e contagem de 480 ms
@@ -81,6 +99,15 @@ export class Hud {
     q('.mm').textContent = `${S.mutirao}/${REGRAS.fichasMax}`; q('.disp i').style.transform = `scaleX(${(clamp(S.disposicao || 0, 0, 100) / 100).toFixed(3)})`;
     this._contar('creditos', Math.max(0, S.creditos - this.ret.creditos));
     this._contar('xp', Math.max(0, S.xp - this.ret.xp));
+    // calendário: texto por dia e o anel do dia (20 s); na virada, o anel volta a zero sem transição
+    const cal = calendarioDe(J); const ce = q('.cal'); const an = ce.querySelector('.anel-dia');
+    if (cal.dia !== this._calDia) { this._calDia = cal.dia; ce.querySelector('.longo').textContent = `Dia ${cal.diaDoMes} · Mês ${cal.mes} · Ano ${cal.ano}`; ce.querySelector('.curto').textContent = `${cal.diaDoMes}/${cal.mes} · A${cal.ano}`; ce.setAttribute('aria-label', `Calendário: dia ${cal.diaDoMes}, mês ${cal.mes}, ano ${cal.ano}`); }
+    if (cal.progDia < (this._calP ?? 0)) { an.classList.add('semtr'); an.style.setProperty('--p', '0%'); void an.offsetWidth; an.classList.remove('semtr'); } this._calP = cal.progDia;
+    an.style.setProperty('--p', (cal.progDia * 100).toFixed(0) + '%');
+    // renda dos moradores por hora e o contador de aceleradores (só quando a simulação os tem)
+    const rh = rendaHoraDe(J); if (rh !== this._rh) { this._rh = rh; q('.ph').textContent = '+' + fmt(rh) + '/h'; }
+    const ac = S.aceleradores; const ae = q('.ac');
+    if (ac) { const n = (ac.obra || 0) + (ac.producao || 0); ae.classList.remove('oculto'); if (n !== this._acN) { this._acN = n; ae.querySelector('b').textContent = n; ae.setAttribute('aria-label', `Aceleradores: ${ac.obra || 0} de obra e ${ac.producao || 0} de produção`); this._tRects = 0; } } else if (!ae.classList.contains('oculto')) { ae.classList.add('oculto'); this._tRects = 0; }
     // trilho: pedidos e trocas só a partir do capítulo em que abrem
     this._bt('pedidos', S.cap >= REGRAS.capPedidos); this._bt('trocas', S.cap >= ABRE.trocasCap);
   }
@@ -185,11 +212,12 @@ export class Hud {
   }
   _sairBrinde(b) { if (!b || b.classList.contains('sai')) return; clearTimeout(b._t); b.classList.add('sai'); const fim = () => b.remove(); b.addEventListener('animationend', fim, { once: true }); setTimeout(fim, 260); }
   // popover de informação preso a um elemento do HUD (bem-estar, Mutirão)
-  info(ancora, html, ms = 5000) {
+  // aoClique(id, botão): um botão [data-i] dentro do popover (por exemplo "Abrir o Escritório")
+  info(ancora, html, ms = 5000, aoClique = null) {
     this.fecharInfo(); const a = typeof ancora === 'string' ? this.topo.querySelector(ancora) : ancora; if (!a) return;
     const p = el('div', 'cartao info-pop', html); this.raiz.appendChild(p); const r = a.getBoundingClientRect(); const w = p.offsetWidth;
     p.style.left = clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8) + 'px'; p.style.top = r.bottom + 10 + 'px';
-    this._info = p; this._infoT = setTimeout(() => this.fecharInfo(), ms); p.addEventListener('click', () => this.fecharInfo());
+    this._info = p; this._infoT = setTimeout(() => this.fecharInfo(), ms); p.addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); this.fecharInfo(); if (b && aoClique) aoClique(b.dataset.i, b); });
   }
   fecharInfo() { clearTimeout(this._infoT); if (this._info) { this._info.remove(); this._info = null; } }
   // ------------------------------------------------ trilho, Obras, Próximo e guia
