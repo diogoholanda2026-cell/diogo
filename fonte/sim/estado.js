@@ -347,6 +347,18 @@ export class Jogo {
     for (const [f, arr] of Object.entries(this.S.modulos)) for (const m of arr) { tot += MODULOS[f].max * 0.5; ok += m.nivel * 0.5; }
     return (ok / tot) * 100;
   }
+  // valuation: quanto a construção vale (calculado na hora): etapas feitas e pavimentos a 150% do que custaram, prédios e
+  // ampliações pelo preço, 100 por morador e o caixa (créditos menos a dívida). S.valuationMax guarda o recorde.
+  valuation() {
+    const S = this.S; let obras = 0, modulos = 0, predios = 0;
+    for (const p of PROJETOS) for (const e of p.etapas) { if (this.etapa(p.id + '.' + e.id).estado !== 'feita') continue; let v = this.custoEtapa(p, e); for (const [k, q] of Object.entries(this.itensEtapa(p, e))) v += (ITENS[k]?.valor || 0) * q; obras += v; }
+    for (const arr of Object.values(S.modulos)) for (const m of arr) for (let n = 1; n <= m.nivel; n++) modulos += CUSTO_NIVEL[n] || 0;
+    for (const [id, P] of Object.entries(PREDIOS)) { const st = S.predios[id]; if (!st?.ok) continue; predios += P.custo || 0; const n = P.tipo === 'usina' ? st.nSlots : P.tipo === 'oficina' ? st.nFila : 0; for (let k = 3; k < n; k++) predios += Math.round(300 * Math.pow(2.2, k - 3)); }
+    obras = Math.round(RECOMPENSA * obras); modulos = Math.round(RECOMPENSA * modulos); const moradores = this.pop * 100; const E = S.emprestimo; const caixa = Math.round(S.creditos - E.principal - E.juros);
+    const total = obras + modulos + predios + moradores + caixa; if (total > S.valuationMax) S.valuationMax = total;
+    return { total, partes: { obras, modulos, predios, moradores, caixa }, max: S.valuationMax };
+  }
+  _valuation() { this.emit('valuation', this.valuation()); }
   _efeitos() { return efeitos(this.S); }
   _derivar() { this.ef = this._efeitos(); this.pop = this.populacao(); this.serv = this.servicos(); this.bem = this.bemEstar(); }
   // ---------------- relógio ----------------
@@ -580,14 +592,14 @@ export class Jogo {
   }
   construirPredio(id) {
     const p = PREDIOS[id], st = this.S.predios[id]; if (st.ok) return 'ja'; if (p.nivel > this.S.nivel) return 'nivel'; if (!this.predioLiberado(id)) return 'requer';
-    if (this.S.creditos < (p.custo || 0)) return 'creditos'; this.S.creditos -= p.custo || 0; st.ok = true; this._xp(20 + (p.custo || 0) / 50, 'predio'); this.emit('predio', { id }); this._verCapitulo(); return 'ok';
+    if (this.S.creditos < (p.custo || 0)) return 'creditos'; this.S.creditos -= p.custo || 0; st.ok = true; this._xp(20 + (p.custo || 0) / 50, 'predio'); this.emit('predio', { id }); this._valuation(); this._verCapitulo(); return 'ok';
   }
   vagasFila(id) { return this.S.predios[id].nFila + this.ef.fila; } // vagas da fila (as compradas e as das escolhas do Conselho)
   custoEspaco(id) { const st = this.S.predios[id]; const usina = PREDIOS[id].tipo === 'usina'; const n = usina ? st.nSlots - 1 : st.nFila - 1; return Math.round(300 * Math.pow(2.2, n - 2)); }
   ampliar(id) {
     const st = this.S.predios[id]; const usina = PREDIOS[id].tipo === 'usina'; const n = usina ? st.nSlots : st.nFila; if (n >= (usina ? USINA_MAX : FILA_MAX)) return 'max';
     const c = this.custoEspaco(id); if (this.S.creditos < c) return 'creditos'; this.S.creditos -= c;
-    if (usina) { st.nSlots++; st.slots.push(null); } else st.nFila++; this.emit('ampliar', { id }); return 'ok';
+    if (usina) { st.nSlots++; st.slots.push(null); } else st.nFila++; this.emit('ampliar', { id }); this._valuation(); return 'ok';
   }
   pedidoAlmox() { const k = 1 + Math.floor((this.S.almoxNivel - 1) / 2); return { estrado: k, etiqueta: k, cadeado: k }; }
   ampliarAlmox() { const req = this.pedidoAlmox(); for (const [k, n] of Object.entries(req)) if (!this.temItem(k, n)) return 'falta'; for (const [k, n] of Object.entries(req)) this.S.itens[k] -= n; this.S.almoxNivel++; this._xp(40, 'almox'); this.emit('almox', {}); return 'ok'; }
@@ -615,7 +627,7 @@ export class Jogo {
     const med = this.recompensa(st.pago ?? this.custoEtapa(p, e), entregue); st.estado = 'feita'; st.entregue = {}; delete st.pago; S.stats.obras++;
     S.creditos += med; S.aceleradores.obra++; S.aceleradores.producao++; // recompensa: 150% do que a etapa custou, mais 1 acelerador de obra e 1 de produção
     const xp = e.xp || Math.round(e.custo / 12 + Object.values(e.itens).reduce((a, b) => a + b, 0) * 12); this._xp(xp, 'etapa');
-    this._derivar(); this.emit('etapaFeita', { key, p, e, recompensa: med, aceleradores: { obra: 1, producao: 1 } });
+    this._derivar(); this._valuation(); this.emit('etapaFeita', { key, p, e, recompensa: med, aceleradores: { obra: 1, producao: 1 } });
     this.emit('aviso', { texto: `Recompensa da etapa: +${fmtN(med)} (150% do custo) e 2 aceleradores`, icone: 'creditos', creditos: med });
     const fala = FALAS_ETAPA[key]; if (fala) this.emit('fala', { quem: fala[0], texto: fala[1], atraso: 1600, etapa: key });
     if (key === 'reflorestar.e1') { let k = 1; for (const n of [1, 5]) { const f = EPILOGO[S.capEscolhas[n]]; if (f) this.emit('fala', { quem: f[0], texto: f[1], atraso: 1600 + 7000 * k++ }); } }
@@ -667,7 +679,7 @@ export class Jogo {
   aprovarModulo(f, i) {
     const m = this.S.modulos[f][i]; if (!m.obra || m.obra.estado !== 'pronta') return 'nada';
     const med = this.recompensa(m.obra.pago ?? CUSTO_NIVEL[m.obra.para], m.obra.itens); m.nivel = m.obra.para; m.obra = null; delete m.pedido; this.S.creditos += med;
-    this._xp(30 * m.nivel, 'modulo'); this._derivar(); this.emit('moduloFeito', { faixa: f, i, nivel: m.nivel, recompensa: med });
+    this._xp(30 * m.nivel, 'modulo'); this._derivar(); this._valuation(); this.emit('moduloFeito', { faixa: f, i, nivel: m.nivel, recompensa: med });
     this.emit('aviso', { texto: `Recompensa do pavimento: +${fmtN(med)} (150% do custo)`, icone: 'creditos', creditos: med });
     this._disposicao(DISP.modulo); this._pedidoModulos(); this._verCapitulo(); return 'ok';
   }
