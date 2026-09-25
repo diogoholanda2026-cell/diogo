@@ -61,12 +61,16 @@ function comAgua(mat) {
           aw = instanceMatrix * aw;
         #endif
         vAguaW = ( modelMatrix * aw ).xyz; }`);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vAguaW; uniform sampler2D tProf; uniform float aguaOn; uniform float aguaT; uniform vec4 aguaP; uniform vec3 raso; uniform vec3 fundo; uniform vec3 margem; uniform float turvo; uniform vec3 lodo; uniform float noite; float dqAgua = 1.0;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vAguaW; uniform sampler2D tProf; uniform float aguaOn; uniform float aguaT; uniform vec4 aguaP; uniform vec3 raso; uniform vec3 fundo; uniform vec3 margem; uniform float turvo; uniform vec3 lodo; uniform float noite; float dqAgua = 1.0;\nfloat hAgua( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }\nfloat nAgua( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( hAgua( i ), hAgua( i + vec2( 1, 0 ) ), f.x ), mix( hAgua( i + vec2( 0, 1 ) ), hAgua( i + vec2( 1, 1 ) ), f.x ), f.y ); }')
       .replace('#include <color_fragment>', `#include <color_fragment>
         float tvAgua = 0.0;
         if ( aguaOn > 0.5 ) { vec2 tp = texture2D( tProf, ( vAguaW.xz - aguaP.xy ) * aguaP.zw ).rg; float dq = vAguaW.y - ( tp.r * 0.5 - 0.45 ); tvAgua = turvo * tp.g; dqAgua = dq;
           diffuseColor.rgb = mix( mix( mix( raso, fundo, smoothstep( 0.0, 0.2, dq ) ), lodo, tvAgua ), margem, 0.35 * ( 1.0 - smoothstep( 0.0, 0.03, dq ) ) ); }`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix( roughnessFactor, 0.5, tvAgua );')
+      // brilhos do sol cintilando nas ondas (pontos que andam; o lago assoreado não brilha)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        { float cint = nAgua( vAguaW.xz * 6.0 + aguaT * vec2( 0.5, 0.25 ) ) * nAgua( vAguaW.xz * 9.5 - aguaT * vec2( 0.35, 0.55 ) );
+          reflectedLight.directSpecular *= ( 0.45 + 2.2 * smoothstep( 0.4, 0.78, cint ) ) * ( 1.0 - tvAgua ); }`)
       // reflexo das janelas acesas: traços quentes que tremulam na água, mais fortes perto das margens
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         if ( noite > 0.01 ) { // traços compridos na direção da câmera (vista padrão), tremulando devagar
@@ -125,9 +129,9 @@ export function makeMaterials() {
   M.bandaCinza = std({ color: 0xdcd8d0, roughness: 0.55 });
   M.caminhoTeto = std({ color: 0xe0d8c6, roughness: 0.8 });
   M.roof = comMacro(std({ color: 0xffffff, map: tex.roof(), normalMap: tex.roofNormal(), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.95 }));
-  M.planter = comMacro(std({ color: 0x4f8f3a, roughness: 0.95 }));
-  M.lawn = comMacro(std({ color: 0xa0d06c, map: tex.grass(), roughness: 0.95 }));
-  M.grassBright = comMacro(std({ color: 0xb8e684, map: tex.grass(), roughness: 0.95 }));
+  M.planter = comMacro(std({ color: 0x5a8a3a, roughness: 0.95 }));
+  M.lawn = comMacro(std({ color: 0xc2d890, map: tex.grass(), roughness: 0.95 }));
+  M.grassBright = comMacro(std({ color: 0xd4e89a, map: tex.grass(), roughness: 0.95 }));
   M.field = std({ color: 0xffffff, map: tex.field(), roughness: 0.9 });
   M.track = std({ color: 0xffffff, map: tex.track(), roughness: 0.9 });
   M.pavers = std({ color: 0xffffff, map: tex.pavers(), roughness: 0.86 });

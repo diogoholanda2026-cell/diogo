@@ -125,7 +125,7 @@ function folhagem() {
 // luz envolvente só no difuso (a sombra própria da copa fica macia, sem fundo preto); o especular
 // continua com o dotNL original (evita faíscas na silhueta)
 const LUZ_FOLHA = THREE.ShaderChunk.lights_physical_pars_fragment.replace('reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );',
-  'vec3 wIrr = saturate( ( dot( geometryNormal, directLight.direction ) + 0.5 ) / 1.5 ) * directLight.color; reflectedLight.directDiffuse += wIrr * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );');
+  'vec3 wIrr = saturate( ( dot( geometryNormal, directLight.direction ) + 0.3 ) / 1.3 ) * directLight.color; reflectedLight.directDiffuse += wIrr * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );');
 export function leafMaterial() {
   if (LEAF) return LEAF;
   LEAF = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.88, metalness: 0, envMapIntensity: 0.35 });
@@ -164,13 +164,13 @@ export function trunkMaterial() { if (!TRUNK) TRUNK = new THREE.MeshStandardMate
 // paletas de verde (instanceColor multiplica a cor de vértice)
 // (verdes vivos e variados, como no BuildIt)
 const VERDES = { // albedo linear
-  mata: [[0.058, 0.17, 0.034], [0.046, 0.145, 0.036], [0.08, 0.2, 0.04], [0.11, 0.195, 0.032], [0.052, 0.15, 0.04], [0.115, 0.215, 0.045], [0.07, 0.16, 0.024]],
-  jardim: [[0.1, 0.27, 0.05], [0.07, 0.22, 0.045], [0.13, 0.29, 0.06], [0.17, 0.28, 0.05]],
+  mata: [[0.076, 0.172, 0.034], [0.06, 0.148, 0.036], [0.104, 0.2, 0.038], [0.142, 0.195, 0.032], [0.07, 0.152, 0.038], [0.148, 0.215, 0.045], [0.092, 0.162, 0.026]],
+  jardim: [[0.12, 0.24, 0.045], [0.085, 0.2, 0.04], [0.15, 0.26, 0.055], [0.19, 0.25, 0.045]],
   outono: [[0.34, 0.16, 0.035], [0.4, 0.11, 0.035], [0.26, 0.21, 0.045]],
   savana: [[0.17, 0.21, 0.06], [0.21, 0.22, 0.07], [0.13, 0.19, 0.055]],
   conifera: [[0.03, 0.1, 0.05], [0.025, 0.085, 0.045], [0.04, 0.115, 0.06]],
 };
-const ORLA = [0.13, 0.21, 0.05];
+const ORLA = [0.15, 0.19, 0.045];
 
 // matriz e cor de cada árvore numa InstancedMesh (t.orla = distância até a clareira: orla mais clara e
 // oliva, miolo da mata mais escuro)

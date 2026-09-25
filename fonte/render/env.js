@@ -12,7 +12,8 @@ import * as THREE from 'three';
 import { setNight, AGUA } from './materials.js';
 import { HAO_U } from './hao.js';
 import { clamp } from '../core/util.js';
-import { amostrar, luzPrincipal, dirSol, dirLua, faseDe, I, N_PARAM } from './ciclo.js';
+import { amostrar, luzPrincipal, dirSol, dirLua, faseDe, I, N_PARAM, FRONTEIRAS } from './ciclo.js';
+import { tex } from './textures.js';
 
 const SKY_V = /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`;
 const SKY_F = /* glsl */`
@@ -56,7 +57,7 @@ const CICLOS = ['acelerado', 'relogio', 'dia'];
 const HORA_DIA = 11.5;                       // 'dia': sempre dia, com o sol alto à esquerda
 const HORA_INICIO = 10;                      // o jogo abre de manhã, com o dia claro
 // faixas do dia para os reflexos (as fronteiras são as dos quadros-chave): o céu dos reflexos é o do meio da faixa
-const FAIXAS = [4.4, 5.4, 6.5, 8, 16.5, 17.8, 18.8, 19.7];
+const FAIXAS = FRONTEIRAS;
 const faixaDe = (h) => { let k = 0; while (k < FAIXAS.length && h >= FAIXAS[k]) k++; return k % FAIXAS.length; }; // 0 = noite (19,7 → 4,4)
 const meioDaFaixa = (k) => { const a = FAIXAS[(k + FAIXAS.length - 1) % FAIXAS.length], b = FAIXAS[k % FAIXAS.length]; const l = ((b - a) % 24 + 24) % 24; return (a + l / 2) % 24; };
 
@@ -88,6 +89,8 @@ export class Environment {
     // cores atuais que outros módulos leem (nuvens dos arredores)
     this.cores = { nuvem: new THREE.Color(1, 1, 1), nuvemSombra: new THREE.Color(0.7, 0.75, 0.85), hor: new THREE.Color(), zen: new THREE.Color() };
     this._prepEnv();
+    HAO_U.tNuvemSombra.value = tex.macro(); // ruído suave sem emenda (o da macro-variação) para as sombras das nuvens
+    this.U = HAO_U;                             // uniformes compartilhados com os materiais (oclusão, tom do céu, recorte, nuvens): para ajuste
     this._forcar = true;
   }
   // ---------------------------------------------------------------- API do ciclo
@@ -159,6 +162,7 @@ export class Environment {
     P.exposure = V[I.exposure]; P.saturation = V[I.saturation]; P.contrast = V[I.contrast]; P.vignette = V[I.vignette]; P.threshold = V[I.threshold]; P.bloomStrength = V[I.bloomStrength];
     P.wb.set(V[I.wb], V[I.wb + 1], V[I.wb + 2]); P.shadowTint.set(V[I.shadowTint], V[I.shadowTint + 1], V[I.shadowTint + 2]); P.highTint.set(V[I.highTint], V[I.highTint + 1], V[I.highTint + 2]);
     HAO_U.haoK.value = V[I.hao];
+    HAO_U.rimCor.value.setRGB(V[I.rim] * V[I.rimK], V[I.rim + 1] * V[I.rimK], V[I.rim + 2] * V[I.rimK]); HAO_U.nuvemK.value = V[I.nuvK];
     const a = this.ajuste; // ajustes de teste pela URL (multiplicam os da hora)
     if (a) { P.exposure *= a.exp ?? 1; P.saturation *= a.sat ?? 1; P.contrast *= a.con ?? 1; P.bloomStrength *= a.bloom ?? 1; P.vignette *= a.vin ?? 1; this.key.intensity *= a.key ?? 1; this.hemi.intensity *= a.hemi ?? 1; e.scene.environmentIntensity *= a.envi ?? 1; }
     // luzes da cidade: janelas acendem prédio a prédio, postes e passarelas
@@ -177,6 +181,8 @@ export class Environment {
   update(t, target, viewSize) {
     const agora = performance.now();
     this.skyMat.uniforms.t.value = t / 1000;
+    // sombras das nuvens rolando com o vento (~1,2 unidade por segundo, para leste-nordeste)
+    const NP = HAO_U.nuvemP.value; NP.x = (t / 1000) * 0.017 % 1; NP.y = (t / 1000) * 0.0065 % 1;
     if (!this._pausa) {
       if (this._ciclo === 'acelerado') this._hora = (((this._ref.h + (Date.now() - this._ref.t) / 60000) % 24) + 24) % 24;
       else if (this._ciclo === 'relogio') this._hora = this._relogio();

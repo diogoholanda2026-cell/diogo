@@ -3,15 +3,18 @@
 // com força pela hora (haoK: mais suave de dia). O mapa só é refeito quando a construção muda, nunca pela
 // câmera. O canal G guarda a cobertura (1 onde há obra). A oclusão só vale dentro da planta, onde há
 // cobertura e acima do fundo do poço do acelerador. Material com userData.semHAO nem recebe o gancho.
-// No mesmo gancho vai o tom contínuo do céu sobre os reflexos (ceuTint): o mapa de reflexos só é refeito
-// quando o dia muda de faixa, e o tom acompanha a hora entre uma faixa e outra.
+// No mesmo gancho vão: o tom contínuo do céu sobre os reflexos (ceuTint: o mapa de reflexos só é refeito
+// quando o dia muda de faixa, e o tom acompanha a hora entre uma faixa e outra); a luz de recorte suave nos
+// contornos de paredes e copas (rimCor, pelo ângulo de visão); e as sombras das nuvens que passam devagar
+// (uma textura de ruído rolando que multiplica a luz direta: nuvemK, nuvemP).
 import * as THREE from 'three';
 import { MESA } from '../data/planta.js';
 
 export const CAMADA_HAO = 5;                 // só o que tem esta camada entra no mapa de alturas
 const X0 = -34, X1 = 34, Z0 = -22, Z1 = 22;  // a planta + 2 unidades
 export const HAO_U = { tHAO: { value: null }, haoOn: { value: 0 }, haoP: { value: new THREE.Vector4(X0, Z1, 1 / (X1 - X0), -1 / (Z1 - Z0)) }, // v cresce para -z (câmera com up -z)
-  haoK: { value: 1 }, ceuTint: { value: new THREE.Vector3(1, 1, 1) } };
+  haoK: { value: 1 }, ceuTint: { value: new THREE.Vector3(1, 1, 1) }, rimCor: { value: new THREE.Color(0, 0, 0) },
+  tNuvemSombra: { value: null }, nuvemK: { value: 0 }, nuvemP: { value: new THREE.Vector3(0, 0, 1 / 70) } }; // nuvemP: deslocamento (x, z) e escala
 export const haoCfg = { taps: 8 };           // amostras da sombra: entram na chave do programa
 const corrigidos = new WeakSet();            // (userData é copiado por clone(), o gancho não)
 
@@ -22,8 +25,17 @@ const VS_POS = /* glsl */`
       hw = instanceMatrix * hw;
     #endif
     vHaoW = ( modelMatrix * hw ).xyz; }`;
-const FS_DECL = 'varying vec3 vHaoW; uniform sampler2D tHAO; uniform vec4 haoP; uniform float haoOn; uniform float haoK; uniform vec3 ceuTint;';
+// sombra das nuvens: ruído suave (o mesmo da macro-variação) rolando com o vento, só na luz direta
+const NUV_DECL = ' uniform sampler2D tNuvemSombra; uniform float nuvemK; uniform vec3 nuvemP;';
+const FS_DECL = 'varying vec3 vHaoW; uniform sampler2D tHAO; uniform vec4 haoP; uniform float haoOn; uniform float haoK; uniform vec3 ceuTint; uniform vec3 rimCor;' + NUV_DECL;
+const nuvem = (w) => /* glsl */`
+  if ( nuvemK > 0.001 ) { float nuvS = 1.0 - nuvemK * smoothstep( 0.52, 0.74, texture2D( tNuvemSombra, ${w}.xz * nuvemP.z + nuvemP.xy ).r );
+    reflectedLight.directDiffuse *= nuvS; reflectedLight.directSpecular *= nuvS; }`;
 const FS_AO = /* glsl */`
+  ${nuvem('vHaoW')}
+  { // luz de recorte: contorno de paredes e copas (não do chão), tingido pelo céu da hora
+    vec3 nW = ( vec4( normal, 0.0 ) * viewMatrix ).xyz; float fr = 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) );
+    reflectedLight.indirectDiffuse += rimCor * ( fr * fr * fr ) * ( 1.0 - smoothstep( 0.5, 0.85, nW.y ) ) * ( diffuseColor.rgb * 0.8 + 0.08 ); }
   if ( haoOn > 0.5 ) {
     vec2 hc = texture2D( tHAO, ( vHaoW.xz - haoP.xy ) * haoP.zw ).rg; // R altura·cobertura, G cobertura
     vec2 dm = abs( vHaoW.xz - vec2( ${((MESA.x0 + MESA.x1) / 2).toFixed(2)}, ${((MESA.z0 + MESA.z1) / 2).toFixed(2)} ) ) - vec2( ${((MESA.x1 - MESA.x0) / 2).toFixed(2)}, ${((MESA.z1 - MESA.z0) / 2).toFixed(2)} );
@@ -42,10 +54,12 @@ const FS_CEU = /* glsl */`
     radiance *= ceuTint;
   #endif`;
 
-// Só o tom do céu sobre os reflexos, para materiais fora do mapa de alturas (arredores): chamar no onBeforeCompile
-export function comTomDoCeu(sh) {
+// Só o tom do céu sobre os reflexos e a sombra das nuvens, para materiais fora do mapa de alturas (arredores):
+// chamar no onBeforeCompile; w = nome da varying com a posição em mundo
+export function comTomDoCeu(sh, w = null) {
   sh.uniforms.ceuTint = HAO_U.ceuTint;
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 ceuTint;').replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FS_CEU);
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 ceuTint;' + (w ? NUV_DECL : '')).replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FS_CEU);
+  if (w) { sh.uniforms.tNuvemSombra = HAO_U.tNuvemSombra; sh.uniforms.nuvemK = HAO_U.nuvemK; sh.uniforms.nuvemP = HAO_U.nuvemP; sh.fragmentShader = sh.fragmentShader.replace('#include <aomap_fragment>', '#include <aomap_fragment>' + nuvem(w)); }
 }
 
 // Encadeia o gancho no material (MeshStandard/Physical). Idempotente; a chave do programa passa a
@@ -63,7 +77,8 @@ export function haoPatch(mat) {
   mat.onBeforeCompile = function (sh, r) {
     if (prev) prev.call(this, sh, r);
     if (sh.uniforms.tHAO) return;
-    sh.uniforms.tHAO = HAO_U.tHAO; sh.uniforms.haoP = HAO_U.haoP; sh.uniforms.haoOn = HAO_U.haoOn; sh.uniforms.haoK = HAO_U.haoK; sh.uniforms.ceuTint = HAO_U.ceuTint;
+    sh.uniforms.tHAO = HAO_U.tHAO; sh.uniforms.haoP = HAO_U.haoP; sh.uniforms.haoOn = HAO_U.haoOn; sh.uniforms.haoK = HAO_U.haoK; sh.uniforms.ceuTint = HAO_U.ceuTint; sh.uniforms.rimCor = HAO_U.rimCor;
+    sh.uniforms.tNuvemSombra = HAO_U.tNuvemSombra; sh.uniforms.nuvemK = HAO_U.nuvemK; sh.uniforms.nuvemP = HAO_U.nuvemP;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + VS_DECL).replace('#include <project_vertex>', '#include <project_vertex>' + VS_POS);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FS_DECL).replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FS_CEU).replace('#include <aomap_fragment>', '#include <aomap_fragment>' + FS_AO);
   };

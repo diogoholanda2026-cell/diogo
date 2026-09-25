@@ -154,8 +154,8 @@ export const tex = {
   }, { linear: true }),
   // grama limpa e viva (pouco ruído: sem manchas de longe)
   grass: () => canvasTex('grass', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [104, 162, 56], 12, 31, 2, 21);
-    for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(46,100,30,.16)' : 'rgba(196,236,140,.14)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
+    noiseRectP(g, w, [116, 138, 60], 12, 31, 2, 21);
+    for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(60,96,30,.16)' : 'rgba(214,230,150,.14)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
   }),
   // pasto degradado (antes da obra): capim seco amarelado, com manchas suaves
   pasto: () => canvasTex('pasto', 512, 512, (g, w, h) => {
@@ -163,7 +163,7 @@ export const tex = {
     for (let i = 0; i < 70; i++) { const x = hash(i, 1, 58) * w, y = hash(i, 2, 58) * h, r = 6 + hash(i, 3, 58) * 26; g.fillStyle = `rgba(${176 + hash(i, 4, 58) * 20},${150 + hash(i, 5, 58) * 14},${92},0.22)`; envolve(w, h, x, y, r, (px, py) => { g.beginPath(); g.ellipse(px, py, r, r * 0.7, hash(i, 6, 58) * 3, 0, 7); g.fill(); }); }
     for (let i = 0; i < 1400; i++) { const x = hash(i, 7, 58) * w, y = hash(i, 8, 58) * h; g.fillStyle = hash(i, 9, 58) < 0.5 ? 'rgba(110,130,60,.22)' : 'rgba(210,190,120,.18)'; g.fillRect(x, y, 1 + hash(i, 10, 58) * 2, 2 + hash(i, 11, 58) * 3); }
   }),
-  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [58, 100, 42], 16, 35, 2, 13)),
+  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [66, 94, 40], 16, 35, 2, 13)),
   pavers: () => canvasTex('pavers', 512, 512, (g, w, h) => {
     noiseRectP(g, w, [228, 222, 208], 8, 51, 2, 26);
     g.strokeStyle = 'rgba(130,110,90,.14)'; g.lineWidth = 1.2;

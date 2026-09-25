@@ -58,7 +58,7 @@ function eixos(a0, a1) { // posições de a0 (borda negativa da planta) para for
   const miolo = []; const n = Math.round((a1 - a0) / 2); for (let i = 0; i <= n; i++) miolo.push(a0 + ((a1 - a0) * i) / n);
   return [...fora.map((q) => a0 - q).reverse(), ...miolo, ...fora.map((q) => a1 + q)];
 }
-const COR = { grama: [0.19, 0.42, 0.068], duna: [0.36, 0.52, 0.14], areia: [0.86, 0.72, 0.42], molhada: [0.62, 0.52, 0.33], mata: [0.07, 0.2, 0.04], rocha: [0.34, 0.34, 0.3], serra: [0.1, 0.24, 0.07] };
+const COR = { grama: [0.2, 0.3, 0.058], duna: [0.38, 0.45, 0.13], areia: [0.86, 0.72, 0.42], molhada: [0.62, 0.52, 0.33], mata: [0.07, 0.2, 0.04], rocha: [0.34, 0.34, 0.3], serra: [0.1, 0.24, 0.07] };
 function terreno() {
   const xs = eixos(MESA.x0, MESA.x1), zs = eixos(MESA.z0, MESA.z1); const nx = xs.length, nz = zs.length;
   const P = new Float32Array(nx * nz * 3), C = new Float32Array(nx * nz * 3), T = new Float32Array(nx * nz * 2);
@@ -92,7 +92,7 @@ function materialTerreno() {
   const copas = tex.copas(), copasN = tex.copasN();
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.tCopas = { value: copas }; sh.uniforms.tCopasN = { value: copasN }; comTomDoCeu(sh);
+    sh.uniforms.tCopas = { value: copas }; sh.uniforms.tCopasN = { value: copasN }; comTomDoCeu(sh, 'vTerW');
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aTipo; varying vec2 vTipo; varying vec3 vTerW;')
       .replace('#include <project_vertex>', '#include <project_vertex>\n  vTipo = aTipo; vTerW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
@@ -101,7 +101,7 @@ function materialTerreno() {
       .replace('#include <color_fragment>', `#include <color_fragment>
         if ( vTipo.x > 0.01 ) { // campos: grade girada, cor por retalho, fileiras em alguns e sebe escura nas bordas
           vec2 q = mat2( 0.94, -0.34, 0.34, 0.94 ) * vTerW.xz; vec2 tam = vec2( 21.0, 14.0 ); vec2 cel = floor( q / tam ); vec2 f = fract( q / tam );
-          float id = hT( cel ); vec3 cor = id < 0.3 ? vec3( 0.2, 0.46, 0.07 ) : id < 0.55 ? vec3( 0.3, 0.5, 0.08 ) : id < 0.8 ? vec3( 0.46, 0.5, 0.12 ) : vec3( 0.58, 0.46, 0.14 );
+          float id = hT( cel ); vec3 cor = id < 0.3 ? vec3( 0.2, 0.32, 0.06 ) : id < 0.55 ? vec3( 0.28, 0.36, 0.07 ) : id < 0.8 ? vec3( 0.42, 0.42, 0.1 ) : vec3( 0.55, 0.42, 0.12 );
           cor *= id > 0.5 ? 0.93 + 0.07 * step( 0.5, fract( q.x * 0.8 ) ) : 1.0;
           float borda = min( min( f.x, 1.0 - f.x ) * tam.x, min( f.y, 1.0 - f.y ) * tam.y );
           cor = mix( cor, vec3( 0.06, 0.16, 0.035 ), ( 1.0 - smoothstep( 0.3, 0.75, borda ) ) * 0.85 );
@@ -134,7 +134,7 @@ function mar() {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.28, metalness: 0.0, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.5 });
   const U = { marT: { value: 0 }, raso: { value: new THREE.Color(0x2ec4bc) }, meio: { value: new THREE.Color(0x1692ba) }, fundo: { value: new THREE.Color(0x0d5c9e) }, espuma: { value: new THREE.Color(0xffffff) } };
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U); comTomDoCeu(sh);
+    Object.assign(sh.uniforms, U); comTomDoCeu(sh, 'vMarW');
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vMarW;').replace('#include <project_vertex>', '#include <project_vertex>\n  vMarW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
       varying vec3 vMarW; uniform float marT; uniform vec3 raso; uniform vec3 meio; uniform vec3 fundo; uniform vec3 espuma;
@@ -151,7 +151,10 @@ function mar() {
         float espK = clamp( esp + faixa * 0.7, 0.0, 1.0 );
         diffuseColor.rgb = mix( agua, espuma, espK );`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix( roughnessFactor, 0.85, espK );')
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n  reflectedLight.directSpecular *= 0.22;') // brilho do sol na água sem ofuscar
+      // brilho do sol na água: cintila em pontos que andam com as ondas, sem virar um clarão
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        { float cint = nM( vMarW.xz * 2.7 + marT * vec2( 0.55, 0.2 ) ) * nM( vMarW.xz * 4.3 - marT * vec2( 0.3, 0.5 ) );
+          reflectedLight.directSpecular *= 0.16 + 2.6 * smoothstep( 0.42, 0.8, cint ); }`)
       .replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;', `vec3 mapN = texture2D( normalMap, vMarW.xz * 0.11 + marT * vec2( 0.012, 0.008 ) ).xyz * 2.0 - 1.0;
         vec3 mapN2 = texture2D( normalMap, vMarW.xz * 0.043 + marT * vec2( -0.006, 0.01 ) ).xyz * 2.0 - 1.0;
         mapN = normalize( vec3( ( mapN.xy + mapN2.xy ) * ( 1.0 - espK ), mapN.z * mapN2.z ) );`);
