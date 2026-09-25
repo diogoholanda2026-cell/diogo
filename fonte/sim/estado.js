@@ -472,7 +472,7 @@ export class Jogo {
     if (tomado + v > EMP.ano) return 'limiteAno'; if (E.principal + E.juros + v > EMP.max) return 'limiteDivida';
     const c = { id: S.seq++, ano, valor: v, saldo: v, ini: this.agora, fim: this.agora + EMP.prazoAnos * ANO_MS }; E.contratos.push(c); E.principal += v; S.creditos += v; S.stats.emprestado += v; this._podar();
     this.emit('emprestimo', { tipo: 'tomou', valor: v, principal: E.principal, juros: E.juros, contrato: { ...c } });
-    this.emit('aviso', { texto: `Empréstimo de ${fmtN(v)} créditos: ${Math.round(EMP.taxa * 100)}% ao ano, ${EMP.prazoAnos} anos`, icone: 'creditos', creditos: v }); return 'ok';
+    this.emit('aviso', { texto: `Empréstimo de ${fmtN(v)} créditos: ${Math.round(EMP.taxa * 100)}% ao ano, ${EMP.prazoAnos} anos`, icone: 'creditos' }); return 'ok'; // sem 'creditos': as moedas voam do botão da interface
   }
   pagarJuros() { // paga os juros devidos (o que der, se não houver créditos para tudo)
     const S = this.S, E = S.emprestimo; const dev = Math.ceil(E.juros); if (dev < 1) return 'nada'; if (S.creditos < 1) return 'creditos';
