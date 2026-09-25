@@ -213,9 +213,9 @@ export const tex = {
   }, { aniso: 8 }),
   canopyGrid: () => canvasTex('canopy', 512, 512, (g, w, h) => {
     g.clearRect(0, 0, w, h);
-    const n = 12; g.strokeStyle = 'rgba(232,210,170,1)'; g.lineWidth = 5;
+    const n = 12; g.strokeStyle = 'rgba(228,198,150,1)'; g.lineWidth = 5; // madeira clara do dossel
     for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo((i * w) / n, 0); g.lineTo((i * w) / n, h); g.stroke(); g.beginPath(); g.moveTo(0, (i * h) / n); g.lineTo(w, (i * h) / n); g.stroke(); }
-    g.lineWidth = 2; g.strokeStyle = 'rgba(210,180,130,.9)'; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (i * w) / n, y = (j * h) / n, s = w / n; g.beginPath(); g.moveTo(x, y + s / 2); g.lineTo(x + s, y + s / 2); g.moveTo(x + s / 2, y); g.lineTo(x + s / 2, y + s); g.stroke(); }
+    g.lineWidth = 2; g.strokeStyle = 'rgba(206,170,118,.9)'; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (i * w) / n, y = (j * h) / n, s = w / n; g.beginPath(); g.moveTo(x, y + s / 2); g.lineTo(x + s, y + s / 2); g.moveTo(x + s / 2, y); g.lineTo(x + s / 2, y + s); g.stroke(); }
   }, { aniso: 8 }),
   mesh: () => canvasTex('mesh', 128, 128, (g, w, h) => {
     g.clearRect(0, 0, w, h); g.strokeStyle = 'rgba(235,238,240,.95)'; g.lineWidth = 2;

@@ -132,7 +132,8 @@ export function makeMaterials() {
   M.planter = comMacro(std({ color: 0x5a8a3a, roughness: 0.95 }));
   M.lawn = comMacro(std({ color: 0xc2d890, map: tex.grass(), roughness: 0.95 }));
   M.grassBright = comMacro(std({ color: 0xd4e89a, map: tex.grass(), roughness: 0.95 }));
-  M.field = std({ color: 0xffffff, map: tex.field(), roughness: 0.9 });
+  // campo: vence a placa de terra da terraplenagem logo abaixo (que tem desvio de profundidade contra o terreno)
+  M.field = std({ color: 0xffffff, map: tex.field(), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   M.track = std({ color: 0xffffff, map: tex.track(), roughness: 0.9 });
   M.pavers = std({ color: 0xffffff, map: tex.pavers(), roughness: 0.86 });
   M.sand = std({ color: 0xffffff, map: tex.sand(), roughness: 1 });
