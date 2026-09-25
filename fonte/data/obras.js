@@ -19,7 +19,7 @@ export const PROJETOS = [
   ] },
   { id: 'sede', nome: 'Sede Administrativa da Holding Guarda-Chuva', cap: 1, icone: 'sede', faixa: 'sede', etapas: [
     E('e1', 'Terraplenagem e fundações', 'Topografia, corte mínimo do terreno e o anel de fundações.', 3, 600, { brita: 6, concreto: 2 }, { licencas: { estaca: 1 }, alvo: { modelo: 'sedePatio', parte: 'e1' }, modo: 'terra' }),
-    E('e2', 'Térreo e núcleo', 'O primeiro pavimento do anel. A Sede passa a receber os repasses (antes no Escritório).', 6, 1200, { concreto: 3, viga: 4 }, { nivel: 1 }),
+    E('e2', 'Térreo e núcleo', 'O primeiro pavimento do anel. A Sede passa a receber a renda dos moradores (antes no Escritório).', 6, 1200, { concreto: 3, viga: 4 }, { nivel: 1 }),
     E('e3', 'Anel de vidro solar', 'Dois pavimentos de vidro fotovoltaico: a fachada gera energia.', 20, 6000, { painel: 6, premoldado: 4, perfil: 4 }, { nivel: 3, servico: { energia: 3000 }, cap: 2 }),
     E('e4', 'Cobertura e pátio', 'Último pavimento, cobertura verde, orla de deque, piscina e árvores entre a Sede e o lago.', 30, 10500, { duplo: 3, grama: 5, muda: 3 }, { nivel: 4, servico: { energia: 2500, agua: 1500 }, extra: { modelo: 'sedePatio', parte: 'e4' }, cap: 3 }),
   ] },
