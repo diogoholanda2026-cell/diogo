@@ -17,11 +17,14 @@ const LOCAL = {};
 const local = (k, make) => LOCAL[k] || (LOCAL[k] = make());
 const std = (o) => new THREE.MeshStandardMaterial(o);
 // vidro azul-esverdeado da cúpula (translúcido, com a água e a baleia visíveis por dentro)
-const vidroCupula = () => local('vidroCupula', () => std({ color: 0x9fd8e8, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.1 }));
+const vidroCupula = () => local('vidroCupula', () => std({ color: 0x86d0e0, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.0 }));
 // cerca e guarda-corpo de vidro quase invisíveis (só o reflexo)
-const vidroCerca = () => local('vidroCerca', () => std({ color: 0xe6f5fb, roughness: 0.05, metalness: 0.15, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.3 }));
-// água turquesa do aquário, mais transparente que a do materials.js (mesmo mapa de ondas)
-const aguaAquario = () => local('aguaAquario', () => { const b = M.waterDeep || M.pool || M.water; const m = b.clone(); m.color.set(0x38c2d6); m.transparent = true; m.opacity = 0.62; m.depthWrite = false; if (m.emissive) m.emissive.set(0x0c7a92); return m; });
+const vidroCerca = () => local('vidroCerca', () => std({ color: 0xe6f5fb, roughness: 0.05, metalness: 0.15, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.3 }));
+// água turquesa do aquário, mais transparente que a do materials.js (mesmo mapa de ondas), sobre um leito fundo
+const aguaAquario = () => local('aguaAquario', () => { const b = M.waterDeep || M.pool || M.water; const m = b.clone(); m.color.set(0x158aa2); m.transparent = true; m.opacity = 0.6; m.depthWrite = false; m.roughness = 0.14; m.envMapIntensity = 0.6; if (m.emissive) m.emissive.set(0x05485a); return m; });
+const leitoAquario = () => local('leitoAquario', () => std({ color: 0x0b5568, roughness: 0.9 }));
+// rocha clara de maquete (arenito bege) para a coroa do anfiteatro e a escarpa da Vila
+const rochaClara = () => local('rochaClara', () => { const m = M.rock.clone(); m.color.set(0xcdb898); return m; });
 export function rocha(x, z, s, seed = 1, y = null, mat = null) {
   const g = new THREE.DodecahedronGeometry(1, 1); const p = g.attributes.position; const R = rng(seed * 97 + 5);
   const k = new Map(); for (let i = 0; i < p.count; i++) { const key = p.getX(i).toFixed(3) + p.getY(i).toFixed(3) + p.getZ(i).toFixed(3); if (!k.has(key)) k.set(key, 0.75 + R() * 0.5); const f = k.get(key); p.setXYZ(i, p.getX(i) * f, Math.max(-0.2, p.getY(i)) * f * 0.8, p.getZ(i) * f); }
@@ -70,18 +73,32 @@ class Fitas {
 }
 // ---------------- Bioma Aquático de Conservação ----------------
 // Casca geodésica quase esférica: esfera unitária cortada na latitude -k (a parte de baixo curva para dentro,
-// como na foto), esticada em rx/rz no plano e hy na vertical, pousada no anel de concreto a y0.
-function geodome(rx, rz, hy, k, y0, detail = 4) {
+// como na foto), esticada em rx/rz no plano e hy na vertical, pousada no anel de concreto a y0. boca: abertura
+// na casca {ang, meia, yMax} (setor de ângulo ang ± meia, até a latitude yMax) por onde se vê o aquário e o
+// mezanino, como na foto; as barras da borda da boca saem à parte (aro mais grosso).
+function geodome(rx, rz, hy, k, y0, detail = 4, boca = null) {
   const ico = new THREE.IcosahedronGeometry(1, detail); const p = ico.attributes.position; const tri = []; const edges = new Map(); const fb = Math.sqrt(1 - k * k);
   const V = (i) => [p.getX(i), p.getY(i), p.getZ(i)];
   const tf = ([x, y, z]) => { const yy = Math.max(-k, y); const f = yy > y ? fb / (Math.hypot(x, z) || 1) : 1; return [x * f * rx, (yy + k) * hy + y0, z * f * rz]; };
+  const naBoca = (x, y, z) => { if (!boca || y > boca.yMax) return false; let d = Math.atan2(z * rz, x * rx) - boca.ang; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return Math.abs(d) < boca.meia; };
   for (let i = 0; i < p.count; i += 3) {
     const a = V(i), b = V(i + 1), c = V(i + 2); if (Math.max(a[1], b[1], c[1]) < -k + 0.002) continue;
+    const cx = (a[0] + b[0] + c[0]) / 3, cy = (a[1] + b[1] + c[1]) / 3, cz = (a[2] + b[2] + c[2]) / 3; if (naBoca(cx, cy, cz)) continue;
     const A2 = tf(a), B2 = tf(b), C2 = tf(c); tri.push(...A2, ...B2, ...C2);
-    for (const [u, v] of [[A2, B2], [B2, C2], [C2, A2]]) { const k1 = u.map((q) => q.toFixed(3)).join(), k2 = v.map((q) => q.toFixed(3)).join(); const key = k1 < k2 ? k1 + '|' + k2 : k2 + '|' + k1; if (!edges.has(key)) edges.set(key, [u, v]); }
+    for (const [u, v] of [[A2, B2], [B2, C2], [C2, A2]]) { const k1 = u.map((q) => q.toFixed(3)).join(), k2 = v.map((q) => q.toFixed(3)).join(); const key = k1 < k2 ? k1 + '|' + k2 : k2 + '|' + k1; const e = edges.get(key); if (e) e.n++; else edges.set(key, { u, v, n: 1 }); }
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(tri, 3)); g.computeVertexNormals();
-  return { glass: g, edges: [...edges.values()] };
+  const all = []; for (const { u, v } of edges.values()) all.push([u, v]);
+  // aro liso da boca: sobe pelo meridiano de um lado, cruza a latitude yMax e desce pelo outro (pontos na casca)
+  let aro = null;
+  if (boca) {
+    const pt = (ang, y) => { const ux = Math.cos(ang) / rx, uz = Math.sin(ang) / rz, nn = Math.hypot(ux, uz) || 1, r = Math.sqrt(Math.max(0, 1 - y * y)); return tf([(ux / nn) * r, y, (uz / nn) * r]); };
+    const a0 = boca.ang - boca.meia, a1 = boca.ang + boca.meia; aro = [];
+    for (let i = 0; i <= 10; i++) aro.push(pt(a0, -k + ((boca.yMax + k) * i) / 10));
+    for (let i = 1; i <= 16; i++) aro.push(pt(a0 + ((a1 - a0) * i) / 16, boca.yMax));
+    for (let i = 1; i <= 10; i++) aro.push(pt(a1, boca.yMax - ((boca.yMax + k) * i) / 10));
+  }
+  return { glass: g, edges: all, aro };
 }
 export function bioma() {
   const [cx, cz] = A.bioma.c; const r = A.bioma.r;
@@ -94,36 +111,42 @@ export function bioma() {
   P.e1.add(flatShape(ellShape(0, 0, bx + 0.45, bz + 0.45), M.whiteSmooth, 0.03));
   P.e1.add(ellWall(0, 0, bx + 0.04, bz + 0.04, 0, yA, M.cream, 0, TAU, 96));
   P.e1.add(ellFlat(0, 0, bx - 0.28, bz - 0.28, bx + 0.09, bz + 0.09, yA, M.whiteSmooth, 0, TAU, 96));
-  P.e1.add(flatShape(ellShape(0, 0, bx - 0.05, bz - 0.05), M.sand, 0.06));
-  const pedra = M.bandaCinza || M.concreto;
+  // leito do tanque em turquesa escuro (a lâmina d'água por cima lê como piscina funda), praia de areia na borda
+  P.e1.add(flatShape(ellShape(0, 0, bx - 0.05, bz - 0.05), M.sand, 0.06)); P.e1.add(flatShape(ellShape(0, 0, bx * 0.82, bz * 0.8), leitoAquario(), 0.07));
+  const pedra = M.concreto;
   for (let i = 0; i < 5; i++) { const a = hash(i, 1, 501) * 6.28, d = 0.25 + hash(i, 2, 501) * 0.5; P.e1.add(rocha(Math.cos(a) * bx * d, Math.sin(a) * bz * d, 0.2 + hash(i, 3, 501) * 0.2, 500 + i, 0.1, pedra)); }
-  for (const [u, v, sc] of [[-0.45, -0.25, 0.6], [0.35, 0.3, 0.5], [0.1, -0.55, 0.42]]) { const q = rocha(u * bx, v * bz, sc, 520 + ((u * 10) | 0), 0.08, pedra); q.scale.y = (1.9 - 0.08) / (sc * 0.95); P.e1.add(q); }
-  { // prédio de apoio: caixa branca de um pavimento com faixa de janelas escura, tangente ao anel na frente/direita
-    const ab = 0.95; const ap = new THREE.Group(); ap.position.set(Math.cos(ab) * (bx + 0.32), 0, Math.sin(ab) * (bz + 0.32)); ap.rotation.y = -(Math.PI / 2 + ab);
+  // ilhas: pilhas de três rochas claras que sobem do leito até furar a lâmina d'água (yW)
+  const yW = yA + 1.2;
+  for (const [u, v, sc] of [[-0.62, -0.42, 1.0], [0.55, 0.5, 0.85], [0.15, -0.72, 0.72]]) { [[0.08, 1], [yW * 0.48, 0.78], [yW - 0.2, 0.58]].forEach(([y, f], j) => { const q = rocha(u * bx + (j % 2) * 0.1, v * bz - (j % 2) * 0.08, sc * f, 520 + j * 3 + ((u * 10) | 0), y, pedra); q.scale.y *= 1.4; P.e1.add(q); }); }
+  const boca = { ang: 0.5, meia: 0.62, yMax: 0.3 }; // boca da casca na frente/direita (para a câmera da foto)
+  { // prédio de apoio: caixa branca de um pavimento com faixa de janelas escura, tangente ao anel ao lado da boca
+    const ab = 1.2; const ap = new THREE.Group(); ap.position.set(Math.cos(ab) * (bx + 0.32), 0, Math.sin(ab) * (bz + 0.32)); ap.rotation.y = -(Math.PI / 2 + ab);
     const corpo = mesh(new THREE.BoxGeometry(1.0, 0.55, 0.6), M.white); corpo.position.y = 0.275; ap.add(corpo);
     const tampa = mesh(new THREE.BoxGeometry(1.06, 0.035, 0.66), M.whiteSmooth); tampa.position.y = 0.56; ap.add(tampa);
     for (const [x, z, w, d] of [[0, -0.306, 0.8, 0.012], [0.506, 0, 0.012, 0.42], [-0.506, 0, 0.012, 0.42]]) { const j = mesh(new THREE.BoxGeometry(w, 0.14, d), M.dark, false); j.position.set(x, 0.3, z); ap.add(j); }
     P.e1.add(ap);
   }
-  // e2: estrutura geodésica (barras brancas) com a passarela em espiral suspensa por dentro
-  const d = geodome(rx, rz, hy, k, yA, 4); P.e2 = new THREE.Group();
-  P.e2.add(beams(d.edges, 0.02, M.whiteSmooth, 4));
+  // e2: estrutura geodésica (barras brancas, aro mais grosso na boca) com o mezanino em espiral por dentro
+  const d = geodome(rx, rz, hy, k, yA, 6, boca); P.e2 = new THREE.Group();
+  P.e2.add(beams(d.edges, 0.014, M.whiteSmooth, 4));
+  if (d.aro) { const cur = new THREE.CatmullRomCurve3(d.aro.map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, 'catmullrom', 0.3); P.e2.add(mesh(new THREE.TubeGeometry(cur, 72, 0.045, 6, false), M.whiteSmooth)); }
   P.e2.add(ellWall(0, 0, bx + 0.02, bz + 0.02, yA, 0.1, M.steelDark, 0, TAU, 96));
-  { // mezanino em espiral: 1,5 volta de deque branco (0,25) por dentro da casca, com guarda-corpo e escoras até as barras
-    const N = 120, w = 0.25, th = 0.05, y0 = yA + 1.75, y1 = yA + 3.1, a0 = Math.PI * 1.15; const Ot = [], It = [], Ob = [], Ib = [], rad = [];
-    for (let j = 0; j <= N; j++) { const t = j / N; const a = a0 + t * 1.5 * TAU, y = y0 + (y1 - y0) * t; const f = fCasca(y) * 0.9; const c = Math.cos(a), s = Math.sin(a); rad.push([c, s, f, y]);
+  { // mezanino em espiral: 1,25 volta de deque branco (0,4) por dentro da casca, começando baixo na boca e subindo
+    // até meia altura, com guarda-corpo e escoras até as barras
+    const N = 120, w = 0.4, th = 0.06, y0 = yA + 1.35, y1 = yA + 2.6, a0 = boca.ang - 0.75; const Ot = [], It = [], Ob = [], Ib = [], rad = [];
+    for (let j = 0; j <= N; j++) { const t = j / N; const a = a0 + t * 1.25 * TAU, y = y0 + (y1 - y0) * t; const f = fCasca(y) * 0.92; const c = Math.cos(a), s = Math.sin(a); rad.push([c, s, f, y]);
       Ot.push([c * f * rx, y, s * f * rz]); It.push([c * (f * rx - w), y, s * (f * rz - w)]); Ob.push([c * f * rx, y - th, s * f * rz]); Ib.push([c * (f * rx - w), y - th, s * (f * rz - w)]); }
     const F = new Fitas(); F.strip(It, Ot, () => [0, 1, 0]); F.strip(Ob, Ib, () => [0, -1, 0]); F.strip(Ot, Ob, (j) => [rad[j][0], 0, rad[j][1]]); F.strip(Ib, It, (j) => [-rad[j][0], 0, -rad[j][1]]);
     P.e2.add(mesh(F.geo(), M.whiteSmooth));
-    const posts = [], esc = []; for (let j = 0; j <= N; j += 6) { const [c, s, f, y] = rad[j]; posts.push([Ot[j], [Ot[j][0], y + 0.3, Ot[j][2]]]); const fs = fCasca(y + 0.12); esc.push([Ot[j], [c * fs * rx, y + 0.12, s * fs * rz]]); }
+    const posts = [], esc = []; for (let j = 0; j <= N; j += 5) { const [c, s, f, y] = rad[j]; posts.push([It[j], [It[j][0], y + 0.3, It[j][2]]]); const fs = fCasca(y + 0.15); esc.push([Ot[j], [c * fs * rx, y + 0.15, s * fs * rz]]); }
     P.e2.add(beams(posts, 0.012, M.whiteSmooth, 4)); P.e2.add(beams(esc, 0.012, M.whiteSmooth, 4));
-    const cur = new THREE.CatmullRomCurve3(Ot.filter((_, j) => j % 2 === 0).map(([x, y, z]) => new THREE.Vector3(x, y + 0.32, z)));
-    P.e2.add(mesh(new THREE.TubeGeometry(cur, 100, 0.014, 5, false), M.whiteSmooth));
+    const cur = new THREE.CatmullRomCurve3(It.filter((_, j) => j % 2 === 0).map(([x, y, z]) => new THREE.Vector3(x, y + 0.32, z)));
+    P.e2.add(mesh(new THREE.TubeGeometry(cur, 100, 0.016, 5, false), M.whiteSmooth));
   }
   // e3: painéis de vidro azul-esverdeado
   P.e3 = new THREE.Group(); const gl = mesh(d.glass, vidroCupula(), false); gl.renderOrder = 4; P.e3.add(gl); P.e3.userData.semHAO = true;
-  // e4: aquário vivo — água turquesa translúcida até meia casca acompanhando a curva, baleia, arraias e cardume
-  P.e4 = new THREE.Group(); const yW = yA + 1.62;
+  // e4: aquário vivo — água turquesa translúcida acompanhando a curva da casca, baleia branca, arraias e cardume
+  P.e4 = new THREE.Group();
   const wg = new THREE.CylinderGeometry(fCasca(yW) * 0.985, fb * 0.99, yW - 0.03, 48, 1, false); wg.scale(rx, 1, rz); wg.translate(0, (yW + 0.03) / 2, 0);
   const water = mesh(wg, aguaAquario(), false); water.renderOrder = 2; P.e4.add(water);
   const faunaW = new THREE.Group(); P.e4.add(faunaW);
@@ -131,11 +154,11 @@ export function bioma() {
   faunaW.add(bal, ar, px); P.e4.userData.fauna = { bal, ar, px, rx, rz };
   // objetos reaproveitados a cada quadro (nada é alocado no laço)
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), p = new THREE.Vector3(), s = new THREE.Vector3();
-  const bxw = bx * 0.55, bzw = bz * 0.5;
+  const bxw = bx * 0.42, bzw = bz * 0.4;
   const inner = { update(t) {
     const T = t * 0.00012 * 6.28; const ct = Math.cos(T), st = Math.sin(T);
-    // baleia: rumo pela tangente da elipse e leve inclinação na curva
-    e.set(0.12, Math.atan2(-bzw * ct, -bxw * st), Math.sin(t * 0.0008) * 0.05); q.setFromEuler(e); p.set(ct * bxw, 1.1, st * bzw); s.setScalar(1.3); bal.setMatrixAt(0, m4.compose(p, q, s)); bal.instanceMatrix.needsUpdate = true;
+    // baleia branca perto da superfície (visível pela casca, como na foto): rumo pela tangente da elipse e leve inclinação na curva
+    e.set(0.12, Math.atan2(-bzw * ct, -bxw * st), Math.sin(t * 0.0008) * 0.05); q.setFromEuler(e); p.set(ct * bxw, yW - 0.32, st * bzw); s.setScalar(1.6); bal.setMatrixAt(0, m4.compose(p, q, s)); bal.instanceMatrix.needsUpdate = true;
     e.set(0, 0, 0);
     for (let i = 0; i < 3; i++) { const u = t * 0.00012 * 1.6 + i * 2.1; e.y = -u * 6.28 - Math.PI / 2; q.setFromEuler(e); p.set(Math.cos(u * 6.28) * bx * 0.35, 0.3 + i * 0.12, Math.sin(u * 6.28) * bz * 0.35); s.setScalar(0.7); ar.setMatrixAt(i, m4.compose(p, q, s)); } ar.instanceMatrix.needsUpdate = true;
     for (let i = 0; i < 40; i++) { const u = t * 0.00012 * 3 + (i % 8) * 0.012 + ((i / 8) | 0) * 0.2; const rr = 0.25 + ((i * 7) % 5) * 0.08; e.y = -u * 6.28 - Math.PI / 2; q.setFromEuler(e); p.set(Math.cos(u * 6.28) * bx * rr + ((i * 13) % 7) * 0.03, 0.45 + ((i * 11) % 6) * 0.22, Math.sin(u * 6.28) * bz * rr); s.setScalar(0.8); px.setMatrixAt(i, m4.compose(p, q, s)); } px.instanceMatrix.needsUpdate = true;
@@ -161,11 +184,11 @@ export function anfiteatro() {
   const RA = A.anfiteatro.r; const N = 10, dr = (RA - 1.1) / N, dh = 0.09;
   for (let k = 0; k < N; k++) { const r0 = 1.1 + k * dr; P.e1.add(sector(r0, RA, a0, a1, dh, k * dh, k % 2 ? M.cream : M.concreto)); P.e1.add(sector(r0 + 0.025, r0 + 0.08, a0, a1, 0.035, (k + 1) * dh, M.wood)); }
   P.e1.add(flatShape(ellShape(0, 0, 1.1, 1.1), M.pavers, 0.02));
-  { // coroa de rocha: um aro extrudado com o topo e a borda de fora sacudidos por ruído, mais pedras nas pontas
-    const rim = sector(RA + 0.01, RA + 0.5, a0 - 0.05, a1 + 0.05, 0.34, N * dh - 0.12, M.rock); const p = rim.geometry.attributes.position; const yT = N * dh - 0.12 + 0.34;
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const hx = Math.round(x * 9), hz = Math.round(z * 9); const rr = Math.hypot(x, z); let f = 1, yy = y; if (rr > RA + 0.45) f = 1 + (hash(hx, hz, 21) - 0.5) * 0.24; if (y > yT - 0.01) yy = y + (hash(hx, hz, 22) - 0.5) * 0.22; p.setXYZ(i, x * f, yy, z * f); }
+  { // coroa de rocha clara: um aro baixo extrudado com o topo e a borda de fora sacudidos por ruído, mais pedras nas pontas
+    const rim = sector(RA + 0.01, RA + 0.3, a0 - 0.05, a1 + 0.05, 0.2, N * dh - 0.1, rochaClara()); const p = rim.geometry.attributes.position; const yT = N * dh - 0.1 + 0.2;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const hx = Math.round(x * 9), hz = Math.round(z * 9); const rr = Math.hypot(x, z); let f = 1, yy = y; if (rr > RA + 0.25) f = 1 + (hash(hx, hz, 21) - 0.5) * 0.2; if (y > yT - 0.01) yy = y + (hash(hx, hz, 22) - 0.5) * 0.14; p.setXYZ(i, x * f, yy, z * f); }
     rim.geometry.computeVertexNormals(); rim.geometry.computeBoundingSphere(); P.e1.add(rim);
-    for (const [a, sc, sd] of [[a0 - 0.02, 0.42, 31], [a1 + 0.02, 0.38, 32], [Math.PI, 0.45, 33], [Math.PI * 0.72, 0.3, 34], [Math.PI * 1.3, 0.34, 35]]) P.e1.add(rocha(Math.cos(a) * (RA + 0.35), Math.sin(a) * (RA + 0.35), sc, sd, N * dh - 0.05));
+    for (const [a, sc, sd] of [[a0 - 0.02, 0.36, 31], [a1 + 0.02, 0.32, 32], [Math.PI, 0.36, 33], [Math.PI * 0.72, 0.26, 34], [Math.PI * 1.3, 0.28, 35]]) P.e1.add(rocha(Math.cos(a) * (RA + 0.28), Math.sin(a) * (RA + 0.28), sc, sd, N * dh - 0.05, rochaClara()));
   }
   P.e2 = new THREE.Group(); // palco de madeira, fundo curvo baixo e iluminação
   const stage = sector(0, 0.85, -Math.PI * 0.45, Math.PI * 0.45, 0.12, 0, M.woodLight); stage.position.x = 0.4; P.e2.add(stage);
@@ -181,17 +204,19 @@ export function anfiteatro() {
 export class CasasVila {
   constructor() {
     const v = A.vila; this.group = new THREE.Group(); this.group.name = 'casas'; this.id = 'casas'; this.group.position.set(v.c[0], 0, v.c[1]); this.group.rotation.y = v.rot ?? -0.32;
-    const pos = [[-1.28, -0.5], [-0.02, -0.55], [1.24, -0.48], [-1.2, 0.5], [0.06, 0.55], [1.3, 0.46]];
-    this.mods = pos.map(([x, z], i) => ({ i, x, z, nivel: 0, g: null, w: 1.12 + hash(i, 1, 71) * 0.14, d: 0.92 + hash(i, 2, 71) * 0.1, lado: i % 2 ? 1 : -1, frente: i < 3 ? -1 : 1, escura: true }));
+    const pos = [[-1.12, -0.46], [-0.02, -0.5], [1.08, -0.44], [-1.06, 0.46], [0.04, 0.5], [1.14, 0.42]];
+    this.mods = pos.map(([x, z], i) => ({ i, x, z, nivel: 0, g: null, w: 1.02 + hash(i, 1, 71) * 0.12, d: 0.86 + hash(i, 2, 71) * 0.08, lado: i % 2 ? 1 : -1, frente: i < 3 ? -1 : 1, escura: true }));
     this.max = 3;
   }
-  // caixa do andar f (extensões x0, x1, z0, z1 relativas ao centro do módulo)
+  // caixa do andar f (extensões x0, x1, z0, z1 relativas ao centro do módulo): o 1º andar desliza para o lado
+  // (balanço de 0,25, terraço do outro lado), o 2º desliza para a frente ou para trás
   _caixa(m, f) {
-    const { w, d, lado, frente } = m; const T = 0.42, B = 0.25;
+    const { w, d, lado, frente } = m; const T = 0.32, B = 0.25;
     if (f === 0) return [-w / 2, w / 2, -d / 2, d / 2];
-    if (f === 1) return lado > 0 ? [-w / 2 + T, w / 2 + B, -d / 2, d / 2] : [-w / 2 - B, w / 2 - T, -d / 2, d / 2];
-    const x = lado > 0 ? [-w / 2 + T + 0.05, w / 2 - 0.12] : [-w / 2 + 0.12, w / 2 - T - 0.05];
-    return frente > 0 ? [x[0], x[1], -d / 2 + 0.32, d / 2 + B] : [x[0], x[1], -d / 2 - B, d / 2 - 0.32];
+    const x = lado > 0 ? [-w / 2 + T, w / 2 + B] : [-w / 2 - B, w / 2 - T];
+    if (f === 1) return [x[0], x[1], -d / 2, d / 2];
+    const x2 = lado > 0 ? [x[0] + 0.04, x[1] - 0.14] : [x[0] + 0.14, x[1] - 0.04];
+    return frente > 0 ? [x2[0], x2[1], -d / 2 + T, d / 2 + B] : [x2[0], x2[1], -d / 2 - B, d / 2 - T];
   }
   _casa(m, n) {
     const g = new THREE.Group(); const fh = 0.44; const jan = M.dark;
@@ -204,10 +229,10 @@ export class CasasVila {
       for (let j = 0; j < jx; j++) { add(new THREE.BoxGeometry(0.12, 0.08, 0.012), jan, ox + j * 0.22, yb + 0.25, m.z + z0 - 0.006, false); add(new THREE.BoxGeometry(0.12, 0.08, 0.012), jan, ox + j * 0.22, yb + 0.25, m.z + z1 + 0.006, false); }
       for (let j = 0; j < jz; j++) { add(new THREE.BoxGeometry(0.012, 0.08, 0.12), jan, m.x + x0 - 0.006, yb + 0.25, oz + j * 0.22, false); add(new THREE.BoxGeometry(0.012, 0.08, 0.12), jan, m.x + x1 + 0.006, yb + 0.25, oz + j * 0.22, false); }
       add(new THREE.BoxGeometry(bw + 0.04, 0.035, bd + 0.04), f === n - 1 ? M.whiteSmooth : M.fascia, mx, yb + fh, mz);
-      // terraço: jardim pequeno na parte da laje que a caixa de cima deixa livre (ou num canto do topo)
-      if (f < n - 1) { const [nx0, nx1, nz0, nz1] = this._caixa(m, f + 1); const livre = f === 0 ? (m.lado > 0 ? [x0 + 0.06, nx0 - 0.06] : [nx1 + 0.06, x1 - 0.06]) : (m.lado > 0 ? [nx1 + 0.06, x1 - 0.06] : [x0 + 0.06, nx0 - 0.06]); const zl = f === 0 ? [z0 + 0.12, z1 - 0.12] : (m.frente > 0 ? [z0 + 0.06, nz0 - 0.06] : [nz1 + 0.06, z1 - 0.06]);
-        if (livre[1] - livre[0] > 0.12 && zl[1] - zl[0] > 0.12) add(new THREE.BoxGeometry(livre[1] - livre[0], 0.025, zl[1] - zl[0]), M.roof, m.x + (livre[0] + livre[1]) / 2, yb + fh + 0.03, m.z + (zl[0] + zl[1]) / 2, false); }
-      else add(new THREE.BoxGeometry(Math.min(0.4, bw * 0.45), 0.025, Math.min(0.32, bd * 0.45)), M.roof, mx + (m.lado > 0 ? -1 : 1) * bw * 0.22, yb + fh + 0.03, mz + m.frente * bd * 0.2, false);
+      // terraços brancos; jardim pequeno só no terraço do térreo dos módulos pares e no canto do topo do 1 e do 4
+      if (f === 0 && n > 1 && m.i % 2 === 0) { const [nx0, nx1] = this._caixa(m, 1); const livre = m.lado > 0 ? [x0 + 0.06, nx0 - 0.05] : [nx1 + 0.05, x1 - 0.06];
+        if (livre[1] - livre[0] > 0.1) add(new THREE.BoxGeometry(livre[1] - livre[0], 0.025, bd * 0.5), M.roof, m.x + (livre[0] + livre[1]) / 2, yb + fh + 0.03, mz, false); }
+      else if (f === n - 1 && (m.i === 1 || m.i === 4)) add(new THREE.BoxGeometry(Math.min(0.36, bw * 0.4), 0.025, Math.min(0.28, bd * 0.4)), M.roof, mx + (m.lado > 0 ? -1 : 1) * bw * 0.22, yb + fh + 0.03, mz + m.frente * bd * 0.2, false);
     }
     return g;
   }
@@ -227,7 +252,7 @@ function escarpa(linha) {
   const ed = []; for (let k = 0; k < E.length - 1; k++) ed.push({ a: E[k], b: E[k + 1], mat: 'r', uv: 'plan' });
   const g = [...sweep(cam, false, ed, { planScale: 1.2 }).values()][0]; const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const alt = 0.6 + 0.5 * (0.5 + 0.5 * Math.sin(x * 0.9 + z * 0.4) * Math.cos(z * 0.7 - x * 0.2)); const nx = (hash(Math.round(x * 7), Math.round(z * 7), 7) - 0.5) * 0.24, nz = (hash(Math.round(z * 7), Math.round(x * 7), 8) - 0.5) * 0.24; p.setXYZ(i, x + nx * (y > 0 ? 1 : 0.4), y * alt + heightAt(x, z), z + nz * (y > 0 ? 1 : 0.4)); }
-  g.computeVertexNormals(); g.computeBoundingSphere(); g.computeBoundingBox(); return mesh(g, M.rock);
+  g.computeVertexNormals(); g.computeBoundingSphere(); g.computeBoundingBox(); return mesh(g, rochaClara());
 }
 export function gorilas() {
   const g0 = A.gorilas; const [cx, cz] = g0.c; const root = new THREE.Group(); root.name = 'gorilas'; const P = {};
@@ -278,7 +303,7 @@ export function acelerador() {
   P.e1.add(flatShape(ellShape(cx, cz, rxF, rzF), M.caminhoTeto, -D));
   P.e1.add(ellWall(cx, cz, a.rx + 0.08, a.rz + 0.08, -0.02, 0.2, M.whiteSmooth)); P.e1.add(ellFlat(cx, cz, a.rx - 0.01, a.rz - 0.01, a.rx + 0.1, a.rz + 0.1, 0.18, M.whiteSmooth));
   P.e2 = new THREE.Group(); // túnel e anel do acelerador: tubo branco grosso em segmentos, sobre pedestais, com o feixe azul por cima
-  const Rx = a.rx * 0.56, Rz = a.rz * 0.52, yR = -D + 0.36;
+  const Rx = a.rx * 0.64, Rz = a.rz * 0.55, yR = -D + 0.36;
   const tor = new THREE.TorusGeometry(1, 0.17, 10, 72); tor.rotateX(Math.PI / 2); tor.scale(Rx, 1, Rz); tor.translate(cx, yR, cz); P.e2.add(mesh(tor, M.whiteSmooth));
   const up = new THREE.Vector3(0, 1, 0), tg = new THREE.Vector3();
   for (let i = 0; i < 16; i++) { const t = (i / 16) * TAU; const f = mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.07, 14), M.steelDark); f.position.set(cx + Math.cos(t) * Rx, yR, cz + Math.sin(t) * Rz); f.quaternion.setFromUnitVectors(up, tg.set(-Math.sin(t) * Rx, 0, Math.cos(t) * Rz).normalize()); P.e2.add(f); }
@@ -294,7 +319,7 @@ export function acelerador() {
   for (let i = 0; i < 6; i++) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.46, 0.3), i % 2 ? M.whiteSmooth : M.steelDark); r.position.set(cx - 0.95 + i * 0.26, -D + 0.23, cz + rzF * 0.7 - (i % 2) * 0.08); r.castShadow = true; P.e3.add(r); const s = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.01), M.cyanGlow); s.position.set(r.position.x, -D + 0.34, r.position.z + 0.155); P.e3.add(s); }
   P.e3.add(ellWall(cx, cz, a.rx - rec - 0.03, a.rz - rec - 0.03, -st - 0.12, 0.035, M.lampGlow));
   P.e4 = new THREE.Group(); // Centro de Física Avançada: galeria envidraçada curva no fundo da bacia, pavilhão baixo na borda de trás e guarda-corpo de vidro na frente
-  { const gx = rxF - 0.02, gz = rzF - 0.02, pr = 0.36, b0 = Math.PI * 1.1, b1 = Math.PI * 1.9, yg = -D;
+  { const gx = rxF - 0.02, gz = rzF - 0.02, pr = 0.3, b0 = Math.PI * 1.1, b1 = Math.PI * 1.9, yg = -D;
     P.e4.add(ellFlat(cx, cz, gx - pr, gz - pr, gx, gz, yg + 0.015, M.whiteSmooth, b0, b1, 40));
     const vid = ellWall(cx, cz, gx - pr, gz - pr, yg + 0.02, 0.4, M.glass, b0, b1, 40); vid.castShadow = false; vid.renderOrder = 3; P.e4.add(vid);
     const mont = []; for (let i = 0; i <= 14; i++) { const t = b0 + ((b1 - b0) * i) / 14; const x = cx + Math.cos(t) * (gx - pr), z = cz + Math.sin(t) * (gz - pr); mont.push([[x, yg + 0.02, z], [x, yg + 0.44, z]]); }
