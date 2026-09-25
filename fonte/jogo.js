@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { el, fmt, lerp, clamp } from './core/util.js';
 import { img } from './ui/icones.js';
-import { Hud, retrato, ABRE } from './ui/hud.js';
+import { Hud, retrato, ABRE, depositoAberto } from './ui/hud.js';
 import { Paineis } from './ui/paineis.js';
 import { Bolhas } from './ui/bolhas.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS } from './data/itens.js';
@@ -37,7 +37,7 @@ const EV_PAINEL = new Set(['produto', 'coleta', 'enfileirar', 'produzir', 'pedid
 const POVO = [...PROJETOS.filter((p) => p.id.startsWith('pas_')).flatMap((p) => p.etapas.map((e) => p.id + '.' + e.id)), 'praca.e3'];
 const VERBO = { pronta: 'Aprovar', coleta: 'Coletar', moedas: 'Moedas', subir: 'Subir módulo', bloq: 'Módulo', obra: 'Obra' };
 const VERBO_PLANO = { aprovar: 'Aprovar', coletar: 'Coletar', iniciar: 'Iniciar', entregar: 'Entregar', produzir: 'Produzir', construir: 'Construir', apresentar: 'Conselho', vender: 'Vender' };
-const ICONE_PLANO = { aprovar: 'ok', coletar: 'repasse', iniciar: 'grua', entregar: 'almox', produzir: 'producao', construir: 'grua', apresentar: 'sede', vender: 'troca', aguardar: 'obras' };
+const ICONE_PLANO = { aprovar: 'check', coletar: 'repasse', iniciar: 'grua', entregar: 'almox', produzir: 'producao', construir: 'grua', apresentar: 'sede', vender: 'troca', aguardar: 'obras' };
 // o que o anel-guia do tutorial procura dentro do painel aberto, por passo
 // (presos à obra do passo: a prancha de outra obra não recebe o anel; botão esmaecido por falta de material: o anel vai
 // para a ficha vermelha do material que falta, no mesmo painel)
@@ -86,6 +86,8 @@ export class Controle {
         case 'almox': this.paineis.abrir('almox'); this.irPara({ predio: 'almox' }, false); break;
         case 'pedidos': this.paineis.abrir('pedidos'); if (this.S.cap >= REGRAS.capPedidos) this._dica('pedidos'); break;
         case 'trocas': this.paineis.abrir('deposito'); this._dica('deposito'); break;
+        // '+' dos créditos: o Depósito de Trocas (antes de abrir, diz quando abre)
+        case 'deposito': if (depositoAberto(this.S)) { this.paineis.abrir('deposito'); this._dica('deposito'); } else this.hud.brinde(`O Depósito de Trocas abre no nível ${ABRE.depositoNivel}`, 'troca'); break;
         case 'apreciar': this.apreciar?.(true); break;
         case 'config': this.config?.(); break;
         case 'proximo': this.proximo(); break;
@@ -408,14 +410,14 @@ export class Controle {
     for (const p of PROJETOS) {
       if (p.cap > S.cap) continue; const nx = J.proximaEtapa(p); if (!nx) continue; const key = p.id + '.' + nx.e.id; const site = this.sites.get('e:' + key); if (site?.concluindo || this._aprovando.has(key)) continue;
       const pos = (site && this.obras.ancora?.('e:' + key)) || this.ancoraEtapa(p, nx.e); const alvo = { etapa: key };
-      if (nx.s === 'pronta') L.push({ id: 'e' + key, tipo: 'pronta', icone: 'ok', pos, alvo, acao: () => this.aprovarEtapa(key) });
+      if (nx.s === 'pronta') L.push({ id: 'e' + key, tipo: 'pronta', icone: 'check', pos, alvo, acao: () => this.aprovarEtapa(key) });
       else if (nx.s === 'obra') { const st = J.etapa(key); L.push({ id: 'e' + key, tipo: 'obra', icone: 'grua', p: (J.agora - st.ini) / (st.fim - st.ini), pos, alvo, verbo: 'Obra: ' + curto(p.nome), acao: () => this.irPara(alvo) }); }
       else if (nx.s === 'disponivel' || nx.s === 'prancha') { placaEtapa = true; L.push({ id: 'e' + key, tipo: 'placa', icone: 'placa', pos, alvo, verbo: 'Obra: ' + curto(p.nome), acao: () => this.irPara(alvo) }); }
     }
     for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => {
       const s = J.situacaoModulo(f, i); const k = `m:${f}:${i}`; const site = this.sites.get(k); if (site?.concluindo || this._aprovando.has(k)) return;
       const pos = (site && this.obras.ancora?.(k)) || this.ancoraModulo(f, i); const alvo = { modulo: [f, i] };
-      if (s === 'pronta') L.push({ id: `m${f}${i}`, tipo: 'pronta', icone: 'ok', pos, alvo, acao: () => this.aprovarModulo(f, i) });
+      if (s === 'pronta') L.push({ id: `m${f}${i}`, tipo: 'pronta', icone: 'check', pos, alvo, acao: () => this.aprovarModulo(f, i) });
       else if (s === 'obra') L.push({ id: `m${f}${i}`, tipo: 'obra', icone: 'grua', p: (J.agora - m.obra.ini) / (m.obra.fim - m.obra.ini), pos, alvo, acao: () => this.irPara(alvo) });
       else if (s === 'disponivel') {
         const r = J.requisitosModulo(f, i); const ok = r.servOk && r.bemOk && S.creditos >= r.custo && Object.entries(r.itens).every(([k2, n]) => J.temItem(k2, n));
@@ -435,7 +437,7 @@ export class Controle {
     if (placaEtapa && S.cap === 1 && !this.S.dicas.primeiraEtapa && !(this._tutAtivo() && (S.dicas.guia || 0) < 1)) this._dica('primeiraEtapa', { se: () => !this._tutAtivo() || (this.S.dicas.guia || 0) <= 1 });
     // Meta em foco e Próximo
     const passo = this._passoTut(); this._plano = J.planoMeta ? J.planoMeta() : null; const agora = !passo || passo.id === 'meta' ? this._plano : null;
-    this.hud.meta(agora);
+    this.hud.meta(agora, agora && (agora.item && ITENS[agora.item] ? agora.item : ICONE_PLANO[agora.acao] || 'obras'));
     this._prox = this._calcProximo(L, passo); this.hud.proximo(this._prox && { icone: this._prox.icone, verbo: this._prox.verbo, pulsa: L.some((b) => b.tipo === 'pronta' || b.tipo === 'coleta'), compacto: !!(this._prox.plano && agora) });
   }
   // ------------------------------------------------------------ Próximo, Meta em foco e metas
@@ -510,7 +512,7 @@ export class Controle {
       const r = A.rev[i];
       // balão apagado sob a fala (sem toque): o anel vai para o Próximo, que leva ao mesmo alvo
       if (r.tipo === 'balao') { pt = this.bolhas.posTela(r.id); if (pt && this.bolhas.sob(r.id)) { if (t - (G.tp || -1e9) > 200) { G.tp = t; G.prox = this.hud.prox.classList.contains('oculto') ? null : centro(this.hud.prox); } pt = G.prox; } }
-      else if (t - G.t > 200 || G.a !== r.a) { G.t = t; G.a = r.a; const e = r.tipo === 'bt' ? this.hud.dir.querySelector(r.sel) : r.tipo === 'meta' ? (this.hud.agora.classList.contains('oculto') ? this.hud.cap : this.hud.agora) : r.tipo === 'nada' || this.paineis.el ? null : document.querySelector(r.sel); G.pt = e && !(this.paineis.el && r.tipo === 'bt' && this.paineis.atual?.tipo === r.id) ? centro(e) : null; pt = G.pt; }
+      else if (t - G.t > 200 || G.a !== r.a) { G.t = t; G.a = r.a; const e = r.tipo === 'bt' ? this.hud.botao(r.id) : r.tipo === 'meta' ? (this.hud.agora.classList.contains('oculto') ? this.hud.cap : this.hud.agora) : r.tipo === 'nada' || this.paineis.el ? null : document.querySelector(r.sel); G.pt = e && !(this.paineis.el && r.tipo === 'bt' && this.paineis.atual?.tipo === r.id) ? centro(e) : null; pt = G.pt; }
       else pt = G.pt;
       if (pt) break;
     }
