@@ -583,7 +583,9 @@ img{-webkit-user-drag:none}
 .modal.config .mh .linha{flex-wrap:nowrap;gap:10px}
 .versao{font-size:12px;line-height:1.25;color:#eef8ff;text-align:right;max-width:240px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cfg{display:grid;grid-template-columns:1.3fr 1fr;gap:6px 10px;text-align:left}
-.cfg .op{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:3px 5px 3px 12px;border-radius:14px;background:#fff;border:2px solid var(--cartaoB);box-shadow:0 3px 0 var(--cartaoE)}
+.cfg .cfg-sec{grid-column:1/-1;margin:8px 0 0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--tinta2)}
+.cfg .cfg-sec:first-child{margin-top:0}
+.cfg .op{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:3px 5px 3px 12px;border-radius:14px;background:#fff;border:1px solid var(--hair);box-shadow:none}
 .cfg label{min-width:0;font-size:14px;line-height:1.15;font-weight:800;color:var(--tinta)}
 .cfg small{display:block;margin-top:1px;color:var(--tinta2);font-size:12px;font-weight:600}
 .cfg .linha{flex:none;flex-wrap:nowrap;gap:6px}

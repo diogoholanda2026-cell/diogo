@@ -25,6 +25,9 @@ const VERSAO = typeof __VERSAO__ !== 'undefined' ? __VERSAO__ : 'dev';
 const qs = new URLSearchParams(location.search);
 const TESTE = qs.has('teste') || qs.has('tudo') || qs.has('vista');
 const cfg = lerConfig();
+// acessibilidade em :root (o index.html já aplica antes da primeira pintura; aqui vale para o arquivo único e para as mudanças)
+const aplicarAcess = (c) => { const r = document.documentElement; r.style.setProperty('--escala', c.escala === 'grande' ? '1.12' : '1'); if (c.menosMov) r.dataset.menosMov = '1'; else delete r.dataset.menosMov; if (c.contraste) r.dataset.contraste = '1'; else delete r.dataset.contraste; };
+aplicarAcess(cfg);
 const quadro = () => new Promise((r) => requestAnimationFrame(() => r()));
 // vista geral (abertura do jogo e botão da interface): centro da composição, ~47° de inclinação, horizonte reto
 const VISTA_GERAL = { x: 1.5, z: 5, dist: 60, yaw: 0.36, pitch: 0.84, fov: 38, roll: 0 };
@@ -92,7 +95,7 @@ async function iniciar() {
   rig.onMove = () => { C._naFoto = false; };
   let promptInstalar = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); promptInstalar = e; });
   const telaCheia = async (alternar) => { try { if (alternar && document.fullscreenElement) { await document.exitFullscreen(); return; } if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); await screen.orientation?.lock?.('landscape'); } catch (_) {} };
-  instalarExtras(C, { engine, env, rig, cfg, fotoURL: FOTO, versao: VERSAO, qualidadeAuto: auto.id, telaCheia, get instalar() { return promptInstalar ? () => { promptInstalar.prompt(); promptInstalar = null; } : null; } });
+  instalarExtras(C, { engine, env, rig, cfg, fotoURL: FOTO, versao: VERSAO, qualidadeAuto: auto.id, telaCheia, aplicarAcess, get instalar() { return promptInstalar ? () => { promptInstalar.prompt(); promptInstalar = null; } : null; } });
   if (qs.get('vista') === 'foto') C.vistaFoto(false); else C.vistaGeral(false);
   // ajustes de luz pela URL (multiplicam os da hora): exp, sat, con, key, hemi, envi, bloom, vin
   const aj = {}; for (const k of ['exp', 'sat', 'con', 'key', 'hemi', 'envi', 'bloom', 'vin']) if (qs.has(k)) aj[k] = +qs.get(k); if (Object.keys(aj).length) env.ajuste = aj;

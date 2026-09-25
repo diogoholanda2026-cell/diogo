@@ -75,16 +75,27 @@ export function instalarExtras(C, o) {
   C.config = () => {
     const seg = (nome, ops, atual) => `<div class="seg" data-cfg="${nome}">${ops.map(([v, t]) => `<button data-v="${v}" class="${String(atual) === String(v) ? 'on' : ''}" aria-pressed="${String(atual) === String(v)}">${t}</button>`).join('')}</div>`;
     const op = (rotulo, controle) => `<div class="op"><label>${rotulo}</label>${controle}</div>`;
+    const sec = (t) => `<h3 class="cfg-sec">${t}</h3>`;
+    // seções: Vídeo, Som e toque, Jogo, Salvamento, Acessibilidade; Recomeçar isolado no fim
     const html = `<header class="mh"><div class="tt"><h1>Configurações</h1></div><div class="linha">${o.instalar ? `<button class="botao ouro" data-y="instalar">Instalar como app</button>` : ''}<small class="versao">${engine.gpu ? 'GPU: ' + engine.gpu + '<br>' : ''}versão ${versao}</small><button class="x" data-fecha aria-label="Fechar"></button></div></header><div class="mc"><div class="cfg">
+      ${sec('Vídeo')}
       ${op('Qualidade gráfica<small>Automática ajusta a resolução</small>', seg('qualidade', [['auto', 'Auto'], ...Object.values(QUALITY).map((q) => [q.id, q.label])], cfg.qualidade || 'auto'))}
       ${op('Quadros por segundo<small>120 exige Chrome 156+</small>', seg('fps', [[30, '30'], [60, '60'], [120, '120']], cfg.fps || 60))}
-      ${op('Ciclo de dia e noite<small>Acelerado: 1 min = 1 h</small>', seg('ciclo', CICLOS, cfg.ciclo || 'acelerado'))}
-      ${op('Ritmo da obra<small>Acelera os cronômetros</small>', seg('ritmo', [[1, '1×'], [2, '2×'], [4, '4×']], C.S.ritmo || 1))}
+      ${op('Tela cheia', `<button class="botao sec" data-y="tela">${img('tela')} Alternar</button>`)}
+      ${sec('Som e toque')}
       ${op('Efeitos sonoros', seg('efeitos', [[1, 'Sim'], [0, 'Não']], cfg.efeitos === false ? 0 : 1))}
       ${op('Música ambiente', seg('musica', [[1, 'Sim'], [0, 'Não']], cfg.musica === false ? 0 : 1))}
       ${op('Vibração', seg('vibra', [[1, 'Sim'], [0, 'Não']], cfg.vibra === false ? 0 : 1))}
-      ${op('Tela cheia', `<button class="botao sec" data-y="tela">${img('tela')} Alternar</button>`)}
+      ${sec('Jogo')}
+      ${op('Ciclo de dia e noite<small>Acelerado: 1 min = 1 h</small>', seg('ciclo', CICLOS, cfg.ciclo || 'acelerado'))}
+      ${op('Ritmo da obra<small>Acelera cronômetros: modo de teste</small>', seg('ritmo', [[1, '1×'], [2, '2×'], [4, '4×']], C.S.ritmo || 1))}
+      ${sec('Salvamento')}
       ${op('Salvamento<small id="persist">Verificando…</small>', '<div class="linha"><button class="botao sec" data-y="exportar">Exportar</button><button class="botao sec" data-y="importar">Importar</button></div>')}
+      ${sec('Acessibilidade')}
+      ${op('Tamanho da interface<small>Grande aumenta textos e botões</small>', seg('escala', [['normal', 'Normal'], ['grande', 'Grande']], cfg.escala || 'normal'))}
+      ${op('Reduzir movimento<small>Sem animações ociosas</small>', seg('menosMov', [[0, 'Não'], [1, 'Sim']], cfg.menosMov ? 1 : 0))}
+      ${op('Alto contraste<small>Contornos e fios mais fortes</small>', seg('contraste', [[0, 'Não'], [1, 'Sim']], cfg.contraste ? 1 : 0))}
+      ${sec('Recomeçar')}
       ${op('Recomeçar do zero<small>Apaga o progresso deste aparelho</small>', '<button class="botao perigo" data-y="reset">Recomeçar</button>')}
       </div></div>`;
     C.modal(html, (m, fechar) => {
@@ -99,6 +110,9 @@ export function instalarExtras(C, o) {
           else if (nome === 'efeitos') { cfg.efeitos = val === '1'; C.som.setEfeitos(cfg.efeitos); }
           else if (nome === 'musica') { cfg.musica = val === '1'; C.som.setMusica(cfg.musica); }
           else if (nome === 'vibra') { cfg.vibra = val === '1'; C.vibra.on = cfg.vibra; }
+          else if (nome === 'escala') { cfg.escala = val; o.aplicarAcess?.(cfg); }
+          else if (nome === 'menosMov') { cfg.menosMov = val === '1'; o.aplicarAcess?.(cfg); }
+          else if (nome === 'contraste') { cfg.contraste = val === '1'; o.aplicarAcess?.(cfg); }
           gravarConfig(cfg); for (const b of sb.parentElement.children) { b.classList.toggle('on', b === sb); b.setAttribute('aria-pressed', b === sb ? 'true' : 'false'); } return; }
         const b = e.target.closest('[data-y]'); if (!b) return; const y = b.dataset.y; C.som.toque();
         if (y === 'tela') o.telaCheia(true); else if (y === 'exportar') { await gravar(C.S); exportar(C.S); }
