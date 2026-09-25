@@ -85,7 +85,9 @@ async function iniciar() {
   if (qs.get('tudo')) { mundo.tudoPronto(); for (const g of Object.values(mundo.predios)) g.visible = false; mundo.canteiro.visible = false; forest.setReflorestamento(1); ground.flags.reflorestado = true; ground.paint(); }
   await passo(92);
   engine.prepararHAO?.();
-  try { await engine.renderer.compileAsync(engine.scene, engine.camera); } catch (_) {}
+  // compila no alvo HDR onde o jogo desenha a cena (espaço de cor linear), como obras.aquecer: no canvas (sRGB) a chave
+  // do programa muda e os programas certos compilariam de novo, travando, nos primeiros quadros do laço
+  { const r = engine.renderer, rt0 = r.getRenderTarget(); if (engine.rtScene) r.setRenderTarget(engine.rtScene); try { await r.compileAsync(engine.scene, engine.camera); } catch (_) {} r.setRenderTarget(rt0); }
   try { await obras.aquecer?.(mundo); } catch (_) {}
   await passo(100);
   // laço principal: só trabalha nos quadros que serão desenhados (numa tela de 120 Hz com limite de 60 qps,
