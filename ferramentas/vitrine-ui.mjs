@@ -2,9 +2,14 @@
 // verdade sobre a foto da maquete (o 3D é trocado por um mundo de mentira com a câmera da vista da foto) e captura
 // cada painel, modal, o tutorial, a pílula de metas e os estados novos. Cerca de 1 s por captura: serve para
 // iterar CSS sem disputar CPU com o renderizador por software.
-// Uso: node ferramentas/vitrine-ui.mjs [pasta] [cenas separadas por vírgula | todas] [tamanhos: 986x443,915x412]
-// Saída: <pasta>/<tamanho>-<cena>.png e <pasta>/ui.json (alvos < 44 px, textos < 11 px, área do HUD em repouso,
-// retângulo da folha, erros de página). ANIMAR=1 deixa as animações de CSS ligadas.
+// Uso: node ferramentas/vitrine-ui.mjs [pasta] [cenas separadas por vírgula | todas] [tamanhos: 986x443,915x412] [séries: noite,dia]
+// Séries: 'noite' captura sobre a foto de referência (FUNDO_NOITE, por padrão fonte/web/foto.webp) e mede; 'dia' só
+// captura, sobre uma composição de dia do jogo (FUNDO_DIA=<png>; sem ele a série de dia é pulada), em dia-<tamanho>-<cena>.png.
+// Saída: <pasta>/<tamanho>-<cena>.png e <pasta>/ui.json por cena: peq (alvos < 44 px), fontesPequenas (textos < 12 px),
+// hudPct (área do HUD em repouso), folha, modal, cobre (retângulos do HUD ou a fala sobre a Sede e a Biblioteca, fora
+// dos modais), rotulosSob (rótulos 3D com o centro sob o HUD, a folha ou um modal), ctas (Agora e Próximo visíveis ao
+// mesmo tempo, fora da folha), baloesPerto (pares de balões a menos de 56 px) e erros de página. ANIMAR=1 deixa as
+// animações de CSS ligadas.
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -12,8 +17,12 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
-const [saida = '/tmp/vitrine-ui', cenasArg = 'todas', tamArg = '986x443,915x412'] = process.argv.slice(2);
+const [saida = '/tmp/vitrine-ui', cenasArg = 'todas', tamArg = '986x443,915x412', serieArg = 'noite,dia'] = process.argv.slice(2);
 const pasta = resolve(saida); mkdirSync(pasta, { recursive: true });
+import { existsSync } from 'node:fs';
+const FUNDOS = { noite: process.env.FUNDO_NOITE || join(raiz, 'fonte/web/foto.webp'), dia: process.env.FUNDO_DIA || '' };
+const series = serieArg.split(',').filter((k) => FUNDOS[k] && existsSync(FUNDOS[k]));
+if (!series.length) { console.error('nenhuma série com fundo disponível (FUNDO_NOITE / FUNDO_DIA)'); process.exit(1); }
 
 // economia nova de mentira (só para a vitrine): quando a simulação ainda não tem o contrato (J.loteMax), estas
 // funções imitam calendário, empréstimo, valuation, lotes, automático, aceleradores, renda por faixa, Depósito a
@@ -94,7 +103,7 @@ const js = (await build({ stdin: { contents: entrada, resolveDir: join(raiz, 'fo
 const css = readFileSync(join(raiz, 'fonte/ui/estilo.css'), 'utf8').replace(/url\(fontes\/([\w.-]+\.woff2)\)/g, (m, f) => `url(data:font/woff2;base64,${readFileSync(join(raiz, 'fonte/web/fontes', f)).toString('base64')})`);
 const semAnim = process.env.ANIMAR ? '' : '*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important}';
 writeFileSync(join(pasta, 'foto.webp'), readFileSync(join(raiz, 'fonte/web/foto.webp')));
-writeFileSync(join(pasta, 'vitrine-ui.html'), `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>${css}\nbody{background:#1a1d16 url(foto.webp) center/cover no-repeat}\n${semAnim}</style></head><body><canvas id="c" style="opacity:0"></canvas><div id="ui"></div><script type="module">${js.replace(/<\/script/g, '<\\/script')}</script></body></html>`);
+for (const k of series) { const f = FUNDOS[k]; const ext = f.endsWith('.webp') ? 'webp' : 'png'; writeFileSync(join(pasta, `fundo-${k}.${ext}`), readFileSync(f)); writeFileSync(join(pasta, `vitrine-ui-${k}.html`), `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>${css}\nbody{background:#1a1d16 url(fundo-${k}.${ext}) center/cover no-repeat}\n${semAnim}</style></head><body><canvas id="c" style="opacity:0"></canvas><div id="ui"></div><script type="module">${js.replace(/<\/script/g, '<\\/script')}</script></body></html>`); }
 
 // cenas: cada uma prepara o estado a partir de um jogo novo
 const CENAS = {
@@ -143,6 +152,18 @@ const CENAS = {
   'deposito-venda': (H) => { economia(H); H.S.cap = 2; H.S.deposito.janela = H.J._janela(); H.S.deposito.vendas = 12; H.C.paineis.aba.deposito = 'vender'; H.C.paineis.abrir('deposito'); },
   'aprovacao-etapa': (H) => { economia(H); const p = H.PROJ.pas_frente, e = p.etapas[0]; H.J.emit('etapaFeita', { key: 'pas_frente.e1', p, e }); H.J.emit('aviso', { texto: 'Medição aprovada: +1.260', icone: 'creditos', creditos: 1260 }); H.C._filaModais.forEach((x) => (x.t = 0)); H.C._festaAte = 0; H.C._verModais(); },
   acelerar: (H) => { economia(H); const t = Date.now(); H.S.etapas['lago.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 5400000 }; H.J._derivar(); H.C.paineis.abrir('etapa', 'lago.e1'); },
+  // ---- prancheta da maquete: estados dos painéis, resumo do pedido, confirmação, rótulo da obra em foco, fala recolhida ----
+  'inicio-recolhida': (H) => { H.C.hud.fala.classList.add('recolhida'); H.C.hud._tRects = 0; },
+  'obras-estados': (H) => { base(H); const t = Date.now(); H.S.cap = 2; H.S.etapas['pas_frente.e1'] = { estado: 'pronta', entregue: {}, ini: t - 9000, fim: t - 10 }; H.S.etapas['lago.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 600000 }; H.S.itens.brita = 20; H.S.itens.concreto = 2; H.J._derivar(); H.C.paineis.abrir('obras'); },
+  'prancha-parcial': (H) => { base(H); H.S.etapas['pas_frente.e1'] = { estado: 'feita', entregue: {} }; H.S.etapas['lago.e1'] = { estado: 'feita', entregue: {} }; H.S.itens.brita = 3; H.S.itens.concreto = 0; H.S.itens.estaca = 1; H.J._derivar(); H.C.paineis.abrir('etapa', 'sede.e1'); },
+  'prancha-entrega': (H) => { CENAS['prancha-parcial'](H); H.C.paineis.el.querySelector('[data-a=entregar][data-k=brita]')?.click(); },
+  'modulo-agua': (H) => { base(H); H.S.cap = 2; H.S.modulos.anel[0].nivel = 2; H.J._derivar(); const r = H.J.requisitosModulo('anel', 0); for (const [k, n] of Object.entries(r.itens)) H.S.itens[k] = n; H.J._derivar(); H.C.paineis.abrir('modulo', ['anel', 0]); },
+  'pedido-resumo': (H) => { CENAS.pedidos(H); const p = H.S.pedidos.find((q) => q.itens); if (p) for (const [k, n] of Object.entries(p.itens)) H.S.itens[k] = n; H.J._derivar(); H.C.paineis.render(true); H.C.paineis.el.querySelector('.pedido.pronto')?.click(); },
+  'usina-confirma': (H) => { CENAS['usina-lote'](H); H.C.paineis.el.querySelector('.vaga.mais')?.click(); },
+  'almox-vazio': (H) => { base(H); H.S.itens.viga = 0; H.S.itens.cimento = 0; H.J._derivar(); H.C.paineis.aba.almox = 'produto'; H.C.paineis.abrir('almox'); },
+  'rotulo-foco': (H) => { base(H); H.S.cap = 3; H.J._derivar(); H.C.paineis.abrir('etapa', 'biblioteca.e1'); H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.C.atualizarRotulos?.(); },
+  'rotulo-obra': (H) => { base(H); H.S.cap = 3; const t = Date.now(); H.S.etapas['biblioteca.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 600000 }; H.J._derivar(); H.C.paineis.abrir('etapa', 'biblioteca.e1'); H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.C.atualizarRotulos?.(); },
+  'apreciar-rotulos': (H) => { for (const k of ['escola.e1', 'sede.e2', 'ciencias.e1', 'biblioteca.e1', 'bioma.e1', 'anfiteatro.e1', 'humanidades.e1', 'instituto.e1', 'engenharia.e1', 'acelerador.e1', 'savana.e1']) H.S.etapas[k] = { estado: 'feita', entregue: {} }; H.S.modulos.uni[0].nivel = 1; H.S.modulos.santuario[0].nivel = 1; H.J._derivar(); H.C.apreciar(true); H.C.atualizarRotulos?.(); },
 };
 // estado da economia nova: dia 12 do mês 3, empréstimos (um vencido), aceleradores, lotes em andamento (um em
 // automático e um parado com o Almoxarifado cheio), fila da oficina em lotes e o modo automático nela
@@ -163,14 +184,17 @@ const CODIGO = `window.base=${base.toString()};window.completarCap1=${completarC
 const nomes = cenasArg === 'todas' ? Object.keys(CENAS) : cenasArg.split(',');
 const tamanhos = tamArg.split(',').map((s) => s.split('x').map(Number));
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-const rel = { cenas: {}, erros: [] };
-for (const [w, h] of tamanhos) for (const nome of nomes) {
+const rel = { cenas: {}, erros: [], series };
+for (const serie of series) for (const [w, h] of tamanhos) for (const nome of nomes) {
   const pg = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
-  pg.on('pageerror', (e) => rel.erros.push(`${w}x${h} ${nome}: ${e.message}`)); pg.on('console', (m) => { if (m.type() === 'error') rel.erros.push(`${w}x${h} ${nome}: console ${m.text()}`); });
-  await pg.goto('file://' + join(pasta, 'vitrine-ui.html')); await pg.waitForFunction(() => window.__pronto, null, { timeout: 20000 });
+  pg.on('pageerror', (e) => rel.erros.push(`${serie} ${w}x${h} ${nome}: ${e.message}`)); pg.on('console', (m) => { if (m.type() === 'error') rel.erros.push(`${serie} ${w}x${h} ${nome}: console ${m.text()}`); });
+  await pg.goto('file://' + join(pasta, `vitrine-ui-${serie}.html`)); await pg.waitForFunction(() => window.__pronto, null, { timeout: 20000 });
   await pg.addScriptTag({ content: CODIGO }); await pg.evaluate((n) => window.CENAS[n](window.H), nome);
   await pg.waitForTimeout(nome === 'aprovacao' ? 450 : 350);
-  await pg.screenshot({ path: join(pasta, `${w}x${h}-${nome}.png`) });
+  // ícones em voo (coleta automática, moedas) terminam antes da foto, para não cruzarem a folha na captura
+  if (nome !== 'aprovacao') await pg.waitForFunction(() => ![...document.querySelectorAll('.voa')].some((v) => v.style.display !== 'none'), null, { timeout: 1500 }).catch(() => {});
+  await pg.screenshot({ path: join(pasta, `${serie === 'noite' ? '' : serie + '-'}${w}x${h}-${nome}.png`) });
+  if (serie !== 'noite') { await pg.close(); continue; } // a série de dia só captura: as medidas são as mesmas
   rel.cenas[`${w}x${h}-${nome}`] = await pg.evaluate(() => {
     const vis = (e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight; };
     const escondido = (e) => { if (getComputedStyle(e).pointerEvents === 'none') return true; for (let x = e; x && x !== document.body; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity < 0.05) return true; } return false; };
@@ -178,18 +202,31 @@ for (const [w, h] of tamanhos) for (const nome of nomes) {
     const folga = (e) => { let fx = 0, fy = 0; for (const ps of ['::after', '::before']) { const cs = getComputedStyle(e, ps); if (cs.content === 'none' || cs.position !== 'absolute') continue; const t = -parseFloat(cs.top) || 0, l = -parseFloat(cs.left) || 0; fy = Math.max(fy, 2 * t); fx = Math.max(fx, 2 * l); } return [fx, fy]; };
     const alvos = [...document.querySelectorAll('#ui button, #ui [data-a], #ui .balao, #ui input, #ui [data-x], #ui [data-y], #ui [data-esc], #ui [data-fecha]')].filter((e) => vis(e) && !escondido(e));
     const peq = alvos.map((e) => { const r = e.getBoundingClientRect(); const [fx, fy] = folga(e); return { c: (e.className?.baseVal ?? e.className) + '', a: e.dataset.a || e.dataset.x || e.dataset.y || e.dataset.v || '', t: (e.textContent || '').trim().slice(0, 20), w: Math.round(r.width + fx), h: Math.round(r.height + fy) }; }).filter((x) => x.w < 44 || x.h < 44);
-    const fontes = {}; const wk = document.createTreeWalker(document.getElementById('ui'), NodeFilter.SHOW_TEXT); let n; while ((n = wk.nextNode())) { if (!n.textContent.trim()) continue; const p = n.parentElement; if (!vis(p) || escondido(p)) continue; const fs = parseFloat(getComputedStyle(p).fontSize); if (fs < 11) (fontes[fs.toFixed(1)] ||= []).push(n.textContent.trim().slice(0, 20)); }
+    const fontes = {}; const wk = document.createTreeWalker(document.getElementById('ui'), NodeFilter.SHOW_TEXT); let n; while ((n = wk.nextNode())) { if (!n.textContent.trim()) continue; const p = n.parentElement; if (!vis(p) || escondido(p)) continue; const fs = parseFloat(getComputedStyle(p).fontSize); if (fs < 12) (fontes[fs.toFixed(1)] ||= []).push(n.textContent.trim().slice(0, 20)); }
     const blocos = [...document.querySelectorAll('#ui .topo > *:not(.esp), #ui .esq > *, #ui .dir > .bt, #ui .obras-bt, #ui .proximo')].filter((e) => vis(e) && !escondido(e)).map((e) => { const r = e.getBoundingClientRect(); return r.width * r.height; });
     const f = document.querySelector('.folha:not(.sai)'); const fr = f?.getBoundingClientRect();
     const bal = [...document.querySelectorAll('.balao')].filter((e) => vis(e) && !e.classList.contains('sob')).map((e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
-    let perto = 0; for (let i = 0; i < bal.length; i++) for (let j = i + 1; j < bal.length; j++) if (Math.hypot(bal[i][0] - bal[j][0], bal[i][1] - bal[j][1]) < 36) perto++;
+    let perto = 0; for (let i = 0; i < bal.length; i++) for (let j = i + 1; j < bal.length; j++) if (Math.hypot(bal[i][0] - bal[j][0], bal[i][1] - bal[j][1]) < 56) perto++;
     const m = document.querySelector('.modal'); const fd = document.querySelector('.fala-dock');
-    return { peq, fontesPequenas: fontes, hudArea: Math.round(blocos.reduce((a, b) => a + b, 0)), hudPct: +((blocos.reduce((a, b) => a + b, 0) / (innerWidth * innerHeight)) * 100).toFixed(1), folha: fr ? { rect: [fr.left, fr.top, fr.width, fr.height].map(Math.round), pct: +((fr.width * fr.height) / (innerWidth * innerHeight) * 100).toFixed(1), html: f.innerHTML.length, rola: f.querySelector('.corpo').scrollHeight > f.querySelector('.corpo').clientHeight + 2 } : null,
-      modal: m ? { rola: (() => { const c = m.querySelector('.mc') || m; return c.scrollHeight > c.clientHeight + 2; })(), rect: (() => { const r = m.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); })() } : null, fala: fd && vis(fd) && !escondido(fd), guia: (() => { const g = document.querySelector('.guia'); return g && vis(g) && !g.classList.contains('oculto') ? g.style.transform : null; })(), baloesPerto: perto, baloes: bal.length };
+    // cobertura da Sede e da Biblioteca (retângulos fixos na vista da foto, em 986x443; escalados para outras larguras)
+    // por retângulos do HUD (hud.retangulos, que já inclui a fala) fora dos modais e do carimbo
+    const H = window.H; H.C.hud._tRects = 0; const R = H.C.hud.retangulos(performance.now()); const k = innerWidth / 986;
+    const ALVOS = { sede: [470, 110, 700, 330].map((v) => v * k), biblio: [560, 230, 760, 380].map((v) => v * k) };
+    const cruza = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+    const cobre = []; if (!m && !document.querySelector('.carimbo')) for (let i = 0; i < R.length; i += 4) for (const [nm, A] of Object.entries(ALVOS)) if (cruza([R[i], R[i + 1], R[i + 2], R[i + 3]], A)) cobre.push(nm + ':' + [R[i], R[i + 1], R[i + 2], R[i + 3]].map(Math.round).join(','));
+    // rótulos 3D com o centro sob um retângulo do HUD, a folha ou um modal
+    const caixas = []; for (let i = 0; i < R.length; i += 4) caixas.push([R[i], R[i + 1], R[i + 2], R[i + 3]]); for (const e of [f, m]) if (e) { const r = e.getBoundingClientRect(); caixas.push([r.left, r.top, r.right, r.bottom]); }
+    const rots = [...document.querySelectorAll('.rotulo3d')].filter((e) => vis(e)); let rotulosSob = 0; for (const e of rots) { const r = e.getBoundingClientRect(); const c = [r.left + r.width / 2, r.top + r.height / 2]; if (caixas.some((b) => c[0] >= b[0] && c[0] <= b[2] && c[1] >= b[1] && c[1] <= b[3])) rotulosSob++; }
+    let rotulosCruzam = 0; for (let i = 0; i < rots.length; i++) for (let j = i + 1; j < rots.length; j++) { const a = rots[i].getBoundingClientRect(), b = rots[j].getBoundingClientRect(); if (cruza([a.left, a.top, a.right, a.bottom], [b.left, b.top, b.right, b.bottom])) rotulosCruzam++; }
+    // uma chamada de ação por vez fora da folha: Agora e Próximo não podem aparecer juntos
+    const ctas = f ? 0 : ['.agora', '.proximo'].filter((sel) => { const e = document.querySelector(sel); return e && vis(e) && !escondido(e); }).length;
+    return { peq, fontesPequenas: fontes, hudArea: Math.round(blocos.reduce((a, b) => a + b, 0)), hudPct: +((blocos.reduce((a, b) => a + b, 0) / (innerWidth * innerHeight)) * 100).toFixed(1), folha: fr ? { rect: [fr.left, fr.top, fr.width, fr.height].map(Math.round), pct: +((fr.width * fr.height) / (innerWidth * innerHeight) * 100).toFixed(1), html: f.innerHTML.length, rola: f.querySelector('.corpo').scrollHeight > f.querySelector('.corpo').clientHeight + 2, acoesH: f.style.getPropertyValue('--acoesH') } : null,
+      modal: m ? { rola: (() => { const c = m.querySelector('.mc') || m; return c.scrollHeight > c.clientHeight + 2; })(), sobra: (() => { const c = m.querySelector('.mc') || m; return c.scrollHeight - c.clientHeight; })(), rect: (() => { const r = m.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); })() } : null, fala: fd && vis(fd) && !escondido(fd), guia: (() => { const g = document.querySelector('.guia'); return g && vis(g) && !g.classList.contains('oculto') ? g.style.transform : null; })(), baloesPerto: perto, baloes: bal.length, cobre, rotulos: rots.length, rotulosSob, rotulosCruzam, ctas };
   });
   await pg.close();
 }
 writeFileSync(join(pasta, 'ui.json'), JSON.stringify(rel, null, 1));
-for (const [k, r] of Object.entries(rel.cenas)) console.log(k.padEnd(28), `hud ${r.hudPct}%`, r.folha ? `folha ${r.folha.pct}% ${r.folha.rola ? 'rola' : ''}` : '', r.modal ? `modal${r.modal.rola ? ' ROLA' : ''}` : '', `alvos<44: ${r.peq.length}`, Object.keys(r.fontesPequenas).length ? 'TEXTO<11 ' + JSON.stringify(r.fontesPequenas) : '', r.guia ? 'guia' : '', r.fala ? 'fala' : '', r.baloesPerto ? `balões perto ${r.baloesPerto}` : '');
+for (const [k, r] of Object.entries(rel.cenas)) console.log(k.padEnd(28), `hud ${r.hudPct}%`, r.folha ? `folha ${r.folha.pct}% ${r.folha.rola ? 'rola' : ''}` : '', r.modal ? `modal${r.modal.rola ? ' ROLA ' + r.modal.sobra + 'px' : ''}` : '', `alvos<44: ${r.peq.length}`, Object.keys(r.fontesPequenas).length ? 'TEXTO<12 ' + JSON.stringify(r.fontesPequenas) : '', r.guia ? 'guia' : '', r.fala ? 'fala' : '', r.baloesPerto ? `balões perto ${r.baloesPerto}` : '', r.cobre.length ? `COBRE ${r.cobre.length}` : '', r.rotulos ? `rótulos ${r.rotulos}${r.rotulosSob ? ' SOB ' + r.rotulosSob : ''}${r.rotulosCruzam ? ' CRUZAM ' + r.rotulosCruzam : ''}` : '', r.ctas > 1 ? `CTAS ${r.ctas}` : '');
+const tot = Object.values(rel.cenas); console.log(`resumo: cenas ${tot.length} · alvos<44 ${tot.reduce((a, r) => a + r.peq.length, 0)} · textos<12 ${tot.reduce((a, r) => a + Object.values(r.fontesPequenas).reduce((x, y) => x + y.length, 0), 0)} · cobre ${tot.filter((r) => r.cobre.length).length} · rotulosSob ${tot.reduce((a, r) => a + r.rotulosSob, 0)} · ctas>1 ${tot.filter((r) => r.ctas > 1).length} · balõesPerto ${tot.reduce((a, r) => a + r.baloesPerto, 0)}`);
 console.log(rel.erros.length ? 'ERROS:\n' + rel.erros.join('\n') : 'sem erros de página');
 await browser.close();
