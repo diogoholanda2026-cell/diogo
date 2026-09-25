@@ -85,6 +85,8 @@ const CENAS = {
   brindes: (H) => { H.C.hud.brinde('Medição aprovada: +1.260', 'creditos', 9000); H.C.hud.brinde('Caminho da Frente: Abrir o caminho', 'ok', 9000); H.C.hud.brinde('Achado: Etiqueta RFID!', 'etiqueta', 9000); },
   bem: (H) => { H.C._infoBem(); },
   mutirao: (H) => { H.S.disposicao = 45; H.C._infoMutirao(); },
+  // todos os tipos de balão: coleta (item pulando), obra pronta (check), repasse (moeda subindo), obra em andamento
+  baloes: (H) => { base(H); const t = Date.now(); H.S.etapas['pas_frente.e1'] = { estado: 'pronta', entregue: {}, ini: t - 9000, fim: t - 10 }; H.S.etapas['lago.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 60000 }; H.S.repasse.acum = 800; H.J._derivar(); H.C.calcBolhas(); },
   aprovacao: (H) => { H.S.etapas['pas_frente.e1'] = { estado: 'pronta', entregue: {}, ini: Date.now() - 1000, fim: Date.now() - 10 }; H.C.aprovarEtapa('pas_frente.e1'); },
 };
 function base(H) { H.S.nivel = 9; H.S.xp = 1700; H.S.creditos = 12000; H.S.predios.carpintaria.ok = true; H.S.predios.concreto.ok = true; H.S.predios.usina2.ok = true; H.J.produzir('usina1', 'madeira'); H.J.produzir('usina1', 'brita'); H.J.produzir('usina1', 'aco'); H.S.predios.usina1.slots[0].fim = Date.now() - 10; H.S.itens.viga = 2; H.S.itens.cimento = 3; H.S.dicas.guia = H.TUTORIAL.length; H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.J._derivar(); H.C.calcBolhas(); H.C.hud.atualizar(); }
