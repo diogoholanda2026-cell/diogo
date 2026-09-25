@@ -47,7 +47,9 @@ if (process.env.MEDIR) {
     const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0.05; };
     const sels = '.hud-txt, .stat span, .bt span, .obras-bt span, .cap .c, .cap .prog, .nivel .nv, .proximo span, .agora .ir, .balao .n';
     const out = [];
-    for (const el of document.querySelectorAll(sels)) { if (!vis(el) || el.closest('.folha, .modal, .cartao, .info-pop, .oculto, .escondido')) continue; const r = el.getBoundingClientRect(); if (r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) continue;
+    // (um texto com fundo próprio, como o verbo do Próximo sobre o botão verde, não está sobre o mundo: fica de fora)
+    const semFundo = (el) => { const cs = getComputedStyle(el); const b = cs.backgroundColor; return cs.backgroundImage === 'none' && (b === 'transparent' || /rgba\(.*, 0\)$/.test(b)); };
+    for (const el of document.querySelectorAll(sels)) { if (!vis(el) || !semFundo(el) || el.closest('.folha, .modal, .cartao, .info-pop, .oculto, .escondido')) continue; const r = el.getBoundingClientRect(); if (r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) continue;
       const pts = [[r.left - 3, r.top + r.height / 2], [r.right + 3, r.top + r.height / 2], [r.left + r.width / 2, r.top - 3], [r.left + r.width / 2, r.bottom + 3], [r.left + r.width * 0.25, r.bottom + 3]]; let L = 0; for (const [x, y] of pts) L += lum(x, y); L /= pts.length; out.push({ t: (el.textContent || '').trim().slice(0, 14), c: +(1.05 / (L + 0.05)).toFixed(2) }); }
     const ui = document.getElementById('ui'); const H = window.__held;
     return { fase: { ui: ui?.dataset.fase || null, env: H?.env?.fase || null }, contraste: { n: out.length, min: out.length ? Math.min(...out.map((o) => o.c)) : null, abaixo3: out.filter((o) => o.c < 3) } };

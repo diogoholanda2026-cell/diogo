@@ -745,7 +745,7 @@ img{-webkit-user-drag:none}
 .folha header .voltar{background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.3);color:#fff;line-height:38px}
 .folha header h2{display:block;font-size:19px;line-height:1.1;text-shadow:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .folha header small{display:block;margin-top:2px;font-size:13px;line-height:1.2;color:#d5e3f3;text-shadow:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.folha .corpo{padding:9px 10px 10px}
+.folha .corpo{padding:9px 10px 12px;-webkit-mask-image:linear-gradient(#000 calc(100% - 12px),transparent);mask-image:linear-gradient(#000 calc(100% - 12px),transparent)}
 .folha .rodape{flex:none;display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;background:var(--pp);border-top:1px solid var(--hr)}
 .folha .rodape .linha.acoes.fixa{position:static;margin:0;padding:0;background:none;flex-wrap:nowrap}
 .folha .rodape .cartao.fixo,.folha .rodape .cartao.resumo,.folha .rodape .linha.licenca{position:static;margin:0}
@@ -753,6 +753,7 @@ img{-webkit-user-drag:none}
 .folha p.desc .nome-longo{display:block;margin-bottom:2px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--tinta2)}
 .folha h3.secao{margin:12px 0 6px;font-size:12px;letter-spacing:.08em;color:var(--tinta2)}
 .folha .cartao,.folha .ficha,.folha .vaga,.folha .item-lista,.folha .pedido,.folha .lote,.folha .contrato,.folha .totais,.folha .linha.licenca{background:#fff;border:1px solid var(--hr);box-shadow:none}
+.folha .ficha,.folha .item-lista,.folha .pedido,.folha .vaga,.folha .lote .auto,.servicos .serv{transition:transform .22s cubic-bezier(.3,1.6,.5,1)}
 .folha .ficha:active,.folha .item-lista:active,.folha .pedido:active,.folha .vaga:active,.folha .lote .auto:active{transform:scale(.985);box-shadow:none;transition:transform .09s}
 .folha .entra-i{animation:entra .24s ease-out backwards;animation-delay:calc(var(--i,0) * 35ms)}
 .folha .etiq{border:1px solid var(--hr);padding:3px 10px 3px 4px;box-shadow:none}
@@ -990,7 +991,7 @@ img{-webkit-user-drag:none}
 .modal .lib{font-size:12px;letter-spacing:.08em;color:var(--tinta2)}
 .modal .lib small{margin-left:6px;font-size:12px;letter-spacing:0;text-transform:none;font-weight:600}
 .versao{font-size:12px}
-@media (max-height:420px){.modal .escolha small{font-size:12px}.modal .escolha .ganho,.modal .escolha .custo{font-size:12px}.modal>.mc{padding:5px 12px 6px}.modal .falas{margin:4px auto;gap:3px 8px;max-width:none}.modal.capitulo .falas{grid-template-columns:1fr 1fr}.modal.capitulo .conselho:nth-child(even){flex-direction:row}.modal.capitulo .conselho:nth-child(even) .fala{margin:0 0 0 4px}.modal.capitulo .conselho:nth-child(even) .fala::before{left:-8px;right:auto;border-width:7px 9px 7px 0;border-color:transparent #fff transparent transparent}.modal.capitulo .linha.centro .etiq{padding:0 8px 0 2px;line-height:22px}.modal .escolha{padding:4px 8px 5px;gap:4px 8px}.modal .escolhas{gap:6px}.modal .pergunta{margin:0}.modal .novas{margin:2px 0}.modal .escolha .delta{margin:0}.modal .premios{margin:2px 0}.modal .lib{margin:2px 0}.modal .liberados{margin-bottom:2px}.modal .escolha{padding:5px 8px 6px}.modal .escolha .escolher{height:44px}.selo-nivel,.selo-nivel img{width:84px;height:84px}.selo-nivel b{font-size:32px;margin-top:-20px}.premio{min-height:74px}}
+@media (max-height:420px){.modal .escolha small{font-size:12px}.modal .escolha .ganho,.modal .escolha .custo{font-size:12px}.modal>.mc{padding:5px 12px 6px}.modal .falas{margin:4px auto;gap:3px 8px;max-width:none}.modal.capitulo .falas{grid-template-columns:1fr 1fr}.modal.capitulo .conselho:nth-child(even){flex-direction:row}.modal.capitulo .conselho:nth-child(even) .fala{margin:0 0 0 4px}.modal.capitulo .conselho:nth-child(even) .fala::before{left:-8px;right:auto;border-width:7px 9px 7px 0;border-color:transparent #fff transparent transparent}.modal.larga{max-height:calc(100vh - 8px)}.modal.capitulo .linha.centro .etiq{padding:0 8px 0 2px;line-height:22px}.modal.capitulo .pergunta{font-size:12.5px}.modal.capitulo .escolha small{line-height:1.15}.modal .escolha{padding:4px 8px 5px;gap:4px 8px}.modal .escolhas{gap:6px}.modal .pergunta{margin:0}.modal .novas{margin:2px 0}.modal .escolha .delta{margin:0}.modal .premios{margin:2px 0}.modal .lib{margin:2px 0}.modal .liberados{margin-bottom:2px}.modal .escolha{padding:5px 8px 6px}.modal .escolha .escolher{height:44px}.selo-nivel,.selo-nivel img{width:84px;height:84px}.selo-nivel b{font-size:32px;margin-top:-20px}.premio{min-height:74px}}
 /* ---- rótulos 3D: legendas de maquete com linha-guia até o pé ---- */
 .rotulo3d{padding:3px 8px;background:var(--pp);border:1px solid var(--hr);border-radius:8px;box-shadow:0 2px 6px rgba(0,20,50,.18);color:var(--tinta);font-size:12.5px;font-weight:800;line-height:1.15;letter-spacing:.08em;text-transform:uppercase;text-align:center;white-space:normal}
 .rotulo3d::after{content:none}

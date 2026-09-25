@@ -350,10 +350,11 @@ export class Paineis {
       }).join('');
       corpo += `<div class="grade">${fichas}</div>` + desc;
       // licença que falta: o topógrafo do Escritório faz uma por vez
-      const tp = S.topografo;
+      // (a primeira que falta vai para o rodapé, sempre à vista; as outras ficam no corpo, para o rodapé não crescer)
+      const tp = S.topografo; let fx = 'fixo';
       for (const [k, n] of lic) { const R = TOPOGRAFO?.[k]; if (!R) continue;
-        if (tp?.k === k) corpo += `<div class="linha licenca fixo" data-ini="${tp.ini}" data-fim="${tp.fim}">${img(k)}<span class="tx">Topógrafo fazendo ${nomeIt(k)}</span><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div>`;
-        else corpo += `<div class="linha licenca fixo">${img(k)}<span class="tx"><small>Falta ${n}</small>${nomeIt(k)}</span><button class="botao ouro ${tp ? 'fraco' : ''}" data-a="topografo" data-k="${k}">${tp ? `Topógrafo ocupado até ${hhmm(tp.fim)}` : `Encomendar ao topógrafo · ${fmt(R.creditos)}`}</button></div>`; }
+        if (tp?.k === k) corpo += `<div class="linha licenca ${fx}" data-ini="${tp.ini}" data-fim="${tp.fim}">${img(k)}<span class="tx">Topógrafo fazendo ${nomeIt(k)}</span><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div>`;
+        else corpo += `<div class="linha licenca ${fx}">${img(k)}<span class="tx"><small>Falta ${n}</small>${nomeIt(k)}</span><button class="botao ouro ${tp ? 'fraco' : ''}" data-a="topografo" data-k="${k}">${tp ? `Topógrafo ocupado até ${hhmm(tp.fim)}` : `Encomendar ao topógrafo · ${fmt(R.creditos)}`}</button></div>`; fx = ''; }
       if (s === 'disponivel' || s === 'prancha') {
         // um botão de estado: verde "Iniciar obra" com tudo entregue ou em estoque; azul "Entregar N materiais" enquanto há o
         // que entregar; cinza com o motivo ("Faltam N materiais", "Sem créditos"); o custo (moeda e relógio) na segunda linha
