@@ -1,6 +1,7 @@
 // Configurações (modal largo com cartões de opção em duas colunas, sem rolar em 986x443, com o ciclo de dia e
 // noite), modo Apreciar (vista geral, comparação discreta com a referência, rótulos, planta, hora do dia, passeio
-// de câmera, fotografar e compartilhar, barra que some sozinha), rótulos presos ao mundo e as ligações da economia
+// de câmera, fotografar e compartilhar, barra que some sozinha), rótulos presos ao mundo como legendas de maquete (no
+// máximo 6, sem cruzar o HUD nem uns aos outros; fora do Apreciar só o da obra em foco) e as ligações da economia
 // nova que o Controle não conhece: toque no calendário (abre Finanças) e na pílula de moradores (popover da renda),
 // ícone voando ao Almoxarifado na coleta automática, redesenho do painel nos eventos novos, aviso do ano novo e o
 // modal da etapa aprovada com a recompensa (150% do custo) e os aceleradores ganhos.
@@ -23,13 +24,42 @@ const HORAS = [{ t: 'Automático', ic: 'ciclo' }, { t: 'Manhã', h: 7, ic: 'manh
 const CICLOS = [['acelerado', 'Acelerado'], ['relogio', 'Hora do celular'], ['dia', 'Sempre dia']];
 export function instalarExtras(C, o) {
   const { engine, env, rig, cfg, fotoURL, versao } = o;
-  // ---------------- rótulos ----------------
+  // ---------------- rótulos: legendas de maquete ----------------
+  // Texto curto com linha-guia até o pé projetado. No Apreciar: no máximo 6 visíveis, os mais perto do centro da tela
+  // primeiro; um rótulo some quando a caixa cruza um retângulo do HUD (hud.retangulos, como o _sob dos balões), a folha ou
+  // outro rótulo já colocado. Fora do Apreciar só aparece o rótulo da obra em foco (folha de etapa ou módulo aberta), com
+  // o estado EM OBRA e o capacete quando a etapa está em obra. Sem alocação por quadro: arrays fixos.
   const camadaR = el('div', 'passa rotulos'); camadaR.style.cssText = 'position:absolute;inset:0;overflow:hidden'; C.ui.insertBefore(camadaR, C.ui.firstChild);
-  const rot = ROTULOS.map((r) => { const d = el('div', 'rotulo3d', r.txt); camadaR.appendChild(d); return { ...r, el: d, tx: '' }; });
+  const rot = ROTULOS.map((r) => { const d = el('div', 'rotulo3d', `<span>${r.curto || r.txt}</span><small>${img('grua')}EM OBRA</small><i></i>`); camadaR.appendChild(d); return { ...r, el: d, tx: '', vis: null, w: 0, h: 0, sx: 0, sy: 0, d2: 0, obraOn: false }; });
   const v = new (engine.camera.position.constructor)();
+  const MAX_ROT = 6, GUIA = 18; const ordem = new Array(rot.length); const caixas = new Float32Array(MAX_ROT * 4); let nCaixas = 0; let tFolha = -1e9; const rFixos = new Float32Array(12); let nFixos = 0;
+  const cruza = (x0, y0, x1, y1, R, n) => { for (let i = 0; i < n; i += 4) if (x0 < R[i + 2] && x1 > R[i] && y0 < R[i + 3] && y1 > R[i + 1]) return true; return false; };
+  const verRot = (r, on) => { if (r.vis !== on) { r.vis = on; r.el.style.display = on ? '' : 'none'; } };
   C.atualizarRotulos = () => {
-    const on = C.modoApreciar && cfg.rotulos !== false; if (camadaR._on !== on) { camadaR._on = on; camadaR.style.display = on ? '' : 'none'; } if (!on) return;
-    for (const r of rot) { if (r.se && !C.J.feita(r.se)) { if (r.vis !== false) { r.vis = false; r.el.style.display = 'none'; } continue; } v.set(...r.pos).project(engine.camera); const vis = v.z <= 1; if (r.vis !== vis) { r.vis = vis; r.el.style.display = vis ? '' : 'none'; } if (!vis) continue; const tx = `translate(${((v.x * 0.5 + 0.5) * engine.vw).toFixed(0)}px,${((-v.y * 0.5 + 0.5) * engine.vh).toFixed(0)}px) translate(-50%,-100%)`; if (tx !== r.tx) { r.tx = tx; r.el.style.transform = tx; } }
+    const ap = C.modoApreciar && cfg.rotulos !== false; const at = C.paineis.atual; const foco = !ap && at && (at.tipo === 'etapa' || at.tipo === 'modulo') ? (at.tipo === 'etapa' ? at.arg.split('.')[0] : at.arg[0]) : null;
+    const on = ap || !!foco; if (camadaR._on !== on) { camadaR._on = on; camadaR.style.display = on ? '' : 'none'; } if (!on) return;
+    const t = performance.now(); const R = C.hud.retangulos(t); const W = engine.vw, H = engine.vh; let n = 0;
+    // folha, fala do conselheiro e barra do Apreciar (fora de hud.retangulos, que só cobre o HUD visível): relidos a cada 0,5 s
+    if (t - tFolha > 500) { tFolha = t; nFixos = 0; for (const e of [C.paineis.el, C.hud.fala, C.ui.querySelector('.apreciar:not(.oculta)')]) { if (!e || e.classList.contains('oculto')) continue; const b = e.getBoundingClientRect(); if (!b.width) continue; rFixos[nFixos] = b.left; rFixos[nFixos + 1] = b.top; rFixos[nFixos + 2] = b.right; rFixos[nFixos + 3] = b.bottom; nFixos += 4; } }
+    for (const r of rot) {
+      const quer = ap ? !!(!r.se || C.J.feita(r.se)) : r.obra === foco; if (!quer) { verRot(r, false); continue; }
+      v.set(...r.pos).project(engine.camera); if (v.z > 1) { verRot(r, false); continue; }
+      r.sx = (v.x * 0.5 + 0.5) * W; r.sy = (-v.y * 0.5 + 0.5) * H; r.d2 = (r.sx - W / 2) ** 2 + (r.sy - H / 2) ** 2; ordem[n++] = r;
+      if (!r.w || r.el.style.display === 'none') { if (r.el.style.display === 'none') r.el.style.display = ''; r.w = r.el.offsetWidth || 120; r.h = r.el.offsetHeight || 24; }
+      // estado EM OBRA da obra em foco (a etapa em obra da folha aberta)
+      const obra = !!foco && at.tipo === 'etapa' && C.J.etapa(at.arg).estado === 'obra'; if (obra !== r.obraOn) { r.obraOn = obra; r.el.classList.toggle('obra', obra); r.w = 0; }
+    }
+    if (n > 1) { const O = ordem; for (let i = 1; i < n; i++) { const x = O[i]; let j = i - 1; while (j >= 0 && O[j].d2 > x.d2) { O[j + 1] = O[j]; j--; } O[j + 1] = x; } }
+    nCaixas = 0; let vis = 0;
+    for (let i = 0; i < n; i++) {
+      const r = ordem[i]; if (!r.w) { r.w = r.el.offsetWidth || 120; r.h = r.el.offsetHeight || 24; }
+      const x0 = r.sx - r.w / 2, y1 = r.sy - GUIA, y0 = y1 - r.h, x1 = r.sx + r.w / 2;
+      const sob = vis >= MAX_ROT || x0 < 0 || x1 > W || y0 < 0 || cruza(x0, y0, x1, y1, R, R.length) || cruza(x0, y0, x1, y1, rFixos, nFixos) || cruza(x0, y0, x1, y1, caixas, nCaixas);
+      if (sob) { verRot(r, false); continue; }
+      verRot(r, true); caixas[nCaixas] = x0; caixas[nCaixas + 1] = y0; caixas[nCaixas + 2] = x1; caixas[nCaixas + 3] = y1; nCaixas += 4; vis++;
+      const tx = `translate(${r.sx.toFixed(0)}px,${y1.toFixed(0)}px) translate(-50%,-100%)`; if (tx !== r.tx) { r.tx = tx; r.el.style.transform = tx; }
+    }
+    for (let i = n; i < ordem.length; i++) ordem[i] = null;
   };
   // ---------------- apreciar ----------------
   const foto = el('div', ''); foto.id = 'foto-ref'; foto.style.backgroundImage = `url(${fotoURL})`; C.ui.appendChild(foto);
