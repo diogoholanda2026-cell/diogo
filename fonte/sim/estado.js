@@ -55,6 +55,8 @@ export const FICHAS_MAX = 3;
 const BANDEJA = 9, FILA_MAX = 9, USINA_MAX = 6, FILA_SELO = 12, MUTIRAO_MS = 2 * 3600e3, PEND_MS = 12 * 3600e3;
 // lotes: cada espaço ou trabalho faz de 1 a 10 unidades de uma vez; um lote de 10 leva 8 vezes o tempo de 1 (economia de escala)
 const LOTE_MAX = 10, F_LOTE = 0.8;
+// almoxarifado: vagas iniciais e por ampliação (dimensionado para lotes de 10 e pedidos 5 × maiores)
+const ALMOX_BASE = 120, ALMOX_NIVEL = 40;
 // usinas que aceitam J.produzir (a Usina de Pedidos da Comunidade só trabalha para os pedidos)
 const USINAS_LIVRES = USINAS.filter((u) => !PREDIOS[u].pedidos);
 const PASSO_OFF = 5 * 60e3, PASSOS_MAX = 288, RAMPA_MS = 48 * 3600e3;
@@ -82,7 +84,7 @@ const TARIFA = [[30, 5, '0-30'], [60, 8, '31-60'], [100, 11, '61-100']], OFFLINE
 const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 100, compra: 3, venda: 1.5 };
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
 export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
-  pedidoFator: PEDIDO_FATOR, pedidoValor: PEDIDO_VALOR, filaPedidos: FILA_PEDIDOS, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR, tarifas: TARIFA.map((t) => t[1]), depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
+  pedidoFator: PEDIDO_FATOR, pedidoValor: PEDIDO_VALOR, filaPedidos: FILA_PEDIDOS, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR, tarifas: TARIFA.map((t) => t[1]), almoxBase: ALMOX_BASE, almoxNivel: ALMOX_NIVEL, depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export const TOPOGRAFO = { estaca: { itens: { madeira: 2 }, creditos: 300, min: 20 }, baliza: { itens: { aco: 2 }, creditos: 600, min: 30 }, trena: { itens: { cobre: 2 }, creditos: 900, min: 45 } };
 const LICENCAS = ['estaca', 'baliza', 'trena'], ALMOX = ['estrado', 'etiqueta', 'cadeado'];
 const QUEDA = { estaca: ['madeira', 0.006], baliza: ['serralheria', 0.03], trena: ['eletrica', 0.03] }; // licenças caem de onde fazem sentido
@@ -273,7 +275,7 @@ export class Jogo {
   on(fn) { this.ouvintes.push(fn); }
   emit(tipo, dados = {}) { for (const f of this.ouvintes) f(tipo, dados); }
   // ---------------- consultas ----------------
-  get capacidade() { return 60 + 20 * (this.S.almoxNivel - 1) + this.ef.almox; }
+  get capacidade() { return ALMOX_BASE + ALMOX_NIVEL * (this.S.almoxNivel - 1) + this.ef.almox; } // com lotes de 10 e pedidos 5 × maiores, o almoxarifado começa em 120 vagas
   get ocupado() { let n = 0; for (const [k, v] of Object.entries(this.S.itens)) if (ITENS[k] && ITENS[k].tipo !== 'especial') n += v; return n; }
   get livre() { return this.capacidade - this.ocupado; }
   temItem(k, n = 1) { return (this.S.itens[k] || 0) >= n; }
@@ -914,9 +916,10 @@ export class Jogo {
     return null;
   }
   _planoCreditos(v) {
-    const r = this.S.repasse; if (r.acum >= 1 && this.S.creditos + r.acum >= v) return this._plano('coletar', { repasse: true }, 'Coletar os repasses da Holding');
-    const tx = this.taxaRepasse(); const fim = this.agora + (Math.max(0, v - this.S.creditos - r.acum) / Math.max(0.01, tx)) * 60000;
-    return this._plano('aguardar', { repasse: true }, `Juntar ${fmtN(v)} créditos (repasses e medições)`, { fim });
+    const r = this.S.repasse; if (r.acum >= 1 && this.S.creditos + r.acum >= v) return this._plano('coletar', { repasse: true }, 'Coletar a renda dos moradores');
+    const tx = this.taxaRepasse(); if (tx < 0.01) return this._plano('vender', { deposito: true }, `Sem moradores pagando: vender sobras no Depósito de Trocas para juntar ${fmtN(v)} créditos`);
+    const fim = this.agora + (Math.max(0, v - this.S.creditos - r.acum) / tx) * 60000;
+    return this._plano('aguardar', { repasse: true }, `Juntar ${fmtN(v)} créditos (renda dos moradores e recompensas)`, { fim });
   }
   _planoItens(falta) { let espera = null; for (const [k, n] of Object.entries(falta)) { const pl = this._planoItem(k, n, 0); if (pl && pl.acao !== 'aguardar') return pl; espera = this._espera(espera, pl); } return espera || this._plano('aguardar', null, 'Aguardar a produção'); }
   _emProducao(k) { // quanto de k está pronto para coletar, a caminho e na fila à espera de insumos que ainda não existem

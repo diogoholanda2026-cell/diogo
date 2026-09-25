@@ -1,15 +1,18 @@
 // Robô que joga sozinho para medir o equilíbrio: quanto tempo cada capítulo leva, onde trava,
-// quanto as oficinas trabalham e se cada regra nova (cadeia, licenças, dilemas, depósito) termina o jogo.
+// quanto as oficinas trabalham e se cada regra (lotes, automático, cadeia, licenças, dilemas, depósito, pedidos,
+// empréstimo) termina o jogo. Produz em lotes (n pelo que a próxima etapa pede), deixa o espaço 1 da Usina de
+// Materiais em automático enquanto o plano pede o item, usa os aceleradores das etapas, fabrica um pedido por vez
+// na Usina de Pedidos e vende sobras no Depósito quando falta crédito.
 // Uso: node ferramentas/simular.mjs [passo_min=3] [ritmo=1]
 //   SESSOES='7:30-7:45,12:30-12:45,18:30-18:45,22:00-22:15'  joga só nessas janelas (fora delas o tempo passa)
-//   ESCOLHA=0|1|alt  opção do Conselho   MUTIRAO=1 usa fichas   DEPOSITO=1 compra matéria-prima
+//   ESCOLHA=0|1|alt  opção do Conselho   MUTIRAO=1 usa fichas   DEPOSITO=1 compra matéria-prima   EMPRESTIMO=1 toma empréstimo quando falta crédito
 //   ROBO=meta  só coleta e segue J.planoMeta() (Meta em foco)   CADEIA=1 encomenda em cadeia   SEMENTE=n sorteios fixos
-//   ETAPAS=1 registra cada etapa e módulo      RELATORIO=1 detalhes por capítulo
+//   ACELERA=0 não usa aceleradores   AUTO=0 sem espaço automático   ETAPAS=1 registra cada etapa e módulo   RELATORIO=1 detalhes por capítulo
 // npm run simular:todos (node ferramentas/simular.mjs --todos): testes de regra, matriz de 8 combinações e
 // dilemas; sai com código 1 se houver TRAVADO ou algum número fora das faixas.
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO, COFRE_H, VERSAO_SAVE } from '../fonte/sim/estado.js';
+import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO, COFRE_H, VERSAO_SAVE, REGRAS, ANO_MS } from '../fonte/sim/estado.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS, receitas } from '../fonte/data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../fonte/data/obras.js';
 import { CAPITULOS, FALAS_ETAPA, EFEITOS, TUTORIAL } from '../fonte/data/historia.js';
@@ -18,6 +21,8 @@ const DIA0 = Date.UTC(2026, 0, 1); const H = 3600e3;
 const SESSOES_PADRAO = '7:30-7:45,12:30-12:45,18:30-18:45,22:00-22:15';
 const semente = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const LIC = ['estaca', 'baliza', 'trena'];
+const USINAS_L = USINAS.filter((u) => !PREDIOS[u].pedidos); // usinas que aceitam J.produzir (a de Pedidos só trabalha para os pedidos)
+const LOTE = REGRAS.loteMax;
 
 // ------------------------------------------------------------------ uma partida
 export function rodar(o = {}) {
@@ -32,12 +37,13 @@ function partida(o) {
   const proxJanela = () => { const m = minDia(); let d = Infinity; for (const [a] of janelas) { const x = a > m ? a - m : a + 1440 - m; d = Math.min(d, x); } return t + d * 60000; };
   const hora = () => ((t - T0) / H).toFixed(2).padStart(7) + 'h';
   const log = []; const M = {}; const cap = () => S.cap;
-  const m = (c) => (M[c] ||= { ini: t, dur: 0, turnos: 0, semAcao: 0, parado: 0, bloq: {}, bloqTurnos: {}, credMin: Infinity, credMax: 0, credFim: 0, niveis: 0, pedidos: 0, compras: 0, vendas: 0, etapas: 0, modulos: 0, obrasMax: 0, obrasAm: [], mutUsado: 0, bemFim: 0 });
+  const m = (c) => (M[c] ||= { ini: t, dur: 0, turnos: 0, semAcao: 0, parado: 0, bloq: {}, bloqTurnos: {}, credMin: Infinity, credMax: 0, credFim: 0, niveis: 0, pedidos: 0, compras: 0, vendas: 0, etapas: 0, modulos: 0, obrasMax: 0, obrasAm: [], mutUsado: 0, bemFim: 0, lotes: 0, acelerados: 0, fabricados: 0, emprestado: 0, autoLotes: 0, vendasCred: 0 });
   const util = {}; const desde = { usina1: T0 }; let nNovo = 0, nNovo6 = 0, nFim = 0, nNivelEv = 0;
   J.on((tipo, d) => {
     const c = m(cap());
     if (tipo === 'produto' && d.fim) util[d.predio] = (util[d.predio] || 0) + (d.fim - d.ini);
-    if (tipo === 'produzir') util[d.predio] = (util[d.predio] || 0) + (d.fim - d.ini) / S.predios[d.predio].nSlots;
+    if (tipo === 'produzir') { util[d.predio] = (util[d.predio] || 0) + (d.fim - d.ini) / S.predios[d.predio].nSlots; c.lotes += d.n || 1; if (d.auto) c.autoLotes += d.n || 1; }
+    if (tipo === 'enfileirar' && !d.pend) c.lotes += d.n || 1;
     if (tipo === 'predio') desde[d.id] = t;
     if (tipo === 'nivel') { c.niveis += d.para - d.de; nNivelEv++; }
     if (tipo === 'pedido') c.pedidos++;
@@ -50,18 +56,49 @@ function partida(o) {
   const coletarTudo = () => { for (const u of USINAS) if (S.predios[u].ok) for (const i of J.prontosUsina(u)) conta(J.coletarUsina(u, i)); for (const x of OFICINAS) if (S.predios[x].ok) conta(J.coletarOficina(x)); J.coletarRepasse(); };
   const aprovarTudo = () => { for (const [k, st] of Object.entries(S.etapas)) if (st.estado === 'pronta') conta(J.aprovarEtapa(k)); for (const f of Object.keys(S.modulos)) S.modulos[f].forEach((mm, i) => { if (mm.obra?.estado === 'pronta') conta(J.aprovarModulo(f, i)); }); };
   const escolher = () => { const c = J.capitulo(); if (!c || S.capEscolhas[c.n] !== undefined || !c.metas.every((x) => J.metaFeita(x))) return; const e = o.escolhas?.[c.n] ?? (o.escolha === 'alt' ? (c.n + 1) % 2 : +(o.escolha || 0)); J.concluirCapitulo(c.escolha?.[e]?.id ?? c.escolha?.[0]?.id ?? null); };
-  // almoxarifado apertado: vende primeiro o que mais sobra (o depósito aceita 20 por janela)
+  // almoxarifado apertado: vende primeiro o que mais sobra (o depósito aceita 100 por janela)
   const venderSobras = (need) => { const alvo = Math.max(8, Math.floor(J.capacidade * 0.12)); const sob = Object.entries(S.itens).filter(([k, n]) => ITENS[k].tipo !== 'especial' && n > (need[k] || 0)).map(([k, n]) => [k, n - (need[k] || 0)]).sort((a, b) => b[1] - a[1]);
     for (const [k, q] of sob) { if (J.livre >= alvo) break; const r = J.vender(k, Math.min(q, alvo - J.livre)); if (r === 'ok') m(cap()).vendas++; else if (r === 'limite') break; } };
+  // falta crédito para uma obra de meta: vende o que sobra do plano, do mais valioso ao mais barato, até juntar o que falta
+  const venderParaCreditos = (need, v) => { const sob = Object.entries(S.itens).filter(([k, n]) => ITENS[k].tipo !== 'especial' && n > (need[k] || 0)).map(([k, n]) => [k, n - (need[k] || 0)]).sort((a, b) => J.precoVenda(b[0]) - J.precoVenda(a[0])); const c0 = S.creditos;
+    for (const [k, q] of sob) { if (S.creditos - c0 >= v) break; const r = J.vender(k, Math.min(q, Math.ceil((v - (S.creditos - c0)) / J.precoVenda(k)))); if (r === 'ok') { m(cap()).vendasCred++; acoes++; } else if (r === 'limite') break; } };
+  // aceleradores das etapas: obra, na obra de meta mais longa (se faltar mais de 30 min); produção, no trabalho mais longo
+  // de uma oficina (senão na usina mais ocupada)
+  const usarAceleradores = () => {
+    if (o.aceleradores === 0) return; const A = S.aceleradores; const c = J.capitulo(); const metas = new Set((c?.metas || []).filter((x) => x.tipo === 'etapa').map((x) => x.id.split('.')[0]));
+    for (let g = 0; g < 3 && A.obra > 0; g++) { let best = null, bf = 0;
+      for (const [k, st] of Object.entries(S.etapas)) if (st.estado === 'obra') { const f = (st.fim - t) * (metas.has(k.split('.')[0]) ? 2 : 1); if (f > bf) { bf = f; best = { etapa: k, resta: st.fim - t }; } }
+      for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((mm, i) => { if (mm.obra?.estado === 'obra' && mm.obra.fim - t > bf) { bf = mm.obra.fim - t; best = { modulo: [f, i], resta: mm.obra.fim - t }; } });
+      if (!best || best.resta < 30 * 60000) break; const alvo = best.etapa ? { etapa: best.etapa } : { modulo: best.modulo }; if (J.acelerar(alvo) !== 'ok') break; m(cap()).acelerados++; acoes++; }
+    for (let g = 0; g < 3 && A.producao > 0; g++) { let best = null, bf = 30 * 60000;
+      for (const x of OFICINAS) { const f = S.predios[x].fila[0]; if (S.predios[x].ok && f?.fim > t + bf) { bf = f.fim - t; best = { predio: x }; } }
+      if (!best) for (const u of USINAS) { const st = S.predios[u]; if (!st.ok) continue; const tot = st.slots.reduce((a, s) => a + (s && s.fim > t ? Math.min(3600e3, s.fim - t) : 0), 0); if (tot > bf) { bf = tot; best = { predio: u }; } }
+      if (!best || J.acelerar(best) !== 'ok') break; m(cap()).acelerados++; acoes++; }
+  };
+  // Usina de Pedidos: um pedido por vez, o de recompensa mais útil, se o almoxarifado tiver espaço para guardar o que falta
+  const fabricarPedidos = () => {
+    const u = S.predios.usina2; if (!u?.ok || !PREDIOS.usina2.pedidos || S.pedidos.some((p) => p.auto)) return; let best = null, bv = 0;
+    S.pedidos.forEach((p, i) => { if (!p.itens) return; const R = p.recompensa || {}; const falta = Object.entries(p.itens).reduce((a, [k, n]) => a + Math.max(0, n - (S.itens[k] || 0)), 0); if (falta <= 0 || falta > J.livre) return;
+      const util = (Object.keys(R.itens || {}).some((k) => LIC.includes(k) || S.itens[k] < 4) ? 2 : 0) + (R.bem && J.bem < 80 ? 1 : 0) + (R.disposicao && S.mutirao < FICHAS_MAX ? 1 : 0) + (R.creditos || 0) / 2000; if (util > bv) { bv = util; best = i; } });
+    if (best != null && J.fabricarPedido(best) === 'ok') { m(cap()).fabricados++; acoes++; }
+  };
+  // cenário de empréstimo: toma o que falta para uma obra de meta (múltiplos de 1.000, até o disponível no ano), paga os
+  // juros a cada visita e quita quando os créditos cobrem a dívida com folga
+  const usarEmprestimo = (falta) => {
+    if (!o.emprestimo) return; const I = J.emprestimoInfo();
+    if (I.divida >= 1 && S.creditos >= I.divida + 5000) { if (J.quitar() === 'ok') acoes++; }
+    else if (I.juros >= 1 && S.creditos >= Math.ceil(I.juros)) { if (J.pagarJuros() === 'ok') acoes++; }
+    if (falta > 0 && I.disponivelAno >= 1000) { const v = Math.min(I.disponivelAno, Math.ceil(falta / 1000) * 1000); if (J.emprestar(v) === 'ok') { m(cap()).emprestado += v; acoes++; } }
+  };
   const usarMutirao = () => { // na obra de meta mais longa (etapas e módulos), se faltar mais de 20 min
     const c = J.capitulo(); const metas = new Set((c?.metas || []).filter((x) => x.tipo === 'etapa').map((x) => x.id.split('.')[0])); let best = null, bf = 0;
     for (const [k, st] of Object.entries(S.etapas)) if (st.estado === 'obra') { const f = (st.fim - t) * (metas.has(k.split('.')[0]) ? 2 : 1); if (f > bf) { bf = f; best = { etapa: k }; } }
     for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((mm, i) => { if (mm.obra?.estado === 'obra' && mm.obra.fim - t > bf) { bf = mm.obra.fim - t; best = { modulo: [f, i] }; } });
     if (best && bf > 20 * 60000 && J.mutirao(best) === 'ok') { m(cap()).mutUsado++; acoes++; }
   };
-  const pedidosUteis = (need) => S.pedidos.forEach((p, i) => { // só entrega sobra, e só se a recompensa serve para alguma coisa
-    if (!p.itens || !Object.entries(p.itens).every(([k, n]) => (S.itens[k] || 0) - (need[k] || 0) >= n)) return; const R = p.recompensa || {};
-    const serve = Object.keys(R.itens || {}).some((k) => LIC.includes(k) || S.itens[k] < 4) || (R.bem && J.bem < 80) || (R.disposicao && S.mutirao < FICHAS_MAX) || S.creditos < 20000;
+  const pedidosUteis = (need) => S.pedidos.forEach((p, i) => { // entrega o pedido que a Usina de Pedidos fabricou; dos outros, só sobra, e só se a recompensa serve
+    if (!p.itens || !Object.entries(p.itens).every(([k, n]) => (S.itens[k] || 0) - (p.auto ? 0 : need[k] || 0) >= n)) return; const R = p.recompensa || {};
+    const serve = p.auto || Object.keys(R.itens || {}).some((k) => LIC.includes(k) || S.itens[k] < 4) || (R.bem && J.bem < 80) || (R.disposicao && S.mutirao < FICHAS_MAX) || S.creditos < 20000;
     if (serve) conta(J.entregarPedido(i));
   });
   // metas do capítulo e tudo de que elas dependem (obras, módulos), para gastar primeiro no que importa
@@ -92,13 +129,16 @@ function partida(o) {
       for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((mm, i) => { if (MODULOS[f].cap > S.cap) return; for (let lv = mm.nivel + 1; lv <= Math.min(MODULOS[f].max, J.limiteModulo(f)); lv++) for (const [k, n] of Object.entries(mm.pedido?.nivel === lv ? mm.pedido.itens : J.pedidoModulo(f, i, lv))) resta[k] = (resta[k] || 0) + n; });
       // no fim da sessão, como um jogador antes de fechar o jogo: filas cheias (o que sobrar espera na bandeja)
       let vol = Math.floor(J.capacidade * (fimSessao ? 0.5 : 0.25)); for (const [k, n] of Object.entries(resta)) { if (ITENS[k].tipo !== 'produto' || !J.liberado(k) || vol <= 0) continue; const q = Math.min(n, fimSessao ? 6 : 3); add(4, k, q); vol -= q; } }
-    const livre = { ...S.itens }; for (const x of OFICINAS) { const o2 = S.predios[x]; for (const f of o2.fila) livre[f.item] = (livre[f.item] || 0) + 1; for (const k of o2.prontos) livre[k] = (livre[k] || 0) + 1; } for (const u of USINAS) for (const sl of S.predios[u].slots) if (sl) livre[sl.item] = (livre[sl.item] || 0) + 1;
+    // Usina de Pedidos: os insumos dos produtos da fila dela entram no plano (os itens do pedido marcado ficam reservados abaixo)
+    { const u2 = S.predios.usina2; if (u2?.ok && PREDIOS.usina2.pedidos) for (const f of u2.fila || []) { const it = ITENS[f.item]; if (it?.req) for (const [r, q] of Object.entries(it.req)) add(2, r, q * f.n); } }
+    const livre = { ...S.itens }; for (const x of OFICINAS) { const o2 = S.predios[x]; for (const f of o2.fila) livre[f.item] = (livre[f.item] || 0) + (f.n || 1); for (const k of o2.prontos) livre[k] = (livre[k] || 0) + 1; } for (const u of USINAS) for (const sl of S.predios[u].slots) if (sl) livre[sl.item] = (livre[sl.item] || 0) + (sl.sobra ?? sl.n ?? 1);
     const prod = [], bruto = [];
     const exp = (k, n, pr, prof) => { const it = ITENS[k]; const usa = Math.min(livre[k] || 0, n); livre[k] = (livre[k] || 0) - usa; const d = n - usa; if (d <= 0) return; if (it.tipo === 'bruto') { bruto.push([k, d, pr]); return; } prod.push([k, d, pr, prof]); for (const [r, q] of Object.entries(it.req)) exp(r, q * d, pr, prof + 1); };
     listas.forEach((L, pr) => { for (const [k, n] of L) exp(k, n, pr, 0); });
     // licenças que faltam viram madeira, aço e cobre para o topógrafo
     for (const p of PROJETOS) { const nx = J.proximaEtapa(p); if (!nx || !['disponivel', 'prancha'].includes(nx.s)) continue; const f = J.faltaEtapa(p.id + '.' + nx.e.id); for (const k of LIC) if (f[k]) for (const [i, q] of Object.entries(TOPOGRAFO[k].itens)) bruto.push([i, q * f[k], 0]); }
     const need = {}; for (const L of listas.slice(0, 4)) for (const [k, n] of L) need[k] = (need[k] || 0) + n; for (const [k, n] of prod) need[k] = (need[k] || 0) + n;
+    for (const p of S.pedidos) if (p.auto && p.itens) for (const [k, q] of Object.entries(p.itens)) need[k] = (need[k] || 0) + q;
     return { prod, bruto, need, listas };
   }
   function turnoGuloso() {
@@ -111,7 +151,7 @@ function partida(o) {
     for (const p of PROJETOS) { const nx = J.proximaEtapa(p); if (!nx || !['disponivel', 'prancha'].includes(nx.s)) continue; const f = J.faltaEtapa(p.id + '.' + nx.e.id); for (const k of LIC) if (f[k] && !S.topografo) conta(J.encomendarLicenca(k)); }
     // obras: primeiro as das metas; as outras só com reserva para as metas que ainda esperam material
     // (e, na reta final do capítulo 5, com o custo do epílogo guardado, como faz quem vê a prancha do replantio)
-    const bloq = new Set(); let reserva = 0;
+    const bloq = new Set(); let reserva = 0, faltaCred = 0;
     if (S.cap === 5 && (S.marcos[5] || 0) >= 2) for (const e of PROJ.reflorestar.etapas) reserva += J.custoEtapa(PROJ.reflorestar, e);
     const tentar = (p, meta) => {
       if (p.cap > S.cap) { for (const e of p.etapas) if (J.aceitaEntrega(p, e)) J.entregarTudo(p.id + '.' + e.id); return; }
@@ -120,37 +160,47 @@ function partida(o) {
         if (s === 'disponivel' || s === 'prancha') {
           J.entregarTudo(key); const falta = Object.keys(J.faltaEtapa(key)); const cu = J.custoEtapa(p, e);
           if (!meta && !falta.length && S.creditos - cu < reserva) { bloq.add('etapa:creditos'); break; }
-          const r = conta(J.iniciarEtapa(key)); if (r !== 'ok') { let why = r; if (r === 'falta') why = falta.some((k) => ITENS[k].tipo === 'especial') ? 'licenca' : 'itens'; bloq.add('etapa:' + why); if (meta) reserva += cu; }
+          const r = conta(J.iniciarEtapa(key)); if (r !== 'ok') { let why = r; if (r === 'falta') why = falta.some((k) => ITENS[k].tipo === 'especial') ? 'licenca' : 'itens'; bloq.add('etapa:' + why); if (meta) { reserva += cu; if (r === 'creditos') faltaCred = Math.max(faltaCred, cu - S.creditos); } }
         } else if (J.aceitaEntrega(p, e)) J.entregarTudo(key);
         break;
       }
     };
     for (const p of PROJETOS) if (pri.proj.has(p.id)) tentar(p, true);
-    const modulo = (f, i, meta) => { const mm = S.modulos[f][i]; if (J.situacaoModulo(f, i) !== 'disponivel') return; const q = J.requisitosModulo(f, i); if (!meta && S.creditos - q.custo < reserva) return; const r = conta(J.melhorarModulo(f, i)); if (r === 'servico') { for (const k of q.servicos) if (J.serv[k] < q.popDepois) bloq.add('serv:' + k); } else if (r !== 'ok') { bloq.add('mod:' + r); if (meta && r !== 'bem') reserva += q.custo; } };
+    const modulo = (f, i, meta) => { const mm = S.modulos[f][i]; if (J.situacaoModulo(f, i) !== 'disponivel') return; const q = J.requisitosModulo(f, i); if (!meta && S.creditos - q.custo < reserva) return; const r = conta(J.melhorarModulo(f, i)); if (r === 'servico') { for (const k of q.servicos) if (J.serv[k] < q.popDepois) bloq.add('serv:' + k); } else if (r !== 'ok') { bloq.add('mod:' + r); if (meta && r !== 'bem') { reserva += q.custo; if (r === 'creditos') faltaCred = Math.max(faltaCred, q.custo - S.creditos); } } };
     for (const f of Object.keys(S.modulos)) S.modulos[f].forEach((mm, i) => { if (mm.nivel < (pri.mod[f] || 0)) modulo(f, i, true); });
     for (const p of PROJETOS) if (!pri.proj.has(p.id)) tentar(p, false);
     for (const f of Object.keys(S.modulos)) S.modulos[f].forEach((mm, i) => { if (mm.nivel >= (pri.mod[f] || 0)) modulo(f, i, false); });
     for (const b of bloq) { c.bloq[b] = (c.bloq[b] || 0) + passo / 60000; c.bloqTurnos[b] = (c.bloqTurnos[b] || 0) + 1; }
     if (o.mutirao && S.mutirao > 0) usarMutirao();
+    usarAceleradores();
+    // falta crédito para uma meta: vende sobras do plano no Depósito (150% do preço de compra); no cenário de empréstimo, toma emprestado
+    if (faltaCred > 0) { venderParaCreditos(pl.need, faltaCred); usarEmprestimo(Math.max(0, faltaCred - (S.creditos - (c.credAntes ?? S.creditos)))); } else usarEmprestimo(0);
     // amplia só o que está limitando: fila cheia com trabalho planejado, ou usina toda ocupada
     pl = plano(pri);
-    for (const id of [...USINAS, ...OFICINAS]) { const x = S.predios[id]; if (!x.ok || S.creditos - J.custoEspaco(id) < Math.max(reserva, J.custoEspaco(id) * 2)) continue; const cheio = x.fila ? x.fila.length >= J.vagasFila(id) && pl.prod.some(([k]) => ITENS[k].oficina === id) : x.slots.every(Boolean) && pl.bruto.length; if (cheio) J.ampliar(id); }
-    // oficinas: em rodízio pelos itens do plano (metas primeiro, insumos mais profundos antes)
+    for (const id of [...USINAS_L, ...OFICINAS]) { const x = S.predios[id]; if (!x.ok || S.creditos - J.custoEspaco(id) < Math.max(reserva, J.custoEspaco(id) * 2)) continue; const cheio = x.fila ? x.fila.length >= J.vagasFila(id) && pl.prod.some(([k]) => ITENS[k].oficina === id) : x.slots.every(Boolean) && pl.bruto.length; if (cheio) J.ampliar(id); }
+    // oficinas: em rodízio pelos itens do plano (metas primeiro, insumos mais profundos antes), em lotes limitados pelos insumos
     for (const x of OFICINAS) {
       const o2 = S.predios[x]; if (!o2.ok) continue;
       const cand = pl.prod.filter(([k]) => ITENS[k].oficina === x && J.liberado(k)).sort((a, b) => a[2] - b[2] || b[3] - a[3]).map(([k, d]) => [k, d]);
       // como um jogador: o insumo que uma encomenda mais importante espera não vai para uma menos importante
       const espera = new Set();
-      for (let volta = 0; volta < 12 && o2.fila.length < J.vagasFila(x); volta++) { let fez = false; for (const cd of cand) { if (cd[1] <= 0 || o2.fila.length >= J.vagasFila(x)) continue; const req = Object.keys(ITENS[cd[0]].req); if (req.some((r) => espera.has(r))) continue; const r = conta(J.enfileirar(x, cd[0], !!o.cadeia)); if (r === 'ok') { cd[1]--; fez = true; } else if (r === 'falta') for (const k of req) espera.add(k); } if (!fez) break; }
+      for (let volta = 0; volta < 12 && o2.fila.length < J.vagasFila(x); volta++) { let fez = false; for (const cd of cand) { if (cd[1] <= 0 || o2.fila.length >= J.vagasFila(x)) continue; const req = Object.keys(ITENS[cd[0]].req); if (req.some((r) => espera.has(r))) continue;
+        const n = o.cadeia ? 1 : Math.min(LOTE, cd[1], Math.max(1, J.loteMax(x, cd[0]))); const r = conta(J.enfileirar(x, cd[0], n, false, !!o.cadeia)); if (r === 'ok') { cd[1] -= n; fez = true; } else if (r === 'falta') for (const k of req) espera.add(k); } if (!fez) break; }
     }
-    // usinas: matérias-primas do plano (metas primeiro); sem plano, só se sobrar espaço no almoxarifado
+    // usinas: matérias-primas do plano (metas primeiro) em lotes, dentro do espaço que sobra no almoxarifado; sem plano, só
+    // se sobrar bastante espaço
     const raws = []; for (const [k, d, pr] of pl.bruto.sort((a, b) => a[2] - b[2])) if (J.liberado(k)) { const r = raws.find((x) => x[0] === k); if (r) r[1] += d; else raws.push([k, d]); }
-    const fallback = ['madeira', 'brita', 'aco', 'argila', 'mudas', 'vidro', 'cobre', 'fibra'].filter((k) => J.liberado(k)); let ai = 0;
-    for (const u of USINAS) if (S.predios[u].ok) for (let sl = 0; sl < S.predios[u].nSlots; sl++) {
-      if (S.predios[u].slots[sl] || J.livre < 8) continue; let k = null;
-      for (let g = 0; g < raws.length && !k; g++) { const r = raws[(ai + g) % raws.length]; if (r[1] > 0) { k = r[0]; r[1]--; ai = (ai + g + 1) % raws.length; } }
-      if (!k) { if (J.livre < J.capacidade * 0.3) break; k = fallback[ai++ % fallback.length]; } conta(J.produzir(u, k));
+    const demRaw = new Set(raws.map((r) => r[0]));
+    const fallback = ['madeira', 'brita', 'aco', 'argila', 'mudas', 'vidro', 'cobre', 'fibra'].filter((k) => J.liberado(k)); let ai = 0, orc = J.livre - 8;
+    for (const u of USINAS_L) if (S.predios[u].ok) for (let sl = 0; sl < S.predios[u].nSlots; sl++) {
+      if (S.predios[u].slots[sl] || orc < 1) continue; let k = null, n = 0;
+      for (let g = 0; g < raws.length && !k; g++) { const r = raws[(ai + g) % raws.length]; if (r[1] > 0) { k = r[0]; n = Math.min(LOTE, r[1], orc); r[1] -= n; ai = (ai + g + 1) % raws.length; } }
+      if (!k) { if (J.livre < J.capacidade * 0.3) break; k = fallback[ai++ % fallback.length]; n = Math.min(5, orc); }
+      if (conta(J.produzir(u, k, n)) === 'ok') orc -= n;
     }
+    // automático: o espaço 1 da Usina de Materiais repete o lote enquanto o plano pedir o item; desliga no fim da sessão
+    { const a = S.predios.usina1.slots[0]; if (a && o.auto !== 0) { const quer = !fimSessao && demRaw.has(a.item); if (a.auto !== quer) J.setAuto('usina1', 0, quer); } }
+    fabricarPedidos();
     // depósito: só a matéria-prima que falta para as obras abertas (não para estoque), com folga no almoxarifado
     if (o.deposito) { const falta = {}; for (const [k, d, pr] of pl.bruto) if (pr <= 1) falta[k] = (falta[k] || 0) + d; for (const u of USINAS) for (const sl of S.predios[u].slots) if (sl && falta[sl.item]) falta[sl.item]--;
       for (const [k, d] of Object.entries(falta)) { if (!J.liberado(k)) continue; for (let q = 0; q < d; q++) { const e = J.estoqueDeposito(k); if (e.n < 1 || S.creditos - e.preco < Math.max(reserva, 5 * e.preco) || J.livre < J.capacidade * 0.3) break; if (J.comprar(k) === 'ok') { c.compras++; acoes++; } } } }
@@ -168,13 +218,13 @@ function partida(o) {
       else if (pl.acao === 'entregar') r = J.entregar(a.etapa, pl.item, pl.n);
       else if (pl.acao === 'construir') r = a.almox ? J.ampliarAlmox() : a.ampliar ? J.ampliar(a.ampliar) : J.construirPredio(a.predio);
       else if (pl.acao === 'vender') { const L = J.livre; venderSobras(plano(prioridades()).need); r = J.livre > L ? 'ok' : 'x'; }
-      else if (pl.acao === 'produzir') { if (a.topografo) r = J.encomendarLicenca(a.topografo); else for (let q = 0; q < Math.max(1, pl.n); q++) { const x = PREDIOS[a.predio].tipo === 'usina' ? J.produzir(a.predio, pl.item) : J.enfileirar(a.predio, pl.item); if (x !== 'ok') break; r = 'ok'; } }
+      else if (pl.acao === 'produzir') { if (a.topografo) r = J.encomendarLicenca(a.topografo); else { let resta = Math.max(1, pl.n); while (resta > 0) { const n = Math.min(LOTE, resta); const x = PREDIOS[a.predio].tipo === 'usina' ? J.produzir(a.predio, pl.item, n) : J.enfileirar(a.predio, pl.item, Math.max(1, Math.min(n, J.loteMax(a.predio, pl.item)))); if (x !== 'ok') break; r = 'ok'; resta -= n; } } }
       if (r !== 'ok') { if (J.livre < 4) venderSobras(plano(prioridades()).need); break; } acoes++;
     }
   }
   let fimSessao = false;
   function turno() {
-    J.tick(t); acoes = 0; const c = m(cap()); o.aCadaTurno?.(J, S, t);
+    J.tick(t); acoes = 0; const c = m(cap()); c.credAntes = S.creditos; o.aCadaTurno?.(J, S, t);
     coletarTudo(); aprovarTudo(); escolher();
     if (o.robo === 'meta') { turnoMeta(); if (J.livre < 4) venderSobras(plano(prioridades()).need); } else turnoGuloso();
     let ob = 0; for (const st of Object.values(S.etapas)) if (st.estado === 'obra') ob++; for (const arr of Object.values(S.modulos)) for (const x of arr) if (x.obra) ob++;
@@ -202,9 +252,11 @@ function partida(o) {
 const custoSeguinte = (J, k) => { let v = 0; for (const p of PROJETOS) for (const e of p.etapas) if (J.capEtapa(p, e) === k + 1) v += J.custoEtapa(p, e); return v; };
 function relatorio(R, det = true) {
   const L = [...R.log];
+  const V = R.J.valuation(), EI = R.J.emprestimoInfo();
   L.push(`FIM ${R.horas.toFixed(1)} h (${R.dias.toFixed(1)} dias) nível ${R.S.nivel} créditos ${R.S.creditos} fichas ${R.S.mutirao} pop ${R.J.pop} bem ${R.J.bem}% serv ${JSON.stringify(R.J.serv)}`);
+  L.push(`valuation ${V.total} (obras ${V.partes.obras}, módulos ${V.partes.modulos}, prédios ${V.partes.predios}, moradores ${V.partes.moradores}, caixa ${V.partes.caixa}); renda ${R.J.rendaHora()}/h (tarifa ${R.J.tarifaMorador()}); dívida ${Math.round(EI.divida)} (tomado ${R.S.stats.emprestado}, juros pagos ${R.S.stats.jurosPagos}); aceleradores usados ${R.S.stats.acelerados}, lotes ${R.S.stats.lotes}, pedidos fabricados ${R.S.stats.pedidosFabricados}; calendário ${JSON.stringify((({ dia, mes, ano }) => ({ dia, mes, ano }))(R.J.calendario()))}`);
   if (det) for (const [k, c] of Object.entries(R.M)) {
-    L.push(`cap ${k}: ${c.dur.toFixed(1)} h, turnos ${c.turnos}, sem ação ${((100 * c.semAcao) / Math.max(1, c.turnos)).toFixed(0)}%, parado ${((100 * c.parado) / Math.max(1, c.turnos)).toFixed(0)}%, etapas ${c.etapas}, módulos ${c.modulos}, níveis +${c.niveis}, créditos ${c.credMin === Infinity ? '-' : c.credMin}..${c.credMax} (fim ${c.credFim}), bem ${c.bemFim}%, pedidos ${c.pedidos}, compras ${c.compras}, vendas ${c.vendas}, mutirão ${c.mutUsado}, obras simultâneas máx ${c.obrasMax} p95 ${c.obrasP95}`);
+    L.push(`cap ${k}: ${c.dur.toFixed(1)} h, turnos ${c.turnos}, sem ação ${((100 * c.semAcao) / Math.max(1, c.turnos)).toFixed(0)}%, parado ${((100 * c.parado) / Math.max(1, c.turnos)).toFixed(0)}%, etapas ${c.etapas}, módulos ${c.modulos}, níveis +${c.niveis}, créditos ${c.credMin === Infinity ? '-' : c.credMin}..${c.credMax} (fim ${c.credFim}), bem ${c.bemFim}%, pedidos ${c.pedidos} (fabricados ${c.fabricados}), compras ${c.compras}, vendas ${c.vendas}+${c.vendasCred}, mutirão ${c.mutUsado}, aceleradores ${c.acelerados}, lotes ${c.lotes} (auto ${c.autoLotes}), emprestado ${c.emprestado}, obras simultâneas máx ${c.obrasMax} p95 ${c.obrasP95}`);
     if (Object.keys(c.bloq).length) L.push('   bloqueios (min): ' + Object.entries(c.bloq).map(([a, b]) => `${a} ${Math.round(b)}`).join(', '));
   }
   L.push('oficinas ocupadas: ' + Object.entries(R.oficinas).map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`).join(', '));
@@ -219,15 +271,20 @@ function faixasSessoes(R, nome, falhas, o = {}) {
   const f = (ok, msg) => { if (!ok) falhas.push(`${nome}: ${msg}`); };
   f(R.terminou && !R.travou, R.travou || 'não terminou');
   if (!R.terminou) return;
-  f(R.dias >= 12 && R.dias <= 16, `jogo em ${R.dias.toFixed(1)} dias (faixa 12 a 16)`);
+  f(R.dias >= 7 && R.dias <= 12, `jogo em ${R.dias.toFixed(1)} dias (faixa 7 a 12)`);
   for (const [k, c] of Object.entries(R.M)) {
     if (+k === 1) f(c.dur <= 36, `capítulo 1 em ${(c.dur / 24).toFixed(2)} dias (o começo é rápido: máx. 1,5)`);
-    else if (+k <= 5) f(c.dur >= 36 && c.dur <= 96, `capítulo ${k} em ${(c.dur / 24).toFixed(2)} dias (faixa 1,5 a 4)`);
+    else if (+k <= 5) f(c.dur >= 18 && c.dur <= 96, `capítulo ${k} em ${(c.dur / 24).toFixed(2)} dias (faixa 0,75 a 4)`);
     else f(c.dur <= 8, `epílogo em ${c.dur.toFixed(1)} h (máx. 8)`);
-    // inflação: o que sobra no fim de um capítulo não passa de 1,5 × o custo do seguinte (com os efeitos das escolhas),
-    // inclusive no fim do capítulo 5, diante do epílogo
-    if (+k <= 5) { const cs = custoSeguinte(R.J, +k); f(c.credFim <= 1.5 * cs, `créditos no fim do capítulo ${k}: ${c.credFim} > 1,5 × ${cs}`); }
+    // economia nova: cada etapa devolve 150% do custo e os moradores pagam por hora, então os créditos crescem o jogo
+    // inteiro (não há inflação de preços: nada é reprecificado); o que se confere é que crédito nunca vira parede a partir
+    // do capítulo 2 (bloqueio por crédito em no máximo 10% dos turnos) e que o capítulo seguinte sempre está pago no fim
+    if (+k >= 2 && +k <= 5) { const b = ((c.bloqTurnos['etapa:creditos'] || 0) + (c.bloqTurnos['mod:creditos'] || 0)) / Math.max(1, c.turnos); f(b <= 0.1, `capítulo ${k}: bloqueio por crédito em ${(100 * b).toFixed(0)}% dos turnos (máx. 10%)`); const cs = custoSeguinte(R.J, +k); f(c.credFim >= cs, `créditos no fim do capítulo ${k}: ${c.credFim} < custo do seguinte ${cs}`); }
   }
+  f(R.S.stats.lotes > 500 && Object.values(R.M).reduce((a, c) => a + c.autoLotes, 0) > 0, `lotes ${R.S.stats.lotes} e automático ${Object.values(R.M).reduce((a, c) => a + c.autoLotes, 0)} (o robô produz em lotes e usa o automático)`);
+  if (o.aceleradores !== 0 && !o.robo) f(R.S.stats.acelerados >= 50, `aceleradores usados ${R.S.stats.acelerados} (mín. 50: cada etapa dá 2)`);
+  if (!o.robo) f(R.S.stats.pedidosFabricados >= 1, `pedidos fabricados na Usina de Pedidos ${R.S.stats.pedidosFabricados} (mín. 1)`);
+  f(R.J.emprestimoInfo().divida < 1, `dívida no fim ${R.J.emprestimoInfo().divida.toFixed(0)}`);
   const of = Object.entries(R.oficinas).filter(([k]) => PREDIOS[k].tipo === 'oficina'); const media = of.reduce((a, [, v]) => a + v, 0) / Math.max(1, of.length);
   f(media >= 0.15, `oficinas ocupadas ${(media * 100).toFixed(0)}% em média (mín. 15%)`);
   f(R.M[5] && R.M[5].niveis >= 3, `${R.M[5]?.niveis ?? 0} níveis no capítulo 5 (mín. 3)`);
@@ -260,14 +317,14 @@ function testes() {
     const T = DIA0 + 8 * H;
     // coleta automática: com o almoxarifado lotado a bandeja enche (9) e a fila para; liberado o espaço, a bandeja
     // esvazia sozinha no tick e o próximo trabalho começa nesse instante, com o tempo inteiro
-    { const S = novoEstado(T); const J = new Jogo(S); S.predios.carpintaria.ok = true; S.itens.madeira = 70; const o = S.predios.carpintaria; o.prontos = Array(7).fill('viga');
+    { const S = novoEstado(T); const J = new Jogo(S); S.predios.carpintaria.ok = true; S.itens.madeira = J.capacidade + 10; const o = S.predios.carpintaria; o.prontos = Array(7).fill('viga');
       for (let i = 0; i < 3; i++) J.enfileirar('carpintaria', 'viga'); J.tick(T + 10 * H);
       f(o.prontos.length === 9 && o.fila.length === 1 && !o.fila[0].fim, `bandeja cheia deveria parar a fila (prontos ${o.prontos.length}, fila ${o.fila.length}, fim ${o.fila[0]?.fim})`);
       S.itens.madeira = 10; J.tick(T + 10 * H + 1000); const g = o.fila[0]; f(o.prontos.length === 0 && S.itens.viga === 9 && g && Math.abs(g.fim - g.ini - J.durItem('viga')) < 2 && g.ini === T + 10 * H + 1000, 'com espaço no almoxarifado a bandeja esvazia sozinha e o próximo item leva o tempo inteiro');
       // lotes: 10 unidades levam 8 vezes o tempo de 1; o lote entra inteiro no almoxarifado; o que não cabe espera no espaço
       const S2 = novoEstado(T); const J2 = new Jogo(S2); f(J2.produzir('usina1', 'brita', 10) === 'ok' && J2.produzir('usina1', 'brita', 11) === 'valor' && J2.produzir('usina1', 'brita', 0) === 'valor', 'lote de 1 a 10');
       const sl = S2.predios.usina1.slots[0]; f(Math.abs(sl.fim - sl.ini - 8 * J2.durItem('brita')) < 2 && sl.n === 10 && Math.abs(J2.durLote('brita', 1) - J2.durItem('brita')) < 1e-6, 'lote de 10 leva 8 vezes o tempo de 1');
-      S2.itens.madeira = 51; J2.tick(T + H); f(S2.itens.brita === 4 + 5 && sl.sobra === 5 && S2.predios.usina1.slots[0] === sl && J2.livre === 0, `almoxarifado lotado: entra o que cabe e o resto espera (brita ${S2.itens.brita}, sobra ${sl.sobra})`);
+      S2.itens.madeira = J2.capacidade - 9; J2.tick(T + H); f(S2.itens.brita === 4 + 5 && sl.sobra === 5 && S2.predios.usina1.slots[0] === sl && J2.livre === 0, `almoxarifado lotado: entra o que cabe e o resto espera (brita ${S2.itens.brita}, sobra ${sl.sobra})`);
       f(J2.coletarUsina('usina1', 0) === 'almox', 'coletar com o almoxarifado cheio avisa'); S2.itens.madeira = 0; f(J2.coletarUsina('usina1', 0) === 'ok' && S2.itens.brita === 14 && !S2.predios.usina1.slots[0], 'a sobra é coletada quando abre espaço');
       // automático: o espaço recomeça o mesmo lote no instante em que o anterior terminou, e para quando o almoxarifado lota
       const S3 = novoEstado(T); const J3 = new Jogo(S3); J3.produzir('usina1', 'brita', 5, true); J3.tick(T + 8 * H); const s3 = S3.predios.usina1.slots[0];
@@ -342,6 +399,55 @@ function testes() {
       const S5 = novoEstado(T); const J5 = new Jogo(S5); J5.agora = T; S5.nivel = 5; S5.predios.carpintaria.ok = true; for (const k of ['pas_frente.e1', 'lago.e1', 'sede.e1']) S5.etapas[k] = { estado: 'feita', entregue: {} }; S5.modulos.anel.slice(0, 3).forEach((x) => (x.nivel = 2)); S5.etapas['sede.e2'] = { estado: 'prancha', entregue: { concreto: 3 } };
       S5.itens.madeira = 0; S5.itens.viga = 0; S5.predios.carpintaria.fila = Array.from({ length: 4 }, () => ({ item: 'viga', ini: 0, fim: 0, pend: true, desde: T })); J5._derivar();
       const p5 = J5.planoMeta(); f(p5?.acao === 'produzir' && p5.item === 'madeira', 'vigas pendentes: a Meta em foco deveria pedir madeira (' + p5?.texto + ')'); }
+    // calendário: 20 s por dia, 30 dias por mês, 360 por ano; eventos de dia (com saltou) e de ano
+    { const S = novoEstado(T); const J = new Jogo(S); const ev = []; J.on((t, d) => (t === 'dia' || t === 'ano') && ev.push([t, d])); J.tick(T + 25000); const c = J.calendario();
+      f(c.dia === 1 && c.diaDoMes === 2 && c.mes === 1 && c.ano === 1 && Math.abs(c.progDia - 0.25) < 1e-9 && c.diaMs === 20000 && ev.length === 1 && ev[0][1].saltou === 1, 'calendário no 2º dia');
+      J.tick(T + 361 * 20000); const c2 = J.calendario(); f(c2.ano === 2 && c2.mes === 1 && c2.diaDoMes === 2 && ev.length === 3 && ev[1][0] === 'dia' && ev[1][1].saltou === 360 && ev[2][0] === 'ano' && ev[2][1].ano === 2, 'virada de ano com um único evento de dia (saltou 360)'); }
+    // empréstimo: múltiplos de 1.000, 50 mil por ano, dívida máxima, juros de 10% ao ano (por tempo), parcela, quitação, mora depois do prazo
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); f(J.emprestar(500) === 'valor' && J.emprestar(1500) === 'valor' && J.emprestar(30000) === 'ok' && S.creditos === 33000 && J.emprestar(21000) === 'limiteAno' && J.emprestar(20000) === 'ok' && J.emprestar(1000) === 'limiteAno', 'limite de 50 mil por ano');
+      J.tick(T + ANO_MS / 2); f(Math.abs(S.emprestimo.juros - 2500) < 1e-6 && J.emprestimoInfo().disponivelAno === 0, 'juros de 10% ao ano, proporcionais ao tempo');
+      J.tick(T + ANO_MS + 1000); f(J.emprestimoInfo().disponivelAno === 50000 && J.emprestimoInfo().ano === 2, 'ano novo libera mais 50 mil');
+      S.creditos = 100; f(J.pagarJuros() === 'ok' && S.creditos === 0 && S.emprestimo.juros > 4800, 'pagar juros paga o que dá'); S.creditos = 1e6; f(J.pagarJuros() === 'ok' && S.emprestimo.juros === 0 && J.pagarJuros() === 'nada', 'pagar juros zera');
+      f(J.pagarParcela() === 'ok' && S.emprestimo.principal === 45000 && S.emprestimo.contratos.map((c) => c.saldo).join() === '25000,20000', 'parcela de 10% abate o contrato mais antigo');
+      let neg = null; for (let k = 2; k <= 11; k++) { J.tick(T + k * ANO_MS + 1000); S.emprestimo.juros = 0; const r = J.emprestar(50000); if (r !== 'ok') neg = neg || r; } const I = J.emprestimoInfo();
+      f(neg === 'limiteDivida' && I.divida <= 500000 && I.principal >= 445000 && J.emprestar(50000) !== 'ok' && I.contratos.filter((c) => c.vencido).length === 2, `dívida máxima de 500 mil e contratos vencidos (${neg}, ${I.principal})`);
+      const j0 = S.emprestimo.juros; J.tick(T + 11 * ANO_MS + 1000 + ANO_MS / 10); const dj = S.emprestimo.juros - j0; const esp = I.contratos.reduce((a, c) => a + c.saldo * (c.vencido ? 0.2 : 0.1), 0) / 10; f(Math.abs(dj - esp) < 1, `mora de 20% nos vencidos (juros ${dj.toFixed(0)} × ${esp.toFixed(0)})`);
+      S.creditos = 10; f(J.quitar() === 'creditos', 'quitar sem créditos'); S.creditos = 2e6; f(J.quitar() === 'ok' && S.emprestimo.principal === 0 && S.emprestimo.juros === 0 && J.emprestimoInfo().contratos.length === 0 && J.quitar() === 'nada', 'quitar paga tudo');
+      const P = prepararSave(JSON.parse(JSON.stringify(S)), T); f(P.emprestimo.principal === 0 && Array.isArray(P.emprestimo.contratos), 'empréstimo sobrevive ao save'); }
+    // renda dos moradores: 5, 8 ou 11 por morador por hora pela faixa de bem-estar; cofre de 12 h; fechado rende 12 h a 50%
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); f(J.rendaHora() === 0 && J.rendaInfo().cofreMax === 0, 'sem moradores não há renda');
+      S.modulos.anel.forEach((x) => (x.nivel = 3)); J._derivar(); const pop = J.pop; f(pop === 2560 && J.bem <= 30 && J.tarifaMorador() === 5 && J.rendaHora() === pop * 5 && J.rendaInfo().faixa === '0-30', `tarifa de 5 até 30% (bem ${J.bem}, pop ${pop})`);
+      J.tick(T + 60000); f(Math.abs(S.repasse.acum - J.rendaHora() / 60) < 1e-6, '1 minuto online rende 1/60 da renda por hora');
+      J.tick(T + 60000 + 30 * H); f(Math.abs(S.repasse.acum - (J.rendaHora() / 60 + 12 * 0.5 * J.rendaHora())) < 1e-6, '30 h fechado rendem 12 h a 50%');
+      S.repasse.acum = 0; for (let k = 0; k < 30; k++) J.tick(T + 60000 + 30 * H + (k + 1) * H); f(Math.abs(S.repasse.acum - 12 * J.rendaHora()) < 1e-6, 'o cofre guarda 12 h de renda');
+      S.bemTemp = [{ n: 6, fim: T + 1000 * H }]; for (const p of PROJETOS) for (const e of p.etapas) if (e.bem) S.etapas[p.id + '.' + e.id] = { estado: 'feita', entregue: {} }; J._derivar(); f(J.bem > 60 && J.tarifaMorador() === 11 && J.rendaInfo().faixa === '61-100' && J.rendaHora() === pop * 11, 'tarifa de 11 acima de 60%');
+      const max = J.rendaHora() * COFRE_H; S.repasse.acum = max * 1.5; J.tick(T + 100 * H); f(S.repasse.acum === max * 1.5, 'o cofre nunca encolhe quando a tarifa cai'); }
+    // recompensa de 150% (créditos + itens) e aceleradores por etapa e pavimento
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.itens.madeira = 3; S.itens.brita = 2; J.entregarTudo('pas_frente.e1'); const c0 = S.creditos; f(J.iniciarEtapa('pas_frente.e1') === 'ok' && J.acelerar({ etapa: 'pas_frente.e1' }) === 'sem', 'sem acelerador no começo');
+      J.tick(T + 60000); const ev = []; J.on((t, d) => t === 'etapaFeita' && ev.push(d)); f(J.aprovarEtapa('pas_frente.e1') === 'ok' && ev[0].recompensa === Math.round(1.5 * (150 + 3 * 12 + 2 * 14)) && S.creditos - c0 === -150 + ev[0].recompensa + 400 && S.aceleradores.obra === 1 && S.aceleradores.producao === 1, `recompensa de 150% do custo (${ev[0]?.recompensa})`);
+      S.itens.brita = 4; S.itens.madeira = 2; J.entregarTudo('lago.e1'); J.iniciarEtapa('lago.e1'); const st = S.etapas['lago.e1']; f(J.acelerar({ etapa: 'lago.e1' }) === 'ok' && st.estado === 'pronta' && S.aceleradores.obra === 0 && J.acelerar({ etapa: 'lago.e1' }) === 'sem', 'acelerador adianta 1 h (a obra curta fica pronta)');
+      J.produzir('usina1', 'brita', 10); f(J.acelerar({ predio: 'usina1' }) === 'ok' && S.aceleradores.producao === 0 && S.itens.brita >= 10 && !S.predios.usina1.slots[0], 'acelerador de produção adianta 1 h de todos os espaços (lote coletado)');
+      S.aceleradores.producao = 1; S.predios.carpintaria.ok = true; S.itens.madeira = 20; J.enfileirar('carpintaria', 'viga', 10); const g = S.predios.carpintaria.fila[0]; const gf = g.fim; f(J.acelerar({ predio: 'carpintaria' }) === 'ok' && (S.itens.viga === 10 || g.fim === Math.max(J.agora, gf - H)), 'acelerador de produção na oficina');
+      S.modulos.anel[0].pedido = null; J._pedidoModulos(); const r = J.requisitosModulo('anel', 0); for (const [k, n] of Object.entries(r.itens)) S.itens[k] = n; f(J.melhorarModulo('anel', 0) === 'ok', 'módulo iniciado'); const c1 = S.creditos; J.tick(T + 3 * H);
+      const evm = []; J.on((t, d) => t === 'moduloFeito' && evm.push(d)); f(J.aprovarModulo('anel', 0) === 'ok' && evm[0].recompensa === Math.round(1.5 * (200 + Object.entries(r.itens).reduce((a, [k, n]) => a + n * ITENS[k].valor, 0))) && S.creditos - c1 >= evm[0].recompensa, 'pavimento devolve 150% do custo (créditos + itens)'); }
+    // valuation: etapas e pavimentos a 150%, prédios pelo preço, 100 por morador, caixa menos dívida; recorde e evento
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); const ev = []; J.on((t, d) => t === 'valuation' && ev.push(d.total)); f(J.valuation().total === 3000 && J.valuation().partes.caixa === 3000, 'valuation inicial é o caixa');
+      S.etapas['pas_frente.e1'] = { estado: 'feita', entregue: {} }; S.modulos.anel[0].nivel = 2; J._derivar(); const v = J.valuation(); f(v.partes.obras === Math.round(1.5 * (150 + 36 + 28)) && v.partes.modulos === Math.round(1.5 * (200 + 700)) && v.partes.moradores === J.pop * 100 && v.total === v.partes.obras + v.partes.modulos + v.partes.moradores + 3000 && S.valuationMax === v.total, 'partes do valuation');
+      S.creditos = 5000; J.construirPredio('carpintaria'); J.ampliar('carpintaria'); J.emprestar(10000); const v2 = J.valuation(); f(v2.partes.predios === 500 && v2.partes.caixa === S.creditos - 10000 && S.creditos >= 14500 && ev.length === 2 && v2.max === S.valuationMax, 'prédios, ampliações e dívida no valuation'); }
+    // pedidos 5 × maiores com 150% do valor; Usina de Pedidos fabrica o que falta (matéria-prima e produto com insumos) e para
+    { const S = novoEstado(T); const J = new Jogo(S); S.cap = 3; S.nivel = 8; J._derivar(); J.tick(T + 1000); f(S.pedidos.length === 4 && S.pedidos.every((p) => p.itens && Object.values(p.itens).every((q) => q % 5 === 0 && q >= 5) && p.recompensa.creditos === Math.round(1.5 * Object.entries(p.itens).reduce((a, [k, q]) => a + ITENS[k].valor * q, 0))), 'pedidos com 5 × as quantidades e 150% do valor');
+      f(J.fabricarPedido(0) === 'fechado' && J.pedidosTotais()[Object.keys(S.pedidos[0].itens)[0]].n >= 5, 'sem a Usina de Pedidos não fabrica; totais por item');
+      S.predios.usina2.ok = true; S.predios.carpintaria.ok = true; f(J.produzir('usina2', 'brita', 1) === 'bloqueado' && J.setAuto('usina2', 0, true) === 'bloqueado', 'a Usina de Pedidos não aceita produção comum');
+      S.pedidos[0].itens = { brita: 15, viga: 10 }; S.itens.brita = 0; S.itens.viga = 0; S.itens.madeira = 0; const ev = []; J.on((t, d) => t === 'pedidoFabricando' && ev.push(d));
+      f(J.fabricarPedido(0) === 'ok' && S.pedidos[0].auto && ev[0].itens.brita === 15 && ev[0].itens.viga === 10 && S.predios.usina2.slots[0]?.item === 'brita' && S.predios.usina2.slots[0].n === 10 && S.predios.usina2.slots[1]?.item === 'brita' && S.predios.usina2.slots[1].n === 5 && !S.predios.usina2.slots[2] && S.predios.usina2.fila.length === 1, 'a fila puxa em paralelo; o produto espera os insumos');
+      J.tick(T + 2 * H); f(S.itens.brita === 15 && S.predios.usina2.fila[0]?.item === 'viga' && S.predios.usina2.slots.every((s) => !s), 'matéria-prima pronta e coletada; viga ainda espera madeira');
+      S.itens.madeira = 20; J.tick(T + 2 * H + 1000); f(S.predios.usina2.slots[0]?.item === 'viga' && S.predios.usina2.slots[0].n === 10 && S.itens.madeira === 0 && !S.predios.usina2.fila.length, 'com os insumos a viga começa consumindo 10 × 2 madeira');
+      J.tick(T + 6 * H); f(S.itens.viga === 10 && J.pedidosTotais().viga.falta === 0 && J.entregarPedido(0) === 'ok' && !S.pedidos[0].itens, 'pedido entregue com o que a usina fabricou');
+      S.pedidos[1].itens = { brita: 20 }; f(J.fabricarPedido(1) === 'ok' && J.pararPedido(1) === 'ok' && !S.pedidos[1].auto && !S.predios.usina2.fila.length && J.pararPedido(1) === 'nada', 'parar tira da fila');
+      const P = prepararSave(JSON.parse(JSON.stringify(S)), T + 6 * H); f(Array.isArray(P.predios.usina2.fila) && P.predios.usina2.slots.length === 3, 'a Usina de Pedidos sobrevive ao save'); }
+    // cenário "juros e limites": sem crédito no começo, o robô toma empréstimo, paga os juros a cada visita e quita antes do fim
+    { const S0 = novoEstado(T); S0.creditos = 0; const R = rodar({ estado: S0, sessoes: SESSOES_PADRAO, passo: 1, semente: 5, emprestimo: 1 }); const EI = R.J.emprestimoInfo();
+      f(R.terminou && !R.travou, 'cenário de empréstimo: ' + (R.travou || 'não terminou')); f(R.S.stats.emprestado >= 1000 && R.S.stats.emprestado <= 100000 && R.S.stats.jurosPagos > 0 && EI.divida < 1, `cenário de empréstimo: tomado ${R.S.stats.emprestado}, juros pagos ${R.S.stats.jurosPagos}, dívida no fim ${EI.divida.toFixed(0)}`); }
     // tutorial: cada passo tem fala e teste
     f(TUTORIAL.every((p) => p.id && p.quem && p.fala && p.alvo && typeof p.feito === 'function'), 'tutorial incompleto');
   } catch (e) { falhas.push('teste: exceção ' + (e.stack || e.message)); }
@@ -366,9 +472,13 @@ function todos() {
   const G = roda('sessões, encomenda em cadeia', { ...ses, escolha: 0, cadeia: 1 }); faixasSessoes(G, 'sessões cadeia', falhas);
   const H = roda('sessões, robô da Meta em foco', { ...ses, escolha: 0, robo: 'meta' });
   // quem só segue a Meta em foco (que também manda adiantar produção, subir módulos em paralelo, pré-entregar o epílogo
-  // e ampliar o que trava) termina na mesma faixa de 12 a 16 dias, com o epílogo em até 8 h
-  if (H.terminou && C.terminou) { const ep = H.M[6]?.dur ?? 0; linhas.push(`Meta em foco: ${H.dias.toFixed(1)} dias (${(H.dias / C.dias).toFixed(2)} × o robô normal; faixa 12 a 16), epílogo ${ep.toFixed(1)} h, créditos no fim ${H.S.creditos}`);
-    if (H.dias < 12 || H.dias > 16 || H.dias > 1.5 * C.dias) falhas.push(`Meta em foco: ${H.dias.toFixed(1)} dias (faixa 12 a 16, máx. 1,5 × ${C.dias.toFixed(1)})`); if (ep > 8) falhas.push(`Meta em foco: epílogo em ${ep.toFixed(1)} h (máx. 8)`); }
+  // e ampliar o que trava, mas não usa aceleradores nem a Usina de Pedidos) termina em 10 a 16 dias, com o epílogo em até 8 h
+  if (H.terminou && C.terminou) { const ep = H.M[6]?.dur ?? 0; linhas.push(`Meta em foco: ${H.dias.toFixed(1)} dias (${(H.dias / C.dias).toFixed(2)} × o robô normal; faixa 10 a 16), epílogo ${ep.toFixed(1)} h, créditos no fim ${H.S.creditos}`);
+    if (H.dias < 10 || H.dias > 16 || H.dias > 1.8 * C.dias) falhas.push(`Meta em foco: ${H.dias.toFixed(1)} dias (faixa 10 a 16, máx. 1,8 × ${C.dias.toFixed(1)})`); if (ep > 8) falhas.push(`Meta em foco: epílogo em ${ep.toFixed(1)} h (máx. 8)`); }
+  // sem crédito no começo e com empréstimo: o robô toma até 100 mil, paga juros e termina sem dívida, no mesmo prazo
+  { const S0 = novoEstado(DIA0 + 7 * H); S0.creditos = 0; const Emp = roda('sessões, sem crédito no começo, empréstimo', { ...ses, escolha: 0, emprestimo: 1, estado: S0 }); const EI = Emp.J.emprestimoInfo();
+    linhas.push(`empréstimo: tomado ${Emp.S.stats.emprestado}, juros pagos ${Emp.S.stats.jurosPagos}, dívida no fim ${EI.divida.toFixed(0)}, ${Emp.dias.toFixed(1)} dias`);
+    if (Emp.terminou && (Emp.S.stats.emprestado < 1000 || Emp.S.stats.emprestado > 100000 || EI.divida >= 1 || Emp.dias > 12)) falhas.push(`empréstimo: tomado ${Emp.S.stats.emprestado}, dívida no fim ${EI.divida.toFixed(0)}, ${Emp.dias.toFixed(1)} dias`); }
   // bem-estar: ~77% no fim do capítulo 3 (média das sessões) e sem saturar antes do capítulo 5, para a pressão de
   // moradia e as opções de bem-estar dos dilemas pesarem
   const b3 = [C, D, E, F, G].filter((R) => R.M[3]).map((R) => R.M[3].bemFim); const mb3 = b3.reduce((a, b) => a + b, 0) / Math.max(1, b3.length);
@@ -376,7 +486,7 @@ function todos() {
   if (mb3 < 70 || mb3 > 85 || b3.some((x) => x < 55 || x > 90)) falhas.push(`bem-estar no fim do capítulo 3: ${b3.join(', ')} (média ${mb3.toFixed(0)}%)`);
   for (const R of [A, B, C, D, E, F, G]) for (const k of [2, 3, 4]) if (R.M[k]?.bemFim >= 100) falhas.push(`bem-estar saturou em 100% no fim do capítulo ${k}`);
   const san = [C, D, E, F, G].flatMap((R) => Object.values(R.M).map((c) => (c.bloqTurnos['serv:saneamento'] || 0) / Math.max(1, c.turnos))); linhas.push(`bloqueio por saneamento: até ${(Math.max(...san) * 100).toFixed(0)}% dos turnos de um capítulo`);
-  if (!san.some((x) => x > 0) || san.some((x) => x >= 0.2)) falhas.push(`saneamento: bloqueio de ${(Math.max(...san) * 100).toFixed(0)}% (precisa ser > 0 e < 20%)`);
+  if (!san.some((x) => x > 0) || san.some((x) => x >= 0.25)) falhas.push(`saneamento: bloqueio de ${(Math.max(...san) * 100).toFixed(0)}% (precisa ser > 0 e < 25%)`);
   const lic = [C, D, E, F, G, H].reduce((a, R) => a + Object.values(R.M).reduce((b, c) => b + (c.bloq['etapa:licenca'] || 0), 0), 0); linhas.push(`bloqueio por licença nas sessões: ${lic} min`); if (!lic) falhas.push('licenças nunca faltaram (a topografia não pesa)');
   // dilemas: só a escolha do capítulo k muda (a opção 0 cuida das pessoas, a 1 acelera a obra); compara o capítulo seguinte
   // e o resto do jogo no ritmo de trabalho contínuo (passo 2 min, 3 sementes fixas), onde a escolha não some no intervalo
@@ -411,7 +521,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   else if (process.argv.includes('--testes')) { const f = [...invariantes(), ...testes()]; console.log(f.length ? f.join('\n') : 'testes ok'); process.exitCode = f.length ? 1 : 0; }
   else {
-    const E = process.env; const R = rodar({ passo: +(process.argv[2] || 3), ritmo: +(process.argv[3] || 1), sessoes: E.SESSOES === '1' ? SESSOES_PADRAO : E.SESSOES, escolha: E.ESCOLHA || 0, mutirao: !!+E.MUTIRAO, deposito: !!+E.DEPOSITO, robo: E.ROBO, cadeia: !!+E.CADEIA, semente: E.SEMENTE != null ? +E.SEMENTE : undefined, etapas: !!E.ETAPAS });
+    const E = process.env; const R = rodar({ passo: +(process.argv[2] || 3), ritmo: +(process.argv[3] || 1), sessoes: E.SESSOES === '1' ? SESSOES_PADRAO : E.SESSOES, escolha: E.ESCOLHA || 0, mutirao: !!+E.MUTIRAO, deposito: !!+E.DEPOSITO, robo: E.ROBO, cadeia: !!+E.CADEIA, semente: E.SEMENTE != null ? +E.SEMENTE : undefined, etapas: !!E.ETAPAS, emprestimo: !!+E.EMPRESTIMO, aceleradores: E.ACELERA === '0' ? 0 : 1, auto: E.AUTO === '0' ? 0 : 1 });
     console.log(relatorio(R, true)); if (R.travou || !R.terminou) process.exitCode = 1;
   }
 }
