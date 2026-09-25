@@ -9,7 +9,7 @@
 // dilemas; sai com código 1 se houver TRAVADO ou algum número fora das faixas.
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO } from '../fonte/sim/estado.js';
+import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO, COFRE_H } from '../fonte/sim/estado.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS, receitas } from '../fonte/data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../fonte/data/obras.js';
 import { CAPITULOS, FALAS_ETAPA, EFEITOS, TUTORIAL } from '../fonte/data/historia.js';
@@ -281,6 +281,9 @@ function testes() {
       const b0 = v1(3, { mutirao: 5, capEscolhas: { 1: 'usina+', 2: 'mutirao2' }, bonus: { usina: 0.15, oficina: 0, almox: 0, repasse: 0, bem: 0, xp: 0 }, nivel: 16, xp: 9000, creditos: 50000 }); b0.itens.kitvet = 2; b0.predios.laboratorio = { ok: true, fila: [{ item: 'racao', ini: T - 1000, fim: T + 1000 }], prontos: [], nFila: 4 }; b0.etapas['biblioteca.e1'] = { estado: 'feita', entregue: {} }; b0.modulos.anel.forEach((x) => (x.nivel = 3));
       const b = prepararSave(b0, T); const Jb = new Jogo(b); Jb.agora = T;
       f(b.mutirao === 3 && b.disposicao === 100 && Jb.ef.usina === 0.15 && b.capEscolhas[1] === 'legado:usina+' && b.creditos === 50000 + 4500 && b._avisos?.length === 1 && b.nivel === 16 && b.feita !== 0 && Jb.feita('biblioteca.e1') && b.modulos.anel.every((x) => x.nivel === 3), 'migração do capítulo 3 (bônus, fichas, progresso)');
+      const r0 = v1(3, { repasse: { acum: 40538.7, t: T - H } }); const cr0 = r0.creditos; const rs = prepararSave(r0, T); const Jr = new Jogo(rs); Jr.tick(T);
+      f(rs.creditos === cr0 + 40538 && rs.repasse.acum <= Jr.taxaRepasse() * 60 * COFRE_H + 1e-6 && rs._avisos?.some((x) => x.includes('cofre antigo')), 'migração: o cofre de repasses antigo vira créditos, com aviso');
+      { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); const max = J.taxaRepasse() * 60 * COFRE_H; S.repasse.acum = max * 1.5; J.tick(T + 60000); f(S.repasse.acum === max * 1.5, 'o cofre de repasses não pode encolher quando a taxa cai'); }
       f(Jb.liberado('racao') === false || b.legado.includes('racao'), 'item do capítulo 5 na fila continua liberado'); f(b.predios.laboratorio.fila.length === 1, 'fila preservada');
       f(Math.abs(Jb.durItem('bloco') - ITENS.bloco.t0 * 1000 * F_PRODUTO) < 1 && Jb.fObra(3) === 0.7, 'ritmo novo entra em rampa');
       const c0 = v1(6, { capEscolhas: { 1: 'usina+', 2: 'repasse+', 3: 'bem+', 4: 'xp+', 5: 'mutirao2' } }); c0.etapas['reflorestar.e1'] = { estado: 'prancha', entregue: { muda: 15, substrato: 2 } }; const muda0 = c0.itens.muda;

@@ -107,6 +107,9 @@ export const MIGRACOES = {
     if (m > FICHAS_MAX) { const x = m - FICHAS_MAX, d = clamp(num(S.disposicao), 0, 100), entra = Math.min(100 * x, 100 - d), cr = Math.round(15 * num(S.cap, 1) * (100 * x - entra));
       S.disposicao = d + entra; S.mutirao = FICHAS_MAX; S.creditos = num(S.creditos) + cr;
       avisos.push(`O Mutirão agora guarda até ${FICHAS_MAX} fichas: ${x > 1 ? `as ${x} a mais viraram` : 'a ficha a mais virou'} disposição${cr ? ` e ${fmtN(cr)} créditos` : ''}`); }
+    // cofre de repasses das regras antigas (8 h, taxa maior): vai inteiro para os créditos; o teto novo (COFRE_H) o cortaria
+    const ac = objeto(S.repasse) ? Math.floor(num(S.repasse.acum)) : 0;
+    if (ac > 0) { S.creditos = num(S.creditos) + ac; S.repasse.acum = 0; avisos.push(`Repasses guardados no cofre antigo: +${fmtN(ac)} créditos`); }
     const r = objeto(S.etapas) ? S.etapas['reflorestar.e1'] : null; if (objeto(r) && r.estado && r.estado !== 'prancha') S.etapas['reflorestar.e0'] = { estado: 'feita', entregue: {} };
     const cap = num(S.cap, 1), adiante = (k) => ITENS[k] && (ITENS[k].cap || 1) > cap, leg = new Set();
     for (const [k, v] of Object.entries(S.itens || {})) if (num(v) > 0 && adiante(k)) leg.add(k);
@@ -325,8 +328,8 @@ export class Jogo {
     const tp = S.topografo; if (tp && tp.fim <= agora) { S.itens[tp.k] = Math.min(MAX_ESPECIAL, S.itens[tp.k] + 1); S.topografo = null; this.emit('aviso', { texto: `Topógrafo: ${nomeIt(tp.k)} entregue`, icone: tp.k }); }
     // bem-estar temporário dos pedidos
     if (S.bemTemp.length && S.bemTemp.some((b) => b.fim <= agora)) { S.bemTemp = S.bemTemp.filter((b) => b.fim > agora); this._derivar(); }
-    // repasses (acumulam até COFRE_H horas)
-    if (this.repassesAtivos()) { const r = S.repasse; const tx = this.taxaRepasse(); r.acum = Math.min(tx * 60 * COFRE_H, r.acum + (tx * dt) / 60000); }
+    // repasses (acumulam até COFRE_H horas; o que já está no cofre nunca encolhe, nem quando a taxa cai)
+    if (this.repassesAtivos()) { const r = S.repasse; const tx = this.taxaRepasse(), max = tx * 60 * COFRE_H; if (r.acum < max) r.acum = Math.min(max, r.acum + (tx * dt) / 60000); }
     this._pedidos(agora); this._pedidoModulos();
   }
   repassesAtivos() { return true; }
