@@ -1,11 +1,21 @@
 // Configurações (modal largo com cartões de opção em duas colunas, sem rolar em 986x443, com o ciclo de dia e
 // noite), modo Apreciar (vista geral, comparação discreta com a referência, rótulos, planta, hora do dia, passeio
-// de câmera, fotografar e compartilhar, barra que some sozinha) e rótulos presos ao mundo.
-import { el } from '../core/util.js';
+// de câmera, fotografar e compartilhar, barra que some sozinha), rótulos presos ao mundo e as ligações da economia
+// nova que o Controle não conhece: toque no calendário (abre Finanças) e na pílula de moradores (popover da renda),
+// ícone voando ao Almoxarifado na coleta automática, redesenho do painel nos eventos novos, aviso do ano novo e o
+// modal da etapa aprovada com a recompensa (150% do custo) e os aceleradores ganhos.
+import { el, fmt, clamp } from '../core/util.js';
 import { img, icone } from './icones.js';
 import { ROTULOS } from '../data/rotulos.js';
 import { QUALITY } from '../render/engine.js';
+import { REGRAS } from '../sim/estado.js';
+import { LOTES } from '../render/models/canteiro.js';
+import { rendaHoraDe } from './hud.js';
 import { exportar, importar, apagar, persistir, gravar, gravarImportado, gravarConfig } from '../core/salvar.js';
+
+const CORES_CONFETE = ['#ff5a5a', '#ffcf2e', '#5cc234', '#2c9cf2', '#ff8ad0', '#ff9f1a'];
+const confete = () => Array.from({ length: 16 }, (_, i) => `<i style="--x:${((i * 37 + 5) % 97) + 1}%;--c:${CORES_CONFETE[i % 6]};--d:${(2.1 + (i % 5) * 0.34).toFixed(2)}s;--t:${((i % 8) * 0.17).toFixed(2)}s;--dx:${((i % 7) - 3) * 16}px"></i>`).join('');
+const numEx = (n) => Math.round(n || 0).toLocaleString('pt-BR');
 
 // hora do dia no Apreciar: Automático segue o ciclo das configurações; as outras fixam a hora (env.setHora pausa o
 // ciclo e env.setCiclo o retoma). Sair do Apreciar volta ao automático.
@@ -100,4 +110,39 @@ export function instalarExtras(C, o) {
       });
     }, { cls: 'larga config' });
   };
+  instalarEconomia(C);
+}
+
+// ---------------- economia nova: toques, eventos e o modal da etapa aprovada ----------------
+function instalarEconomia(C) {
+  const J = C.J; const abrirFinancas = () => { C.paineis.aba.escritorio = 'financas'; C.paineis.destaque = null; C.paineis.abrir('escritorio'); };
+  // calendário: abre o Escritório na aba Finanças; pílula de moradores: popover da renda (faixa, tarifa, cofre, offline)
+  C.hud.aoCalendario = () => { C.som.toque(); C.vibra.tique(); abrirFinancas(); };
+  C.hud.aoPop = () => {
+    C.som.toque(); const S = C.S; const ri = J.rendaInfo?.(); const rh = rendaHoraDe(J); const cofre = Math.floor(ri?.cofre ?? S.repasse.acum);
+    const corpo = ri
+      ? `<ul><li><b>${ri.tarifa}</b>por morador e por hora (bem-estar ${ri.faixa}%)</li><li><b>${fmt(cofre)}</b>no cofre, que guarda até ${ri.cofreH} h</li></ul><small>Faixas: até 30% de bem-estar, 5 por morador; 31 a 60%, 8; 61 a 100%, 11. Com o jogo fechado, rende ${Math.round(ri.offlineFator * 100)}% por até ${ri.offlineH} h.</small>`
+      : `<ul><li><b>${fmt(cofre)}</b>no cofre, que guarda até ${REGRAS.cofreH} h</li></ul><small>A Holding repassa créditos conforme os moradores e o bem-estar.</small>`;
+    C.hud.info('[data-a="pop"]', `<h4>${fmt(J.pop)} moradores · +${fmt(rh)}/h</h4>${corpo}<button class="botao sec" data-i="escritorio">${img('repasse')} Abrir o Escritório</button>`, 7000, (id) => { if (id === 'escritorio') { C.som.toque(); abrirFinancas(); } });
+  };
+  // eventos da simulação nova
+  const REDESENHA = new Set(['valuation', 'emprestimo', 'acelerou', 'pedidoFabricando', 'dia', 'ano']); let ultimaEtapa = null;
+  J.on((tipo, d) => {
+    if (REDESENHA.has(tipo)) C.paineis.agendar();
+    if (tipo === 'coleta' && d.auto) { // lote entrou sozinho no Almoxarifado: o ícone voa do prédio até o botão
+      const l = LOTES[d.predio || d.origem]; const [x, y] = C._pontoTela(null, l); const ponto = l ? [clamp(x, 40, innerWidth - 40), clamp(y, 80, innerHeight - 40)] : [innerWidth / 2, innerHeight * 0.45];
+      if (!document.hidden) C.hud.voar(d.item, ponto[0], ponto[1], 'almox', (i) => { if (i === 0) C.som.coleta?.(); }, { n: d.n || 1 }); C.calcBolhas?.();
+    }
+    else if (tipo === 'ano') C.hud.brinde(`Ano ${d.ano} do jogo: o limite anual de empréstimo (${numEx(REGRAS.empAno ?? 50000)}) renovou`, 'calendario', 3600);
+    else if (tipo === 'dia' && d.saltou > 1) C.hud.brinde(`${d.saltou} dias do jogo passaram enquanto você esteve fora`, 'calendario', 3000);
+    // etapa aprovada: a simulação emite 'etapaFeita' e logo o 'aviso' com o valor da recompensa; o modal entra na
+    // fila depois da festa da aprovação (2,6 s) e não repete para a mesma etapa
+    else if (tipo === 'etapaFeita') ultimaEtapa = { key: d.key, p: d.p, e: d.e, t: performance.now() };
+    else if (tipo === 'aviso' && ultimaEtapa && d.creditos > 0 && performance.now() - ultimaEtapa.t < 200) { const u = ultimaEtapa; ultimaEtapa = null; C._fila(() => modalAprovacao(C, u, d.creditos), 2900, 'aprov:' + u.key); }
+  });
+}
+function modalAprovacao(C, u, creditos) {
+  const A = C.S.aceleradores; const p = u.p, e = u.e; if (!p || !e) return;
+  const premios = [`<div class="premio">${img('creditos')}<b>+${fmt(creditos)}</b><small>${A ? '150% do custo' : 'medição da etapa'}</small></div>`, ...(A ? [`<div class="premio">${img('acelerar')}<b>+1</b><small>acelerador de obra</small></div>`, `<div class="premio">${img('acelerar')}<b>+1</b><small>acelerador de produção</small></div>`] : [])].join('');
+  C.modal(`<header class="mh"><div class="tt"><h3>Etapa aprovada</h3><h1>${p.nome}</h1></div></header><div class="mc"><div class="festa" aria-hidden="true">${confete()}</div><p><b>${e.nome}</b> passou na medição da Holding.</p><div class="premios">${premios}</div>${A ? `<p class="lib">Aceleradores: ${A.obra || 0} de obra · ${A.producao || 0} de produção · cada um adianta ${REGRAS.aceleraH ?? 1} h</p>` : ''}<button class="botao grande" data-fecha>Continuar</button></div>`, null, { cls: 'festivo aprov' });
 }
