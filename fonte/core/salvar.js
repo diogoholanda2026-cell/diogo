@@ -17,6 +17,13 @@ const travar = (S) => { trava = S; try { sessionStorage.setItem(IMPORTANDO, '1')
 export function importando() { if (trava !== null) return true; try { return !!sessionStorage.getItem(IMPORTANDO); } catch (_) { return false; } }
 export function fimImportacao() { try { sessionStorage.removeItem(IMPORTANDO); } catch (_) {} }
 const quando = (S) => Math.max(+S.gravado || 0, +S.t || 0);
+// duas páginas do mesmo jogo (o app instalado congelado em segundo plano e uma aba do Chrome): cada página lembra o
+// carimbo do último save que leu ou gravou; se o localStorage tiver o mesmo jogo (criado igual) gravado depois disso,
+// outra página jogou por cima e esta está desatualizada: não grava (o main.js recarrega a página ao voltar)
+let ultimo = 0;
+export function outraPaginaGravou(S) {
+  try { const L = JSON.parse(localStorage.getItem(LS) || 'null'); return !!(L && S && L.criado === S.criado && quando(L) > ultimo); } catch (_) { return false; }
+}
 function abrir() {
   if (dbP) return dbP;
   dbP = new Promise((ok, erro) => {
@@ -45,16 +52,16 @@ export async function carregar() {
   let ls = null; try { ls = localStorage.getItem(LS); } catch (_) {}
   const idb = await lerIDB();
   const a = ler(ls), b = idb && idb !== ls ? ler(idb) : null;
-  if (a && b) return quando(b) > quando(a) ? b : a;
-  return a || b;
+  const S = a && b ? (quando(b) > quando(a) ? b : a) : a || b; if (S) ultimo = quando(S);
+  return S;
 }
 // grava no localStorage na hora (síncrono) e depois no IndexedDB
 export function gravarLocal(S, txt) {
-  if (bloqueado(S)) return false; if (txt == null) { S.gravado = Date.now(); txt = JSON.stringify(S); }
-  try { localStorage.setItem(LS, txt); return true; } catch (_) { return false; }
+  if (bloqueado(S) || (txt == null && outraPaginaGravou(S))) return false; if (txt == null) { S.gravado = Date.now(); txt = JSON.stringify(S); }
+  ultimo = quando(S); try { localStorage.setItem(LS, txt); return true; } catch (_) { return false; }
 }
 export function gravar(S) {
-  if (bloqueado(S)) return Promise.resolve(); S.gravado = Date.now(); const txt = JSON.stringify(S); gravarLocal(S, txt);
+  if (bloqueado(S) || outraPaginaGravou(S)) return Promise.resolve(); S.gravado = Date.now(); const txt = JSON.stringify(S); gravarLocal(S, txt);
   return abrir().then((db) => new Promise((ok, erro) => { const t = db.transaction(LOJA, 'readwrite', { durability: 'relaxed' }); t.objectStore(LOJA).put(txt, CHAVE); t.oncomplete = ok; t.onerror = () => erro(t.error); t.onabort = () => erro(t.error); })).catch(() => {});
 }
 export function gravarImportado(S) { S.gravado = Date.now(); travar(S); return gravar(S); } // grava o save importado e trava o resto

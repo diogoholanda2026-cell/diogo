@@ -17,7 +17,7 @@ import { Controle } from './jogo.js';
 import { instalarExtras } from './ui/extras.js';
 import { Som } from './core/audio.js';
 import { vibra } from './core/vibra.js';
-import { carregar, gravar, gravarLocal, importar, gravarImportado, importando, fimImportacao, avisosSave, guardarCorrompido, lerConfig, persistir } from './core/salvar.js';
+import { carregar, gravar, gravarLocal, importar, gravarImportado, importando, fimImportacao, avisosSave, guardarCorrompido, lerConfig, persistir, outraPaginaGravou } from './core/salvar.js';
 import * as ICONES from './ui/icones.js';
 import { el } from './core/util.js';
 
@@ -130,7 +130,13 @@ async function iniciar() {
   // com uma importação pendente (sessionStorage 'held-importando'), nada grava o jogo da memória até o reload
   const salvar = () => { if (!C.naoSalvar && !importando()) gravar(J.S); };
   salvarAgora = () => { if (!C.naoSalvar && !importando()) gravarLocal(J.S); };
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvar(); else if (C.ativo) { J.tick(Date.now()); C.sincronizar?.(); } });
+  // de volta à página: se outra página (o app e uma aba do Chrome) gravou este jogo depois, recarrega com o save dela
+  // em vez de gravar o estado antigo da memória por cima
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { salvar(); return; }
+    if (!importando() && outraPaginaGravou(J.S)) { C.naoSalvar = true; location.reload(); return; }
+    if (C.ativo) { J.tick(Date.now()); C.sincronizar?.(); }
+  });
   window.addEventListener('pagehide', salvar); document.addEventListener('freeze', salvar);
   engine.onLost = () => { salvarAgora(); salvar(); };
 }
