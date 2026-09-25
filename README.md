@@ -1,10 +1,10 @@
 # Arcologia de Held: composição total
 
-Jogo de construção no estilo **SimCity BuildIt**, em 3D, feito para celular (testado para o Poco X7) e que também roda no computador. A única obra do jogo é a **Composição Total da Arcologia de Held**, a maquete da foto em `arte/originais/composicao-total-arcologia-de-held.png`. Ela começa como pasto degradado cercado de mata e cresce etapa por etapa, com canteiro, andaimes, grua e operários, até ficar igual à foto.
+Jogo de construção no estilo **SimCity BuildIt**, em 3D, feito para celular (testado para o Poco X7) e que também roda no computador. A única obra do jogo é a **Composição Total da Arcologia de Held**, com todas as estruturas da foto em `arte/originais/composicao-total-arcologia-de-held.png`, construídas como uma cidade viva no visual do BuildIt: dia claro e colorido, ciclo de dia e noite, praia, mar e morros em volta. Ela começa como pasto degradado cercado de mata e cresce etapa por etapa, com canteiro, andaimes, grua e operários, até ter cada componente da foto no lugar.
 
 **Jogar:** https://diogoholanda2026-cell.github.io/diogo/ (atualiza sozinho a cada envio ao GitHub).
 
-| Composição total (Vista da foto) | Planta holográfica no início |
+| Composição total, de dia | Planta holográfica no início |
 |---|---|
 | ![](arte/telas/01-composicao-total.png) | ![](arte/telas/02-planta-holografica.png) |
 
@@ -13,6 +13,8 @@ Jogo de construção no estilo **SimCity BuildIt**, em 3D, feito para celular (t
 | ![](arte/telas/03-obra.png) | ![](arte/telas/04-prancha.png) | ![](arte/telas/05-usina.png) |
 
 ![Comparação com a foto de referência](arte/telas/06-comparacao.png)
+
+![Ciclo de dia e noite](arte/telas/09-dia-e-noite.png)
 
 ![Biblioteca Central, etapa por etapa](arte/telas/07-etapas-biblioteca.png)
 
@@ -92,40 +94,41 @@ O jogo grava no navegador a cada 12 segundos e ao sair, esconder ou congelar a a
 
 ## Interface
 
-Pensada para a tela 20:9 em paisagem (986x443 no Poco X7): a maquete fica sempre à vista e tudo que se toca tem pelo menos 44 px.
+No estilo do SimCity BuildIt e pensada para a tela 20:9 em paisagem (986x443 no Poco X7): a cidade fica sempre à vista, tudo que se toca tem pelo menos 44 px e os textos usam a fonte arredondada Baloo 2 (embutida, funciona sem internet), em branco com contorno.
 
-- **Barra de cima:** nível (o anel enche com a experiência), composição concluída, moradores, bem-estar, créditos e **Mutirão** (fichas e a barra de disposição), Apreciar e Configurações. Tocar no bem-estar mostra as três maiores fontes e a pressão de moradia; tocar no Mutirão explica que cada ficha reduz até 2 h de uma obra. Os números contam até o valor novo quando as moedas e estrelas chegam voando.
-- **Capítulo:** uma pílula (`Cap. 1 · Fundação · 1/5`; com a linha Agora à vista, só `Cap. 1 · 1/5`) que abre as metas com o progresso de cada uma (`3/8`, `etapa 2/5`) e o texto inteiro da ação Agora; tocar numa meta leva até o prédio, a obra ou o módulo. Meta cumprida pisca em verde.
+- **No alto à esquerda:** o selo de nível (o anel vermelho enche com a experiência) e as pílulas de moradores, bem-estar (carinha verde, amarela ou vermelha) e composição concluída. **No alto à direita:** créditos com o **+** laranja (Depósito de Trocas), **Mutirão** (fichas e a barra de disposição), Apreciar e a engrenagem azul das Configurações. Tocar no bem-estar mostra as três maiores fontes e a pressão de moradia; tocar no Mutirão explica que cada ficha reduz até 2 h de uma obra. Os números contam até o valor novo quando as moedas e estrelas chegam voando.
+- **À direita**, os botões de Produção, Almoxarifado, Pedidos e Trocas, com selos vermelhos; **embaixo à direita**, o botão grande de **Obras** com capacete, como o de construir do BuildIt.
+- **Capítulo:** a medalha embaixo à esquerda (número do capítulo e metas cumpridas) abre as metas com o progresso de cada uma (`3/8`, `etapa 2/5`) e o texto inteiro da ação Agora; tocar numa meta leva até o prédio, a obra ou o módulo. Meta cumprida pisca em verde.
 - **Agora (Meta em foco):** uma linha com a próxima ação concreta para as metas do capítulo ("Produzir 2 Concreto na Central de Concreto"); tocar nela (ou no **Ir**) leva a câmera, abre o painel e destaca o controle certo.
 - **Próximo** (embaixo, à direita): ícone e verbo da próxima coisa a fazer (Coletar, Aprovar, Produzir, Obra…); quando repete a ação da linha Agora, fica só o ícone. Só leva a câmera e abre o painel; pulsa quando há algo para coletar ou aprovar e some quando não há nada. Em repouso, o HUD cobre menos de 12% da tela.
-- **Falas do conselho** aparecem numa doca no alto, também com painel aberto; o tempo de leitura depende do tamanho do texto, para enquanto há um modal e tem o botão **Pular**. Avisos curtos empilham logo abaixo (até três).
-- **Painéis** abrem numa folha à esquerda (até 412 px de largura e no máximo 36% da tela) e a câmera desloca a maquete para a área livre, de modo que o prédio operado fica à direita da folha. Painéis abertos de dentro de outro têm o botão **‹** para voltar.
-- **Prancha da obra:** cada material mostra entregue/necessário com um anel (ouro: entregue; ouro claro: no almoxarifado). Com tudo à mão, um toque só: **Entregar e iniciar**; a folha fecha e a câmera mostra o canteiro montando. Licença que falta pode ser encomendada ao **Topógrafo** ali mesmo, com cronômetro.
+- **Falas do conselho** aparecem num balão branco com o retrato de quem fala, no alto, também com painel aberto; o tempo de leitura depende do tamanho do texto, para enquanto há um modal e tem o botão **Pular**. Avisos curtos empilham logo abaixo (até três).
+- **Painéis** são cartões claros com a faixa azul do título e o X vermelho, abertos numa folha à esquerda (até 412 px de largura e no máximo 36% da tela); os botões têm volume e afundam ao tocar (verde para a ação principal, azul para a secundária, laranja para adiantar). A câmera desloca a cidade para a área livre, de modo que o prédio operado fica à direita da folha. Painéis abertos de dentro de outro têm o botão **‹** para voltar.
+- **Prancha da obra:** como a tela de melhoria do BuildIt, cada material aparece num círculo com entregue/necessário, check verde quando completo e **!** vermelho quando falta. Com tudo à mão, um toque só: **Entregar e iniciar**; a folha fecha e a câmera mostra o canteiro montando. Licença que falta pode ser encomendada ao **Topógrafo** ali mesmo, com cronômetro.
 - **Pedidos:** grade de cartões com quem pede, onde mora, a fala inteira (até duas linhas) e a recompensa; seis cabem sem rolar em 986x443; o cartão inteiro entrega. Se faltar algo, os itens tremem e aparece o que falta com o atalho **Produzir**. A lixeira pede dois toques.
-- **Balões** entram com mola, pulam cada um no seu ritmo e os de coletar e aprovar chamam atenção. Fora da tela, os importantes ficam presos à borda com uma seta (tocar leva até lá); balões muito próximos viram um grupo com `+n` (tocar aproxima). Módulo que precisa de água, energia, saneamento ou bem-estar mostra um balão cinza com o ícone do que falta.
+- **Balões** são círculos brancos com aro colorido pelo tipo (coletar, aprovar, obra), entram com mola, pulam cada um no seu ritmo e os de coletar e aprovar chamam atenção. Fora da tela, os importantes ficam presos à borda com uma seta (tocar leva até lá); balões muito próximos viram um grupo com `+n` (tocar aproxima). Módulo que precisa de água, energia, saneamento ou bem-estar mostra um balão cinza com o ícone do que falta.
 - **Aprovar:** o balão sai, o carimbo APROVADO cai e bate no mesmo instante em que o andaime desmonta; depois vêm o aviso da medição, as estrelas de experiência e, na última etapa de um projeto, uma volta de câmera com barras de cinema. Um modal só abre depois da festa, sem painel aberto e um de cada vez.
 - **Conselho:** a apresentação do fim de capítulo não some com um toque fora; **Decidir depois** deixa a pílula **Conselho aguarda** no alto. O modal diz quanto a Holding paga pela apresentação (medido na própria regra) e cada escolha mostra ganho, custo e quem prefere; ao escolher, as moedas voam até o contador.
-- **Configurações** em quatro colunas, sem rolar; **Recomeçar** pede dois toques. **Importar** usa o arquivo exportado e recarrega o jogo (avisos de migração aparecem num aviso).
+- **Configurações** em quatro colunas, sem rolar, com o **Ciclo de dia e noite**: Acelerado (padrão, um dia a cada 24 minutos), Hora do celular ou Sempre dia; **Recomeçar** pede dois toques. **Importar** usa o arquivo exportado e recarrega o jogo (avisos de migração aparecem num aviso).
 - `ferramentas/vitrine-ui.mjs` captura a interface no celular (986x443 e 915x412) sem WebGL, cena por cena, e mede alvos de toque, tamanho de texto, área do HUD e da folha.
 
 ## Controles
 
 - **Um dedo:** arrasta o mapa (com inércia). **Pinça:** aproxima. **Torcer dois dedos:** gira. **Dois dedos para cima/baixo:** inclina.
 - **Toque** numa construção, num lote ou num balão. **Toque duplo:** aproxima naquele ponto. Arrastar o dedo por vários balões de coleta recolhe todos.
-- **Próximo** e **Ir** levam até a próxima ação. Tocar na maquete fecha a folha e o cartão das metas.
-- **Apreciar** (ícone de câmera no alto): esconde a interface e a câmera passeia devagar; a barra de baixo some sozinha depois de 3,5 s e volta com um toque. Tem **Vista da foto** (o enquadramento exato da foto), **Comparar** (a foto por cima da maquete, com transparência ajustável), **Rótulos** e **Planta** (ligados ficam dourados), **Luz** (mostra o modo: Exposição, Noite ou Dia), **Fotografar** (salva ou compartilha um JPEG do quadro) e **Sair**. Com som ligado, pássaros e água ao fundo.
+- **Próximo** e **Ir** levam até a próxima ação. Tocar na cidade fecha a folha e o cartão das metas.
+- **Apreciar** (ícone de câmera no alto): esconde a interface e a câmera passeia devagar; a barra de baixo some sozinha depois de 3,5 s e volta com um toque. Tem **Vista geral** (a cidade inteira, como no BuildIt), **Comparar com a referência** (a foto por cima, com transparência ajustável, no enquadramento dela), **Rótulos** (etiquetas com o nome de cada estrutura da foto) e **Planta**, a **hora do dia** (Automático, Manhã, Meio-dia, Pôr do sol e Noite), **Fotografar** (salva ou compartilha um JPEG do quadro) e **Sair**. Com som ligado, pássaros e água ao fundo.
 - No computador: arrastar move, roda do mouse aproxima, botão direito gira e inclina.
 
 ## Gráficos
 
-Feitos para o Mali-G615 MC2 do Poco X7. A composição inteira cabe em cerca de 150 chamadas de desenho e 350 mil triângulos, contando a sombra.
+No visual do SimCity BuildIt, feito para o Mali-G615 MC2 do Poco X7. A composição inteira cabe em cerca de 150 chamadas de desenho e 400 mil triângulos, contando a sombra e os arredores.
 
-- **Luz de exposição** calibrada contra a foto: gradação em espaço linear com tonemapping Khronos PBR Neutral, contraste e saturação sem esmagar os pretos, refletor alto e macio, preenchimento quente e a frente da mesa na penumbra. Modos **Exposição**, **Noite** (fachadas acesas, lua fria) e **Dia** (parede de galeria clara).
-- **Oclusão de ambiente por campo de alturas**: a maquete vista de cima vira um mapa de alturas desfocado, que escurece a base das paredes, os degraus dos terraços, o chão sob as passarelas e a orla da mata. É recalculado só quando a obra muda.
-- **Céu com aurora** em cortinas, estrelas e reflexos de uma sala de exposição; sombras macias e estáveis que não tremem ao arrastar.
-- **Pós-processamento enxuto** (9 passes): bloom a 1/4 da resolução, **profundidade de campo de maquete** só de perto, com foco automático, vinheta e pontilhado; alvo HDR compacto com MSAA 4×; resolução em degraus que se ajusta sozinha.
-- **Materiais de maquete**: fachadas âmbar contínuas, coberturas verdes em tufos, passeio claro no teto das fitas, água opaca com profundidade (o lago assoreado do início é turvo), mesa de nogueira com placa de latão legível.
-- **Mata em cachos** com vento, luz envolvente e três níveis de detalhe por célula; **190 pessoas** nas passarelas, praças e terraços, com figura simples de longe; elefantes, girafas, rinocerontes e gorilas de dorso prateado que andam de verdade; um bando de aves.
+- **Dia de BuildIt:** sol quente vindo da esquerda da tela, sombras nítidas caindo para a direita e azuladas pelo céu (nunca pretas), verde vivo, água turquesa, prédios brancos limpos e vidro azul refletindo o céu. Gradação em espaço linear com tonemapping Khronos PBR Neutral, sem desfoque nem vinheta pesada: imagem nítida o tempo todo.
+- **Ciclo de dia e noite:** amanhecer rosa e laranja, hora dourada com sombras longas, dia claro, pôr do sol dourado e lilás, crepúsculo violeta e noite azul-profunda, com a lua, janelas que acendem prédio a prédio, postes, fitas de luz nas passarelas, reflexos quentes nos lagos e estrelas. Tudo interpolado sem degraus; a sombra acompanha o sol e só é refeita quando ele anda meio grau.
+- **Luz com vida:** sombras de nuvens passando pelo terreno, brilhos do sol cintilando na água, luz de recorte nos contornos, rebote verde da grama, bloom leve de dia e forte à noite, névoa azul-clara ao longe.
+- **Arredores:** a obra fica num terreno que continua até o horizonte, com campos, bosques, morros e serras na névoa, praia com coqueiros e mar com ondas e espuma na areia, veleiros e nuvens.
+- **Oclusão de ambiente por campo de alturas:** a cidade vista de cima vira um mapa de alturas desfocado, que escurece a base das paredes, os degraus dos terraços, o chão sob as passarelas e a orla da mata. É recalculado só quando a obra muda.
+- **Mata em cachos** com vento e três níveis de detalhe por célula; **190 pessoas** nas passarelas, praças e terraços, com figura simples de longe; elefantes, girafas, rinocerontes e gorilas de dorso prateado que andam de verdade; um bando de aves.
 - **Obra com sentido físico**: o canteiro monta em 1,6 s (estacas, poeira, mastro telescópico da grua); a grua trabalha num ciclo de içamento de 14 s com pêndulo e nunca cruza prédios prontos; o caminhão entrega e as pilhas no chão de obra correspondem aos materiais entregues; os operários ficam em postos (andaime, laje, pátio) com um mestre de colete; o andaime sobe um lance acima da obra, com diagonais e tela de proteção; o prédio sobe andar por andar, com tampa de seção e concreto fresco. Modos próprios para **draga** (desassoreamento), **caminho** (passarelas avançam trecho a trecho), **plantio**, **caixas** (os bichos saem dos engradados), **terraplenagem**, **pavimentação**, **desmonte do canteiro** e **replantio**. Ao voltar depois de um tempo fora, a obra avança num time-lapse de 1,5 s.
 - **Aprovação coreografada**: o andaime desmonta de cima, a grua estaciona, poeira, confete (fogos à noite) e o carimbo APROVADO no mesmo instante; o prédio nunca é achatado.
 - Tudo o que fica pronto é **fundido em poucas malhas por material**, em quadrantes que o descarte por caixa esconde fora da tela; a refusão depois de uma aprovação é adiada para não travar.
@@ -145,12 +148,13 @@ fonte/
   data/                      planta traçada da foto, itens, obras e etapas, história, rótulos
   sim/estado.js              simulação: produção, filas, prancha, módulos, serviços, capítulos
   render/                    motor (pós-processamento), oclusão por campo de alturas (hao.js), câmera,
-                             céu, terreno, floresta, mesa, obra animada (obra.js), figuras, animais,
+                             ciclo de dia e noite (ciclo.js), céu, arredores (arredores.js), terreno,
+                             floresta, obra animada (obra.js), figuras, animais,
                              descarte de memória (descartar.js) e o mundo
   render/models/             cada estrutura da foto, por etapas
   ui/                        HUD, painéis (folha lateral), balões, ícones desenhados em código,
                              configurações e modo Apreciar
-  web/                       HTML, manifesto, service worker, ícones e a foto em WebP
+  web/                       HTML, manifesto, service worker, ícones, a fonte Baloo 2 (OFL) e a foto em WebP
 ferramentas/
   montar.mjs                 empacota fonte/ com esbuild em app/ e no arquivo único
   simular.mjs                robô que joga do início ao fim (sessões, escolhas, faixas do equilíbrio)

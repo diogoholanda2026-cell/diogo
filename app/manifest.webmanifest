@@ -2,7 +2,7 @@
   "id": "/diogo/",
   "name": "Arcologia de Held",
   "short_name": "Held",
-  "description": "Construa, etapa por etapa, a maquete viva da Arcologia de Held.",
+  "description": "Construa, etapa por etapa, a Arcologia de Held: uma cidade-arcologia viva no estilo SimCity BuildIt.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

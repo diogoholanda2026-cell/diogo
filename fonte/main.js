@@ -34,9 +34,9 @@ let salvarAgora = () => {}; // grava o localStorage na hora (antes de atualizar 
 // (a foto de referência continua servindo ao Comparar do Apreciar; a tela de carga é estilizada pela interface)
 const FOTO = window.__FOTO__ || 'foto.webp';
 const carga = el('div', ''); carga.id = 'carga';
-carga.innerHTML = `<h1>ARCOLOGIA DE HELD</h1><p>Composição total · Arcologia de Held</p><div class="barra"><i></i></div><button class="toque">Toque para entrar</button><small>versão ${VERSAO}</small>`;
+carga.innerHTML = `<h1>Arcologia de Held</h1><p>Composição total, etapa por etapa</p><div class="barra"><i></i></div><button class="toque">Toque para entrar</button><small>versão ${VERSAO}</small>`;
 document.body.appendChild(carga);
-const gire = el('div', ''); gire.id = 'gire'; gire.innerHTML = '<div>📱</div><b>Gire o celular</b><span>O ateliê é em paisagem.</span>'; document.body.appendChild(gire);
+const gire = el('div', ''); gire.id = 'gire'; gire.innerHTML = '<div>📱</div><b>Gire o celular</b><span>A arcologia é em paisagem.</span>'; document.body.appendChild(gire);
 const barra = carga.querySelector('.barra i'); const passo = async (p) => { barra.style.width = p + '%'; await quadro(); };
 
 async function iniciar() {

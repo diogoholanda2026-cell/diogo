@@ -166,7 +166,7 @@ export class Environment {
     const a = this.ajuste; // ajustes de teste pela URL (multiplicam os da hora)
     if (a) { P.exposure *= a.exp ?? 1; P.saturation *= a.sat ?? 1; P.contrast *= a.con ?? 1; P.bloomStrength *= a.bloom ?? 1; P.vignette *= a.vin ?? 1; this.key.intensity *= a.key ?? 1; this.hemi.intensity *= a.hemi ?? 1; e.scene.environmentIntensity *= a.envi ?? 1; }
     // luzes da cidade: janelas acendem prédio a prédio, postes e passarelas
-    const n = V[I.noite]; if (Math.abs(n - this.noite) > 0.002 || this._forcar) { this.noite = n; e.noite = n; setNight(n, 0.1 * n); }
+    const n = V[I.noite]; if (Math.abs(n - this.noite) > 0.002 || this._forcar) { this.noite = n; e.noite = n; setNight(n, 1.6 * n); }
     e.modoLuz = n >= 0.5 ? 'noite' : 'dia';
     // reflexos: céu da faixa (refeito só na troca de faixa) e o tom contínuo por cima
     const fx = faixaDe(this._hora); if (fx !== this._faixaEnv) this._gerarEnv(fx);
