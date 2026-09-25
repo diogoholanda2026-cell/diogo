@@ -35,7 +35,8 @@ export const A = {
   // Sede Administrativa da Holding Guarda-Chuva: fita aberta (arco de a0 a a1) que abraça o lago pelo
   // fundo e pela direita e encosta na ponta esquerda do Santuário; o0 = largura da fita (para dentro)
   // repasse = onde aparece o balão dos repasses: sobre o meio do 2º módulo (= W.faixas.sede.centro(1)), acima do teto
-  sede: { c: [2.4, -8.2], rx: 10.6, rz: 5.9, rot: 0.04, a0: 4.0, a1: 6.9, o0: -1.9, piscina: { c: [6.3, -10.0], r: 0.95 }, repasse: [4.5, 2.3, -13.0] },
+  // guardaChuva = a cobertura leve de placas claras sobre pilares finos entre a piscina e a fita (o pátio coberto)
+  sede: { c: [2.4, -8.2], rx: 10.6, rz: 5.9, rot: 0.04, a0: 4.0, a1: 6.9, o0: -1.9, piscina: { c: [6.3, -10.0], r: 0.95 }, repasse: [4.5, 2.3, -13.0], guardaChuva: { c: [8.15, -10.75], rot: -0.58 } },
   // Biblioteca Central (torre) + Centro de Recursos Digitais (abóbada) + anel em terraços
   // (dossel quadrado de 6.5 de lado a 5.2 de altura, girado 0.66: na câmera da foto os cantos da esquerda e da
   // direita caem a 2 px dos da foto e a largura dá 255 px, como na foto; os cantos de cima e de baixo ficam
@@ -109,8 +110,9 @@ export const PASSARELAS = {
     patamar: { c: [2.09, 7.46], w: 1.0, d: 0.56, rot: -0.03, em: 'anel' } },
 };
 
-// Pasto dos animais resgatados, atrás da pista do Santuário (clareira com cerca)
-export const SANTUARIO_GRAMADO = { elipse: [[15.8, -15.6], 4.2, 1.5, -0.06] };
+// Pasto dos animais resgatados, atrás da pista do Santuário (clareira com cerca), com as trilhas claras da foto
+export const SANTUARIO_GRAMADO = { elipse: [[15.8, -15.6], 4.2, 1.5, -0.06],
+  trilhas: [{ elipse: [[15.8, -15.6], 3.3, 0.95, -0.06] }, { pts: [[12.9, -15.3], [14.6, -16.1], [17.0, -15.0], [18.9, -15.9]] }] };
 
 // Zonas de chão (pintura do terreno e clareiras da mata). 'quando' = id da etapa que faz a zona aparecer.
 // Só elipses e polígonos de poucos lados: o terreno e a mata consultam todas as zonas em cada ponto (a carga
