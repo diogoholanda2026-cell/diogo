@@ -589,6 +589,9 @@ export class Obras {
     }
     // pilha: ao lado do pátio (a grua pega aqui); o estoque diminui com a obra
     s.pilha = { n: s.opts.novo === false ? Math.round(12 * (1 - 0.85 * s.p) * 0.7) : 0, cap: 12, pop: new Float32Array(12).fill(-1), x: s.patio.x + s.patio.lx * 0.55, z: s.patio.z + s.patio.lz * 0.55 };
+    // os 6 lugares de cada camada (3 x 2) com a altura do chão já lida: o terreno não muda e o quadro só lê
+    const pl = s.pilha, P = s.patio; pl.y = chao(pl.x, pl.z);
+    pl.base = Array.from({ length: 6 }, (_, k) => { const ox = ((k % 3) - 1) * 0.3, oz = (((k / 3) | 0) - 0.5) * 0.28; const x = pl.x + P.lx * ox + P.ox * oz, z = pl.z + P.lz * ox + P.oz * oz; return [x, z, chao(x, z)]; });
   }
   // grua: a 1,2 da obra, perto o bastante da pilha (a lança alcança as duas), de preferência atrás
   // em relação à câmera (não tapa o prédio) e fora da rota do caminhão
@@ -749,6 +752,7 @@ export class Obras {
     } else if (s.modo === 'caminho') for (const p of s.arco) L.push([p[0], p[2], 1.4, 1.4, 0, 0, sd(L.length)]);
     const P = s.patio; L.push([P.x + P.ox * 0.2, P.z + P.oz * 0.2, 2.8, 2.6, Math.atan2(-P.oz, P.ox), 0, sd(99)]);
     if (s.modo !== 'draga') L.push([P.x + P.ox * 2.6, P.z + P.oz * 2.6, 0.9, 5.2, Math.atan2(P.ox, P.oz) + Math.PI, 1, sd(98)]); // corredor (faixa ao longo da rota)
+    for (const c of L) c.push(chao(c[0], c[1]) + 0.012); // altura de cada mancha lida uma vez (o quadro só desenha)
     s.chao = L;
   }
 
@@ -1073,7 +1077,7 @@ export class Obras {
     if (g.carga) this._unidade(hx, hY - 0.08 - ALT_CARGA[g.cargaT], hz, ang + 0.3, g.cargaT, 1);
   }
   _gruaFase(s) {
-    const g = s.grua, F = g.fase, Ty = g.y + g.hm; const pilhaTop = chao(s.pilha.x, s.pilha.z) + 0.25; const nivel = Math.max(s.wl, s.y0) + 0.02;
+    const g = s.grua, F = g.fase, Ty = g.y + g.hm; const pilhaTop = s.pilha.y + 0.25; const nivel = Math.max(s.wl, s.y0) + 0.02;
     const alto = Math.min(Ty - 0.45, Math.max(nivel + 0.9, pilhaTop + 0.6, g.altoMin));
     const de = g.de, pa = g.para; de.a = g.a; de.r = g.r; de.hy = g.hy;
     const vai = vaiPara; vaiPara.pa = pa; // sem fechamento novo a cada fase
@@ -1155,14 +1159,14 @@ export class Obras {
     if (!s.grua && s.estado === 'obra') { p.tc = (p.tc || 0) + dt * s.vel; if (p.tc > 10 && p.n > 0) { p.tc = 0; p.n--; } }
     const cap = s.estado === 'fim' ? p.n : Math.round(12 * (1 - 0.85 * s.pv)); if (p.n > cap) p.n = cap;
     const P = s.patio, ang = Math.atan2(-P.lz, P.lx); const kf = s.estado === 'fim' ? 1 - easeInQuad(fatia(s.tf, 1300, 1800)) : 1; if (kf <= 0.01) return;
-    for (let i = 0; i < p.n; i++) { const col = i % 3, row = ((i / 3) | 0) % 2, lay = (i / 6) | 0; const ox = (col - 1) * 0.3, oz = (row - 0.5) * 0.28; const x = p.x + P.lx * ox + P.ox * oz, z = p.z + P.lz * ox + P.oz * oz;
+    for (let i = 0; i < p.n; i++) { const b = p.base[i % 6], lay = (i / 6) | 0; // lugar i: coluna i % 3, fila (i / 3) % 2
       const tipo = tipoDe(s, i); const kp = p.pop[i] > 0 ? easeOutBack(fatia(this._tl - p.pop[i], 0, 0.2), 1.7) : 1;
-      this._unidade(x, chao(x, z) + lay * (ALT_CARGA[tipo] + 0.04) * kf, z, ang, tipo, Math.max(0.01, kp * kf)); }
+      this._unidade(b[0], b[2] + lay * (ALT_CARGA[tipo] + 0.04) * kf, b[1], ang, tipo, Math.max(0.01, kp * kf)); }
   }
   // ---------------------------------------------------------------- chão de obra (entra em 600 ms, sai na festa)
   _chaoDesenha(s) {
     const a = s.estado === 'fim' ? 1 - fatia(s.tf, 1300, 1900) : fatia(s.tm * 1000, 0, 600); if (a <= 0.01) return;
-    for (const [x, z, w, d, ang, forma, sd] of s.chao) this.L.chao.put(mCaixa(x, chao(x, z) + 0.012, z, w, 1, d, ang), a, forma, sd);
+    for (const [x, z, w, d, ang, forma, sd, y] of s.chao) this.L.chao.put(mCaixa(x, y, z, w, 1, d, ang), a, forma, sd);
   }
   // ---------------------------------------------------------------- terra: corte vertical e escavadeira
   _terra(s, p, dts) {
