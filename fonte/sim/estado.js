@@ -64,15 +64,16 @@ export const DIA_MS = 20000, MES_DIAS = 30, ANO_DIAS = 360, ANO_MS = ANO_DIAS * 
 // empréstimo: até 50 mil por ano do jogo, dívida máxima de 500 mil (principal + juros devidos), 10% ao ano sobre o principal,
 // prazo de 10 anos por contrato (depois dele o saldo rende a mora de 20%), em múltiplos de 1.000
 const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, mora: 0.20 };
+// recompensa por etapa ou pavimento aprovado (150% do custo) e aceleradores (cada um adianta 1 h)
+const RECOMPENSA = 1.5, ACELERA_MS = 3600e3;
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
 export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
-  loteMax: LOTE_MAX, fLote: F_LOTE, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
+  loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (+lv <= n) out.push(...ks); return out; } // serviços que um pavimento de nível n pede
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
-// economia (medida pelo robô em sessões): repasse = (base + por morador) × (0,5 + bem-estar) por minuto; a medição devolve
-// parte do custo quando a etapa é aprovada, então os créditos são capital de giro e não uma parede
-// e diminui no fim, quando os repasses de uma arcologia cheia já pagam as obras (sem inflação no epílogo)
-const REPASSE = [24, 0.0025], MEDICAO = { 1: 0.7, 2: 0.7, 3: 0.7, 4: 0.6, 5: 0.5, 6: 0.6 }, DISP = { pedido: 2, modulo: 4, etapa: 8, marco: 30 };
+// economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
+// + valor dos itens entregues) e dá 1 acelerador de obra e 1 de produção (cada um adianta 1 h de um cronômetro)
+const DISP = { pedido: 2, modulo: 4, etapa: 8, marco: 30 }; const REPASSE = [24, 0.0025];
 const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 20, venda: 0.6 };
 export const TOPOGRAFO = { estaca: { itens: { madeira: 2 }, creditos: 300, min: 20 }, baliza: { itens: { aco: 2 }, creditos: 600, min: 30 }, trena: { itens: { cobre: 2 }, creditos: 900, min: 45 } };
 const LICENCAS = ['estaca', 'baliza', 'trena'], ALMOX = ['estrado', 'etiqueta', 'cadeado'];
@@ -241,7 +242,8 @@ export function normalizar(S, agora = Date.now()) {
     O.modulos[f] = Array.from({ length: N }, (_, i) => {
       const m = arr[i]; if (!objeto(m)) return { nivel: 0, obra: null };
       const out = { ...m, nivel: clamp(num(m.nivel) | 0, 0, MODULOS[f].max), obra: null };
-      if (objeto(m.obra) && ['obra', 'pronta'].includes(m.obra.estado) && num(m.obra.para) > out.nivel && num(m.obra.para) <= MODULOS[f].max) out.obra = { estado: m.obra.estado, para: m.obra.para | 0, ini: num(m.obra.ini, O.t), fim: num(m.obra.fim, O.t) };
+      if (objeto(m.obra) && ['obra', 'pronta'].includes(m.obra.estado) && num(m.obra.para) > out.nivel && num(m.obra.para) <= MODULOS[f].max) { out.obra = { estado: m.obra.estado, para: m.obra.para | 0, ini: num(m.obra.ini, O.t), fim: num(m.obra.fim, O.t) };
+        if (m.obra.pago != null) out.obra.pago = Math.max(0, Math.round(num(m.obra.pago))); if (objeto(m.obra.itens)) { const its = {}; for (const [k, q] of Object.entries(m.obra.itens)) if (tem(ITENS, k) && num(q) > 0) its[k] = Math.round(num(q)); out.obra.itens = its; } }
       if (m.pedido && (!objeto(m.pedido.itens) || Object.keys(m.pedido.itens).some((k) => !tem(ITENS, k)))) delete out.pedido;
       return out;
     });
@@ -561,14 +563,33 @@ export class Jogo {
   aprovarEtapa(key) {
     const st = this.S.etapas[key]; if (!st || st.estado !== 'pronta') return 'nada';
     const [p, e] = this._pe(key); const S = this.S;
-    st.estado = 'feita'; st.entregue = {}; S.stats.obras++;
-    const med = Math.round((st.pago ?? this.custoEtapa(p, e)) * MEDICAO[this.capEtapa(p, e)]); delete st.pago; S.creditos += med; // medição: a Holding paga pela etapa medida
+    const entregue = objeto(st.entregue) && Object.keys(st.entregue).length ? st.entregue : this.itensEtapa(p, e);
+    const med = this.recompensa(st.pago ?? this.custoEtapa(p, e), entregue); st.estado = 'feita'; st.entregue = {}; delete st.pago; S.stats.obras++;
+    S.creditos += med; S.aceleradores.obra++; S.aceleradores.producao++; // recompensa: 150% do que a etapa custou, mais 1 acelerador de obra e 1 de produção
     const xp = e.xp || Math.round(e.custo / 12 + Object.values(e.itens).reduce((a, b) => a + b, 0) * 12); this._xp(xp, 'etapa');
-    this._derivar(); this.emit('etapaFeita', { key, p, e });
-    this.emit('aviso', { texto: `Medição aprovada: +${fmtN(med)}`, icone: 'creditos', creditos: med });
+    this._derivar(); this.emit('etapaFeita', { key, p, e, recompensa: med, aceleradores: { obra: 1, producao: 1 } });
+    this.emit('aviso', { texto: `Recompensa da etapa: +${fmtN(med)} (150% do custo) e 2 aceleradores`, icone: 'creditos', creditos: med });
     const fala = FALAS_ETAPA[key]; if (fala) this.emit('fala', { quem: fala[0], texto: fala[1], atraso: 1600, etapa: key });
     if (key === 'reflorestar.e1') { let k = 1; for (const n of [1, 5]) { const f = EPILOGO[S.capEscolhas[n]]; if (f) this.emit('fala', { quem: f[0], texto: f[1], atraso: 1600 + 7000 * k++ }); } }
     this._disposicao(DISP.etapa); this._pedidoModulos(); this._verCapitulo(); return 'ok';
+  }
+  // recompensa de uma etapa ou pavimento: 150% dos créditos pagos e do valor dos itens entregues
+  recompensa(pago, itens) { let v = num(pago); for (const [k, q] of Object.entries(itens || {})) v += (ITENS[k]?.valor || 0) * num(q); return Math.round(RECOMPENSA * v); }
+  // aceleradores (ganhos a cada etapa aprovada): 1 h a menos numa obra ou pavimento em obra (obra), ou em todos os espaços
+  // de uma usina (ou um só, com slot) e no trabalho da frente de uma oficina (producao)
+  acelerar(alvo) {
+    const S = this.S, A = S.aceleradores, a = this.agora; const adianta = (x) => { x.fim = Math.max(a, x.fim - ACELERA_MS); }; let tipo;
+    if (alvo?.etapa || alvo?.modulo) {
+      tipo = 'obra'; if (A.obra < 1) return 'sem';
+      if (alvo.etapa) { const st = S.etapas[alvo.etapa]; if (!st || st.estado !== 'obra') return 'nada'; adianta(st); }
+      else { const m = S.modulos[alvo.modulo[0]]?.[alvo.modulo[1]]; if (!m?.obra || m.obra.estado !== 'obra') return 'nada'; adianta(m.obra); }
+    } else if (alvo?.predio) {
+      tipo = 'producao'; if (A.producao < 1) return 'sem'; const p = S.predios[alvo.predio]; if (!p?.ok) return 'nada'; let ok = false;
+      if (p.slots) { p.slots.forEach((s, i) => { if (s && s.fim > a && (alvo.slot == null || alvo.slot === i)) { adianta(s); ok = true; } }); }
+      else { const f = p.fila?.[0]; if (f && f.fim && f.fim > a) { adianta(f); ok = true; } }
+      if (!ok) return 'nada';
+    } else return 'nada';
+    A[tipo]--; S.stats.acelerados++; this.tick(a); this.emit('acelerou', { alvo, tipo, restante: A[tipo], aceleradores: { ...A } }); return 'ok';
   }
   // módulos (zonas residenciais)
   situacaoModulo(f, i) {
@@ -592,14 +613,14 @@ export class Jogo {
     if (!r.servOk) return 'servico'; if (!r.bemOk) return 'bem'; if (this.S.creditos < r.custo) return 'creditos';
     for (const [k, n] of Object.entries(r.itens)) if (!this.temItem(k, n)) return 'falta';
     for (const [k, n] of Object.entries(r.itens)) this.S.itens[k] -= n; this.S.creditos -= r.custo;
-    this.S.modulos[f][i].obra = { estado: 'obra', para: r.nivel, ini: this.agora, fim: this.agora + this.dur(r.tempo, 'modulo') };
+    this.S.modulos[f][i].obra = { estado: 'obra', para: r.nivel, ini: this.agora, fim: this.agora + this.dur(r.tempo, 'modulo'), pago: r.custo, itens: { ...r.itens } };
     this.emit('moduloIniciado', { faixa: f, i, nivel: r.nivel }); return 'ok';
   }
   aprovarModulo(f, i) {
     const m = this.S.modulos[f][i]; if (!m.obra || m.obra.estado !== 'pronta') return 'nada';
-    m.nivel = m.obra.para; m.obra = null; delete m.pedido; const med = Math.round(CUSTO_NIVEL[m.nivel] * MEDICAO[this.S.cap]); this.S.creditos += med;
-    this._xp(30 * m.nivel, 'modulo'); this._derivar(); this.emit('moduloFeito', { faixa: f, i, nivel: m.nivel });
-    this.emit('aviso', { texto: `Medição aprovada: +${fmtN(med)}`, icone: 'creditos', creditos: med });
+    const med = this.recompensa(m.obra.pago ?? CUSTO_NIVEL[m.obra.para], m.obra.itens); m.nivel = m.obra.para; m.obra = null; delete m.pedido; this.S.creditos += med;
+    this._xp(30 * m.nivel, 'modulo'); this._derivar(); this.emit('moduloFeito', { faixa: f, i, nivel: m.nivel, recompensa: med });
+    this.emit('aviso', { texto: `Recompensa do pavimento: +${fmtN(med)} (150% do custo)`, icone: 'creditos', creditos: med });
     this._disposicao(DISP.modulo); this._pedidoModulos(); this._verCapitulo(); return 'ok';
   }
   // Mutirão: a comunidade adianta até 2 horas de um cronômetro
