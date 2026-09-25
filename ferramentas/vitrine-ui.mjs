@@ -50,7 +50,8 @@ C.iniciar();
 window.H = { C, J, S, TUTORIAL, THREE }; window.__pronto = true;
 `;
 const js = (await build({ stdin: { contents: entrada, resolveDir: join(raiz, 'fonte'), loader: 'js' }, bundle: true, format: 'esm', write: false, logLevel: 'error', target: ['chrome110'] })).outputFiles[0].text;
-const css = readFileSync(join(raiz, 'fonte/ui/estilo.css'), 'utf8');
+// a fonte entra no CSS em base64, como no arquivo único (a página abre por file://, onde a fonte externa é barrada)
+const css = readFileSync(join(raiz, 'fonte/ui/estilo.css'), 'utf8').replace(/url\(fontes\/([\w.-]+\.woff2)\)/g, (m, f) => `url(data:font/woff2;base64,${readFileSync(join(raiz, 'fonte/web/fontes', f)).toString('base64')})`);
 const semAnim = process.env.ANIMAR ? '' : '*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important}';
 writeFileSync(join(pasta, 'foto.webp'), readFileSync(join(raiz, 'fonte/web/foto.webp')));
 writeFileSync(join(pasta, 'vitrine-ui.html'), `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>${css}\nbody{background:#1a1d16 url(foto.webp) center/cover no-repeat}\n${semAnim}</style></head><body><canvas id="c" style="opacity:0"></canvas><div id="ui"></div><script type="module">${js.replace(/<\/script/g, '<\\/script')}</script></body></html>`);
