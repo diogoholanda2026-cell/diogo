@@ -529,6 +529,109 @@ img{-webkit-user-drag:none}
 .deslize::-webkit-slider-thumb{width:28px;height:28px}
 .rotulo3d{position:absolute;left:0;top:0;transform:translate(-50%,-100%);padding:3px 10px 4px;background:linear-gradient(180deg,#ffffff,#e4f1fc);border:2px solid #fff;border-radius:12px;box-shadow:0 2px 0 #9dbfdf,0 4px 8px rgba(0,20,50,.3);color:var(--tinta);font-size:11px;font-weight:800;line-height:1.15;text-align:center;white-space:pre;pointer-events:none}
 .rotulo3d::after{content:"";position:absolute;left:50%;bottom:-8px;margin-left:-7px;border-style:solid;border-width:8px 7px 0;border-color:#fff transparent transparent}
+/* ---------- economia nova: calendário, renda, aceleradores, lotes, finanças, pedidos ---------- */
+/* renda por hora na pílula de moradores e o calendário com o anel do dia (20 s) na ponta esquerda */
+.stat .ph{margin-left:5px;font-size:11px;line-height:1;font-weight:800;color:#b6f28a;white-space:nowrap;text-shadow:var(--t1)}
+.stat.cal{padding-left:27px;padding-right:11px}
+.stat.cal .anel-dia{position:absolute;left:-22px;top:50%;width:44px;height:44px;margin-top:-23px;border-radius:50%;background:conic-gradient(#ffcf36 var(--p,0%),rgba(8,22,46,.7) 0);box-shadow:0 2px 4px rgba(0,0,0,.35);display:grid;place-items:center;transition:--p .5s linear}
+.stat.cal .anel-dia.semtr{transition:none}
+.stat.cal .anel-dia::after{content:"";position:absolute;inset:5px;border-radius:50%;background:rgba(8,22,46,.62)}
+.stat.cal .anel-dia img{position:relative;z-index:1;width:30px;height:30px}
+.stat.cal .cd b{font-size:12.5px;line-height:1;font-weight:800;white-space:nowrap;text-shadow:var(--t1)}
+.stat.cal .curto{display:none}
+@media (max-width:940px){.stat.cal .longo{display:none}.stat.cal .curto{display:inline}}
+/* contador de aceleradores (ganhos por etapa aprovada) na pílula do Mutirão */
+.mutirao .ac{display:flex;align-items:center;gap:1px;height:22px;margin-left:6px;padding:0 6px 0 1px;border-radius:11px;background:rgba(255,255,255,.14)}
+.mutirao .ac img{width:20px;height:20px}
+.mutirao .ac b{font-size:12px;font-weight:800;color:#ffe066;text-shadow:var(--t1)}
+/* lote em andamento (usina: espaço; oficina: trabalho da frente): "3/10 · 12 min", barra, Auto e x */
+.lotes{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:2px 0 8px}
+.lote{position:relative;display:flex;align-items:center;gap:4px;min-height:58px;padding:4px 4px 4px 6px;border-radius:14px;background:linear-gradient(180deg,#ffffff,#e4f0fa);border:2px solid var(--cartaoB);box-shadow:0 3px 0 var(--cartaoE);min-width:0}
+.lote>img{width:38px;height:38px;flex:none}
+.lote .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.lote .tx b{font-size:14px;line-height:1.1;font-weight:800;color:var(--tinta);font-variant-numeric:tabular-nums}
+.lote .tx small{font-size:11px;line-height:1.1;font-weight:800;color:#1f78d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lote .barra{flex:none;width:100%;height:6px;margin-top:2px;min-width:0}
+.lote .auto{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:40px;height:44px;border-radius:12px;background:#eef5fb;border:2px solid var(--cartaoB);color:#5a7a9a;font-size:11px;font-weight:800;line-height:1}
+.lote .auto::after{content:"";position:absolute;inset:0 -2px}
+.lote .auto i{position:relative;width:24px;height:13px;border-radius:8px;background:#b8cbe0;transition:background .2s}
+.lote .auto i::before{content:"";position:absolute;left:2px;top:2px;width:9px;height:9px;border-radius:50%;background:#fff;transition:transform .2s}
+.lote.auto{border-color:#a6de8a;background:linear-gradient(180deg,#ffffff,#effbe6)}
+.lote.auto .auto{background:#e2f7d6;border-color:#8ed46a;color:#23641a}
+.lote.auto .auto i{background:#4cb62a}
+.lote.auto .auto i::before{transform:translateX(11px)}
+.lote .canc{position:relative;flex:none;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 42% 30%,#ff9e8e,#f2453a 55%,#c42418);border:2px solid #fff;box-shadow:0 2px 0 #8e1a12;color:#fff;font-size:17px;line-height:1;font-weight:800;--cc:#8a1008;text-shadow:var(--t1)}
+.lote .canc::after{content:"";position:absolute;inset:-8px}
+.lote .auto:active,.lote .canc:active{transform:translateY(2px)}
+.vaga .nn{position:absolute;top:2px;right:2px;z-index:2;padding:0 4px;border-radius:8px;background:rgba(8,22,46,.8);font-style:normal;font-size:11px;font-weight:800;line-height:14px;color:#ffe066}
+.minis .mini{position:relative}
+.minis .mini i{position:absolute;right:-5px;bottom:-5px;min-width:15px;padding:0 3px;border-radius:8px;background:#2c9cf2;border:1.5px solid #fff;font-style:normal;font-size:11px;line-height:13px;font-weight:800;color:#fff;text-align:center}
+.minis .mini.auto{border-color:#8ed46a}
+/* ficha com o seletor de lote (− n +) e o rótulo verde "Produzir N · tempo" (a ficha inteira é o botão) */
+.ficha.lote-f{gap:2px;padding-bottom:4px}
+.ficha.lote-f img{width:42px;height:42px}
+.passo{display:inline-flex;align-items:center;gap:2px}
+.passo .pm{position:relative;width:28px;height:28px;border-radius:9px;background:linear-gradient(180deg,#86d9ff,#2c9cf2 52%,#1f83dc);border:2px solid #1463b4;box-shadow:inset 0 2px 0 rgba(255,255,255,.45),0 2px 0 #1463b4;color:#fff;font-size:19px;line-height:1;font-weight:800;--cc:#0d4a8c;text-shadow:var(--t1)}
+.passo .pm::after{content:"";position:absolute;inset:-8px}
+.passo .pm:active{transform:translateY(2px);box-shadow:inset 0 2px 0 rgba(255,255,255,.45),0 0 0 #1463b4}
+.passo .n{min-width:20px;text-align:center;font-size:15px;line-height:1;font-weight:800;color:var(--tinta);font-variant-numeric:tabular-nums}
+.ficha .prod{display:block;width:100%;margin-top:1px;padding:4px 3px;border-radius:9px;background:linear-gradient(180deg,#a8ee64,#5cc234 52%,#43a524);box-shadow:0 2px 0 #2c7c18;font-size:11px;line-height:1.1;font-weight:800;color:#fff;--cc:#1f5a10;text-shadow:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ficha.falta .prod{background:linear-gradient(180deg,#eef5fb,#c9d9ea);box-shadow:0 2px 0 #9fb4c8;color:#4a6a8e;text-shadow:none}
+.ficha .ate{font-size:11px;line-height:1;font-weight:800;color:#1f78d0}
+.ficha .ate.nao{color:#c8261a}
+/* Depósito: preço de venda em destaque e as vendas da janela */
+.ficha.venda small.qtd{font-size:15px;color:#23801a}
+.linha.vendas{margin:-4px 0 8px}
+/* Pedidos: totais por item no cabeçalho e o botão "Fabricar na Usina de Pedidos" no cartão */
+.totais{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 8px;padding:5px 8px;border-radius:12px;background:#fff;border:2px solid var(--cartaoB);box-shadow:0 2px 0 var(--cartaoE)}
+.totais>small{margin-right:4px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1f78d0}
+.totais .etiq{padding:1px 7px 1px 2px;font-size:12px}
+.totais .etiq small{margin-left:3px;font-size:11px;font-weight:800;color:#c8261a}
+.pedido .fab{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;width:100%;min-height:44px;margin-top:4px;padding:2px 6px;border-radius:12px;background:linear-gradient(180deg,#86d9ff,#2c9cf2 52%,#1f83dc);border:2px solid #1463b4;box-shadow:inset 0 2px 0 rgba(255,255,255,.45),0 3px 0 #1463b4;color:#fff;font-size:12px;line-height:1.1;font-weight:800;text-align:center;--cc:#0d4a8c;text-shadow:var(--t1)}
+.pedido .fab img{width:26px;height:26px;flex:none}
+.pedido .fab.on{background:linear-gradient(180deg,#ffd872,#ff9f1a 52%,#f0840a);border-color:#bb5a04;box-shadow:inset 0 2px 0 rgba(255,255,255,.5),0 3px 0 #bb5a04;--cc:#8a3a00}
+.pedido .fab:active{transform:translateY(2px);box-shadow:inset 0 2px 0 rgba(255,255,255,.45),0 0 0 #1463b4}
+.pedido.fabricando{border-color:#ffc46a}
+/* Escritório, aba Finanças: cartões de valuation, renda e empréstimo */
+.linha.calend{margin:0 0 8px;align-items:center}
+.desc-linha{font-size:11.5px;font-weight:600;color:var(--tinta2)}
+.cartao.fin{margin:0 0 8px;padding:8px 10px 9px}
+.fin .cab{display:flex;align-items:center;gap:8px}
+.fin .cab>img{width:44px;height:44px;flex:none}
+.fin .cab .tx{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
+.fin .cab small{font-size:11px;line-height:1.15;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1f78d0}
+.fin .grande{font-size:26px;line-height:1.05;font-weight:800;color:var(--tinta);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fin .grande em{font-style:normal;font-size:14px;color:var(--tinta2)}
+.fin .cab .rec{display:flex;align-items:center;gap:3px;font-size:12px;letter-spacing:0;text-transform:none;color:var(--tinta2)}
+.fin .rec img{width:16px;height:16px}
+.fin .det{list-style:none;margin:6px 0 0;padding:6px 0 0;border-top:2px solid #e4eef8;display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.fin .det li{display:flex;justify-content:space-between;gap:6px;font-size:12px;line-height:1.3;color:var(--tinta2)}
+.fin .det li b{color:var(--tinta);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fin .det li b.neg{color:#c8261a}
+.fin .det.divida{grid-template-columns:1fr 1fr}
+.fin .det li.tot{grid-column:1/-1;font-size:14px;color:var(--tinta)}
+.fin .det li.tot b{color:#c8261a}
+.fin .linha.etiqs{margin:6px 0 0}
+.fin .linha.cofre{margin-top:8px;flex-wrap:nowrap}
+.fin p.desc{margin:6px 0 0;font-size:12.5px}
+.fin .linha.tomar{margin-top:8px;flex-wrap:nowrap}
+.passo.grande .pm{width:40px;height:40px;border-radius:12px;font-size:24px}
+.passo.grande .pm::after{inset:-3px}
+.passo.grande .n{min-width:70px;font-size:17px}
+.fin .linha.pagar{margin-top:8px}
+.fin .linha.pagar .botao{font-size:13px;padding:0 11px}
+.contratos{display:flex;flex-direction:column;gap:5px}
+.contrato{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 8px;border-radius:12px;background:#fff;border:2px solid var(--cartaoB);box-shadow:0 2px 0 var(--cartaoE)}
+.contrato>img{width:30px;height:30px;flex:none}
+.contrato .tx{flex:1;min-width:0;font-size:13px;line-height:1.2;color:var(--tinta)}
+.contrato .tx small{display:block;font-size:11.5px;color:var(--tinta2)}
+.contrato.vencido{border-color:#ffc2b8;background:#fff4f2}
+.contrato.vencido .tx small{color:#c8261a}
+/* popover da renda (toque na pílula de moradores) com o botão que abre o Escritório */
+.info-pop .botao{margin:4px 12px 0}
+/* modal da etapa aprovada: recompensa (150% do custo) e os aceleradores ganhos */
+.modal.aprov .premio{width:100px}
+.modal.aprov .premio b{font-size:14px}
 /* ---------- utilidades ---------- */
 .cred{color:#c86a00;font-weight:800}
 .tempo{color:#1f78d0;font-weight:800;font-size:13px}
@@ -552,6 +655,6 @@ img{-webkit-user-drag:none}
 <body>
 <canvas id="c"></canvas>
 <div id="ui"></div>
-<script type="module" src="jogo.20260925121334.js"></script>
+<script type="module" src="jogo.20260925175935.js"></script>
 </body>
 </html>
