@@ -16,6 +16,8 @@ Jogo de construção no estilo **SimCity BuildIt**, em 3D, feito para celular (t
 
 ![Biblioteca Central, etapa por etapa](arte/telas/07-etapas-biblioteca.png)
 
+![Modos de obra: draga, obra linear, aprovação e replantio](arte/telas/08-modos-de-obra.png)
+
 ## Instalar no celular (recomendado)
 
 O melhor formato para este jogo é um **app instalável (PWA) servido pelo GitHub Pages**. No Poco X7:
@@ -116,14 +118,18 @@ Pensada para a tela 20:9 em paisagem (986x443 no Poco X7): a maquete fica sempre
 
 ## Gráficos
 
-Feitos para o Mali-G615 MC2 do Poco X7, com resolução que se ajusta sozinha para manter a fluidez:
+Feitos para o Mali-G615 MC2 do Poco X7. A composição inteira cabe em cerca de 150 chamadas de desenho e 350 mil triângulos, contando a sombra.
 
-- Obras com esqueleto de concreto, plano de corte com borda incandescente, andaimes que sobem junto e contornam o prédio, grua, betoneira e operários.
-- Renderização em alta faixa dinâmica com MSAA 4×, **bloom** com filtro de Karis, **profundidade de campo de maquete** (tilt-shift), tonemapping ACES, gradação de cor, vinheta e pontilhado.
-- Sombras suaves que só são recalculadas quando algo muda; reflexos de uma "sala de exposição"; céu noturno com **aurora**.
-- Fachadas com luz interna, terraços verdes, floresta instanciada com vento, água com normal animada.
-- Tudo o que fica pronto é **fundido em poucas malhas por material** (cerca de 150 chamadas de desenho com a composição inteira, contando sombras).
-- Perfis **Ultra, Alta, Média e Leve**, escolhidos automaticamente pelo processador gráfico; limite de 30, 60 ou 120 qps; 30 qps quando a tela fica parada.
+- **Luz de exposição** calibrada contra a foto: gradação em espaço linear com tonemapping Khronos PBR Neutral, contraste e saturação sem esmagar os pretos, refletor alto e macio, preenchimento quente e a frente da mesa na penumbra. Modos **Exposição**, **Noite** (fachadas acesas, lua fria) e **Dia** (parede de galeria clara).
+- **Oclusão de ambiente por campo de alturas**: a maquete vista de cima vira um mapa de alturas desfocado, que escurece a base das paredes, os degraus dos terraços, o chão sob as passarelas e a orla da mata. É recalculado só quando a obra muda.
+- **Céu com aurora** em cortinas, estrelas e reflexos de uma sala de exposição; sombras macias e estáveis que não tremem ao arrastar.
+- **Pós-processamento enxuto** (9 passes): bloom a 1/4 da resolução, **profundidade de campo de maquete** só de perto, com foco automático, vinheta e pontilhado; alvo HDR compacto com MSAA 4×; resolução em degraus que se ajusta sozinha.
+- **Materiais de maquete**: fachadas âmbar contínuas, coberturas verdes em tufos, passeio claro no teto das fitas, água opaca com profundidade (o lago assoreado do início é turvo), mesa de nogueira com placa de latão legível.
+- **Mata em cachos** com vento, luz envolvente e três níveis de detalhe por célula; **190 pessoas** nas passarelas, praças e terraços, com figura simples de longe; elefantes, girafas, rinocerontes e gorilas de dorso prateado que andam de verdade; um bando de aves.
+- **Obra com sentido físico**: o canteiro monta em 1,6 s (estacas, poeira, mastro telescópico da grua); a grua trabalha num ciclo de içamento de 14 s com pêndulo e nunca cruza prédios prontos; o caminhão entrega e as pilhas no chão de obra correspondem aos materiais entregues; os operários ficam em postos (andaime, laje, pátio) com um mestre de colete; o andaime sobe um lance acima da obra, com diagonais e tela de proteção; o prédio sobe andar por andar, com tampa de seção e concreto fresco. Modos próprios para **draga** (desassoreamento), **caminho** (passarelas avançam trecho a trecho), **plantio**, **caixas** (os bichos saem dos engradados), **terraplenagem**, **pavimentação**, **desmonte do canteiro** e **replantio**. Ao voltar depois de um tempo fora, a obra avança num time-lapse de 1,5 s.
+- **Aprovação coreografada**: o andaime desmonta de cima, a grua estaciona, poeira, confete (fogos à noite) e o carimbo APROVADO no mesmo instante; o prédio nunca é achatado.
+- Tudo o que fica pronto é **fundido em poucas malhas por material**, em quadrantes que o descarte por caixa esconde fora da tela; a refusão depois de uma aprovação é adiada para não travar.
+- Perfis **Ultra, Alta, Média e Leve**, escolhidos pelo processador gráfico (o Poco X7 usa Alta); limite de 30, 60 ou 120 qps; 30 qps com a tela parada.
 
 ## Estrutura do código
 
@@ -138,8 +144,9 @@ fonte/
   core/                      utilidades, som procedural, vibração, salvamento (IndexedDB)
   data/                      planta traçada da foto, itens, obras e etapas, história, rótulos
   sim/estado.js              simulação: produção, filas, prancha, módulos, serviços, capítulos
-  render/                    motor (pós-processamento), câmera, céu, terreno, floresta, mesa,
-                             canteiro animado, figuras, animais e o mundo
+  render/                    motor (pós-processamento), oclusão por campo de alturas (hao.js), câmera,
+                             céu, terreno, floresta, mesa, obra animada (obra.js), figuras, animais,
+                             descarte de memória (descartar.js) e o mundo
   render/models/             cada estrutura da foto, por etapas
   ui/                        HUD, painéis (folha lateral), balões, ícones desenhados em código,
                              configurações e modo Apreciar
@@ -149,6 +156,9 @@ ferramentas/
   simular.mjs                robô que joga do início ao fim (sessões, escolhas, faixas do equilíbrio)
   robo-partida.js            robô que joga a partida inteira no navegador (pela interface)
   testar.mjs                 capturas de tela no Chromium (WebGL por software)
+  vitrine.mjs                conjunto padrão de capturas (composição, closes, obra, celular) para comparar versões
+  cap-obra.mjs               capturas de aceite de cada modo de obra, montagem e aprovação
+  conexoes.mjs               confere na planta se fitas, passarelas e vias se cruzam
   vitrine-ui.mjs             capturas e medidas da interface no celular, sem WebGL
 ```
 
@@ -161,4 +171,4 @@ npm run simular:todos     # testes de regra + matriz de 8 combinações (faixas 
 npm run testar -- /tmp/tela.png "vista=foto&tudo=1"
 ```
 
-Three.js (licença MIT) vai embutido no pacote; o aviso de licença fica no fim de `app/jogo.js`.
+Three.js (licença MIT) vai embutido no pacote; o aviso de licença fica no fim do `app/jogo.<versão>.js`.
