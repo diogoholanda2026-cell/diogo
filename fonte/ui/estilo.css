@@ -7,7 +7,9 @@
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:Roboto,"Segoe UI",system-ui,-apple-system,sans-serif;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-size:15px}
 #c{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none}
 #ui{position:fixed;inset:0;pointer-events:none;z-index:2}
-#ui *{pointer-events:auto}
+/* tudo dentro de #ui recebe toque por padrão, mas sem especificidade: as regras de classe com pointer-events:none
+   (.bolhas, .doca, .brindes, .topo, .apreciar.oculta, .balao.sob, .folha.sai...) precisam vencer esta */
+:where(#ui) *{pointer-events:auto}
 #ui .passa,#ui .passa *{pointer-events:none}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .oculto,.escondido{display:none!important}
@@ -107,6 +109,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .fala-dock .pular{flex:none;min-width:60px;height:44px;border-radius:22px;background:rgba(255,255,255,.1);font-size:13px;font-weight:700;color:var(--txt2)}
 @keyframes entra{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .brindes{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;pointer-events:none}
+.brindes *{pointer-events:none}
 .brinde{max-width:100%;padding:8px 16px;border-radius:20px;background:var(--vidro2);border:1px solid var(--borda);font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;box-shadow:var(--sombra);text-align:center;animation:brEntra .24s cubic-bezier(.2,.9,.3,1.2)}
 .brinde img{width:24px;height:24px;flex:none}
 .brinde.sai{animation:brSai .22s ease-in forwards}
@@ -147,7 +150,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .balao .ent{position:absolute;inset:0;transform-origin:50% 100%;animation:bEntra .32s cubic-bezier(.34,1.56,.64,1) both}
 .balao.sai .ent{animation:bSai .18s ease-out forwards}
 .balao.toque .ent{animation:bToque .12s ease-out forwards}
-.balao.sai,.balao.toque{pointer-events:none}
+.balao.sai,.balao.toque,.balao.sai *,.balao.toque *{pointer-events:none}
 @keyframes bEntra{0%{transform:scale(0)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
 @keyframes bSai{to{transform:scale(1.3);opacity:0}}
 @keyframes bToque{to{transform:scale(1.25);opacity:0}}
@@ -180,6 +183,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .balao.borda .flut{animation:bordaPulso 1.2s ease-in-out infinite}
 @keyframes bordaPulso{50%{transform:scale(1.1)}}
 .balao.sob{opacity:.35;pointer-events:none}
+.balao.sob *{pointer-events:none}
 .balao.sob::before{display:none}
 .voa{position:fixed;left:0;top:0;width:34px;height:34px;z-index:20;pointer-events:none;will-change:transform}
 .voa.mais::after{content:attr(data-mais)}
