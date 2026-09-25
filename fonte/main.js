@@ -5,6 +5,7 @@ import { makeMaterials } from './render/materials.js';
 import { Environment } from './render/env.js';
 import { Ground } from './render/ground.js';
 import { Forest } from './render/forest.js';
+import { Arredores } from './render/arredores.js';
 import { CameraRig } from './render/camera.js';
 import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
@@ -25,12 +26,15 @@ const qs = new URLSearchParams(location.search);
 const TESTE = qs.has('teste') || qs.has('tudo') || qs.has('vista');
 const cfg = lerConfig();
 const quadro = () => new Promise((r) => requestAnimationFrame(() => r()));
+// vista geral (abertura do jogo e botão da interface): centro da composição, ~47° de inclinação, horizonte reto
+const VISTA_GERAL = { x: 1.5, z: 5, dist: 60, yaw: 0.36, pitch: 0.84, fov: 38, roll: 0 };
 let salvarAgora = () => {}; // grava o localStorage na hora (antes de atualizar a versão ou perder o contexto)
 
 // ---------------- tela de carregamento ----------------
+// (a foto de referência continua servindo ao Comparar do Apreciar; a tela de carga é estilizada pela interface)
 const FOTO = window.__FOTO__ || 'foto.webp';
-const carga = el('div', ''); carga.id = 'carga'; carga.style.backgroundImage = `url(${FOTO})`;
-carga.innerHTML = `<h1>ARCOLOGIA DE HELD</h1><p>Composição total · maquete viva</p><div class="barra"><i></i></div><button class="toque">Toque para entrar</button><small>versão ${VERSAO}</small>`;
+const carga = el('div', ''); carga.id = 'carga';
+carga.innerHTML = `<h1>ARCOLOGIA DE HELD</h1><p>Composição total · Arcologia de Held</p><div class="barra"><i></i></div><button class="toque">Toque para entrar</button><small>versão ${VERSAO}</small>`;
 document.body.appendChild(carga);
 const gire = el('div', ''); gire.id = 'gire'; gire.innerHTML = '<div>📱</div><b>Gire o celular</b><span>O ateliê é em paisagem.</span>'; document.body.appendChild(gire);
 const barra = carga.querySelector('.barra i'); const passo = async (p) => { barra.style.width = p + '%'; await quadro(); };
@@ -46,9 +50,13 @@ async function iniciar() {
   // troca de perfil de qualidade: sombra e árvores (o raio da sombra é da própria luz, no env)
   const env = new Environment(engine); const aoPerfil = (q) => { env.setShadowSize(q.shadow); forest?.setShadows(q.treeShadow); };
   if (Array.isArray(engine.aoQualidade)) engine.aoQualidade.push(aoPerfil); else engine.onQuality = aoPerfil;
-  env.setShadowSize(engine.q.shadow); if (cfg.luz) env.setMode(cfg.luz);
+  env.setShadowSize(engine.q.shadow);
+  // ciclo de dia e noite: o da configuração (a interface grava cfg.ciclo), 'acelerado' por padrão; nos testes,
+  // ?ciclo= e ?hora= (a hora fixa pausa o ciclo)
+  env.setCiclo(qs.get('ciclo') || cfg.ciclo || 'acelerado'); if (qs.has('hora')) env.setHora(+qs.get('hora'));
   const ground = new Ground(engine); await passo(30);
-  forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(45);
+  forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(40);
+  const arredores = new Arredores(engine, forest); await passo(45);
   const rig = new CameraRig(engine, canvas, MESA);
   const mundo = new Mundo(engine, ground, forest); await passo(70);
   // epílogo (desmontar o canteiro e replantar): etapas sem peça própria; o modelo só dá foco e âncora,
@@ -70,16 +78,24 @@ async function iniciar() {
   try { await ICONES.prepararIcones?.(); } catch (_) {}
   const som = new Som(); som.efeitos = cfg.efeitos !== false; som.musica = cfg.musica !== false; vibra.on = cfg.vibra !== false;
   const ui = document.getElementById('ui');
-  const C = new Controle({ engine, rig, env, ground, forest, mundo, obras, J, som, vibra, ui, cfg });
-  // vista da foto de referência (com a leve rolagem da foto)
+  const C = new Controle({ engine, rig, env, ground, forest, arredores, mundo, obras, J, som, vibra, ui, cfg });
+  // vista da foto de referência (com a leve rolagem da foto): só para os testes e o Comparar do Apreciar
   C.vistaFoto = (anim) => { const v = VISTA_FOTO; rig.pitchFix = v.pitch; const o = { x: v.x, z: v.z, dist: v.dist, yaw: v.yaw, fov: v.fov, roll: v.roll }; C._naFoto = true; if (anim) rig.flyTo(o, 1600, { cine: true }); else { rig.target.set(o.x, 0, o.z); rig.dist = o.dist; rig.yaw = o.yaw; rig.fov = o.fov; rig.roll = o.roll; rig.apply(); } };
+  // vista geral no estilo do BuildIt: a obra inteira centralizada, horizonte reto (sem rolagem) e ~47° de
+  // inclinação (a inclinação da câmera é a do zoom mais um ajuste, então pinça e arrasto seguem normais)
+  C.vistaGeral = (anim) => {
+    const o = { ...VISTA_GERAL }; rig.pitchFix = null; C._naFoto = false;
+    // inclinação que o zoom daria nessa distância (a fórmula é a do próprio rig), e o ajuste até a da vista
+    const base = rig.pitch.call({ pitchFix: null, tilt: 0, zoomT: () => Math.min(1, Math.max(0, (o.dist - rig.minDist) / (rig.maxDist - rig.minDist))) }); o.tilt = o.pitch - base; delete o.pitch;
+    if (anim) rig.flyTo(o, 1400, { cine: true }); else { rig.anim = null; rig.target.set(o.x, 0, o.z); rig.dist = o.dist; rig.yaw = o.yaw; rig.tilt = o.tilt; rig.fov = o.fov; rig.roll = 0; rig.apply(); }
+  };
   rig.onMove = () => { C._naFoto = false; };
   let promptInstalar = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); promptInstalar = e; });
   const telaCheia = async (alternar) => { try { if (alternar && document.fullscreenElement) { await document.exitFullscreen(); return; } if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); await screen.orientation?.lock?.('landscape'); } catch (_) {} };
   instalarExtras(C, { engine, env, rig, cfg, fotoURL: FOTO, versao: VERSAO, qualidadeAuto: auto.id, telaCheia, get instalar() { return promptInstalar ? () => { promptInstalar.prompt(); promptInstalar = null; } : null; } });
-  C.vistaFoto(false);
-  // ajustes de luz pela URL (para comparar com a foto): exp, sat, con, key, hemi, envi, bloom
-  for (const [k, f] of Object.entries({ exp: (v) => (engine.params.exposure = v), sat: (v) => (engine.params.saturation = v), con: (v) => (engine.params.contrast = v), key: (v) => (env.key.intensity = v), hemi: (v) => (env.hemi.intensity = v), envi: (v) => (engine.scene.environmentIntensity = v), bloom: (v) => (engine.params.bloomStrength = v), vin: (v) => (engine.params.vignette = v) })) if (qs.has(k)) f(+qs.get(k));
+  if (qs.get('vista') === 'foto') C.vistaFoto(false); else C.vistaGeral(false);
+  // ajustes de luz pela URL (multiplicam os da hora): exp, sat, con, key, hemi, envi, bloom, vin
+  const aj = {}; for (const k of ['exp', 'sat', 'con', 'key', 'hemi', 'envi', 'bloom', 'vin']) if (qs.has(k)) aj[k] = +qs.get(k); if (Object.keys(aj).length) env.ajuste = aj;
   const V = qs.get('vista'); if (V && V !== 'foto') { const [x, z, d, y, p, f] = V.split(',').map(Number); rig.pitchFix = null; rig.roll = 0; rig.target.set(x, 0, z); rig.dist = d; rig.yaw = y; rig.tilt = p || 0; if (f) rig.fov = f; rig.apply(); }
   if (qs.get('tudo')) { mundo.tudoPronto(); for (const g of Object.values(mundo.predios)) g.visible = false; mundo.canteiro.visible = false; forest.setReflorestamento(1); ground.flags.reflorestado = true; ground.paint(); }
   await passo(92);
@@ -101,7 +117,7 @@ async function iniciar() {
     const dt = Math.min(0.1, (t - last) / 1000); last = t;
     const moveu = rig.update(dt);
     ocioso = moveu || rig.g ? 0 : ocioso + dt; engine.ocioso = ocioso; engine.idle = ocioso > 8 && !rig.anim;
-    env.update(t, rig.target, rig.dist * 1.15); ground.update(t); forest.update(t); mundo.update(dt, t); obras.update(dt, t);
+    env.update(t, rig.target, rig.dist * 1.15); ground.update(t); forest.update(t); arredores.update(t, env); mundo.update(dt, t); obras.update(dt, t);
     // a interface (tutorial, falas, avisos, modais) só anda depois do toque em 'Toque para entrar' (C.iniciar):
     // antes disso as falas e os avisos correriam e sumiriam atrás da tela de carga
     if (!qs.get('tudo') && C.ativo) C.update(dt, t);
@@ -109,7 +125,7 @@ async function iniciar() {
     engine.render(t); frames++; if (frames === 3) window.__pronto = true;
   };
   requestAnimationFrame(loop);
-  window.__held = { engine, rig, env, ground, forest, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal, importar, gravarImportado, importando } }; window.__PROJ = PROJETOS;
+  window.__held = { engine, rig, env, ground, forest, arredores, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal, importar, gravarImportado, importando } }; window.__PROJ = PROJETOS;
   // entrada: o primeiro toque libera som, tela cheia, orientação e tela sempre acesa
   const entrar = async () => {
     carga.style.opacity = 0; setTimeout(() => { carga.remove(); engine.carregando = false; }, 800);
