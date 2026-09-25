@@ -64,7 +64,8 @@ export class Paineis {
   }
   // destaque (anel dourado) no elemento que a Meta em foco ou o Próximo indicaram
   destacar(sel, ms = 6000) { this.destaque = sel; clearTimeout(this._tDest); if (sel) this._tDest = setTimeout(() => { this.destaque = null; this.el?.querySelector('.alvo')?.classList.remove('alvo'); }, ms); this._aplicarDestaque(); }
-  _aplicarDestaque() { if (!this.el) return; this.el.querySelector('.alvo')?.classList.remove('alvo'); if (!this.destaque) return; const e = this.el.querySelector(this.destaque); if (e) { e.classList.add('alvo'); e.scrollIntoView?.({ block: 'nearest' }); } }
+  // (controle esmaecido depois de uma ação, como 'Entregar o que tenho (0 de n)': o destaque sai dele)
+  _aplicarDestaque() { if (!this.el) return; this.el.querySelector('.alvo')?.classList.remove('alvo'); if (!this.destaque) return; const e = this.el.querySelector(this.destaque); if (e?.classList.contains('fraco')) { this.destaque = null; return; } if (e) { e.classList.add('alvo'); e.scrollIntoView?.({ block: 'nearest' }); } }
   tick() { // cronômetros e barras sem redesenhar
     if (!this.el) return; const agora = this.J.agora;
     for (const n of this.el.querySelectorAll('[data-fim]')) { const ini = +n.dataset.ini, fim = +n.dataset.fim; const p = Math.max(0, Math.min(1, (agora - ini) / (fim - ini || 1))); const b = n.querySelector('.pb, .barra i'); if (b) b.style.width = (p * 100).toFixed(1) + '%'; const t = n.querySelector('.tt'); if (t) t.textContent = fim > agora ? (n.classList.contains('vaga') ? durCurta : dur)((fim - agora) / 1000) : 'pronto'; if (fim <= agora && !n.dataset.feito) { n.dataset.feito = 1; this._precisa = true; } }

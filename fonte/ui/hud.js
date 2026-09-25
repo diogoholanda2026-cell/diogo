@@ -53,6 +53,8 @@ export class Hud {
     raiz.append(this.topo, this.esq, this.doca, this.dir, this.prox, this.guiaEl);
     this.filaFalas = []; this._falaAtual = null; this._falaResta = 0; this._falaT = 0;
     this.fala.addEventListener('click', (e) => { e.stopPropagation(); const pular = e.target.closest('.pular'); this._pularFala(!!pular); });
+    // cartão de metas: tocar ou rolar dentro dele adia o fechamento automático (6 s contados da última interação)
+    const armar = () => { if (this.metasAbertas) this._armarMetas(); }; this.metas.addEventListener('pointerdown', armar); this.metas.addEventListener('scroll', armar, { passive: true });
     // números: valor mostrado separado do real (o que está voando fica retido) e contagem de 480 ms
     this.ret = { creditos: 0, xp: 0 }; this.mostra = { creditos: null, xp: null }; this._an = {}; this._raf = 0; this._passo = (t) => this._contagem(t);
     this._pool = []; this._metasT = 0; this._visivel = true; this._rects = []; this._tRects = 0; this._dirVis = {};
@@ -113,8 +115,9 @@ export class Hud {
   }
   alternarMetas(on = this.metas.classList.contains('oculto')) {
     clearTimeout(this._metasT); this.metas.classList.toggle('oculto', !on); this.cap.setAttribute('aria-expanded', on ? 'true' : 'false'); this.cap.classList.toggle('aberta', on); this._tRects = 0;
-    if (on) { this._metasH = null; this._htmlMetas(); this._metasT = setTimeout(() => this.alternarMetas(false), 6000); }
+    if (on) { this._metasH = null; this._htmlMetas(); this._armarMetas(); }
   }
+  _armarMetas() { clearTimeout(this._metasT); this._metasT = setTimeout(() => this.alternarMetas(false), 6000); }
   get metasAbertas() { return !this.metas.classList.contains('oculto'); }
   _metaCumprida(m) {
     const c = this.cap; c.classList.remove('cumpriu'); void c.offsetWidth; c.classList.add('cumpriu'); setTimeout(() => c.classList.remove('cumpriu'), 700);

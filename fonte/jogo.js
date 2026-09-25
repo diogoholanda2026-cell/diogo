@@ -39,8 +39,9 @@ const VERBO = { pronta: 'Aprovar', coleta: 'Coletar', moedas: 'Moedas', subir: '
 const VERBO_PLANO = { aprovar: 'Aprovar', coletar: 'Coletar', iniciar: 'Iniciar', entregar: 'Entregar', produzir: 'Produzir', construir: 'Construir', apresentar: 'Conselho', vender: 'Vender' };
 const ICONE_PLANO = { aprovar: 'ok', coletar: 'repasse', iniciar: 'grua', entregar: 'almox', produzir: 'producao', construir: 'grua', apresentar: 'sede', vender: 'troca', aguardar: 'obras' };
 // o que o anel-guia do tutorial procura dentro do painel aberto, por passo
-// (presos à obra do passo: a prancha de outra obra não recebe o anel)
-const TUT_PAINEL = { brita: ['[data-a=produzir][data-k=brita]'], caminho: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=entregarIniciar][data-key="pas_frente.e1"]', '[data-a=entregarTudo][data-key="pas_frente.e1"]'], coletar: ['[data-a=coletarU]', '[data-a=coletarO]'],
+// (presos à obra do passo: a prancha de outra obra não recebe o anel; botão esmaecido por falta de material: o anel vai
+// para a ficha vermelha do material que falta, no mesmo painel)
+const TUT_PAINEL = { brita: ['[data-a=produzir][data-k=brita]'], caminho: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=entregarIniciar][data-key="pas_frente.e1"]', '[data-a=entregarTudo][data-key="pas_frente.e1"]'], coletar: ['[data-a=coletarU]', '[data-a=coletarO]', '[data-a=produzir][data-k=brita]'],
   aprovar: ['.item-lista[data-alvo*="pas_frente.e1"]', '[data-a=aprovar][data-key="pas_frente.e1"]'], carpintaria: ['[data-a=construir][data-p=carpintaria]', '[data-a=enfileirar][data-k=viga]'],
   lago: ['.item-lista[data-alvo*="lago.e1"]', '[data-a=entregarIniciar][data-key="lago.e1"]', '[data-a=entregarTudo][data-key="lago.e1"]', '[data-a=mutirao][data-alvo*="lago.e1"]'], anel: ['[data-a=melhorar][data-f=anel]'] };
 const curto = (s, n = 14) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
@@ -73,7 +74,7 @@ export class Controle {
     if (!S.dicas.abertura) { S.dicas.abertura = 1; const cap1 = () => this.S.cap === 1 && !this.J.feita('pas_frente.e1'); ABERTURA.forEach(([q, t]) => this.hud.falar(q, t, { se: cap1, grupo: 'abertura' })); }
     this._tutorial();
     // capítulo concluído enquanto o jogo estava fechado (o último, sem escolha, conclui sozinho: vem o fim do jogo)
-    const c = this.J.capitulo(); if (this._capituloPronto(c)) { this._fila(() => this.modalCapitulo(c), 1500, 'capitulo'); this.hud.conselho(true); }
+    const c = this.J.capitulo(); if (this._capituloPronto(c)) { if (S.dicas.depoisCap !== c.n) this._fila(() => this.modalCapitulo(c), 1500, 'capitulo'); this.hud.conselho(true); }
     this._verCapSemEscolha(1500);
   }
   _bind() {
@@ -249,7 +250,7 @@ export class Controle {
       case 'etapaPronta': this.obras.pronta('e:' + d.key); this.som.sino?.(); this.calcBolhas(); break;
       case 'moduloIniciado': this._siteModulo(d.faixa, d.i); this._dica('modulo'); break;
       case 'moduloPronto': this.obras.pronta(`m:${d.faixa}:${d.i}`); this.som.sino?.(); this.calcBolhas(); break;
-      case 'capituloCompleto': if (d.cap?.escolha) { if (this._depoisCap !== d.cap.n) this._fila(() => this.modalCapitulo(d.cap), 2200, 'capitulo'); } else this._verCapSemEscolha(2200); break;
+      case 'capituloCompleto': if (d.cap?.escolha) { if (this.S.dicas.depoisCap !== d.cap.n) this._fila(() => this.modalCapitulo(d.cap), 2200, 'capitulo'); } else this._verCapSemEscolha(2200); break;
       case 'novoCapitulo': this._novoCapitulo(d); break;
       case 'fimDeJogo': this.finalComposicao(); break;
       case 'dica': this._dica(d.id); break;
@@ -262,7 +263,7 @@ export class Controle {
     if (EV_PAINEL.has(tipo)) this.paineis.agendar();
     if (tipo !== 'xp') this._sujo = true;
   }
-  _dica(id) { if (this.S.dicas[id]) return; const d = DICAS[id]; if (!d) return; this.S.dicas[id] = 1; this.hud.falar(d[0], d[1]); }
+  _dica(id, o) { if (this.S.dicas[id]) return; const d = DICAS[id]; if (!d) return; this.S.dicas[id] = 1; this.hud.falar(d[0], d[1], o); }
   // aviso da simulação: brinde; com créditos, as moedas voam até o contador (o número só sobe na chegada)
   _aviso(d) {
     this.hud.brinde(d.texto, d.icone || null, 3000); if (d.creditos > 0 && this._somaAvisos) this._somaAvisos.v += d.creditos;
@@ -430,7 +431,8 @@ export class Controle {
     this.hud.ponto('pedidos', S.cap >= REGRAS.capPedidos ? S.pedidos.filter((p) => p.itens && Object.entries(p.itens).every(([k, n]) => J.temItem(k, n))).length : 0);
     const pc = J.ocupado / J.capacidade; this.hud.ponto('almox', pc >= 0.95 ? '!' : 0);
     // a primeira placa de obra à vista (fora do primeiro passo do tutorial) explica a prancha
-    if (placaEtapa && S.cap === 1 && !this.S.dicas.primeiraEtapa && !(this._tutAtivo() && (S.dicas.guia || 0) < 1)) this._dica('primeiraEtapa');
+    // (no tutorial, cai da fila se a obra do Caminho começar antes de ela tocar: explicaria a prancha tarde demais)
+    if (placaEtapa && S.cap === 1 && !this.S.dicas.primeiraEtapa && !(this._tutAtivo() && (S.dicas.guia || 0) < 1)) this._dica('primeiraEtapa', { se: () => !this._tutAtivo() || (this.S.dicas.guia || 0) <= 1 });
     // Meta em foco e Próximo
     const passo = this._passoTut(); this._plano = J.planoMeta ? J.planoMeta() : null; const agora = !passo || passo.id === 'meta' ? this._plano : null;
     this.hud.meta(agora);
@@ -478,7 +480,8 @@ export class Controle {
   _infoBem() {
     const J = this.J; const bi = J.bemInfo?.(); if (!bi) { this.paineis.abrir('escritorio'); return; }
     const f = bi.fontes.slice(0, 3).map((x) => `<li><b>+${x.v}%</b>${x.txt}</li>`).join('');
-    this.hud.info('[data-a="bem"]', `<h4>Bem-estar ${bi.total}%</h4><ul><li><b>${bi.base}%</b>Base</li>${f}${bi.pressao ? `<li class="nao"><b>−${bi.pressao}%</b>Pressão de moradia</li>` : ''}</ul><small>Mais bem-estar aumenta os repasses. O último pavimento dos módulos pede ${bemMinimo(POP_NIVEL.length - 1)}%.</small>`);
+    const nv = POP_NIVEL.length - 1, quem = Object.values(MODULOS).filter((M) => M.max >= nv).map((M) => M.nome).join(' e '); // só os módulos que têm esse pavimento
+    this.hud.info('[data-a="bem"]', `<h4>Bem-estar ${bi.total}%</h4><ul><li><b>${bi.base}%</b>Base</li>${f}${bi.pressao ? `<li class="nao"><b>−${bi.pressao}%</b>Pressão de moradia</li>` : ''}</ul><small>Mais bem-estar aumenta os repasses. O ${nv}º pavimento (${quem}) pede ${bemMinimo(nv)}%.</small>`);
   }
   _infoMutirao() {
     const S = this.S; this.hud.info('[data-a="mutirao"]', `<h4>Mutirão ${S.mutirao}/${REGRAS.fichasMax}</h4><p>Cada ficha reduz até ${REGRAS.mutiraoH} h de uma obra (na usina, de todos os espaços; na oficina, do item atual).</p><div class="linha"><div class="barra"><i style="width:${S.disposicao || 0}%"></i></div><b class="num">${Math.round(S.disposicao || 0)}/100</b></div><small>Disposição da comunidade: obras aprovadas, módulos e pedidos enchem a barra; cheia, vira uma ficha.</small>`);
@@ -502,10 +505,11 @@ export class Controle {
   _guia(t) {
     const p = this._passoTut(); if (!p || !this.hud._visivel || this.modoApreciar || this._modais.length || this.ui.classList.contains('intro')) { this.hud.guia(null); return; }
     let pt = null; const G = this._guiaCache; const A = this._alvosTut(p);
-    if (this.paineis.el) { if (t - G.t > 200) { G.t = t; G.pt = null; for (let i = 0; i < A.painel.length; i++) { const e = this.paineis.el.querySelector(A.painel[i]); if (e) { G.pt = centro(e); break; } } } pt = G.pt; }
+    if (this.paineis.el) { if (t - G.t > 200) { G.t = t; G.pt = null; for (let i = 0; i < A.painel.length; i++) { const e = this.paineis.el.querySelector(A.painel[i]); if (e) { const f = e.classList.contains('fraco') && this.paineis.el.querySelector('.ficha.falta[data-a=produtor]'); G.pt = centro(f || e); break; } } } pt = G.pt; }
     if (!pt) for (let i = 0; i < A.rev.length; i++) {
       const r = A.rev[i];
-      if (r.tipo === 'balao') pt = this.bolhas.posTela(r.id);
+      // balão apagado sob a fala (sem toque): o anel vai para o Próximo, que leva ao mesmo alvo
+      if (r.tipo === 'balao') { pt = this.bolhas.posTela(r.id); if (pt && this.bolhas.sob(r.id)) { if (t - (G.tp || -1e9) > 200) { G.tp = t; G.prox = this.hud.prox.classList.contains('oculto') ? null : centro(this.hud.prox); } pt = G.prox; } }
       else if (t - G.t > 200 || G.a !== r.a) { G.t = t; G.a = r.a; const e = r.tipo === 'bt' ? this.hud.dir.querySelector(r.sel) : r.tipo === 'meta' ? (this.hud.agora.classList.contains('oculto') ? this.hud.cap : this.hud.agora) : r.tipo === 'nada' || this.paineis.el ? null : document.querySelector(r.sel); G.pt = e && !(this.paineis.el && r.tipo === 'bt' && this.paineis.atual?.tipo === r.id) ? centro(e) : null; pt = G.pt; }
       else pt = G.pt;
       if (pt) break;
@@ -604,7 +608,9 @@ export class Controle {
   // metas dadas por cumpridas na cópia: o modal também abre por fora, nos testes e na vitrine)
   _premioCap() {
     const J = this.J; try {
-      const D = new J.constructor(structuredClone(J.S)); D.agora = J.agora; D.metaFeita = () => true; let marcos = 0; D.on((t, d) => { if (t === 'aviso' && d.creditos > 0) marcos += d.creditos; });
+      // só as metas do capítulo atual valem por cumpridas: as do seguinte seguem o estado (senão os marcos dele dariam
+      // disposição e fichas que a conclusão real não dá)
+      const D = new J.constructor(structuredClone(J.S)); D.agora = J.agora; const c = J.capitulo(), mf = D.metaFeita.bind(D); D.metaFeita = (m) => c.metas.includes(m) || mf(m); let marcos = 0; D.on((t, d) => { if (t === 'aviso' && d.creditos > 0) marcos += d.creditos; });
       if (D.concluirCapitulo(null) !== 'ok') return null; return { creditos: D.S.creditos - J.S.creditos - marcos, fichas: D.S.mutirao - J.S.mutirao };
     } catch (e) { return null; }
   }
@@ -617,7 +623,7 @@ export class Controle {
     const premio = `<span class="etiq">${img('creditos')}${pr?.creditos > 0 ? `<b class="cred">+${fmt(pr.creditos)}</b>&nbsp;da Holding` : 'Créditos da Holding'}</span>${!pr || pr.fichas > 0 ? `<span class="etiq">${img('mutirao')}${pr ? `+${pr.fichas} ficha${pr.fichas > 1 ? 's' : ''} de Mutirão` : 'Ficha de Mutirão'}</span>` : ''}`;
     this.modal(`<h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1><div class="linha centro"><span class="etiq ok">${img('ok')}Aprovado</span>${premio}</div><div class="falas">${falas}</div>${prox?.abre?.length ? `<p class="novas"><b>Novas obras:</b> ${prox.abre.join(', ')}</p>` : ''}<p class="pergunta"><span>O Conselho pede uma decisão. Ela vale para os próximos capítulos.</span><button class="botao sec depois" data-depois>Decidir depois</button></p><div class="escolhas">${esc}</div>`, (m, fechar) => {
       m.addEventListener('click', (e) => {
-        if (e.target.closest('[data-depois]')) { this._depoisCap = c.n; fechar(); return; } // não reabre sozinho: fica a pílula
+        if (e.target.closest('[data-depois]')) { this.S.dicas.depoisCap = c.n; fechar(); return; } // não reabre sozinho (nem ao reabrir o jogo): fica a pílula
         const b = e.target.closest('[data-esc]'); if (!b) return; const r = m.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height * 0.3;
         // conclui antes de fechar (o fechar não pode pôr a pílula de volta); som, vibração e moedas vêm na conclusão
         const res = this._concluirCap(b.dataset.esc || null, x, y); this._modalCap = false; fechar(true); if (res !== 'ok') return;
