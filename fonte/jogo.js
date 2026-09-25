@@ -330,7 +330,7 @@ export class Controle {
   aprovarEtapa(key) {
     const J = this.J; if (J.etapa(key).estado !== 'pronta' || this.sites.get('e:' + key)?.concluindo || this._aprovando.has(key)) return; this.paineis.fechar(true); this._aprovando.add(key);
     const [pid, eid] = key.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e); const ultima = p.etapas[p.etapas.length - 1] === e;
-    this._festaAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite('e:' + key, this.ancoraEtapa(p, e));
+    this._festaAte = this.ground.adiarAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite('e:' + key, this.ancoraEtapa(p, e)); // o chão repinta depois da festa
     const carimbo = this._carimbo(); const box = this.sites.get('e:' + key)?.obra?.box?.clone();
     this._concluirSite('e:' + key, () => {
       this._aprovando.delete(key); const xp0 = J.S.xp; J.aprovarEtapa(key); if (!(p.faixa && e.nivel)) this.mundo.setEtapa(a.modelo, a.parte, true); if (e.extra) this.mundo.setEtapa(e.extra.modelo, e.extra.parte, true);
@@ -341,7 +341,7 @@ export class Controle {
   }
   aprovarModulo(f, i) {
     const J = this.J, k = `m:${f}:${i}`; if (J.S.modulos[f][i].obra?.estado !== 'pronta' || this.sites.get(k)?.concluindo || this._aprovando.has(k)) return; this.paineis.fechar(true); this._aprovando.add(k);
-    this._festaAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite(k, this.ancoraModulo(f, i)); const carimbo = this._carimbo();
+    this._festaAte = this.ground.adiarAte = performance.now() + 2600; this.engine.acordar?.(3200); this._pontoCel = this._pontoSite(k, this.ancoraModulo(f, i)); const carimbo = this._carimbo();
     this._concluirSite(k, () => { this._aprovando.delete(k); const xp0 = J.S.xp; J.aprovarModulo(f, i); this.sincronizar(); const m = J.S.modulos[f][i]; this.hud.brinde(`${MODULOS[f].nome}: módulo ${i + 1} no nível ${m.nivel}`, 'subir'); const [x, y] = this._pontoCel; this._estrelas(J.S.xp - xp0, x, y, 5); },
       { aoImpacto: () => { this.som.aprovado(); this.vibra.sucesso(); carimbo.classList.add('bate'); } });
   }

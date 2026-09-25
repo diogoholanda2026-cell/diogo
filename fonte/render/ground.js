@@ -77,7 +77,7 @@ export class Ground {
     this.e = engine; this.group = new THREE.Group(); engine.scene.add(this.group);
     this.canvas = document.createElement('canvas'); this.canvas.width = W * S; this.canvas.height = D * S;
     this.tex = new THREE.CanvasTexture(this.canvas); this.tex.colorSpace = THREE.SRGBColorSpace; this.tex.anisotropy = 4;
-    this.flags = {}; this._sujo = false; this.stats = { pinturas: 0, ms: 0 };
+    this.flags = {}; this._sujo = false; this.adiarAte = 0; this.stats = { pinturas: 0, ms: 0 }; // adiarAte: a festa da aprovação segura a pintura
     this._buildMesh();
     this._buildWater();
     this._pintar();
@@ -141,7 +141,8 @@ export class Ground {
     const t = new THREE.DataTexture(dat, NX, NZ, THREE.RGFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
     AGUA.tProf.value = t; AGUA.aguaOn.value = 1; this.agua = AGUA; // uniformes da água (cores e tempo), para ajuste
   }
-  // Pede uma nova pintura do chão (feita no próximo quadro, no máximo uma por quadro).
+  // Pede uma nova pintura do chão (feita no próximo quadro, no máximo uma por quadro; durante a festa de uma aprovação,
+  // só depois dela: adiarAte, em ms de performance.now).
   // flags: { praca, verde: {zona: true}, reflorestado, vias: {id: false} }
   paint(flags = this.flags) { this.flags = flags; this._sujo = true; }
   // camada fixa: chão de floresta e manchas de copa vistas de cima (meia resolução, desenhada uma vez)
@@ -277,6 +278,6 @@ export class Ground {
   update(t) {
     AGUA.aguaT.value = t / 1000; AGUA.turvo.value = clamp((-0.1 - this.lake.position.y) / 0.2, 0, 1);
     const n = this.e.mats.pool?.normalMap; if (n) { n.offset.x = t * 0.000012; n.offset.y = t * 0.000008; }
-    if (this._sujo) { this._sujo = false; this._pintar(); }
+    if (this._sujo && performance.now() >= this.adiarAte) { this._sujo = false; this._pintar(); }
   }
 }
