@@ -61,11 +61,12 @@ export const BRUTOS = Object.keys(ITENS).filter((k) => ITENS[k].tipo === 'bruto'
 export const F_NIVEL_T = (n) => (n <= 2 ? 0.75 : n <= 4 ? 1 : n <= 9 ? 3 : n <= 14 ? 5 : 8);
 for (const it of Object.values(ITENS)) if (it.tipo === 'produto') { it.t0 = it.t; it.fT = F_NIVEL_T(it.nivel); it.t = it.t0 * it.fT; }
 
-// Prédios do canteiro. Usinas: espaços paralelos. Oficinas: fila.
+// Prédios do canteiro. Usinas: espaços paralelos, um lote de 1 a 10 por espaço. Oficinas: fila de lotes (limitados pelos insumos).
+// Todo lote pronto vai direto para o Almoxarifado. usina2 (pedidos: true) só fabrica o que os pedidos da comunidade pedem.
 export const PREDIOS = {
-  escritorio: { nome: 'Escritório de Obra', tipo: 'base', nivel: 1, desc: 'Coordena a obra. Recebe os repasses enquanto a Sede não fica pronta.' },
-  almox: { nome: 'Almoxarifado', tipo: 'armazem', nivel: 1, desc: 'Guarda tudo o que é produzido. Amplie com estrados, etiquetas e cadeados.' },
-  usina1: { nome: 'Usina de Materiais', tipo: 'usina', nivel: 1, custo: 0, desc: 'Transforma resíduos e recursos renováveis em matéria-prima.' },
+  escritorio: { nome: 'Escritório de Obra', tipo: 'base', nivel: 1, desc: 'Coordena a obra e as finanças: calendário, empréstimos e valuation. Recolhe a renda dos moradores enquanto a Sede não fica pronta.' },
+  almox: { nome: 'Almoxarifado', tipo: 'armazem', nivel: 1, desc: 'Recebe sozinho cada lote pronto. Amplie com estrados, etiquetas e cadeados.' },
+  usina1: { nome: 'Usina de Materiais', tipo: 'usina', nivel: 1, custo: 0, desc: 'Transforma resíduos e recursos renováveis em matéria-prima: lotes de 1 a 10 por espaço, coleta automática e modo automático.' },
   usina2: { nome: 'Usina de Pedidos da Comunidade', tipo: 'usina', nivel: 7, custo: 3500, pedidos: true, desc: 'Só fabrica o que os pedidos da comunidade pedem: marque um pedido e os três espaços produzem o que falta (matéria-prima e produtos, com os insumos do Almoxarifado), com coleta automática.' },
   usina3: { nome: 'Usina de Materiais III', tipo: 'usina', nivel: 13, custo: 15000, desc: 'A usina maior, para os capítulos finais.' },
   carpintaria: { nome: 'Carpintaria', tipo: 'oficina', nivel: 1, custo: 200, desc: 'Vigas laminadas, deques, treliças e estantes.' },

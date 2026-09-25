@@ -22,11 +22,11 @@ export const ABERTURA = [
 // feito(J): o passo está cumprido (também vale se o jogador já passou dele por conta própria).
 const naObra = (J, k) => ['obra', 'pronta', 'feita'].includes(J.etapa(k).estado);
 export const TUTORIAL = [
-  { id: 'brita', quem: 'tome', fala: 'Toque na Usina de Materiais e produza Brita reciclada: é o piso do primeiro caminho.', alvo: 'balao:uusina1',
+  { id: 'brita', quem: 'tome', fala: 'Toque na Usina de Materiais e produza Brita reciclada: é o piso do primeiro caminho. Com + e − dá para fazer até 10 de uma vez.', alvo: 'balao:uusina1',
     feito: (J) => J.S.predios.usina1.slots.some((s) => s?.item === 'brita') || J.S.stats.coletas > 0 || naObra(J, 'pas_frente.e1') },
   { id: 'caminho', quem: 'iris', fala: 'Abra Obras, escolha o Caminho da Frente e toque em Entregar e iniciar.', alvo: ['bt:obras', '[data-a=entregarIniciar]'],
     feito: (J) => naObra(J, 'pas_frente.e1') },
-  { id: 'coletar', quem: 'tome', fala: 'Quando o balão da Usina aparecer, toque nele para coletar. Com vários balões, arraste o dedo por cima de todos.', alvo: 'balao:uusina1',
+  { id: 'coletar', quem: 'tome', fala: 'Cada lote pronto vai sozinho para o Almoxarifado. Marque um espaço como automático e ele repete o mesmo lote sem parar.', alvo: 'balao:uusina1',
     feito: (J) => J.S.stats.coletas >= 1 },
   { id: 'aprovar', quem: 'iris', fala: 'O caminho ficou pronto. Toque no balão verde para aprovar a obra.', alvo: 'balao:epas_frente.e1',
     feito: (J) => J.feita('pas_frente.e1') },
@@ -149,7 +149,7 @@ export const EFEITOS = {
 
 // Marcos dentro do capítulo (ao cumprir 1/3 e 2/3 das metas): fala, disposição e créditos
 export const MARCOS = {
-  1: [['tome', 'O canteiro já produz sem parar. A Holding mandou uma medição extra.'], ['iris', 'Falta pouco para a primeira apresentação. O Conselho vai gostar do que vê.']],
+  1: [['tome', 'O canteiro já produz sem parar. A Holding mandou uma recompensa extra.'], ['iris', 'Falta pouco para a primeira apresentação. O Conselho vai gostar do que vê.']],
   2: [['nara', 'A água já corre limpa até a praça. A comunidade veio ajudar de mutirão.'], ['cida', 'As famílias do Anel perguntam da escola todo dia. Estamos quase lá.']],
   3: [['iris', 'A Biblioteca já aparece por cima das árvores. O campus ganhou um centro.'], ['caio', 'Faculdades quase prontas. Já tem estudante pedindo vaga no laboratório.']],
   4: [['caio', 'O anel do acelerador já tem forma. A Vila está curiosa com o barulho.'], ['cida', 'A Vila Estudantil está quase cheia. Os estudantes chegaram antes das casas.']],
@@ -158,10 +158,10 @@ export const MARCOS = {
 
 // Falas curtas disparadas por acontecimentos (cada uma aparece uma vez)
 export const DICAS = {
-  primeiraColeta: ['tome', 'Toque no balão para coletar. Arrastar o dedo por vários balões coleta todos.'],
+  primeiraColeta: ['tome', 'Os lotes prontos entram sozinhos no Almoxarifado. Se ele lotar, o resto espera no espaço até você coletar.'],
   almoxCheio: ['tome', 'O almoxarifado lotou. Use os materiais nas obras ou amplie com estrados, etiquetas e cadeados.'],
   primeiraEtapa: ['iris', 'Cada placa é uma obra. Na prancha, entregue os materiais aos poucos e inicie quando estiver tudo lá.'],
-  obraComecou: ['tome', 'A obra começou. O canteiro trabalha mesmo com o jogo fechado: o balão verde avisa quando ela ficar pronta.'],
+  obraComecou: ['tome', 'A obra começou. O canteiro trabalha mesmo com o jogo fechado; ao aprovar, a Holding devolve 150% do custo e dá dois aceleradores.'],
   modulo: ['iris', 'Os módulos do Anel crescem um andar por nível, como uma cidade de verdade.'],
   servicoAgua: ['cida', 'Para passar do nível 2, os moradores precisam de água tratada. O lago resolve.'],
   servicoEnergia: ['tome', 'O nível 4 pede energia e saneamento: a fachada solar da Sede e os jardins filtrantes da praça.'],
@@ -169,9 +169,9 @@ export const DICAS = {
   bemNivel: ['cida', 'O último pavimento pede 70% de bem-estar. Mais gente morando pede mais praça, escola e verde.'],
   licenca: ['iris', 'Obra grande pede topografia. Estacas vêm da madeira, balizas da Serralheria e trenas da Elétrica.'],
   topografo: ['tome', 'Faltou licença? O Topógrafo do Escritório faz uma por vez, em troca de material e créditos.'],
-  pedidos: ['cida', 'O quadro de pedidos abriu: os vizinhos pedem materiais e retribuem com licenças, itens e disposição.'],
-  deposito: ['tome', 'O Depósito de Trocas, no Almoxarifado, vende matéria-prima com estoque que renova a cada 4 horas. E compra sobras.'],
-  bemEstar: ['cida', 'Praças, escola e biblioteca deixam todo mundo mais feliz. Felicidade aumenta os repasses.'],
+  pedidos: ['cida', 'O quadro de pedidos abriu: os vizinhos pedem materiais e retribuem com créditos, licenças, itens e disposição. A Usina de Pedidos fabrica o que falta.'],
+  deposito: ['tome', 'O Depósito de Trocas, no Almoxarifado, vende matéria-prima com estoque que renova a cada 4 horas. E compra sobras pagando 50% acima do preço de compra, até 100 por janela.'],
+  bemEstar: ['cida', 'Praças, escola e biblioteca deixam todo mundo mais feliz. Com mais bem-estar, cada morador paga mais por hora: 5, 8 ou 11 créditos.'],
   disposicao: ['cida', 'Cada obra aprovada anima a comunidade. Com a disposição cheia, ganhamos uma ficha de Mutirão.'],
   cadeia: ['tome', 'Dá para encomendar em cadeia: o item espera na fila e puxa os insumos assim que ficarem prontos.'],
 };
@@ -195,7 +195,7 @@ export const FALAS_ETAPA = {
   'lago.e2': ['nara', 'Os juncos já seguram as margens. Vi uma garça pousar na ilha hoje cedo.'],
   'lago.e3': ['nara', 'As ilhas flutuantes filtram a água sem química nenhuma. O lago trata a si mesmo.'],
   'sede.e1': ['tome', 'Fundações da Sede no lugar. Cortamos só o terreno que precisava.'],
-  'sede.e2': ['iris', 'A Sede já recebe os repasses da Holding. Toque nas moedas para coletar.'],
+  'sede.e2': ['iris', 'A Sede já recolhe a renda que os moradores pagam por hora. Toque nas moedas para coletar.'],
   'sede.e3': ['tome', 'Cada placa de vidro dessa fachada gera energia. A Sede virou usina.'],
   'sede.e4': ['iris', 'Cobertura verde e pátio prontos. A Sede está igual ao projeto do Conselho.'],
   'escola.e1': ['cida', 'As salas olham para o pátio. As crianças vão estudar vendo árvore, não muro.'],

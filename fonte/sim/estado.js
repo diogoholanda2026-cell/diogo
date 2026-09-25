@@ -5,41 +5,87 @@
 // ---- API para a interface (contrato estável) ----
 // Eventos (J.on((tipo, d) => …)); quem não conhece um evento pode ignorá-lo:
 //   'fala'  {quem, texto, atraso?}       conselheiro fala (atraso em ms depois do evento; quem ∈ CONSELHO)
-//   'aviso' {texto, icone, creditos?}    aviso curto (medição, marco, topógrafo, disposição, fila)
+//   'aviso' {texto, icone, creditos?}    aviso curto (recompensa, marco, topógrafo, disposição, fila, empréstimo)
 //   'nivel' {de, para, nivel, creditos, especiais[], especial, novos[], predios[], vagas[]}  um evento por subida,
 //           mesmo que pule vários níveis (nivel = para; vagas = oficinas que ganharam o Selo de Mestre de Obras)
 //   'novoCapitulo' {cap, anterior, escolha, novos[], abre[]}   'fimDeJogo' {cap, escolhas}  (último capítulo)
-//   e os de antes: xp, coleta, produto, produzir, enfileirar {pend}, etapaIniciada/Pronta/Feita, moduloIniciado/
-//   Pronto/Feito, capituloCompleto, mutirao, repasse, troca, pedido, predio, ampliar, almox, dica {id}, topografo.
+//   'dia' {dia, diaDoMes, mes, ano, saltou}  virada de dia do calendário (um só evento se passaram vários dias fechado:
+//           saltou = quantos)   'ano' {ano}  virada de ano
+//   'emprestimo' {tipo: 'tomou'|'juros'|'parcela'|'quitou', valor, principal, juros, parcial?, parcela?, contrato?}
+//   'valuation' {total, partes, max}  depois de cada etapa, pavimento, prédio ou ampliação
+//   'coleta' {item, n, especial, predio, auto}  auto: true quando o lote entrou sozinho no Almoxarifado (no tick)
+//   'produzir' {predio, item, slot, ini, fim, n, auto, pedido?}   'produto' {predio, item, n, ini, fim, auto}
+//   'enfileirar' {predio, item, pend, n, auto}   'acelerou' {alvo, tipo, restante, aceleradores}
+//   'pedidoFabricando' {i, id, itens | null}   'auto' {predio, slot?, auto}   'cancelou' {predio, slot?, item, n}
+//   e os de antes: xp, etapaIniciada/Pronta/Feita {recompensa, aceleradores}, moduloIniciado/Pronto/Feito {recompensa},
+//   capituloCompleto, mutirao, repasse, troca, pedido, predio, ampliar, almox, dica {id}, topografo.
 // TUTORIAL, ABERTURA, DICAS, PEDIDOS, FALAS_ETAPA, MARCOS, EPILOGO, EFEITOS: em data/historia.js.
+// Calendário: 1 dia = 20 s reais (DIA_MS), mês de 30 dias, ano de 360, contado pelo relógio real desde S.calendario.inicio.
+//   J.calendario() → {dia, diaDoMes, mes, ano, progDia, diaMs}.
+// Empréstimo (Escritório): S.emprestimo = {principal, juros, contratos: [{id, ano, valor, saldo, ini, fim}], ultimoJuro}.
+//   J.emprestar(v) → 'ok'|'limiteAno'|'limiteDivida'|'valor' (múltiplos de 1.000; até 50 mil por ano do jogo; dívida
+//   principal + juros ≤ 500 mil). Juros de 10% ao ano sobre o principal acumulam no tick, proporcionais ao tempo
+//   (fechado também); contrato vencido (10 anos) rende a mora de 20%. J.pagarJuros() → 'ok'|'nada'|'creditos' (paga o que
+//   dá: parcial no evento), J.pagarParcela() (juros + 10% do principal, mínimo 1.000, abatendo os mais antigos), J.quitar().
+//   J.emprestimoInfo() → {principal, juros, divida, disponivelAno, tomadoAno, ano, limiteAno, limiteDivida, taxaAno, mora,
+//   passo, prazoAnos, parcela, contratos: [{…, vencido}], jurosPorDia}.
+// Valuation: J.valuation() → {total, partes: {obras, modulos, predios, moradores, caixa}, max} (calculado na hora: etapas
+//   feitas e pavimentos a 150% do que custaram, prédios e ampliações pelo preço, 100 por morador, caixa = créditos − dívida);
+//   S.valuationMax guarda o recorde.
+// Lotes: usinas J.produzir(uid, item, n = 1, auto = false) → 'ok'|'fechado'|'bloqueado'|'cheio'|'valor' (n de 1 a 10;
+//   espaço = {item, n, ini, fim, auto, sobra?}; J.durLote(item, n) = durItem × max(1, n × 0,8): 10 levam 8 vezes o tempo de 1).
+//   Oficinas J.enfileirar(oid, item, n = 1, auto = false, encadear = false) → 'ok'|'fechado'|'bloqueado'|'cheio'|'falta'|'valor'
+//   (J.loteMax(oid, item) = maior lote que os insumos permitem; os insumos de n × req saem na hora; a chamada antiga
+//   enfileirar(oid, item, true) encadeia 1 unidade). Trabalho = {item, n, ini, fim, auto, pend?, desde?}.
+// Coleta automática: no tick, todo lote pronto vai para o Almoxarifado (evento 'coleta' com auto: true); o que não cabe
+//   espera no espaço (sobra) ou na bandeja (prontos) e a interface mostra "Almoxarifado cheio"; J.coletarUsina(uid, i) e
+//   J.coletarOficina(oid) recolhem esse resto ('nada' quando não há).
+// Automático: J.setAuto(uid, i, on) (o espaço recomeça o mesmo lote ao ser coletado); J.setAutoFila(oid, on, item, n)
+//   (S.predios[oid].auto = {item, n} | null: repete o item em lotes de n enquanto houver insumos e vaga, um por vez na fila).
+//   J.cancelarSlot(uid, i) (não devolve nada) e J.cancelarFila(oid, j) (devolve os insumos; desliga o automático se era ele).
+// Recompensa e aceleradores: ao aprovar uma etapa ou pavimento, recompensa = 150% × (créditos pagos + valor dos itens
+//   entregues) (J.recompensa); cada etapa dá +1 acelerador de obra e +1 de produção (S.aceleradores). J.acelerar(alvo) →
+//   'ok'|'nada'|'sem', alvo = {etapa: key} | {modulo: [f, i]} | {predio: id, slot?: i}: adianta 1 h (REGRAS.aceleraH).
+// Renda dos moradores (substitui a taxa de repasse): por hora real cada morador paga 5 (bem-estar geral ≤ 30), 8 (31 a 60)
+//   ou 11 (61 a 100): J.tarifaMorador(), J.rendaHora(), J.taxaRepasse() (por minuto, nome antigo), J.rendaInfo() → {tarifa,
+//   faixa, porHora, cofre, cofreMax, offlineH, offlineFator}. O cofre (S.repasse.acum) guarda 12 h; fechado rende 12 h a 50%.
+//   Coleta: J.coletarRepasse().
+// Usina de Pedidos da Comunidade (PREDIOS.usina2.pedidos): não aceita J.produzir. J.pedidosTotais() → {[item]: {n, falta,
+//   pedidos}}; J.fabricarPedido(i) → 'ok'|'fechado'|'nada'|'cheio' marca o pedido (auto: true) e põe na fila dela
+//   (S.predios.usina2.fila = [{item, n, pedido}]) o que falta; os espaços puxam em paralelo, em lotes de até 10 (produto só
+//   com os insumos no Almoxarifado); J.pararPedido(i) desmarca. Pedidos pedem 5 × as quantidades e pagam 150% do valor.
 // J.planoMeta() → {acao, alvo, item, n, meta, texto, fim?, adiantar?} ou null. acao: 'aprovar' | 'coletar' | 'iniciar' |
 //   'entregar' | 'produzir' | 'construir' | 'aguardar' | 'apresentar' (capítulo cumprido, falta o Conselho) |
-//   'vender' (almoxarifado cheio: vender sobras no Depósito). alvo: {etapa:'proj.e'} | {modulo:[faixa,i]} | {predio:id} |
-//   {repasse:true} | {topografo:k} | {capitulo:n} | {almox:true} (ampliar, com acao 'construir') | {deposito:true} |
+//   'vender' (almoxarifado cheio ou sem moradores pagando: vender sobras no Depósito). alvo: {etapa:'proj.e'} | {modulo:[faixa,i]} |
+//   {predio:id} | {repasse:true} | {topografo:k} | {capitulo:n} | {almox:true} (ampliar, com acao 'construir') | {deposito:true} |
 //   {ampliar:id} (acao 'construir': +1 espaço na usina ou vaga na fila, quando a produção travou por falta de espaço);
-//   texto: a ação em português ("Produzir 2 Concreto na Central de Concreto"); meta: a meta do capítulo (txt).
-//   adiantar: true quando tudo das metas está em espera e o plano sugere produzir já o que as próximas etapas e
-//   pavimentos vão pedir (texto 'Adiantar: …'; fim = quando a espera termina).
+//   texto: a ação em português ("Produzir 10 Concreto na Central de Concreto"; n = quantas faltam, para produzir em lotes);
+//   meta: a meta do capítulo (txt). adiantar: true quando tudo das metas está em espera e o plano sugere produzir já o que
+//   as próximas etapas e pavimentos vão pedir (texto 'Adiantar: …'; fim = quando a espera termina).
 // J.metaProgresso(meta) → {feito, total, txt}  ('3/8', 'etapa 2/5', 'nível 12/15').
 // S.mutirao: fichas (teto FICHAS_MAX = 3). S.disposicao 0..100: +2 pedido, +4 módulo, +8 etapa, +30 marco;
 //   em 100 vira 1 ficha. J.mutirao(alvo) adianta até 2 h (usina: todos os espaços; oficina: o item atual).
 // J.encomendarLicenca(k) → 'ok'|'ocupado'|'falta'|'creditos'|'nada'. TOPOGRAFO[k] = {itens, creditos, min};
 //   S.topografo = {k, ini, fim} | null (uma por vez; ao terminar, +1 licença e 'aviso').
 // J.estoqueDeposito(k) → {n, preco}  (10 por matéria-prima a cada janela de 4 h, preço sobe 12% por compra);
-//   J.vendasDeposito() → {feitas, max}; J.comprar(k) → 'ok'|'esgotado'|'creditos'|'almox'|'bloqueado';
-//   J.vender(k, n) → 'ok'|'limite'|'nada'|'nao'.
+//   J.precoBase(k) (3 × o valor), J.precoVenda(k) = 150% do preço base; J.vendasDeposito() → {feitas, max: 100};
+//   J.comprar(k) → 'ok'|'esgotado'|'creditos'|'almox'|'bloqueado'; J.vender(k, n) → 'ok'|'limite'|'nada'|'nao'.
 // J.servicoInfo(tipo) → {cap, uso} (tipo 'agua'|'energia'|'saneamento'); J.bemInfo() → {total, fontes[], pressao}.
-// Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera} com
+// Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera, auto} com
 //   recompensa = {creditos, xp, itens?:{id:n}, bem?:{n,h}, disposicao?}; (creditos, xp, especial: cópias antigas).
 // Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, porque, dica (as três juntas)}; valem nos capítulos seguintes.
 // Consultas com efeitos das escolhas: J.itensEtapa(p,e), J.custoEtapa(p,e), J.durEtapa(p,e), J.durItem(k),
 //   J.predioLiberado(id), J.vagasFila(id), J.requisitosModulo(f,i) → {…, servicos[], bemMin}.
-// Números das regras para a interface: REGRAS {fichasMax 3, mutiraoH 2, cofreH 4, capPedidos 2 (o painel de pedidos
-//   abre no capítulo 2, não por nível), bandeja 9, filaMax 9, filaSelo 12, usinaMax 6, pendH 12}; servicosDoNivel(n)
-//   (3: água; 4 em diante: energia e saneamento) e bemMinimo(n) (70 no 5º pavimento); J.liberado(k) diz se um item
-//   já pode ser produzido (nível e capítulo) e J.durItem(k) o tempo real dele (com escolhas e a rampa de saves antigos).
-// Save: prepararSave(S) = normalizar(migrar(S)); uma migração pode deixar S._avisos (textos para um brinde; main.js
-//   mostra e apaga). F_OBRA[6] = 0,15 de propósito: o epílogo é uma festa curta, não uma espera.
+// Números das regras para a interface: REGRAS {fichasMax 3, mutiraoH 2, cofreH 12, offlineH 12, offlineFator 0,5,
+//   tarifas [5, 8, 11], capPedidos 2 (o painel de pedidos abre no capítulo 2, não por nível), bandeja 9, filaMax 9,
+//   filaSelo 12, usinaMax 6, pendH 12, almoxBase 120, almoxNivel 40, loteMax 10, fLote 0,8, recompensa 1,5, aceleraH 1,
+//   diaMs 20000, mesDias 30, anoDias 360, empAno 50000, empMax 500000, empTaxa 0,1, empPrazoAnos 10, empPasso 1000,
+//   empMora 0,2, depVendas 100, depEstoque 10, depJanelaH 4, depVenda 1,5, pedidoFator 5, pedidoValor 1,5, filaPedidos 24};
+//   servicosDoNivel(n) (3: água; 4 em diante: energia e saneamento) e bemMinimo(n) (70 no 5º pavimento); J.liberado(k) diz se
+//   um item já pode ser produzido (nível e capítulo) e J.durItem(k) o tempo real dele (com escolhas e a rampa de saves antigos).
+// Save: VERSAO_SAVE = 3; prepararSave(S) = normalizar(migrar(S)); a migração 2 → 3 cria calendário (início = criado),
+//   empréstimo vazio, aceleradores zerados e lotes de 1 nos espaços e filas, e deixa S._avisos (textos para um brinde;
+//   main.js mostra e apaga). Nada de perder progresso. F_OBRA[6] = 0,15 de propósito: o epílogo é uma festa curta, não uma espera.
 import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data/itens.js';
 import { PROJETOS, PROJ, MODULOS, LIMITE_CAP, POP_NIVEL, POOL_NIVEL, CUSTO_NIVEL, TEMPO_NIVEL, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../data/obras.js';
 import { CAPITULOS, EFEITOS, MARCOS, FALAS_ETAPA, EPILOGO, PEDIDOS } from '../data/historia.js';
@@ -66,15 +112,15 @@ export const DIA_MS = 20000, MES_DIAS = 30, ANO_DIAS = 360, ANO_MS = ANO_DIAS * 
 // empréstimo: até 50 mil por ano do jogo, dívida máxima de 500 mil (principal + juros devidos), 10% ao ano sobre o principal,
 // prazo de 10 anos por contrato (depois dele o saldo rende a mora de 20%), em múltiplos de 1.000
 const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, mora: 0.20 };
-// recompensa por etapa ou pavimento aprovado (150% do custo) e aceleradores (cada um adianta 1 h)
+// economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
+// + valor dos itens entregues) e cada etapa dá 1 acelerador de obra e 1 de produção (cada um adianta 1 h de um cronômetro)
 const RECOMPENSA = 1.5, ACELERA_MS = 3600e3;
 // pedidos da comunidade: 5 × as quantidades de antes e 150% do valor dos itens em créditos; a Usina de Pedidos aceita até
 // 24 trabalhos na fila
 const PEDIDO_FATOR = 5, PEDIDO_VALOR = 1.5, FILA_PEDIDOS = 24;
 export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (+lv <= n) out.push(...ks); return out; } // serviços que um pavimento de nível n pede
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
-// economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
-// + valor dos itens entregues) e dá 1 acelerador de obra e 1 de produção (cada um adianta 1 h de um cronômetro)
+// disposição da comunidade por acontecimento (100 pontos viram 1 ficha de Mutirão)
 const DISP = { pedido: 2, modulo: 4, etapa: 8, marco: 30 };
 // renda dos moradores, por hora real: cada morador paga 5 créditos com bem-estar geral até 30, 8 de 31 a 60 e 11 de 61 a 100.
 // O cofre guarda até 12 h de renda; com o jogo fechado rendem no máximo 12 h, a 50%
