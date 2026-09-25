@@ -1,16 +1,17 @@
-// Oclusão de ambiente por campo de alturas (HAO): a maquete vista de cima vira um mapa de alturas
-// desfocado; cada fragmento compara a própria altura com a do entorno e escurece a luz indireta
-// (e um pouco da direta). Na mesma injeção vão a queda de luz nos cantos da mesa (poça do refletor)
-// e um véu leve de distância. O mapa só é refeito quando a construção muda, nunca pela câmera.
-// O canal G guarda a cobertura (1 onde há maquete). A oclusão só vale dentro da bandeja, onde há
-// cobertura e acima do fundo do poço do acelerador: bordas e face da mesa, placa, pedestal e piso
-// ficam com occ = 1 (só a queda nos cantos e o véu). Material com userData.semHAO nem recebe o gancho.
+// Oclusão de ambiente por campo de alturas (HAO): a obra vista de cima vira um mapa de alturas desfocado;
+// cada fragmento compara a própria altura com a do entorno e escurece a luz indireta (e um pouco da direta),
+// com força pela hora (haoK: mais suave de dia). O mapa só é refeito quando a construção muda, nunca pela
+// câmera. O canal G guarda a cobertura (1 onde há obra). A oclusão só vale dentro da planta, onde há
+// cobertura e acima do fundo do poço do acelerador. Material com userData.semHAO nem recebe o gancho.
+// No mesmo gancho vai o tom contínuo do céu sobre os reflexos (ceuTint): o mapa de reflexos só é refeito
+// quando o dia muda de faixa, e o tom acompanha a hora entre uma faixa e outra.
 import * as THREE from 'three';
 import { MESA } from '../data/planta.js';
 
 export const CAMADA_HAO = 5;                 // só o que tem esta camada entra no mapa de alturas
-const X0 = -34, X1 = 34, Z0 = -22, Z1 = 22;  // a mesa + 2 unidades
-export const HAO_U = { tHAO: { value: null }, haoOn: { value: 0 }, haoP: { value: new THREE.Vector4(X0, Z1, 1 / (X1 - X0), -1 / (Z1 - Z0)) } }; // v cresce para -z (câmera com up -z)
+const X0 = -34, X1 = 34, Z0 = -22, Z1 = 22;  // a planta + 2 unidades
+export const HAO_U = { tHAO: { value: null }, haoOn: { value: 0 }, haoP: { value: new THREE.Vector4(X0, Z1, 1 / (X1 - X0), -1 / (Z1 - Z0)) }, // v cresce para -z (câmera com up -z)
+  haoK: { value: 1 }, ceuTint: { value: new THREE.Vector3(1, 1, 1) } };
 export const haoCfg = { taps: 8 };           // amostras da sombra: entram na chave do programa
 const corrigidos = new WeakSet();            // (userData é copiado por clone(), o gancho não)
 
@@ -21,20 +22,31 @@ const VS_POS = /* glsl */`
       hw = instanceMatrix * hw;
     #endif
     vHaoW = ( modelMatrix * hw ).xyz; }`;
-const FS_DECL = 'varying vec3 vHaoW; uniform sampler2D tHAO; uniform vec4 haoP; uniform float haoOn;';
+const FS_DECL = 'varying vec3 vHaoW; uniform sampler2D tHAO; uniform vec4 haoP; uniform float haoOn; uniform float haoK; uniform vec3 ceuTint;';
 const FS_AO = /* glsl */`
   if ( haoOn > 0.5 ) {
     vec2 hc = texture2D( tHAO, ( vHaoW.xz - haoP.xy ) * haoP.zw ).rg; // R altura·cobertura, G cobertura
     vec2 dm = abs( vHaoW.xz - vec2( ${((MESA.x0 + MESA.x1) / 2).toFixed(2)}, ${((MESA.z0 + MESA.z1) / 2).toFixed(2)} ) ) - vec2( ${((MESA.x1 - MESA.x0) / 2).toFixed(2)}, ${((MESA.z1 - MESA.z0) / 2).toFixed(2)} );
     float cob = smoothstep( 0.1, 0.4, hc.g ) * step( max( dm.x, dm.y ), 0.0 ) * smoothstep( -3.2, -2.8, vHaoW.y );
     float hb = hc.r / max( hc.g, 0.1 ); // média das alturas cobertas (o vazio limpo com 0 não puxa para baixo)
-    float occ = mix( 1.0, clamp( 1.0 - max( hb - vHaoW.y, 0.0 ) * 0.6, 0.35, 1.0 ), cob );
+    float occ = mix( 1.0, clamp( 1.0 - max( hb - vHaoW.y, 0.0 ) * 0.6, 0.35, 1.0 ), cob * haoK );
     reflectedLight.indirectDiffuse *= occ; reflectedLight.indirectSpecular *= occ;
     reflectedLight.directDiffuse *= mix( 1.0, occ, 0.35 );
-    reflectedLight.directDiffuse *= 1.0 - 0.22 * smoothstep( 0.45, 1.05, length( vHaoW.xz / vec2( 34.0, 22.0 ) ) );
   }`;
-const FS_VEU = /* glsl */`
-  if ( haoOn > 0.5 ) gl_FragColor.rgb = mix( gl_FragColor.rgb, vec3( 0.020, 0.026, 0.040 ), smoothstep( 50.0, 110.0, length( vHaoW - cameraPosition ) ) * 0.18 );`;
+// tom do céu da hora sobre a luz do mapa de reflexos (difusa e especular), logo depois de lida
+const FS_CEU = /* glsl */`
+  #if defined( RE_IndirectDiffuse ) && defined( USE_ENVMAP )
+    iblIrradiance *= ceuTint;
+  #endif
+  #if defined( RE_IndirectSpecular ) && defined( USE_ENVMAP )
+    radiance *= ceuTint;
+  #endif`;
+
+// Só o tom do céu sobre os reflexos, para materiais fora do mapa de alturas (arredores): chamar no onBeforeCompile
+export function comTomDoCeu(sh) {
+  sh.uniforms.ceuTint = HAO_U.ceuTint;
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 ceuTint;').replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FS_CEU);
+}
 
 // Encadeia o gancho no material (MeshStandard/Physical). Idempotente; a chave do programa passa a
 // incluir '|hao' para não dividir programa com um material sem o gancho.
@@ -51,9 +63,9 @@ export function haoPatch(mat) {
   mat.onBeforeCompile = function (sh, r) {
     if (prev) prev.call(this, sh, r);
     if (sh.uniforms.tHAO) return;
-    sh.uniforms.tHAO = HAO_U.tHAO; sh.uniforms.haoP = HAO_U.haoP; sh.uniforms.haoOn = HAO_U.haoOn;
+    sh.uniforms.tHAO = HAO_U.tHAO; sh.uniforms.haoP = HAO_U.haoP; sh.uniforms.haoOn = HAO_U.haoOn; sh.uniforms.haoK = HAO_U.haoK; sh.uniforms.ceuTint = HAO_U.ceuTint;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + VS_DECL).replace('#include <project_vertex>', '#include <project_vertex>' + VS_POS);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FS_DECL).replace('#include <aomap_fragment>', '#include <aomap_fragment>' + FS_AO).replace('#include <opaque_fragment>', '#include <opaque_fragment>' + FS_VEU);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FS_DECL).replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FS_CEU).replace('#include <aomap_fragment>', '#include <aomap_fragment>' + FS_AO);
   };
   mat.customProgramCacheKey = function () { return (prevKey ? prevKey.call(this) : chave0) + '|hao' + haoCfg.taps; };
   mat.needsUpdate = true;
