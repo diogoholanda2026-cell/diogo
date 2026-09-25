@@ -66,7 +66,7 @@ export const PREDIOS = {
   escritorio: { nome: 'Escritório de Obra', tipo: 'base', nivel: 1, desc: 'Coordena a obra. Recebe os repasses enquanto a Sede não fica pronta.' },
   almox: { nome: 'Almoxarifado', tipo: 'armazem', nivel: 1, desc: 'Guarda tudo o que é produzido. Amplie com estrados, etiquetas e cadeados.' },
   usina1: { nome: 'Usina de Materiais', tipo: 'usina', nivel: 1, custo: 0, desc: 'Transforma resíduos e recursos renováveis em matéria-prima.' },
-  usina2: { nome: 'Usina de Materiais II', tipo: 'usina', nivel: 7, custo: 3500, desc: 'Mais espaços de produção em paralelo.' },
+  usina2: { nome: 'Usina de Pedidos da Comunidade', tipo: 'usina', nivel: 7, custo: 3500, pedidos: true, desc: 'Só fabrica o que os pedidos da comunidade pedem: marque um pedido e os três espaços produzem o que falta (matéria-prima e produtos, com os insumos do Almoxarifado), com coleta automática.' },
   usina3: { nome: 'Usina de Materiais III', tipo: 'usina', nivel: 13, custo: 15000, desc: 'A usina maior, para os capítulos finais.' },
   carpintaria: { nome: 'Carpintaria', tipo: 'oficina', nivel: 1, custo: 200, desc: 'Vigas laminadas, deques, treliças e estantes.' },
   concreto: { nome: 'Central de Concreto', tipo: 'oficina', nivel: 2, custo: 500, desc: 'Cimento verde, concreto, blocos e lajes pré-moldadas.' },

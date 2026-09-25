@@ -66,6 +66,9 @@ export const DIA_MS = 20000, MES_DIAS = 30, ANO_DIAS = 360, ANO_MS = ANO_DIAS * 
 const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, mora: 0.20 };
 // recompensa por etapa ou pavimento aprovado (150% do custo) e aceleradores (cada um adianta 1 h)
 const RECOMPENSA = 1.5, ACELERA_MS = 3600e3;
+// pedidos da comunidade: 5 × as quantidades de antes e 150% do valor dos itens em créditos; a Usina de Pedidos aceita até
+// 24 trabalhos na fila
+const PEDIDO_FATOR = 5, PEDIDO_VALOR = 1.5, FILA_PEDIDOS = 24;
 export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (+lv <= n) out.push(...ks); return out; } // serviços que um pavimento de nível n pede
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
 // economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
@@ -79,7 +82,7 @@ const TARIFA = [[30, 5, '0-30'], [60, 8, '31-60'], [100, 11, '61-100']], OFFLINE
 const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 100, compra: 3, venda: 1.5 };
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
 export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
-  offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR, tarifas: TARIFA.map((t) => t[1]), depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
+  pedidoFator: PEDIDO_FATOR, pedidoValor: PEDIDO_VALOR, filaPedidos: FILA_PEDIDOS, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR, tarifas: TARIFA.map((t) => t[1]), depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export const TOPOGRAFO = { estaca: { itens: { madeira: 2 }, creditos: 300, min: 20 }, baliza: { itens: { aco: 2 }, creditos: 600, min: 30 }, trena: { itens: { cobre: 2 }, creditos: 900, min: 45 } };
 const LICENCAS = ['estaca', 'baliza', 'trena'], ALMOX = ['estrado', 'etiqueta', 'cadeado'];
 const QUEDA = { estaca: ['madeira', 0.006], baliza: ['serralheria', 0.03], trena: ['eletrica', 0.03] }; // licenças caem de onde fazem sentido
@@ -105,7 +108,7 @@ export function novoEstado(agora = Date.now()) {
   for (const k of Object.keys(ITENS)) S.itens[k] = 0;
   S.itens.madeira = 6; S.itens.brita = 4; S.itens.estaca = 1;
   for (const [id, p] of Object.entries(PREDIOS)) {
-    if (p.tipo === 'usina') S.predios[id] = { ok: id === 'usina1', slots: [null, null, null], nSlots: 3 };
+    if (p.tipo === 'usina') S.predios[id] = { ok: id === 'usina1', slots: [null, null, null], nSlots: 3, ...(p.pedidos ? { fila: [] } : {}) };
     else if (p.tipo === 'oficina') S.predios[id] = { ok: false, fila: [], prontos: [], nFila: 3, auto: null };
     else S.predios[id] = { ok: true };
   }
@@ -256,7 +259,7 @@ export function normalizar(S, agora = Date.now()) {
   }
   for (const [f, v] of Object.entries(objeto(S.modulos) ? S.modulos : {})) if (!tem(N_MODULOS, f)) guarda('modulos', f, v);
   // pedidos, topógrafo, bem-estar temporário, escolhas
-  O.pedidos = (Array.isArray(S.pedidos) ? S.pedidos : []).filter(objeto).map((p) => (p.itens && (!objeto(p.itens) || Object.keys(p.itens).some((k) => !tem(ITENS, k))) ? { id: p.id, espera: O.t, itens: null } : { ...p, espera: num(p.espera, O.t) }));
+  O.pedidos = (Array.isArray(S.pedidos) ? S.pedidos : []).filter(objeto).map((p) => (p.itens && (!objeto(p.itens) || Object.keys(p.itens).some((k) => !tem(ITENS, k))) ? { id: num(p.id, O.seq++) | 0, espera: O.t, itens: null } : { ...p, id: num(p.id, O.seq++) | 0, espera: num(p.espera, O.t), auto: !!p.auto && !!p.itens }));
   O.topografo = objeto(S.topografo) && typeof S.topografo.k === 'string' && tem(TOPOGRAFO, S.topografo.k) ? { k: S.topografo.k, ini: num(S.topografo.ini, O.t), fim: num(S.topografo.fim, O.t) } : null;
   O.bemTemp = (Array.isArray(S.bemTemp) ? S.bemTemp : []).filter((b) => objeto(b) && num(b.n) > 0).map((b) => ({ n: num(b.n), fim: num(b.fim) }));
   O.legado = Array.isArray(S.legado) ? S.legado.filter((k) => typeof k === 'string' && tem(ITENS, k)) : [];
@@ -466,7 +469,35 @@ export class Jogo {
       if (ped) for (let i = 0; i < u.nSlots; i++) if (!u.slots[i]) this._puxarPedido(uid, u, i, ate);
     }
   }
-  _puxarPedido() { return false; } // preenchido pela Usina de Pedidos da Comunidade
+  // Usina de Pedidos da Comunidade: cada espaço livre puxa da fila o primeiro trabalho que pode começar (matéria-prima
+  // sempre; produto só com os insumos no almoxarifado, consumidos na hora), em lotes de até 10
+  _puxarPedido(uid, u, i, quando) {
+    const S = this.S; if (!Array.isArray(u.fila)) u.fila = [];
+    for (let j = 0; j < u.fila.length; j++) {
+      const f = u.fila[j]; const I = ITENS[f.item]; if (!I || I.tipo === 'especial' || !(f.n > 0)) { u.fila.splice(j--, 1); continue; }
+      let q = Math.min(f.n, LOTE_MAX); if (I.req) { q = Math.min(q, this.loteMax(null, f.item)); if (q < 1) continue; for (const [k, m] of Object.entries(I.req)) S.itens[k] -= m * q; }
+      f.n -= q; if (f.n <= 0) u.fila.splice(j, 1);
+      this._iniciarSlot(uid, u, i, f.item, q, false, quando, { pedido: f.pedido }); return true;
+    }
+    return false;
+  }
+  _usinaPedidos() { return USINAS.find((u) => PREDIOS[u].pedidos); }
+  pedidosTotais() { // soma dos pedidos abertos por item: n pedido, falta = n − estoque
+    const S = this.S, out = {}; for (const p of S.pedidos) if (p.itens) for (const [k, q] of Object.entries(p.itens)) { const o = (out[k] ||= { n: 0, falta: 0, pedidos: 0 }); o.n += q; o.pedidos++; }
+    for (const [k, o] of Object.entries(out)) o.falta = Math.max(0, o.n - (S.itens[k] || 0)); return out;
+  }
+  fabricarPedido(i) { // marca o pedido e põe na fila da Usina de Pedidos o que falta de cada item (menos o que já está a caminho)
+    const S = this.S, uid = this._usinaPedidos(), u = uid && S.predios[uid]; if (!u?.ok) return 'fechado'; const p = S.pedidos[i]; if (!p?.itens) return 'nada';
+    if (!Array.isArray(u.fila)) u.fila = []; u.fila = u.fila.filter((f) => f.pedido !== p.id);
+    const curso = {}; for (const s of u.slots) if (s?.pedido === p.id) curso[s.item] = (curso[s.item] || 0) + (s.sobra ?? s.n);
+    const itens = {}; for (const [k, q] of Object.entries(p.itens)) { const falta = q - (S.itens[k] || 0) - (curso[k] || 0); if (falta > 0) itens[k] = falta; }
+    if (!Object.keys(itens).length && !Object.keys(curso).length) return 'nada';
+    if (u.fila.length + Object.keys(itens).length > FILA_PEDIDOS) return 'cheio';
+    for (const [k, n] of Object.entries(itens)) u.fila.push({ item: k, n, pedido: p.id }); p.auto = true; S.stats.pedidosFabricados++;
+    this._usinas(this.agora); this.emit('pedidoFabricando', { i, id: p.id, itens }); return 'ok';
+  }
+  pararPedido(i) { const S = this.S, p = S.pedidos[i]; if (!p?.itens || !p.auto) return 'nada'; p.auto = false; this._tirarPedido(p.id); this.emit('pedidoFabricando', { i, id: p.id, itens: null }); return 'ok'; }
+  _tirarPedido(id) { const uid = this._usinaPedidos(); const u = uid && this.S.predios[uid]; if (Array.isArray(u?.fila)) u.fila = u.fila.filter((f) => f.pedido !== id); }
   _iniciarSlot(uid, u, i, item, n, auto, quando, extra) {
     const s = (u.slots[i] = { item, n, ini: quando, fim: quando + this.durLote(item, n), auto: !!auto, ...(extra || {}) }); this.S.stats.lotes += n;
     this.emit('produzir', { predio: uid, item, slot: i, ini: s.ini, fim: s.fim, n, auto: s.auto, pedido: s.pedido }); return s;
@@ -740,11 +771,11 @@ export class Jogo {
     const usados = new Set(S.pedidos.filter((q) => q !== p && q.itens).map((q) => q.modelo)); const livres = cands.filter((x) => !usados.has(x.m.id)); if (livres.length) cands = livres;
     const { m, op } = cands[(Math.random() * cands.length) | 0];
     const tipos = Math.min(op.length, 1 + ((Math.random() * Math.min(3, 1 + S.nivel / 10)) | 0)); const ord = op.slice().sort(() => Math.random() - 0.5).slice(0, tipos);
-    const itens = {}; let valor = 0; for (const k of ord) { const q = ITENS[k].tipo === 'bruto' ? 2 + ((Math.random() * 4) | 0) : 1 + ((Math.random() * 2) | 0); itens[k] = q; valor += ITENS[k].valor * q; }
-    const rec = { creditos: Math.round(valor), xp: Math.round(valor / 9) }; const r = Math.random();
+    const itens = {}; let valor = 0; for (const k of ord) { const q = (ITENS[k].tipo === 'bruto' ? 2 + ((Math.random() * 4) | 0) : 1 + ((Math.random() * 2) | 0)) * PEDIDO_FATOR; itens[k] = q; valor += ITENS[k].valor * q; }
+    const rec = { creditos: Math.round(PEDIDO_VALOR * valor), xp: Math.round((PEDIDO_VALOR * valor) / 9) }; const r = Math.random();
     const menos = (g) => g.slice().sort((a, b) => S.itens[a] - S.itens[b])[0];
     if (r < 0.3) rec.itens = { [menos(LICENCAS)]: 1 }; else if (r < 0.6) rec.itens = { [menos(ALMOX)]: 1 }; else if (r < 0.8) rec.bem = { n: 1, h: 24 }; else rec.disposicao = 15;
-    Object.assign(p, { modelo: m.id, quem: m.quem, onde: m.onde, cor: m.cor, fala: m.fala, itens, recompensa: rec, creditos: rec.creditos, xp: rec.xp, especial: rec.itens ? Object.keys(rec.itens)[0] : null, mutirao: false });
+    Object.assign(p, { modelo: m.id, quem: m.quem, onde: m.onde, cor: m.cor, fala: m.fala, itens, recompensa: rec, creditos: rec.creditos, xp: rec.xp, especial: rec.itens ? Object.keys(rec.itens)[0] : null, mutirao: false, auto: false });
   }
   entregarPedido(i) {
     const S = this.S; const p = S.pedidos[i]; if (!p?.itens) return 'nada'; for (const [k, n] of Object.entries(p.itens)) if (!this.temItem(k, n)) return 'falta';
@@ -756,7 +787,7 @@ export class Jogo {
     this._xp(R.xp || 0, 'pedido'); this.emit('pedido', { ...p }); this._repor(i, 20000); return 'ok';
   }
   descartarPedido(i) { this._repor(i, 180000); return 'ok'; }
-  _repor(i, ms) { if (this.S.cap < CAP_PEDIDOS) this.S.pedidos.splice(i, 1); else this.S.pedidos[i] = { id: this.S.seq++, espera: this.agora + ms, itens: null }; }
+  _repor(i, ms) { const p = this.S.pedidos[i]; if (p?.id != null) this._tirarPedido(p.id); if (this.S.cap < CAP_PEDIDOS) this.S.pedidos.splice(i, 1); else this.S.pedidos[i] = { id: this.S.seq++, espera: this.agora + ms, itens: null }; }
   // capítulos
   metaFeita(m) {
     if (m.tipo === 'etapa') return this.feita(m.id);
