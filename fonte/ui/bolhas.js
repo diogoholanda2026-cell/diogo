@@ -1,10 +1,10 @@
 // Balões presos a pontos do mundo 3D (coletar, aprovar, obra disponível, obra em andamento, módulo bloqueado),
-// como os do BuildIt: círculo branco com aro colorido, ícone grande, ponta embaixo e sombra. Arrastar o dedo por
-// vários balões de coleta recolhe todos de uma vez. Os balões entram com mola e pulam no compositor (transform),
-// cada um na sua fase; os de coletar e aprovar chamam atenção de tempos em tempos, o item da coleta pula dentro do
-// balão, uma moeda sobe do balão de repasse e um brilho pisca nos que pedem toque (só transform e opacity).
+// como os do BuildIt: círculo branco com aro colorido por intenção (terraço: pronto e coletar; latão: moedas; azul:
+// placa, obra e subir; cinza: bloqueado), ícone grande, ponta embaixo e sombra. Arrastar o dedo por vários balões
+// de coleta recolhe todos de uma vez. Uma animação ociosa só (flutua, 4 px, fase por --i); a cada 6 a 8 s um balão
+// visível de maior prioridade balança uma vez (chamariz). Perto da câmera, um rótulo curto de ação ("Aprovar").
 // Os importantes (aprovar, coletar, moedas, subir) fora da tela ficam presos à borda com uma seta; balões a
-// menos de 40 px viram um grupo com '+n' (fica o de maior prioridade). Sob o HUD ficam apagados e sem toque.
+// menos de 56 px viram um grupo com '+n' (fica o de maior prioridade). Sob o HUD ficam apagados e sem toque.
 // O DOM só é escrito quando algo muda (posição > 0,3 px, escala > 0,005): com a câmera parada, nada.
 import * as THREE from 'three';
 import { el, clamp } from '../core/util.js';
@@ -20,7 +20,7 @@ export class Bolhas {
     this.raiz = el('div', 'bolhas'); raiz.insertBefore(this.raiz, raiz.firstChild); // abaixo do HUD e dos painéis
     this.raiz.style.setProperty('--moeda', `url("${icone('creditos')}")`); // a moeda que sobe do balão de repasse
     this.cam = camera; this.e = engine; this.mapa = new Map(); this._v = new THREE.Vector3(); this.visivel = true; this._vis = true;
-    this._colhendo = false; this._ord = []; this._vistos = new Set(); this._t = 0; this.rects = null; this.cartao = 0;
+    this._colhendo = false; this._ord = []; this._vistos = new Set(); this._t = 0; this.rects = null; this.cartao = 0; this._tPulso = 0; this._chamaEl = null;
     this.onBorda = null; this.onGrupo = null; this.safeL = 0; this._safe(); addEventListener('resize', () => this._safe());
     this._cmp = (a, b) => PRIO[a.tipo] - PRIO[b.tipo] || a.z - b.z;
     window.addEventListener('pointermove', (ev) => {
@@ -33,10 +33,10 @@ export class Bolhas {
   _safe() { const p = el('div', ''); p.style.cssText = 'position:fixed;left:0;top:0;padding-left:env(safe-area-inset-left,0px);visibility:hidden'; document.body.appendChild(p); this.safeL = parseFloat(getComputedStyle(p).paddingLeft) || 0; p.remove(); }
   _membros(d) { const out = []; for (const m of this.mapa.values()) if (m.lider === d) out.push(m); return out; }
   _criar(b, k) {
-    const n = el('div', 'balao ' + b.tipo); const dl = -(hashId(b.id) % 1600);
-    n.innerHTML = `<div class="ent" style="animation-delay:${k * 40}ms"><div class="flut" style="animation-delay:${dl}ms"><i class="ponta"></i><div class="corpo" style="animation-delay:${dl}ms"><img alt="" draggable="false" style="animation-delay:${dl}ms"><i class="brilho" style="animation-delay:${dl}ms"></i></div><span class="n"></span><span class="mais"></span></div></div><i class="seta"></i>`;
+    const n = el('div', 'balao ' + b.tipo); const fase = (hashId(b.id) + k) % 6; // fase da flutuação: estável por balão
+    n.innerHTML = `<div class="ent" style="animation-delay:${k * 40}ms"><div class="flut" style="--i:${fase}"><i class="ponta"></i><div class="corpo"><img alt="" draggable="false"><i class="brilho"></i></div><span class="n"></span><span class="mais"></span><span class="verbo"></span></div></div><i class="seta"></i>`;
     this.raiz.appendChild(n);
-    const d = { el: n, img: n.querySelector('img'), corpo: n.querySelector('.corpo'), nEl: n.querySelector('.n'), maisEl: n.querySelector('.mais'), seta: n.querySelector('.seta'), tipo: b.tipo, cur: null, pos: null, vis: null, wx: -1e9, wy: -1e9, we: -1e9, wz: NaN, wa: -1e9, wm: 0, wb: false, ws: false, membros: 0, lider: null };
+    const d = { el: n, img: n.querySelector('img'), corpo: n.querySelector('.corpo'), nEl: n.querySelector('.n'), maisEl: n.querySelector('.mais'), verboEl: n.querySelector('.verbo'), seta: n.querySelector('.seta'), tipo: b.tipo, cur: null, pos: null, vis: null, wx: -1e9, wy: -1e9, we: -1e9, wz: NaN, wa: -1e9, wm: 0, wb: false, ws: false, wp: false, pulsou: false, membros: 0, lider: null };
     n._d = d;
     n.addEventListener('pointerdown', (ev) => {
       ev.stopPropagation(); const B = n._b; if (!B) return; n._down = [ev.clientX, ev.clientY];
@@ -60,6 +60,7 @@ export class Bolhas {
       if (d.tipo !== b.tipo) { n.classList.remove(d.tipo); n.classList.add(b.tipo); d.tipo = b.tipo; }
       if (d.icone !== b.icone) { d.img.src = icone(b.icone); d.icone = b.icone; }
       const nn = b.n > 1 ? String(b.n) : ''; if (d.nn !== nn) { d.nEl.textContent = nn; d.nEl.style.display = nn ? '' : 'none'; d.nn = nn; }
+      const vb = b.verbo || ''; if (d.verbo !== vb) { d.verboEl.textContent = vb; d.verbo = vb; }
       if (b.tipo === 'obra') { const p = ((b.p || 0) * 100).toFixed(1) + '%'; if (d.p !== p) { d.corpo.style.setProperty('--p', p); d.p = p; } }
       if (!d.cur) d.cur = [b.pos[0], b.pos[1], b.pos[2]]; d.pos = b.pos;
     }
@@ -93,10 +94,10 @@ export class Bolhas {
       } else d.esc = clamp(1.25 - v.z * 0.35, 0.85, 1.1);
       d.x = x; d.y = y; d.z = atras ? 1 : v.z; d.show = true; ord.push(d);
     }
-    // agrupar: pela prioridade, quem cai a menos de 40 px de um balão já posto entra no grupo dele
+    // agrupar: pela prioridade, quem cai a menos de 56 px de um balão já posto entra no grupo dele
     ord.sort(this._cmp);
-    // (com folga: quem já estava no grupo só sai acima de 46 px, para não piscar na borda dos 40)
-    for (let i = 0; i < ord.length; i++) { const a = ord[i]; for (let j = 0; j < i; j++) { const b = ord[j]; if (b.lider) continue; const ex = a.x - b.x, ey = a.y - b.y; if (ex * ex + ey * ey < (a.antes === b ? 2116 : 1600)) { a.lider = b; b.membros++; break; } } }
+    // (com folga: quem já estava no grupo só sai acima de 62 px, para não piscar na borda dos 56)
+    for (let i = 0; i < ord.length; i++) { const a = ord[i]; for (let j = 0; j < i; j++) { const b = ord[j]; if (b.lider) continue; const ex = a.x - b.x, ey = a.y - b.y; if (ex * ex + ey * ey < (a.antes === b ? 3844 : 3136)) { a.lider = b; b.membros++; break; } } }
     for (const d of ord) d.antes = d.lider;
     for (const d of this.mapa.values()) {
       const n = d.el; const vis = d.show && !d.lider;
@@ -108,7 +109,16 @@ export class Bolhas {
       if (d.borda && Math.abs(d.ang - d.wa) > 0.03) { d.wa = d.ang; d.seta.style.transform = `rotate(${d.ang.toFixed(3)}rad) translateX(33px)`; }
       if (d.membros !== d.wm) { d.wm = d.membros; d.maisEl.textContent = d.membros ? '+' + d.membros : ''; n.classList.toggle('grupo', d.membros > 0); }
       const sob = !d.borda && this._sob(d.x, d.y - BH / 2); if (sob !== d.ws) { d.ws = sob; n.classList.toggle('sob', sob); }
+      const perto = d.wp ? d.esc >= 1.0 : d.esc >= 1.05; if (perto !== d.wp) { d.wp = perto; n.classList.toggle('perto', perto); } // rótulo curto de ação com a câmera perto
     }
+    this._chamariz(t, ord);
+  }
+  // chamariz: a cada 6 a 8 s, o balão visível (não apagado) de maior prioridade que ainda não balançou ganha .chama por 900 ms
+  _chamariz(t, ord) {
+    if (t < this._tPulso) return; this._tPulso = t + 6000 + Math.random() * 2000;
+    let esc = null; for (const d of ord) { if (d.lider || d.ws || !d.vis || d.pulsou) continue; if (!esc || PRIO[d.tipo] < PRIO[esc.tipo]) esc = d; }
+    if (!esc) { for (const d of ord) d.pulsou = false; return; } // todos já balançaram: a rodada recomeça
+    esc.pulsou = true; const n = esc.el; n.classList.add('chama'); setTimeout(() => n.classList.remove('chama'), 900);
   }
   // centro do balão na tela (ou do grupo em que ele está); null se não aparece. Chamado a cada quadro pelo guia:
   // devolve sempre o mesmo array (quem guarda o ponto copia)
