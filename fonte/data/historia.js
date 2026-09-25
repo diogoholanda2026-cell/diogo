@@ -21,22 +21,26 @@ export const ABERTURA = [
 // 'bt:<botão do trilho>', seletor CSS dentro do painel, ou 'meta' para o cartão do capítulo).
 // feito(J): o passo está cumprido (também vale se o jogador já passou dele por conta própria).
 const naObra = (J, k) => ['obra', 'pronta', 'feita'].includes(J.etapa(k).estado);
+// cada passo tem a fala do conselheiro (fica igual) e o cartão persistente na pílula Agora: 'curto' (frase de até
+// ~30 caracteres) e 'icone'. feito(J, C) recebe também o controlador (o passo 'caminhoA' cumpre ao abrir Obras).
 export const TUTORIAL = [
-  { id: 'brita', quem: 'tome', fala: 'Toque na Usina de Materiais e produza Brita reciclada: é o piso do primeiro caminho. Com + e − dá para fazer até 10 de uma vez.', alvo: 'balao:uusina1',
+  { id: 'brita', quem: 'tome', fala: 'Toque na Usina de Materiais e produza Brita reciclada: é o piso do primeiro caminho. Com + e − dá para fazer até 10 de uma vez.', alvo: 'balao:uusina1', curto: 'Produza brita na Usina', icone: 'brita',
     feito: (J) => J.S.predios.usina1.slots.some((s) => s?.item === 'brita') || J.S.stats.coletas > 0 || naObra(J, 'pas_frente.e1') },
-  { id: 'caminho', quem: 'iris', fala: 'Abra Obras, escolha o Caminho da Frente e toque em Entregar e iniciar.', alvo: ['bt:obras', '[data-a=entregarIniciar]'],
+  { id: 'caminhoA', quem: 'iris', fala: 'Abra Obras, escolha o Caminho da Frente e toque em Entregar e iniciar.', alvo: 'bt:obras', curto: 'Abra Obras', icone: 'obras',
+    feito: (J, C) => ['obras', 'etapa'].includes(C?.paineis?.atual?.tipo) || naObra(J, 'pas_frente.e1') },
+  { id: 'caminhoB', quem: 'iris', fala: 'Escolha o Caminho da Frente e toque em Entregar e iniciar.', alvo: ['bt:obras', '[data-a=entregarIniciar]'], curto: 'Entregue e inicie o Caminho', icone: 'grua',
     feito: (J) => naObra(J, 'pas_frente.e1') },
-  { id: 'coletar', quem: 'tome', fala: 'Cada lote pronto vai sozinho para o Almoxarifado. Marque um espaço como automático e ele repete o mesmo lote sem parar.', alvo: 'balao:uusina1',
+  { id: 'coletar', quem: 'tome', fala: 'Cada lote pronto vai sozinho para o Almoxarifado. Marque um espaço como automático e ele repete o mesmo lote sem parar.', alvo: 'balao:uusina1', curto: 'Aguarde o lote de brita', icone: 'almox',
     feito: (J) => J.S.stats.coletas >= 1 },
-  { id: 'aprovar', quem: 'iris', fala: 'O caminho ficou pronto. Toque no balão verde para aprovar a obra.', alvo: 'balao:epas_frente.e1',
+  { id: 'aprovar', quem: 'iris', fala: 'O caminho ficou pronto. Toque no balão verde para aprovar a obra.', alvo: 'balao:epas_frente.e1', curto: 'Aprove o Caminho', icone: 'check',
     feito: (J) => J.feita('pas_frente.e1') },
-  { id: 'carpintaria', quem: 'tome', fala: 'Construa a Carpintaria e coloque uma Viga laminada na fila.', alvo: 'balao:ocarpintaria',
+  { id: 'carpintaria', quem: 'tome', fala: 'Construa a Carpintaria e coloque uma Viga laminada na fila.', alvo: 'balao:ocarpintaria', curto: 'Construa a Carpintaria', icone: 'predio:carpintaria',
     feito: (J) => { const o = J.S.predios.carpintaria; return o.ok && (o.fila.some((f) => f.item === 'viga') || o.prontos.includes('viga') || J.S.itens.viga > 0 || J.feita('sede.e2')); } },
-  { id: 'lago', quem: 'nara', fala: 'Agora o Lago: entregue brita e madeira, inicie e use a ficha de Mutirão para terminar mais cedo.', alvo: 'balao:elago.e1',
+  { id: 'lago', quem: 'nara', fala: 'Agora o Lago: entregue brita e madeira, inicie e use a ficha de Mutirão para terminar mais cedo.', alvo: 'balao:elago.e1', curto: 'Inicie o Lago e use o Mutirão', icone: 'mutirao',
     feito: (J) => J.feita('lago.e1') || J.S.stats.mutiroes > 0 },
-  { id: 'anel', quem: 'cida', fala: 'As primeiras famílias esperam. Construa o primeiro módulo do Anel.', alvo: 'balao:manel0',
+  { id: 'anel', quem: 'cida', fala: 'As primeiras famílias esperam. Construa o primeiro módulo do Anel.', alvo: 'balao:manel0', curto: 'Construa o 1º módulo do Anel', icone: 'subir',
     feito: (J) => J.S.modulos.anel.some((m) => m.nivel > 0 || m.obra) },
-  { id: 'meta', quem: 'iris', fala: 'A linha Agora mostra o próximo passo até a apresentação ao Conselho. Toque nela para seguir.', alvo: 'meta',
+  { id: 'meta', quem: 'iris', fala: 'A linha Agora mostra o próximo passo até a apresentação ao Conselho. Toque nela para seguir.', alvo: 'meta', curto: 'Toque na linha Agora', icone: 'obras',
     feito: (J) => !!J.S.dicas.metaFoco },
 ];
 

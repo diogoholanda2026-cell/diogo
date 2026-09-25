@@ -63,6 +63,8 @@ export class Som {
   confete() { if (!this._ok()) return; const t = this.ctx.currentTime; this._ruidoF(t, 0.08, 1400, 1.2, 0.12); for (let i = 0; i < 5; i++) this._ruidoF(t + 0.05 + Math.random() * 0.25, 0.03, 4000 + Math.random() * 3000, 4, 0.04); }
   fogos() { if (!this._ok()) return; const t = this.ctx.currentTime; const o = this._tom(600, t, 0.55, 'sine', 0.025, this.gEf, 0.05); o.frequency.exponentialRampToValueAtTime(1800, t + 0.5); this._ruidoF(t + 0.6, 0.5, 300, 0.7, 0.3, 'lowpass'); for (let i = 0; i < 8; i++) this._ruidoF(t + 0.65 + Math.random() * 0.5, 0.04, 5000, 3, 0.05); }
   moeda() { if (!this._ok()) return; const t = this.ctx.currentTime; this._tom(2100 + Math.random() * 500, t, 0.1, 'square', 0.018, this.gEf, 0.002, 0.2); }
+  // encaixe (o item entra no espaço de produção): a coleta invertida, dois tons curtos descendentes em 80 ms
+  encaixe() { if (!this._ok()) return; const t = this.ctx.currentTime; this._tom(1174.7, t, 0.06, 'sine', 0.12, this.gEf, 0.003, 0.15); this._tom(880, t + 0.04, 0.08, 'sine', 0.1, this.gEf, 0.003, 0.2); this._ruidoF(t + 0.03, 0.03, 4000, 3, 0.04); }
   foto() { if (!this._ok()) return; const t = this.ctx.currentTime; this._ruidoF(t, 0.03, 5000, 2, 0.2); this._ruidoF(t + 0.09, 0.05, 3500, 2, 0.15); }
   // betoneira: tambor girando (ruído grave pulsante), só perto de uma obra
   _betoneira() {
