@@ -118,6 +118,12 @@ export function makeMaterials() {
   M.concreto = std({ color: 0xc4c0b6, roughness: 0.92, map: conc });
   M.whiteSmooth = std({ color: 0xf3f0e9, roughness: 0.42, metalness: 0.05 });
   M.fascia = std({ color: 0xf6f3ec, roughness: 0.5, metalness: 0.02 });
+  // pacote "fiel à foto": beirais grossos de concreto claro das fitas, ripas de madeira escura dos brises,
+  // painéis translúcidos leitosos (dossel da Biblioteca) e madeira laminada clara com veio (treliças, arcos)
+  M.fasciaBeiral = std({ color: 0xf2eee6, roughness: 0.62, metalness: 0.0 });
+  M.ripa = std({ color: 0x6b5a48, roughness: 0.8 });
+  M.vidroLeitoso = std({ color: 0xdfe6ea, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide });
+  M.madeiraClara = std({ color: 0xd9b47a, map: tex.veio(), roughness: 0.68 });
   // borda das passarelas: a mesma faixa branca, com uma fita de luz que acende à noite
   M.fasciaLuz = acesa(std({ color: 0xf6f3ec, roughness: 0.5, metalness: 0.02, emissive: 0xffc47a, emissiveIntensity: 0 }), 1.5);
   M.cream = std({ color: 0xf1e7d3, roughness: 0.8 });
@@ -129,7 +135,7 @@ export function makeMaterials() {
   M.bandaCinza = std({ color: 0xdcd8d0, roughness: 0.55 });
   M.caminhoTeto = std({ color: 0xe0d8c6, roughness: 0.8 });
   M.roof = comMacro(std({ color: 0xffffff, map: tex.roof(), normalMap: tex.roofNormal(), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.95 }));
-  M.planter = comMacro(std({ color: 0x5a8a3a, roughness: 0.95 }));
+  M.planter = comMacro(std({ color: 0x4f8a34, roughness: 0.95 }));
   M.lawn = comMacro(std({ color: 0xc2d890, map: tex.grass(), roughness: 0.95 }));
   M.grassBright = comMacro(std({ color: 0xd4e89a, map: tex.grass(), roughness: 0.95 }));
   // campo: vence a placa de terra da terraplenagem logo abaixo (que tem desvio de profundidade contra o terreno)
@@ -183,8 +189,8 @@ export function makeMaterials() {
   M.shadowBlob = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false });
   // fachadas: de dia, vidro azul refletindo o céu com caixilhos brancos; à noite a luz âmbar vem do emissivo,
   // janela a janela
-  const baseFac = { quente: 0.9, lab: 0.8, escuro: 0.5, madeira: 0.95 };
-  for (const s of ['quente', 'lab', 'escuro', 'madeira']) {
+  const baseFac = { quente: 0.9, lab: 0.8, escuro: 0.5, madeira: 0.95, fita: 0.9 };
+  for (const s of ['quente', 'lab', 'escuro', 'madeira', 'fita']) {
     const f = facadeTextures(s);
     M['fac_' + s] = acesa(comJanelas(std({ color: 0xffffff, map: f.map, emissive: 0xffffff, emissiveMap: f.emissive, roughness: 0.22, metalness: 0.15, envMapIntensity: 1.0 })), baseFac[s], 'janelas');
   }

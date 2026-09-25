@@ -70,7 +70,8 @@ function texDeCanvas(c, o = {}) {
 // de cada andar, com reflexo em diagonal), caixilhos brancos, peitoril claro e floreiras verdes. Emissivo de
 // noite: faixas contínuas de luz âmbar interna, luminária no topo de cada vão e brilho variando devagar de um vão
 // para o outro (as janelas acendem vão a vão no shader: materials.js). Os vãos coincidem nos dois mapas.
-// estilo: 'quente' (moradias), 'lab' (laboratórios frios), 'escuro' (sede), 'madeira' (biblioteca)
+// estilo: 'quente' (moradias), 'lab' (laboratórios frios), 'escuro' (sede), 'madeira' (biblioteca),
+// 'fita' (edifícios-fita em terraços: vidro recuado na sombra do beiral, com ripas de madeira escura a cada meio vão)
 export function facadeTextures(style = 'quente') {
   const key = 'fac-' + style;
   if (cache.has(key)) return cache.get(key);
@@ -80,8 +81,10 @@ export function facadeTextures(style = 'quente') {
     lab: { lit: [[236, 244, 255], [224, 236, 250], [255, 250, 240], [214, 230, 246]], dark: 0.04, gain: 0.95, v: [[186, 226, 246], [104, 164, 214]], frame: '#F4F6F8', mull: 2 },
     escuro: { lit: [[255, 222, 176], [230, 238, 250], [255, 232, 196]], dark: 0.1, gain: 0.8, v: [[128, 180, 226], [44, 96, 160]], frame: '#DCE3EA', mull: 1 },
     madeira: { lit: [[255, 190, 104], [255, 206, 132], [255, 180, 92]], dark: 0.04, gain: 1.05, v: [[176, 214, 238], [88, 142, 194]], frame: '#C9965C', mull: 5 },
+    // vidro azul mais fundo (fica na sombra do beiral), caixilho claro e ripas escuras (#6b5a48) a cada meio vão
+    fita: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[92, 150, 210], [40, 92, 156]], frame: '#EDE7DC', mull: 2, ripa: '#6b5a48', sombra: 0.42 },
   }[style];
-  const seed = { quente: 11, lab: 23, escuro: 37, madeira: 41 }[style];
+  const seed = { quente: 11, lab: 23, escuro: 37, madeira: 41, fita: 53 }[style];
   const rgb = (c, k) => `rgb(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0})`;
   const dC = document.createElement('canvas'); dC.width = W; dC.height = H; const d = dC.getContext('2d');
   const emC = document.createElement('canvas'); emC.width = W; emC.height = H; const e = emC.getContext('2d');
@@ -95,7 +98,8 @@ export function facadeTextures(style = 'quente') {
       const g1 = d.createLinearGradient(0, top, 0, bot); g1.addColorStop(0, rgb(a, kv)); g1.addColorStop(0.55, rgb([(a[0] + z[0]) / 2, (a[1] + z[1]) / 2, (a[2] + z[2]) / 2], kv)); g1.addColorStop(1, rgb(z, kv));
       d.fillStyle = g1; d.fillRect(x, top, bw, bot - top);
       if (hash(b, f, seed + 30) < 0.12) { d.fillStyle = 'rgba(250,244,230,0.55)'; d.fillRect(x, top, bw, (bot - top) * 0.38); } // persiana
-      d.fillStyle = 'rgba(255,255,255,0.22)'; d.beginPath(); d.moveTo(x + bw * 0.1, top); d.lineTo(x + bw * 0.55, top); d.lineTo(x + bw * 0.1, top + (bot - top) * 0.75); d.fill();
+      if (pal.sombra) { const gs = d.createLinearGradient(0, top, 0, top + (bot - top) * pal.sombra); gs.addColorStop(0, 'rgba(18,24,40,0.5)'); gs.addColorStop(1, 'rgba(18,24,40,0)'); d.fillStyle = gs; d.fillRect(x, top, bw, (bot - top) * pal.sombra); } // sombra do beiral
+      else { d.fillStyle = 'rgba(255,255,255,0.22)'; d.beginPath(); d.moveTo(x + bw * 0.1, top); d.lineTo(x + bw * 0.55, top); d.lineTo(x + bw * 0.1, top + (bot - top) * 0.75); d.fill(); }
       // noite: sala acesa (luminária forte no forro, luz suave no resto) ou na penumbra
       const dark = hash(b, f, seed) < pal.dark;
       const c = pal.lit[(hash(b >> 1, f, seed + 3) * pal.lit.length) | 0], k = (0.62 + vnoise(b, f * 7, 3, seed) * 0.38) * pal.gain;
@@ -105,6 +109,7 @@ export function facadeTextures(style = 'quente') {
       // montantes
       d.fillStyle = pal.frame; d.fillRect(x, top, pal.mull, bot - top); e.fillStyle = '#000'; e.fillRect(x, top, pal.mull, bot - top);
       if (style === 'madeira') for (let q = 1; q < 3; q++) { d.fillRect(x + (bw * q) / 3, top, 3, bot - top); e.fillRect(x + (bw * q) / 3, top, 3, bot - top); }
+      if (pal.ripa) { d.fillStyle = pal.ripa; e.fillStyle = '#000'; for (let q = 0; q < 2; q++) { const rx = x + (bw * (q + 0.5)) / 2 - 1; d.fillRect(rx, top, 2, bot - top); e.fillRect(rx, top, 2, bot - top); } } // ripas (brises)
     }
     // travessa superior (fundo branco), peitoril claro e floreiras
     e.fillStyle = '#000'; e.fillRect(0, y, W, 7);
