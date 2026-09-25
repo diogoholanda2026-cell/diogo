@@ -156,9 +156,9 @@ export function gramadoUni() {
   const f = new THREE.PlaneGeometry(cp.w, cp.d); f.rotateX(-Math.PI / 2); const field = mesh(f, M.field, false); field.position.set(cp.c[0], 0.04, cp.c[1]); field.rotation.y = -cp.rot; P.e1.add(field);
   const tr = []; const R = rng(88); for (let i = 0, t = 0; i < 12 && t < 80; t++) { const a = R() * 6.28; const x = cp.c[0] + Math.cos(a) * (cp.w / 2 + 0.7), z = cp.c[1] + Math.sin(a) * (cp.d / 2 + 0.6); if (Math.hypot(x - al.c[0], z - al.c[1]) < al.w / 2 + 0.6) continue; tr.push({ x, z, s: 0.22 + R() * 0.1, pal: 'jardim' }); i++; }
   P.e1.add(treeGroup(tr));
-  // ala alta: 8 andares com brises horizontais fortes (lajes claras avançando 0,25 a cada andar), vidro escuro
-  // recuado entre elas, montantes finos e topo verde (o último andar mais alto)
-  const plano = retRed(al.c, al.w, al.d, al.rot); const n = al.andares || 8; let y = 0; const LJ = 0.08, AV = 0.25; const laje = M.fasciaBeiral || M.fascia;
+  // ala alta: bloco reto de cantos quase vivos (o "portal" da foto), 8 andares com brises horizontais fortes
+  // (lajes claras avançando 0,25 a cada andar), vidro escuro recuado entre elas, montantes finos e topo verde
+  const plano = retRed(al.c, al.w, al.d, al.rot, 0.12, 3); const n = al.andares || 8; let y = 0; const LJ = 0.08, AV = 0.25; const laje = M.fasciaBeiral || M.fascia;
   for (let f = 0; f < n; f++) {
     const h = f === n - 1 ? FH * 1.15 : FH;
     const E = [{ a: [AV, y], b: [AV, y + LJ], mat: 'laje', uv: 'run' }, { a: [AV, y + LJ], b: [0, y + LJ], mat: 'laje', uv: 'plan' }, { a: [0, y + LJ], b: [0, y + h], mat: 'fac', uv: 'facade', vBase: 0 }];

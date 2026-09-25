@@ -303,12 +303,14 @@ export function acelerador() {
   P.e1.add(flatShape(ellShape(cx, cz, rxF, rzF), M.caminhoTeto, -D));
   P.e1.add(ellWall(cx, cz, a.rx + 0.08, a.rz + 0.08, -0.02, 0.2, M.whiteSmooth)); P.e1.add(ellFlat(cx, cz, a.rx - 0.01, a.rz - 0.01, a.rx + 0.1, a.rz + 0.1, 0.18, M.whiteSmooth));
   P.e2 = new THREE.Group(); // túnel e anel do acelerador: tubo branco grosso em segmentos, sobre pedestais, com o feixe azul por cima
-  const Rx = a.rx * 0.64, Rz = a.rz * 0.55, yR = -D + 0.36;
-  const tor = new THREE.TorusGeometry(1, 0.17, 10, 72); tor.rotateX(Math.PI / 2); tor.scale(Rx, 1, Rz); tor.translate(cx, yR, cz); P.e2.add(mesh(tor, M.whiteSmooth));
+  const Rx = a.rx * 0.64, Rz = a.rz * 0.55, yR = -D + 0.38;
+  // pista branca larga no piso, por baixo do tubo: de longe é ela que faz o anel ler como na foto
+  P.e2.add(ellFlat(cx, cz, Rx - 0.32, Rz - 0.32, Rx + 0.32, Rz + 0.32, -D + 0.03, M.whiteSmooth, 0, TAU, 72));
+  const tor = new THREE.TorusGeometry(1, 0.2, 10, 72); tor.rotateX(Math.PI / 2); tor.scale(Rx, 1, Rz); tor.translate(cx, yR, cz); P.e2.add(mesh(tor, M.whiteSmooth));
   const up = new THREE.Vector3(0, 1, 0), tg = new THREE.Vector3();
-  for (let i = 0; i < 16; i++) { const t = (i / 16) * TAU; const f = mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.07, 14), M.steelDark); f.position.set(cx + Math.cos(t) * Rx, yR, cz + Math.sin(t) * Rz); f.quaternion.setFromUnitVectors(up, tg.set(-Math.sin(t) * Rx, 0, Math.cos(t) * Rz).normalize()); P.e2.add(f); }
+  for (let i = 0; i < 16; i++) { const t = (i / 16) * TAU; const f = mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.07, 14), M.steelDark); f.position.set(cx + Math.cos(t) * Rx, yR, cz + Math.sin(t) * Rz); f.quaternion.setFromUnitVectors(up, tg.set(-Math.sin(t) * Rx, 0, Math.cos(t) * Rz).normalize()); P.e2.add(f); }
   for (let i = 0; i < 8; i++) { const t = ((i + 0.5) / 8) * TAU; const b = mesh(new THREE.BoxGeometry(0.24, 0.2, 0.2), M.steelDark); b.position.set(cx + Math.cos(t) * Rx, -D + 0.1, cz + Math.sin(t) * Rz); b.rotation.y = -t; P.e2.add(b); }
-  const feixe = new THREE.TorusGeometry(1, 0.035, 6, 72); feixe.rotateX(Math.PI / 2); feixe.scale(Rx, 1, Rz); feixe.translate(cx, yR + 0.19, cz); P.e2.add(mesh(feixe, M.blue));
+  const feixe = new THREE.TorusGeometry(1, 0.035, 6, 72); feixe.rotateX(Math.PI / 2); feixe.scale(Rx, 1, Rz); feixe.translate(cx, yR + 0.22, cz); P.e2.add(mesh(feixe, M.blue));
   P.e3 = new THREE.Group(); // detectores em camadas (o grande à esquerda, o menor à direita), racks e luz
   const det = new THREE.Group(); det.position.set(cx - Rx, yR, cz); P.e3.add(det);
   const cols = [M.whiteSmooth, M.steel, M.whiteSmooth, M.steel, M.blue];
