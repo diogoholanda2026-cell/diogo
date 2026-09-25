@@ -136,13 +136,14 @@ export function ciencias() {
   sc.count = ns; lb.castShadow = true; P.e2.add(lb, fx, sc);
   for (const [p0, p1] of pisos) { P.e2.add(plate(p0, y0 + 0.1, 0.03, M.whiteSmooth)); P.e2.add(plate(p1, y0 + lh + 0.1, 0.03, M.whiteSmooth)); }
   // e3: a rede — banda de topo grossa e boleada no contorno e nas divisórias, banda fina na borda do térreo, e
-  // as duas rampas (bandas que saem das pontas, dão a volta e descem até o chão)
+  // as duas rampas: à esquerda a banda sai da ponta, dá a volta e desce até o chão sob o prédio; à direita ela
+  // sai da ponta sobre a Ponte Coberta e desce a leste até a cabeceira da ponte comprida do lago
   addMap(P.e3, sweep(cont, true, bandaRedonda(yT, 0.55, 0.6)), matBanda);
   addMap(P.e3, sweep(cont, true, bandaDupla(y0 - 0.12, 0.22, 0.42)), matBanda);
   for (const d of divs) { addMap(P.e3, sweep(d.path, false, bandaRedonda(yT, 0.55, 0.6), { caps: false }), matBanda); addMap(P.e3, sweep(d.path, false, bandaDupla(y0 - 0.12, 0.22, 0.42), { caps: false }), matBanda); }
   const rampas = [
     [[-6.1, -1.15, yT - 0.02], [-6.9, -1.1, yT - 0.12], [-7.6, -1.4, yT * 0.72], [-7.5, -2.3, yT * 0.48], [-6.6, -2.8, yT * 0.27], [-5.6, -2.7, yT * 0.1], [-4.6, -2.3, -0.5]],
-    [[6.0, 1.6, yT - 0.02], [7.1, 0.9, yT - 0.1], [7.8, -0.2, yT * 0.7], [7.6, -1.4, yT * 0.44], [6.6, -2.2, yT * 0.22], [5.6, -2.1, yT * 0.06], [4.6, -1.7, -0.5]],
+    [[6.3, -0.4, yT - 0.02], [7.3, -0.7, yT - 0.1], [8.3, -0.9, yT * 0.68], [9.3, -0.6, yT * 0.4], [10.0, -0.35, yT * 0.16], [10.6, -0.3, -0.5]], // à direita: desce rumo à ponte do lago
   ];
   for (const r of rampas) { const cv = new THREE.CatmullRomCurve3(r.map(([u, v, y]) => { const [x, z] = T(u, v); return new THREE.Vector3(x, y, z); }), false, 'catmullrom', 0.5); const pts = cv.getSpacedPoints(44).map((p) => [p.x, p.y, p.z]); addMap(P.e3, sweep3(pts, bandaRedonda(0, 0.5, 0.6)), matBanda); }
   // e4: vidro transparente recuado sob a banda de topo (os laboratórios dos dois pisos ficam à vista, como na foto),
