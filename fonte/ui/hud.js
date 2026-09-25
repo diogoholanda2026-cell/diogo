@@ -36,7 +36,7 @@ export class Hud {
       <div class="esp"></div>
       <div class="stat creditos" data-a="creditos" role="button" aria-label="Créditos">${img('creditos')}<span class="cc">0</span><button class="mais" data-a="deposito" aria-label="Depósito de Trocas: comprar matéria-prima"><i></i></button></div>
       <div class="stat mutirao" data-a="mutirao" role="button" aria-label="Mutirão e disposição">${img('mutirao')}<span class="mm">0/3</span><div class="disp"><i></i></div></div>
-      <button class="redondo" data-a="apreciar" aria-label="Apreciar a maquete">${img('apreciar')}</button>
+      <button class="redondo" data-a="apreciar" aria-label="Apreciar a cidade">${img('apreciar')}</button>
       <button class="redondo" data-a="config" aria-label="Configurações">${img('config')}</button>`;
     // embaixo à esquerda: medalha do capítulo, metas (cartão acima dela) e a linha "Agora"
     this.esq = el('div', 'esq');

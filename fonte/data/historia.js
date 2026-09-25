@@ -14,7 +14,7 @@ export const CONSELHO = {
 export const ABERTURA = [
   ['iris', 'Boas-vindas ao Ateliê da Arcologia de Held. Em azul, a Composição Total que vamos erguer.'],
   ['nara', 'Uma regra só: nenhuma árvore da mata cai. Construímos nas clareiras e devolvemos vida a elas.'],
-  ['tome', 'Tudo começa no canteiro, ali no canto da mesa. Vamos produzir os primeiros materiais.'],
+  ['tome', 'Tudo começa no canteiro, ali na beira do terreno. Vamos produzir os primeiros materiais.'],
 ];
 
 // Primeiros passos (4 a 6 minutos). alvo: o que a interface destaca ('balao:<id do balão>',
@@ -110,14 +110,14 @@ export const CAPITULOS = [
       { tipo: 'etapa', id: 'gorilas.e4', txt: 'Receba a família de gorilas' },
       { tipo: 'modulos', faixa: 'santuario', qtd: 5, nivel: 4, txt: 'Santuário com os quatro pavimentos' },
     ],
-    fala: [['nara', 'Os gorilas olham para a passarela com curiosidade. Estão em casa.'], ['iris', 'Falta só o canteiro para a composição ficar igual à maquete. E a água do replantio?']],
+    fala: [['nara', 'Os gorilas olham para a passarela com curiosidade. Estão em casa.'], ['iris', 'Falta só o canteiro para a arcologia ficar igual ao projeto. E a água do replantio?']],
     escolha: [
       { id: 'tarifa', quem: 'cida', txt: 'Tarifa social da água', ganho: '+6% de bem-estar', custo: 'A obra paga a água a preço cheio: Replantar a mata custa 30% mais', porque: 'Dona Cida prefere: água limpa para todos, pelo preço justo.' },
       { id: 'aguaObra', quem: 'tome', txt: 'Água para a obra', ganho: 'Horto 20% mais rápido e o replantio 40% mais curto', custo: '−3% de bem-estar', porque: 'Tomé prefere: o replantio pede muita rega.' },
     ] },
   { n: 6, nome: 'Composição total', sub: 'Devolver o canteiro à mata', obras: ['reflorestar'],
     metas: [{ tipo: 'etapa', id: 'reflorestar.e0', txt: 'Desmonte o canteiro' }, { tipo: 'etapa', id: 'reflorestar.e1', txt: 'Replante a mata' }],
-    fala: [['iris', 'A composição total da Arcologia de Held está completa. Igual à maquete do Conselho.'], ['cida', 'Toda cidade começa pequena. Obrigada por construir esta com a gente.']],
+    fala: [['iris', 'A composição total da Arcologia de Held está completa. Igual ao projeto do Conselho.'], ['cida', 'Toda cidade começa pequena. Obrigada por construir esta com a gente.']],
     escolha: null },
 ];
 
@@ -153,7 +153,7 @@ export const MARCOS = {
   2: [['nara', 'A água já corre limpa até a praça. A comunidade veio ajudar de mutirão.'], ['cida', 'As famílias do Anel perguntam da escola todo dia. Estamos quase lá.']],
   3: [['iris', 'A Biblioteca já aparece por cima das árvores. O campus ganhou um centro.'], ['caio', 'Faculdades quase prontas. Já tem estudante pedindo vaga no laboratório.']],
   4: [['caio', 'O anel do acelerador já tem forma. A Vila está curiosa com o barulho.'], ['cida', 'A Vila Estudantil está quase cheia. Os estudantes chegaram antes das casas.']],
-  5: [['nara', 'Os primeiros animais já estão em casa. O Santuário respira.'], ['iris', 'Falta pouco para a composição ficar igual à maquete.']],
+  5: [['nara', 'Os primeiros animais já estão em casa. O Santuário respira.'], ['iris', 'Falta pouco para a arcologia ficar igual ao projeto.']],
 };
 
 // Falas curtas disparadas por acontecimentos (cada uma aparece uma vez)
@@ -197,7 +197,7 @@ export const FALAS_ETAPA = {
   'sede.e1': ['tome', 'Fundações da Sede no lugar. Cortamos só o terreno que precisava.'],
   'sede.e2': ['iris', 'A Sede já recebe os repasses da Holding. Toque nas moedas para coletar.'],
   'sede.e3': ['tome', 'Cada placa de vidro dessa fachada gera energia. A Sede virou usina.'],
-  'sede.e4': ['iris', 'Cobertura verde e pátio prontos. A Sede está igual à maquete do Conselho.'],
+  'sede.e4': ['iris', 'Cobertura verde e pátio prontos. A Sede está igual ao projeto do Conselho.'],
   'escola.e1': ['cida', 'As salas olham para o pátio. As crianças vão estudar vendo árvore, não muro.'],
   'escola.e2': ['cida', 'Os parquinhos já estão cheios. Barulho bom de ouvir.'],
   'escola.e3': ['cida', 'Piscina aberta! A aula de natação começa segunda.'],
@@ -214,7 +214,7 @@ export const FALAS_ETAPA = {
   'biblioteca.e2': ['iris', 'Três andares de leitura com estantes iluminadas. O cheiro de madeira é ótimo.'],
   'biblioteca.e3': ['tome', 'Seis andares em madeira laminada. É a torre de madeira mais alta do campus.'],
   'biblioteca.e4': ['tome', 'Os pilares-árvore se abrem em V e seguram o dossel como galhos seguram a copa.'],
-  'biblioteca.e5': ['iris', 'O dossel está no lugar. É a imagem que a maquete do Conselho mostra.'],
+  'biblioteca.e5': ['iris', 'O dossel está no lugar. É a imagem que o projeto do Conselho mostra.'],
   'crd.e1': ['caio', 'Os laboratórios digitais já têm energia e rede. Falta o telhado em onda.'],
   'crd.e2': ['tome', 'As costelas da abóbada vieram inteiras da Carpintaria. Encaixe perfeito.'],
   'crd.e3': ['caio', 'Computadores ligados no Centro de Recursos Digitais. A rede da arcologia acordou.'],

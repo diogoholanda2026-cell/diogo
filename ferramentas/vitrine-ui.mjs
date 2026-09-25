@@ -115,7 +115,7 @@ for (const [w, h] of tamanhos) for (const nome of nomes) {
     let perto = 0; for (let i = 0; i < bal.length; i++) for (let j = i + 1; j < bal.length; j++) if (Math.hypot(bal[i][0] - bal[j][0], bal[i][1] - bal[j][1]) < 36) perto++;
     const m = document.querySelector('.modal'); const fd = document.querySelector('.fala-dock');
     return { peq, fontesPequenas: fontes, hudArea: Math.round(blocos.reduce((a, b) => a + b, 0)), hudPct: +((blocos.reduce((a, b) => a + b, 0) / (innerWidth * innerHeight)) * 100).toFixed(1), folha: fr ? { rect: [fr.left, fr.top, fr.width, fr.height].map(Math.round), pct: +((fr.width * fr.height) / (innerWidth * innerHeight) * 100).toFixed(1), html: f.innerHTML.length, rola: f.querySelector('.corpo').scrollHeight > f.querySelector('.corpo').clientHeight + 2 } : null,
-      modal: m ? { rola: m.scrollHeight > m.clientHeight + 2, rect: (() => { const r = m.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); })() } : null, fala: fd && vis(fd) && !escondido(fd), guia: (() => { const g = document.querySelector('.guia'); return g && vis(g) && !g.classList.contains('oculto') ? g.style.transform : null; })(), baloesPerto: perto, baloes: bal.length };
+      modal: m ? { rola: (() => { const c = m.querySelector('.mc') || m; return c.scrollHeight > c.clientHeight + 2; })(), rect: (() => { const r = m.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); })() } : null, fala: fd && vis(fd) && !escondido(fd), guia: (() => { const g = document.querySelector('.guia'); return g && vis(g) && !g.classList.contains('oculto') ? g.style.transform : null; })(), baloesPerto: perto, baloes: bal.length };
   });
   await pg.close();
 }
