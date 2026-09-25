@@ -1,21 +1,35 @@
 // Robô de partida completa no navegador: joga do início ao fim pela API do Controle, abre painéis e fecha modais
 // (os automáticos entram numa fila: nenhum abre com painel aberto, outro modal ou a festa de uma aprovação).
+// Também exercita a economia nova pela API J: lotes de até 10 (com um espaço automático), filas em lotes, coleta
+// automática (o Coletar só recolhe sobras), aceleradores, Usina de Pedidos, empréstimo (tomado e quitado) e valuation.
 // Uso: node ferramentas/testar.mjs /tmp/robo.png "teste=1&novo=1&q=leve&pr=1" 700 400 2000 "$(cat ferramentas/robo-partida.js)"
-// Resultado em window.__resultado: capítulo, nível, vida, população, etapas e módulos pendentes.
+// Resultado em window.__resultado: capítulo, nível, vida, população, etapas e módulos pendentes, economia.
 (async () => {
   const H = window.__held, C = H.C, J = H.J; const esp = (ms) => new Promise((r) => setTimeout(r, ms));
   const log = []; const t0 = Date.now(); J.S.ritmo = 4000; J.S.creditos = 200000; J.S.mutirao = 5;
   const paineis = ['obras', 'producao', 'almox', 'pedidos', 'deposito', 'escritorio'];
+  const eco = { lotes: 0, auto: 0, coletas: 0, acelerados: 0, pedidosFab: 0, emprestimo: null, valuation: 0, calendario: null, erros: [] };
+  const ok = (r, oque) => { if (r !== 'ok') eco.erros.push(oque + ':' + r); return r === 'ok'; };
+  J.on((t, d) => { if (t === 'coleta' && d.auto) eco.coletas += d.n; });
+  const brutos = ['madeira', 'brita', 'aco', 'argila', 'mudas', 'vidro', 'cobre', 'fibra'];
   for (let volta = 0; volta < 5000; volta++) { // para assim que o canteiro é replantado
     J.S.creditos = 1e7; J.tick(Date.now());
     for (const u of ['usina1', 'usina2', 'usina3']) if (J.S.predios[u].ok) C.coletarUsina(u, -1, null);
     for (const o of ['carpintaria', 'concreto', 'horto', 'serralheria', 'vidracaria', 'eletrica', 'laboratorio']) if (J.S.predios[o].ok && J.S.predios[o].prontos.length) C.coletarOficina(o, null);
     for (const id of Object.keys(J.S.predios)) if (!J.S.predios[id].ok && J.construirPredio(id) === 'ok') C.predioConstruido(id);
+    // lotes: um espaço livre da Usina de Materiais produz até 10 de uma matéria-prima liberada (o primeiro em automático)
+    { const u = J.S.predios.usina1; const i = u.slots.findIndex((s, k) => k < u.nSlots && !s); if (i >= 0) { const k = brutos.filter((b) => J.liberado(b))[volta % 8 % brutos.filter((b) => J.liberado(b)).length]; const n = 1 + (volta % 10); if (ok(J.produzir('usina1', k, n, i === 0), 'produzir')) { eco.lotes += n; if (i === 0) eco.auto++; } } }
+    // oficina em lote, limitado pelos insumos (J.loteMax)
+    { const cp = J.S.predios.carpintaria; if (cp.ok && cp.fila.length < J.vagasFila('carpintaria') && J.liberado('viga')) { const n = J.loteMax('carpintaria', 'viga'); if (n >= 1) ok(J.enfileirar('carpintaria', 'viga', Math.min(3, n)), 'enfileirar'); } }
     for (const [k, st] of Object.entries(J.S.etapas)) if (st.estado === 'pronta') C.aprovarEtapa(k);
     for (const f of Object.keys(J.S.modulos)) J.S.modulos[f].forEach((m, i) => { if (m.obra?.estado === 'pronta') C.aprovarModulo(f, i); });
     // abre a prancha da próxima etapa de cada projeto e tenta iniciar
     for (const p of window.__PROJ) { const nx = J.proximaEtapa(p); if (!nx) continue; if (nx.s === 'disponivel' || nx.s === 'prancha') { const key = p.id + '.' + nx.e.id; for (const [k, n] of Object.entries(J.faltaEtapa(key))) J.S.itens[k] = (J.S.itens[k] || 0) + n; J.entregarTudo(key); if (J.iniciarEtapa(key) === 'ok') C.sincronizar(); } }
     for (const f of Object.keys(J.S.modulos)) J.S.modulos[f].forEach((m, i) => { if (J.situacaoModulo(f, i) === 'disponivel') { const r = J.requisitosModulo(f, i); for (const [k, n] of Object.entries(r.itens)) J.S.itens[k] = (J.S.itens[k] || 0) + n; if (J.melhorarModulo(f, i) === 'ok') C.sincronizar(); } });
+    // aceleradores das etapas na obra mais longa; Usina de Pedidos no primeiro pedido aberto; empréstimo tomado e quitado
+    if (J.S.aceleradores?.obra > 0) { let best = null, bf = 0; for (const [k, st] of Object.entries(J.S.etapas)) if (st.estado === 'obra' && st.fim - J.agora > bf) { bf = st.fim - J.agora; best = k; } if (best && ok(J.acelerar({ etapa: best }), 'acelerar')) eco.acelerados++; }
+    if (J.S.predios.usina2?.ok && !J.S.pedidos.some((p) => p.auto)) { const i = J.S.pedidos.findIndex((p) => p.itens); if (i >= 0) { const r = J.fabricarPedido(i); if (r === 'ok') eco.pedidosFab++; else if (r !== 'nada') eco.erros.push('fabricarPedido:' + r); } }
+    if (volta === 5) { ok(J.emprestar(10000), 'emprestar'); eco.emprestimo = J.emprestimoInfo().divida; } if (volta === 9) ok(J.quitar(), 'quitar');
     if (volta % 7 === 0) { const t = paineis[(volta / 7) % paineis.length | 0]; C.paineis.abrir(t); await esp(30); C.paineis.fechar(true); }
     if (volta % 11 === 0) { C.paineis.abrir('usina', 'usina1'); await esp(20); C.paineis.fechar(true); C.paineis.abrir('oficina', 'carpintaria'); await esp(20); C.paineis.fechar(true); C.paineis.abrir('modulo', ['anel', 0]); await esp(20); C.paineis.fechar(true); }
     // fecha modais (nível: Continuar; final: data-fecha) e escolhe a primeira opção dos capítulos; a festa da
@@ -25,8 +39,9 @@
     await esp(120);
     log.push(J.S.cap); if (J.S.etapas['reflorestar.e1']?.estado === 'feita') { await esp(6000); break; }
   }
+  eco.valuation = J.valuation().total; eco.calendario = J.calendario(); eco.dividaFim = J.emprestimoInfo().divida; eco.aceleradoresRestantes = { ...J.S.aceleradores }; eco.renda = J.rendaHora(); eco.tarifa = J.tarifaMorador();
   const pend = []; for (const p of window.__PROJ) { const nx = J.proximaEtapa(p); if (nx) pend.push(p.id + '.' + nx.e.id + ':' + nx.s); }
   const mods = Object.entries(J.S.modulos).map(([f, a]) => f + ':' + a.map((m, i) => m.nivel + (m.obra ? '(' + m.obra.estado + ')' : '') + J.situacaoModulo(f, i)[0]).join(','));
   const sites = [...C.sites.entries()].map(([k, s]) => k + (s.concluindo ? '*' : ''));
-  window.__resultado = { voltas: log.length, cap: J.S.cap, nivel: J.S.nivel, vida: J.vida().toFixed(1), pop: J.pop, ms: Date.now() - t0, sites, draws: H.engine.stats.calls, pend: pend.slice(0, 40), mods, capEsc: J.S.capEscolhas, metas: J.capitulo()?.metas.map((m) => m.txt + ':' + J.metaFeita(m)) };
+  window.__resultado = { voltas: log.length, cap: J.S.cap, nivel: J.S.nivel, vida: J.vida().toFixed(1), pop: J.pop, ms: Date.now() - t0, sites, draws: H.engine.stats.calls, pend: pend.slice(0, 40), mods, capEsc: J.S.capEscolhas, metas: J.capitulo()?.metas.map((m) => m.txt + ':' + J.metaFeita(m)), eco };
 })();
