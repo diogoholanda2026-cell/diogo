@@ -5,7 +5,6 @@ import { makeMaterials } from './render/materials.js';
 import { Environment } from './render/env.js';
 import { Ground } from './render/ground.js';
 import { Forest } from './render/forest.js';
-import { ExhibitTable } from './render/table.js';
 import { CameraRig } from './render/camera.js';
 import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
@@ -50,7 +49,7 @@ async function iniciar() {
   env.setShadowSize(engine.q.shadow); if (cfg.luz) env.setMode(cfg.luz);
   const ground = new Ground(engine); await passo(30);
   forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(45);
-  const table = new ExhibitTable(engine); const rig = new CameraRig(engine, canvas, MESA);
+  const rig = new CameraRig(engine, canvas, MESA);
   const mundo = new Mundo(engine, ground, forest); await passo(70);
   // epílogo (desmontar o canteiro e replantar): etapas sem peça própria; o modelo só dá foco e âncora,
   // e as obras (modos 'desmontar' e 'replantar') desmontam os prédios do canteiro e plantam a mata
@@ -71,7 +70,7 @@ async function iniciar() {
   try { await ICONES.prepararIcones?.(); } catch (_) {}
   const som = new Som(); som.efeitos = cfg.efeitos !== false; som.musica = cfg.musica !== false; vibra.on = cfg.vibra !== false;
   const ui = document.getElementById('ui');
-  const C = new Controle({ engine, rig, env, ground, forest, table, mundo, obras, J, som, vibra, ui, cfg });
+  const C = new Controle({ engine, rig, env, ground, forest, mundo, obras, J, som, vibra, ui, cfg });
   // vista da foto de referência (com a leve rolagem da foto)
   C.vistaFoto = (anim) => { const v = VISTA_FOTO; rig.pitchFix = v.pitch; const o = { x: v.x, z: v.z, dist: v.dist, yaw: v.yaw, fov: v.fov, roll: v.roll }; C._naFoto = true; if (anim) rig.flyTo(o, 1600, { cine: true }); else { rig.target.set(o.x, 0, o.z); rig.dist = o.dist; rig.yaw = o.yaw; rig.fov = o.fov; rig.roll = o.roll; rig.apply(); } };
   rig.onMove = () => { C._naFoto = false; };
@@ -110,7 +109,7 @@ async function iniciar() {
     engine.render(t); frames++; if (frames === 3) window.__pronto = true;
   };
   requestAnimationFrame(loop);
-  window.__held = { engine, rig, env, ground, forest, table, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal, importar, gravarImportado, importando } }; window.__PROJ = PROJETOS;
+  window.__held = { engine, rig, env, ground, forest, mundo, obras, J, C, THREE, save: { gravar, carregar, gravarLocal, importar, gravarImportado, importando } }; window.__PROJ = PROJETOS;
   // entrada: o primeiro toque libera som, tela cheia, orientação e tela sempre acesa
   const entrar = async () => {
     carga.style.opacity = 0; setTimeout(() => { carga.remove(); engine.carregando = false; }, 800);

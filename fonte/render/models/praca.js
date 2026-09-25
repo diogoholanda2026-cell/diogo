@@ -33,7 +33,7 @@ export function deck(pts, w, o = {}) {
   // arbustos nas floreiras, a cada 0.6 alternando os lados
   if (o.jardim !== false) { const passo = Math.max(1, Math.round(0.6 / (L / N))); for (let i = 1, k = 0; i < N; i += passo, k++) { const t = k % 2 ? 0.89 : 0.11; const a = L2[i], b = R2[i]; arb.push({ x: a[0] + (b[0] - a[0]) * t, z: a[2] + (b[2] - a[2]) * t, y: a[1] + 0.05, s: 0.07, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); } }
   const mk = (arr, idx, mat, cast = true) => { const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); bg.setIndex(idx); bg.computeVertexNormals(); const m = mesh(bg, mat, cast); g.add(m); return m; };
-  mk(top, ti, dupla(M.whiteSmooth)); mk(side, si, dupla(M.fascia)); const rm = mk(rail, ri, M.glassRail, false); rm.renderOrder = 3; if (plant.length) mk(plant, pi, dupla(M.planter), false);
+  mk(top, ti, dupla(M.whiteSmooth)); mk(side, si, dupla(M.fasciaLuz || M.fascia)); // borda com fita de luz (acende à noite) const rm = mk(rail, ri, M.glassRail, false); rm.renderOrder = 3; if (plant.length) mk(plant, pi, dupla(M.planter), false);
   const cols = []; const step = Math.max(1, Math.round(1.5 / (L / N)));
   for (let i = step; i < N; i += step) { const p = S[i]; const gy = heightAt(p.x, p.z); if (p.y - gy > 0.25) cols.push([[p.x, gy - 0.05, p.z], [p.x, p.y - 0.07, p.z]]); }
   if (cols.length) g.add(beams(cols, 0.045, M.whiteSmooth, 6));

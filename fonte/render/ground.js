@@ -94,7 +94,7 @@ export class Ground {
       const img = c.createImageData(w, h); const d = img.data;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const n = vnoise(x, y, 6, 5) * 0.5 + hash(x, y, 6) * 0.3 + vnoise(x, y, 23, 7) * 0.2; const v = 108 + n * 40; const i = (y * w + x) * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
       c.putImageData(img, 0, 0);
-    }, { linear: true });
+    }, { linear: true }); // (usada a meia força: grão fino, sem manchas)
     // flocagem de maquete: grão fino e fiapos, visto só de perto (9 repetições por unidade)
     const floc = canvasTex('gfloc', 256, 256, (c, w, h) => {
       const img = c.createImageData(w, h); const d = img.data;
@@ -103,14 +103,15 @@ export class Ground {
       c.lineCap = 'round'; for (let i = 0; i < 900; i++) { const x = hash(i, 1, 73) * w, y = hash(i, 2, 73) * h, a = hash(i, 3, 73) * 6.28, l = 1.5 + hash(i, 4, 73) * 3; c.strokeStyle = hash(i, 5, 73) < 0.5 ? 'rgba(255,255,255,.35)' : 'rgba(40,40,40,.3)'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); }
     }, { linear: true });
     const mat = new THREE.MeshStandardMaterial({ map: this.tex, roughness: 0.96, metalness: 0 });
+    // detalhe e flocagem a meia força (chão limpo, sem manchas)
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.detailMap = { value: detail }; sh.uniforms.flocMap = { value: floc };
       sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
         vec3 dtl = texture2D(detailMap, vMapUv * vec2(${(W * 1.6).toFixed(2)}, ${(D * 1.6).toFixed(2)})).rgb;
-        diffuseColor.rgb *= dtl * 1.7;
+        diffuseColor.rgb *= 0.575 + dtl * 0.85;
         vec2 fuv = vMapUv * vec2(${(W * 9).toFixed(1)}, ${(D * 9).toFixed(1)});
         float wfl = 1.0 - smoothstep(0.5, 2.0, length(fwidth(fuv)));
-        if (wfl > 0.0) diffuseColor.rgb *= mix(1.0, 0.8 + 0.4 * texture2D(flocMap, fuv).r, wfl);`).replace('void main() {', 'uniform sampler2D detailMap; uniform sampler2D flocMap;\nvoid main() {');
+        if (wfl > 0.0) diffuseColor.rgb *= mix(1.0, 0.9 + 0.2 * texture2D(flocMap, fuv).r, wfl);`).replace('void main() {', 'uniform sampler2D detailMap; uniform sampler2D flocMap;\nvoid main() {');
     };
     mat.customProgramCacheKey = () => 'chao';
     this.mesh = new THREE.Mesh(g, mat); this.mesh.receiveShadow = true; this.group.add(this.mesh);
@@ -150,7 +151,7 @@ export class Ground {
     if (this._fixo) return this._fixo;
     const f = document.createElement('canvas'); f.width = (W * S) >> 1; f.height = (D * S) >> 1; const c = f.getContext('2d'); const w = f.width, h = f.height;
     c.fillStyle = c.createPattern(tex.forestFloor().userData.canvas, 'repeat'); c.save(); c.scale(0.5, 0.5); c.fillRect(0, 0, w * 2, h * 2); c.restore();
-    for (let i = 0; i < 2600; i++) { const x = hash(i, 1, 501) * w, y = hash(i, 2, 501) * h, r = (6 + hash(i, 3, 501) * 22) / 2; c.fillStyle = `rgba(${14 + hash(i, 4, 501) * 30},${40 + hash(i, 5, 501) * 40},${16 + hash(i, 6, 501) * 20},0.55)`; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
+    for (let i = 0; i < 2600; i++) { const x = hash(i, 1, 501) * w, y = hash(i, 2, 501) * h, r = (6 + hash(i, 3, 501) * 22) / 2; c.fillStyle = `rgba(${34 + hash(i, 4, 501) * 30},${82 + hash(i, 5, 501) * 44},${28 + hash(i, 6, 501) * 20},0.45)`; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
     return (this._fixo = f);
   }
   _pintar() {
@@ -170,7 +171,7 @@ export class Ground {
     // 2) clareiras: halo desfocado (desenhado a 1/4 e ampliado), depois pasto degradado no início e
     //    gramado quando a obra da área começa
     if (!this._zonas) { this._zonas = document.createElement('canvas'); this._zonas.width = w >> 2; this._zonas.height = h >> 2; }
-    const zc = this._zonas.getContext('2d'); zc.clearRect(0, 0, w >> 2, h >> 2); zc.filter = 'blur(2.5px)'; zc.fillStyle = '#6a6440';
+    const zc = this._zonas.getContext('2d'); zc.clearRect(0, 0, w >> 2, h >> 2); zc.filter = 'blur(2.5px)'; zc.fillStyle = '#7c8e4c';
     for (const Z of ZONAS) { zona(Z, zc, 0.25, Z.poly ? 0 : 0.5); zc.fill(); }
     zc.filter = 'none'; c.drawImage(this._zonas, 0, 0, w, h);
     c.save(); c.globalAlpha = 0.95;
@@ -184,7 +185,7 @@ export class Ground {
     for (let i = 0, n = 0; i < 400 && n < 60; i++) {
       const x = MESA.x0 + hash(i, 1, 601) * W, z = MESA.z0 + hash(i, 2, 601) * D; const cl = clearance(x, z); if (cl > -0.3) continue; n++;
       const r = Math.min((3 + hash(i, 3, 601) * 5) * 0.5, 0.6 - cl) * S, [px, py] = P(x, z); const baixo = heightAt(x, z) < 0 || waterDepth(x, z) > 0;
-      const cor = baixo ? '70,110,44' : hash(i, 4, 601) < 0.5 ? '255,250,220' : '20,24,10'; const a = baixo ? 0.14 : 0.1;
+      const cor = baixo ? '90,150,56' : hash(i, 4, 601) < 0.5 ? '255,250,220' : '40,76,20'; const a = baixo ? 0.07 : 0.045;
       const gr = c.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(1, `rgba(${cor},0)`);
       c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, 6, 601) * 3); c.scale(1, 0.55 + hash(i, 5, 601) * 0.45); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
     }
@@ -198,7 +199,7 @@ export class Ground {
       const n = Math.min(60, Math.max(5, ((bx1 - bx0) * (bz1 - bz0)) / 3)) | 0;
       for (let i = 0, k = 0; i < n * 4 && k < n; i++) {
         const x = bx0 + hash(i, zi, 611) * (bx1 - bx0), z = bz0 + hash(i, zi, 612) * (bz1 - bz0); if (!dentro(x, z)) continue; k++;
-        const [px, py] = P(x, z), r = (0.8 + hash(i, zi, 613) * 1.8) * S, t = hash(i, zi, 614); const cor = t < 0.4 ? '112,86,54' : t < 0.75 ? '184,168,116' : '60,94,36'; const a = 0.26 + hash(i, zi, 615) * 0.14;
+        const [px, py] = P(x, z), r = (0.8 + hash(i, zi, 613) * 1.8) * S, t = hash(i, zi, 614); const cor = t < 0.4 ? '150,118,78' : t < 0.75 ? '206,190,128' : '96,146,58'; const a = 0.24 + hash(i, zi, 615) * 0.12;
         const gr = c.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(0.6, `rgba(${cor},${a * 0.6})`); gr.addColorStop(1, `rgba(${cor},0)`);
         c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, zi, 616) * 3); c.scale(1, 0.5 + hash(i, zi, 617) * 0.5); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
       }
@@ -206,16 +207,16 @@ export class Ground {
     // 3) savana em piquetes de pasto (terra batida escura e capim), com trilhas entre eles
     if (V.savana) {
       c.save(); const piq = A.savana.piquetes || [A.savana.poly];
-      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); const k = [1, 0.86, 1.13][i % 3], q = [1, 1.06, 0.95][i % 3]; c.fillStyle = `rgba(${54 * k * q | 0},${64 * k | 0},${84 * k / q | 0},0.55)`; path(poly); c.fill(); }); // capim baixo cinza-oliva (#3b3928 na foto)
+      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); const k = [1, 0.9, 1.08][i % 3], q = [1, 1.06, 0.95][i % 3]; c.fillStyle = `rgba(${196 * k * q | 0},${176 * k | 0},${96 * k / q | 0},0.32)`; path(poly); c.fill(); }); // capim de savana dourado
       c.restore();
     }
     // 4) margens e leitos d'água (areia clara nas bordas, fundo escuro sob a água)
     // (o leito, lodo, só aparece na encosta do lago assoreado; a faixa de areia cobre a margem)
-    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#5a5642'; path(A.lago); c.fill(); for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); }
-    c.lineWidth = 0.75 * S; c.strokeStyle = '#b9a47c'; path(A.lago); c.stroke(); c.lineWidth = 0.5 * S; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx, l.rz, l.rot || 0); c.stroke(); } c.restore();
+    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#8a8a66'; path(A.lago); c.fill(); for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); }
+    c.lineWidth = 0.75 * S; c.strokeStyle = '#e8d6a6'; path(A.lago); c.stroke(); c.lineWidth = 0.5 * S; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx, l.rz, l.rot || 0); c.stroke(); } c.restore();
     // 5) trilhas de terra/cascalho pelos gramados e pela savana
     c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.filter = 'blur(1px)';
-    c.strokeStyle = 'rgba(214,196,160,0.85)'; c.lineWidth = 0.32 * S;
+    c.strokeStyle = 'rgba(240,230,204,0.95)'; c.lineWidth = 0.32 * S;
     const s = A.santuario, rel = (pts) => pts.map(([u, v]) => [s.c[0] + u * s.rx, s.c[1] + v * s.rz]);
     const T = [
       ['bioma', [[20.4, 9.8], [22.6, 9.0], [25.2, 8.4], [26.6, 6.0]]], ['vila', [[17.2, 12.0], [18.4, 11.2], [21.0, 11.4], [23.4, 12.0]]],
@@ -224,7 +225,7 @@ export class Ground {
     ];
     for (const [id, pts] of T) if (V[id]) linha(pts);
     if (V.savana) {
-      c.strokeStyle = '#b9a47e'; c.lineWidth = 0.35 * S;
+      c.strokeStyle = '#dcc89e'; c.lineWidth = 0.35 * S;
       for (const pts of A.savanaTrilhas || [[[11.6, -2.6], [14.2, 0.4], [13.6, 3.4], [16.8, 5.0], [19.4, 3.0]], [[18.2, -2.0], [19.6, 0.6], [18.6, 4.4]]]) linha(pts);
     }
     c.restore();
@@ -233,8 +234,8 @@ export class Ground {
       c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
       for (const v of A.vias) {
         const asfalto = !v.quando || ligado(v.quando) || flags.reflorestado; if (flags.vias && flags.vias[v.id] === false) continue;
-        c.strokeStyle = asfalto ? 'rgba(220,220,210,.5)' : 'rgba(170,146,112,.5)'; c.lineWidth = v.w * S + 2; linha(v.pts);
-        c.strokeStyle = asfalto ? '#3a3b3e' : '#8a6e50'; c.lineWidth = v.w * S - 1; linha(v.pts);
+        c.strokeStyle = asfalto ? 'rgba(244,244,236,.85)' : 'rgba(196,172,136,.6)'; c.lineWidth = v.w * S + 2; linha(v.pts);
+        c.strokeStyle = asfalto ? '#52565e' : '#a8886a'; c.lineWidth = v.w * S - 1; linha(v.pts);
       }
       c.restore();
     }
@@ -243,7 +244,7 @@ export class Ground {
     for (const Z of ZONAS) {
       if (Z.tipo !== 'praca' || !pronta(Z)) continue;
       c.save(); zona(Z);
-      c.fillStyle = pat(tex.pavers()); c.fill(); c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(214,214,227)'; c.fill(); c.globalCompositeOperation = 'source-over';
+      c.fillStyle = pat(tex.pavers()); c.fill(); c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(238,236,244)'; c.fill(); c.globalCompositeOperation = 'source-over';
       c.clip();
       if (Z.id === 'praca') {
         const cam = caminhosPraca(); c.lineCap = 'round'; c.lineJoin = 'round';
@@ -260,9 +261,9 @@ export class Ground {
           if (!inPoly(x, z, Z.poly) || polyDist(x, z, Z.poly) > -0.7 || folga < 0.75 || lagos.some((l) => inEllipse(x, z, l.c[0], l.c[1], l.rx + 0.9, l.rz + 0.9, l.rot || 0))) continue;
           const an = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]) + Math.PI / 2, L = Math.min(1.5, folga * 1.6);
           const [px, py] = P(x, z); c.save(); c.translate(px, py); c.rotate(an); c.beginPath(); c.moveTo(-L * S, 0); c.quadraticCurveTo(0, -0.7 * folga * S, L * S, 0); c.quadraticCurveTo(0, 0.3 * folga * S, -L * S, 0); c.closePath();
-          c.fillStyle = pat(tex.grass()); c.fill(); c.strokeStyle = 'rgba(70,64,52,.55)'; c.lineWidth = 2; c.stroke(); c.restore(); nc++; break;
+          c.fillStyle = pat(tex.grass()); c.fill(); c.strokeStyle = 'rgba(90,110,70,.5)'; c.lineWidth = 2; c.stroke(); c.restore(); nc++; break;
         }
-        c.strokeStyle = 'rgba(214,204,188,.8)'; c.lineWidth = 0.5 * S; for (const pts of cam) linha(pts);
+        c.strokeStyle = 'rgba(246,240,228,.95)'; c.lineWidth = 0.5 * S; for (const pts of cam) linha(pts);
       }
       c.restore();
     }

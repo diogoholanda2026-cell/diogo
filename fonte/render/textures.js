@@ -66,84 +66,56 @@ function texDeCanvas(c, o = {}) {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = o.linear ? THREE.NoColorSpace : THREE.SRGBColorSpace; t.anisotropy = o.aniso ?? 4; t.userData.canvas = c; return t;
 }
 
-// Fachada: 32 vãos x 4 andares. mapa (vidro) + emissivo (luzes internas).
+// Fachada: 32 vãos x 4 andares. Mapa de dia (paleta do BuildIt): vidro azul que reflete o céu (claro no alto
+// de cada andar, com reflexo em diagonal), caixilhos brancos, peitoril claro e floreiras verdes. Emissivo de
+// noite: faixas contínuas de luz âmbar interna, luminária no topo de cada vão e brilho variando devagar de um vão
+// para o outro (as janelas acendem vão a vão no shader: materials.js). Os vãos coincidem nos dois mapas.
 // estilo: 'quente' (moradias), 'lab' (laboratórios frios), 'escuro' (sede), 'madeira' (biblioteca)
 export function facadeTextures(style = 'quente') {
   const key = 'fac-' + style;
   if (cache.has(key)) return cache.get(key);
-  // faixas contínuas de luz âmbar interna (como na maquete da foto): montantes finos, luminária no
-  // topo de cada vão, brilho variando devagar de um vão para o outro. Não há vão preto: a sala
-  // apagada é penumbra (moradias e laboratórios) ou vidro refletindo o céu (sede).
   const W = 1024, H = 256, bays = 32, floors = 4, bw = W / bays, fh = H / floors;
   const pal = {
-    quente: { glass: [36, 38, 44], lit: [[255, 196, 120], [255, 210, 150], [250, 186, 110], [255, 224, 176]], dark: 0.03, frame: '#EEEAE0', mull: 2, gain: 1 },
-    lab: { glass: [44, 50, 58], lit: [[236, 244, 255], [224, 236, 250], [255, 250, 240], [214, 230, 246]], dark: 0.04, frame: '#EDF0F3', mull: 2, gain: 0.95 },
-    escuro: { glass: [44, 54, 68], lit: [[255, 222, 176], [230, 238, 250], [255, 232, 196]], dark: 0.1, frame: '#C6CED6', mull: 1, gain: 0.8, ceu: true },
-    madeira: { glass: [92, 64, 40], lit: [[255, 200, 128], [255, 214, 150], [255, 190, 110]], dark: 0.04, frame: '#C9965C', mull: 5, gain: 1.05 },
+    quente: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[168, 214, 244], [74, 138, 204]], frame: '#F7F5EF', mull: 2 },
+    lab: { lit: [[236, 244, 255], [224, 236, 250], [255, 250, 240], [214, 230, 246]], dark: 0.04, gain: 0.95, v: [[186, 226, 246], [104, 164, 214]], frame: '#F4F6F8', mull: 2 },
+    escuro: { lit: [[255, 222, 176], [230, 238, 250], [255, 232, 196]], dark: 0.1, gain: 0.8, v: [[128, 180, 226], [44, 96, 160]], frame: '#DCE3EA', mull: 1 },
+    madeira: { lit: [[255, 190, 104], [255, 206, 132], [255, 180, 92]], dark: 0.04, gain: 1.05, v: [[176, 214, 238], [88, 142, 194]], frame: '#C9965C', mull: 5 },
   }[style];
-  const mapC = document.createElement('canvas'); mapC.width = W; mapC.height = H;
-  const emC = document.createElement('canvas'); emC.width = W; emC.height = H;
-  const m = mapC.getContext('2d'), e = emC.getContext('2d');
-  m.fillStyle = `rgb(${pal.glass.join(',')})`; m.fillRect(0, 0, W, H);
-  e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
   const seed = { quente: 11, lab: 23, escuro: 37, madeira: 41 }[style];
   const rgb = (c, k) => `rgb(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0})`;
-  const PEN = [110, 100, 96];
+  const dC = document.createElement('canvas'); dC.width = W; dC.height = H; const d = dC.getContext('2d');
+  const emC = document.createElement('canvas'); emC.width = W; emC.height = H; const e = emC.getContext('2d');
+  d.fillStyle = pal.frame; d.fillRect(0, 0, W, H); e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
   for (let f = 0; f < floors; f++) {
     const y = f * fh, top = y + 7, bot = y + fh - 14;
     for (let b = 0; b < bays; b++) {
-      const x = b * bw; const dark = hash(b, f, seed) < pal.dark;
-      let c = pal.lit[(hash(b >> 1, f, seed + 3) * pal.lit.length) | 0];
-      let k = (0.62 + vnoise(b, f * 7, 3, seed) * 0.38) * pal.gain;
-      if (dark && pal.ceu) {
-        // sede: vidro apagado reflete o céu; atrás dele, a sala na penumbra
-        const g0 = m.createLinearGradient(0, top, 0, bot); g0.addColorStop(0, 'rgb(128,146,160)'); g0.addColorStop(1, 'rgb(64,72,82)'); m.fillStyle = g0; m.fillRect(x, top, bw, bot - top);
-        m.fillStyle = 'rgba(220,232,244,0.18)'; m.beginPath(); m.moveTo(x, top); m.lineTo(x + bw * 0.6, top); m.lineTo(x, top + (bot - top) * 0.8); m.fill();
-        e.fillStyle = rgb(c, 0.22); e.fillRect(x, top, bw, bot - top);
-      } else {
-        // interior visto pelo vidro: tom neutro e quente, mais escuro que a luz; a cor âmbar vem do
-        // emissivo, forte na luminária do forro e suave no resto da sala. Sala apagada = penumbra.
-        if (dark) { c = [(PEN[0] + c[0]) / 2, (PEN[1] + c[1]) / 2, (PEN[2] + c[2]) / 2]; k = 0.32; } // sala na penumbra, não buraco
-        const cm = [c[0] * 0.45 + 118 * 0.55, c[1] * 0.45 + 112 * 0.55, c[2] * 0.45 + 106 * 0.55];
-        const g1 = m.createLinearGradient(0, top, 0, bot); g1.addColorStop(0, rgb(cm, dark ? 0.75 : 0.5 + k * 0.25)); g1.addColorStop(1, rgb(cm, dark ? 0.5 : 0.32 + k * 0.2));
-        m.fillStyle = g1; m.fillRect(x, top, bw, bot - top);
-        const g2 = e.createLinearGradient(0, top, 0, bot); g2.addColorStop(0, rgb(c, dark ? 0.42 : k * 0.6)); g2.addColorStop(1, rgb(c, dark ? 0.25 : k * 0.3));
-        e.fillStyle = g2; e.fillRect(x, top, bw, bot - top);
-        if (!dark) {
-          // luminária linear no forro
-          m.fillStyle = rgb(c, 1); m.fillRect(x, top, bw, 3); e.fillStyle = rgb(c, 1); e.fillRect(x, top, bw, 3);
-          // mobiliário e gente só como manchas suaves no difuso (sem bonecos)
-          const n = hash(b, f, seed + 9) < 0.55 ? 2 + ((hash(b, f, seed + 11) * 2) | 0) : 0;
-          for (let i = 0; i < n; i++) { m.fillStyle = 'rgba(40,28,18,0.15)'; m.fillRect(x + 4 + hash(b * 3 + i, f, seed + 10) * (bw - 10), bot - 14, 3, 14); }
-          if (hash(b, f, seed + 12) < 0.25) { m.fillStyle = 'rgba(40,28,18,0.12)'; m.fillRect(x + 3, bot - 9, bw - 6, 3); }
-        }
-      }
-      // reflexo do céu em diagonal
-      m.fillStyle = 'rgba(200,220,240,0.07)'; m.beginPath(); m.moveTo(x, top); m.lineTo(x + bw * 0.5, top); m.lineTo(x, top + (bot - top) * 0.7); m.fill();
+      const x = b * bw;
+      // dia: vidro com o céu refletido
+      const kv = 0.94 + vnoise(b, f * 7, 3, seed) * 0.1, a = pal.v[0], z = pal.v[1];
+      const g1 = d.createLinearGradient(0, top, 0, bot); g1.addColorStop(0, rgb(a, kv)); g1.addColorStop(0.55, rgb([(a[0] + z[0]) / 2, (a[1] + z[1]) / 2, (a[2] + z[2]) / 2], kv)); g1.addColorStop(1, rgb(z, kv));
+      d.fillStyle = g1; d.fillRect(x, top, bw, bot - top);
+      if (hash(b, f, seed + 30) < 0.12) { d.fillStyle = 'rgba(250,244,230,0.55)'; d.fillRect(x, top, bw, (bot - top) * 0.38); } // persiana
+      d.fillStyle = 'rgba(255,255,255,0.22)'; d.beginPath(); d.moveTo(x + bw * 0.1, top); d.lineTo(x + bw * 0.55, top); d.lineTo(x + bw * 0.1, top + (bot - top) * 0.75); d.fill();
+      // noite: sala acesa (luminária forte no forro, luz suave no resto) ou na penumbra
+      const dark = hash(b, f, seed) < pal.dark;
+      const c = pal.lit[(hash(b >> 1, f, seed + 3) * pal.lit.length) | 0], k = (0.62 + vnoise(b, f * 7, 3, seed) * 0.38) * pal.gain;
+      const g2 = e.createLinearGradient(0, top, 0, bot); g2.addColorStop(0, rgb(c, dark ? 0.2 : k * 0.6)); g2.addColorStop(1, rgb(c, dark ? 0.12 : k * 0.3));
+      e.fillStyle = g2; e.fillRect(x, top, bw, bot - top);
+      if (!dark) { e.fillStyle = rgb(c, 1); e.fillRect(x, top, bw, 3); }
       // montantes
-      m.fillStyle = pal.frame; m.fillRect(x, top, pal.mull, bot - top); e.fillStyle = '#000'; e.fillRect(x, top, pal.mull, bot - top);
-      if (style === 'madeira') for (let q = 1; q < 3; q++) { m.fillRect(x + (bw * q) / 3, top, 3, bot - top); e.fillRect(x + (bw * q) / 3, top, 3, bot - top); }
+      d.fillStyle = pal.frame; d.fillRect(x, top, pal.mull, bot - top); e.fillStyle = '#000'; e.fillRect(x, top, pal.mull, bot - top);
+      if (style === 'madeira') for (let q = 1; q < 3; q++) { d.fillRect(x + (bw * q) / 3, top, 3, bot - top); e.fillRect(x + (bw * q) / 3, top, 3, bot - top); }
     }
-    // travessa superior, peitoril de vidro e floreiras
-    m.fillStyle = pal.frame; m.fillRect(0, y, W, 7); e.fillStyle = '#000'; e.fillRect(0, y, W, 7);
-    m.fillStyle = 'rgba(225,236,244,0.55)'; m.fillRect(0, bot, W, 9); e.fillStyle = 'rgba(0,0,0,0.6)'; e.fillRect(0, bot, W, 9);
-    m.fillStyle = pal.frame; m.fillRect(0, bot + 9, W, 5); e.fillStyle = '#000'; e.fillRect(0, bot + 9, W, 5);
-    for (let b = 0; b < bays * 3; b++) if (hash(b, f, seed + 20) < 0.42) { m.fillStyle = ['#3E7A3A', '#4E8C42', '#2F6630', '#5E9A48'][(hash(b, f, seed + 21) * 4) | 0]; m.beginPath(); m.ellipse(b * (bw / 3) + 5, bot + 1, 6, 5, 0, 0, 7); m.fill(); e.fillStyle = '#000'; e.beginPath(); e.ellipse(b * (bw / 3) + 5, bot + 1, 6, 5, 0, 0, 7); e.fill(); }
+    // travessa superior (fundo branco), peitoril claro e floreiras
+    e.fillStyle = '#000'; e.fillRect(0, y, W, 7);
+    d.fillStyle = 'rgba(232,242,248,0.9)'; d.fillRect(0, bot, W, 9); e.fillStyle = 'rgba(0,0,0,0.6)'; e.fillRect(0, bot, W, 9);
+    d.fillStyle = pal.frame; d.fillRect(0, bot + 9, W, 5); e.fillStyle = '#000'; e.fillRect(0, bot + 9, W, 5);
+    for (let b = 0; b < bays * 3; b++) if (hash(b, f, seed + 20) < 0.42) { d.fillStyle = ['#4f9a3c', '#62ac46', '#3f8a34', '#76b850'][(hash(b, f, seed + 21) * 4) | 0]; d.beginPath(); d.ellipse(b * (bw / 3) + 5, bot + 1, 6, 5, 0, 0, 7); d.fill(); e.fillStyle = '#000'; e.beginPath(); e.ellipse(b * (bw / 3) + 5, bot + 1, 6, 5, 0, 0, 7); e.fill(); }
   }
   const mk = (c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
-  const out = { map: mk(mapC), emissive: mk(emC), bays, floors };
+  const out = { map: mk(dC), emissive: mk(emC), bays, floors };
   cache.set(key, out);
   return out;
-}
-
-// texto e moldura gravados da placa da mesa (desenhados iguais na cor e no mapa de metal/rugosidade):
-// título em caixa-alta grossa e três linhas curtas de corpo, grandes o bastante para ler na vista da foto
-function placa(g, w, h, cor) {
-  g.strokeStyle = cor; g.lineWidth = 6; g.strokeRect(14, 14, w - 28, h - 28); g.lineWidth = 2; g.strokeRect(26, 26, w - 52, h - 52);
-  g.fillStyle = cor; g.textAlign = 'center'; g.lineJoin = 'round';
-  const escreve = (txt, y, fs, peso, borda) => { g.font = `${peso} ${fs}px sans-serif`; while (g.measureText(txt).width > w - 120 && fs > 20) { fs -= 1; g.font = `${peso} ${fs}px sans-serif`; } g.fillText(txt, w / 2, y); if (borda) { g.lineWidth = borda; g.strokeText(txt, w / 2, y); } };
-  escreve('COMPOSIÇÃO TOTAL DA ARCOLOGIA DE HELD', 96, 64, 800, 2);
-  ['Ciência, educação e conservação numa só arcologia sustentável:', 'campus, biblioteca, acelerador, santuário e bioma aquático', 'ligados por passarelas verdes, com energia solar e reuso de água.'].forEach((l, i) => escreve(l, 166 + i * 50, 38, 700, 0.8));
 }
 
 export const tex = {
@@ -153,16 +125,16 @@ export const tex = {
   roof: () => {
     if (cache.has('roof')) return cache.get('roof');
     const w = 512, c = document.createElement('canvas'); c.width = c.height = w; const g = c.getContext('2d');
-    noiseRectP(g, w, [76, 74, 48], 14, 21, 2, 13);
-    // verde-oliva de maquete (medido na foto: #554427 no telhado do Anel)
-    const PAL = ['#67733f', '#737d44', '#526236', '#7f8249', '#857a46'];
+    noiseRectP(g, w, [70, 118, 48], 10, 21, 2, 13);
+    // cobertura verde viva (na exposição o material puxa para o verde-oliva da foto, #554427 no Anel)
+    const PAL = ['#5d9a3a', '#6cab42', '#4c8a33', '#7fb84a', '#8cbc52'];
     const tom = (hex, k) => { const n = parseInt(hex.slice(1), 16); return `rgb(${clamp(((n >> 16) & 255) * k, 0, 255) | 0},${clamp(((n >> 8) & 255) * k, 0, 255) | 0},${clamp((n & 255) * k, 0, 255) | 0})`; };
     // tufo = touceira de 3 a 5 bolotas sobrepostas (sombra primeiro, depois o volume)
     for (let i = 0; i < 1600; i++) {
       const x = hash(i, 1, 22) * w, y = hash(i, 2, 22) * w, r = 3 + hash(i, 3, 22) * 6, cor = PAL[(hash(i, 4, 22) * PAL.length) | 0];
       const nb = 3 + ((hash(i, 5, 22) * 3) | 0), bs = []; for (let k = 0; k < nb; k++) { const a = hash(i, 10 + k, 22) * 6.28, d = r * 0.45 * hash(i, 20 + k, 22); bs.push([Math.cos(a) * d, Math.sin(a) * d * 0.8, r * (0.5 + 0.3 * hash(i, 30 + k, 22))]); }
       envolve(w, w, x, y, r + 3, (px, py) => {
-        g.fillStyle = 'rgba(15,30,10,.3)'; for (const [dx, dy, rr] of bs) { g.beginPath(); g.arc(px + dx + 1.5, py + dy + 1.5, rr, 0, 7); g.fill(); }
+        g.fillStyle = 'rgba(20,52,16,.26)'; for (const [dx, dy, rr] of bs) { g.beginPath(); g.arc(px + dx + 1.5, py + dy + 1.5, rr, 0, 7); g.fill(); }
         for (const [dx, dy, rr] of bs) { const cx = px + dx, cy = py + dy; const gr = g.createRadialGradient(cx - rr * 0.3, cy - rr * 0.3, 0, cx, cy, rr); gr.addColorStop(0, tom(cor, 1.07)); gr.addColorStop(1, tom(cor, 0.84)); g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.fill(); }
       });
     }
@@ -170,7 +142,7 @@ export const tex = {
     const px = g.getImageData(0, 0, w, w).data; const hgt = new Float32Array(w * w);
     for (let i = 0; i < w * w; i++) hgt[i] = (px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11) / 255;
     cache.set('roofN', texDeCanvas(normalDeAltura(hgt, w, w, 2.2), { linear: true }));
-    for (let i = 0; i < 250; i++) { const x = hash(i, 5, 23) * w, y = hash(i, 6, 23) * w, r = 1 + hash(i, 7, 23) * 0.8; g.fillStyle = ['rgba(216,180,188,.5)', 'rgba(230,214,144,.5)', 'rgba(242,239,230,.5)'][(hash(i, 8, 23) * 3) | 0]; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+    for (let i = 0; i < 250; i++) { const x = hash(i, 5, 23) * w, y = hash(i, 6, 23) * w, r = 1 + hash(i, 7, 23) * 0.8; g.fillStyle = ['rgba(236,150,178,.6)', 'rgba(248,222,110,.6)', 'rgba(250,248,240,.6)'][(hash(i, 8, 23) * 3) | 0]; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
     const t = texDeCanvas(c); cache.set('roof', t); return t;
   },
   roofNormal: () => { tex.roof(); return cache.get('roofN'); },
@@ -180,25 +152,27 @@ export const tex = {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = pnoise(x / 64, y / 64, 4, 131) * 0.6 + pnoise(x / 32, y / 32, 8, 137) * 0.3 + pnoise(x / 16, y / 16, 16, 139) * 0.1; const i = (y * w + x) * 4; d[i] = d[i + 1] = d[i + 2] = clamp(v * 255, 0, 255); d[i + 3] = 255; }
     g.putImageData(img, 0, 0);
   }, { linear: true }),
+  // grama limpa e viva (pouco ruído: sem manchas de longe)
   grass: () => canvasTex('grass', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [60, 92, 46], 24, 31, 2, 21);
-    for (let i = 0; i < 5000; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(20,55,20,.28)' : 'rgba(150,200,110,.18)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
+    noiseRectP(g, w, [104, 162, 56], 12, 31, 2, 21);
+    for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(46,100,30,.16)' : 'rgba(196,236,140,.14)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
   }),
+  // pasto degradado (antes da obra): capim seco amarelado, com manchas suaves
   pasto: () => canvasTex('pasto', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [100, 102, 66], 22, 57, 2, 18);
-    for (let i = 0; i < 90; i++) { const x = hash(i, 1, 58) * w, y = hash(i, 2, 58) * h, r = 6 + hash(i, 3, 58) * 26; g.fillStyle = `rgba(${112 + hash(i, 4, 58) * 20},${96 + hash(i, 5, 58) * 14},${64},0.32)`; envolve(w, h, x, y, r, (px, py) => { g.beginPath(); g.ellipse(px, py, r, r * 0.7, hash(i, 6, 58) * 3, 0, 7); g.fill(); }); }
-    for (let i = 0; i < 2600; i++) { const x = hash(i, 7, 58) * w, y = hash(i, 8, 58) * h; g.fillStyle = hash(i, 9, 58) < 0.5 ? 'rgba(80,90,40,.35)' : 'rgba(170,150,90,.25)'; g.fillRect(x, y, 1 + hash(i, 10, 58) * 2, 2 + hash(i, 11, 58) * 3); }
+    noiseRectP(g, w, [160, 162, 98], 14, 57, 2, 18);
+    for (let i = 0; i < 70; i++) { const x = hash(i, 1, 58) * w, y = hash(i, 2, 58) * h, r = 6 + hash(i, 3, 58) * 26; g.fillStyle = `rgba(${176 + hash(i, 4, 58) * 20},${150 + hash(i, 5, 58) * 14},${92},0.22)`; envolve(w, h, x, y, r, (px, py) => { g.beginPath(); g.ellipse(px, py, r, r * 0.7, hash(i, 6, 58) * 3, 0, 7); g.fill(); }); }
+    for (let i = 0; i < 1400; i++) { const x = hash(i, 7, 58) * w, y = hash(i, 8, 58) * h; g.fillStyle = hash(i, 9, 58) < 0.5 ? 'rgba(110,130,60,.22)' : 'rgba(210,190,120,.18)'; g.fillRect(x, y, 1 + hash(i, 10, 58) * 2, 2 + hash(i, 11, 58) * 3); }
   }),
-  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [40, 62, 34], 28, 35, 2, 13)),
+  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [58, 100, 42], 16, 35, 2, 13)),
   pavers: () => canvasTex('pavers', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [200, 186, 164], 16, 51, 2, 26);
-    g.strokeStyle = 'rgba(90,70,50,.18)'; g.lineWidth = 1.2;
+    noiseRectP(g, w, [228, 222, 208], 8, 51, 2, 26);
+    g.strokeStyle = 'rgba(130,110,90,.14)'; g.lineWidth = 1.2;
     for (let y = 0; y < h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); const off = (y / 16) % 2 ? 16 : 0; for (let x = off; x < w; x += 32) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 16); g.stroke(); } }
-    for (let i = 0; i < 220; i++) { g.fillStyle = `rgba(${hash(i, 1, 52) < 0.5 ? '255,245,225' : '120,100,80'},.10)`; g.fillRect(((hash(i, 2, 52) * 32) | 0) * 16, ((hash(i, 3, 52) * 32) | 0) * 16, 32, 16); }
+    for (let i = 0; i < 220; i++) { g.fillStyle = `rgba(${hash(i, 1, 52) < 0.5 ? '255,250,238' : '150,130,110'},.07)`; g.fillRect(((hash(i, 2, 52) * 32) | 0) * 16, ((hash(i, 3, 52) * 32) | 0) * 16, 32, 16); }
   }),
   sand: () => canvasTex('sand', 256, 256, (g, w, h) => {
-    noiseRectP(g, w, [196, 170, 120], 26, 41, 2, 12);
-    for (let i = 0; i < 600; i++) { g.fillStyle = hash(i, 1, 42) < 0.5 ? 'rgba(120,140,60,.35)' : 'rgba(150,120,80,.3)'; g.fillRect(hash(i, 2, 42) * w, hash(i, 3, 42) * h, 2, 2 + hash(i, 4, 42) * 3); }
+    noiseRectP(g, w, [238, 218, 170], 12, 41, 2, 12);
+    for (let i = 0; i < 300; i++) { g.fillStyle = hash(i, 1, 42) < 0.5 ? 'rgba(150,170,90,.14)' : 'rgba(190,160,110,.16)'; g.fillRect(hash(i, 2, 42) * w, hash(i, 3, 42) * h, 2, 2 + hash(i, 4, 42) * 3); }
   }),
   // terra batida pardo-acinzentada (não alaranjada): grão fino, sem manchas grandes, com pares de
   // marcas de pneu em arco
@@ -221,11 +195,6 @@ export const tex = {
     g.fillStyle = 'rgba(70,40,18,.28)'; for (let i = 0; i < 70; i++) { const y = hash(i, 1, 72) * h; g.fillRect(0, y, w, 1 + hash(i, 2, 72) * 2); }
     g.fillStyle = 'rgba(255,220,170,.10)'; for (let i = 0; i < 40; i++) g.fillRect(0, hash(i, 3, 72) * h, w, 1);
   }),
-  nogueira: () => canvasTex('nogueira', 1024, 256, (g, w, h) => {
-    noiseRect(g, w, h, [98, 88, 82], 14, 75, 2, 60);
-    for (let i = 0; i < 140; i++) { const y = hash(i, 1, 76) * h; const a = 0.08 + hash(i, 2, 76) * 0.18; g.strokeStyle = `rgba(46,32,24,${a * 1.4})`; g.lineWidth = 0.6 + hash(i, 3, 76) * 2.2; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x * 0.01 + i) * 3 + (vnoise(x, i, 40, 77) - 0.5) * 6); g.stroke(); }
-    g.fillStyle = 'rgba(255,225,190,.07)'; for (let i = 0; i < 40; i++) g.fillRect(0, hash(i, 4, 76) * h, w, 1.5);
-  }, { aniso: 8 }),
   // veio claro e quase neutro para a madeira estrutural (a cor vem do material): fibras ao longo de v
   veio: () => canvasTex('veio', 64, 256, (g, w, h) => {
     g.fillStyle = '#f2ece4'; g.fillRect(0, 0, w, h);
@@ -253,7 +222,7 @@ export const tex = {
     for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo((i * w) / 8, 0); g.lineTo((i * w) / 8, h); g.stroke(); g.beginPath(); g.moveTo(0, (i * h) / 8); g.lineTo(w, (i * h) / 8); g.stroke(); }
   }),
   field: () => canvasTex('field', 512, 320, (g, w, h) => {
-    noiseRect(g, w, h, [70, 140, 64], 14, 95, 2, 30);
+    noiseRect(g, w, h, [86, 170, 70], 10, 95, 2, 30);
     g.fillStyle = 'rgba(255,255,255,.07)'; for (let i = 0; i < 10; i += 2) g.fillRect((i * w) / 10, 0, w / 10, h);
     g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 4; g.strokeRect(14, 14, w - 28, h - 28);
     g.beginPath(); g.moveTo(w / 2, 14); g.lineTo(w / 2, h - 14); g.stroke(); g.beginPath(); g.arc(w / 2, h / 2, 40, 0, 7); g.stroke();
@@ -271,20 +240,39 @@ export const tex = {
     }
     g.putImageData(img, 0, 0);
   }, { linear: true }),
-  // placa de latão escovado com o texto gravado; a cor do latão vem do material (0xc0b494) e o
-  // gravado é fosco e não metálico (tex.brassMR: rugosidade no verde, metal no azul)
-  brass: () => canvasTex('brass', 1280, 320, (g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#f4efe4'); gr.addColorStop(0.55, '#e2d9c6'); gr.addColorStop(1, '#cfc4ae'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 260; i++) { g.fillStyle = hash(i, 1, 97) < 0.5 ? 'rgba(255,255,255,.10)' : 'rgba(90,80,60,.07)'; g.fillRect(0, hash(i, 2, 97) * h, w, 1); }
-    placa(g, w, h, '#1e1a16');
-  }, { aniso: 8 }),
-  brassMR: () => canvasTex('brassMR', 1280, 320, (g, w, h) => { g.fillStyle = 'rgb(0,71,230)'; g.fillRect(0, 0, w, h); placa(g, w, h, 'rgb(0,204,26)'); }, { linear: true, aniso: 8 }),
 };
 
-// cobertura de nuvens de luz (spots) projetada no chão — "cookie" da luz principal
-export function spotCookie() {
-  return canvasTex('cookie', 256, 256, (g, w, h) => {
-    const gr = g.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2);
-    gr.addColorStop(0, '#fff'); gr.addColorStop(0.7, '#ddd'); gr.addColorStop(1, '#888'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  });
-}
+// ---------------------------------------------------------------- arredores
+// Copas da mata vista de longe (morros e manchas de mata dos arredores): copas redondas em verdes variados,
+// sem emenda; o relevo das copas (tex.copasN) acompanha o sol e a lua
+tex.copas = () => {
+  if (cache.has('copas')) return cache.get('copas');
+  const w = 512, c = document.createElement('canvas'); c.width = c.height = w; const g = c.getContext('2d');
+  g.fillStyle = '#2f6326'; g.fillRect(0, 0, w, w);
+  const PAL = ['#3f7f2c', '#4a8c34', '#5a9a3a', '#356f28', '#6aa644', '#2f6a30', '#78aa3c', '#4f9444'];
+  const tom = (hex, k) => { const n = parseInt(hex.slice(1), 16); return `rgb(${clamp(((n >> 16) & 255) * k, 0, 255) | 0},${clamp(((n >> 8) & 255) * k, 0, 255) | 0},${clamp((n & 255) * k, 0, 255) | 0})`; };
+  for (let i = 0; i < 760; i++) {
+    const x = hash(i, 1, 331) * w, y = hash(i, 2, 331) * w, r = 10 + hash(i, 3, 331) * 13, cor = PAL[(hash(i, 4, 331) * PAL.length) | 0];
+    envolve(w, w, x, y, r + 4, (px, py) => {
+      g.fillStyle = 'rgba(16,40,12,.35)'; g.beginPath(); g.arc(px + 2.5, py + 2.5, r, 0, 7); g.fill();
+      const gr = g.createRadialGradient(px - r * 0.3, py - r * 0.3, 0, px, py, r); gr.addColorStop(0, tom(cor, 1.18)); gr.addColorStop(0.7, tom(cor, 0.95)); gr.addColorStop(1, tom(cor, 0.78));
+      g.fillStyle = gr; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
+    });
+  }
+  const px = g.getImageData(0, 0, w, w).data; const hgt = new Float32Array(w * w);
+  for (let i = 0; i < w * w; i++) hgt[i] = (px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11) / 255;
+  cache.set('copasN', texDeCanvas(normalDeAltura(hgt, w, w, 1.6), { linear: true }));
+  const t = texDeCanvas(c); cache.set('copas', t); return t;
+};
+tex.copasN = () => { tex.copas(); return cache.get('copasN'); };
+// nuvem de algodão para os arredores: luminância (miolo claro, base mais escura) no vermelho e forma no alfa
+tex.nuvem = () => canvasTex('nuvem', 256, 160, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  const bolas = []; for (let i = 0; i < 16; i++) { const a = hash(i, 1, 341), x = w * (0.18 + 0.64 * a), r = h * (0.16 + 0.2 * Math.sin(a * Math.PI) * (0.7 + 0.5 * hash(i, 2, 341))); bolas.push([x, h * 0.62 - r * (0.5 + 0.5 * hash(i, 3, 341)), r]); }
+  bolas.push([w * 0.5, h * 0.66, h * 0.16], [w * 0.32, h * 0.7, h * 0.12], [w * 0.68, h * 0.7, h * 0.12]);
+  for (const [x, y, r] of bolas) {
+    const gr = g.createRadialGradient(x - r * 0.25, y - r * 0.35, r * 0.1, x, y, r);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.75, `rgba(${Math.round(150 + 90 * (1 - y / h))},0,0,0.95)`); gr.addColorStop(1, 'rgba(120,0,0,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+}, { clamp: true, linear: true });

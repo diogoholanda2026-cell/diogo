@@ -148,7 +148,7 @@ export function leafMaterial() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler3D tFolha; varying vec3 vFolhaW;')
       .replace('#include <color_fragment>', `#include <color_fragment>
         float fo = texture(tFolha, vFolhaW * ${(1 / (0.16 * 32)).toFixed(4)}).r * 0.6 + texture(tFolha, vFolhaW * ${(1 / (0.37 * 32)).toFixed(4)} + 0.37).r * 0.4;
-        diffuseColor.rgb *= 0.62 + 0.76 * fo;`)
+        diffuseColor.rgb *= 0.72 + 0.56 * fo;`)
       // de perto, a mesma folhagem vira relevo (normal perturbada pela derivada na tela; some de longe)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         { float wb = 1.0 - smoothstep(0.012, 0.04, length(fwidth(vFolhaW)));
@@ -159,17 +159,18 @@ export function leafMaterial() {
   LEAF.customProgramCacheKey = () => 'folha2';
   return LEAF;
 }
-export function trunkMaterial() { if (!TRUNK) TRUNK = new THREE.MeshStandardMaterial({ color: 0x4d3626, roughness: 0.95 }); return TRUNK; }
+export function trunkMaterial() { if (!TRUNK) TRUNK = new THREE.MeshStandardMaterial({ color: 0x6a4a32, roughness: 0.95 }); return TRUNK; }
 
 // paletas de verde (instanceColor multiplica a cor de vértice)
+// (verdes vivos e variados, como no BuildIt)
 const VERDES = { // albedo linear
-  mata: [[0.035, 0.075, 0.022], [0.028, 0.062, 0.02], [0.05, 0.095, 0.028], [0.062, 0.085, 0.022], [0.03, 0.07, 0.04], [0.07, 0.098, 0.03]],
-  jardim: [[0.07, 0.16, 0.04], [0.05, 0.13, 0.035], [0.09, 0.18, 0.05], [0.11, 0.17, 0.04]],
-  outono: [[0.16, 0.1, 0.03], [0.2, 0.08, 0.03], [0.13, 0.12, 0.04]],
-  savana: [[0.1, 0.14, 0.04], [0.13, 0.15, 0.05], [0.08, 0.12, 0.04]],
-  conifera: [[0.035, 0.07, 0.04], [0.03, 0.06, 0.035], [0.045, 0.08, 0.045]],
+  mata: [[0.058, 0.17, 0.034], [0.046, 0.145, 0.036], [0.08, 0.2, 0.04], [0.11, 0.195, 0.032], [0.052, 0.15, 0.04], [0.115, 0.215, 0.045], [0.07, 0.16, 0.024]],
+  jardim: [[0.1, 0.27, 0.05], [0.07, 0.22, 0.045], [0.13, 0.29, 0.06], [0.17, 0.28, 0.05]],
+  outono: [[0.34, 0.16, 0.035], [0.4, 0.11, 0.035], [0.26, 0.21, 0.045]],
+  savana: [[0.17, 0.21, 0.06], [0.21, 0.22, 0.07], [0.13, 0.19, 0.055]],
+  conifera: [[0.03, 0.1, 0.05], [0.025, 0.085, 0.045], [0.04, 0.115, 0.06]],
 };
-const ORLA = [0.09, 0.11, 0.035];
+const ORLA = [0.13, 0.21, 0.05];
 
 // matriz e cor de cada árvore numa InstancedMesh (t.orla = distância até a clareira: orla mais clara e
 // oliva, miolo da mata mais escuro)
@@ -241,31 +242,46 @@ export class Forest {
         (inCant ? cant : trees).push(t);
       }
     }
-    const G = treeGeos(), mat = leafMaterial();
-    const nova = (geo, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.castShadow = this.cast; m.receiveShadow = true; return m; };
+    const G = treeGeos();
     // folhosas: blocos de descarte, com as árvores em ordem de célula
-    const blocos = new Map(), cel = (t) => Math.floor((t.x - MESA.x0) / CEL_X) * 64 + Math.floor((t.z - MESA.z0) / CEL_Z);
+    const blocos = new Map();
     for (const t of trees) { if (t.kind === 'conifera') continue; const bx = Math.floor((t.x - MESA.x0) / BLOCO_X), bz = Math.floor((t.z - MESA.z0) / BLOCO_Z), k = bx * 64 + bz; if (!blocos.has(k)) blocos.set(k, { bx, bz, l: [] }); blocos.get(k).l.push(t); }
-    for (const { bx, bz, l } of blocos.values()) {
-      l.sort((a, b) => cel(a) - cel(b)); const n = l.length; const g = new THREE.Group(); g.name = 'mata';
-      const par = (bx + bz) & 1; // as duas formas de copa alternam por bloco (quebra a repetição sem chamada a mais)
-      const hi = nova(par ? G.folha2 : G.folha, n); preencher(hi, l, 'folha');
-      const lo = nova(par ? G.folhaLow2 : G.folhaLow, n), pe = nova(par ? G.folhaPerto2 : G.folhaPerto, n);
-      const M0 = hi.instanceMatrix.array.slice(), C0 = hi.instanceColor.array.slice(); // matrizes e cores de referência, em ordem de célula
-      for (const m of [lo, pe]) { m.instanceMatrix = new THREE.InstancedBufferAttribute(M0.slice(), 16); m.instanceColor = new THREE.InstancedBufferAttribute(C0.slice(), 3); }
-      const niveis = [lo, hi, pe]; for (const m of niveis) { m.computeBoundingSphere(); m.userData.kind = 'folha'; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.instanceColor.setUsage(THREE.DynamicDrawUsage); g.add(m); }
-      // células: faixa [a, b) das instâncias e caixa das árvores
-      const cels = []; for (let i = 0; i < n; i++) { const t = l[i]; let c = cels[cels.length - 1]; if (!c || c.k !== cel(t)) { c = { k: cel(t), a: i, b: i, bx: [1e9, -1e9, 1e9, -1e9], n: 0 }; cels.push(c); } c.b = i + 1; c.bx[0] = Math.min(c.bx[0], t.x); c.bx[1] = Math.max(c.bx[1], t.x); c.bx[2] = Math.min(c.bx[2], t.z); c.bx[3] = Math.max(c.bx[3], t.z); }
-      const L = { niveis, cels, M0, C0 }; this._preencher(L); this.lods.push(L);
-      this.group.add(g); this.chunks.push(g);
-    }
+    for (const { bx, bz, l } of blocos.values()) this.group.add(this._bloco(l, (bx + bz) & 1));
     // coníferas: três faixas (fundo e laterais)
     const faixas = [[], [], []]; for (const t of trees) if (t.kind === 'conifera') faixas[t.z < -16.5 ? 0 : t.x < 0 ? 1 : 2].push(t);
-    for (const l of faixas) { if (!l.length) continue; const g = new THREE.Group(); g.name = 'mata'; const cm = nova(G.conifera, l.length); preencher(cm, l, 'conifera'); cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); this.group.add(g); this.chunks.push(g); }
+    for (const l of faixas) { if (!l.length) continue; const g = new THREE.Group(); g.name = 'mata'; const cm = this._nova(G.conifera, l.length); preencher(cm, l, 'conifera'); cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); this.group.add(g); this.chunks.push(g); }
     this.count = trees.length;
     this.canteiro = treeGroup(cant, { name: 'reflorestamento', cast: this.cast }); this.canteiro.visible = false; this.group.add(this.canteiro);
     this.canteiroN = cant.length;
   }
+  _nova(geo, n) { const m = new THREE.InstancedMesh(geo, leafMaterial(), n); m.castShadow = this.cast; m.receiveShadow = true; return m; }
+  // Bloco de descarte com três malhas de copa (longe, meia distância e perto) e as árvores em ordem de célula de
+  // CEL_X x CEL_Z; par alterna as duas formas de copa (quebra a repetição sem chamada a mais). geos: as três
+  // geometrias, de longe para perto (padrão: as da mata da planta)
+  _bloco(l, par, geos = null) {
+    const G = treeGeos(); const cel = (t) => Math.floor((t.x + 1000) / CEL_X) * 4096 + Math.floor((t.z + 1000) / CEL_Z);
+    l.sort((a, b) => cel(a) - cel(b)); const n = l.length; const g = new THREE.Group(); g.name = 'mata';
+    const [gLo, gHi, gPe] = geos || (par ? [G.folhaLow2, G.folha2, G.folhaPerto2] : [G.folhaLow, G.folha, G.folhaPerto]);
+    const hi = this._nova(gHi, n); preencher(hi, l, 'folha');
+    const lo = this._nova(gLo, n), pe = this._nova(gPe, n);
+    const M0 = hi.instanceMatrix.array.slice(), C0 = hi.instanceColor.array.slice(); // matrizes e cores de referência, em ordem de célula
+    for (const m of [lo, pe]) { m.instanceMatrix = new THREE.InstancedBufferAttribute(M0.slice(), 16); m.instanceColor = new THREE.InstancedBufferAttribute(C0.slice(), 3); }
+    const niveis = [lo, hi, pe]; for (const m of niveis) { m.computeBoundingSphere(); m.userData.kind = 'folha'; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.instanceColor.setUsage(THREE.DynamicDrawUsage); g.add(m); }
+    // células: faixa [a, b) das instâncias e caixa das árvores
+    const cels = []; for (let i = 0; i < n; i++) { const t = l[i]; let c = cels[cels.length - 1]; if (!c || c.k !== cel(t)) { c = { k: cel(t), a: i, b: i, bx: [1e9, -1e9, 1e9, -1e9], n: 0 }; cels.push(c); } c.b = i + 1; c.bx[0] = Math.min(c.bx[0], t.x); c.bx[1] = Math.max(c.bx[1], t.x); c.bx[2] = Math.min(c.bx[2], t.z); c.bx[3] = Math.max(c.bx[3], t.z); }
+    const L = { niveis, cels, M0, C0 }; this._preencher(L); this.lods.push(L); this.chunks.push(g);
+    return g;
+  }
+  // Mata dos arredores (fora da planta): os mesmos blocos com nível de detalhe por célula, num grupo que some no
+  // modo exposição. lados: listas de árvores (um bloco por lado, para o descarte por visão)
+  arredores(lados) {
+    if (this.fora) return this.fora;
+    const G = treeGeos(); this.fora = new THREE.Group(); this.fora.name = 'mata-arredores'; const n0 = this.lods.length;
+    lados.forEach((l, i) => { if (l.length) this.fora.add(this._bloco(l, i & 1, i & 1 ? [G.folhaLow2, G.folha2, G.folha2] : [G.folhaLow, G.folha, G.folha])); });
+    this.lodsFora = this.lods.slice(n0); this.group.add(this.fora); this._cam[0] = NaN; this.e.shadowDirty = true;
+    return this.fora;
+  }
+  mostrarArredores(on) { if (!this.fora) return; this.fora.visible = on; for (const L of this.lodsFora) L.oculto = !on; this._cam[0] = NaN; this.e.shadowDirty = true; }
   // cada malha do bloco recebe, em sequência, as células do seu nível (cópia das referências; sem alocar)
   _preencher(L) {
     for (let v = 0; v < 3; v++) {
@@ -294,6 +310,7 @@ export class Forest {
     U[0] = p.x; U[1] = p.y; U[2] = p.z; U[3] = cam.fov; U[4] = hpx;
     const k = (RAIO_COPA * hpx * 0.5) / Math.tan((cam.fov * Math.PI) / 360); let alto = 0, perto = 0; const dy = Math.max(p.y - 1.2, 0);
     for (const L of this.lods) {
+      if (L.oculto) continue;
       let mudou = false;
       for (const c of L.cels) {
         const dx = Math.max(c.bx[0] - p.x, 0, p.x - c.bx[1]), dz = Math.max(c.bx[2] - p.z, 0, p.z - c.bx[3]);
