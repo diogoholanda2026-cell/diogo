@@ -595,8 +595,9 @@ export class Jogo {
   }
   // ---------------- próximo passo para as metas do capítulo (consulta pura) ----------------
   planoMeta() {
-    const S = this.S, c = this.capitulo(); if (!c) return null;
-    if (S.capEscolhas[c.n] === undefined && c.metas.every((m) => this.metaFeita(m))) return { acao: 'apresentar', alvo: { capitulo: c.n }, meta: null, texto: 'Apresentar o capítulo ao Conselho' };
+    const S = this.S, c = this.capitulo(); if (!c || S.capEscolhas[CAPITULOS.length] !== undefined) return null; // fim de jogo: não há próximo passo
+    // capítulo cumprido: apresentar ao Conselho; o epílogo (sem escolha) conclui sozinho e não tem o que indicar
+    if (S.capEscolhas[c.n] === undefined && c.metas.every((m) => this.metaFeita(m))) return c.escolha ? { acao: 'apresentar', alvo: { capitulo: c.n }, meta: null, texto: 'Apresentar o capítulo ao Conselho' } : null;
     let espera = null;
     for (const m of c.metas) {
       if (this.metaFeita(m)) continue; let p = this._planoMeta(m); if (!p) continue; if (p.acao === 'coletar' && !p.alvo?.repasse && this.livre < 1) p = this._planoAlmox(); p.meta = m;
@@ -694,11 +695,11 @@ export class Jogo {
   }
   _planoItens(falta) { let espera = null; for (const [k, n] of Object.entries(falta)) { const pl = this._planoItem(k, n, 0); if (pl && pl.acao !== 'aguardar') return pl; espera = this._espera(espera, pl); } return espera || this._plano('aguardar', null, 'Aguardar a produção'); }
   _emProducao(k) { // quanto de k está pronto para coletar, a caminho e na fila à espera de insumos que ainda não existem
-    const S = this.S; let pronto = 0, curso = 0, pend = 0, fim = Infinity, onde = null;
-    for (const u of USINAS) { const st = S.predios[u]; if (!st.ok) continue; for (const s of st.slots) if (s?.item === k) { if (s.fim <= this.agora) { pronto++; onde = u; } else { curso++; fim = Math.min(fim, s.fim); } } }
+    const S = this.S; let pronto = 0, curso = 0, pend = 0, fim = Infinity, onde = null, ondeCurso = null; // ondeCurso: a usina que entrega primeiro
+    for (const u of USINAS) { const st = S.predios[u]; if (!st.ok) continue; for (const s of st.slots) if (s?.item === k) { if (s.fim <= this.agora) { pronto++; onde = u; } else { curso++; if (s.fim < fim) { fim = s.fim; ondeCurso = u; } } } }
     const I = ITENS[k]; if (I.oficina) { const o = S.predios[I.oficina]; if (o.ok) { const tem = Object.entries(I.req).every(([r, q]) => (S.itens[r] || 0) >= q);
       for (const x of o.prontos) if (x === k) { pronto++; onde = I.oficina; } for (const f of o.fila) if (f.item === k) { if (f.pend && !tem) pend++; else { curso++; if (f.fim) fim = Math.min(fim, f.fim); } } } }
-    return { pronto, curso, pend, fim, onde };
+    return { pronto, curso, pend, fim, onde, ondeCurso };
   }
   _planoItem(k, n, prof) {
     const S = this.S, I = ITENS[k]; if (prof > 6) return null;
@@ -713,7 +714,7 @@ export class Jogo {
     // bandeja cheia (de outro produto): a fila está parada e nada do que for pedido começa antes da coleta
     const of = I.oficina ? S.predios[I.oficina] : null;
     if (of?.ok && of.prontos.length >= BANDEJA) return this._plano('coletar', { predio: I.oficina }, `Coletar a bandeja cheia ${noPredio(I.oficina)} (a fila está parada)`, { item: of.prontos[0], n: of.prontos.length });
-    if (ep.curso >= n) return this._plano('aguardar', { predio: I.oficina || null }, `Aguardar ${nomeIt(k)}${ep.fim < Infinity ? ` (pronto às ${hhmm(ep.fim)})` : ''}`, { item: k, fim: ep.fim < Infinity ? ep.fim : undefined });
+    if (ep.curso >= n) return this._plano('aguardar', { predio: I.oficina || ep.ondeCurso || 'usina1' }, `Aguardar ${nomeIt(k)}${ep.fim < Infinity ? ` (pronto às ${hhmm(ep.fim)})` : ''}`, { item: k, fim: ep.fim < Infinity ? ep.fim : undefined });
     const faltam = n - ep.curso, novos = faltam - Math.min(ep.pend, faltam); // as encomendas que esperam insumos só pedem os insumos
     if (I.nivel > S.nivel || ((I.cap || 1) > S.cap && !S.legado?.includes(k))) return this._plano('aguardar', null, `${nomeIt(k)} libera no nível ${I.nivel}`, { item: k });
     if (I.tipo === 'bruto') {
