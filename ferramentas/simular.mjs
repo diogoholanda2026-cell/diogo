@@ -369,11 +369,11 @@ function todos() {
     const V = SEM.map((x) => rodar({ semente: x, ...cont, escolha: 0, escolhas: { [k]: 1 } })); if (V.some((R) => !R.terminou)) { falhas.push(`dilema ${k}: opção 1 não terminou`); continue; }
     const cap = (R) => R.M[k + 1]?.dur || 0, resto = (R) => R.horas - Object.entries(R.M).filter(([c]) => +c <= k).reduce((x, [, c]) => x + c.dur, 0);
     const a = med(base, cap), b = med(V, cap), ra = med(base, resto), rb = med(V, resto); const d = Math.abs(b - a) / Math.max(a, b), dr = Math.abs(rb - ra) / Math.max(ra, rb);
-    if (k === 5) { linhas.push(`dilema do capítulo 5: epílogo ${(a * 60).toFixed(0)} × ${(b * 60).toFixed(0)} min (${(d * 100).toFixed(0)}%)`); difs.push([d, 0]); if (Math.max(...base.map(cap), ...V.map(cap)) > 3) falhas.push('dilema 5: epílogo passou de 3 h no contínuo (armadilha)'); continue; }
+    if (k === 5) { linhas.push(`dilema do capítulo 5: epílogo ${(a * 60).toFixed(0)} × ${(b * 60).toFixed(0)} min (${(d * 100).toFixed(0)}%)`); difs.push([d, 0, true]); if (Math.max(...base.map(cap), ...V.map(cap)) > 3) falhas.push('dilema 5: epílogo passou de 3 h no contínuo (armadilha)'); continue; }
     difs.push([d, dr]); linhas.push(`dilema do capítulo ${k}: capítulo ${k + 1} ${a.toFixed(1)} × ${b.toFixed(1)} h (${(d * 100).toFixed(0)}%), resto do jogo ${ra.toFixed(0)} × ${rb.toFixed(0)} h (${(dr * 100).toFixed(0)}%)`);
   }
   const pesam = difs.filter(([d, dr]) => Math.max(d, dr) >= 0.08).length; if (pesam < 3) falhas.push(`dilemas: só ${pesam} com diferença ≥ 8% (mín. 3)`); linhas.push(`dilemas que pesam (≥ 8%): ${pesam} de ${difs.length}`);
-  if (difs.some(([d, dr]) => Math.max(d, dr) > 0.2)) falhas.push('dilemas: alguma opção muda o tempo em mais de 20% (armadilha)');
+  if (difs.some(([d, dr, epilogo]) => !epilogo && Math.max(d, dr) > 0.2)) falhas.push('dilemas: alguma opção muda o tempo em mais de 20% (armadilha)'); // no epílogo curto a armadilha é passar de 3 h (acima)
   // projetos condicionais (pas_frente2, pas_caracol): com passarelas de mentira na planta, entram no jogo e o robô termina
   const pr = spawnSync(process.execPath, ['--import', new URL('./passarelas-teste.mjs', import.meta.url).href, fileURLToPath(import.meta.url), '--passarelas'], { encoding: 'utf8' });
   linhas.push('passarelas condicionais: ' + (pr.stdout || pr.stderr || '').trim().split('\n').join(' | ')); if (pr.status !== 0) falhas.push('passarelas condicionais: ' + (pr.stdout || pr.stderr || '').trim());
