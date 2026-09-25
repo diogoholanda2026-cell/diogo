@@ -12,8 +12,9 @@ import { XP_NIVEL } from '../data/itens.js';
 import { REGRAS } from '../sim/estado.js';
 
 const easeOutQuad = (t) => 1 - (1 - t) * (1 - t);
-// retrato redondo do conselheiro (desenhado em icones.js); cls: 'p32' (escolhas do Conselho), 'mini'
-const retrato = (q, cls = '') => { const c = CONSELHO[q] || CONSELHO.iris; return `<div class="retrato ${cls}" style="--cor:${c.cor}">${img('retrato:' + (CONSELHO[q] ? q : 'iris'))}</div>`; };
+// retrato redondo do conselheiro (desenhado em icones.js; a inicial fica por baixo até a imagem aparecer);
+// cls: 'p32' (escolhas do Conselho), 'mini'
+const retrato = (q, cls = '') => { const c = CONSELHO[q] || CONSELHO.iris; return `<div class="retrato ${cls}" style="--cor:${c.cor}"><b aria-hidden="true">${c.ini}</b>${img('retrato:' + (CONSELHO[q] ? q : 'iris'))}</div>`; };
 const pct = (v) => (v <= 0 ? '0%' : v.toLocaleString('pt-BR', { minimumFractionDigits: v < 10 ? 1 : 0, maximumFractionDigits: v < 10 ? 1 : 0 }) + '%');
 const nivelDe = (xp, max) => { let n = 1; while (n < max && xp >= XP_NIVEL[n + 1]) n++; return n; };
 // carinha do bem-estar: verde a partir do que o último pavimento pede, amarela na faixa do meio, vermelha abaixo da base
