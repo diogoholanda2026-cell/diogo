@@ -258,19 +258,36 @@ function testes() {
   const r0 = Math.random; Math.random = semente(7);
   try {
     const T = DIA0 + 8 * H;
-    // fila parada: 3 itens na fila e bandeja cheia; +10 h e coleta: o próximo leva o tempo inteiro
-    { const S = novoEstado(T); const J = new Jogo(S); S.predios.carpintaria.ok = true; S.itens.madeira = 60; const o = S.predios.carpintaria; o.prontos = Array(7).fill('viga');
+    // coleta automática: com o almoxarifado lotado a bandeja enche (9) e a fila para; liberado o espaço, a bandeja
+    // esvazia sozinha no tick e o próximo trabalho começa nesse instante, com o tempo inteiro
+    { const S = novoEstado(T); const J = new Jogo(S); S.predios.carpintaria.ok = true; S.itens.madeira = 70; const o = S.predios.carpintaria; o.prontos = Array(7).fill('viga');
       for (let i = 0; i < 3; i++) J.enfileirar('carpintaria', 'viga'); J.tick(T + 10 * H);
       f(o.prontos.length === 9 && o.fila.length === 1 && !o.fila[0].fim, `bandeja cheia deveria parar a fila (prontos ${o.prontos.length}, fila ${o.fila.length}, fim ${o.fila[0]?.fim})`);
-      J.tick(T + 20 * H); J.coletarOficina('carpintaria'); const g = o.fila[0]; f(g && Math.abs(g.fim - g.ini - J.durItem('viga')) < 2 && g.ini === T + 20 * H, 'depois da coleta o próximo item deveria levar o tempo inteiro'); }
+      S.itens.madeira = 10; J.tick(T + 10 * H + 1000); const g = o.fila[0]; f(o.prontos.length === 0 && S.itens.viga === 9 && g && Math.abs(g.fim - g.ini - J.durItem('viga')) < 2 && g.ini === T + 10 * H + 1000, 'com espaço no almoxarifado a bandeja esvazia sozinha e o próximo item leva o tempo inteiro');
+      // lotes: 10 unidades levam 8 vezes o tempo de 1; o lote entra inteiro no almoxarifado; o que não cabe espera no espaço
+      const S2 = novoEstado(T); const J2 = new Jogo(S2); f(J2.produzir('usina1', 'brita', 10) === 'ok' && J2.produzir('usina1', 'brita', 11) === 'valor' && J2.produzir('usina1', 'brita', 0) === 'valor', 'lote de 1 a 10');
+      const sl = S2.predios.usina1.slots[0]; f(Math.abs(sl.fim - sl.ini - 8 * J2.durItem('brita')) < 2 && sl.n === 10 && Math.abs(J2.durLote('brita', 1) - J2.durItem('brita')) < 1e-6, 'lote de 10 leva 8 vezes o tempo de 1');
+      S2.itens.madeira = 51; J2.tick(T + H); f(S2.itens.brita === 4 + 5 && sl.sobra === 5 && S2.predios.usina1.slots[0] === sl && J2.livre === 0, `almoxarifado lotado: entra o que cabe e o resto espera (brita ${S2.itens.brita}, sobra ${sl.sobra})`);
+      f(J2.coletarUsina('usina1', 0) === 'almox', 'coletar com o almoxarifado cheio avisa'); S2.itens.madeira = 0; f(J2.coletarUsina('usina1', 0) === 'ok' && S2.itens.brita === 14 && !S2.predios.usina1.slots[0], 'a sobra é coletada quando abre espaço');
+      // automático: o espaço recomeça o mesmo lote no instante em que o anterior terminou, e para quando o almoxarifado lota
+      const S3 = novoEstado(T); const J3 = new Jogo(S3); J3.produzir('usina1', 'brita', 5, true); J3.tick(T + 8 * H); const s3 = S3.predios.usina1.slots[0];
+      f(S3.itens.brita >= 40 && J3.livre === 0 && s3 && s3.auto && s3.item === 'brita' && s3.n === 5 && s3.sobra > 0, `automático produz até lotar o almoxarifado (brita ${S3.itens.brita}, livre ${J3.livre}, sobra ${s3?.sobra})`);
+      f(J3.setAuto('usina1', 0, false) === 'ok' && !s3.auto && J3.cancelarSlot('usina1', 0) === 'ok' && !S3.predios.usina1.slots[0] && J3.cancelarSlot('usina1', 0) === 'nada', 'setAuto e cancelarSlot');
+      // oficina em lotes: loteMax pelos insumos, insumos consumidos na hora, cancelar devolve; automático repete enquanto houver insumos
+      const S4 = novoEstado(T); const J4 = new Jogo(S4); S4.predios.carpintaria.ok = true; S4.itens.madeira = 30; f(J4.loteMax('carpintaria', 'viga') === 10 && J4.enfileirar('carpintaria', 'viga', 5) === 'ok' && S4.itens.madeira === 20 && J4.enfileirar('carpintaria', 'viga', 11) === 'valor', 'lote na oficina limitado pelos insumos');
+      S4.itens.madeira = 0; f(J4.enfileirar('carpintaria', 'viga', true) === 'ok' && S4.predios.carpintaria.fila[1].pend && S4.predios.carpintaria.fila[1].n === 1, 'chamada antiga enfileirar(oid, item, true) ainda encadeia 1 unidade');
+      f(J4.cancelarFila('carpintaria', 1) === 'ok' && S4.itens.madeira === 0 && J4.cancelarFila('carpintaria', 0) === 'ok' && S4.itens.madeira === 10 && !S4.predios.carpintaria.fila.length, 'cancelar devolve os insumos'); S4.itens.madeira = 30;
+      f(J4.setAutoFila('carpintaria', true, 'viga', 4) === 'ok' && S4.predios.carpintaria.fila.length === 1 && S4.predios.carpintaria.fila[0].auto, 'setAutoFila entra na fila na hora');
+      J4.tick(T + 3 * H); f(S4.itens.viga === 15 && S4.itens.madeira === 0 && !S4.predios.carpintaria.fila.length, `automático repete até acabar os insumos (viga ${S4.itens.viga}, madeira ${S4.itens.madeira})`);
+      S4.itens.madeira = 8; J4.tick(T + 4 * H); f(S4.itens.viga === 19 && J4.setAutoFila('carpintaria', false) === 'ok' && !S4.predios.carpintaria.auto, 'insumos novos: o automático volta; desligar limpa'); }
     // encomenda em cadeia: concreto sem cimento puxa da bandeja da própria central; pendente vencido libera a vaga
     { const S = novoEstado(T); const J = new Jogo(S); S.nivel = 6; S.predios.concreto.ok = true; S.predios.carpintaria.ok = true; S.itens.brita = 20; S.itens.argila = 5;
       f(J.enfileirar('concreto', 'concreto', true) === 'ok' && S.predios.concreto.fila[0].pend, 'item sem insumos deveria entrar pendente');
       f(J.enfileirar('concreto', 'cimento') === 'ok' && S.predios.concreto.fila[0].item === 'cimento' && S.predios.concreto.fila[0].fim, 'pendente não pode segurar a fila');
-      J.tick(T + 2 * H); f(S.predios.concreto.prontos.includes('concreto'), 'o pendente deveria puxar o cimento pronto e produzir');
+      J.tick(T + 2 * H); f(S.itens.concreto >= 1, 'o pendente deveria puxar o cimento pronto e produzir');
       const S2 = novoEstado(T); const J2 = new Jogo(S2); S2.nivel = 6; S2.predios.carpintaria.ok = true; J2.enfileirar('carpintaria', 'trelica', true); J2.tick(T + 13 * H); f(S2.predios.carpintaria.fila.length === 0, 'pendente sem insumos por 12 h deveria liberar a vaga'); }
     // tempo fechado: 3 dias em no máximo 288 passos, e em menos de 100 ms
-    { const S = novoEstado(T); const J = new Jogo(S); S.predios.carpintaria.ok = true; S.itens.madeira = 20; for (let i = 0; i < 3; i++) J.enfileirar('carpintaria', 'viga'); const t0 = performance.now(); J.tick(T + 72 * H); f(performance.now() - t0 < 100, 'avanço offline caro demais'); f(S.predios.carpintaria.prontos.length === 3, 'avanço offline não produziu a fila'); }
+    { const S = novoEstado(T); const J = new Jogo(S); S.predios.carpintaria.ok = true; S.itens.madeira = 20; for (let i = 0; i < 3; i++) J.enfileirar('carpintaria', 'viga'); const t0 = performance.now(); J.tick(T + 72 * H); f(performance.now() - t0 < 100, 'avanço offline caro demais'); f(S.itens.viga === 3, 'avanço offline não produziu a fila'); }
     // níveis: dois de uma vez geram um evento só; nível não dá ficha
     { const S = novoEstado(T); const J = new Jogo(S); const ev = []; J.on((t, d) => t === 'nivel' && ev.push(d)); const fichas = S.mutirao; J._xp(200, 'teste'); f(ev.length === 1 && ev[0].de === 1 && ev[0].para === 4 && ev[0].especiais.length === 3 && ITENS[ev[0].especial], 'vários níveis de uma vez deveriam gerar um único evento'); f(S.mutirao === fichas, 'subir de nível não dá ficha'); }
     // falas: uma por etapa
@@ -319,7 +336,7 @@ function testes() {
       const S4 = novoEstado(T); const J4 = new Jogo(S4); J4.agora = T; S4.nivel = 5; S4.predios.carpintaria.ok = true; for (const k of ['pas_frente.e1', 'lago.e1', 'sede.e1']) S4.etapas[k] = { estado: 'feita', entregue: {} }; S4.modulos.anel.slice(0, 3).forEach((x) => (x.nivel = 2)); S4.etapas['sede.e2'] = { estado: 'prancha', entregue: { concreto: 3 } };
       const o4 = S4.predios.carpintaria; o4.prontos = Array(9).fill('deque'); o4.fila = Array.from({ length: 3 }, () => ({ item: 'viga', ini: 0, fim: 0 })); S4.itens.viga = 0; J4._derivar();
       const p4 = J4.planoMeta(); f(p4?.acao === 'coletar' && p4.alvo?.predio === 'carpintaria', 'bandeja cheia: a Meta em foco deveria mandar coletar (' + p4?.texto + ')');
-      J4.coletarOficina('carpintaria'); J4.tick(T + 3 * H); f(S4.predios.carpintaria.prontos.filter((k) => k === 'viga').length === 3, 'depois da coleta as vigas saem');
+      J4.coletarOficina('carpintaria'); J4.tick(T + 3 * H); f(S4.itens.viga === 3, 'depois da coleta as vigas saem');
       // encomenda em cadeia sem insumos: o plano pede os insumos, não mais uma encomenda do mesmo produto
       const S5 = novoEstado(T); const J5 = new Jogo(S5); J5.agora = T; S5.nivel = 5; S5.predios.carpintaria.ok = true; for (const k of ['pas_frente.e1', 'lago.e1', 'sede.e1']) S5.etapas[k] = { estado: 'feita', entregue: {} }; S5.modulos.anel.slice(0, 3).forEach((x) => (x.nivel = 2)); S5.etapas['sede.e2'] = { estado: 'prancha', entregue: { concreto: 3 } };
       S5.itens.madeira = 0; S5.itens.viga = 0; S5.predios.carpintaria.fila = Array.from({ length: 4 }, () => ({ item: 'viga', ini: 0, fim: 0, pend: true, desde: T })); J5._derivar();

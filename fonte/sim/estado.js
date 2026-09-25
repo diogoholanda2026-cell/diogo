@@ -53,6 +53,10 @@ export const F_PRODUTO = 0.88;
 export const F_OBRA = { 1: 0.7, 2: 1.5, 3: 3, 4: 4, 5: 5, 6: 0.15 }; // obras mais longas a cada capítulo; o epílogo é festa, não espera
 export const FICHAS_MAX = 3;
 const BANDEJA = 9, FILA_MAX = 9, USINA_MAX = 6, FILA_SELO = 12, MUTIRAO_MS = 2 * 3600e3, PEND_MS = 12 * 3600e3;
+// lotes: cada espaço ou trabalho faz de 1 a 10 unidades de uma vez; um lote de 10 leva 8 vezes o tempo de 1 (economia de escala)
+const LOTE_MAX = 10, F_LOTE = 0.8;
+// usinas que aceitam J.produzir (a Usina de Pedidos da Comunidade só trabalha para os pedidos)
+const USINAS_LIVRES = USINAS.filter((u) => !PREDIOS[u].pedidos);
 const PASSO_OFF = 5 * 60e3, PASSOS_MAX = 288, RAMPA_MS = 48 * 3600e3;
 export const COFRE_H = 12, CAP_PEDIDOS = 2; // horas de renda que o cofre guarda; capítulo em que os pedidos começam
 // calendário do jogo: 1 dia = 20 s reais, mês de 30 dias (10 min), ano de 12 meses (360 dias, 2 h reais), contado pelo relógio real
@@ -62,7 +66,7 @@ export const DIA_MS = 20000, MES_DIAS = 30, ANO_DIAS = 360, ANO_MS = ANO_DIAS * 
 const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, mora: 0.20 };
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
 export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
-  diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
+  loteMax: LOTE_MAX, fLote: F_LOTE, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (+lv <= n) out.push(...ks); return out; } // serviços que um pavimento de nível n pede
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
 // economia (medida pelo robô em sessões): repasse = (base + por morador) × (0,5 + bem-estar) por minuto; a medição devolve
@@ -96,7 +100,7 @@ export function novoEstado(agora = Date.now()) {
   S.itens.madeira = 6; S.itens.brita = 4; S.itens.estaca = 1;
   for (const [id, p] of Object.entries(PREDIOS)) {
     if (p.tipo === 'usina') S.predios[id] = { ok: id === 'usina1', slots: [null, null, null], nSlots: 3 };
-    else if (p.tipo === 'oficina') S.predios[id] = { ok: false, fila: [], prontos: [], nFila: 3 };
+    else if (p.tipo === 'oficina') S.predios[id] = { ok: false, fila: [], prontos: [], nFila: 3, auto: null };
     else S.predios[id] = { ok: true };
   }
   for (const [f, n] of Object.entries(N_MODULOS)) S.modulos[f] = Array.from({ length: n }, () => ({ nivel: 0, obra: null }));
@@ -200,10 +204,18 @@ export function normalizar(S, agora = Date.now()) {
   O.predios = {};
   for (const [id, P] of Object.entries(PREDIOS)) {
     const b = B.predios[id], s = objeto(S.predios?.[id]) ? S.predios[id] : null; const o = { ...(s || {}), ...b, ok: s ? !!s.ok : b.ok };
-    if (P.tipo === 'usina') { o.nSlots = clamp(num(s?.nSlots, 3) | 0, 3, USINA_MAX); o.slots = Array.from({ length: o.nSlots }, (_, i) => { const x = s?.slots?.[i]; return x && typeof x.item === 'string' && tem(ITENS, x.item) && ITENS[x.item].tipo === 'bruto' ? { item: x.item, ini: num(x.ini, O.t), fim: num(x.fim, O.t) } : null; }); }
+    const lote = (n) => clamp(num(n, 1) | 0, 1, LOTE_MAX);
+    if (P.tipo === 'usina') {
+      o.nSlots = clamp(num(s?.nSlots, 3) | 0, 3, USINA_MAX);
+      o.slots = Array.from({ length: o.nSlots }, (_, i) => { const x = s?.slots?.[i]; if (!objeto(x) || typeof x.item !== 'string' || !tem(ITENS, x.item) || !(ITENS[x.item].tipo === 'bruto' || (P.pedidos && ITENS[x.item].tipo === 'produto'))) return null;
+        const y = { item: x.item, n: lote(x.n), ini: num(x.ini, O.t), fim: num(x.fim, O.t), auto: !!x.auto && !P.pedidos }; if (num(x.sobra) > 0) y.sobra = clamp(num(x.sobra) | 0, 1, y.n); if (x.pedido != null) y.pedido = num(x.pedido) | 0; return y; });
+      // fila da Usina de Pedidos: o que falta produzir para os pedidos marcados
+      if (P.pedidos) o.fila = (Array.isArray(s?.fila) ? s.fila : []).filter((f) => objeto(f) && itemOk(f.item) && num(f.n) > 0).map((f) => ({ item: f.item, n: Math.round(num(f.n)), pedido: num(f.pedido) | 0 }));
+    }
     else if (P.tipo === 'oficina') {
       o.nFila = clamp(num(s?.nFila, 3) | 0, 3, FILA_SELO);
-      o.fila = []; for (const f of Array.isArray(s?.fila) ? s.fila : []) { if (!itemOk(f?.item)) { guarda('fila', id + ':' + (f?.item || '?'), f); continue; } const g = { item: f.item, ini: num(f.ini), fim: num(f.fim) }; if (f.pend) { g.pend = true; g.desde = num(f.desde, O.t); g.ini = g.fim = 0; } o.fila.push(g); }
+      o.fila = []; for (const f of Array.isArray(s?.fila) ? s.fila : []) { if (!itemOk(f?.item)) { guarda('fila', id + ':' + (f?.item || '?'), f); continue; } const g = { item: f.item, n: lote(f.n), ini: num(f.ini), fim: num(f.fim), auto: !!f.auto }; if (f.pend) { g.pend = true; g.desde = num(f.desde, O.t); g.ini = g.fim = 0; g.n = 1; } o.fila.push(g); }
+      o.auto = objeto(s?.auto) && itemOk(s.auto.item) && ITENS[s.auto.item].oficina === id ? { item: s.auto.item, n: lote(s.auto.n) } : null;
       o.prontos = (Array.isArray(s?.prontos) ? s.prontos : []).filter((k) => { if (itemOk(k)) return true; guarda('prontos', id + ':' + k, k); return false; });
       // fila maior que as vagas (save antigo): as compradas passam a cobrir o que já estava lá, sem contar as vagas das escolhas
       if (o.fila.length > o.nFila + E.fila) o.nFila = Math.min(FILA_SELO, o.fila.length - E.fila);
@@ -339,6 +351,9 @@ export class Jogo {
     if (tipo === 'modulo') return (seg * 1000 * F_MODULO) / S.ritmo;
     return (seg * 1000) / S.ritmo;
   }
+  durLote(k, n = 1) { return this.durItem(k) * Math.max(1, n * F_LOTE); } // 1 unidade leva o tempo dela; 10 levam 8 vezes isso
+  // maior lote que os insumos do almoxarifado permitem (0 se falta algum); oid confere a oficina (null: qualquer)
+  loteMax(oid, item) { const I = ITENS[item]; if (!I?.req || (oid && I.oficina !== oid)) return 0; let m = LOTE_MAX; for (const [k, q] of Object.entries(I.req)) m = Math.min(m, Math.floor((this.S.itens[k] || 0) / q)); return Math.max(0, m); }
   durItem(k) {
     const I = ITENS[k]; if (I.tipo === 'bruto') return this.dur(I.t, 'usina');
     const fT = 1 + ((I.fT || 1) - 1) * this._rampa(); const v = 1 + this.ef.oficina + (this.ef.oficinas[I.oficina] || 0) + (this.ef.itens[k] || 0);
@@ -347,9 +362,9 @@ export class Jogo {
   tick(agora = Date.now()) {
     const S = this.S; const t0 = S.t; const dt = Math.max(0, agora - t0);
     // tempo fechado: as oficinas andam em passos (uma pode esperar o produto da outra), com teto de custo
-    if (dt > PASSO_OFF * 1.5) { const n = Math.min(PASSOS_MAX, Math.ceil(dt / PASSO_OFF)); for (let i = 1; i < n; i++) { this.agora = t0 + (dt * i) / n; this._oficinas(this.agora); } }
+    if (dt > PASSO_OFF * 1.5) { const n = Math.min(PASSOS_MAX, Math.ceil(dt / PASSO_OFF)); for (let i = 1; i < n; i++) { this.agora = t0 + (dt * i) / n; this._usinas(this.agora); this._oficinas(this.agora); } }
     S.t = agora; this.agora = agora; S.stats.jogadoMs += Math.min(dt, 5000);
-    this._oficinas(agora);
+    this._usinas(agora); this._oficinas(agora);
     // obras e módulos
     for (const [key, st] of Object.entries(S.etapas)) if (st.estado === 'obra' && st.fim <= agora) { st.estado = 'pronta'; this.emit('etapaPronta', { key }); }
     for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => { if (m.obra && m.obra.estado === 'obra' && m.obra.fim <= agora) { m.obra.estado = 'pronta'; this.emit('moduloPronto', { faixa: f, i }); } });
@@ -373,24 +388,59 @@ export class Jogo {
     this.emit('dia', { dia: c.dia, diaDoMes: c.diaDoMes, mes: c.mes, ano: c.ano, saltou: c.dia - ant });
     if (c.ano > anoAnt) this.emit('ano', { ano: c.ano });
   }
-  // oficinas: fila em cadeia; o item da frente espera insumos sem segurar a fila; bandeja cheia para a fila
+  // usinas: coleta automática de cada lote pronto (o que não cabe no almoxarifado espera no espaço), o espaço
+  // automático recomeça o mesmo lote no instante em que o anterior terminou, e a Usina de Pedidos puxa da fila dela
+  _usinas(ate) {
+    for (const uid of USINAS) {
+      const u = this.S.predios[uid]; if (!u.ok) continue; const ped = !!PREDIOS[uid].pedidos;
+      for (let i = 0; i < u.slots.length; i++) for (let g = 0; g < 64; g++) {
+        const s = u.slots[i]; if (!s || s.fim > ate) break;
+        const pend = s.sobra ?? s.n ?? 1, q = Math.min(pend, Math.max(0, this.livre));
+        if (q > 0) this._receber(s.item, q, uid, false, true);
+        if (q < pend) { s.sobra = pend - q; break; } // almoxarifado cheio: o resto espera no espaço (a interface mostra e J.coletarUsina recolhe)
+        u.slots[i] = null;
+        if (ped) this._puxarPedido(uid, u, i, s.fim); else if (s.auto) this._iniciarSlot(uid, u, i, s.item, s.n || 1, true, s.fim);
+      }
+      if (ped) for (let i = 0; i < u.nSlots; i++) if (!u.slots[i]) this._puxarPedido(uid, u, i, ate);
+    }
+  }
+  _puxarPedido() { return false; } // preenchido pela Usina de Pedidos da Comunidade
+  _iniciarSlot(uid, u, i, item, n, auto, quando, extra) {
+    const s = (u.slots[i] = { item, n, ini: quando, fim: quando + this.durLote(item, n), auto: !!auto, ...(extra || {}) }); this.S.stats.lotes += n;
+    this.emit('produzir', { predio: uid, item, slot: i, ini: s.ini, fim: s.fim, n, auto: s.auto, pedido: s.pedido }); return s;
+  }
+  // oficinas: fila em cadeia; o item da frente espera insumos sem segurar a fila; cada lote pronto vai direto para o
+  // almoxarifado e a bandeja só guarda o que não coube (cheia, a fila para); o automático volta para a fila enquanto houver insumos
   _oficinas(ate) { for (const id of OFICINAS) if (this.S.predios[id].ok) this._oficina(id, ate); }
   _oficina(id, ate) {
     const o = this.S.predios[id]; let desde = ate;
     for (let j = o.fila.length - 1; j >= 0; j--) { const f = o.fila[j]; if (f.pend && ate - f.desde >= PEND_MS) { o.fila.splice(j, 1); this.emit('aviso', { texto: `${nomeIt(f.item)} saiu da fila ${noPredio(id)}: faltaram insumos por 12 h`, icone: f.item, predio: id }); } }
+    this._drenar(id, o);
     for (let g = 0; g < 64; g++) {
-      let f = o.fila[0]; if (!f) break;
+      if (!o.fila.length && !this._autoFila(id, o)) break;
+      let f = o.fila[0];
       if (!f.fim) { if (o.prontos.length >= BANDEJA || !this._comecar(o, desde)) break; f = o.fila[0]; }
       if (f.fim > ate) break;
-      o.fila.shift(); o.prontos.push(f.item); this.emit('produto', { predio: id, item: f.item, ini: f.ini, fim: f.fim }); desde = f.fim;
+      o.fila.shift(); const n = f.n || 1; for (let k = 0; k < n; k++) o.prontos.push(f.item); this.emit('produto', { predio: id, item: f.item, n, ini: f.ini, fim: f.fim, auto: !!f.auto }); desde = f.fim;
+      this._drenar(id, o); if (f.auto) this._autoFila(id, o);
       if (o.prontos.length >= BANDEJA) break; // bandeja cheia: o próximo só começa (com o tempo inteiro) depois da coleta
     }
+    this._autoFila(id, o); // insumos que chegaram depois: o automático entra na fila (começa quando chegar a vez)
+  }
+  _drenar(id, o) { // coleta automática da bandeja, no que couber no almoxarifado
+    while (o.prontos.length && this.livre >= 1) { const k = o.prontos[0]; let q = 0; const max = this.livre; while (o.prontos[0] === k && q < max) { o.prontos.shift(); q++; } this._receber(k, q, id, false, true); }
+  }
+  _autoFila(id, o) { // repete o item automático em lotes de n (ou menores, se os insumos não dão para n), um por vez na fila
+    const a = o.auto; if (!a || o.fila.some((f) => f.auto) || o.fila.length >= this.vagasFila(id) || ITENS[a.item]?.oficina !== id || !this.liberado(a.item)) return false;
+    const q = Math.min(a.n, this.loteMax(id, a.item)); if (q < 1) return false;
+    for (const [k, m] of Object.entries(ITENS[a.item].req)) this.S.itens[k] -= m * q;
+    o.fila.push({ item: a.item, n: q, ini: 0, fim: 0, auto: true }); this.emit('enfileirar', { predio: id, item: a.item, pend: false, n: q, auto: true }); return true;
   }
   _comecar(o, quando) { // põe na frente o primeiro item que pode começar e liga o cronômetro
     for (let j = 0; j < o.fila.length; j++) {
       const g = o.fila[j]; if (g.pend && !this._puxar(g)) continue;
       if (j) { o.fila.splice(j, 1); o.fila.unshift(g); }
-      delete g.pend; delete g.desde; g.ini = quando; g.fim = quando + this.durItem(g.item); return true;
+      delete g.pend; delete g.desde; g.ini = quando; g.fim = quando + this.durLote(g.item, g.n || 1); return true;
     }
     return false;
   }
@@ -421,34 +471,55 @@ export class Jogo {
   }
   _sorteiaEspecial(licencaMais) { const g = Math.random() < (licencaMais ? 0.5 : 0.62) ? ALMOX : LICENCAS; return g[(Math.random() * g.length) | 0]; }
   _achar(k) { this.S.itens[k] = Math.min(MAX_ESPECIAL, this.S.itens[k] + 1); return k; }
-  _receber(item, n = 1, origem = '', direto = false) { // entra no almoxarifado (com chance de item especial)
+  _receber(item, n = 1, origem = '', direto = false, auto = false) { // entra no almoxarifado (com chance de item especial)
     const S = this.S, I = ITENS[item]; S.itens[item] += n; S.stats.coletas += n; let esp = null;
     for (let u = 0; u < n; u++) {
       for (const [k, [fonte, p]] of Object.entries(QUEDA)) if ((item === fonte || I.oficina === fonte) && Math.random() < p) esp = this._achar(k);
       if (Math.random() < 0.03) esp = this._achar(ALMOX[(Math.random() * 3) | 0]);
     }
     this._xp((I.tipo === 'bruto' ? 1 : 2 + Math.floor(I.nivel / 4)) * n, 'coleta');
-    this.emit('coleta', { item, n, especial: esp, origem, direto });
+    this.emit('coleta', { item, n, especial: esp, origem, predio: origem, direto, auto });
     if (!direto && this.livre <= 0) this.emit('dica', { id: 'almoxCheio' });
     return true;
   }
-  produzir(uid, item) {
-    const u = this.S.predios[uid]; if (!u?.ok) return 'fechado'; if (ITENS[item].tipo !== 'bruto' || !this.liberado(item)) return 'bloqueado';
+  // usinas: um lote de n (1 a 10) por espaço; auto: quando o lote for coletado, o espaço recomeça o mesmo lote
+  produzir(uid, item, n = 1, auto = false) {
+    const u = this.S.predios[uid]; if (!u?.ok) return 'fechado'; if (PREDIOS[uid].pedidos || ITENS[item]?.tipo !== 'bruto' || !this.liberado(item)) return 'bloqueado';
+    n = +n; if (!Number.isInteger(n) || n < 1 || n > LOTE_MAX) return 'valor';
     const i = u.slots.findIndex((s, k) => k < u.nSlots && !s); if (i < 0) return 'cheio';
-    const s = (u.slots[i] = { item, ini: this.agora, fim: this.agora + this.durItem(item) }); this.emit('produzir', { predio: uid, item, slot: i, ini: s.ini, fim: s.fim }); return 'ok';
+    this._iniciarSlot(uid, u, i, item, n, !!auto, this.agora); return 'ok';
   }
+  // coleta o que ficou esperando num espaço pronto (a coleta normal é automática, no tick)
   coletarUsina(uid, i) {
-    const u = this.S.predios[uid]; const s = u.slots[i]; if (!s || s.fim > this.agora) return 'nada'; if (this.livre < 1) { this.emit('dica', { id: 'almoxCheio' }); return 'almox'; }
-    u.slots[i] = null; this._receber(s.item, 1, uid); return 'ok';
+    const u = this.S.predios[uid]; const s = u?.slots?.[i]; if (!s || s.fim > this.agora) return 'nada'; if (this.livre < 1) { this.emit('dica', { id: 'almoxCheio' }); return 'almox'; }
+    const pend = s.sobra ?? s.n ?? 1, q = Math.min(pend, this.livre); this._receber(s.item, q, uid);
+    if (q < pend) { s.sobra = pend - q; return 'ok'; }
+    u.slots[i] = null; if (PREDIOS[uid].pedidos) this._puxarPedido(uid, u, i, this.agora); else if (s.auto) this._iniciarSlot(uid, u, i, s.item, s.n || 1, true, this.agora); return 'ok';
   }
   prontosUsina(uid) { const u = this.S.predios[uid]; return u.slots.map((s, i) => (s && s.fim <= this.agora ? i : -1)).filter((i) => i >= 0); }
-  // encadear: aceita o item sem insumos; ele espera na fila e puxa os insumos quando ficarem prontos
-  enfileirar(oid, item, encadear = false) {
-    const o = this.S.predios[oid]; if (!o?.ok) return 'fechado'; if (ITENS[item].oficina !== oid || !this.liberado(item)) return 'bloqueado';
+  setAuto(uid, i, on) { const u = this.S.predios[uid]; if (!u?.ok) return 'fechado'; if (PREDIOS[uid].pedidos) return 'bloqueado'; const s = u.slots[i]; if (!s) return 'nada'; s.auto = !!on; this.emit('auto', { predio: uid, slot: i, auto: s.auto }); return 'ok'; }
+  cancelarSlot(uid, i) { const u = this.S.predios[uid]; const s = u?.slots?.[i]; if (!s) return 'nada'; u.slots[i] = null; this.emit('cancelou', { predio: uid, slot: i, item: s.item, n: s.n }); return 'ok'; }
+  // oficinas: lote de n (1 a 10) limitado pelos insumos (J.loteMax); auto: repete o lote enquanto houver insumos e vaga;
+  // encadear: aceita 1 unidade sem insumos, que espera na fila e puxa os insumos quando ficarem prontos
+  enfileirar(oid, item, n = 1, auto = false, encadear = false) {
+    if (typeof n === 'boolean') { encadear = n; n = 1; auto = false; } // interface antiga: enfileirar(oid, item, encadear)
+    const o = this.S.predios[oid]; if (!o?.ok) return 'fechado'; if (ITENS[item]?.oficina !== oid || !this.liberado(item)) return 'bloqueado';
     if (o.fila.length >= this.vagasFila(oid)) return 'cheio';
-    const req = ITENS[item].req; const tem = Object.entries(req).every(([k, n]) => this.temItem(k, n)); if (!tem && !encadear) return 'falta';
-    const f = { item, ini: 0, fim: 0 }; if (tem) { for (const [k, n] of Object.entries(req)) this.S.itens[k] -= n; } else { f.pend = true; f.desde = this.agora; }
-    o.fila.push(f); this._oficina(oid, this.agora); this.emit('enfileirar', { predio: oid, item, pend: !tem }); return 'ok';
+    if (encadear) n = 1; n = +n; if (!Number.isInteger(n) || n < 1 || n > LOTE_MAX) return 'valor';
+    const req = ITENS[item].req; const tem = this.loteMax(oid, item) >= n; if (!tem && !encadear) return 'falta';
+    const f = { item, n, ini: 0, fim: 0, auto: !!auto }; if (tem) { for (const [k, q] of Object.entries(req)) this.S.itens[k] -= q * n; } else { f.pend = true; f.desde = this.agora; }
+    o.fila.push(f); if (auto) o.auto = { item, n }; this._oficina(oid, this.agora); this.emit('enfileirar', { predio: oid, item, pend: !tem, n, auto: !!auto }); return 'ok';
+  }
+  setAutoFila(oid, on, item, n = 1) {
+    const o = this.S.predios[oid]; if (!o?.ok) return 'fechado';
+    if (!on) { o.auto = null; for (const f of o.fila) delete f.auto; this.emit('auto', { predio: oid, auto: null }); return 'ok'; }
+    if (ITENS[item]?.oficina !== oid || !this.liberado(item)) return 'bloqueado'; n = +n; if (!Number.isInteger(n) || n < 1 || n > LOTE_MAX) return 'valor';
+    o.auto = { item, n }; this._oficina(oid, this.agora); this.emit('auto', { predio: oid, auto: o.auto }); return 'ok';
+  }
+  cancelarFila(oid, j) { // tira um trabalho da fila devolvendo os insumos (e desliga o automático se era ele)
+    const o = this.S.predios[oid]; const f = o?.fila?.[j]; if (!f) return 'nada'; o.fila.splice(j, 1);
+    if (!f.pend) for (const [k, q] of Object.entries(ITENS[f.item].req)) this.S.itens[k] += q * (f.n || 1);
+    if (f.auto) o.auto = null; this._oficina(oid, this.agora); this.emit('cancelou', { predio: oid, item: f.item, n: f.n || 1 }); return 'ok';
   }
   coletarOficina(oid) {
     const o = this.S.predios[oid]; if (!o.prontos.length) return 'nada';
@@ -736,9 +807,9 @@ export class Jogo {
   _planoItens(falta) { let espera = null; for (const [k, n] of Object.entries(falta)) { const pl = this._planoItem(k, n, 0); if (pl && pl.acao !== 'aguardar') return pl; espera = this._espera(espera, pl); } return espera || this._plano('aguardar', null, 'Aguardar a produção'); }
   _emProducao(k) { // quanto de k está pronto para coletar, a caminho e na fila à espera de insumos que ainda não existem
     const S = this.S; let pronto = 0, curso = 0, pend = 0, fim = Infinity, onde = null, ondeCurso = null; // ondeCurso: a usina que entrega primeiro
-    for (const u of USINAS) { const st = S.predios[u]; if (!st.ok) continue; for (const s of st.slots) if (s?.item === k) { if (s.fim <= this.agora) { pronto++; onde = u; } else { curso++; if (s.fim < fim) { fim = s.fim; ondeCurso = u; } } } }
+    for (const u of USINAS) { const st = S.predios[u]; if (!st.ok) continue; for (const s of st.slots) if (s?.item === k) { if (s.fim <= this.agora) { pronto += s.sobra ?? s.n ?? 1; onde = u; } else { curso += s.n || 1; if (s.fim < fim) { fim = s.fim; ondeCurso = u; } } } }
     const I = ITENS[k]; if (I.oficina) { const o = S.predios[I.oficina]; if (o.ok) { const tem = Object.entries(I.req).every(([r, q]) => (S.itens[r] || 0) >= q);
-      for (const x of o.prontos) if (x === k) { pronto++; onde = I.oficina; } for (const f of o.fila) if (f.item === k) { if (f.pend && !tem) pend++; else { curso++; if (f.fim) fim = Math.min(fim, f.fim); } } } }
+      for (const x of o.prontos) if (x === k) { pronto++; onde = I.oficina; } for (const f of o.fila) if (f.item === k) { if (f.pend && !tem) pend++; else { curso += f.n || 1; if (f.fim) fim = Math.min(fim, f.fim); } } } }
     return { pronto, curso, pend, fim, onde, ondeCurso };
   }
   _planoItem(k, n, prof) {
@@ -758,10 +829,10 @@ export class Jogo {
     const faltam = n - ep.curso, novos = faltam - Math.min(ep.pend, faltam); // as encomendas que esperam insumos só pedem os insumos
     if (I.nivel > S.nivel || ((I.cap || 1) > S.cap && !S.legado?.includes(k))) return this._plano('aguardar', null, `${nomeIt(k)} libera no nível ${I.nivel}`, { item: k });
     if (I.tipo === 'bruto') {
-      const u = USINAS.find((id) => { const st = S.predios[id]; return st.ok && st.slots.some((s, j) => j < st.nSlots && !s); });
+      const u = USINAS_LIVRES.find((id) => { const st = S.predios[id]; return st.ok && st.slots.some((s, j) => j < st.nSlots && !s); });
       if (u) return this._plano('produzir', { predio: u }, `Produzir ${faltam} ${nomeIt(k)} ${noPredio(u)}`, { item: k, n: faltam });
-      const mais = this._planoEspaco(USINAS); if (mais) return mais;
-      let fim = Infinity; for (const id of USINAS) for (const s of S.predios[id].slots) if (s) fim = Math.min(fim, s.fim);
+      const mais = this._planoEspaco(USINAS_LIVRES); if (mais) return mais;
+      let fim = Infinity; for (const id of USINAS_LIVRES) for (const s of S.predios[id].slots) if (s) fim = Math.min(fim, s.fim);
       return this._plano('aguardar', { predio: 'usina1' }, `Aguardar um espaço livre na Usina${fim < Infinity ? ` (às ${hhmm(fim)})` : ''}`, { item: k, fim: fim < Infinity ? fim : undefined });
     }
     const o = S.predios[I.oficina]; if (!o.ok) return this._planoPredio(I.oficina, new Set());
