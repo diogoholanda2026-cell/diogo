@@ -40,7 +40,9 @@ const FS_VEU = /* glsl */`
 // incluir '|hao' para não dividir programa com um material sem o gancho.
 export function haoPatch(mat) {
   if (!mat || !mat.isMeshStandardMaterial || corrigidos.has(mat) || mat.userData.semHAO) return false;
-  if (mat.clippingPlanes && mat.clippingPlanes.length) return false; // clones de obra (temporários)
+  // clones de obra (temporários, userData.base = original): já herdam o gancho e a chave da base; um gancho a mais
+  // mudaria a chave ('...|obra-arco|haoN') e o programa aquecido em obras.aquecer não serviria
+  if ((mat.clippingPlanes && mat.clippingPlanes.length) || mat.userData.base) return false;
   corrigidos.add(mat);
   const own = (k) => Object.prototype.hasOwnProperty.call(mat, k);
   const prev = own('onBeforeCompile') ? mat.onBeforeCompile : null;
