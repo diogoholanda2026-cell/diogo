@@ -70,13 +70,16 @@ export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Obje
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
 // economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
 // + valor dos itens entregues) e dá 1 acelerador de obra e 1 de produção (cada um adianta 1 h de um cronômetro)
-const DISP = { pedido: 2, modulo: 4, etapa: 8, marco: 30 }; const REPASSE = [24, 0.0025];
+const DISP = { pedido: 2, modulo: 4, etapa: 8, marco: 30 };
+// renda dos moradores, por hora real: cada morador paga 5 créditos com bem-estar geral até 30, 8 de 31 a 60 e 11 de 61 a 100.
+// O cofre guarda até 12 h de renda; com o jogo fechado rendem no máximo 12 h, a 50%
+const TARIFA = [[30, 5, '0-30'], [60, 8, '31-60'], [100, 11, '61-100']], OFFLINE_H = 12, OFFLINE_FATOR = 0.5;
 // depósito de trocas: compra a 3 × o valor do item (+12% a cada compra na janela), 10 por matéria-prima a cada 4 h;
 // vende a 150% do preço base de compra (4,5 × o valor), até 100 vendas por janela
 const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 100, compra: 3, venda: 1.5 };
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
 export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
-  depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
+  offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR, tarifas: TARIFA.map((t) => t[1]), depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export const TOPOGRAFO = { estaca: { itens: { madeira: 2 }, creditos: 300, min: 20 }, baliza: { itens: { aco: 2 }, creditos: 600, min: 30 }, trena: { itens: { cobre: 2 }, creditos: 900, min: 45 } };
 const LICENCAS = ['estaca', 'baliza', 'trena'], ALMOX = ['estrado', 'etiqueta', 'cadeado'];
 const QUEDA = { estaca: ['madeira', 0.006], baliza: ['serralheria', 0.03], trena: ['eletrica', 0.03] }; // licenças caem de onde fazem sentido
@@ -333,9 +336,11 @@ export class Jogo {
     if (this.ef.bem) fontes.push({ txt: 'Escolhas do Conselho', v: this.ef.bem }); const t = this._bemTemp(); if (t) fontes.push({ txt: 'Pedidos atendidos', v: t });
     fontes.sort((a, b) => b.v - a.v); return { total: this.bem, base: 35, fontes, pressao: Math.round(this.pop / PRESSAO_MORADIA) };
   }
-  taxaRepasse() { // créditos por minuto
-    return (REPASSE[0] + this.pop * REPASSE[1]) * (0.5 + this.bem / 100) * Math.max(0, 1 + this.ef.repasse);
-  }
+  _faixaTarifa() { const b = this.bem; return TARIFA.find((t) => b <= t[0]) || TARIFA[TARIFA.length - 1]; }
+  tarifaMorador() { return this._faixaTarifa()[1]; } // créditos por morador por hora (5, 8 ou 11 pelo bem-estar geral)
+  rendaHora() { return this.pop * this.tarifaMorador() * Math.max(0, 1 + this.ef.repasse); } // créditos por hora, online
+  taxaRepasse() { return this.rendaHora() / 60; } // créditos por minuto (nome antigo, usado pela interface)
+  rendaInfo() { const f = this._faixaTarifa(), por = this.rendaHora(); return { tarifa: f[1], faixa: f[2], porHora: por, cofre: Math.floor(this.S.repasse.acum), cofreMax: por * COFRE_H, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR }; }
   vida() { // porcentagem da composição concluída
     let tot = 0, ok = 0;
     for (const p of PROJETOS) for (const e of p.etapas) { tot += 1; if (this.feita(p.id + '.' + e.id)) ok += 1; }
@@ -376,8 +381,9 @@ export class Jogo {
     const tp = S.topografo; if (tp && tp.fim <= agora) { S.itens[tp.k] = Math.min(MAX_ESPECIAL, S.itens[tp.k] + 1); S.topografo = null; this.emit('aviso', { texto: `Topógrafo: ${nomeIt(tp.k)} entregue`, icone: tp.k }); }
     // bem-estar temporário dos pedidos
     if (S.bemTemp.length && S.bemTemp.some((b) => b.fim <= agora)) { S.bemTemp = S.bemTemp.filter((b) => b.fim > agora); this._derivar(); }
-    // repasses (acumulam até COFRE_H horas; o que já está no cofre nunca encolhe, nem quando a taxa cai)
-    if (this.repassesAtivos()) { const r = S.repasse; const tx = this.taxaRepasse(), max = tx * 60 * COFRE_H; if (r.acum < max) r.acum = Math.min(max, r.acum + (tx * dt) / 60000); }
+    // renda dos moradores (o cofre guarda COFRE_H horas e nunca encolhe, nem quando a tarifa cai): online a 100%;
+    // fechado (mais de 5 min entre ticks) rendem no máximo OFFLINE_H horas, a 50%
+    if (this.repassesAtivos()) { const r = S.repasse; const por = this.rendaHora(), max = por * COFRE_H; const fechado = dt > PASSO_OFF; const ganho = fechado ? (por * Math.min(dt, OFFLINE_H * 3600e3) * OFFLINE_FATOR) / 3600e3 : (por * dt) / 3600e3; if (r.acum < max) r.acum = Math.min(max, r.acum + ganho); }
     this._pedidos(agora); this._pedidoModulos(); this._calendario();
   }
   repassesAtivos() { return true; }

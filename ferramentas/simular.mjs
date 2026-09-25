@@ -303,7 +303,7 @@ function testes() {
       { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); const max = J.taxaRepasse() * 60 * COFRE_H; S.repasse.acum = max * 1.5; J.tick(T + 60000); f(S.repasse.acum === max * 1.5, 'o cofre de repasses não pode encolher quando a taxa cai'); }
       f(Jb.liberado('racao') === false || b.legado.includes('racao'), 'item do capítulo 5 na fila continua liberado'); f(b.predios.laboratorio.fila.length === 1, 'fila preservada');
       f(Math.abs(Jb.durItem('bloco') - ITENS.bloco.t0 * 1000 * F_PRODUTO) < 1 && Jb.fObra(3) === 0.7, 'ritmo novo entra em rampa');
-      const c0 = v1(6, { capEscolhas: { 1: 'usina+', 2: 'repasse+', 3: 'bem+', 4: 'xp+', 5: 'mutirao2' } }); c0.etapas['reflorestar.e1'] = { estado: 'prancha', entregue: { muda: 15, substrato: 2 } }; const muda0 = c0.itens.muda;
+      const c0 = v1(6, { capEscolhas: { 1: 'usina+', 2: 'repasse+', 3: 'bem+', 4: 'xp+', 5: 'mutirao2' } }); c0.etapas['reflorestar.e1'] = { estado: 'prancha', entregue: { muda: 15, substrato: 2 } }; const muda0 = c0.itens.muda; c0.modulos.anel.forEach((x) => (x.nivel = 5)); // no capítulo 6 há moradores pagando a renda
       const c = prepararSave(c0, T); f(c.etapas['reflorestar.e1'].entregue.muda === 8 && c.itens.muda === muda0 + 7 && !c.etapas['reflorestar.e0'], 'epílogo antigo: entrega acima do pedido volta ao almoxarifado');
       const d = prepararSave(prepararSave(v1(2), T), T); f(d.v === VERSAO_SAVE && !d._orfaos?.x, 'normalizar é idempotente');
       const d2 = prepararSave({ ...novoEstado(T), mutirao: 7, disposicao: 250, creditos: -5 }, T); f(d2.mutirao === 3 && d2.disposicao === 100 && d2.creditos === 0, 'normalizar limita fichas, disposição e créditos');
