@@ -1,9 +1,9 @@
 // Arredores no estilo do SimCity BuildIt: a obra não flutua mais numa mesa no escuro. O terreno continua além
-// da planta (até ~9 vezes a largura dela para cada lado, com a borda fundida no chão da obra), com a mata em
+// da planta (até ~10 vezes a largura dela para cada lado, com a borda fundida no chão da obra), com a mata em
 // volta (instâncias com nível de detalhe por célula), campos em retalhos com sebes, morros atrás da obra e
 // serras ao longe (que a neblina azula), uma praia com coqueiros a oeste (à esquerda na vista padrão e na da
 // foto) com mar turquesa → azul, ondas e espuma branca na areia, alguns barcos e nuvens de algodão.
-// Orçamento: ~11 chamadas e ~70 mil triângulos na vista padrão.
+// Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
 import { MESA } from '../data/planta.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
@@ -58,7 +58,7 @@ function eixos(a0, a1) { // posições de a0 (borda negativa da planta) para for
   const miolo = []; const n = Math.round((a1 - a0) / 2); for (let i = 0; i <= n; i++) miolo.push(a0 + ((a1 - a0) * i) / n);
   return [...fora.map((q) => a0 - q).reverse(), ...miolo, ...fora.map((q) => a1 + q)];
 }
-const COR = { grama: [0.2, 0.3, 0.058], duna: [0.38, 0.45, 0.13], areia: [0.86, 0.72, 0.42], molhada: [0.62, 0.52, 0.33], mata: [0.07, 0.2, 0.04], rocha: [0.34, 0.34, 0.3], serra: [0.1, 0.24, 0.07] };
+const COR = { grama: [0.2, 0.3, 0.058], duna: [0.38, 0.45, 0.13], areia: [0.86, 0.72, 0.42], molhada: [0.62, 0.52, 0.33], rocha: [0.34, 0.34, 0.3], serra: [0.1, 0.24, 0.07] }; // albedo linear
 function terreno() {
   const xs = eixos(MESA.x0, MESA.x1), zs = eixos(MESA.z0, MESA.z1); const nx = xs.length, nz = zs.length;
   const P = new Float32Array(nx * nz * 3), C = new Float32Array(nx * nz * 3), T = new Float32Array(nx * nz * 2);
@@ -274,8 +274,11 @@ export class Arredores {
   }
   mostrar(on) { this.group.visible = on; this.forest.mostrarArredores(on); }
   _barcos(t) {
-    const im = this.barcos, pos = im.userData.pos;
-    pos.forEach(([x, z, r, s], i) => { const f = t * 0.6 + i * 1.7; this._e.set(Math.sin(f) * 0.04, r + Math.sin(f * 0.3) * 0.05, Math.cos(f * 1.3) * 0.05); this._q.setFromEuler(this._e); this._p.set(x, MAR_Y + Math.sin(f * 1.1) * 0.03, z); this._s.setScalar(s); im.setMatrixAt(i, this._m4.compose(this._p, this._q, this._s)); });
+    const im = this.barcos, pos = im.userData.pos; // (laço simples: nada alocado por quadro)
+    for (let i = 0; i < pos.length; i++) {
+      const b = pos[i], f = t * 0.6 + i * 1.7; this._e.set(Math.sin(f) * 0.04, b[2] + Math.sin(f * 0.3) * 0.05, Math.cos(f * 1.3) * 0.05); this._q.setFromEuler(this._e);
+      this._p.set(b[0], MAR_Y + Math.sin(f * 1.1) * 0.03, b[1]); this._s.setScalar(b[3]); im.setMatrixAt(i, this._m4.compose(this._p, this._q, this._s));
+    }
     im.instanceMatrix.needsUpdate = true;
   }
   // tempo do mar, nuvens com a cor do céu da hora (env.cores) e barcos balançando (a cada 2 quadros)

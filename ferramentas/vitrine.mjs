@@ -78,7 +78,7 @@ try {
     await camera(pg, [2, 2, 62, -0.55, 0.78, 36]); await foto(pg, 'c04-geral-outro-angulo', 'Composição completa vista do outro lado', 2000);
     await camera(pg, [4, 0, 44, 0.2, 1.35, 36]); await foto(pg, 'c05-planta-de-cima', 'Composição quase de cima (leitura da planta)', 2000);
     // o ciclo de dia e noite na vista geral de abertura (C.vistaGeral): amanhecer, meio-dia, pôr do sol e noite
-    await pg.evaluate(() => window.__held.C.vistaGeral?.(false));
+    await pg.evaluate(() => window.__held.C.vistaGeral?.(false)); pg._alvo = { de: 'vistaGeral' };
     for (const [n, h, d] of [['c06-geral-07h', 7, 'amanhecer'], ['c07-geral-12h', 12, 'meio-dia'], ['c08-geral-18h', 18, 'pôr do sol'], ['c09-geral-22h', 22, 'noite']]) { await hora(pg, h); await foto(pg, n, `Composição completa na vista geral, ${d} (${h} h)`, 3000); }
     await pg.close();
   } catch (e) { erros.push('grupo: ' + e.message.split('\n')[0]); }

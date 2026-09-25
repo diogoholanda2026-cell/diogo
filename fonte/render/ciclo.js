@@ -40,7 +40,7 @@ const DIA = {
   luz: [0xfff0d6, 3.7], ceuH: 0xa6d0ff, chaoH: 0x86a85a, hemi: 0.95, env: 0.95,
   zen: 0x3f84e8, hor: 0xd2e8fa, baixo: 0x6e7e5e, brilho: [0xfff2d8, 0.45], nevoa: [115, 470], nuvem: [0xffffff, 0xb6c6e0],
   noite: 0, estrelas: 0, sombra: 0.88, hao: 0.85, lua: 0, cidade: 0, rim: [0xcfe6ff, 0.3], nuvK: 0.42,
-  P: { exposure: 1.2, saturation: 1.05, contrast: 1.1, vignette: 0.06, wb: [1.0, 1.0, 1.0], shadowTint: [0.0, 0.002, 0.006], highTint: [0.006, 0.003, -0.004], threshold: 1.15, bloomStrength: 0.35 },
+  P: { exposure: 1.2, saturation: 1.1, contrast: 1.07, vignette: 0.06, wb: [1.0, 1.0, 1.0], shadowTint: [0.0, 0.002, 0.006], highTint: [0.006, 0.003, -0.004], threshold: 1.15, bloomStrength: 0.35 },
 };
 const DIA_TARDE = { ...DIA, luz: [0xffecc8, 3.6], hor: 0xdae6f2, brilho: [0xffe4b8, 0.6], P: { ...DIA.P, wb: [1.02, 1.0, 0.98] } };
 // hora dourada (manhã e fim de tarde): sol baixo, quente e forte, sombras longas e céu ainda azul

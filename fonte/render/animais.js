@@ -32,9 +32,8 @@ const par = (x, z) => ((x > 0) === (z > 0) ? PERNA_A : PERNA_B);
 // Gorila de maquete: preto, sela prateada no dorso. Em pé anda sobre os nós dos dedos (ombros mais
 // altos que o quadril, tronco inclinado para a frente); a variante sentada tem o tronco ereto.
 function gorila(sentado) {
-  // quase preto, azulado no albedo para sair neutro sob a luz quente de exposição (medido na k11: corpo
-  // perto de #1a1a20 e sela prateada em cinza de luminância 70 a 90, como o dorso da foto)
-  const gc = [0.035, 0.046, 0.075], gp = [0.06, 0.062, 0.075], prata = [0.10, 0.12, 0.17]; const out = [];
+  // quase preto e neutro sob o sol (a luz do dia já é fria nas sombras), sela prateada clara no dorso, como na foto
+  const gc = [0.042, 0.042, 0.046], gp = [0.066, 0.063, 0.062], prata = [0.16, 0.16, 0.17]; const out = [];
   if (!sentado) {
     const tronco = ell(0.36, 0.30, 0.28); tronco.rotateZ(0.5); out.push(memb(colorize(T(tronco, 0.05, 0.55, 0), gc), TORAX, 0.05, 0.55));
     out.push(memb(colorize(T(ell(0.22, 0.2, 0.24), 0.18, 0.5, 0), gc), TORAX, 0.05, 0.55)); // peito
@@ -90,7 +89,7 @@ function aveGeo() {
 let GEOS = null;
 export function animalGeos() {
   if (GEOS) return GEOS;
-  const cinza = [0.42, 0.4, 0.39], cinzaE = [0.32, 0.3, 0.3], marfim = [0.92, 0.88, 0.78];
+  const cinza = [0.25, 0.24, 0.235], cinzaE = [0.18, 0.17, 0.17], marfim = [0.92, 0.88, 0.78]; // cinza médio sob o sol forte
   const eleph = [];
   eleph.push(colorize(T(ell(0.36, 0.26, 0.24), 0, 0.42, 0), cinza));
   eleph.push(colorize(T(ell(0.17, 0.17, 0.15), 0.36, 0.52, 0), cinza));
@@ -110,7 +109,7 @@ export function animalGeos() {
   for (const s of [-1, 1]) gir.push(memb(colorize(limb([0.42, 1.42, s * 0.03], [0.41, 1.5, s * 0.035], 0.012, 0.01), mar), PESCOCO, 0.18, 0.78, 1));
   for (const [x, z] of [[0.16, 0.08], [0.16, -0.08], [-0.16, 0.08], [-0.16, -0.08]]) gir.push(memb(colorize(limb([x, 0.66, z], [x, 0, z], 0.035, 0.025), am), par(x, z), x, 0.66));
   for (let i = 0; i < 9; i++) gir.push(colorize(T(ell(0.035, 0.03, 0.036, 6), -0.15 + (i % 3) * 0.14, 0.78 + ((i / 3) | 0) * 0.04 - 0.04, (i % 2 ? 1 : -1) * 0.12), mar));
-  const rino = []; const rc = [0.5, 0.47, 0.44];
+  const rino = []; const rc = [0.3, 0.28, 0.26];
   rino.push(colorize(T(ell(0.3, 0.17, 0.15), 0, 0.27, 0), rc)); rino.push(colorize(T(ell(0.14, 0.1, 0.09), 0.3, 0.24, 0), rc));
   rino.push(colorize(limb([0.4, 0.26, 0], [0.47, 0.38, 0], 0.03, 0.005), marfim)); rino.push(colorize(limb([0.34, 0.3, 0], [0.37, 0.36, 0], 0.02, 0.004), marfim));
   for (const [x, z] of [[0.16, 0.08], [0.16, -0.08], [-0.16, 0.08], [-0.16, -0.08]]) rino.push(memb(colorize(limb([x, 0.22, z], [x, 0, z], 0.05, 0.045), rc), par(x, z), x, 0.22));

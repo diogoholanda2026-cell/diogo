@@ -87,7 +87,7 @@ export class Environment {
     // neblina (a cor é o horizonte do céu: o terreno distante some no céu)
     scene.fog = new THREE.Fog(0xd2e8fa, 115, 470);
     // cores atuais que outros módulos leem (nuvens dos arredores)
-    this.cores = { nuvem: new THREE.Color(1, 1, 1), nuvemSombra: new THREE.Color(0.7, 0.75, 0.85), hor: new THREE.Color(), zen: new THREE.Color() };
+    this.cores = { nuvem: new THREE.Color(1, 1, 1), nuvemSombra: new THREE.Color(0.7, 0.75, 0.85) };
     this._prepEnv();
     HAO_U.tNuvemSombra.value = tex.macro(); // ruído suave sem emenda (o da macro-variação) para as sombras das nuvens
     this.U = HAO_U;                             // uniformes compartilhados com os materiais (oclusão, tom do céu, recorte, nuvens): para ajuste
@@ -157,7 +157,7 @@ export class Environment {
     U.solDir.value.copy(this.solDir); U.solCor.value.setRGB(V[I.brilho], V[I.brilho + 1], V[I.brilho + 2]); U.solK.value = V[I.brilhoK]; U.solDisco.value = clamp((elSol * 180 / Math.PI + 3) / 4, 0, 1);
     U.luaDir.value.copy(this.luaDir); U.lua.value = V[I.lua]; U.estrelas.value = V[I.estrelas]; U.cidade.value = V[I.cidade];
     U.nuvemCor.value.setRGB(V[I.nuvem], V[I.nuvem + 1], V[I.nuvem + 2]); U.nuvemSombra.value.setRGB(V[I.nuvemSombra], V[I.nuvemSombra + 1], V[I.nuvemSombra + 2]);
-    this.cores.nuvem.copy(U.nuvemCor.value); this.cores.nuvemSombra.copy(U.nuvemSombra.value); this.cores.hor.copy(f.color); this.cores.zen.copy(U.zen.value);
+    this.cores.nuvem.copy(U.nuvemCor.value); this.cores.nuvemSombra.copy(U.nuvemSombra.value);
     // gradação e bloom
     P.exposure = V[I.exposure]; P.saturation = V[I.saturation]; P.contrast = V[I.contrast]; P.vignette = V[I.vignette]; P.threshold = V[I.threshold]; P.bloomStrength = V[I.bloomStrength];
     P.wb.set(V[I.wb], V[I.wb + 1], V[I.wb + 2]); P.shadowTint.set(V[I.shadowTint], V[I.shadowTint + 1], V[I.shadowTint + 2]); P.highTint.set(V[I.highTint], V[I.highTint + 1], V[I.highTint + 2]);
@@ -185,8 +185,10 @@ export class Environment {
     const NP = HAO_U.nuvemP.value; NP.x = (t / 1000) * 0.017 % 1; NP.y = (t / 1000) * 0.0065 % 1;
     if (!this._pausa) {
       if (this._ciclo === 'acelerado') this._hora = (((this._ref.h + (Date.now() - this._ref.t) / 60000) % 24) + 24) % 24;
-      else if (this._ciclo === 'relogio') this._hora = this._relogio();
-      else this._hora = HORA_DIA;
+      else if (this._ciclo === 'relogio') { // hora do aparelho: referência + tempo corrido (sem Date por quadro), ressincroniza a cada 10 min
+        const dt = Date.now() - this._ref.t; if (dt > 600000 || dt < 0) { this._ref.t = Date.now(); this._ref.h = this._relogio(); }
+        this._hora = (this._ref.h + (Date.now() - this._ref.t) / 3600000) % 24;
+      } else this._hora = HORA_DIA;
     }
     if (this._forcar || this._hora !== this._horaAplicada) { amostrar(this._hora, this.V); this._aplicar(this.V, agora); this._horaAplicada = this._hora; this._forcar = false; }
     const s = this.key.shadow, sc = s.camera, C = this._sc;
