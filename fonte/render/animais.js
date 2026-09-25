@@ -113,7 +113,7 @@ export function animalGeos() {
   rino.push(colorize(T(ell(0.3, 0.17, 0.15), 0, 0.27, 0), rc)); rino.push(colorize(T(ell(0.14, 0.1, 0.09), 0.3, 0.24, 0), rc));
   rino.push(colorize(limb([0.4, 0.26, 0], [0.47, 0.38, 0], 0.03, 0.005), marfim)); rino.push(colorize(limb([0.34, 0.3, 0], [0.37, 0.36, 0], 0.02, 0.004), marfim));
   for (const [x, z] of [[0.16, 0.08], [0.16, -0.08], [-0.16, 0.08], [-0.16, -0.08]]) rino.push(memb(colorize(limb([x, 0.22, z], [x, 0, z], 0.05, 0.045), rc), par(x, z), x, 0.22));
-  const baleia = []; const az = [0.28, 0.36, 0.44], br = [0.85, 0.87, 0.88];
+  const baleia = []; const az = [0.74, 0.78, 0.82], br = [0.92, 0.93, 0.94]; // baleia branca, como a da maquete
   const pesoCauda = (x) => Math.max(0, -x - 0.5); // cauda sobe e desce (cetáceo)
   baleia.push(memb(colorize(T(ell(0.9, 0.24, 0.26, 12), 0, 0, 0), az), CAUDA_V, 0, 0, pesoCauda)); baleia.push(memb(colorize(T(ell(0.7, 0.12, 0.2, 10), 0.1, -0.12, 0), br), CAUDA_V, 0, 0, pesoCauda));
   { const t = new THREE.ConeGeometry(0.28, 0.1, 3); t.rotateZ(Math.PI / 2); t.scale(1, 1, 1.6); baleia.push(memb(colorize(T(t, -0.98, 0.02, 0), az), CAUDA_V, 0, 0, pesoCauda)); }
