@@ -19,22 +19,22 @@ export function faseDe(h) { h = ((h % 24) + 24) % 24; return h >= 4.4 && h < 8 ?
 // ---------------------------------------------------------------- quadros-chave
 // cores em sRGB (hex), convertidas para linear na carga; P é a gradação do motor
 const NOITE = {
-  luz: [0xa4b6ff, 0.95], ceuH: 0x6668d2, chaoH: 0x302a48, hemi: 1.12, env: 0.66,
+  luz: [0xa4b6ff, 1.05], ceuH: 0x6a6ad4, chaoH: 0x322c4a, hemi: 1.2, env: 0.68,
   zen: 0x0f1440, hor: 0x383e82, baixo: 0x1c1c38, brilho: [0x000000, 0], nevoa: [130, 540], nuvem: [0x4e548f, 0x272b5c],
   noite: 1, estrelas: 1, sombra: 0.55, hao: 1, lua: 1, cidade: 1, rim: [0x8c90ff, 0.16], nuvK: 0,
-  P: { exposure: 1.95, saturation: 1.0, contrast: 1.04, vignette: 0.12, wb: [1.0, 0.99, 1.01], shadowTint: [0.004, 0.0, 0.012], highTint: [0.012, 0.008, -0.004], threshold: 0.72, bloomStrength: 1.4 },
+  P: { exposure: 2.45, saturation: 0.88, contrast: 1.04, vignette: 0.12, wb: [1.0, 0.99, 1.01], shadowTint: [0.004, 0.0, 0.012], highTint: [0.012, 0.008, -0.004], threshold: 0.85, bloomStrength: 1.3 },
 };
 const CREP_MANHA = {
   luz: [0xc4a0ff, 0.6], ceuH: 0x8a88d6, chaoH: 0x3e3850, hemi: 0.98, env: 0.68,
   zen: 0x2c327c, hor: 0xbc8cb8, baixo: 0x302a44, brilho: [0xff8c78, 0.55], nevoa: [120, 500], nuvem: [0xdc9cba, 0x5c4c8a],
   noite: 0.8, estrelas: 0.35, sombra: 0.5, hao: 0.9, lua: 0.4, cidade: 0.6, rim: [0xd0a4ff, 0.2], nuvK: 0.04,
-  P: { exposure: 1.5, saturation: 1.06, contrast: 1.04, vignette: 0.1, wb: [0.99, 0.97, 1.04], shadowTint: [0.004, 0.0, 0.01], highTint: [0.012, 0.004, -0.002], threshold: 0.85, bloomStrength: 1.1 },
+  P: { exposure: 1.85, saturation: 0.95, contrast: 1.04, vignette: 0.1, wb: [0.99, 0.97, 1.04], shadowTint: [0.004, 0.0, 0.01], highTint: [0.012, 0.004, -0.002], threshold: 0.9, bloomStrength: 1.1 },
 };
 const AMANHECER = {
   luz: [0xffb07c, 2.3], ceuH: 0xc4b6e6, chaoH: 0x6c6258, hemi: 1.02, env: 0.85,
   zen: 0x6c92dc, hor: 0xffbaa0, baixo: 0x5c5260, brilho: [0xffa070, 1.25], nevoa: [110, 470], nuvem: [0xffcab4, 0x9c8aba],
   noite: 0.12, estrelas: 0, sombra: 0.8, hao: 0.8, lua: 0, cidade: 0, rim: [0xffc090, 0.3], nuvK: 0.24,
-  P: { exposure: 1.16, saturation: 1.12, contrast: 1.05, vignette: 0.08, wb: [1.03, 1.0, 0.98], shadowTint: [0.002, 0.0, 0.008], highTint: [0.01, 0.004, -0.004], threshold: 1.0, bloomStrength: 0.7 },
+  P: { exposure: 1.25, saturation: 1.02, contrast: 1.05, vignette: 0.08, wb: [1.03, 1.0, 0.98], shadowTint: [0.002, 0.0, 0.008], highTint: [0.01, 0.004, -0.004], threshold: 1.0, bloomStrength: 0.7 },
 };
 const DIA = {
   luz: [0xfff0d6, 3.7], ceuH: 0xa6d0ff, chaoH: 0x86a85a, hemi: 0.95, env: 0.95,
@@ -55,13 +55,13 @@ const POR_DO_SOL = {
   luz: [0xffa458, 2.7], ceuH: 0x9ea6e8, chaoH: 0x6a5c4c, hemi: 1.02, env: 0.88,
   zen: 0x5a66c6, hor: 0xffb07c, baixo: 0x5c4c5a, brilho: [0xff8a48, 1.4], nevoa: [110, 470], nuvem: [0xffba8e, 0x8a7cb6],
   noite: 0.35, estrelas: 0, sombra: 0.8, hao: 0.8, lua: 0, cidade: 0.2, rim: [0xffb070, 0.45], nuvK: 0.18,
-  P: { exposure: 1.16, saturation: 1.12, contrast: 1.06, vignette: 0.09, wb: [1.03, 1.0, 0.97], shadowTint: [0.004, 0.0, 0.01], highTint: [0.014, 0.004, -0.006], threshold: 0.95, bloomStrength: 0.85 },
+  P: { exposure: 1.3, saturation: 1.0, contrast: 1.06, vignette: 0.09, wb: [1.03, 1.0, 0.97], shadowTint: [0.004, 0.0, 0.01], highTint: [0.014, 0.004, -0.006], threshold: 0.95, bloomStrength: 0.85 },
 };
 const CREPUSCULO = {
   luz: [0xb89cff, 0.62], ceuH: 0x8a8cde, chaoH: 0x3a3650, hemi: 0.98, env: 0.72,
   zen: 0x322e82, hor: 0xc892c0, baixo: 0x322c4a, brilho: [0xff7262, 0.6], nevoa: [120, 500], nuvem: [0xcc92c2, 0x4c428a],
   noite: 0.85, estrelas: 0.3, sombra: 0.5, hao: 0.9, lua: 0.5, cidade: 0.7, rim: [0xc8a0ff, 0.25], nuvK: 0.05,
-  P: { exposure: 1.5, saturation: 1.06, contrast: 1.04, vignette: 0.1, wb: [0.98, 0.97, 1.05], shadowTint: [0.004, 0.0, 0.012], highTint: [0.012, 0.006, -0.002], threshold: 0.82, bloomStrength: 1.2 },
+  P: { exposure: 1.85, saturation: 0.95, contrast: 1.04, vignette: 0.1, wb: [0.98, 0.97, 1.05], shadowTint: [0.004, 0.0, 0.012], highTint: [0.012, 0.006, -0.002], threshold: 0.82, bloomStrength: 1.2 },
 };
 // [hora, quadro] em ordem; 0 e 24 são a mesma noite (o ciclo fecha sem costura)
 const QUADROS = [[0, NOITE], [4.4, NOITE], [5.4, CREP_MANHA], [6.3, AMANHECER], [7.2, DOURADA_MANHA], [8, DIA], [16.5, DIA_TARDE], [17.1, DOURADA_TARDE], [17.9, POR_DO_SOL], [18.8, CREPUSCULO], [19.7, NOITE], [24, NOITE]];
