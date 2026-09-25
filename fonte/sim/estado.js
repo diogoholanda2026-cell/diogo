@@ -384,7 +384,47 @@ export class Jogo {
     // renda dos moradores (o cofre guarda COFRE_H horas e nunca encolhe, nem quando a tarifa cai): online a 100%;
     // fechado (mais de 5 min entre ticks) rendem no máximo OFFLINE_H horas, a 50%
     if (this.repassesAtivos()) { const r = S.repasse; const por = this.rendaHora(), max = por * COFRE_H; const fechado = dt > PASSO_OFF; const ganho = fechado ? (por * Math.min(dt, OFFLINE_H * 3600e3) * OFFLINE_FATOR) / 3600e3 : (por * dt) / 3600e3; if (r.acum < max) r.acum = Math.min(max, r.acum + ganho); }
-    this._pedidos(agora); this._pedidoModulos(); this._calendario();
+    this._pedidos(agora); this._pedidoModulos(); this._juros(agora); this._calendario();
+  }
+  // ---------------- empréstimo (Escritório): até 50 mil por ano do jogo, dívida máxima de 500 mil, 10% ao ano ----------------
+  _juros(agora) { // os juros devidos acumulam proporcionalmente ao tempo (fechado também); contrato vencido rende a mora
+    const E = this.S.emprestimo; const dt = Math.max(0, agora - E.ultimoJuro); E.ultimoJuro = agora; if (dt <= 0 || !E.contratos.length) return;
+    let j = 0; for (const c of E.contratos) if (c.saldo > 0) { const venc = clamp(agora - c.fim, 0, dt); j += (c.saldo * (EMP.taxa * (dt - venc) + EMP.mora * venc)) / ANO_MS; }
+    if (j > 0) E.juros += j;
+  }
+  _ano() { return this.calendario().ano; }
+  _parcela() { const p = this.S.emprestimo.principal; return p > 0 ? Math.min(p, Math.max(EMP.passo, Math.ceil(p / 10))) : 0; }
+  _podar() { const E = this.S.emprestimo, ano = this._ano(); E.contratos = E.contratos.filter((c) => c.saldo > 0 || c.ano === ano); } // quitados de anos anteriores saem do save
+  _abater(v) { const E = this.S.emprestimo; for (const c of [...E.contratos].sort((a, b) => a.ini - b.ini)) { if (v <= 0) break; const x = Math.min(v, c.saldo); c.saldo -= x; v -= x; } E.principal = E.contratos.reduce((a, c) => a + c.saldo, 0); this._podar(); }
+  emprestimoInfo() {
+    const E = this.S.emprestimo, ano = this._ano(); const tomado = E.contratos.filter((c) => c.ano === ano).reduce((a, c) => a + c.valor, 0); const divida = E.principal + E.juros;
+    const contratos = E.contratos.filter((c) => c.saldo > 0).map((c) => ({ id: c.id, ano: c.ano, valor: c.valor, saldo: c.saldo, ini: c.ini, fim: c.fim, vencido: this.agora > c.fim }));
+    const jurosPorDia = contratos.reduce((a, c) => a + (c.saldo * (c.vencido ? EMP.mora : EMP.taxa)) / ANO_DIAS, 0);
+    const disp = Math.max(0, Math.floor(Math.min(EMP.ano - tomado, EMP.max - divida) / EMP.passo) * EMP.passo);
+    return { principal: E.principal, juros: E.juros, divida, disponivelAno: disp, tomadoAno: tomado, ano, limiteAno: EMP.ano, limiteDivida: EMP.max, taxaAno: EMP.taxa, mora: EMP.mora, passo: EMP.passo, prazoAnos: EMP.prazoAnos, parcela: this._parcela(), contratos, jurosPorDia };
+  }
+  emprestar(v) {
+    v = +v; if (!Number.isInteger(v) || v < EMP.passo || v % EMP.passo) return 'valor';
+    const S = this.S, E = S.emprestimo, ano = this._ano(); const tomado = E.contratos.filter((c) => c.ano === ano).reduce((a, c) => a + c.valor, 0);
+    if (tomado + v > EMP.ano) return 'limiteAno'; if (E.principal + E.juros + v > EMP.max) return 'limiteDivida';
+    const c = { id: S.seq++, ano, valor: v, saldo: v, ini: this.agora, fim: this.agora + EMP.prazoAnos * ANO_MS }; E.contratos.push(c); E.principal += v; S.creditos += v; S.stats.emprestado += v; this._podar();
+    this.emit('emprestimo', { tipo: 'tomou', valor: v, principal: E.principal, juros: E.juros, contrato: { ...c } });
+    this.emit('aviso', { texto: `Empréstimo de ${fmtN(v)} créditos: ${Math.round(EMP.taxa * 100)}% ao ano, ${EMP.prazoAnos} anos`, icone: 'creditos', creditos: v }); return 'ok';
+  }
+  pagarJuros() { // paga os juros devidos (o que der, se não houver créditos para tudo)
+    const S = this.S, E = S.emprestimo; const dev = Math.ceil(E.juros); if (dev < 1) return 'nada'; if (S.creditos < 1) return 'creditos';
+    const v = Math.min(S.creditos, dev); S.creditos -= v; E.juros = Math.max(0, E.juros - v); S.stats.jurosPagos += v; const parcial = E.juros >= 1;
+    this.emit('emprestimo', { tipo: 'juros', valor: v, parcial, principal: E.principal, juros: E.juros }); return 'ok';
+  }
+  pagarParcela() { // juros devidos + uma parcela do principal (10%, mínimo 1.000), abatendo os contratos mais antigos
+    const S = this.S, E = S.emprestimo; const par = this._parcela(), dev = Math.ceil(E.juros); if (par < 1 && dev < 1) return 'nada'; const total = dev + par; if (S.creditos < total) return 'creditos';
+    S.creditos -= total; E.juros = 0; S.stats.jurosPagos += dev; this._abater(par);
+    this.emit('emprestimo', { tipo: 'parcela', valor: total, juros: dev, parcela: par, principal: E.principal }); return 'ok';
+  }
+  quitar() {
+    const S = this.S, E = S.emprestimo; const dev = Math.ceil(E.juros), total = dev + E.principal; if (total < 1) return 'nada'; if (S.creditos < total) return 'creditos';
+    S.creditos -= total; E.juros = 0; S.stats.jurosPagos += dev; this._abater(E.principal);
+    this.emit('emprestimo', { tipo: 'quitou', valor: total, principal: 0, juros: 0 }); return 'ok';
   }
   repassesAtivos() { return true; }
   // ---------------- calendário (1 dia = 20 s reais, contado pelo relógio real, com o jogo fechado também) ----------------
