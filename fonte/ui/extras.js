@@ -165,7 +165,7 @@ function instalarEconomia(C) {
   C.hud.aoPop = () => {
     C.som.toque(); const S = C.S; const ri = J.rendaInfo?.(); const rh = rendaHoraDe(J); const cofre = Math.floor(ri?.cofre ?? S.repasse.acum);
     const corpo = ri
-      ? `<ul><li><b>${ri.tarifa}</b>por morador e por hora (bem-estar ${ri.faixa}%)</li><li><b>${fmt(cofre)}</b>no cofre, que guarda até ${ri.cofreH} h</li></ul><small>Faixas: até 30% de bem-estar, 5 por morador; 31 a 60%, 8; 61 a 100%, 11. Com o jogo fechado, rende ${Math.round(ri.offlineFator * 100)}% por até ${ri.offlineH} h.</small>`
+      ? `<ul><li><b>${ri.tarifa}</b>por morador e por hora (bem-estar ${ri.faixa}%)</li><li><b>${fmt(cofre)}</b>no cofre, que guarda até ${ri.cofreH ?? REGRAS.cofreH} h</li></ul><small>Faixas: até 30% de bem-estar, 5 por morador; 31 a 60%, 8; 61 a 100%, 11. Com o jogo fechado, rende ${Math.round(ri.offlineFator * 100)}% por até ${ri.offlineH} h.</small>`
       : `<ul><li><b>${fmt(cofre)}</b>no cofre, que guarda até ${REGRAS.cofreH} h</li></ul><small>A Holding repassa créditos conforme os moradores e o bem-estar.</small>`;
     C.hud.info('[data-a="pop"]', `<h4>${fmt(J.pop)} moradores · +${fmt(rh)}/h</h4>${corpo}<button class="botao sec" data-i="escritorio">${img('repasse')} Abrir o Escritório</button>`, 7000, (id) => { if (id === 'escritorio') { C.som.toque(); abrirFinancas(); } });
   };

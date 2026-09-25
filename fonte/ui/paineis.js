@@ -144,6 +144,7 @@ export class Paineis {
   }
   _clique(e) {
     const b = e.target.closest('[data-a]'); if (!b || !this.el?.contains(b)) return; const a = b.dataset.a; const d = b.dataset; const C = this.C; const J = this.J;
+    if (C.hud.longoRecente?.()) return; // o toque longo abriu o popover de informação: este clique não é uma ação
     if (a === 'fechar') return this.fechar();
     if (a === 'voltar') return this.voltar();
     C.som.toque();

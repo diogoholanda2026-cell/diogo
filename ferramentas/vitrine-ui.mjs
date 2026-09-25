@@ -153,7 +153,7 @@ const CENAS = {
   'aprovacao-etapa': (H) => { economia(H); const p = H.PROJ.pas_frente, e = p.etapas[0]; H.J.emit('etapaFeita', { key: 'pas_frente.e1', p, e }); H.J.emit('aviso', { texto: 'Medição aprovada: +1.260', icone: 'creditos', creditos: 1260 }); H.C._filaModais.forEach((x) => (x.t = 0)); H.C._festaAte = 0; H.C._verModais(); },
   acelerar: (H) => { economia(H); const t = Date.now(); H.S.etapas['lago.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 5400000 }; H.J._derivar(); H.C.paineis.abrir('etapa', 'lago.e1'); },
   // ---- prancheta da maquete: estados dos painéis, resumo do pedido, confirmação, rótulo da obra em foco, fala recolhida ----
-  'inicio-recolhida': (H) => { H.C.hud.fala.classList.add('recolhida'); H.C.hud._tRects = 0; },
+  'inicio-recolhida': () => {}, // a fala recolhe sozinha 4 s depois da revelação (2,4 s): a captura espera 7 s
   'obras-estados': (H) => { base(H); const t = Date.now(); H.S.cap = 2; H.S.etapas['pas_frente.e1'] = { estado: 'pronta', entregue: {}, ini: t - 9000, fim: t - 10 }; H.S.etapas['lago.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 600000 }; H.S.itens.brita = 20; H.S.itens.concreto = 2; H.J._derivar(); H.C.paineis.abrir('obras'); },
   'prancha-parcial': (H) => { base(H); H.S.etapas['pas_frente.e1'] = { estado: 'feita', entregue: {} }; H.S.etapas['lago.e1'] = { estado: 'feita', entregue: {} }; H.S.itens.brita = 3; H.S.itens.concreto = 0; H.S.itens.estaca = 1; H.J._derivar(); H.C.paineis.abrir('etapa', 'sede.e1'); },
   'prancha-entrega': (H) => { CENAS['prancha-parcial'](H); H.C.paineis.el.querySelector('[data-a=entregar][data-k=brita]')?.click(); },
@@ -190,7 +190,7 @@ for (const serie of series) for (const [w, h] of tamanhos) for (const nome of no
   pg.on('pageerror', (e) => rel.erros.push(`${serie} ${w}x${h} ${nome}: ${e.message}`)); pg.on('console', (m) => { if (m.type() === 'error') rel.erros.push(`${serie} ${w}x${h} ${nome}: console ${m.text()}`); });
   await pg.goto('file://' + join(pasta, `vitrine-ui-${serie}.html`)); await pg.waitForFunction(() => window.__pronto, null, { timeout: 20000 });
   await pg.addScriptTag({ content: CODIGO }); await pg.evaluate((n) => window.CENAS[n](window.H), nome);
-  await pg.waitForTimeout(nome === 'aprovacao' ? 450 : 350);
+  await pg.waitForTimeout({ aprovacao: 450, 'inicio-recolhida': 7000 }[nome] || 350);
   // ícones em voo (coleta automática, moedas) terminam antes da foto, para não cruzarem a folha na captura
   if (nome !== 'aprovacao') await pg.waitForFunction(() => ![...document.querySelectorAll('.voa')].some((v) => v.style.display !== 'none'), null, { timeout: 1500 }).catch(() => {});
   await pg.screenshot({ path: join(pasta, `${serie === 'noite' ? '' : serie + '-'}${w}x${h}-${nome}.png`) });
