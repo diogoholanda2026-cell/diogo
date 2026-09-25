@@ -65,9 +65,6 @@ export class Controle {
       const ev0 = this.obras.onEvento; this.obras.onEvento = (t, k, d) => { ev0?.(t, k, d); this._eventoObra(t, k, d); };
       const tl0 = this.obras.onTimelapse; this.obras.onTimelapse = (k, de, para) => { tl0?.(k, de, para); this._timelapse(k, de, para); };
     }
-    // desfoque atrás da folha só no perfil ultra (custa caro no Mali)
-    const q = (p) => document.body.classList.toggle('q-ultra', p?.id === 'ultra'); q(this.engine.q);
-    if (Array.isArray(this.engine.aoQualidade)) this.engine.aoQualidade.push(q); else { const f = this.engine.onQuality; this.engine.onQuality = (p) => { f?.(p); q(p); }; }
   }
   get S() { return this.J.S; }
   // ------------------------------------------------------------ início
