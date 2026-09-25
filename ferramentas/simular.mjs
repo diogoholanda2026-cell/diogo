@@ -9,7 +9,7 @@
 // dilemas; sai com código 1 se houver TRAVADO ou algum número fora das faixas.
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO, COFRE_H } from '../fonte/sim/estado.js';
+import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRODUTO, COFRE_H, VERSAO_SAVE } from '../fonte/sim/estado.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS, receitas } from '../fonte/data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../fonte/data/obras.js';
 import { CAPITULOS, FALAS_ETAPA, EFEITOS, TUTORIAL } from '../fonte/data/historia.js';
@@ -277,10 +277,10 @@ function testes() {
     { const falta = []; for (const p of PROJETOS) for (const e of p.etapas) if (!FALAS_ETAPA[p.id + '.' + e.id]) falta.push(p.id + '.' + e.id); f(!falta.length, 'etapas sem fala: ' + falta.join(', ')); }
     // migração v1 → v2 (saves sintéticos: início, capítulo 3 com escolhas antigas e 5 fichas, epílogo)
     { const v1 = (cap, o = {}) => { const S = novoEstado(T - 5 * 24 * H); S.v = 1; S.cap = cap; delete S.disposicao; delete S.topografo; delete S.deposito; delete S.bemTemp; delete S.marcos; delete S.itens.estaca; S.itens.nó = 3; S.predios.velho = { ok: true }; S.modulos.anel.push({ nivel: 2, obra: null }); S.stats = { coletas: 10, obras: 2, jogadoMs: 5 }; S.dicas.guia = 1; Object.assign(S, o); return JSON.parse(JSON.stringify(S)); };
-      const a = prepararSave(v1(1), T); const Ja = new Jogo(a); f(Number.isFinite(Ja.ocupado) && a.v === 2 && a.itens.estaca === 0 && a._orfaos?.itens?.nó === 3 && a._orfaos?.predios?.velho && a._orfaos?.modulos?.anel && a.dicas.guia === 1, 'migração do início');
+      const a = prepararSave(v1(1), T); const Ja = new Jogo(a); f(Number.isFinite(Ja.ocupado) && a.v === VERSAO_SAVE && a.itens.estaca === 0 && a._orfaos?.itens?.nó === 3 && a._orfaos?.predios?.velho && a._orfaos?.modulos?.anel && a.dicas.guia === 1, 'migração do início');
       const b0 = v1(3, { mutirao: 5, capEscolhas: { 1: 'usina+', 2: 'mutirao2' }, bonus: { usina: 0.15, oficina: 0, almox: 0, repasse: 0, bem: 0, xp: 0 }, nivel: 16, xp: 9000, creditos: 50000 }); b0.itens.kitvet = 2; b0.predios.laboratorio = { ok: true, fila: [{ item: 'racao', ini: T - 1000, fim: T + 1000 }], prontos: [], nFila: 4 }; b0.etapas['biblioteca.e1'] = { estado: 'feita', entregue: {} }; b0.modulos.anel.forEach((x) => (x.nivel = 3));
       const b = prepararSave(b0, T); const Jb = new Jogo(b); Jb.agora = T;
-      f(b.mutirao === 3 && b.disposicao === 100 && Jb.ef.usina === 0.15 && b.capEscolhas[1] === 'legado:usina+' && b.creditos === 50000 + 4500 && b._avisos?.length === 1 && b.nivel === 16 && b.feita !== 0 && Jb.feita('biblioteca.e1') && b.modulos.anel.every((x) => x.nivel === 3), 'migração do capítulo 3 (bônus, fichas, progresso)');
+      f(b.mutirao === 3 && b.disposicao === 100 && Jb.ef.usina === 0.15 && b.capEscolhas[1] === 'legado:usina+' && b.creditos === 50000 + 4500 && b._avisos?.some((x) => x.includes('Mutirão')) && b.nivel === 16 && b.feita !== 0 && Jb.feita('biblioteca.e1') && b.modulos.anel.every((x) => x.nivel === 3), 'migração do capítulo 3 (bônus, fichas, progresso)');
       const r0 = v1(3, { repasse: { acum: 40538.7, t: T - H } }); const cr0 = r0.creditos; const rs = prepararSave(r0, T); const Jr = new Jogo(rs); Jr.tick(T);
       f(rs.creditos === cr0 + 40538 && rs.repasse.acum <= Jr.taxaRepasse() * 60 * COFRE_H + 1e-6 && rs._avisos?.some((x) => x.includes('cofre antigo')), 'migração: o cofre de repasses antigo vira créditos, com aviso');
       { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); const max = J.taxaRepasse() * 60 * COFRE_H; S.repasse.acum = max * 1.5; J.tick(T + 60000); f(S.repasse.acum === max * 1.5, 'o cofre de repasses não pode encolher quando a taxa cai'); }
@@ -288,7 +288,7 @@ function testes() {
       f(Math.abs(Jb.durItem('bloco') - ITENS.bloco.t0 * 1000 * F_PRODUTO) < 1 && Jb.fObra(3) === 0.7, 'ritmo novo entra em rampa');
       const c0 = v1(6, { capEscolhas: { 1: 'usina+', 2: 'repasse+', 3: 'bem+', 4: 'xp+', 5: 'mutirao2' } }); c0.etapas['reflorestar.e1'] = { estado: 'prancha', entregue: { muda: 15, substrato: 2 } }; const muda0 = c0.itens.muda;
       const c = prepararSave(c0, T); f(c.etapas['reflorestar.e1'].entregue.muda === 8 && c.itens.muda === muda0 + 7 && !c.etapas['reflorestar.e0'], 'epílogo antigo: entrega acima do pedido volta ao almoxarifado');
-      const d = prepararSave(prepararSave(v1(2), T), T); f(d.v === 2 && !d._orfaos?.x, 'normalizar é idempotente');
+      const d = prepararSave(prepararSave(v1(2), T), T); f(d.v === VERSAO_SAVE && !d._orfaos?.x, 'normalizar é idempotente');
       const d2 = prepararSave({ ...novoEstado(T), mutirao: 7, disposicao: 250, creditos: -5 }, T); f(d2.mutirao === 3 && d2.disposicao === 100 && d2.creditos === 0, 'normalizar limita fichas, disposição e créditos');
       const e = prepararSave({ v: 1, itens: { madeira: 'x' }, modulos: {}, etapas: { 'nada.e1': {} } }, T); f(new Jogo(e).ocupado === 0 && e._orfaos.etapas['nada.e1'], 'save quebrado vira jogo válido');
       let g = null; try { g = prepararSave({ v: 1, cap: 2, itens: {}, modulos: { anel: 5 }, predios: { carpintaria: { ok: true, fila: 5, prontos: 'x' }, x: { fila: 5 } }, pedidos: [{ itens: 5 }], etapas: { 'reflorestar.e1': 5 } }, T); const Jg = new Jogo(g); Jg.tick(T + H); } catch (err) { g = null; } f(g && g.predios.carpintaria.ok && g.predios.carpintaria.fila.length === 0, 'save com listas quebradas não pode lançar exceção');

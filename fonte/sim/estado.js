@@ -44,7 +44,7 @@ import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data
 import { PROJETOS, PROJ, MODULOS, LIMITE_CAP, POP_NIVEL, POOL_NIVEL, CUSTO_NIVEL, TEMPO_NIVEL, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../data/obras.js';
 import { CAPITULOS, EFEITOS, MARCOS, FALAS_ETAPA, EPILOGO, PEDIDOS } from '../data/historia.js';
 
-export const VERSAO_SAVE = 2;
+export const VERSAO_SAVE = 3;
 const N_MODULOS = { anel: 8, uni: 4, anelBib: 3, casas: 6, santuario: 5 };
 const MAX_ESPECIAL = 999;
 // ajuste global de ritmo (o jogador ainda escolhe 1x, 2x ou 4x nas configurações)
@@ -54,9 +54,15 @@ export const F_OBRA = { 1: 0.7, 2: 1.5, 3: 3, 4: 4, 5: 5, 6: 0.15 }; // obras ma
 export const FICHAS_MAX = 3;
 const BANDEJA = 9, FILA_MAX = 9, USINA_MAX = 6, FILA_SELO = 12, MUTIRAO_MS = 2 * 3600e3, PEND_MS = 12 * 3600e3;
 const PASSO_OFF = 5 * 60e3, PASSOS_MAX = 288, RAMPA_MS = 48 * 3600e3;
-export const COFRE_H = 4, CAP_PEDIDOS = 2; // horas de repasse que o cofre guarda; capítulo em que os pedidos começam
+export const COFRE_H = 12, CAP_PEDIDOS = 2; // horas de renda que o cofre guarda; capítulo em que os pedidos começam
+// calendário do jogo: 1 dia = 20 s reais, mês de 30 dias (10 min), ano de 12 meses (360 dias, 2 h reais), contado pelo relógio real
+export const DIA_MS = 20000, MES_DIAS = 30, ANO_DIAS = 360, ANO_MS = ANO_DIAS * DIA_MS;
+// empréstimo: até 50 mil por ano do jogo, dívida máxima de 500 mil (principal + juros devidos), 10% ao ano sobre o principal,
+// prazo de 10 anos por contrato (depois dele o saldo rende a mora de 20%), em múltiplos de 1.000
+const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, mora: 0.20 };
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
-export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3 };
+export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
+  diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (+lv <= n) out.push(...ks); return out; } // serviços que um pavimento de nível n pede
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
 // economia (medida pelo robô em sessões): repasse = (base + por morador) × (0,5 + bem-estar) por minuto; a medição devolve
@@ -83,7 +89,8 @@ export function novoEstado(agora = Date.now()) {
     itens: {}, almoxNivel: 1,
     predios: {}, etapas: {}, modulos: {}, pedidos: [], repasse: { acum: 0, t: agora }, dicas: {}, desbloq: {},
     topografo: null, deposito: { janela: 0, n: {}, vendas: 0 }, bemTemp: [],
-    stats: { coletas: 0, obras: 0, jogadoMs: 0, mutiroes: 0, pedidos: 0, compras: 0, vendas: 0, dispGanha: 0, dispPerdida: 0 }, seq: 1,
+    calendario: { inicio: agora, dia: 0 }, emprestimo: { principal: 0, juros: 0, contratos: [], ultimoJuro: agora }, aceleradores: { obra: 0, producao: 0 }, valuationMax: 0,
+    stats: { coletas: 0, obras: 0, jogadoMs: 0, mutiroes: 0, pedidos: 0, compras: 0, vendas: 0, dispGanha: 0, dispPerdida: 0, emprestado: 0, jurosPagos: 0, acelerados: 0, lotes: 0, pedidosFabricados: 0 }, seq: 1,
   };
   for (const k of Object.keys(ITENS)) S.itens[k] = 0;
   S.itens.madeira = 6; S.itens.brita = 4; S.itens.estaca = 1;
@@ -117,6 +124,21 @@ export const MIGRACOES = {
     for (const p of Object.values(objeto(S.predios) ? S.predios : {})) { for (const f of lista(p?.fila)) if (adiante(f?.item)) leg.add(f.item); for (const k of lista(p?.prontos)) if (adiante(k)) leg.add(k); }
     for (const p of lista(S.pedidos)) for (const k of Object.keys(objeto(p?.itens) ? p.itens : {})) if (adiante(k)) leg.add(k);
     S.legado = [...leg]; S.migradoEm = agora; S.v = 2;
+  },
+  2: (S, agora) => { // v2 → v3: calendário (conta desde a criação do jogo), empréstimo vazio, aceleradores zerados, lotes nos espaços e filas
+    const ini = num(S.criado, agora); S.calendario = { inicio: ini, dia: Math.max(0, Math.floor((num(S.t, agora) - ini) / DIA_MS)) };
+    S.emprestimo = { principal: 0, juros: 0, contratos: [], ultimoJuro: num(S.t, agora) }; S.aceleradores = { obra: 0, producao: 0 }; S.valuationMax = 0;
+    for (const p of Object.values(objeto(S.predios) ? S.predios : {})) {
+      if (!objeto(p)) continue;
+      if (Array.isArray(p.slots)) p.slots = p.slots.map((x) => (objeto(x) ? { ...x, n: 1, auto: false } : null));
+      if (Array.isArray(p.fila)) p.fila = p.fila.map((x) => (objeto(x) ? { ...x, n: 1, auto: false } : x));
+      if (Array.isArray(p.prontos)) p.auto = null;
+    }
+    if (objeto(S.deposito)) S.deposito = { janela: num(S.deposito.janela), n: objeto(S.deposito.n) ? S.deposito.n : {}, vendas: num(S.deposito.vendas) };
+    if (objeto(S.repasse)) S.repasse = { acum: Math.max(0, num(S.repasse.acum)), t: num(S.repasse.t, agora) };
+    const avisos = (S._avisos = Array.isArray(S._avisos) ? S._avisos : []);
+    avisos.push('Economia nova: calendário, Escritório com empréstimos e valuation, lotes de até 10, coleta automática, recompensa de 150% por etapa e renda paga pelos moradores');
+    S.v = 3;
   },
 };
 export function migrar(S, agora = Date.now()) { if (!(S.v >= 1)) S.v = 1; let g = 0; while (S.v < VERSAO_SAVE && MIGRACOES[S.v] && g++ < 20) MIGRACOES[S.v](S, agora); return S; }
@@ -163,6 +185,13 @@ export function normalizar(S, agora = Date.now()) {
   const E = efeitos(O); // vagas e itens a mais das escolhas (para a fila e as entregas abaixo)
   O.almoxNivel = Math.max(1, num(S.almoxNivel, 1) | 0); O.seq = Math.max(1, num(S.seq, 1) | 0); O.ritmo = num(S.ritmo, 1) > 0 ? num(S.ritmo, 1) : 1;
   O.repasse.acum = Math.max(0, num(O.repasse.acum));
+  // calendário, empréstimo, aceleradores e recorde de valuation
+  { const c = objeto(S.calendario) ? S.calendario : {}; const ini = num(c.inicio, O.criado); O.calendario = { inicio: ini, dia: Math.max(0, num(c.dia, Math.floor((O.t - ini) / DIA_MS)) | 0) }; }
+  { const e = objeto(S.emprestimo) ? S.emprestimo : {}; const contratos = [];
+    for (const k of Array.isArray(e.contratos) ? e.contratos : []) { if (!objeto(k)) continue; const valor = Math.max(0, Math.round(num(k.valor))); const saldo = clamp(Math.round(num(k.saldo, valor)), 0, valor); if (!valor) continue; const ini = num(k.ini, O.t); contratos.push({ id: num(k.id, O.seq++) | 0, ano: Math.max(1, num(k.ano, 1) | 0), valor, saldo, ini, fim: num(k.fim, ini + EMP.prazoAnos * ANO_MS) }); }
+    O.emprestimo = { principal: contratos.reduce((a, k) => a + k.saldo, 0), juros: Math.max(0, num(e.juros)), contratos, ultimoJuro: num(e.ultimoJuro, O.t) }; }
+  { const a = objeto(S.aceleradores) ? S.aceleradores : {}; O.aceleradores = { obra: Math.max(0, num(a.obra) | 0), producao: Math.max(0, num(a.producao) | 0) }; }
+  O.valuationMax = Math.max(0, num(S.valuationMax));
   // itens: todos os do jogo (0 se faltar); desconhecidos vão para _orfaos
   O.itens = {}; for (const k of Object.keys(ITENS)) O.itens[k] = Math.max(0, Math.round(num(S.itens?.[k])));
   for (const [k, v] of Object.entries(objeto(S.itens) ? S.itens : {})) if (!tem(ITENS, k)) guarda('itens', k, v);
@@ -330,9 +359,20 @@ export class Jogo {
     if (S.bemTemp.length && S.bemTemp.some((b) => b.fim <= agora)) { S.bemTemp = S.bemTemp.filter((b) => b.fim > agora); this._derivar(); }
     // repasses (acumulam até COFRE_H horas; o que já está no cofre nunca encolhe, nem quando a taxa cai)
     if (this.repassesAtivos()) { const r = S.repasse; const tx = this.taxaRepasse(), max = tx * 60 * COFRE_H; if (r.acum < max) r.acum = Math.min(max, r.acum + (tx * dt) / 60000); }
-    this._pedidos(agora); this._pedidoModulos();
+    this._pedidos(agora); this._pedidoModulos(); this._calendario();
   }
   repassesAtivos() { return true; }
+  // ---------------- calendário (1 dia = 20 s reais, contado pelo relógio real, com o jogo fechado também) ----------------
+  calendario(agora = this.agora) {
+    const ms = Math.max(0, agora - this.S.calendario.inicio); const dia = Math.floor(ms / DIA_MS);
+    return { dia, diaDoMes: (dia % MES_DIAS) + 1, mes: Math.floor(dia / MES_DIAS) % (ANO_DIAS / MES_DIAS) + 1, ano: Math.floor(dia / ANO_DIAS) + 1, progDia: (ms % DIA_MS) / DIA_MS, diaMs: DIA_MS };
+  }
+  _calendario() { // virada de dia (um evento só se passaram vários dias fechado) e de ano
+    const S = this.S, c = this.calendario(); const ant = S.calendario.dia; if (c.dia === ant) return;
+    const anoAnt = Math.floor(Math.max(0, ant) / ANO_DIAS) + 1; S.calendario.dia = c.dia;
+    this.emit('dia', { dia: c.dia, diaDoMes: c.diaDoMes, mes: c.mes, ano: c.ano, saltou: c.dia - ant });
+    if (c.ano > anoAnt) this.emit('ano', { ano: c.ano });
+  }
   // oficinas: fila em cadeia; o item da frente espera insumos sem segurar a fila; bandeja cheia para a fila
   _oficinas(ate) { for (const id of OFICINAS) if (this.S.predios[id].ok) this._oficina(id, ate); }
   _oficina(id, ate) {
