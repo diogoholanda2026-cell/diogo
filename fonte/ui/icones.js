@@ -315,6 +315,34 @@ const D = {
   sol(c) { sol(c, 48, 48, 21, ['#fffce0', '#ffdc1a', '#f69a00'], 12); reflexo(c, 41, 40, 8, 5, 0.8); },
   por(c) { sol(c, 48, 60, 19, ['#fff0b0', '#ff8a2a', '#e0441a']); c.beginPath(); c.rect(6, 62, 84, 24); c.fillStyle = lin(c, 0, 62, 0, 86, [[0, '#7a5ad8'], [1, '#3a2a8a']]); c.fill(); contorno(c, 2.2); c.strokeStyle = 'rgba(255,190,120,.9)'; c.lineWidth = 3; c.lineCap = 'round'; for (const [x0, x1, y] of [[30, 66, 70], [38, 58, 77], [44, 52, 83]]) { c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke(); } },
   lua(c) { c.save(); c.beginPath(); c.rect(0, 0, 96, 96); c.arc(62, 40, 25, 0, 7, true); c.clip(); c.beginPath(); c.arc(44, 52, 30, 0, 7); c.fillStyle = rad(c, 30, 52, 2, 34, [[0, '#fffbe0'], [1, '#ffd24a']]); c.fill(); c.restore(); for (const [x, y, r] of [[74, 66, 8], [78, 20, 6], [58, 82, 4.5]]) { estrela(c, x, y, r * 0.42, r); c.fillStyle = '#fff6b0'; c.fill(); contorno(c, 1.2); } },
+  // economia: calendário do jogo (folha com a faixa azul e as argolas), valuation (barras subindo com a seta),
+  // empréstimo (banco com a moeda) e acelerador (cronômetro com o raio)
+  calendario(c) {
+    rr(c, 16, 22, 64, 62, 9); c.fillStyle = lin(c, 0, 22, 0, 84, [[0, '#ffffff'], [1, '#dcebf8']]); c.fill(); contorno(c, 2.2);
+    c.save(); rr(c, 16, 22, 64, 62, 9); c.clip(); c.fillStyle = lin(c, 0, 22, 0, 42, [[0, '#6ad2ff'], [1, '#1f83dc']]); c.fillRect(16, 22, 64, 20); c.restore(); rr(c, 16, 22, 64, 62, 9); contorno(c, 2.2);
+    for (const x of [32, 64]) { c.beginPath(); c.rect(x - 3, 12, 6, 18); c.fillStyle = lin(c, x - 3, 0, x + 3, 0, [[0, '#f6f8fb'], [1, '#8c9cb0']]); c.fill(); contorno(c, 1.4); }
+    for (let i = 0; i < 9; i++) { const x = 25 + (i % 3) * 17, y = 48 + Math.floor(i / 3) * 12; rr(c, x, y, 12, 8, 2); c.fillStyle = i === 4 ? '#f2453a' : '#b9d2ea'; c.fill(); }
+  },
+  valuation(c) {
+    for (const [i, h] of [[0, 22], [1, 36], [2, 54]]) { const x = 16 + i * 22; rr(c, x, 82 - h, 16, h, 4); c.fillStyle = lin(c, x, 0, x + 16, 0, [[0, i === 2 ? '#a8ee64' : '#86d9ff'], [1, i === 2 ? '#3fa320' : '#1f83dc']]); c.fill(); contorno(c, 1.8); }
+    c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#ff9f1a'; c.lineWidth = 6; c.beginPath(); c.moveTo(20, 46); c.lineTo(46, 30); c.lineTo(58, 38); c.lineTo(80, 16); c.stroke();
+    c.beginPath(); c.moveTo(66, 14); c.lineTo(84, 12); c.lineTo(82, 30); c.closePath(); c.fillStyle = '#ff9f1a'; c.fill(); contorno(c, 1.6);
+    c.strokeStyle = 'rgba(22,28,50,.5)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(20, 46); c.lineTo(46, 30); c.lineTo(58, 38); c.lineTo(80, 16); c.stroke();
+  },
+  emprestimo(c) {
+    c.beginPath(); c.moveTo(12, 38); c.lineTo(48, 14); c.lineTo(84, 38); c.closePath(); c.fillStyle = lin(c, 0, 14, 0, 38, [[0, '#ffffff'], [1, '#c8dcee']]); c.fill(); contorno(c, 2);
+    for (const x of [20, 40, 60]) { rr(c, x, 40, 12, 28, 2); c.fillStyle = lin(c, x, 0, x + 12, 0, [[0, '#f8fbfe'], [0.5, '#dbe8f4'], [1, '#98acc0']]); c.fill(); contorno(c, 1.6); }
+    rr(c, 10, 68, 76, 12, 3); c.fillStyle = lin(c, 0, 68, 0, 80, [[0, '#e6f0fa'], [1, '#9db4cc']]); c.fill(); contorno(c, 2);
+    c.beginPath(); c.arc(72, 66, 15, 0, 7); c.fillStyle = rad(c, 67, 61, 2, 17, [[0, '#fff8c4'], [0.5, '#ffd23a'], [1, '#e08a00']]); c.fill(); contorno(c, 2);
+    c.beginPath(); c.arc(72, 66, 9, 0, 7); c.strokeStyle = 'rgba(196,112,0,.65)'; c.lineWidth = 2.2; c.stroke();
+  },
+  acelerar(c) {
+    rr(c, 42, 8, 12, 10, 3); c.fillStyle = '#8c9cb0'; c.fill(); contorno(c, 1.6); c.beginPath(); c.rect(45, 16, 6, 8); c.fillStyle = '#5a6a80'; c.fill();
+    c.beginPath(); c.arc(48, 54, 30, 0, 7); c.fillStyle = lin(c, 0, 24, 0, 84, [[0, '#ffffff'], [1, '#c8dcee']]); c.fill(); contorno(c, 2.4);
+    c.beginPath(); c.arc(48, 54, 23, 0, 7); c.fillStyle = rad(c, 42, 46, 2, 26, [[0, '#ffffff'], [1, '#dbe9f6']]); c.fill(); c.strokeStyle = 'rgba(22,28,50,.35)'; c.lineWidth = 1.4; c.stroke();
+    c.lineCap = 'round'; c.strokeStyle = 'rgba(22,28,50,.5)'; c.lineWidth = 2; for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; c.beginPath(); c.moveTo(48 + Math.cos(a) * 19, 54 + Math.sin(a) * 19); c.lineTo(48 + Math.cos(a) * 22, 54 + Math.sin(a) * 22); c.stroke(); }
+    c.beginPath(); c.moveTo(52, 36); c.lineTo(38, 58); c.lineTo(48, 58); c.lineTo(44, 74); c.lineTo(60, 50); c.lineTo(50, 50); c.closePath(); c.fillStyle = lin(c, 0, 36, 0, 74, [[0, '#fff2a0'], [0.5, '#ffd23a'], [1, '#f09000']]); c.fill(); contorno(c, 1.8);
+  },
 };
 // usinas: prédio de reciclagem com chaminé; o número de chaminés distingue I, II e III
 function usina(c, n) {
