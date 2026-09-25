@@ -140,13 +140,7 @@ const D = {
   // edifício-fita em três terraços curvos (módulo por pavimento)
   modulo(c) { sombra(c); for (let i = 0; i < 3; i++) { const y = 66 - i * 14, x0 = 12 + i * 8, x1 = 84 - i * 8; c.beginPath(); c.moveTo(x0, y); c.quadraticCurveTo(48, y + 10, x1, y); c.lineTo(x1, y - 10); c.quadraticCurveTo(48, y, x0, y - 10); c.closePath(); c.fillStyle = lin(c, 0, y - 10, 0, y + 6, [[0, '#ffd08a'], [1, '#c98a3e']]); c.fill(); contorno(c, 1.6); c.beginPath(); c.moveTo(x0, y - 10); c.quadraticCurveTo(48, y, x1, y - 10); c.lineTo(x1 - 2, y - 13); c.quadraticCurveTo(48, y - 4, x0 + 2, y - 13); c.closePath(); c.fillStyle = '#5f8f3e'; c.fill(); contorno(c, 1.2); c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x0, y - 1); c.quadraticCurveTo(48, y + 9, x1, y - 1); c.stroke(); } },
   // lixeira (descartar)
-  lixo(c) { sombra(c); c.beginPath(); c.moveTo(26, 30); c.lineTo(70, 30); c.lineTo(65, 82); c.lineTo(31, 82); c.closePath(); c.fillStyle = lin(c, 26, 0, 70, 0, [[0, '#c9d2da'], [0.5, '#98a4b0'], [1, '#6d7884']]); c.fill(); contorno(c);
-    c.strokeStyle = 'rgba(60,70,80,.55)'; c.lineWidth = 3; for (const x of [38, 48, 58]) { c.beginPath(); c.moveTo(x, 38); c.lineTo(x - (x - 48) * 0.1, 76); c.stroke(); }
-    rr(c, 20, 22, 56, 9, 3); c.fillStyle = '#f04a3a'; c.fill(); contorno(c, 1.6); rr(c, 40, 15, 16, 8, 3); c.fillStyle = '#b8402f'; c.fill(); contorno(c, 1.4); },
   // disposição da equipe: cafezinho fumegante
-  disposicao(c) { sombra(c); c.beginPath(); c.ellipse(48, 78, 30, 7, 0, 0, 7); c.fillStyle = '#e8e2d6'; c.fill(); contorno(c, 1.6); c.beginPath(); c.moveTo(24, 40); c.lineTo(68, 40); c.quadraticCurveTo(68, 76, 46, 76); c.quadraticCurveTo(24, 76, 24, 40); c.closePath(); c.fillStyle = lin(c, 24, 0, 68, 0, [[0, '#ffffff'], [1, '#c9c2b4']]); c.fill(); contorno(c);
-    c.beginPath(); c.ellipse(46, 41, 21, 4, 0, 0, 7); c.fillStyle = '#5a3418'; c.fill(); c.beginPath(); c.arc(72, 52, 9, -1.3, 1.3); c.lineWidth = 5; c.strokeStyle = '#d8d0c2'; c.stroke(); c.lineWidth = 1.6; c.strokeStyle = 'rgba(20,16,12,.55)'; c.beginPath(); c.arc(72, 52, 11.5, -1.3, 1.3); c.stroke();
-    c.lineCap = 'round'; c.strokeStyle = 'rgba(230,120,90,.9)'; c.lineWidth = 3.5; for (const x of [38, 50]) { c.beginPath(); c.moveTo(x, 34); c.bezierCurveTo(x - 7, 26, x + 7, 22, x, 12); c.stroke(); } },
   // ---- prédios do canteiro ----
   'predio:escritorio'(c) { sombra(c); caixa(c, 12, 46, 56, 30, 16, '#f0ece2', '#d8d2c4', '#b4ac9c'); c.fillStyle = '#2e9cf0'; for (const x of [18, 34, 50]) c.fillRect(x, 52, 11, 9); contorno(c, 1); c.fillStyle = '#50667c'; c.fillRect(20, 66, 9, 10); rr(c, 60, 16, 26, 30, 3); c.fillStyle = '#d08a42'; c.fill(); contorno(c, 1.6); rr(c, 63, 21, 20, 22, 2); c.fillStyle = '#f5f0e6'; c.fill(); c.strokeStyle = '#6c8298'; c.lineWidth = 1.8; for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(66, 27 + i * 6); c.lineTo(80, 27 + i * 6); c.stroke(); } },
   'predio:almox'(c) { sombra(c); c.beginPath(); c.moveTo(10, 44); c.lineTo(48, 22); c.lineTo(86, 44); c.lineTo(86, 80); c.lineTo(10, 80); c.closePath(); c.fillStyle = lin(c, 0, 22, 0, 80, [[0, '#dfe4ea'], [1, '#98a4b0']]); c.fill(); contorno(c); rr(c, 30, 48, 36, 32, 2); c.fillStyle = '#50667c'; c.fill(); c.strokeStyle = 'rgba(200,210,220,.7)'; c.lineWidth = 1.5; for (let i = 1; i < 6; i++) { c.beginPath(); c.moveTo(30, 48 + i * 5.3); c.lineTo(66, 48 + i * 5.3); c.stroke(); } caixa(c, 36, 68, 12, 12, 5, '#f8d08a', '#e2a052', '#b8742c'); caixa(c, 50, 70, 10, 10, 4, '#f8d08a', '#e2a052', '#b8742c'); },
@@ -317,6 +311,14 @@ const D = {
   lua(c) { c.save(); c.beginPath(); c.rect(0, 0, 96, 96); c.arc(62, 40, 25, 0, 7, true); c.clip(); c.beginPath(); c.arc(44, 52, 30, 0, 7); c.fillStyle = rad(c, 30, 52, 2, 34, [[0, '#fffbe0'], [1, '#ffd24a']]); c.fill(); c.restore(); for (const [x, y, r] of [[74, 66, 8], [78, 20, 6], [58, 82, 4.5]]) { estrela(c, x, y, r * 0.42, r); c.fillStyle = '#fff6b0'; c.fill(); contorno(c, 1.2); } },
   // economia: calendário do jogo (folha com a faixa azul e as argolas), valuation (barras subindo com a seta),
   // empréstimo (banco com a moeda) e acelerador (cronômetro com o raio)
+  // relógio (o tempo de uma obra ou lote nos botões): mostrador claro, aro escuro, 12 traços e dois ponteiros
+  relogio(c) {
+    c.beginPath(); c.arc(48, 50, 36, 0, 7); c.fillStyle = lin(c, 0, 14, 0, 86, [[0, '#5a7a9e'], [1, '#2a4468']]); c.fill(); contorno(c, 2.2);
+    c.beginPath(); c.arc(48, 50, 29, 0, 7); c.fillStyle = rad(c, 42, 42, 2, 32, [[0, '#ffffff'], [1, '#dbe8f4']]); c.fill(); contorno(c, 1.4);
+    c.strokeStyle = '#3a5678'; c.lineCap = 'round'; for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; const L = i % 3 ? 3.5 : 6; c.lineWidth = i % 3 ? 1.8 : 2.6; c.beginPath(); c.moveTo(48 + Math.cos(a) * (27 - L), 50 + Math.sin(a) * (27 - L)); c.lineTo(48 + Math.cos(a) * 26, 50 + Math.sin(a) * 26); c.stroke(); }
+    c.lineWidth = 4.2; c.strokeStyle = '#1e3350'; c.beginPath(); c.moveTo(48, 50); c.lineTo(48, 32); c.stroke(); c.lineWidth = 3.4; c.strokeStyle = '#ff9f1a'; c.beginPath(); c.moveTo(48, 50); c.lineTo(62, 58); c.stroke();
+    c.beginPath(); c.arc(48, 50, 3.2, 0, 7); c.fillStyle = '#1e3350'; c.fill(); c.beginPath(); c.arc(40, 18, 5, 0, 7); c.fillStyle = '#ff9f1a'; c.fill(); contorno(c, 1.4); reflexo(c, 38, 36, 10, 6, 0.7, -0.7);
+  },
   calendario(c) {
     rr(c, 16, 22, 64, 62, 9); c.fillStyle = lin(c, 0, 22, 0, 84, [[0, '#ffffff'], [1, '#dcebf8']]); c.fill(); contorno(c, 2.2);
     c.save(); rr(c, 16, 22, 64, 62, 9); c.clip(); c.fillStyle = lin(c, 0, 22, 0, 42, [[0, '#6ad2ff'], [1, '#1f83dc']]); c.fillRect(16, 22, 64, 20); c.restore(); rr(c, 16, 22, 64, 62, 9); contorno(c, 2.2);
