@@ -8,7 +8,7 @@ import { Paineis } from './ui/paineis.js';
 import { Bolhas } from './ui/bolhas.js';
 import { ITENS, PREDIOS, USINAS, OFICINAS } from './data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, alvoEtapa } from './data/obras.js';
-import { CAPITULOS, DICAS, ABERTURA, CONSELHO, TUTORIAL } from './data/historia.js';
+import { CAPITULOS, DICAS, ABERTURA, CONSELHO, TUTORIAL, EFEITOS } from './data/historia.js';
 import { LOTES } from './render/models/canteiro.js';
 import { A } from './data/planta.js';
 import { M } from './render/materials.js';
@@ -36,6 +36,9 @@ const EV_PAINEL = new Set(['produto', 'coleta', 'enfileirar', 'produzir', 'pedid
 // passarelas e a praça povoam as vias (a chave muda quando uma delas fica pronta)
 const POVO = [...PROJETOS.filter((p) => p.id.startsWith('pas_')).flatMap((p) => p.etapas.map((e) => p.id + '.' + e.id)), 'praca.e3'];
 const VERBO = { pronta: 'Aprovar', coleta: 'Coletar', moedas: 'Moedas', subir: 'Subir módulo', bloq: 'Módulo', obra: 'Obra' };
+// legenda dos prêmios de nível (o que cada item especial faz)
+const LEGENDA_ITEM = { estrado: 'Amplia o Almoxarifado', etiqueta: 'Amplia o Almoxarifado', cadeado: 'Amplia o Almoxarifado', estaca: 'Licença de obra', baliza: 'Licença de obra', trena: 'Licença de obra' };
+const NOME_ITEM_CURTO = { estrado: 'Estrado', etiqueta: 'Etiqueta', cadeado: 'Cadeado' };
 const VERBO_PLANO = { aprovar: 'Aprovar', coletar: 'Coletar', iniciar: 'Iniciar', entregar: 'Entregar', produzir: 'Produzir', construir: 'Construir', apresentar: 'Conselho', vender: 'Vender' };
 const ICONE_PLANO = { aprovar: 'check', coletar: 'repasse', iniciar: 'grua', entregar: 'almox', produzir: 'producao', construir: 'grua', apresentar: 'sede', vender: 'troca', aguardar: 'obras' };
 // o que o anel-guia do tutorial procura dentro do painel aberto, por passo
@@ -619,15 +622,17 @@ export class Controle {
   modalNivel(d) {
     const de = d.de ?? d.nivel - 1, para = d.para ?? d.nivel; const n = para - de; const tit = n > 2 ? `Níveis ${de + 1} a ${para}` : n === 2 ? `Níveis ${de + 1} e ${para}` : `Nível ${para}`;
     const esp = (d.especiais?.length ? d.especiais : [d.especial]).filter((k) => ITENS[k]); const cont = {}; for (const k of esp) cont[k] = (cont[k] || 0) + 1;
-    const cards = [`<div class="premio" data-p="creditos">${img('creditos')}<b>+${fmt(d.creditos || 0)}</b><small>créditos</small></div>`, ...Object.entries(cont).map(([k, q]) => `<div class="premio" data-p="${k}">${img(k)}<b>+${q}</b><small>${ITENS[k].nome}</small></div>`), ...(d.vagas || []).map((id) => `<div class="premio" data-p="predio:${id}">${img('predio:' + id)}<b>+1 vaga</b><small>${PREDIOS[id]?.nome || id}</small></div>`)].join('');
-    const novos = [...(d.novos || []).map((k) => `<span class="etiq">${img(k)}${ITENS[k].nome}</span>`), ...(d.predios || []).map((k) => `<span class="etiq">${img('predio:' + k)}${PREDIOS[k].nome}</span>`)].join('');
+    const cards = [`<div class="premio" data-p="creditos">${img('creditos')}<b>+${fmt(d.creditos || 0)}</b><small>créditos</small></div>`, ...Object.entries(cont).map(([k, q]) => `<div class="premio" data-p="${k}" title="${ITENS[k].nome}">${img(k)}<b>+${q} ${NOME_ITEM_CURTO[k] || ITENS[k].nome}</b><small>${LEGENDA_ITEM[k] || ITENS[k].nome}</small></div>`), ...(d.vagas || []).map((id) => `<div class="premio" data-p="predio:${id}">${img('predio:' + id)}<b>+1 vaga</b><small>${PREDIOS[id]?.nome || id}</small></div>`)].join('');
+    // "Liberado agora" separa itens de prédios, cada grupo com o seu rótulo
+    const novosIt = (d.novos || []).map((k) => `<span class="etiq">${img(k)}${ITENS[k].nome}</span>`).join(''), novosPr = (d.predios || []).map((k) => `<span class="etiq">${img('predio:' + k)}${PREDIOS[k].nome}</span>`).join('');
+    const novos = novosIt || novosPr ? `<p class="lib">Liberado agora</p>${novosIt ? `<div class="linha centro liberados"><small class="lib-i">Itens</small>${novosIt}</div>` : ''}${novosPr ? `<div class="linha centro liberados"><small class="lib-i">Prédios</small>${novosPr}</div>` : ''}` : '';
     // retido: o que ainda falta somar no contador (0 se ele já subiu enquanto o modal esperava na fila)
     const ret = d._ret || { v: d.creditos || 0 }; let voou = false; const voar = (m) => {
       if (voou) return; voou = true; const cs = m ? [...m.querySelectorAll('.premio')] : []; let t = 0; const v = ret.v; ret.v = 0;
       for (const c of cs) { const r = c.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const p = c.dataset.p; setTimeout(() => { if (p === 'creditos') { const k = 6, parte = Math.floor(v / k); this.hud.voar('creditos', x, y, 'creditos', v ? (i, vis, ult) => this.hud.soltar('creditos', ult ? v - parte * (vis - 1) : parte) : null, { n: k }); this.som.moedas(); } else this.hud.voar(p, x, y, 'almox', null, { n: cont[p] || 1 }); }, t); t += 90; }
       if (!cs.length && v) this.hud.soltar('creditos', v);
     };
-    this.modal(`<header class="mh"><div class="tt"><h3>Subiu de nível</h3><h1>${tit}</h1></div></header><div class="mc"><div class="festa" aria-hidden="true">${confete()}</div><div class="selo-nivel">${img('nivel')}<b>${para}</b></div><div class="premios">${cards}</div>${novos ? `<p class="lib">Liberado agora</p><div class="linha centro">${novos}</div>` : ''}<button class="botao grande" data-continuar>Continuar</button></div>`,
+    this.modal(`<header class="mh"><div class="tt"><h3>Subiu de nível</h3><h1>${tit}</h1></div></header><div class="mc"><div class="festa" aria-hidden="true">${confete()}</div><div class="selo-nivel">${img('nivel')}<b>${para}</b></div><div class="premios">${cards}</div>${novos}<button class="botao grande" data-continuar>Continuar</button></div>`,
       (m, fechar) => { m.querySelector('[data-continuar]').addEventListener('click', () => { voar(m); fechar(); }); this._modalNivelEl = m; },
       { cls: 'festivo', aoFechar: () => { voar(this._modalNivelEl); if (de < ABRE.depositoNivel && para >= ABRE.depositoNivel) setTimeout(() => this._dica('deposito'), 400); } });
     this.calcBolhas();
@@ -653,21 +658,39 @@ export class Controle {
     } catch (e) { return null; }
   }
   _falasHtml(fala) { return (fala || []).map(([q, t]) => `<div class="conselho">${retrato(q)}<div class="fala"><b>${CONSELHO[q]?.nome || ''}</b>${t}</div></div>`).join(''); }
-  // apresentação ao Conselho: não some com um toque fora; 'Decidir depois' deixa a pílula 'Conselho aguarda' no topo
+  // antes e depois de uma escolha do Conselho, lidos de EFEITOS (sem constante copiada): "Almoxarifado: 60 -> 40 vagas",
+  // "Bem-estar: 35% -> 39%", "Energia: 3.000 -> 1.500", "+3 vagas na fila de cada oficina"
+  _deltaEscolha(id) {
+    const E = EFEITOS[id]; if (!E) return ''; const J = this.J; const seta = ' → '; const L = [];
+    const soma = (k) => (E.bonus?.[k] || 0) + (E.custo?.[k] || 0);
+    if (soma('almox')) L.push(`${img('almox')}<span>Almoxarifado: <b>${J.capacidade}${seta}${J.capacidade + soma('almox')} vagas</b></span>`);
+    if (soma('bem')) L.push(`${img('bem')}<span>Bem-estar: <b>${J.bem}%${seta}${Math.max(0, Math.min(100, J.bem + soma('bem')))}%</b></span>`);
+    if (soma('energia')) L.push(`${img('energia')}<span>Energia: <b>${fmt(J.serv?.energia || 0)}${seta}${fmt(Math.max(0, (J.serv?.energia || 0) + soma('energia')))}</b></span>`);
+    if (soma('fila')) L.push(`${img('producao')}<span>Fila das oficinas: <b>+${soma('fila')} vagas</b></span>`);
+    return L.length ? `<span class="delta">${L.map((x) => `<span>${x}</span>`).join('')}</span>` : '';
+  }
+  // apresentação ao Conselho: modal sóbrio, não some com um toque fora; 'Decidir depois' deixa o selo na medalha do capítulo
   modalCapitulo(c) {
     if (!c || this._modalCap || !c.escolha || this.S.capEscolhas[c.n] !== undefined) return; this._modalCap = true; this.hud.conselho(false);
     const prox = CAPITULOS[c.n]; const falas = this._falasHtml(c.fala); const pr = this._premioCap();
-    const esc = c.escolha.map((o) => `<button class="escolha" data-esc="${o.id}">${retrato(o.quem, 'p32')}<div class="tx"><b>${o.txt}</b><span class="ganho">${o.ganho}</span><span class="custo">Custo: ${o.custo}</span><small>${o.porque}</small></div></button>`).join('');
+    const esc = c.escolha.map((o) => `<button class="escolha" data-esc="${o.id}" aria-label="Escolher: ${o.txt}">${retrato(o.quem, 'p32')}<div class="tx"><b>${o.txt}</b><span class="ganho">${o.ganho}</span><span class="custo">Custo: ${o.custo}</span>${this._deltaEscolha(o.id)}<small>${o.porque}</small></div><span class="escolher">${img('check')}Escolher</span></button>`).join('');
     const premio = `<span class="etiq">${img('creditos')}${pr?.creditos > 0 ? `<b class="cred">+${fmt(pr.creditos)}</b>&nbsp;da Holding` : 'Créditos da Holding'}</span>${!pr || pr.fichas > 0 ? `<span class="etiq">${img('mutirao')}${pr ? `+${pr.fichas} ficha${pr.fichas > 1 ? 's' : ''} de Mutirão` : 'Ficha de Mutirão'}</span>` : ''}`;
-    this.modal(`<header class="mh"><div class="tt"><h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1></div></header><div class="mc"><div class="festa" aria-hidden="true">${confete()}</div><div class="linha centro"><span class="etiq ok">${img('check')}Aprovado</span>${premio}</div><div class="falas">${falas}</div>${prox?.abre?.length ? `<p class="novas"><b>Novas obras:</b> ${prox.abre.join(', ')}</p>` : ''}<p class="pergunta"><span>O Conselho pede uma decisão. Ela vale para os próximos capítulos.</span><button class="botao sec depois" data-depois>Decidir depois</button></p><div class="escolhas">${esc}</div></div>`, (m, fechar) => {
+    const novas = prox?.abre?.length ? `<p class="novas"><b>Novas obras:</b> ${prox.abre.map((n) => { const p = PROJETOS.find((q) => q.nome === n); return `<span class="etiq" title="${n}">${img(p?.icone || 'obras')}${p?.nomeCurto || n}</span>`; }).join('')}</p>` : '';
+    this.modal(`<header class="mh"><div class="tt"><h3>Apresentação ao Conselho</h3><h1>Capítulo ${c.n}: ${c.nome}</h1></div></header><div class="mc"><div class="linha centro"><span class="etiq ok">${img('check')}Aprovado</span>${premio}</div><div class="falas">${falas}</div>${novas}<p class="pergunta"><span>O Conselho pede uma decisão. Ela vale para os próximos capítulos.</span><button class="depois" data-depois>Decidir depois<small>O selo fica na medalha do capítulo</small></button></p><div class="escolhas">${esc}</div></div>`, (m, fechar) => {
+      let decidiu = false;
       m.addEventListener('click', (e) => {
-        if (e.target.closest('[data-depois]')) { this.S.dicas.depoisCap = c.n; fechar(); return; } // não reabre sozinho (nem ao reabrir o jogo): fica a pílula
-        const b = e.target.closest('[data-esc]'); if (!b) return; const r = m.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height * 0.3;
-        // conclui antes de fechar (o fechar não pode pôr a pílula de volta); som, vibração e moedas vêm na conclusão
-        const res = this._concluirCap(b.dataset.esc || null, x, y); this._modalCap = false; fechar(true); if (res !== 'ok') return;
-        const o = c.escolha.find((q) => q.id === b.dataset.esc); if (o) this.hud.brinde(`Escolha do Conselho: ${o.txt}`, 'sede', 3200); this.hud.capitulo(); this.sincronizar();
+        if (decidiu) return;
+        if (e.target.closest('[data-depois]')) { this.S.dicas.depoisCap = c.n; fechar(); return; } // não reabre sozinho (nem ao reabrir o jogo): fica o selo
+        const b = e.target.closest('[data-esc]'); if (!b) return; decidiu = true; const r = m.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height * 0.3;
+        // a escolhida cresce e a outra apaga por 200 ms; depois conclui antes de fechar (o fechar não pode pôr o selo de
+        // volta); som, vibração e moedas vêm na conclusão
+        for (const q of m.querySelectorAll('[data-esc]')) q.classList.add(q === b ? 'escolhida' : 'outra'); this.som.toque();
+        setTimeout(() => {
+          const res = this._concluirCap(b.dataset.esc || null, x, y); this._modalCap = false; fechar(true); if (res !== 'ok') return;
+          const o = c.escolha.find((q) => q.id === b.dataset.esc); if (o) this.hud.brinde(`Escolha do Conselho: ${o.txt}`, 'sede', 3200); this.hud.capitulo(); this.sincronizar();
+        }, 200);
       });
-    }, { fixo: true, cls: 'larga capitulo festivo', aoFechar: () => { this._modalCap = false; if (this._capituloPronto(this.J.capitulo())) this.hud.conselho(true); } });
+    }, { fixo: true, cls: 'larga capitulo sobrio', aoFechar: () => { this._modalCap = false; if (this._capituloPronto(this.J.capitulo())) this.hud.conselho(true); } });
   }
   _introCap(c) { const t = { 2: ['iris', 'Agora o Anel pode crescer e a praça sai do papel. Veja as novas obras no botão Obras.'], 3: ['iris', 'Chegou a vez da Biblioteca Central, das faculdades e da Faculdade de Ciências.'], 4: ['caio', 'Um acelerador de partículas debaixo da praça. E a Vila Estudantil ao lado.'], 5: ['nara', 'Santuário, savana, bioma aquático e gorilas. É a parte mais delicada.'], 6: ['iris', 'Último passo: desmontar o canteiro e devolver a área à mata.'] }[c.n]; if (t) this.hud.falar(t[0], t[1]); }
   // fim do jogo (evento 'fimDeJogo'): vista geral no modo Apreciar e o modal da composição total
