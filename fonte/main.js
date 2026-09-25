@@ -88,7 +88,6 @@ async function iniciar() {
   try { await engine.renderer.compileAsync(engine.scene, engine.camera); } catch (_) {}
   try { await obras.aquecer?.(mundo); } catch (_) {}
   await passo(100);
-  [...avisosSave(), ...avisosMigracao].forEach((m, i) => setTimeout(() => C.hud.brinde(m, null, 5000), 2500 + 5200 * i));
   // laço principal: só trabalha nos quadros que serão desenhados (numa tela de 120 Hz com limite de 60 qps,
   // simulação, multidões e interface andam 60 vezes por segundo, não 120)
   let last = performance.now(), frames = 0, ocioso = 0;
@@ -99,7 +98,9 @@ async function iniciar() {
     const moveu = rig.update(dt);
     ocioso = moveu || rig.g ? 0 : ocioso + dt; engine.ocioso = ocioso; engine.idle = ocioso > 8 && !rig.anim;
     env.update(t, rig.target, rig.dist * 1.15); ground.update(t); forest.update(t); mundo.update(dt, t); obras.update(dt, t);
-    if (!qs.get('tudo')) C.update(dt, t);
+    // a interface (tutorial, falas, avisos, modais) só anda depois do toque em 'Toque para entrar' (C.iniciar):
+    // antes disso as falas e os avisos correriam e sumiriam atrás da tela de carga
+    if (!qs.get('tudo') && C.ativo) C.update(dt, t);
     C.atualizarRotulos?.();
     engine.render(t); frames++; if (frames === 3) window.__pronto = true;
   };
@@ -112,6 +113,8 @@ async function iniciar() {
     try { let wl = await navigator.wakeLock?.request('screen'); document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible') wl = await navigator.wakeLock?.request('screen').catch(() => null); }); } catch (_) {}
     if (qs.get('tudo')) return;
     C.iniciar();
+    // avisos do save (danificado, migrado) contados a partir da entrada, não do fim da carga
+    [...avisosSave(), ...avisosMigracao].forEach((m, i) => setTimeout(() => C.hud.brinde(m, null, 5000), 2500 + 5200 * i));
     if (TESTE) return;
     if (!S.dicas.voo) { // primeira vez: a planta holográfica mostra a meta, depois a câmera desce ao canteiro
       S.dicas.voo = 1; ui.classList.add('intro'); mundo.mostrarFantasma(true, 1600);
@@ -125,7 +128,7 @@ async function iniciar() {
   // com uma importação pendente (sessionStorage 'held-importando'), nada grava o jogo da memória até o reload
   const salvar = () => { if (!C.naoSalvar && !importando()) gravar(J.S); };
   salvarAgora = () => { if (!C.naoSalvar && !importando()) gravarLocal(J.S); };
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvar(); else { J.tick(Date.now()); C.sincronizar?.(); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvar(); else if (C.ativo) { J.tick(Date.now()); C.sincronizar?.(); } });
   window.addEventListener('pagehide', salvar); document.addEventListener('freeze', salvar);
   engine.onLost = () => { salvarAgora(); salvar(); };
 }

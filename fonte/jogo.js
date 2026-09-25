@@ -53,6 +53,7 @@ export class Controle {
     this.bolhas.onBorda = (b) => this._irMundo(b.pos, b.alvo); this.bolhas.onGrupo = (b) => this._irMundo(b.pos, null, 0.6);
     this.sites = new Map(); this._tBolhas = 0; this._tSim = 0; this._tSalvar = 0; this._tFila = 0; this.fantasmas = [];
     this._modais = []; this._filaModais = []; this._festaAte = 0; this._aprovando = new Set(); this._guiaCache = { t: -1e9, pt: null };
+    this.ativo = false; // só depois de iniciar() (o toque na tela de carga) o laço chama update()
     this._bind();
     this.J.on((tipo, d) => this._evento(tipo, d));
     // obra: sons ligados ao que se vê e o brinde do time-lapse (encadeados a quem já estiver ouvindo)
@@ -67,7 +68,7 @@ export class Controle {
   get S() { return this.J.S; }
   // ------------------------------------------------------------ início
   iniciar() {
-    this.J.tick(Date.now()); this.sincronizarMundo(); this.hud.atualizar(); this.hud.capitulo(); this.calcBolhas();
+    this.ativo = true; this.J.tick(Date.now()); this.sincronizarMundo(); this.hud.atualizar(); this.hud.capitulo(); this.calcBolhas();
     const S = this.S;
     if (!S.dicas.abertura) { S.dicas.abertura = 1; const cap1 = () => this.S.cap === 1 && !this.J.feita('pas_frente.e1'); ABERTURA.forEach(([q, t]) => this.hud.falar(q, t, { se: cap1, grupo: 'abertura' })); }
     this._tutorial();

@@ -143,13 +143,13 @@ export class Hud {
     this._falaAtual = f; this._falaResta = f.ms; this._falaUlt = performance.now(); const c = CONSELHO[f.quem] || CONSELHO.iris;
     this.fala.innerHTML = `${retrato(f.quem)}<div class="fala"><b>${c.nome} · ${c.cargo}</b>${f.txt}</div><button class="pular" aria-label="Pular a fala">Pular</button>`;
     this.fala.classList.remove('oculto'); this.fala.classList.remove('entra'); void this.fala.offsetWidth; this.fala.classList.add('entra');
-    // o tempo só corre com o jogo à vista e sem modal aberto
+    // o tempo só corre com o jogo à vista, sem modal aberto e sem a tela de carga por cima
     if (!this._falaT) this._falaT = setInterval(() => this._relogioFala(), 200);
   }
   _relogioFala() {
     const t = performance.now(), dt = t - this._falaUlt; this._falaUlt = t; const f = this._falaAtual; if (!f) return;
     if (f.se && !f.se()) { this._proxFala(); return; }
-    if (document.hidden || this.raiz.querySelector('.veu')) return;
+    if (document.hidden || this.raiz.querySelector('.veu') || document.getElementById('carga')) return;
     this._falaResta -= dt; if (this._falaResta <= 0) this._proxFala();
   }
   _pularFala(tudo) { const g = this._falaAtual?.grupo; if (tudo && g) this.filaFalas = this.filaFalas.filter((f) => f.grupo !== g); this._proxFala(); }
