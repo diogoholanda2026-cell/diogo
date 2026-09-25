@@ -729,3 +729,188 @@ img{-webkit-user-drag:none}
 #gire div{font-size:54px;animation:gira 1.8s ease-in-out infinite}
 @keyframes gira{50%{transform:rotate(90deg)}}
 @media (max-width:940px){.apreciar [data-x="geral"] span,.apreciar [data-x="fotografar"] span,.apreciar .comparar span{display:none}.apreciar .botao{padding:0 10px}}
+/* ==== painéis, modais e rótulos (E2) ==== */
+/* Prancheta da maquete: a folha e os modais viram papel quente com cabeçalho azul-noite e fio de aurora; cartões brancos
+   com fio fino e sem sombra; latão só para prêmio e ficha; os rótulos 3D viram legendas de maquete. Os tokens da seção 2
+   entram com fallback para valer antes da mesclagem com o bloco do HUD. */
+.folha,.modal,.rotulo3d,.info-pop,.voa{--pp:var(--papel,#fbf8f1);--pp2:var(--papel2,#f1ece2);--nt:var(--noite,#16264a);--ntE:var(--noiteE,#0d1731);--au:var(--aurora,#7fe0c4);--te:var(--terraco,#6cab4c);--teE:var(--terracoE,#3f7a2a);--ng:var(--nogueira,#6b4a2e);--lt:var(--latao,#c9a24a);--lt2:var(--latao2,#8a6a24);--ltC:var(--lataoC,#e9cf85);--t85:var(--tinta85,rgba(21,52,90,.85));--hr:var(--hair,rgba(20,40,70,.08));--fxN:linear-gradient(180deg,#1c3060 0%,var(--nt) 100%)}
+@property --e{syntax:'<percentage>';inherits:false;initial-value:0%}
+/* ---- folha ---- */
+.folha{background:var(--pp);border:1.5px solid #fff;border-bottom:3px solid var(--ng);border-radius:20px;box-shadow:0 10px 24px rgba(10,20,40,.22),0 2px 6px rgba(10,20,40,.12)}
+.folha header{gap:8px;height:60px;padding:0 6px 0 8px;background:var(--fxN);border-top:1px solid var(--au);border-bottom:2px solid var(--ntE);--cc:transparent}
+.folha header .ic{width:44px;height:44px;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.25)}
+.folha header .ic img{width:38px;height:38px}
+.folha header:has(.mini-foto) .ic{display:none}
+.folha header .mini-foto{flex:none;width:56px;height:40px;border-radius:8px;border:1.5px solid rgba(255,255,255,.5);background-image:url(foto.webp);background-repeat:no-repeat;background-color:#0d1731;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.folha header .voltar{background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.3);color:#fff;line-height:38px}
+.folha header h2{display:block;font-size:19px;line-height:1.1;text-shadow:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folha header small{display:block;margin-top:2px;font-size:13px;line-height:1.2;color:#d5e3f3;text-shadow:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folha .corpo{padding:9px 10px 10px}
+.folha .rodape{flex:none;display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;background:var(--pp);border-top:1px solid var(--hr)}
+.folha .rodape .linha.acoes.fixa{position:static;margin:0;padding:0;background:none;flex-wrap:nowrap}
+.folha .rodape .cartao.fixo,.folha .rodape .cartao.resumo,.folha .rodape .linha.licenca{position:static;margin:0}
+.folha p.desc{font-size:14px;line-height:1.4;font-weight:600;color:var(--t85);max-width:34em}
+.folha p.desc .nome-longo{display:block;margin-bottom:2px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--tinta2)}
+.folha h3.secao{margin:12px 0 6px;font-size:12px;letter-spacing:.08em;color:var(--tinta2)}
+.folha .cartao,.folha .ficha,.folha .vaga,.folha .item-lista,.folha .pedido,.folha .lote,.folha .contrato,.folha .totais,.folha .linha.licenca{background:#fff;border:1px solid var(--hr);box-shadow:none}
+.folha .ficha:active,.folha .item-lista:active,.folha .pedido:active,.folha .vaga:active,.folha .lote .auto:active{transform:scale(.985);box-shadow:none;transition:transform .09s}
+.folha .entra-i{animation:entra .24s ease-out backwards;animation-delay:calc(var(--i,0) * 35ms)}
+.folha .etiq{border:1px solid var(--hr);padding:3px 10px 3px 4px;box-shadow:none}
+.folha .etiq.ok{border-color:#b8e6a0}
+.folha .etiq.nao{border-color:#ffc2b8}
+.folha .abas button{border:1px solid var(--hr);box-shadow:none;background:#fff;color:var(--tinta2)}
+.folha .abas button.on{background:var(--fxN);border-color:var(--nt);box-shadow:none;color:#fff;text-shadow:none}
+.folha .passos i{background:#e6ede8;box-shadow:none}
+.folha .passos i.f{background:var(--te)}
+.folha .passos i.a{background:var(--laranja)}
+.folha .barra{background:#e6ede8;box-shadow:none}
+.folha .barra i{background:var(--te);box-shadow:none}
+.folha .barra.cheia i{background:var(--verm)}
+.folha .barra.alerta i{background:var(--laranja)}
+.folha .botao,.modal .botao{text-shadow:none}
+/* fichas: nome em 13 px (duas linhas), chip de estoque azul, cadeado de nível sobreposto ao ícone */
+.folha .ficha{border-radius:14px;padding:5px 3px 5px;min-height:92px;gap:1px}
+.folha .ficha b{font-size:13px;line-height:1.1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.folha .ficha small{font-size:13px}
+.folha .ficha .tem{top:-6px;left:-4px;font-size:13px;line-height:18px;background:var(--azulE);border:1.5px solid #fff;text-shadow:none}
+.folha .ficha.ok{border-color:#bfe8a8;background:#f7fcf3}
+.folha .ficha.falta small.qtd{color:var(--vermE)}
+.folha .ficha.bloq{background:var(--pp2);opacity:1;filter:none}
+.folha .ficha.bloq>img{filter:saturate(.6)}
+.folha .ficha.bloq b{color:var(--tinta2)}
+.folha .ficha.conf{border-color:var(--laranja);background:#fff6e6}
+.folha .ficha.conf small.qtd{color:var(--laranjaE)}
+.ficha .cadeado{position:absolute;left:calc(50% + 6px);top:31px;z-index:2;display:inline-flex;align-items:center;gap:1px;height:22px;padding:0 7px 0 0;border-radius:11px;background:rgba(22,38,74,.88);border:1.5px solid #fff;color:#ffe9a8;font-size:12px;line-height:1;font-weight:800;white-space:nowrap}
+.ficha .cadeado img{width:22px;height:22px;margin-left:-4px}
+.ficha .cadeado b{font-size:12px}
+.ficha .cadeado:not(:has(img)){padding-left:7px;left:auto;right:-4px;top:-6px}
+.ficha.lote-f .cadeado{top:28px}
+.ficha.mais-n::after{content:attr(data-mais);position:absolute;left:50%;top:4px;z-index:3;font-size:15px;font-weight:800;color:var(--teE);pointer-events:none;animation:maisSobe .6s ease-out both}
+@keyframes maisSobe{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-24px)}}
+/* prancha: aro de uma cor (o que foi entregue), contador em 14 px, "+N" ao entregar */
+.folha .ficha .aro{background:conic-gradient(var(--te) 0 var(--e,0%),#e6ede8 0);box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.12);transition:--e .4s}
+.folha .ficha .aro::before{background:#fff}
+.folha .ficha.redonda{background:none;border:0;box-shadow:none}
+.folha .ficha.redonda .tem{top:2px;left:calc(50% - 44px)}
+.folha .ficha.redonda small.qtd{font-size:14px;line-height:20px;padding:0 10px;background:var(--pp2);border:1px solid var(--hr);box-shadow:none;color:var(--tinta)}
+.folha .ficha.redonda.ok small.qtd{background:#e6f6d8;border-color:#bfe8a8;color:var(--verdeE)}
+.folha .ficha.redonda.falta small.qtd{background:#fdeae7;border-color:#f5c4bd;color:var(--vermE)}
+/* chips de receita: ícone, "×2", check ou exclamação e o que há em cinza */
+.folha .req span{height:22px;gap:2px;padding:0 5px 0 1px;border-radius:9px;background:var(--pp2);color:var(--tinta);font-size:12px}
+.folha .req span.ok{background:#eef7e8;color:var(--verdeE)}
+.folha .req span.f{background:#fdeae7;color:var(--vermE)}
+.folha .req span img{width:20px;height:20px}
+.req span i{position:relative;flex:none;width:12px;height:12px;border-radius:50%}
+.req span i.sim{background:var(--verde)}
+.req span i.sim::after{content:"";position:absolute;left:3.5px;top:1.5px;width:3px;height:6px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(40deg)}
+.req span i.nao{background:var(--verm)}
+.req span i.nao::before{content:"";position:absolute;left:5px;top:2px;width:2px;height:5px;border-radius:1px;background:#fff}
+.req span i.nao::after{content:"";position:absolute;left:5px;top:8.5px;width:2px;height:2px;border-radius:50%;background:#fff}
+.req span small{font-size:12px;font-weight:800;color:var(--tinta2)}
+/* vagas de produção, "Novo espaço" com moeda e dois toques, lotes */
+.folha .vaga.livre{background:rgba(255,255,255,.5);border:1.5px dashed #b9c6d4}
+.folha .vaga.livre small{font-size:12px}
+.folha .vaga.pronto{border-color:#bfe8a8;background:#eef8e6}
+.folha .vaga small{font-size:12px;line-height:15px}
+.folha .vaga .nn{font-size:12px;line-height:15px}
+.folha .vaga.mais{width:auto;min-width:62px;padding:0 6px;gap:0;border:1.5px solid #f2c27a;background:#fff6e6}
+.folha .vaga.mais b{font-size:20px;line-height:1;color:var(--laranjaE);text-shadow:none}
+.folha .vaga.mais small{position:static;background:none;font-size:12px;line-height:1.1;color:var(--laranjaE);white-space:nowrap}
+.folha .vaga.mais small.preco{display:flex;align-items:center;gap:2px;margin-top:2px;color:var(--tinta)}
+.folha .vaga.mais small.preco img{position:static;width:14px;height:14px;margin:0}
+.folha .vaga.mais.conf{background:var(--laranja);border-color:var(--laranjaE)}
+.folha .vaga.mais.conf b,.folha .vaga.mais.conf small{color:#fff}
+.folha .vaga.mais.fraco{opacity:.7;filter:saturate(.4)}
+.folha .lote.auto{border-color:#bfe8a8;background:#f7fcf3}
+.folha .lote .tx small,.folha .lote .auto,.folha .minis .mini i,.folha .ficha .prod,.folha .ficha .ate,.folha .desc-linha,.folha .fin .cab small,.folha .contrato .tx small,.folha .totais>small,.folha .totais .etiq small,.folha .stat .ph{font-size:12px}
+.folha .minis .mini i{min-width:16px;line-height:14px}
+.folha .fin p.desc{font-size:13px}
+.folha .fin .det li{font-size:13px}
+.voa{position:fixed;left:0;top:0;width:38px;height:38px;z-index:20;pointer-events:none;will-change:transform}
+/* formato único de custo nos botões: verbo em cima, moeda e relógio embaixo; selo de ficha em latão */
+.botao .rot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;line-height:1.05}
+.botao .verbo{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.botao .custo{display:flex;align-items:center;gap:3px;font-size:13px;line-height:1;font-weight:800;opacity:.94}
+.botao .custo img{width:16px;height:16px;margin:0 1px 0 4px}
+.botao .custo img:first-child{margin-left:0}
+.botao .custo b{font-weight:800}
+.botao .custo small{font-size:12px;margin-left:4px;opacity:.9}
+.botao .custo .selo-ficha{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:9px;background:var(--latao,#c9a24a);color:var(--latao2,#8a6a24);font-size:12px;text-shadow:none}
+.botao:has(.rot){height:auto;min-height:44px;padding:3px 14px}
+.botao.grande:has(.rot){min-height:52px}
+.botao.fraco .selo-ficha{background:#e6e9ee;color:#4a5a6a}
+.botao.conf{box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 0 3px rgba(255,159,26,.55),0 3px 0 var(--laranjaE)}
+.linha.acoes .botao:has(.rot){flex:1 1 auto;min-width:0}
+/* cartão de motivo (com Ir), estados vazios, barrinhas de serviço do módulo */
+.cartao.motivo,.cartao.vazio{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:8px 8px 8px 10px;border-radius:14px;background:#fff;border:1px solid var(--hr);box-shadow:none}
+.cartao.motivo>img,.cartao.vazio>img{width:40px;height:40px;flex:none}
+.cartao.motivo .tx,.cartao.vazio .tx,.cartao.vazio p{flex:1;margin:0;font-size:13px;line-height:1.3;font-weight:600;color:var(--t85)}
+.cartao.motivo .botao{flex:none;min-width:56px}
+.servicos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 0 10px}
+.servicos .serv{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:44px;padding:4px 4px 5px;border-radius:12px;background:#fff;border:1px solid var(--hr);color:var(--tinta)}
+.servicos .serv img{width:22px;height:22px}
+.servicos .serv b{font-size:13px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.servicos .serv .barra{display:block;width:100%;height:6px;flex:none;min-width:0;background:#e6ede8;box-shadow:none;border-radius:4px}
+.servicos .serv .barra i{background:var(--te);border-radius:4px}
+.servicos .serv.nao .barra i{background:var(--verm)}
+.servicos .serv.nao b{color:var(--vermE)}
+.servicos .serv:active{transform:scale(.985)}
+/* obras e produção: cartão de 64 px com o ícone num círculo na cor do estado e o progresso em anel fino */
+.folha .item-lista{min-height:64px;padding:6px 10px 6px 8px;gap:10px;border-radius:14px;--st:#eef2f6}
+.folha .item-lista::before{display:none}
+.item-lista .anel-ic{position:relative;flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--terraco,#6cab4c) var(--p,0%),#e6ede8 0)}
+.item-lista .anel-ic::before{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--st)}
+.item-lista .anel-ic img{position:relative;width:38px;height:38px}
+.item-lista .anel-ic img.cad{position:absolute;right:-5px;bottom:-3px;width:22px;height:22px}
+.item-lista.st-pronta,.item-lista.st-pronta-ini,.item-lista.st-fim{--st:#e6f6d8}
+.item-lista.st-falta,.item-lista.st-disp,.item-lista.st-construir{--st:#fff1dc}
+.item-lista.st-obra{--st:#e2f0fc}
+.item-lista.st-bloq,.item-lista.st-futura{--st:#edf0f3}
+.item-lista .tx b{font-size:14px}
+.item-lista .tx small.st{display:flex;align-items:center;gap:4px;font-size:13px;line-height:1.2;font-weight:800;color:var(--tinta2)}
+.item-lista .tx small.st img{width:18px;height:18px}
+.item-lista.st-pronta .tx small.st,.item-lista.st-pronta-ini .tx small.st,.item-lista.st-fim .tx small.st{color:var(--verdeE)}
+.item-lista.st-falta .tx small.st,.item-lista.st-disp .tx small.st,.item-lista.st-construir .tx small.st{color:var(--laranjaE)}
+.item-lista.st-obra .tx small.st{color:var(--azulE)}
+.item-lista .tx small.cont{display:block;font-size:13px;line-height:1.2;font-weight:600;color:var(--tinta2)}
+.item-lista.st-fim,.item-lista.st-futura{opacity:1}
+.item-lista.st-fim .tx b,.item-lista.st-futura .tx b,.item-lista.st-bloq .tx b{color:var(--tinta2)}
+.item-lista.bloq .anel-ic>img:not(.cad){filter:saturate(.5);opacity:.75}
+.item-lista .tx .minis{display:inline-flex;gap:3px;margin:3px 0 0}
+.minis .mini.nao{background:#fdeae7;border-color:#f5c4bd}
+.verbo-chip{flex:none;display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:16px;background:linear-gradient(180deg,#ffad3a,#f5921a);box-shadow:0 2px 0 var(--laranjaE);color:#fff;font-size:13px;font-weight:800}
+/* almoxarifado: ampliar na linha da ocupação */
+.linha.ocupacao{margin:0 0 6px;flex-wrap:nowrap}
+.linha.ocupacao .botao{flex:none;font-size:13px;padding:0 10px}
+.linha.para-ampliar{margin:0 0 10px;align-items:center}
+.linha.para-ampliar .rotulo{font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:var(--tinta2)}
+.linha.para-ampliar .req{gap:4px}
+/* pedidos: nome sem truncar, local em etiqueta, fala normal, contadores de 12 px, lixeira discreta, resumo no rodapé */
+.folha .pedido{padding:5px 8px 6px;min-height:100px;gap:3px}
+.pedido .pq{height:auto;min-height:26px;align-items:flex-start;padding-right:24px}
+.pedido .quem{white-space:normal;overflow:visible;line-height:1.15}
+.pedido .quem b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}
+.pedido .quem.longo b{font-size:13px}
+.pedido .quem small{display:inline-block;margin-top:2px;padding:0 6px;border-radius:7px;background:var(--pp2);font-size:12px;line-height:16px;color:var(--tinta2)}
+.pedido .quem small:not(:empty)::before{content:none}
+.pedido .fala{min-height:0;font-size:12px;font-style:normal;font-weight:600;color:var(--tinta2)}
+.pedido .it i{bottom:-4px;right:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;font-size:12px;line-height:15px;text-shadow:none}
+.pedido .rec span{font-size:12px;color:var(--laranjaE)}
+.pedido .lixo img{opacity:.4}
+.pedido.sel .lixo img{opacity:1}
+.pedido .lixo.conf{font-size:12px}
+.pedido.sel{border-color:var(--te);box-shadow:0 0 0 2px rgba(108,171,76,.35)}
+.pedido.pronto{border-color:#bfe8a8;background:linear-gradient(180deg,#fff,#f3faee)}
+.pedido .fab{border:0;font-size:12px;text-shadow:none}
+.pedido.espera b{font-size:13px}
+.cartao.resumo{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:14px;background:#fff;border:1px solid var(--hr);box-shadow:none}
+.cartao.resumo .tx{flex:1;min-width:0}
+.cartao.resumo .tx b{display:block;font-size:13px;line-height:1.2;color:var(--tinta)}
+.cartao.resumo .tx small{display:block;font-size:12px;line-height:1.25;font-weight:600;color:var(--tinta2)}
+.cartao.resumo .lixo{position:static;flex:none;width:44px;height:44px;display:grid;place-items:center;padding:0;border-radius:12px;background:var(--pp2)}
+.cartao.resumo .lixo img{width:24px;height:24px;opacity:.7}
+.cartao.resumo .lixo.conf{width:auto;padding:0 10px;background:var(--verm);color:#fff;font-size:12px;font-weight:800}
+.cartao.resumo .botao{flex:none}
+.folha .cartao.aviso-falta{border:1px solid #f5c4bd;background:#fff6f4;box-shadow:none}
+.folha .cartao.aviso-falta .tx{font-size:13px}
+.folha .linha.licenca .tx small{font-size:12px}
