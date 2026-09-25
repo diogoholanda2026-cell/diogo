@@ -66,15 +66,17 @@ export const DIA_MS = 20000, MES_DIAS = 30, ANO_DIAS = 360, ANO_MS = ANO_DIAS * 
 const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, mora: 0.20 };
 // recompensa por etapa ou pavimento aprovado (150% do custo) e aceleradores (cada um adianta 1 h)
 const RECOMPENSA = 1.5, ACELERA_MS = 3600e3;
-// números das regras para a interface mostrar (em vez de constantes soltas nos textos)
-export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
-  loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export function servicosDoNivel(n) { const out = []; for (const [lv, ks] of Object.entries(SERVICO_NIVEL)) if (+lv <= n) out.push(...ks); return out; } // serviços que um pavimento de nível n pede
 export function bemMinimo(n) { return BEM_NIVEL[n] || 0; } // bem-estar mínimo para subir um módulo ao nível n
 // economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
 // + valor dos itens entregues) e dá 1 acelerador de obra e 1 de produção (cada um adianta 1 h de um cronômetro)
 const DISP = { pedido: 2, modulo: 4, etapa: 8, marco: 30 }; const REPASSE = [24, 0.0025];
-const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 20, venda: 0.6 };
+// depósito de trocas: compra a 3 × o valor do item (+12% a cada compra na janela), 10 por matéria-prima a cada 4 h;
+// vende a 150% do preço base de compra (4,5 × o valor), até 100 vendas por janela
+const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 100, compra: 3, venda: 1.5 };
+// números das regras para a interface mostrar (em vez de constantes soltas nos textos)
+export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
+  depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export const TOPOGRAFO = { estaca: { itens: { madeira: 2 }, creditos: 300, min: 20 }, baliza: { itens: { aco: 2 }, creditos: 600, min: 30 }, trena: { itens: { cobre: 2 }, creditos: 900, min: 45 } };
 const LICENCAS = ['estaca', 'baliza', 'trena'], ALMOX = ['estrado', 'etiqueta', 'cadeado'];
 const QUEDA = { estaca: ['madeira', 0.006], baliza: ['serralheria', 0.03], trena: ['eletrica', 0.03] }; // licenças caem de onde fazem sentido
@@ -648,13 +650,15 @@ export class Jogo {
   }
   // repasses da Holding (coletados na Sede ou, antes dela, no Escritório)
   coletarRepasse() { const r = this.S.repasse; const v = Math.floor(r.acum); if (v < 1) return 'nada'; r.acum -= v; this.S.creditos += v; this.emit('repasse', { v }); return 'ok'; }
-  // depósito de trocas: estoque de 10 por matéria-prima a cada 4 h, preço sobe a cada compra; vendas limitadas
+  // depósito de trocas: estoque de 10 por matéria-prima a cada 4 h, preço sobe a cada compra; vende a 150% do preço
+  // base de compra, até 100 vendas por janela
   _janela() { return Math.floor(this.agora / DEP.janela); }
   _dep() { const D = this.S.deposito, j = this._janela(); if (D.janela !== j) { D.janela = j; D.n = {}; D.vendas = 0; } return D; }
-  estoqueDeposito(k) { const D = this.S.deposito; const n = D.janela === this._janela() ? D.n[k] || 0 : 0; return { n: Math.max(0, DEP.estoque - n), preco: Math.ceil(ITENS[k].valor * 3 * Math.pow(DEP.sobe, n)) }; }
+  estoqueDeposito(k) { const D = this.S.deposito; const n = D.janela === this._janela() ? D.n[k] || 0 : 0; return { n: Math.max(0, DEP.estoque - n), preco: Math.ceil(this.precoBase(k) * Math.pow(DEP.sobe, n)) }; }
   vendasDeposito() { const D = this.S.deposito; return { feitas: D.janela === this._janela() ? D.vendas : 0, max: DEP.vendas }; }
+  precoBase(k) { return ITENS[k].valor * DEP.compra; } // preço base de compra (sem o acréscimo por compra)
   precoCompra(k) { return this.estoqueDeposito(k).preco; }
-  precoVenda(k) { return Math.max(1, Math.floor(ITENS[k].valor * DEP.venda)); }
+  precoVenda(k) { return Math.max(1, Math.ceil(this.precoBase(k) * DEP.venda)); }
   comprar(k) {
     if (ITENS[k].tipo !== 'bruto' || !this.liberado(k)) return 'bloqueado'; const est = this.estoqueDeposito(k); if (est.n < 1) return 'esgotado';
     if (this.S.creditos < est.preco) return 'creditos'; if (this.livre < 1) return 'almox';
