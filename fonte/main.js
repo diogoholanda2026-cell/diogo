@@ -84,6 +84,9 @@ async function iniciar() {
   const V = qs.get('vista'); if (V && V !== 'foto') { const [x, z, d, y, p, f] = V.split(',').map(Number); rig.pitchFix = null; rig.roll = 0; rig.target.set(x, 0, z); rig.dist = d; rig.yaw = y; rig.tilt = p || 0; if (f) rig.fov = f; rig.apply(); }
   if (qs.get('tudo')) { mundo.tudoPronto(); for (const g of Object.values(mundo.predios)) g.visible = false; mundo.canteiro.visible = false; forest.setReflorestamento(1); ground.flags.reflorestado = true; ground.paint(); }
   await passo(92);
+  // jogo novo: a planta holográfica da introdução é montada aqui, atrás da barra (e o programa dela compila logo abaixo),
+  // e não no toque de entrada, onde a fusão de ~300 mil vértices travava a abertura
+  if (!TESTE && !S.dicas.voo) { try { mundo.fantasma(); } catch (e) { console.error(e); } }
   engine.prepararHAO?.();
   // compila no alvo HDR onde o jogo desenha a cena (espaço de cor linear), como obras.aquecer: no canvas (sRGB) a chave
   // do programa muda e os programas certos compilariam de novo, travando, nos primeiros quadros do laço
