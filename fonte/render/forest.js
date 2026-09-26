@@ -37,7 +37,7 @@ function cachoGeo(seed, lobos, lump = 0.16, B = ICO) {
       const px = cx + x * r * kk, py = cy + y * r * kk * 0.9, pz = cz + z * r * kk; vs.push([px, py, pz]);
       // normal esférica inclinada para cima: copa macia sob a luz
       let nx = x, ny = y + 0.35, nz = z; const l = Math.hypot(nx, ny, nz); P.push(px, py, pz); N.push(nx / l, ny / l, nz / l);
-      const t = clamp((py + 0.4) / 1.3, 0, 1), sp = 0.93 + hash(i + j * 64, seed, 5) * 0.14; let v = (0.32 + 0.78 * t) * sp; if (dentro(px, py, pz, j, 0.98)) v *= 0.55; // sombra própria forte; a textura de folhagem faz o resto
+      const t = clamp((py + 0.4) / 1.3, 0, 1), sp = 0.93 + hash(i + j * 64, seed, 5) * 0.14; let v = (0.16 + 0.94 * t) * sp; if (dentro(px, py, pz, j, 0.98)) v *= 0.45; // sombra própria forte (os vãos da mata da foto são quase pretos); a textura de folhagem faz o resto
       C.push(v * 0.94, v, v * 0.9);
     });
     for (const [a, b, c] of B.f) {
@@ -58,7 +58,7 @@ function cachoBaixo(seed) {
     const n = noise3(x, y, z, seed); const kk = 1 + (n - 0.5) * 0.2; let px = x * 1.28 * kk * 0.78, py = y * kk * 0.7 + 0.04, pz = z * kk * 0.78;
     if (i === 0) py -= 0.16; else if (i < 6) py += 0.08 * Math.abs(x);
     let nx = x / 1.28, ny = y + 0.35, nz = z; const l = Math.hypot(nx, ny, nz); P.push(px, py, pz); N.push(nx / l, ny / l, nz / l);
-    const t = clamp((py + 0.4) / 1.1, 0, 1), sp = 0.93 + hash(i, seed, 5) * 0.14; const v = (0.32 + 0.78 * t) * sp * (i === 0 ? 0.8 : 1); C.push(v * 0.94, v, v * 0.9);
+    const t = clamp((py + 0.4) / 1.1, 0, 1), sp = 0.93 + hash(i, seed, 5) * 0.14; const v = (0.16 + 0.94 * t) * sp * (i === 0 ? 0.8 : 1); C.push(v * 0.94, v, v * 0.9);
   });
   for (const [a, b, c] of ICO.f) if (a !== 11 && b !== 11 && c !== 11) I.push(a, b, c);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.setIndex(I);
@@ -149,7 +149,13 @@ export function leafMaterial() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler3D tFolha; varying vec3 vFolhaW;')
       .replace('#include <color_fragment>', `#include <color_fragment>
         float fo = texture(tFolha, vFolhaW * ${(1 / (0.16 * 32)).toFixed(4)}).r * 0.6 + texture(tFolha, vFolhaW * ${(1 / (0.37 * 32)).toFixed(4)} + 0.37).r * 0.4;
-        diffuseColor.rgb *= 0.72 + 0.56 * fo;`)
+        diffuseColor.rgb *= 0.72 + 0.56 * fo;
+        // copas miúdas da mata da foto: cada copa grande vira várias copinhas de ~0,45 (células de Worley no
+        // plano), com o miolo claro e o vão escuro entre elas
+        { vec2 q = vFolhaW.xz / 0.45; vec2 iq = floor(q), fq = fract(q); float d1 = 8.0;
+          for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { vec2 g = vec2(float(i), float(j)), c = iq + g;
+            vec2 o = fract(sin(vec2(dot(c, vec2(127.1, 311.7)), dot(c, vec2(269.5, 183.3)))) * 43758.5453); vec2 r = g + o - fq; d1 = min(d1, dot(r, r)); }
+          diffuseColor.rgb *= mix(0.3, 1.14, 1.0 - smoothstep(0.1, 0.6, d1)); }`)
       // de perto, a mesma folhagem vira relevo (normal perturbada pela derivada na tela; some de longe)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         { float wb = 1.0 - smoothstep(0.012, 0.04, length(fwidth(vFolhaW)));
@@ -157,24 +163,24 @@ export function leafMaterial() {
             vec2 dh = vec2(dFdx(fo), dFdy(fo)) * 0.05 * wb; normal = normalize(abs(det) * normal - sign(det) * (dh.x * r1 + dh.y * r2)); } }`)
       .replace('#include <lights_physical_pars_fragment>', LUZ_FOLHA);
   };
-  LEAF.customProgramCacheKey = () => 'folha2';
+  LEAF.customProgramCacheKey = () => 'folha3';
   return LEAF;
 }
 export function trunkMaterial() { if (!TRUNK) TRUNK = new THREE.MeshStandardMaterial({ color: 0x6a4a32, roughness: 0.95 }); return TRUNK; }
 
 // paletas de verde (instanceColor multiplica a cor de vértice)
-// (verdes vivos e variados, como no BuildIt)
-// (a mata da foto: verdes fundos e saturados, do azulado ao amarelo-verde; 2,5% de copas ocre)
+// (a mata da foto, medida: verdes-oliva fundos e pouco saturados, média #32302a com os vãos quase pretos;
+// 2,5% de copas ocre)
 export const VERDES = { // albedo linear
-  mata: [[0.025, 0.147, 0.023], [0.018, 0.114, 0.027], [0.042, 0.205, 0.03], [0.072, 0.275, 0.037], [0.107, 0.328, 0.045], [0.023, 0.11, 0.048], [0.04, 0.159, 0.025]], // #2c6b2a #245f2e #3a7d30 #4c8f36 #5c9b3c #2a5d3e #386f2c
+  mata: [[0.044, 0.102, 0.025], [0.034, 0.084, 0.023], [0.058, 0.12, 0.028], [0.076, 0.144, 0.033], [0.028, 0.068, 0.021], [0.05, 0.089, 0.037], [0.093, 0.141, 0.042]], // #3b5a2c #34522a #44612f #4e6a33 #2f4a28 #3f5436 #56693a
   jardim: [[0.12, 0.24, 0.045], [0.085, 0.2, 0.04], [0.15, 0.26, 0.055], [0.19, 0.25, 0.045]],
   outono: [[0.479, 0.144, 0.023], [0.584, 0.254, 0.037], [0.333, 0.195, 0.023]], // #b86a2a #c98a36 #9c7a2a
   outonoClaro: [[0.397, 0.479, 0.048], [0.333, 0.423, 0.04]], // amarelo-esverdeado do miolo do Santuário
   savana: [[0.17, 0.21, 0.06], [0.21, 0.22, 0.07], [0.13, 0.19, 0.055]],
-  conifera: [[0.013, 0.069, 0.027], [0.017, 0.078, 0.03], [0.01, 0.06, 0.03]], // #1e4a2e #234f30 #1a4530
+  conifera: [[0.014, 0.033, 0.019], [0.017, 0.04, 0.023], [0.011, 0.027, 0.018]], // #1f3326 #23382a #1b2e24
   flores: [[0.55, 0.08, 0.05], [0.6, 0.22, 0.04], [0.5, 0.09, 0.2]], // jardineiras (vermelho, laranja, rosa)
 };
-const ORLA = [0.159, 0.423, 0.058]; // #6fae44, só na faixa de 1,2 da borda das clareiras
+const ORLA = [0.114, 0.195, 0.045]; // #5f7a3c, só na faixa de 1,2 da borda das clareiras
 
 // matriz e cor de cada árvore numa InstancedMesh (t.orla = distância até a clareira: orla mais clara e
 // oliva, miolo da mata mais escuro)

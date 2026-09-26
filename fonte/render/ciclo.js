@@ -1,7 +1,9 @@
-// Ciclo de dia e noite no estilo do SimCity BuildIt: quadros-chave por hora do jogo (amanhecer rosa e
-// laranja, dia claro das 8h às 16h30, pôr do sol laranja e lilás, crepúsculo violeta e noite azul-violeta
-// legível), interpolados sem degraus, e o caminho do sol (arco leste → oeste) e da lua. Nada aqui aloca por
-// quadro: amostrar() escreve num vetor reaproveitado e as direções vão em vetores de quem chama.
+// Luz do jogo. O padrão é a luz da FOTO de referência, num mundo aberto: a luz quente da exposição vindo de
+// cima, à esquerda e à frente, o céu azul-marinho com estrelas e aurora, as janelas acesas e a gradação quente
+// e contida da foto. O ciclo de dia e noite continua como opção: quadros-chave por hora do jogo (amanhecer,
+// dia claro das 8h às 16h30, pôr do sol, crepúsculo e a noite da foto, com aurora), interpolados sem degraus,
+// e o caminho do sol (arco leste → oeste) e da lua. Nada aqui aloca por quadro: amostrar() escreve num vetor
+// reaproveitado e as direções vão em vetores de quem chama.
 import * as THREE from 'three';
 
 const GRAU = Math.PI / 180;
@@ -19,10 +21,11 @@ export function faseDe(h) { h = ((h % 24) + 24) % 24; return h >= 4.4 && h < 8 ?
 
 // ---------------------------------------------------------------- quadros-chave
 // cores em sRGB (hex), convertidas para linear na carga; P é a gradação do motor
+// (a noite do ciclo é a da foto: céu azul-marinho com aurora e estrelas, a lua fria como luz principal)
 const NOITE = {
   luz: [0xa8bcff, 0.95], ceuH: 0x34449a, chaoH: 0x10141c, hemi: 0.55, env: 0.4,
-  zen: 0x08103a, hor: 0x243278, baixo: 0x10122a, brilho: [0x000000, 0], nevoa: [240, 760], nuvem: [0x3a4686, 0x1c2250],
-  noite: 1, estrelas: 1, sombra: 0.6, hao: 1, lua: 1, cidade: 1, rim: [0x8ea4ff, 0.22], nuvK: 0,
+  zen: 0x060a16, hor: 0x172337, baixo: 0x0a0c12, brilho: [0x000000, 0], nevoa: [240, 760], nuvem: [0x3a4686, 0x1c2250],
+  noite: 1, estrelas: 1, sombra: 0.6, hao: 1, lua: 1, cidade: 0.4, rim: [0x6fdcc0, 0.3], nuvK: 0, aur: 0.85,
   P: { exposure: 1.85, saturation: 1.15, contrast: 1.14, vignette: 0.12, wb: [0.97, 1.0, 1.04], shadowTint: [0.002, 0.0, 0.012], highTint: [0.016, 0.008, -0.004], threshold: 0.7, bloomStrength: 1.6 },
 };
 const CREP_MANHA = {
@@ -66,6 +69,16 @@ const CREPUSCULO = {
   noite: 0.88, estrelas: 0.3, sombra: 0.55, hao: 0.95, lua: 0.5, cidade: 0.75, rim: [0xc8a0ff, 0.25], nuvK: 0.05,
   P: { exposure: 2.2, saturation: 1.12, contrast: 1.1, vignette: 0.1, wb: [0.98, 0.97, 1.05], shadowTint: [0.004, 0.0, 0.012], highTint: [0.014, 0.006, -0.002], threshold: 0.78, bloomStrength: 1.4 },
 };
+// A luz da foto (o padrão do jogo): a luz de exposição quente, de cima, à esquerda e à frente (FOTO_DIR), o
+// céu azul-marinho com estrelas e a aurora (#172337 logo acima do horizonte), as janelas acesas e a gradação
+// quente e contida da foto; a névoa leva o mundo aberto ao azul do horizonte
+export const FOTO = {
+  luz: [0xffd6a4, 2.5], ceuH: 0x7a98d8, chaoH: 0x4a3a2a, hemi: 0.6, env: 0.65,
+  zen: 0x060a16, hor: 0x172337, baixo: 0x0a0c12, brilho: [0x000000, 0], nevoa: [200, 720], nuvem: [0x3a4686, 0x1c2250],
+  noite: 1, estrelas: 1, sombra: 0.85, hao: 1, lua: 0, cidade: 0.5, rim: [0x6fdcc0, 0.35], nuvK: 0, aur: 1,
+  P: { exposure: 1.05, saturation: 0.7, contrast: 1.14, vignette: 0.3, wb: [1.0, 1.0, 1.03], shadowTint: [0.0, 0.004, 0.014], highTint: [0.012, 0.004, -0.006], threshold: 1.0, bloomStrength: 0.9 },
+};
+export const FOTO_DIR = [-0.3, 0.9, 0.3];
 // [hora, quadro] em ordem; 0 e 24 são a mesma noite (o ciclo fecha sem costura)
 const QUADROS = [[0, NOITE], [4.4, NOITE], [5.4, CREP_MANHA], [6.3, AMANHECER], [7.2, DOURADA_MANHA], [8, DIA], [16.5, DIA_TARDE], [17.1, DOURADA_TARDE], [17.9, POR_DO_SOL], [18.8, CREPUSCULO], [19.7, NOITE], [24, NOITE]];
 // fronteiras dos quadros (o mapa de reflexos é refeito só quando a hora cruza uma delas)
@@ -74,8 +87,8 @@ export const FRONTEIRAS = QUADROS.slice(1, -1).map((q) => q[0]).filter((h, i, a)
 // Vetor plano de parâmetros (interpola tudo de uma vez, sem objetos): índices em I
 export const I = { luz: 0, luzK: 3, ceuH: 4, chaoH: 7, hemi: 10, env: 11, zen: 12, hor: 15, baixo: 18, brilho: 21, brilhoK: 24, nevoaPerto: 25, nevoaLonge: 26,
   nuvem: 27, nuvemSombra: 30, noite: 33, estrelas: 34, sombra: 35, hao: 36, exposure: 37, saturation: 38, contrast: 39, vignette: 40, wb: 41, shadowTint: 44, highTint: 47,
-  threshold: 50, bloomStrength: 51, lua: 52, cidade: 53, rim: 54, rimK: 57, nuvK: 58 };
-export const N_PARAM = 59;
+  threshold: 50, bloomStrength: 51, lua: 52, cidade: 53, rim: 54, rimK: 57, nuvK: 58, aur: 59 };
+export const N_PARAM = 60;
 const _c = new THREE.Color();
 function lin(hex, out, o) { _c.setHex(hex); out[o] = _c.r; out[o + 1] = _c.g; out[o + 2] = _c.b; } // setHex: sRGB → linear
 function plano(q) {
@@ -84,12 +97,13 @@ function plano(q) {
   lin(q.zen, v, I.zen); lin(q.hor, v, I.hor); lin(q.baixo, v, I.baixo); lin(q.brilho[0], v, I.brilho); v[I.brilhoK] = q.brilho[1];
   v[I.nevoaPerto] = q.nevoa[0]; v[I.nevoaLonge] = q.nevoa[1]; lin(q.nuvem[0], v, I.nuvem); lin(q.nuvem[1], v, I.nuvemSombra);
   v[I.noite] = q.noite; v[I.estrelas] = q.estrelas; v[I.sombra] = q.sombra; v[I.hao] = q.hao; v[I.lua] = q.lua; v[I.cidade] = q.cidade;
-  lin(q.rim[0], v, I.rim); v[I.rimK] = q.rim[1]; v[I.nuvK] = q.nuvK;
+  lin(q.rim[0], v, I.rim); v[I.rimK] = q.rim[1]; v[I.nuvK] = q.nuvK; v[I.aur] = q.aur || 0;
   const P = q.P; v[I.exposure] = P.exposure; v[I.saturation] = P.saturation; v[I.contrast] = P.contrast; v[I.vignette] = P.vignette;
   v.set(P.wb, I.wb); v.set(P.shadowTint, I.shadowTint); v.set(P.highTint, I.highTint); v[I.threshold] = P.threshold; v[I.bloomStrength] = P.bloomStrength;
   return v;
 }
 const HORAS = QUADROS.map((q) => q[0]), VALS = QUADROS.map((q) => plano(q[1]));
+export const FOTO_V = plano(FOTO);
 
 // Amostra o ciclo na hora h (0..24): interpolação suave (smoothstep) entre os quadros vizinhos, em out
 export function amostrar(h, out) {

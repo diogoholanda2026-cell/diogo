@@ -85,8 +85,9 @@ export function facadeTextures(style = 'quente') {
     lab: { lit: [[236, 244, 255], [224, 236, 250], [255, 250, 240], [214, 230, 246]], dark: 0.04, gain: 0.95, v: [[186, 226, 246], [104, 164, 214]], frame: '#F4F6F8', mull: 2 },
     escuro: { lit: [[255, 222, 176], [230, 238, 250], [255, 232, 196]], dark: 0.1, gain: 0.8, v: [[128, 180, 226], [44, 96, 160]], frame: '#DCE3EA', mull: 1 },
     madeira: { lit: [[255, 190, 104], [255, 206, 132], [255, 180, 92]], dark: 0.04, gain: 1.05, v: [[176, 214, 238], [88, 142, 194]], frame: '#C9965C', mull: 5 },
-    // vidro azul mais fundo (fica na sombra do beiral), caixilho claro e ripas escuras (#6b5a48) a cada meio vão
-    fita: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[70, 112, 168], [26, 58, 104]], frame: '#EDE7DC', mull: 2, ripa: '#6b5a48', sombra: 0.6, ripas: 3 },
+    // fitas dos anéis (como na foto): lajes creme e faixas de vidro escuro neutro na sombra do beiral; à noite
+    // as salas acendem em amarelo quente, com ~18% das janelas apagadas
+    fita: { lit: [[255, 206, 138], [255, 218, 160], [250, 196, 120], [255, 226, 176]], dark: 0.18, gain: 1.15, v: [[96, 98, 102], [44, 46, 52]], frame: '#EDE7DC', mull: 2, sombra: 0.5 },
     // Santuário: vidro âmbar (bronze) entre faixas creme, ripas marrons
     ambar: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[226, 168, 96], [168, 104, 48]], frame: '#F4EFE4', mull: 2, ripa: '#7A5A3A', sombra: 0.42, ripas: 3 },
     // arena do Campus: 32 x 10 células de 32 px (moldura de 6 px com bisel, abertura de 20 px de vidro azul)
@@ -201,16 +202,16 @@ export const tex = {
   }, { linear: true }),
   // grama limpa e viva (pouco ruído: sem manchas de longe)
   grass: () => canvasTex('grass', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [102, 138, 54], 12, 31, 2, 21); // gramado vivo (BuildIt)
-    for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(60,96,30,.16)' : 'rgba(214,230,150,.14)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
+    noiseRectP(g, w, [96, 122, 60], 12, 31, 2, 21); // gramado da foto: verde de maquete, puxado para o oliva
+    for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(52,70,30,.18)' : 'rgba(176,182,122,.12)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
   }),
   // pasto degradado (antes da obra): capim seco amarelado, com manchas suaves
   pasto: () => canvasTex('pasto', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [160, 162, 98], 14, 57, 2, 18);
+    noiseRectP(g, w, [138, 134, 86], 14, 57, 2, 18);
     for (let i = 0; i < 70; i++) { const x = hash(i, 1, 58) * w, y = hash(i, 2, 58) * h, r = 6 + hash(i, 3, 58) * 26; g.fillStyle = `rgba(${176 + hash(i, 4, 58) * 20},${150 + hash(i, 5, 58) * 14},${92},0.22)`; envolve(w, h, x, y, r, (px, py) => { g.beginPath(); g.ellipse(px, py, r, r * 0.7, hash(i, 6, 58) * 3, 0, 7); g.fill(); }); }
     for (let i = 0; i < 1400; i++) { const x = hash(i, 7, 58) * w, y = hash(i, 8, 58) * h; g.fillStyle = hash(i, 9, 58) < 0.5 ? 'rgba(110,130,60,.22)' : 'rgba(210,190,120,.18)'; g.fillRect(x, y, 1 + hash(i, 10, 58) * 2, 2 + hash(i, 11, 58) * 3); }
   }),
-  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [66, 94, 40], 16, 35, 2, 13)),
+  forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [44, 56, 32], 14, 35, 2, 13)), // chão da mata: quase preto entre as copas, como na foto
   pavers: () => canvasTex('pavers', 512, 512, (g, w, h) => {
     noiseRectP(g, w, [204, 200, 190], 8, 51, 2, 26);
     g.strokeStyle = 'rgba(130,110,90,.14)'; g.lineWidth = 1.2;

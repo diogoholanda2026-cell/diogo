@@ -1,26 +1,33 @@
-// Ambiente: ciclo de dia e noite no estilo do SimCity BuildIt. Sol em arco (leste → oeste) que à noite dá lugar
-// a uma lua fria e alta; céu em gradiente com disco do sol, nuvens, lua e estrelas; neblina com a cor do
-// horizonte; reflexos de um céu ao ar livre (céu, sol e chão verde) refeitos só quando o dia muda de faixa, com
-// um tom contínuo por cima (sem degraus); gradação e bloom por hora; janelas, postes e passarelas acendendo.
+// Ambiente: por padrão a luz da foto de referência (ciclo 'foto': luz quente de exposição fixa, céu azul-marinho
+// com estrelas e aurora em fitas, janelas acesas); como opção, o ciclo de dia e noite (sol em arco leste → oeste
+// que à noite dá lugar a uma lua fria e alta). Céu em gradiente com disco do sol, nuvens, lua, estrelas e aurora;
+// neblina com a cor do horizonte; reflexos do céu refeitos só quando o dia muda de faixa, com um tom contínuo
+// por cima (sem degraus); gradação e bloom por hora; janelas, postes e passarelas acendendo.
 // A sombra acompanha o ponto de interesse da câmera com histerese; com o sol andando, ela é refeita no máximo a
 // cada ~2 s, e só quando a luz girou mais de ~0,5°.
 //
 // Contrato com a interface (chamado com ?.):
-//   env.setCiclo('acelerado'|'relogio'|'dia'), env.ciclo, env.hora (0..24), env.fase ('amanhecer'|'dia'|'entardecer'|'noite'),
+//   env.setCiclo('foto'|'acelerado'|'relogio'|'dia'), env.ciclo, env.hora (0..24), env.fase ('amanhecer'|'dia'|'entardecer'|'noite'),
 //   env.setHora(h) (fixa e pausa; setCiclo volta a andar). env.setMode é só um apelido antigo ('dia', 'noite').
 import * as THREE from 'three';
 import { setNight, AGUA } from './materials.js';
 import { HAO_U } from './hao.js';
 import { clamp } from '../core/util.js';
-import { amostrar, luzPrincipal, dirSol, dirLua, faseDe, I, N_PARAM, FRONTEIRAS } from './ciclo.js';
+import { amostrar, luzPrincipal, dirSol, dirLua, faseDe, I, N_PARAM, FRONTEIRAS, FOTO_V, FOTO_DIR } from './ciclo.js';
 import { tex } from './textures.js';
 
 const SKY_V = /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`;
 const SKY_F = /* glsl */`
   uniform float t; uniform vec3 zen; uniform vec3 hor; uniform vec3 baixo; uniform vec3 solDir; uniform vec3 solCor; uniform float solK; uniform float solDisco;
-  uniform vec3 luaDir; uniform float lua; uniform float estrelas; uniform float nuvens; uniform vec3 nuvemCor; uniform vec3 nuvemSombra; uniform float cidade;
+  uniform vec3 luaDir; uniform float lua; uniform float estrelas; uniform float nuvens; uniform vec3 nuvemCor; uniform vec3 nuvemSombra; uniform float cidade; uniform float aur;
   varying vec3 vDir;
   float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+  // ruído periódico no azimute (a volta inteira tem N células): a aurora não tem costura em lugar nenhum
+  float np(float u, float v, float N){ float i = floor(u), f = fract(u); vec2 j = vec2(floor(v), fract(v)); f = f*f*(3.0-2.0*f); j.y = j.y*j.y*(3.0-2.0*j.y);
+    float a = mod(i, N), b = mod(i + 1.0, N); return mix(mix(h(vec2(a, j.x)), h(vec2(b, j.x)), f), mix(h(vec2(a, j.x + 1.0)), h(vec2(b, j.x + 1.0)), f), j.y); }
+  // fita de aurora: borda de baixo nítida, topo difuso, verde embaixo e violeta em cima (como na foto)
+  vec3 fita(float y, float yc, float k) { float dy = y - yc; float base = smoothstep(-0.02, 0.0, dy) * exp(-max(dy, 0.0) * k);
+    return mix(vec3(0.12, 0.95, 0.5), vec3(0.55, 0.25, 0.9), smoothstep(0.0, 0.18, dy)) * base; }
   float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
   float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * n2(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
   void main(){
@@ -41,6 +48,13 @@ const SKY_F = /* glsl */`
     col += vec3(0.85, 0.9, 1.0) * lua * (smoothstep(0.99955, 0.9998, cl) * 2.5 + pow(max(cl, 0.0), 300.0) * 0.25);
     if (estrelas > 0.001) { float u = atan(d.x, d.z) * 0.15915494; vec2 sp = vec2(mod(floor(u * 565.0), 565.0), floor(y * 260.0)); float s = h(sp), s2 = h(sp + 17.31);
       col += vec3(step(0.9975, s) * pow(s2, 8.0) * (0.6 + 0.4 * sin(t * 1.7 + s * 90.0)) * smoothstep(0.05, 0.25, y)) * 2.5 * estrelas; }
+    // aurora em fitas baixas no céu do fundo (lado -z, atrás da Arcologia na vista padrão), em raios de cortina
+    if (aur > 0.001 && y > -0.02) { float u = atan(d.x, d.z) * 0.15915494;
+      float yc = 0.12 + 0.06 * sin(u * 12.566371 - 0.93 + t * 0.03) + 0.04 * np(u * 19.0, t * 0.02, 19.0);
+      float nr = np(u * 239.0 + t * 0.12, 0.0, 239.0), nr2 = np(u * 609.0 - t * 0.2, 3.0, 609.0);
+      float raios = 0.6 + 0.45 * nr * nr + 0.15 * nr2; float k = 10.0 - 3.5 * nr;
+      float dobra = 0.5 + 0.5 * sin(u * 12.566371 + 0.94 + 4.0 * np(u * 13.0, t * 0.01, 13.0));
+      col += (fita(y, yc, k) + fita(y, yc + 0.1, k) * 0.5) * raios * dobra * smoothstep(-0.2, 0.6, -d.z) * aur * 0.3; }
     // nuvens: ruído projetado num teto, andando devagar; mais claras no miolo e do lado do sol
     if (nuvens > 0.001 && y > 0.0) {
       vec2 p = d.xz / (y + 0.1) * 0.7 + vec2(t * 0.004, t * 0.0016);
@@ -53,8 +67,9 @@ const SKY_F = /* glsl */`
 
 const ENV_TAM = 64;                          // cubo dos reflexos: o céu é liso, 64 basta
 const COS_SOMBRA = Math.cos(0.5 * Math.PI / 180), INTERVALO_SOMBRA = 2000; // sombra: > 0,5° e no máximo a cada 2 s
-const CICLOS = ['acelerado', 'relogio', 'dia'];
+const CICLOS = ['foto', 'acelerado', 'relogio', 'dia'];
 const HORA_DIA = 11.5;                       // 'dia': sempre dia, com o sol alto à esquerda
+const HORA_FOTO = 21;                        // 'foto': a luz da foto (fixa), contada como noite pelo resto do jogo
 const HORA_INICIO = 10;                      // o jogo abre de manhã, com o dia claro
 // faixas do dia para os reflexos (as fronteiras são as dos quadros-chave): o céu dos reflexos é o do meio da faixa
 const FAIXAS = FRONTEIRAS;
@@ -64,7 +79,7 @@ const meioDaFaixa = (k) => { const a = FAIXAS[(k + FAIXAS.length - 1) % FAIXAS.l
 export class Environment {
   constructor(engine) {
     this.e = engine; const scene = engine.scene;
-    this.mode = 'ciclo'; this._ciclo = 'acelerado'; this._hora = HORA_INICIO; this._pausa = false; this._ref = { t: Date.now(), h: HORA_INICIO };
+    this.mode = 'ciclo'; this._ciclo = 'foto'; this._hora = HORA_FOTO; this._pausa = false; this._ref = { t: Date.now(), h: HORA_INICIO };
     this.V = new Float32Array(N_PARAM); this._Venv = new Float32Array(N_PARAM); this._info = { lua: false, el: 0 };
     this.noite = 0;                             // 0 dia … 1 noite (janelas, postes, aves): lido por quem precisa
     this.ajuste = null;                         // testes: { exp, sat, con, key, hemi, envi, bloom, vin } multiplicam os da hora
@@ -81,7 +96,7 @@ export class Environment {
     const U = (v) => ({ value: v });
     this.skyMat = new THREE.ShaderMaterial({ vertexShader: SKY_V, fragmentShader: SKY_F, side: THREE.BackSide, depthWrite: false, fog: false,
       uniforms: { t: U(0), zen: U(new THREE.Color()), hor: U(new THREE.Color()), baixo: U(new THREE.Color()), solDir: U(new THREE.Vector3(0, 1, 0)), solCor: U(new THREE.Color()), solK: U(0), solDisco: U(1),
-        luaDir: U(new THREE.Vector3(0, 1, 0)), lua: U(0), estrelas: U(0), nuvens: U(0.55), nuvemCor: U(new THREE.Color(1, 1, 1)), nuvemSombra: U(new THREE.Color(0.7, 0.75, 0.85)), cidade: U(0) } });
+        luaDir: U(new THREE.Vector3(0, 1, 0)), lua: U(0), estrelas: U(0), nuvens: U(0.55), nuvemCor: U(new THREE.Color(1, 1, 1)), nuvemSombra: U(new THREE.Color(0.7, 0.75, 0.85)), cidade: U(0), aur: U(0) } });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), this.skyMat); this.sky.frustumCulled = false; this.sky.renderOrder = 1e4; this.sky.userData.semHAO = true; this.sky.name = 'ceu';
     scene.add(this.sky);
     // neblina (a cor é o horizonte do céu: o terreno distante some no céu)
@@ -97,17 +112,19 @@ export class Environment {
   get ciclo() { return this._ciclo; }
   get hora() { return this._hora; }
   get fase() { return faseDe(this._hora); }
-  // 'acelerado': 1 min real = 1 h de jogo (continua da hora atual); 'relogio': hora do aparelho; 'dia': sempre dia
+  // 'foto': a luz da foto, fixa (padrão); 'acelerado': 1 min real = 1 h de jogo (continua da hora atual);
+  // 'relogio': hora do aparelho; 'dia': sempre dia
   setCiclo(m) {
-    if (!CICLOS.includes(m)) m = 'acelerado';
+    if (!CICLOS.includes(m)) m = 'foto';
     this._ciclo = m; this._pausa = false;
-    if (m === 'dia') this._hora = HORA_DIA; else if (m === 'relogio') this._hora = this._relogio();
+    if (m === 'foto') this._hora = HORA_FOTO; else if (m === 'dia') this._hora = HORA_DIA; else if (m === 'relogio') this._hora = this._relogio();
     this._ref.t = Date.now(); this._ref.h = this._hora; this._forcar = true; this.e.acordar?.(600);
     return m;
   }
   // fixa uma hora e pausa o ciclo (setCiclo volta a andar)
   setHora(h) { h = +h; if (!isFinite(h)) return; this._hora = ((h % 24) + 24) % 24; this._pausa = true; this._forcar = true; this.e.acordar?.(600); }
   _relogio() { const d = new Date(); return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; }
+  _fotoAtiva() { return this._ciclo === 'foto' && !this._pausa; }
   // apelido da interface antiga: 'dia' = ciclo sempre dia; 'noite' = ciclo parado às 22 h; o resto é o ciclo
   setMode(m) { if (m === 'dia') this.setCiclo('dia'); else if (m === 'noite') this.setHora(22); return this.mode; }
   // ---------------------------------------------------------------- reflexos (PMREM)
@@ -119,7 +136,7 @@ export class Environment {
     this._pm = new THREE.PMREMGenerator(r);
     this._cubo = new THREE.WebGLCubeRenderTarget(ENV_TAM, { type: this.e.hdr ? THREE.HalfFloatType : THREE.UnsignedByteType, generateMipmaps: false });
     this._cubeCam = new THREE.CubeCamera(0.1, 200, this._cubo);
-    this._envMat = this.skyMat.clone(); const EU = this._envMat.uniforms; EU.nuvens.value = 0; EU.estrelas.value = 0; EU.solDisco.value = 0;
+    this._envMat = this.skyMat.clone(); const EU = this._envMat.uniforms; EU.nuvens.value = 0; EU.estrelas.value = 0; EU.solDisco.value = 0; EU.aur.value = 0;
     this._envCena = new THREE.Scene(); this._envCena.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), this._envMat));
     this._envRT = null; this._faixaEnv = -1; this._eGen = new THREE.Vector3(1, 1, 1); this._eCur = new THREE.Vector3(); this._solEnv = new THREE.Vector3(); this._luaEnv = new THREE.Vector3();
     this.stats = { reflexos: 0 };
@@ -140,11 +157,24 @@ export class Environment {
     const r = this.e.renderer;
     try { this._cubeCam.update(r, this._envCena); this._envRT = this._pm.fromCubemap(this._cubo.texture, this._envRT); this.e.scene.environment = this._envRT.texture; this.stats.reflexos++; } catch (e) { console.warn('reflexos:', e.message); }
   }
+  // reflexos da luz da foto: o céu azul-marinho com um halo largo e quente na direção da luz de exposição e o
+  // brilho quente da cidade no horizonte (vidro, água e verniz pegam o dourado da foto, não só o azul da noite)
+  _gerarEnvFoto() {
+    const Ve = FOTO_V, EU = this._envMat.uniforms;
+    EU.zen.value.setRGB(Ve[I.zen], Ve[I.zen + 1], Ve[I.zen + 2]); EU.hor.value.setRGB(Ve[I.hor] * 2.2, Ve[I.hor + 1] * 2.2, Ve[I.hor + 2] * 2.2);
+    EU.baixo.value.setRGB(Ve[I.chaoH] * 0.5, Ve[I.chaoH + 1] * 0.5, Ve[I.chaoH + 2] * 0.5);
+    EU.solDir.value.set(FOTO_DIR[0], FOTO_DIR[1], FOTO_DIR[2]).normalize(); EU.solCor.value.setRGB(Ve[I.luz], Ve[I.luz + 1], Ve[I.luz + 2]); EU.solK.value = 0.9;
+    EU.lua.value = 0; EU.cidade.value = 6;
+    this._media(Ve, this._eGen); this._faixaEnv = 'foto';
+    try { this._cubeCam.update(this.e.renderer, this._envCena); this._envRT = this._pm.fromCubemap(this._cubo.texture, this._envRT); this.e.scene.environment = this._envRT.texture; this.stats.reflexos++; } catch (e) { console.warn('reflexos:', e.message); }
+  }
   // ---------------------------------------------------------------- quadro a quadro
   _aplicar(V, agora) {
     const e = this.e, P = e.params, s = this.key.shadow, U = this.skyMat.uniforms;
-    // luz principal: sol ou lua (intensidade zero na troca), direção contínua; sombra em degraus de 0,5°
-    const k = luzPrincipal(this._hora, this._d, this._info);
+    // luz principal: a da foto (fixa) ou o sol ou a lua (intensidade zero na troca), direção contínua; sombra em
+    // degraus de 0,5°
+    const foto = this._fotoAtiva();
+    let k = 1; if (foto) { this._d.set(FOTO_DIR[0], FOTO_DIR[1], FOTO_DIR[2]).normalize(); this._info.lua = false; this._info.el = Math.asin(this._d.y); } else k = luzPrincipal(this._hora, this._d, this._info);
     this.keyDir.copy(this._d);
     this.key.color.setRGB(V[I.luz], V[I.luz + 1], V[I.luz + 2]); this.key.intensity = V[I.luzK] * k; s.intensity = V[I.sombra];
     this.hemi.color.setRGB(V[I.ceuH], V[I.ceuH + 1], V[I.ceuH + 2]); this.hemi.groundColor.setRGB(V[I.chaoH], V[I.chaoH + 1], V[I.chaoH + 2]); this.hemi.intensity = V[I.hemi];
@@ -155,7 +185,7 @@ export class Environment {
     const elSol = dirSol(this._hora, this.solDir); dirLua(this._hora, this.luaDir);
     U.zen.value.setRGB(V[I.zen], V[I.zen + 1], V[I.zen + 2]); U.hor.value.copy(f.color); U.baixo.value.setRGB(V[I.baixo], V[I.baixo + 1], V[I.baixo + 2]);
     U.solDir.value.copy(this.solDir); U.solCor.value.setRGB(V[I.brilho], V[I.brilho + 1], V[I.brilho + 2]); U.solK.value = V[I.brilhoK]; U.solDisco.value = clamp((elSol * 180 / Math.PI + 3) / 4, 0, 1);
-    U.luaDir.value.copy(this.luaDir); U.lua.value = V[I.lua]; U.estrelas.value = V[I.estrelas]; U.cidade.value = V[I.cidade];
+    U.luaDir.value.copy(this.luaDir); U.lua.value = V[I.lua]; U.estrelas.value = V[I.estrelas]; U.cidade.value = V[I.cidade]; U.aur.value = V[I.aur];
     U.nuvemCor.value.setRGB(V[I.nuvem], V[I.nuvem + 1], V[I.nuvem + 2]); U.nuvemSombra.value.setRGB(V[I.nuvemSombra], V[I.nuvemSombra + 1], V[I.nuvemSombra + 2]);
     this.cores.nuvem.copy(U.nuvemCor.value); this.cores.nuvemSombra.copy(U.nuvemSombra.value);
     // gradação e bloom
@@ -166,10 +196,11 @@ export class Environment {
     const a = this.ajuste; // ajustes de teste pela URL (multiplicam os da hora)
     if (a) { P.exposure *= a.exp ?? 1; P.saturation *= a.sat ?? 1; P.contrast *= a.con ?? 1; P.bloomStrength *= a.bloom ?? 1; P.vignette *= a.vin ?? 1; this.key.intensity *= a.key ?? 1; this.hemi.intensity *= a.hemi ?? 1; e.scene.environmentIntensity *= a.envi ?? 1; }
     // luzes da cidade: janelas acendem prédio a prédio, postes e passarelas
-    const n = V[I.noite]; if (Math.abs(n - this.noite) > 0.002 || this._forcar) { this.noite = n; e.noite = n; setNight(n, 1.6 * n); }
+    // (na luz da foto as janelas brilham mais: as salas acesas são o que mais se vê nos prédios da foto)
+    const n = V[I.noite]; if (Math.abs(n - this.noite) > 0.002 || this._forcar) { this.noite = n; e.noite = n; setNight(n, (foto ? 3.2 : 1.6) * n); }
     e.modoLuz = n >= 0.5 ? 'noite' : 'dia';
     // reflexos: céu da faixa (refeito só na troca de faixa) e o tom contínuo por cima
-    const fx = faixaDe(this._hora); if (fx !== this._faixaEnv) this._gerarEnv(fx);
+    if (foto) { if (this._faixaEnv !== 'foto') this._gerarEnvFoto(); } else { const fx = faixaDe(this._hora); if (fx !== this._faixaEnv) this._gerarEnv(fx); }
     this._media(V, this._eCur); AGUA.noite.value = n; HAO_U.ceuTint.value.set(clamp(this._eCur.x / this._eGen.x, 0.2, 5), clamp(this._eCur.y / this._eGen.y, 0.2, 5), clamp(this._eCur.z / this._eGen.z, 0.2, 5));
     // sombra: refeita quando a luz girou mais de 0,5° (no máximo a cada 2 s) ou trocou de astro
     const troca = this._info.lua !== this._luaAntes; this._luaAntes = this._info.lua;
@@ -185,12 +216,13 @@ export class Environment {
     const NP = HAO_U.nuvemP.value; NP.x = (t / 1000) * 0.017 % 1; NP.y = (t / 1000) * 0.0065 % 1;
     if (!this._pausa) {
       if (this._ciclo === 'acelerado') this._hora = (((this._ref.h + (Date.now() - this._ref.t) / 60000) % 24) + 24) % 24;
+      else if (this._ciclo === 'foto') this._hora = HORA_FOTO;
       else if (this._ciclo === 'relogio') { // hora do aparelho: referência + tempo corrido (sem Date por quadro), ressincroniza a cada 10 min
         const dt = Date.now() - this._ref.t; if (dt > 600000 || dt < 0) { this._ref.t = Date.now(); this._ref.h = this._relogio(); }
         this._hora = (this._ref.h + (Date.now() - this._ref.t) / 3600000) % 24;
       } else this._hora = HORA_DIA;
     }
-    if (this._forcar || this._hora !== this._horaAplicada) { amostrar(this._hora, this.V); this._aplicar(this.V, agora); this._horaAplicada = this._hora; this._forcar = false; }
+    if (this._forcar || this._hora !== this._horaAplicada) { if (this._fotoAtiva()) this.V.set(FOTO_V); else amostrar(this._hora, this.V); this._aplicar(this.V, agora); this._horaAplicada = this._hora; this._forcar = false; }
     const s = this.key.shadow, sc = s.camera, C = this._sc;
     const span = clamp(viewSize, 10, 90);
     const half = Math.pow(2, Math.ceil(Math.log2(0.62 * span * 1.25) * 4) / 4);

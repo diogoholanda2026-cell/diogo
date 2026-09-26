@@ -54,9 +54,9 @@ async function iniciar() {
   const env = new Environment(engine); const aoPerfil = (q) => { env.setShadowSize(q.shadow); forest?.setShadows(q.treeShadow); };
   if (Array.isArray(engine.aoQualidade)) engine.aoQualidade.push(aoPerfil); else engine.onQuality = aoPerfil;
   env.setShadowSize(engine.q.shadow);
-  // ciclo de dia e noite: o da configuração (a interface grava cfg.ciclo), 'acelerado' por padrão; nos testes,
+  // luz: a da configuração (a interface grava cfg.ciclo), a da foto ('foto') por padrão; nos testes,
   // ?ciclo= e ?hora= (a hora fixa pausa o ciclo)
-  env.setCiclo(qs.get('ciclo') || cfg.ciclo || 'acelerado'); if (qs.has('hora')) env.setHora(+qs.get('hora'));
+  env.setCiclo(qs.get('ciclo') || cfg.ciclo || 'foto'); if (qs.has('hora')) env.setHora(+qs.get('hora'));
   const ground = new Ground(engine); await passo(30);
   forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(40);
   const arredores = new Arredores(engine, forest); await passo(45);

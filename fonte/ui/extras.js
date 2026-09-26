@@ -40,7 +40,7 @@ const G = {
   planta: svg('<path d="M12 3.5 3 8.5l9 5 9-5z"/><path d="m3 12.5 9 5 9-5M3 16.5l9 5 9-5" opacity=".7"/>'),
   cabo: svg('<path d="m9 7-5 5 5 5M15 7l5 5-5 5"/>'),
 };
-const CICLOS = [['acelerado', 'Acelerado'], ['relogio', 'Hora do celular'], ['dia', 'Sempre dia']];
+const CICLOS = [['foto', 'Foto'], ['acelerado', 'Acelerado'], ['relogio', 'Celular'], ['dia', 'Sempre dia']];
 export function instalarExtras(C, o) {
   const { engine, env, rig, cfg, fotoURL, versao } = o;
   // ---------------- rótulos: legendas de maquete ----------------
@@ -90,7 +90,7 @@ export function instalarExtras(C, o) {
   // vista da foto, o passeio para e a hora vai para a noite (a foto é noturna); ao sair, volta a hora escolhida.
   const foto = el('div', ''); foto.id = 'foto-ref'; foto.style.backgroundImage = `url(${fotoURL})`; C.ui.appendChild(foto);
   let barra = null, xis = null, placa = null, cabo = null, etiq = null, tBarra = 0, hora = 0, comp = false, espia = false, tEspia = 0, semClique = false, xCabo = 0, iEnq = -1, tPlaca = 0, txPlaca = '';
-  const automatico = () => { hora = 0; env.setCiclo?.(cfg.ciclo || 'acelerado'); };
+  const automatico = () => { hora = 0; env.setCiclo?.(cfg.ciclo || 'foto'); };
   const voltarHora = () => { const H = HORAS[hora]; if (H.h == null) automatico(); else env.setHora?.(H.h); engine.acordar?.(800); };
   // a barra some depois de 3,5 s sem toque e volta com um toque na cidade ou com a câmera andando
   const mostrar = () => { if (!barra) return; barra.classList.remove('oculta'); clearTimeout(tBarra); tBarra = setTimeout(() => barra?.classList.add('oculta'), 3500); };
@@ -121,7 +121,7 @@ export function instalarExtras(C, o) {
   // ---- Comparar ----
   const larg = () => engine.vw || innerWidth;
   const moverCabo = (x) => { xCabo = clamp(Math.round(x), 0, larg()); cabo.style.transform = `translateX(${xCabo}px)`; foto.style.clipPath = `inset(0 0 0 ${xCabo}px)`; cabo.setAttribute('aria-valuenow', Math.round((xCabo / larg()) * 100)); };
-  const verFoto = (on) => { if (on) { C._enq = null; C.vistaFoto?.(true); rig.passeio?.(false); env.setHora?.(22); engine.acordar?.(1800); } else { voltarHora(); if (C.modoApreciar) rig.passeio?.(true); } };
+  const verFoto = (on) => { if (on) { C._enq = null; C.vistaFoto?.(true); rig.passeio?.(false); env.setCiclo?.('foto'); engine.acordar?.(1800); } else { voltarHora(); if (C.modoApreciar) rig.passeio?.(true); } };
   const comparar = (on) => {
     if (!barra || comp === on) return; comp = on; cabo.classList.toggle('oculto', !on); etiq.classList.toggle('oculto', !on);
     if (on) { moverCabo(larg() / 2); foto.style.opacity = 1; } else { foto.style.opacity = 0; foto.style.clipPath = ''; }
@@ -238,7 +238,7 @@ export function instalarExtras(C, o) {
       ${op('Música ambiente', seg('musica', [[1, 'Sim'], [0, 'Não']], cfg.musica === false ? 0 : 1))}
       ${op('Vibração', seg('vibra', [[1, 'Sim'], [0, 'Não']], cfg.vibra === false ? 0 : 1))}
       ${sec('Jogo')}
-      ${op('Ciclo de dia e noite<small>Acelerado: 1 min = 1 h</small>', seg('ciclo', CICLOS, cfg.ciclo || 'acelerado'))}
+      ${op('Luz e ciclo<small>Foto: a luz da referência · Acelerado: 1 min = 1 h</small>', seg('ciclo', CICLOS, cfg.ciclo || 'foto'))}
       ${op('Ritmo da obra<small>Acelera cronômetros: modo de teste</small>', seg('ritmo', [[1, '1×'], [2, '2×'], [4, '4×']], C.S.ritmo || 1))}
       ${sec('Salvamento')}
       ${op('Salvamento<small id="persist">Verificando…</small>', '<div class="linha"><button class="botao sec" data-y="exportar">Exportar</button><button class="botao sec" data-y="importar">Importar</button></div>')}

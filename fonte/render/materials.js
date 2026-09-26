@@ -10,7 +10,7 @@ const litMats = []; // materiais com emissivo que variam com a noite
 export let nightLevel = 0, nightExtra = 0;
 // água dos lagos: mapa da altura do leito (o terreno preenche) e o tempo em segundos
 export const AGUA = { tProf: { value: null }, aguaOn: { value: 0 }, aguaT: { value: 0 }, aguaP: { value: new THREE.Vector4(MESA.x0, MESA.z0, 1 / (MESA.x1 - MESA.x0), 1 / (MESA.z1 - MESA.z0)) },
-  raso: { value: new THREE.Color(0x35aab0) }, fundo: { value: new THREE.Color(0x1f6f96) }, margem: { value: new THREE.Color(0xd6d2c4) }, // turquesa na margem, azul-ardósia no fundo, margem de pedra clara
+  raso: { value: new THREE.Color(0x74a6b0) }, fundo: { value: new THREE.Color(0x4a7a8c) }, margem: { value: new THREE.Color(0xcfcabb) }, // azul-acinzentado da foto (o céu refletido), mais fundo no meio, margem de pedra clara
   turvo: { value: 0 }, lodo: { value: new THREE.Color(0x7a7254) }, // lago assoreado (turvo 1): lodo pardo, mais escuro e fosco
   noite: { value: 0 } }; // à noite, as luzes da cidade tremulam refletidas perto das margens
 const MACRO = { tMacro: { value: null } };
@@ -132,15 +132,15 @@ export function makeMaterials() {
   M.dark = std({ color: 0x3a4250, roughness: 0.75 });
   M.steel = std({ color: 0xd2d7de, roughness: 0.32, metalness: 0.75 });
   M.steelDark = std({ color: 0x75808e, roughness: 0.4, metalness: 0.7 });
-  M.roofMetal = std({ color: 0x9aa2aa, roughness: 0.45, metalness: 0.6 });
+  M.roofMetal = std({ color: 0xbcbab2, roughness: 0.55, metalness: 0.25 }); // cobertura cinza-clara (a Sede da foto), sem espelhar o céu escuro
   M.bandaCinza = std({ color: 0xa3b09f, roughness: 0.7 }); // tampo sálvia clara da Ciências
   M.concretoClaro = std({ color: 0xe3dccb, roughness: 0.9 }); // muros de pedra clara, muro do pátio do CRD, margens das lagoas
   M.terracota = std({ color: 0xe0906e, roughness: 0.9 }); // pátios da Escola (salmão da foto, na paleta do BuildIt)
   M.caminhoTeto = std({ color: 0xe0d8c6, roughness: 0.8 });
   M.roof = comMacro(std({ color: 0xffffff, map: tex.roof(), normalMap: tex.roofNormal(), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.95 }));
-  M.planter = comMacro(std({ color: 0x4a8432, roughness: 0.95 }));
-  M.lawn = comMacro(std({ color: 0xc2d890, map: tex.grass(), roughness: 0.95 }));
-  M.grassBright = comMacro(std({ color: 0xd4e89a, map: tex.grass(), roughness: 0.95 }));
+  M.planter = comMacro(std({ color: 0x5f8a3a, roughness: 0.95 })); // canteiros dos terraços: o verde vivo e fresco da foto
+  M.lawn = comMacro(std({ color: 0xd0dca0, map: tex.grass(), roughness: 0.95 }));
+  M.grassBright = comMacro(std({ color: 0xdce6a8, map: tex.grass(), roughness: 0.95 }));
   // campo: vence a placa de terra da terraplenagem logo abaixo (que tem desvio de profundidade contra o terreno)
   M.field = std({ color: 0xffffff, map: tex.field(), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   M.track = std({ color: 0xffffff, map: tex.track(), roughness: 0.9 });
@@ -169,7 +169,7 @@ export function makeMaterials() {
   M.water = comAgua(std({ color: 0x40605f, roughness: 0.16, metalness: 0.05, normalMap: wn.clone(), normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 0.6 }));
   // aquário do Bioma: continua translúcido (a fauna nada dentro do volume de água)
   M.waterDeep = std({ color: 0x2294c0, roughness: 0.05, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.25, 0.25), transparent: true, opacity: 0.82, emissive: 0x0d6788, emissiveIntensity: 0.08, envMapIntensity: 1.3 });
-  M.pool = std({ color: 0x2699b2, roughness: 0.3, metalness: 0.05, normalMap: wn, normalScale: new THREE.Vector2(0.12, 0.12), envMapIntensity: 1.0 }); // espelhos d'água turquesa, mais escuros que o céu que refletem
+  M.pool = std({ color: 0x2699b2, roughness: 0.3, metalness: 0.05, normalMap: wn, normalScale: new THREE.Vector2(0.12, 0.12), envMapIntensity: 1.0, emissive: 0x2cc4d4, emissiveIntensity: 0 }); // espelhos d'água turquesa; à noite acesos por dentro, como na foto
   M.yellow = std({ color: 0xf8c83a, roughness: 0.5 });
   M.orange = std({ color: 0xf28a3a, roughness: 0.5 });
   M.red = std({ color: 0xe2543f, roughness: 0.55 });
@@ -201,8 +201,8 @@ export function makeMaterials() {
     const f = facadeTextures(s);
     M['fac_' + s] = acesa(comJanelas(std({ color: 0xffffff, map: f.map, emissive: 0xffffff, emissiveMap: f.emissive, roughness: 0.22, metalness: 0.15, envMapIntensity: 1.0 }), f.grade || [f.bays, f.floors]), baseFac[s], 'janelas');
   }
-  acesa(M.glassWarm, 0.6);
-  acesa(M.waterDeep, 0.08, 'sempre');
+  acesa(M.glassWarm, 0.6); acesa(M.pool, 0.35);
+  acesa(M.waterDeep, 0.5); // o aquário do Bioma acende à noite, azul, como na foto
   setNight(nightLevel, nightExtra);
   return M;
 }

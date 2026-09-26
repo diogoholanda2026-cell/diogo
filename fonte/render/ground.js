@@ -192,7 +192,7 @@ export class Ground {
     const f = document.createElement('canvas'); f.width = (W * S) >> 1; f.height = (D * S) >> 1; const c = f.getContext('2d'); const w = f.width, h = f.height;
     c.fillStyle = c.createPattern(tex.forestFloor().userData.canvas, 'repeat'); c.save(); c.scale(0.5, 0.5); c.fillRect(0, 0, w * 2, h * 2); c.restore();
     // chão de mata escuro (a foto nunca mostra o chão): a base [66,94,40] da textura cai aqui mesmo, sem mexer na textura
-    c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(112,166,160)'; c.fillRect(0, 0, w, h); c.globalCompositeOperation = 'source-over'; // ~[29,61,25]: verde fundo, não pardo
+    c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(96,120,108)'; c.fillRect(0, 0, w, h); c.globalCompositeOperation = 'source-over'; // ~[17,26,14]: fundo escuro da mata da foto
     for (let i = 0; i < 2600; i++) { const x = hash(i, 1, 501) * w, y = hash(i, 2, 501) * h, r = (6 + hash(i, 3, 501) * 22) / 2; c.fillStyle = `rgba(${16 + hash(i, 4, 501) * 22},${58 + hash(i, 5, 501) * 40},${18 + hash(i, 6, 501) * 16},0.6)`; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
     return (this._fixo = f);
   }
