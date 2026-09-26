@@ -1005,3 +1005,11 @@ img{-webkit-user-drag:none}
 .rotulo3d small{display:none;align-items:center;justify-content:center;gap:3px;margin-top:2px;font-size:12px;letter-spacing:.06em;color:var(--azulE)}
 .rotulo3d small img{width:16px;height:16px}
 .rotulo3d.obra small{display:flex}
+/* ==== leva 2 ==== */
+/* Selo do nível: o Anel do Campus visto de cima (ícone anel-campus). O terraço do ícone é vazado: o XP o pinta por baixo
+   em --terraco no sentido horário (o --p que o hud.js já escreve, com a transição de sempre) e um fio claro marca os dois
+   degraus do terraço; o número fica no campo do centro. */
+.nivel .anel{inset:4px;background:radial-gradient(circle closest-side,transparent 69%,rgba(255,255,255,.55) 69% 73%,transparent 73%),conic-gradient(var(--terraco) var(--p,0%),#dcd2bd 0);box-shadow:none}
+.nivel .anel::after{content:none}
+.nivel .selo{left:-7px;top:-6px;width:76px;height:76px}
+.nivel .nv{top:19px}

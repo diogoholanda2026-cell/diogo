@@ -65,7 +65,7 @@ export class Hud {
     this.J = J; this.raiz = raiz;
     this.topo = el('div', 'topo');
     this.topo.innerHTML = `
-      <div class="nivel" data-a="nivel" role="button" aria-label="Nível 1"><i class="anel"></i>${img('nivel', 'selo')}<b class="nv">1</b></div>
+      <div class="nivel" data-a="nivel" role="button" aria-label="Nível 1"><i class="anel"></i>${img('anel-campus', 'selo')}<b class="nv">1</b></div>
       <div class="stat pop" data-a="pop" role="button" aria-label="Moradores e renda por hora">${img('pop')}<span class="pp">0</span><small class="ph">+0/h</small></div>
       <div class="stat bem" data-a="bem" role="button" aria-label="Bem-estar">${img('bem-medio')}<span class="bb">35%</span></div>
       <div class="stat vida" data-a="vida" role="button" aria-label="Composição concluída"><i class="anel-vida" style="--p:0%">${img('vida')}</i><span class="vv">0%</span></div>
