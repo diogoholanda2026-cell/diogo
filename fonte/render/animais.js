@@ -29,44 +29,44 @@ function limb(a, b, r0, r1, seg = 6) { const A = new THREE.Vector3(...a), B = ne
 // perna em pares diagonais: dianteira esquerda com traseira direita
 const par = (x, z) => ((x > 0) === (z > 0) ? PERNA_A : PERNA_B);
 
-// Gorila de maquete: preto, sela prateada no dorso. Em pé anda sobre os nós dos dedos (ombros mais
-// altos que o quadril, tronco inclinado para a frente); a variante sentada tem o tronco ereto.
+// Gorila da foto: pelagem carvão azulada quase preta, baixo e longo, com a faixa dorsal clara da nuca à garupa
+// (mais larga atrás), cabeça da cor do corpo colada no ombro (sem pescoço), braços grossos verticais até os nós
+// dos dedos e pernas quase escondidas. Em pé: topo da cabeça a 1,12 e ombro a 0,85 no modelo (x 1,3 na cena);
+// sentado: tronco ereto de costas. Esferas de 8 x 6 (cerca de mil triângulos por bicho).
 function gorila(sentado) {
-  // quase preto e neutro sob o sol (a luz do dia já é fria nas sombras), sela prateada clara no dorso, como na foto
-  const gc = [0.042, 0.042, 0.046], gp = [0.066, 0.063, 0.062], prata = [0.16, 0.16, 0.17]; const out = [];
+  const gc = [0.022, 0.02, 0.03], gp = [0.04, 0.036, 0.036], faixa = [0.14, 0.095, 0.085]; const out = []; const E = (rx, ry, rz) => ell(rx, ry, rz, 8);
   if (!sentado) {
-    const tronco = ell(0.36, 0.30, 0.28); tronco.rotateZ(0.5); out.push(memb(colorize(T(tronco, 0.05, 0.55, 0), gc), TORAX, 0.05, 0.55));
-    out.push(memb(colorize(T(ell(0.22, 0.2, 0.24), 0.18, 0.5, 0), gc), TORAX, 0.05, 0.55)); // peito
-    out.push(memb(colorize(T(ell(0.18, 0.18, 0.22), -0.2, 0.45, 0), gc), TORAX, 0.05, 0.55)); // quadril
-    out.push(memb(colorize(T(ell(0.2, 0.1, 0.18), -0.08, 0.72, 0), prata), TORAX, 0.05, 0.55)); // sela prateada
-    out.push(colorize(T(ell(0.13, 0.14, 0.13), 0.34, 0.78, 0), gc));
-    out.push(colorize(T(ell(0.08, 0.07, 0.08), 0.3, 0.9, 0), gc)); // crista
-    out.push(colorize(T(ell(0.05, 0.03, 0.11), 0.42, 0.83, 0), gc)); // arco das sobrancelhas
-    out.push(colorize(T(ell(0.07, 0.065, 0.09), 0.44, 0.74, 0), gp)); // focinho
-    for (const s of [-1, 1]) { // braços longos com cotovelo, apoiados nos nós dos dedos; pernas curtas dobradas
+    const tronco = E(0.34, 0.23, 0.24); tronco.rotateZ(0.3); out.push(memb(colorize(T(tronco, 0.02, 0.62, 0), gc), TORAX, 0.02, 0.62));
+    out.push(memb(colorize(T(E(0.24, 0.21, 0.27), 0.22, 0.64, 0), gc), TORAX, 0.02, 0.62)); // ombros (topo a 0,85)
+    out.push(memb(colorize(T(E(0.18, 0.15, 0.2), -0.28, 0.41, 0), gc), TORAX, 0.02, 0.62)); // garupa (topo a 0,56)
+    out.push(memb(colorize(T(E(0.15, 0.04, 0.09), 0.12, 0.85, 0), faixa), TORAX, 0.02, 0.62)); // faixa dorsal: da nuca...
+    { const f2 = E(0.19, 0.05, 0.15); f2.rotateZ(0.32); out.push(memb(colorize(T(f2, -0.14, 0.73, 0), faixa), TORAX, 0.02, 0.62)); } // ...à garupa, mais larga atrás
+    out.push(colorize(T(E(0.12, 0.13, 0.11), 0.38, 0.97, 0), gc)); // cabeça colada no ombro (topo a 1,10)
+    out.push(colorize(T(E(0.07, 0.05, 0.07), 0.36, 1.06, 0), gc)); // crista
+    out.push(colorize(T(E(0.07, 0.06, 0.08), 0.48, 0.92, 0), gp)); // focinho
+    for (const s of [-1, 1]) { // braços grossos quase verticais até os nós dos dedos; pernas curtas dobradas atrás
       const A = par(1, s), B = par(-1, s);
-      out.push(memb(colorize(T(ell(0.12, 0.12, 0.12), 0.22, 0.72, s * 0.22), gc), A, 0.22, 0.72));
-      out.push(memb(colorize(limb([0.22, 0.72, s * 0.24], [0.3, 0.36, s * 0.3], 0.095, 0.085), gc), A, 0.22, 0.72));
-      out.push(memb(colorize(limb([0.3, 0.36, s * 0.3], [0.36, 0.04, s * 0.3], 0.085, 0.07), gc), A, 0.22, 0.72));
-      out.push(memb(colorize(T(ell(0.07, 0.04, 0.08, 6), 0.38, 0.03, s * 0.3), gp), A, 0.22, 0.72)); // nós dos dedos
-      out.push(memb(colorize(limb([-0.2, 0.42, s * 0.17], [-0.06, 0.22, s * 0.2], 0.1, 0.085), gc), B, -0.2, 0.42));
-      out.push(memb(colorize(limb([-0.06, 0.22, s * 0.2], [-0.14, 0.03, s * 0.2], 0.08, 0.07), gc), B, -0.2, 0.42));
-      out.push(memb(colorize(T(ell(0.1, 0.03, 0.06, 6), -0.08, 0.02, s * 0.2), gp), B, -0.2, 0.42));
+      out.push(memb(colorize(T(E(0.11, 0.11, 0.11), 0.28, 0.66, s * 0.24), gc), A, 0.28, 0.66));
+      out.push(memb(colorize(limb([0.28, 0.66, s * 0.26], [0.36, 0.34, s * 0.3], 0.1, 0.09), gc), A, 0.28, 0.66));
+      out.push(memb(colorize(limb([0.36, 0.34, s * 0.3], [0.4, 0.04, s * 0.3], 0.09, 0.08), gc), A, 0.28, 0.66));
+      out.push(memb(colorize(T(ell(0.08, 0.04, 0.09, 6), 0.42, 0.03, s * 0.3), gp), A, 0.28, 0.66)); // nós dos dedos
+      out.push(memb(colorize(limb([-0.25, 0.4, s * 0.16], [-0.18, 0.03, s * 0.18], 0.09, 0.07), gc), B, -0.25, 0.4));
+      out.push(memb(colorize(T(ell(0.1, 0.03, 0.06, 6), -0.14, 0.02, s * 0.18), gp), B, -0.25, 0.4));
     }
-  } else { // sentado: tronco ereto, mãos nos joelhos
-    const tronco = ell(0.27, 0.34, 0.27); tronco.rotateZ(-0.15); out.push(memb(colorize(T(tronco, 0.0, 0.5, 0), gc), TORAX, 0, 0.5));
-    out.push(memb(colorize(T(ell(0.12, 0.17, 0.2), -0.14, 0.44, 0), prata), TORAX, 0, 0.5));
-    out.push(colorize(T(ell(0.22, 0.15, 0.25), -0.02, 0.17, 0), gc)); // quadril
-    out.push(memb(colorize(T(ell(0.12, 0.14, 0.12), 0.06, 0.92, 0), gc), TORAX, 0, 0.5));
-    out.push(colorize(T(ell(0.08, 0.06, 0.1), 0.03, 1.04, 0), gc));
-    out.push(colorize(T(ell(0.06, 0.065, 0.085), 0.16, 0.88, 0), gp));
+  } else { // sentado: tronco ereto, faixa clara nas costas, mãos nos joelhos
+    out.push(memb(colorize(T(E(0.26, 0.32, 0.26), 0.0, 0.55, 0), gc), TORAX, 0, 0.55));
+    out.push(memb(colorize(T(E(0.08, 0.18, 0.15), -0.21, 0.56, 0), faixa), TORAX, 0, 0.55));
+    out.push(colorize(T(E(0.24, 0.14, 0.28), -0.02, 0.16, 0), gc)); // quadril
+    out.push(memb(colorize(T(E(0.12, 0.13, 0.11), 0.06, 0.96, 0), gc), TORAX, 0, 0.55));
+    out.push(colorize(T(E(0.07, 0.05, 0.07), 0.04, 1.05, 0), gc));
+    out.push(colorize(T(E(0.06, 0.06, 0.08), 0.16, 0.9, 0), gp));
     for (const s of [-1, 1]) {
-      out.push(colorize(T(ell(0.11, 0.11, 0.11), 0.02, 0.74, s * 0.24), gc));
-      out.push(colorize(limb([0.02, 0.74, s * 0.25], [0.16, 0.44, s * 0.3], 0.09, 0.08), gc));
-      out.push(colorize(limb([0.16, 0.44, s * 0.3], [0.3, 0.22, s * 0.24], 0.08, 0.065), gc));
-      out.push(colorize(T(ell(0.06, 0.04, 0.07, 6), 0.32, 0.2, s * 0.24), gp));
-      out.push(colorize(limb([0.0, 0.2, s * 0.15], [0.28, 0.26, s * 0.2], 0.1, 0.085), gc));
-      out.push(colorize(limb([0.28, 0.26, s * 0.2], [0.34, 0.02, s * 0.2], 0.08, 0.07), gc));
+      out.push(colorize(T(E(0.11, 0.11, 0.11), 0.04, 0.76, s * 0.24), gc));
+      out.push(colorize(limb([0.04, 0.76, s * 0.25], [0.2, 0.45, s * 0.3], 0.09, 0.08), gc));
+      out.push(colorize(limb([0.2, 0.45, s * 0.3], [0.32, 0.2, s * 0.26], 0.08, 0.07), gc));
+      out.push(colorize(T(ell(0.07, 0.04, 0.08, 6), 0.34, 0.18, s * 0.26), gp));
+      out.push(colorize(limb([0.0, 0.2, s * 0.15], [0.28, 0.24, s * 0.2], 0.1, 0.085), gc));
+      out.push(colorize(limb([0.28, 0.24, s * 0.2], [0.34, 0.02, s * 0.2], 0.08, 0.07), gc));
       out.push(colorize(T(ell(0.1, 0.03, 0.06, 6), 0.38, 0.02, s * 0.2), gp));
     }
   }
@@ -113,7 +113,7 @@ export function animalGeos() {
   rino.push(colorize(T(ell(0.3, 0.17, 0.15), 0, 0.27, 0), rc)); rino.push(colorize(T(ell(0.14, 0.1, 0.09), 0.3, 0.24, 0), rc));
   rino.push(colorize(limb([0.4, 0.26, 0], [0.47, 0.38, 0], 0.03, 0.005), marfim)); rino.push(colorize(limb([0.34, 0.3, 0], [0.37, 0.36, 0], 0.02, 0.004), marfim));
   for (const [x, z] of [[0.16, 0.08], [0.16, -0.08], [-0.16, 0.08], [-0.16, -0.08]]) rino.push(memb(colorize(limb([x, 0.22, z], [x, 0, z], 0.05, 0.045), rc), par(x, z), x, 0.22));
-  const baleia = []; const az = [0.74, 0.78, 0.82], br = [0.92, 0.93, 0.94]; // baleia branca, como a da maquete
+  const baleia = []; const az = [0.92, 0.94, 0.93], br = [0.97, 0.97, 0.96]; // baleia clara, como a da maquete (dorso na lâmina)
   const pesoCauda = (x) => Math.max(0, -x - 0.5); // cauda sobe e desce (cetáceo)
   baleia.push(memb(colorize(T(ell(0.9, 0.24, 0.26, 12), 0, 0, 0), az), CAUDA_V, 0, 0, pesoCauda)); baleia.push(memb(colorize(T(ell(0.7, 0.12, 0.2, 10), 0.1, -0.12, 0), br), CAUDA_V, 0, 0, pesoCauda));
   { const t = new THREE.ConeGeometry(0.28, 0.1, 3); t.rotateZ(Math.PI / 2); t.scale(1, 1, 1.6); baleia.push(memb(colorize(T(t, -0.98, 0.02, 0), az), CAUDA_V, 0, 0, pesoCauda)); }
