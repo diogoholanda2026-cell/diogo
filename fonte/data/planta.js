@@ -148,7 +148,7 @@ export const PASSARELAS = {
   santuario: { nome: 'Passeio do Santuário', pts: [[23.5, -3.6, 0.1], [25.0, -1.6, 0.1], [26.6, 1.2, 0.1], [27.6, 5.2, 0.1]], w: 0.45 },
   // fita elevada da frente: sai do chão ao lado do canteiro, corre entre o Passeio do Anel e o Caminho da Frente
   // (as três fitas em camadas da foto) e desce até o piso da praça
-  frente2: { nome: 'Fita da Frente', pts: [[-20.2, 15.9, 0.1], [-17.4, 17.1, 0.6], [-14.0, 18.26, 0.95], [-10.0, 18.65, 1.0], [-6.8, 18.55, 0.95], [-4.2, 17.6, 0.7], [-2.4, 16.6, 0.1]], w: 0.8 },
+  frente2: { nome: 'Fita da Frente', pts: [[-20.2, 15.9, 0.1], [-17.4, 17.5, 0.6], [-14.0, 18.66, 0.95], [-10.0, 19.05, 1.0], [-6.8, 18.95, 0.95], [-4.2, 18.0, 0.7], [-2.4, 16.6, 0.1]], w: 0.8 },
   // rampa em "S" do piso do vale (ao lado do fim do canal) até o Anel, pelo lado de fora: termina num patamar
   // próprio sobre pilares, encostado no módulo 7 do Anel a 1.28 (o terraço do teto com 3 andares, ou o piso do
   // 4º andar com 4 ou 5)

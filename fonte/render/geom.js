@@ -339,6 +339,19 @@ export function merge(list) {
   return out;
 }
 
+// Fita de piso ao longo de pontos 3D (rampas e pontes claras): tampo de largura w com y interpolado ponto a ponto,
+// duas bordas de altura esp e o fundo. Devolve uma BufferGeometry (uv planar / uvScale).
+export function deckGeo(pts, w, esp = 0.05, uvScale = 2.2) {
+  const B = new Buf(); const N = pts.length; const h = w / 2;
+  const dir = (i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N - 1, i + 1)]; let tx = b[0] - a[0], tz = b[2] - a[2]; const l = Math.hypot(tx, tz) || 1; return [tx / l, tz / l]; };
+  const faces = [[h, 0, h, -esp, 1, 0], [-h, -esp, -h, 0, -1, 0], [h, -esp, -h, -esp, 0, -1], [-h, 0, h, 0, 0, 1]]; // [oA, yA, oB, yB, nO, nY]: bordas, fundo, tampo
+  for (const [oA, yA, oB, yB, nO, nY] of faces) {
+    const base = B.p.length / 3;
+    for (let i = 0; i < N; i++) { const [tx, tz] = dir(i); const nx = tz, nz = -tx; const [x, y, z] = pts[i]; B.vert(x + nx * oA, y + yA, z + nz * oA, nx * nO, nY, nz * nO, (x + nx * oA) / uvScale, (z + nz * oA) / uvScale); B.vert(x + nx * oB, y + yB, z + nz * oB, nx * nO, nY, nz * nO, (x + nx * oB) / uvScale, (z + nz * oB) / uvScale); }
+    for (let i = 0; i < N - 1; i++) { const a = base + i * 2; B.i.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  }
+  return B.geo();
+}
 // primitivas posicionadas
 export function box(w, h, d, mat, x = 0, y = 0, z = 0, ry = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y + h / 2, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; return m; }
 export function cyl(rt, rb, h, mat, x = 0, y = 0, z = 0, seg = 24, open = false) { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg, 1, open), mat); m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true; return m; }
