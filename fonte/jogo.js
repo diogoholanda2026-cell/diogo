@@ -137,7 +137,7 @@ export class Controle {
     if (ck !== this._chaoKey) { this._chaoKey = ck; this.ground.flags.verde = verde; this.ground.flags.praca = praca; this.ground.paint(); }
     this.ground.tampa.visible = !['obra', 'pronta', 'feita'].includes(J.etapa('acelerador.e1').estado);
     // cidade: chão dos bairros abertos e os prédios de cada tipo (no nível aprovado)
-    W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b))); W.cidade.sincronizar(this.S.modulos); { const oc = J.ocupacaoCidade(); W.cidade.terrenos(Object.keys(this.S.cidade.terrenos || {}).filter((id) => !oc.has(id))); }
+    W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b)), J.limposSet()); W.cidade.sincronizar(this.S.modulos); { const oc = J.ocupacaoCidade(); W.cidade.terrenos(Object.keys(this.S.cidade.terrenos || {}).filter((id) => !oc.has(id))); }
     for (const [f, arr] of Object.entries(this.S.modulos)) {
       if (MODULOS[f].cidade) continue; const F = W.grupoModulo(f); let muda = false;
       arr.forEach((m, i) => { const mod = F.mods[i]; if (f === 'casas') { if (mod.nivel !== m.nivel) F.setNivel(i, m.nivel); return; } const lote = m.nivel === 0 && J.situacaoModulo(f, i) === 'disponivel' && !m.obra; if (mod.nivel !== m.nivel || !!mod.lote !== lote) { mod.nivel = m.nivel; mod.lote = lote; muda = true; } });
@@ -398,7 +398,7 @@ export class Controle {
     const serv = (fx.servicos || []).map((k) => ({ agua: 'água', energia: 'energia', saneamento: 'saneamento' }[k])).filter(Boolean).join(', ');
     const cob = (fx.cobFalta || []).map((k) => COBERTURAS[k]?.nome.toLowerCase()).filter(Boolean).join(', ');
     const msg = { creditos: 'Créditos insuficientes', falta: 'Faltam materiais no almoxarifado', faltaPrancha: 'Entregue todos os materiais na prancha', nadaEntregar: 'Nada no almoxarifado para esta prancha: toque num material para produzir', cheio: 'Todos os espaços estão ocupados', almox: 'Almoxarifado cheio', nivel: 'Nível insuficiente', requer: 'Antes, conclua a obra que libera este prédio', bloqueado: 'Ainda não liberado', bloqueada: 'Etapa ainda não liberada', fechado: 'Construa o prédio primeiro',
-      capitulo: 'Abre num capítulo adiante', teto: 'Limite de prédios deste tipo', loteOcupado: 'Este lote já tem um prédio', bairro: 'Bairro fechado: compre o bairro no painel Cidade', unico: 'Só pode haver um destes na cidade', jaTem: 'Este terreno já é da Holding', prefeitura: 'Construa a Prefeitura antes de comprar outro bairro', cobertura: `Faltam serviços perto${cob ? ': ' + cob : ''}`, lote: 'Toque num lote livre da cidade', aberto: 'Este bairro já é seu',
+      capitulo: 'Abre num capítulo adiante', teto: 'Limite de prédios deste tipo', loteOcupado: 'Este lote já tem um prédio', bairro: 'Bairro fechado: compre o bairro no painel Cidade', unico: 'Só pode haver um destes na cidade', jaTem: 'Este terreno já é da Holding', mata: 'Lote com mata: toque duas vezes nas árvores para desmatar', limpo: 'Este lote já está limpo', acesso: 'A rua ainda não chega aqui: desmate um lote da borda do bairro ou ao lado de um lote limpo', prefeitura: 'Construa a Prefeitura antes de comprar outro bairro', cobertura: `Faltam serviços perto${cob ? ': ' + cob : ''}`, lote: 'Toque num lote livre da cidade', aberto: 'Este bairro já é seu',
       servico: `Faltam serviços para os novos moradores${serv ? ': ' + serv : ''}`, bem: `Bem-estar abaixo de ${fx.bemMin || 'mínimo'}${fx.bemMin ? '%' : ''}`, sem: 'Sem fichas de Mutirão: a disposição da comunidade enche a próxima', max: 'Já está no máximo', nada: 'Nada para fazer aqui', ja: 'Já construído', esgotado: 'Esgotado nesta janela: o estoque renova em breve', limite: 'Limite de vendas desta janela', ocupado: 'O Topógrafo já está fazendo uma licença', nao: 'Este item não é vendido', limiteCap: 'Nível máximo por enquanto' }[r] || 'Não foi possível';
     this.hud.brinde(msg, r === 'creditos' ? 'creditos' : r === 'almox' ? 'almox' : r === 'sem' ? 'mutirao' : null, 2800);
   }
@@ -581,19 +581,35 @@ export class Controle {
     if (this.mundo.pick) { const h = this.mundo.pick(ray); if (h) p = { pick: h.pick, point: h.point }; }
     else { const hits = ray.intersectObjects([this.mundo.root], true); for (const h of hits) { let o = h.object; while (o && !o.userData.pick) o = o.parent; if (o && o.visible) { p = { pick: o.userData.pick, point: h.point }; break; } } }
     const g = p?.point || this.rig.ground(x, y); if (!g) { this.paineis.fechar(); return; }
+    if (!p && this._toqueMata(g)) return; // árvores de um lote da cidade: desmate com dois toques
     const alvo = p ? this._pickAlvo(p.pick, g) : this._maisProximo(g);
     if (alvo) { this.som.toque(); this.vibra.tique(); this.irPara(alvo, true); } else this.paineis.fechar();
+  }
+  // ---------------- cidade: desmate ----------------
+  // toque num lote com mata: o primeiro mostra o custo, o segundo (no mesmo lote, em 4 s) desmata; bairro fechado avisa
+  _toqueMata(g) {
+    const l = loteEm(g.x, g.z); if (!l) return false; const J = this.J;
+    if (!J.bairroAberto(l.bairro)) { this.hud.brinde(`${BAIRROS[l.bairro].nome}: mata à venda. Compre o bairro no painel Cidade`, 'cidade', 2400); return true; }
+    if (J.loteLimpo(l.id)) return false;
+    const agora = performance.now(); if (this._mata?.id !== l.id || agora - this._mata.t > 4000) { this._mata = { id: l.id, t: agora }; const f = J.podeDesmatar(l.id); this.som.toque(); this.mundo.cidade.mostrarLotes([l.id], () => (f ? 0xe2543f : 0xc9a060)); setTimeout(() => { if (!this._colocar) this.mundo.cidade.mostrarLotes([]); }, 2500);
+      this.hud.brinde(f === 'acesso' ? 'A rua ainda não chega aqui: desmate um lote da borda do bairro ou ao lado de um lote limpo' : `Mata: toque de novo para desmatar por ${fmt(J.custoDesmate(l.id))} (+3 madeira)`, 'madeira', 2600); return true; }
+    this._mata = null; this.desmatar(l.id); return true;
+  }
+  desmatar(id) {
+    const J = this.J; const r = J.desmatar(id); if (r !== 'ok') { this.falha(r); return r; } const l = loteDe(id);
+    this.mundo.cidade.derrubar(id); this.obras.poeiraEm?.(l.x, l.z, 1.8, 26); this.som.obra?.(); this.vibra.sucesso?.(); this.mundo.cidade.mostrarLotes([]);
+    this.hud.brinde('Lote desmatado: a rua chegou. Construa pelo painel Cidade', 'madeira', 2200); this.sincronizar(); return r;
   }
   // ---------------- cidade: modo de colocar um prédio ----------------
   // lotes livres destacados, a câmera vai ao lote livre mais perto e uma faixa no alto diz o que fazer (Cancelar sai);
   // o toque num lote livre constrói e a obra do nível 1 começa na hora
   colocarCidade(f) {
     const J = this.J; const falta = J.podeConstruir(f); if (falta) { this.falha(falta); return; }
-    if (CIDADE[f].lugar) { // o aeroporto tem área própria: constrói direto e leva a câmera até lá
+    if (CIDADE[f].lugar) { // aeroporto e porto têm área própria: constrói direto e leva a câmera até lá
       const r = J.construirCidade(f, CIDADE[f].lugar); if (r !== 'ok') { this.falha(r); return; } this.paineis.fechar(true); this.som.obra?.(); this.vibra.sucesso?.(); this.sincronizar();
       const i = this.S.modulos[f].length - 1; setTimeout(() => this.irPara({ modulo: [f, i] }, false), 200); return; }
-    const livres = J.lotesLivres(); if (!livres.length) { this.falha('lote'); return; }
-    this._colocar = { f }; this.mundo.cidade.mostrarLotes(livres, this._corLote(f)); this.paineis.fechar(true);
+    const L = J.lotesConstruiveis(); const livres = [...L.limpos, ...L.mata]; if (!livres.length) { this.falha('lote'); return; }
+    this._colocar = { f }; const mata = new Set(L.mata), cor = this._corLote(f); this.mundo.cidade.mostrarLotes(livres, (id) => (mata.has(id) ? 0xc9a060 : cor ? cor(id) : null)); this.paineis.fechar(true);
     const t = this.rig.target; let best = null, bd = 1e9; for (const id of livres) { const l = loteDe(id); const d = Math.hypot(l.x - t.x, l.z - t.z); if (d < bd) { bd = d; best = l; } }
     if (best) { this.rig.pitchFix = null; this.rig.flyTo({ x: best.x, z: best.z - 3, dist: clamp(this.rig.dist, 26, 44) }, 900); }
     this._faixaColocar(true); this.engine.acordar?.(1200);
@@ -629,13 +645,14 @@ export class Controle {
     if (this._colocar.terreno) { const T = this.J.terrenosInfo(); this._colocarEl.innerHTML = `${img('terreno')}<span><b>Terrenos da Holding: ${T.n} (valem ${fmt(T.valor)})</b><small>Toque num lote azul para comprar; num dourado, duas vezes para vender pelo preço atual</small></span><button class="botao fraco" data-x="cancelar">Pronto</button>`; return; }
     const M = CIDADE[this._colocar.f];
     const leg = M.cat === 'empresa' ? 'Dourado: terreno da Holding; nos azuis o terreno é comprado junto' : M.cobre ? `Verde: já tem ${COBERTURAS[Object.keys(M.cobre)[0]].nome.toLowerCase()} perto` : M.cat === 'moradia' ? 'Verde: polícia, escola e saúde perto; amarelo: parte deles' : '';
-    this._colocarEl.innerHTML = `${img(M.icone)}<span><b>${M.nome}</b><small>Toque num lote livre para construir${leg ? '. ' + leg : ''}</small></span><button class="botao fraco" data-x="cancelar">Cancelar</button>`;
+    this._colocarEl.innerHTML = `${img(M.icone)}<span><b>${M.nome}</b><small>Toque num lote livre para construir${leg ? '. ' + leg : ''}. Marrom: com mata (o desmate entra junto)</small></span><button class="botao fraco" data-x="cancelar">Cancelar</button>`;
   }
   cancelarColocar() { this._colocar = null; this.mundo.cidade.mostrarLotes([]); this._faixaColocar(false); }
   _colocarEm(g) {
     const l = g && loteEm(g.x, g.z); if (!l) { this.falha('lote'); return; }
     if (this._colocar.terreno) { this._terrenoEm(l); return; }
-    const f = this._colocar.f; const r = this.J.construirCidade(f, l.id); if (r !== 'ok') { this.falha(r); return; }
+    const f = this._colocar.f;
+    if (!this.J.loteLimpo(l.id)) { const d = this.J.podeDesmatar(l.id); if (d) { this.falha(d); return; } if (this.J.S.creditos < this.J.custoDesmate(l.id) + (CIDADE[f].custo[1] || 0)) { this.falha('creditos'); return; } this.J.desmatar(l.id); this.mundo.cidade.derrubar(l.id); this.obras.poeiraEm?.(l.x, l.z, 1.8, 20); } const r = this.J.construirCidade(f, l.id); if (r !== 'ok') { this.falha(r); return; }
     this.cancelarColocar(); this.som.obra?.(); this.vibra.sucesso?.(); this.sincronizar();
     const i = this.S.modulos[f].length - 1; setTimeout(() => this.irPara({ modulo: [f, i] }, false), 200);
   }

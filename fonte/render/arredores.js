@@ -6,7 +6,7 @@
 // Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
 import { MESA, A } from '../data/planta.js';
-import { ORDEM_BAIRROS, areaBairro, AEROPORTO } from '../data/cidade.js';
+import { ORDEM_BAIRROS, areaBairro, AEROPORTO, PORTO } from '../data/cidade.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
 import { tex } from './textures.js';
 import { treeGroup } from './forest.js';
@@ -35,7 +35,7 @@ const naFaixa = (x, z) => {
 const borda = (x, z) => { const dx = x < MESA.x0 ? MESA.x0 - x : x > MESA.x1 ? x - MESA.x1 : 0, dz = z < MESA.z0 ? MESA.z0 - z : z > MESA.z1 ? z - MESA.z1 : 0; return Math.max(dx / (x < CX ? FAIXA.oeste : FAIXA.leste), dz / (z < CZ ? FAIXA.fundo : FAIXA.frente)); };
 // bairros da cidade (abertos ou à venda): 1 dentro (com a rua em volta), caindo a 0 em 5 unidades para fora. Neles o
 // terreno é plano, sem mata, campos nem bosques (terra para a cidade crescer em volta da Arcologia)
-const AREAS = [...ORDEM_BAIRROS.map(areaBairro), AEROPORTO]; // (e a área do aeroporto)
+const AREAS = [...ORDEM_BAIRROS.map(areaBairro), AEROPORTO, PORTO]; // (e as áreas do aeroporto e do porto)
 export function zonaCidade(x, z) { let k = 0; for (const a of AREAS) { const dx = Math.max(a.x0 - x, 0, x - a.x1), dz = Math.max(a.z0 - z, 0, z - a.z1); if (dx < 5 && dz < 5) k = Math.max(k, 1 - sm(0, 5, Math.hypot(dx, dz))); } return k; }
 // mancha de mata longe da obra (morros e bosques)
 const mataLonge = (x, z) => sm(0.5, 0.62, fbm(x * 0.02 + 3.1, z * 0.02 - 1.7, 1, 717, 3));
@@ -280,7 +280,7 @@ function arvoresFaixa() {
 }
 function coqueiros() {
   const R = rng(7171); const l = [];
-  for (let z = -46; z < 46; z += 1.4) { if (R() < 0.35) continue; const c = 4.4 + R() * 2.2, x = costaX(z) + c; l.push({ x, z: z + (R() - 0.5) * 0.8, y: alturaArredor(x, z), s: 0.55 + R() * 0.3, h: 0.85 + R() * 0.4, kind: 'palmeira', pal: 'jardim', rot: R() * 6.28 }); }
+  for (let z = -46; z < 46; z += 1.4) { if (R() < 0.35) continue; const c = 4.4 + R() * 2.2, x = costaX(z) + c; if (z > PORTO.z0 - 1 && z < PORTO.z1 + 1) continue; /* o cais do porto ocupa essa praia */ l.push({ x, z: z + (R() - 0.5) * 0.8, y: alturaArredor(x, z), s: 0.55 + R() * 0.3, h: 0.85 + R() * 0.4, kind: 'palmeira', pal: 'jardim', rot: R() * 6.28 }); }
   return treeGroup(l, { name: 'coqueiros', cast: false });
 }
 function bosques() {

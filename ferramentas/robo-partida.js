@@ -6,16 +6,18 @@
 // Resultado em window.__resultado: capítulo, nível, vida, população, etapas e módulos pendentes, economia.
 (async () => {
   const H = window.__held, C = H.C, J = H.J; const esp = (ms) => new Promise((r) => setTimeout(r, ms));
-  const ORDEM = ['sul', 'leste', 'norte', 'sudeste', 'nordeste', 'leste2', 'sudeste2', 'nordeste2', 'sul2', 'norte2'];
+  const LUGAR = ['cidAeroporto', 'cidPorto']; // áreas próprias: o Controle constrói direto
+  const ORDEM = ['sul', 'leste', 'norte', 'sudeste', 'nordeste', 'leste2', 'sudeste2', 'nordeste2', 'sul2', 'norte2', 'sudeste3', 'nordeste3', 'sudeste4', 'nordeste4', 'sudeste5', 'nordeste5', 'sul3', 'norte3', 'sul3leste', 'norte3leste'];
   const log = []; const t0 = Date.now(); J.S.ritmo = 4000; J.S.creditos = 200000; J.S.mutirao = 5;
   const paineis = ['obras', 'producao', 'almox', 'pedidos', 'deposito', 'escritorio', 'cidade'];
   const eco = { lotes: 0, auto: 0, coletas: 0, acelerados: 0, pedidosFab: 0, emprestimo: null, valuation: 0, calendario: null, erros: [], cidade: 0, tempo: 0, bairros: 1 };
   // a Prefeitura primeiro (libera os bairros), depois delegacia, escola e posto no meio do Sul, perto das moradias
   const CID = ['cidPrefeitura', 'cidCasas', 'cidSeguranca', 'cidEscola', 'cidAgua', 'cidSaude', 'cidPraca', 'cidComercio', 'cidTerraco', 'cidEnergia', 'cidCasas', 'cidSaneamento', 'cidParque', 'cidMercado',
-    'cidConstrutora', 'cidEstacao', 'cidTorre', 'cidFabrica', 'cidFaculdade', 'cidHidreletrica', 'cidLogistica', 'cidEscritorio', 'cidShopping', 'cidCultura', 'cidHospital', 'cidBanco', 'cidLuxo', 'cidComercio', 'cidAeroporto', 'cidEstadio', 'cidLuxo', 'cidTerraco', 'cidTorre'];
+    'cidConstrutora', 'cidEstacao', 'cidTorre', 'cidFabrica', 'cidFaculdade', 'cidHidreletrica', 'cidLogistica', 'cidEscritorio', 'cidShopping', 'cidCultura', 'cidHospital', 'cidBanco', 'cidPorto', 'cidLuxo', 'cidComercio', 'cidAeroporto', 'cidEstadio', 'cidLuxo', 'cidTerraco', 'cidTorre'];
   // moradias e serviços vão para o meio do Sul (a área de atendimento cobre as moradias); comércio e lazer, para os bairros abertos
   const SUL = new Set(['cidPrefeitura', 'cidCasas', 'cidSeguranca', 'cidEscola', 'cidAgua', 'cidSaude', 'cidTerraco', 'cidEnergia', 'cidSaneamento', 'cidTorre', 'cidFaculdade', 'cidHidreletrica', 'cidHospital', 'cidLuxo']);
-  const meio = (b) => { const L = J.lotesLivres(b).map((id) => { const [, i, j] = id.split(':'); return { id, i: +i, j: +j }; }); if (!L.length) return null; const ci = L.reduce((a, l) => a + l.i, 0) / L.length, cj = L.reduce((a, l) => a + l.j, 0) / L.length; let best = L[0], bd = 1e9; for (const l of L) { const d = Math.hypot(l.i - ci, (l.j - cj) * 1.5); if (d < bd) { bd = d; best = l; } } return best.id; };
+  const construiveis = (b) => { const L = J.lotesConstruiveis(b); return [...L.limpos, ...L.mata]; }; // o modo de colocar desmata o lote com mata
+  const meio = (b) => { const L = construiveis(b).map((id) => { const [, i, j] = id.split(':'); return { id, i: +i, j: +j }; }); if (!L.length) return null; const ci = L.reduce((a, l) => a + l.i, 0) / L.length, cj = L.reduce((a, l) => a + l.j, 0) / L.length; let best = L[0], bd = 1e9; for (const l of L) { const d = Math.hypot(l.i - ci, (l.j - cj) * 1.5); if (d < bd) { bd = d; best = l; } } return best.id; };
   const ok = (r, oque) => { if (r !== 'ok') eco.erros.push(oque + ':' + r); return r === 'ok'; };
   J.on((t, d) => { if (t === 'coleta' && d.auto) eco.coletas += d.n; });
   const brutos = ['madeira', 'brita', 'aco', 'argila', 'mudas', 'vidro', 'cobre', 'fibra'];
@@ -42,11 +44,13 @@
     // cidade: a cada 25 voltas um prédio novo pelo modo de colocar do Controle (os níveis sobem pelo laço dos módulos e as
     // obras prontas são aprovadas como as dos módulos), alternando entre os bairros abertos; compra cada bairro quando o
     // capítulo chega
-    if (volta % 25 === 20 && eco.cidade < CID.length && CID[eco.cidade] === 'cidAeroporto') { if (J.tipoCidadeLiberado('cidAeroporto')) { const n0 = J.S.modulos.cidAeroporto.length; C.colocarCidade('cidAeroporto'); if (J.S.modulos.cidAeroporto.length > n0) eco.cidade++; else eco.erros.push('cidade:cidAeroporto'); } }
-    else if (volta % 25 === 20 && eco.cidade < CID.length) { const f = CID[eco.cidade]; if (J.tipoCidadeLiberado(f)) { const abertos = ORDEM.filter((b) => J.bairroAberto(b)); const b = SUL.has(f) ? 'sul' : abertos[eco.cidade % abertos.length]; const id = b === 'sul' ? meio(b) : J.lotesLivres(b)[eco.cidade * 3 % 20]; const p = id && H.mundo.cidade.centroLote(id); C.colocarCidade(f); if (p) { const n0 = J.S.modulos[f].length; C._colocarEm(p); if (J.S.modulos[f].length > n0) eco.cidade++; else eco.erros.push('cidade:' + f); } C.cancelarColocar(); } }
+    if (volta % 25 === 20 && eco.cidade < CID.length && LUGAR.includes(CID[eco.cidade])) { const f = CID[eco.cidade]; if (J.tipoCidadeLiberado(f)) { const n0 = J.S.modulos[f].length; C.colocarCidade(f); if (J.S.modulos[f].length > n0) eco.cidade++; else eco.erros.push('cidade:' + f); } }
+    else if (volta % 25 === 20 && eco.cidade < CID.length) { const f = CID[eco.cidade]; if (J.tipoCidadeLiberado(f)) { const abertos = ORDEM.filter((b) => J.bairroAberto(b)); const b = SUL.has(f) ? 'sul' : abertos[eco.cidade % abertos.length]; const lv = construiveis(b); const id = b === 'sul' ? meio(b) : lv[eco.cidade * 3 % Math.max(1, Math.min(20, lv.length))]; const p = id && H.mundo.cidade.centroLote(id); C.colocarCidade(f); if (p) { const n0 = J.S.modulos[f].length; C._colocarEm(p); if (J.S.modulos[f].length > n0) eco.cidade++; else eco.erros.push('cidade:' + f); } C.cancelarColocar(); } }
     for (const b of ORDEM) if (!J.bairroAberto(b)) { const r = J.comprarBairro(b); if (r === 'ok') { eco.bairros++; C.sincronizar(); } else if (r !== 'capitulo' && r !== 'prefeitura') eco.erros.push('comprarBairro:' + b + ':' + r); }
     // serviços da cidade quando a folga acaba (como um jogador faria): água, energia ou saneamento com menos de 3 mil de sobra
-    if (volta % 25 === 8) for (const [k, f] of [['agua', 'cidAgua'], ['energia', 'cidEnergia'], ['saneamento', 'cidSaneamento']]) { const si = J.servicoInfo(k); if (si.cap - si.uso < 3000 && !J.podeConstruir(f)) { const id = meio('sul') || J.lotesLivres()[0]; if (id && J.construirCidade(f, id) === 'ok') { eco.servicosExtra = (eco.servicosExtra || 0) + 1; C.sincronizar(); } break; } }
+    if (volta % 25 === 8) for (const [k, f] of [['agua', 'cidAgua'], ['energia', 'cidEnergia'], ['saneamento', 'cidSaneamento']]) { const si = J.servicoInfo(k); if (si.cap - si.uso < 3000 && !J.podeConstruir(f)) { const id = meio('sul'); if (id && (J.loteLimpo(id) || J.desmatar(id) === 'ok') && J.construirCidade(f, id) === 'ok') { eco.servicosExtra = (eco.servicosExtra || 0) + 1; C.sincronizar(); } break; } }
+    // desmate pelo toque duplo do Controle num lote da borda do Sul (volta 12)
+    if (volta === 12) { const id = J.lotesConstruiveis('sul').mata.slice(-1)[0]; const p = id && H.mundo.cidade.centroLote(id); if (p) { C._toqueMata(p); C._toqueMata(p); if (!J.loteLimpo(id)) eco.erros.push('desmate:' + id); } }
     // terrenos pelo modo do Controle: compra um lote, e dois toques no mesmo lote o vendem pelo preço atual; outro fica
     if (volta === 30) { const ids = J.lotesLivres('sul').slice(-2); C.colocarTerreno(); for (const id of ids) C._colocarEm(H.mundo.cidade.centroLote(id)); const p = H.mundo.cidade.centroLote(ids[0]); C._colocarEm(p); C._colocarEm(p); C.cancelarColocar(); eco.terrenos = J.terrenosInfo(); if (eco.terrenos.n !== 1) eco.erros.push('terrenos:' + eco.terrenos.n); }
     if (volta === 5) { ok(J.emprestar(10000), 'emprestar'); eco.emprestimo = J.emprestimoInfo().divida; } if (volta === 9) ok(J.quitar(), 'quitar');

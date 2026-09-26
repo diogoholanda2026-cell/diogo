@@ -11,7 +11,7 @@ import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
 import { modeloReflorestar } from './render/models/canteiro.js';
 import { MESA, VISTA_FOTO } from './data/planta.js';
-import { ORDEM_BAIRROS, areaBairro, AEROPORTO } from './data/cidade.js';
+import { ORDEM_BAIRROS, areaBairro, AEROPORTO, PORTO } from './data/cidade.js';
 import { PROJETOS } from './data/obras.js';
 import { novoEstado, Jogo, prepararSave, VERSAO_SAVE } from './sim/estado.js';
 import { Controle } from './jogo.js';
@@ -62,8 +62,8 @@ async function iniciar() {
   forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(40);
   const arredores = new Arredores(engine, forest); await passo(45);
   // a câmera anda pela Arcologia e pelos bairros da cidade em volta (mundo aberto), com um zoom máximo maior
-  const LIM = { ...MESA }; for (const a of [...ORDEM_BAIRROS.map(areaBairro), AEROPORTO]) { LIM.x0 = Math.min(LIM.x0, a.x0); LIM.x1 = Math.max(LIM.x1, a.x1); LIM.z0 = Math.min(LIM.z0, a.z0); LIM.z1 = Math.max(LIM.z1, a.z1); }
-  const rig = new CameraRig(engine, canvas, LIM); rig.maxDist = 150; rig.distPitch = 96; // a cidade inteira cabe no zoom máximo
+  const LIM = { ...MESA }; for (const a of [...ORDEM_BAIRROS.map(areaBairro), AEROPORTO, PORTO]) { LIM.x0 = Math.min(LIM.x0, a.x0); LIM.x1 = Math.max(LIM.x1, a.x1); LIM.z0 = Math.min(LIM.z0, a.z0); LIM.z1 = Math.max(LIM.z1, a.z1); }
+  const rig = new CameraRig(engine, canvas, LIM); rig.maxDist = 230; rig.distPitch = 96; // a cidade inteira cabe no zoom máximo
   const mundo = new Mundo(engine, ground, forest); await passo(70);
   // epílogo (desmontar o canteiro e replantar): etapas sem peça própria; o modelo só dá foco e âncora,
   // e as obras (modos 'desmontar' e 'replantar') desmontam os prédios do canteiro e plantam a mata

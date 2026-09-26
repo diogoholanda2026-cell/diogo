@@ -25,8 +25,19 @@ export const BAIRROS = {
   nordeste2: { nome: 'Bairro da Serra', x0: 106, z0: -72.4, nx: 7, nz: 7, preco: 240000, cap: 5 },
   sul2: { nome: 'Bairro Sul Novo', x0: -36, z0: 72.6, nx: 19, nz: 8, preco: 320000, cap: 6 },
   norte2: { nome: 'Bairro Norte Novo', x0: -36, z0: -119.6, nx: 19, nz: 8, preco: 400000, cap: 6 },
+  // anel externo (depois do capítulo 6 a cidade continua: mais ~700 lotes de mata para desmatar)
+  sudeste3: { nome: 'Bairro das Palmeiras', x0: 70, z0: 72.6, nx: 8, nz: 8, preco: 450000, cap: 6 },
+  nordeste3: { nome: 'Bairro do Cerrado', x0: 70, z0: -119.6, nx: 8, nz: 8, preco: 450000, cap: 6 },
+  sudeste4: { nome: 'Bairro do Aeroporto Sul', x0: 150, z0: 34, nx: 7, nz: 7, preco: 520000, cap: 6 },
+  nordeste4: { nome: 'Bairro do Aeroporto Norte', x0: 150, z0: -70, nx: 7, nz: 7, preco: 520000, cap: 6 },
+  sudeste5: { nome: 'Bairro do Vale', x0: 116, z0: 72.6, nx: 7, nz: 8, preco: 600000, cap: 6 },
+  nordeste5: { nome: 'Bairro da Chapada', x0: 116, z0: -119.6, nx: 7, nz: 8, preco: 600000, cap: 6 },
+  sul3: { nome: 'Bairro da Restinga', x0: -30, z0: 118, nx: 18, nz: 7, preco: 700000, cap: 6 },
+  norte3: { nome: 'Bairro da Cordilheira', x0: -27, z0: -158, nx: 17, nz: 7, preco: 700000, cap: 6 },
+  sul3leste: { nome: 'Bairro do Horizonte', x0: 66, z0: 118, nx: 8, nz: 7, preco: 800000, cap: 6 },
+  norte3leste: { nome: 'Bairro do Planalto', x0: 66, z0: -158, nx: 8, nz: 7, preco: 800000, cap: 6 },
 };
-export const ORDEM_BAIRROS = ['sul', 'leste', 'norte', 'sudeste', 'nordeste', 'leste2', 'sudeste2', 'nordeste2', 'sul2', 'norte2'];
+export const ORDEM_BAIRROS = ['sul', 'leste', 'norte', 'sudeste', 'nordeste', 'leste2', 'sudeste2', 'nordeste2', 'sul2', 'norte2', 'sudeste3', 'nordeste3', 'sudeste4', 'nordeste4', 'sudeste5', 'nordeste5', 'sul3', 'norte3', 'sul3leste', 'norte3leste'];
 const _lotes = new Map(), _porBairro = {};
 for (const [b, B] of Object.entries(BAIRROS)) {
   _porBairro[b] = [];
@@ -38,7 +49,10 @@ for (const [b, B] of Object.entries(BAIRROS)) {
 // aeroporto: área própria plana a leste do Leste Alto, fora dos bairros (pista ao longo de z); o prédio 'cidAeroporto'
 // ocupa o lote especial 'aeroporto', no centro da área
 export const AEROPORTO = { x0: 146, z0: -26, x1: 190, z1: 26, x: 168, z: 0 };
-_lotes.set('aeroporto', { id: 'aeroporto', bairro: 'aeroporto', i: 0, j: 0, x: AEROPORTO.x, z: AEROPORTO.z });
+// porto: na costa oeste, entre os bairros Norte e Sul; o cais fica na linha da praia (x = -54) e os píeres entram no mar
+export const PORTO = { x0: -86, z0: -29, x1: -46, z1: 27, x: -54, z: -1 };
+export const LUGARES = { aeroporto: AEROPORTO, porto: PORTO }; // áreas especiais (um prédio único em cada, fora dos bairros)
+for (const [k, A] of Object.entries(LUGARES)) _lotes.set(k, { id: k, bairro: k, i: 0, j: 0, x: A.x, z: A.z });
 export const lotesDoBairro = (b) => _porBairro[b] || [];
 export const loteDe = (id) => _lotes.get(id) || null;
 // extensão de um bairro em mundo (com a rua em volta)
@@ -77,6 +91,8 @@ export const CIDADE = {
   cidFaculdade: { cat: 'servico', nome: 'Faculdade', sub: 'Campus com biblioteca, laboratórios e gramado', icone: 'faculdade', cap: 3, max: 1, bem: 6, cobre: { superior: 60 }, custo: [0, 10000], tempo: [0, 420] },
   cidAeroporto: { cat: 'servico', nome: 'Aeroporto', sub: 'Pista, terminal de passageiros, torre de controle e hangares', icone: 'aeroporto', cap: 5, max: 3, unico: true, lugar: 'aeroporto', bem: 10, renda: 0.04,
     custo: [0, 40000, 80000, 150000], tempo: [0, 900, 1800, 3600] },
+  cidPorto: { cat: 'servico', nome: 'Porto', sub: 'Marina com iates, terminal de contêineres e terminal de cruzeiros com farol', icone: 'porto', cap: 3, max: 3, unico: true, lugar: 'porto', bem: 8, renda: 0.04,
+    custo: [0, 30000, 70000, 140000], tempo: [0, 720, 1500, 3000] },
   cidEstacao: { cat: 'servico', nome: 'Estação de VLT', sub: 'Parada coberta sobre os trilhos', icone: 'estacao', cap: 2, max: 1, bem: 4, custo: [0, 3500], tempo: [0, 150] },
   cidPraca: { cat: 'lazer', nome: 'Praça', sub: 'Piso claro, árvores e bancos', icone: 'praca', cap: 1, max: 1, bem: 3, custo: [0, 800], tempo: [0, 40] },
   cidParque: { cat: 'lazer', nome: 'Parque com lago', sub: 'Gramado, lago e caminhos', icone: 'parque', cap: 2, max: 1, bem: 6, custo: [0, 2000], tempo: [0, 90] },
@@ -115,8 +131,9 @@ export const TIPOS_CIDADE = Object.keys(CIDADE);
 export const ehCidade = (f) => Object.prototype.hasOwnProperty.call(CIDADE, f);
 export const CATEGORIAS_CIDADE = [['moradia', 'Moradia'], ['comercio', 'Comércio'], ['servico', 'Serviços'], ['lazer', 'Lazer'], ['empresa', 'Empresas da Holding']];
 // terrenos: preço base de um lote por bairro; valoriza com a ocupação do bairro (até o triplo com o bairro cheio)
-export const PRECO_TERRENO = { sul: 400, leste: 600, norte: 700, sudeste: 800, nordeste: 1000, leste2: 1200, sudeste2: 1400, nordeste2: 1400, sul2: 1600, norte2: 1800 };
+export const PRECO_TERRENO = { sul: 400, leste: 600, norte: 700, sudeste: 800, nordeste: 1000, leste2: 1200, sudeste2: 1400, nordeste2: 1400, sul2: 1600, norte2: 1800,
+  sudeste3: 2000, nordeste3: 2000, sudeste4: 2200, nordeste4: 2200, sudeste5: 2400, nordeste5: 2400, sul3: 2600, norte3: 2600, sul3leste: 2800, norte3leste: 2800 };
 // efeitos das empresas por nível e seus tetos
 export const EFEITO_EMPRESA = { cidConstrutora: { obra: 0.03 }, cidFabrica: { fabrica: 2 }, cidLogistica: { almox: 30 }, cidShopping: { renda: 0.02 }, cidBanco: { juros: 0.02 } };
 export const TETO_EMPRESA = { obra: 0.25, renda: 0.2, taxaMin: 0.02 };
-export const MAX_POR_TIPO = 270; // teto de prédios de um tipo (o save guarda até isso): o triplo do primeiro
+export const MAX_POR_TIPO = 27000; // teto de prédios de um tipo (o save guarda até isso): 100 vezes o anterior, liberado pelo dono

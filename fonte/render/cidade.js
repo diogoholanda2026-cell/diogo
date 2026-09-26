@@ -13,6 +13,7 @@ import { FH, bake } from './geom.js';
 import { treeGroup } from './forest.js';
 import { Crowd } from './figuras.js';
 import { Aereo } from './aereo.js';
+import { Maritimo, iate } from './maritimo.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tex } from './textures.js';
 import { BAIRROS, ORDEM_BAIRROS, LOTE, PASSO, areaBairro, loteDe, CIDADE } from '../data/cidade.js';
@@ -318,6 +319,45 @@ function aeroporto(n, seed) {
   }
   return N.fim();
 }
+// Porto (origem no cais, na linha da praia; x negativo é o mar, o nível do mar fica em -0,25): cais de concreto, marina
+// com píeres de madeira, iates atracados, clube e quebra-mar de pedras (1); terminal de contêineres com três portêineres,
+// pátio de contêineres, armazém e um cargueiro atracado (2); terminal de passageiros, navio de cruzeiro e farol (3)
+function navioCarga(N, x, z, comp, seed, y0 = -0.85) {
+  const COR = [M.orange, M.blue, M.red, M.teal, M.yellow, M.white];
+  N.add(caixa(2.4, 1.15, comp, M.dark, x, y0, z)); N.add(caixa(2.42, 0.18, comp - 0.1, M.red, x, y0, z, false));
+  const proa = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.15, 3, 1, false, 0, Math.PI), M.dark); proa.rotation.y = -Math.PI / 2; proa.scale.set(1, 1, 0.9); proa.position.set(x, y0 + 0.575, z - comp / 2); N.add(proa);
+  for (let k = 0; k < Math.floor((comp - 4) / 1.25); k++) for (let c = 0; c < 3; c++) { const h = 1 + ((sorte(seed, k * 3 + c) * 3) | 0); for (let a = 0; a < h; a++) N.add(caixa(0.7, 0.28, 1.15, COR[(k * 3 + c + a + seed) % COR.length], x - 0.75 + c * 0.75, y0 + 1.15 + a * 0.29, z - comp / 2 + 1.3 + k * 1.25, false)); }
+  const zp = z + comp / 2 - 1.1; N.add(caixa(2.0, 1.4, 1.5, M.whiteSmooth || M.white, x, y0 + 1.15, zp)); N.add(caixa(2.02, 0.12, 1.52, M.dark, x, y0 + 2.2, zp, false)); N.add(caixa(2.3, 0.1, 0.8, M.whiteSmooth || M.white, x, y0 + 2.55, zp - 0.2));
+  N.add(cilindro(0.22, 0.7, M.red, x, y0 + 2.55, zp + 0.35, 10));
+}
+function porto(n, seed) {
+  const N = new Nivel(n); const P = M.madeiraClara, B = M.whiteSmooth || M.white;
+  if (n === 1) {
+    N.add(caixa(10, 0.85, 54, M.concretoClaro, 3.0, -0.6, 0)); for (let z = -25; z <= 25; z += 3) N.add(cilindro(0.08, 0.14, M.steelDark, -1.8, 0.25, z, 8));
+    N.add(caixa(0.9, 0.08, 10, P, -2.5, -0.1, 21.5)); for (const z of [17, 21, 25]) N.add(caixa(12, 0.08, 0.6, P, -8.5, -0.1, z));
+    for (const [x, z, r] of [[-5, 18, 0], [-9, 18, 0], [-12.5, 18, 0], [-6, 20, Math.PI], [-10.5, 22, 0], [-6, 24, Math.PI], [-12, 26, 0]]) { const y = iate(1.2 + sorte(seed, x * 7 + z) * 0.5); y.rotation.y = Math.PI / 2 + r; y.position.set(x, -0.18, z); N.add(y); }
+    for (let k = 0; k < 16; k++) { const b = caixa(1.1 + sorte(seed, k) * 0.7, 0.6, 1.0, M.rock, -2.5 - k * 1.05, -0.45, 27.6 + (sorte(seed, k + 30) - 0.5) * 0.4); b.rotation.y = sorte(seed, k + 60); N.add(b); }
+    for (let k = 0; k < 6; k++) { const b = caixa(1.0, 0.6, 1.1, M.rock, -19.3 + (sorte(seed, k + 90) - 0.5) * 0.4, -0.45, 26.6 - k * 1.05); b.rotation.y = sorte(seed, k + 70); N.add(b); }
+    let y = N.pav(2.4, 1.8, 5, 0.25, 21, { fac: M.fac_fita }); N.teto(2.3, 1.7, 5, y, 21); N.add(caixa(3.2, 0.03, 2.6, P, 5, 0.25, 23.4, false));
+    for (const z of [12, 15, 18, 24.5]) N.arvore(7.3, 0.25, z, 0.3);
+  }
+  if (n === 2) {
+    const COR = [M.orange, M.blue, M.red, M.teal, M.yellow, B];
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 18; k++) { const h = 1 + ((sorte(seed, r * 40 + k) * 3) | 0); for (let a = 0; a < h; a++) N.add(caixa(1.05, 0.3, 0.44, COR[(r * 5 + k + a) % COR.length], 3.0 + r * 1.2, 0.25 + a * 0.31, -24.5 + k * 1.38, false)); }
+    N.add(caixa(1.4, 0.9, 12, M.roofMetal, 7.3, 0.25, -17)); N.add(caixa(1.2, 0.5, 0.04, M.dark, 6.58, 0.25, -17, false));
+    for (const z of [-19, -12, -5]) { for (const [dx, dz] of [[0, -0.6], [0, 0.6], [1.8, -0.6], [1.8, 0.6]]) N.add(caixa(0.14, 3.0, 0.14, M.red, -1.2 + dx, 0.25, z + dz)); N.add(caixa(2.2, 0.22, 1.5, M.red, -0.3, 3.25, z)); N.add(caixa(10.5, 0.16, 0.3, B, -3.2, 3.45, z)); N.add(caixa(1.1, 0.5, 0.9, B, 0.3, 3.47, z)); N.add(caixa(0.02, 1.6, 0.02, M.steel, -4.5, 1.85, z, false)); N.add(caixa(0.7, 0.28, 0.4, M.blue, -4.5, 1.6, z, false)); }
+    navioCarga(N, -3.6, -14.5, 19, seed);
+  }
+  if (n === 3) {
+    const xs = -3.4, z0 = 7.5, L = 13; N.add(caixa(2.3, 1.0, L, B, xs, -0.85, z0)); N.add(caixa(2.32, 0.12, L - 0.1, M.blue, xs, -0.5, z0, false));
+    const proa = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 1.0, 3, 1, false, 0, Math.PI), B); proa.rotation.y = -Math.PI / 2; proa.scale.set(1, 1, 0.9); proa.position.set(xs, -0.35, z0 - L / 2); N.add(proa);
+    for (let d = 0; d < 4; d++) { const w = 2.1 - d * 0.25, l = L - 1.2 - d * 1.4, y = 0.15 + d * 0.34; N.add(caixa(w, 0.3, l, B, xs, y, z0 + d * 0.4)); N.add(caixa(w + 0.02, 0.08, l - 0.2, M.dark, xs, y + 0.13, z0 + d * 0.4, false)); }
+    N.add(cilindro(0.3, 0.8, M.red, xs, 1.5, z0 + 3.5, 12)); N.add(cilindro(0.31, 0.2, M.dark, xs, 2.3, z0 + 3.5, 12)); for (let k = 0; k < 5; k++) for (const dx of [-1.12, 1.12]) N.add(caixa(0.12, 0.12, 0.5, M.orange, xs + dx, 0.4, z0 - 4 + k * 1.6, false));
+    let y = 0.25; for (let f = 0; f < 2; f++) y = N.pav(3.2, 6, 3.6, 0.25 + f * FH_C * 1.4, 7.5, { fac: M.fac_fita, h: FH_C * 1.4 }); const cob = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 6.6, 20, 1, true, -0.45, 0.9), M.fasciaBeiral); cob.rotation.set(-Math.PI / 2, 0, 0); cob.position.set(3.6, y - 3.9, 7.5); cob.castShadow = true; N.add(cob);
+    N.add(cilindro(0.38, 3.4, B, -19.3, 0.1, 27.8, 16)); for (const h of [0.9, 1.9, 2.9]) N.add(cilindro(0.39, 0.35, M.red, -19.3, 0.1 + h, 27.8, 16)); N.add(cilindro(0.3, 0.45, M.glass, -19.3, 3.5, 27.8, 12)); N.add(cilindro(0.16, 0.3, M.lampGlow, -19.3, 3.55, 27.8, 10)); N.add(cilindro(0.34, 0.12, M.red, -19.3, 3.95, 27.8, 12));
+  }
+  return N.fim();
+}
 // ---------------------------------------------------------------- empresas da Holding (5 níveis cada)
 // Construtora: escritório com faixa laranja (1), galpão das máquinas (2), mais dois andares (3), grua no pátio (4) e o
 // letreiro no topo (5); no pátio, escavadeira e pilhas de material
@@ -379,12 +419,13 @@ function banco(n, seed) {
 }
 const MODELOS = { cidCasas: casas, cidTerraco: terraco, cidTorre: torre, cidAgua: agua, cidEnergia: energia, cidSaneamento: saneamento, cidSaude: saude, cidEscola: escola, cidSeguranca: seguranca, cidPraca: praca, cidParque: parque,
   cidComercio: comercio, cidEscritorio: escritorio, cidMercado: mercado, cidEstacao: estacao, cidHospital: hospital, cidCultura: cultura, cidEstadio: estadio,
-  cidPrefeitura: prefeitura, cidHidreletrica: hidreletrica, cidFaculdade: faculdade, cidConstrutora: construtora, cidFabrica: fabrica, cidLogistica: logistica, cidShopping: shopping, cidBanco: banco, cidLuxo: luxo, cidAeroporto: aeroporto };
+  cidPrefeitura: prefeitura, cidHidreletrica: hidreletrica, cidFaculdade: faculdade, cidConstrutora: construtora, cidFabrica: fabrica, cidLogistica: logistica, cidShopping: shopping, cidBanco: banco, cidLuxo: luxo, cidAeroporto: aeroporto, cidPorto: porto };
 // altura do topo de um prédio no nível n (âncora de balão e placa da obra)
 function alturaDe(f, n) {
   if (f === 'cidCasas') return (n >= 3 ? 3 : 2) * FH_C + 0.1; if (f === 'cidTerraco') return (Math.max(2, n + 1)) * FH_C + 0.1;
   if (f === 'cidTorre') return (n <= 1 ? 2 : 2 + (n - 1) * 4) * FH_C + 0.1; if (f === 'cidComercio') return n * FH_C + 0.1;
   if (f === 'cidEscritorio') return (n <= 1 ? 1 : 1 + (n - 1) * 3) * FH_C + 0.1; if (f === 'cidHospital') return 4 * FH_C + 0.2;
+  if (f === 'cidPorto') return n >= 2 ? 3.6 : 1.3;
   if (f === 'cidLuxo') return (n <= 1 ? 2 : 2 + (n - 1) * 4) * FH_C + 0.2; if (f === 'cidAeroporto') return n >= 3 ? 6.8 : n >= 2 ? 2.4 : 0.6;
   if (f === 'cidConstrutora') return n >= 4 ? 2.7 : (n >= 3 ? 4 : 2) * FH_C + 0.1; if (f === 'cidFabrica') return 2.0; if (f === 'cidLogistica') return 1.1; if (f === 'cidShopping') return FH_C * 1.2 + Math.max(0, Math.min(n, 4) - 1) * FH_C + (n >= 5 ? 0.5 : 0.1);
   if (f === 'cidBanco') return n <= 1 ? 2 * FH_C + 0.2 : (2 + (n - 1) * 3) * FH_C + 0.2 + (n >= 5 ? 1.0 : 0); if (f === 'cidPrefeitura') return 2 * FH_C + 1.8; if (f === 'cidFaculdade') return 3 * FH_C + 0.75; if (f === 'cidSeguranca') return 2.4; if (f === 'cidHidreletrica') return 1.8; if (f === 'cidEstadio' || f === 'cidCultura') return 1.4; return 1.1;
@@ -421,34 +462,57 @@ export class FaixaCidade {
 // ---------------------------------------------------------------- chão dos bairros
 const MAX_MARCAS = 1000; // marcas de lote livre (todos os lotes dos dez bairros)
 const PX = 8; // pixels por unidade na textura do chão
-function chaoBairro(b) {
+// Chão de um bairro aberto: a avenida em volta do bairro sempre; em cada lote limpo, as ruas dos quatro lados (asfalto
+// com a faixa tracejada), a calçada clara e o gramado. O resto do canvas fica transparente (a mata e os campos
+// pintados no terreno aparecem por baixo, com as árvores dos lotes por cima).
+let _asfalto = null;
+function asfalto() {
+  if (_asfalto) return _asfalto; const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d'); c.fillStyle = '#3a3d42'; c.fillRect(0, 0, 64, 64);
+  for (let k = 0; k < 60; k++) { c.fillStyle = hash(k, 1, 404) < 0.5 ? 'rgba(20,22,26,.18)' : 'rgba(120,120,118,.10)'; c.fillRect(hash(k, 2, 404) * 64, hash(k, 3, 404) * 64, 2 + hash(k, 4, 404) * 6, 2 + hash(k, 5, 404) * 4); }
+  return (_asfalto = cv);
+}
+function chaoBairro(b, limpos) {
   const a = areaBairro(b), W = a.x1 - a.x0, D = a.z1 - a.z0, B = BAIRROS[b];
   const w = Math.ceil(W * PX), h = Math.ceil(D * PX);
   const t = tex.grass(); const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const c = cv.getContext('2d');
-  c.fillStyle = '#3a3d42'; c.fillRect(0, 0, w, h); // asfalto
-  // manchas do asfalto
-  for (let k = 0; k < 900; k++) { c.fillStyle = hash(k, 1, 404) < 0.5 ? 'rgba(20,22,26,.18)' : 'rgba(120,120,118,.10)'; c.fillRect(hash(k, 2, 404) * w, hash(k, 3, 404) * h, 2 + hash(k, 4, 404) * 6, 2 + hash(k, 5, 404) * 4); }
-  const px = (x) => (x - a.x0) * PX, pz = (z) => (z - a.z0) * PX;
-  // faixa tracejada no meio das ruas
-  c.strokeStyle = 'rgba(226,218,196,.75)'; c.lineWidth = 1; c.setLineDash([6, 6]);
-  for (let i = 0; i <= B.nx; i++) { const x = px(B.x0 + i * PASSO - LOTE.rua / 2); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
-  for (let j = 0; j <= B.nz; j++) { const z = pz(B.z0 + j * PASSO - LOTE.rua / 2); c.beginPath(); c.moveTo(0, z); c.lineTo(w, z); c.stroke(); }
-  c.setLineDash([]);
-  // quadras: calçada clara e o gramado do lote (textura da grama)
+  const px = (x) => (x - a.x0) * PX, pz = (z) => (z - a.z0) * PX; const pa = c.createPattern(asfalto(), 'repeat'), R = LOTE.rua;
+  // chão da mata (folhas e sombra) onde ainda não se desmatou
+  c.fillStyle = '#2a331c'; c.fillRect(0, 0, w, h); for (let k = 0; k < w * h / 60; k++) { const v = hash(k, 21, 77); c.fillStyle = v < 0.4 ? 'rgba(18,24,10,.35)' : v < 0.75 ? 'rgba(70,82,38,.25)' : 'rgba(96,78,44,.2)'; c.fillRect(hash(k, 22, 77) * w, hash(k, 23, 77) * h, 2 + hash(k, 24, 77) * 5, 2 + hash(k, 25, 77) * 4); }
+  const xr = (i) => B.x0 + i * PASSO - R, zr = (j) => B.z0 + j * PASSO - R; // borda de cima/esquerda da rua i (j)
+  const ruaH = (j, i0, i1) => { c.fillStyle = pa; c.fillRect(px(xr(i0)), pz(zr(j)), (xr(i1) - xr(i0) + R) * PX, R * PX); c.strokeStyle = 'rgba(226,218,196,.75)'; c.lineWidth = 1; c.setLineDash([6, 6]); c.beginPath(); c.moveTo(px(xr(i0) + R), pz(zr(j) + R / 2)); c.lineTo(px(xr(i1)), pz(zr(j) + R / 2)); c.stroke(); c.setLineDash([]); };
+  const ruaV = (i, j0, j1) => { c.fillStyle = pa; c.fillRect(px(xr(i)), pz(zr(j0)), R * PX, (zr(j1) - zr(j0) + R) * PX); c.strokeStyle = 'rgba(226,218,196,.75)'; c.lineWidth = 1; c.setLineDash([6, 6]); c.beginPath(); c.moveTo(px(xr(i) + R / 2), pz(zr(j0) + R)); c.lineTo(px(xr(i) + R / 2), pz(zr(j1))); c.stroke(); c.setLineDash([]); };
+  // avenida em volta do bairro (a estrada que chega)
+  ruaH(0, 0, B.nx); ruaH(B.nz, 0, B.nx); ruaV(0, 0, B.nz); ruaV(B.nx, 0, B.nz);
   const pat = c.createPattern(t.userData.canvas, 'repeat');
   for (let j = 0; j < B.nz; j++) for (let i = 0; i < B.nx; i++) {
-    const x0 = B.x0 + i * PASSO, z0 = B.z0 + j * PASSO;
+    if (!limpos.has(`${b}:${i}:${j}`)) continue; ruaH(j, i, i + 1); ruaH(j + 1, i, i + 1); ruaV(i, j, j + 1); ruaV(i + 1, j, j + 1);
+  }
+  for (let j = 0; j < B.nz; j++) for (let i = 0; i < B.nx; i++) {
+    if (!limpos.has(`${b}:${i}:${j}`)) continue; const x0 = B.x0 + i * PASSO, z0 = B.z0 + j * PASSO;
     c.fillStyle = '#b8b2a4'; c.beginPath(); c.roundRect(px(x0 - 0.12), pz(z0 - 0.12), (LOTE.tam + 0.24) * PX, (LOTE.tam + 0.24) * PX, 3); c.fill();
     c.save(); c.fillStyle = pat; c.translate(px(x0), pz(z0)); c.scale(0.35, 0.35); c.fillRect(0.3 * PX / 0.35, 0.3 * PX / 0.35, (LOTE.tam - 0.6) * PX / 0.35, (LOTE.tam - 0.6) * PX / 0.35); c.restore();
   }
   const mapa = new THREE.CanvasTexture(cv); mapa.colorSpace = THREE.SRGBColorSpace; mapa.anisotropy = 8;
   const geo = new THREE.PlaneGeometry(W, D); geo.rotateX(-Math.PI / 2); geo.translate((a.x0 + a.x1) / 2, 0.03, (a.z0 + a.z1) / 2);
-  const mat = new THREE.MeshStandardMaterial({ map: mapa, roughness: 0.92, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }); mat.userData.semHAO = true;
+  const mat = new THREE.MeshStandardMaterial({ map: mapa, roughness: 0.92, metalness: 0, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }); mat.userData.semHAO = true;
   const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.name = 'chao-' + b; m.userData.semHAO = true; return m;
 }
+// mata dos lotes ainda não desmatados de um bairro aberto (copas baixas e ciprestes, sem tronco à vista): n árvores por lote
+const ARV_LOTE = { ultra: 8, alta: 6, media: 4, leve: 3 };
+function arvoresLote(b, i, j, n) {
+  const B = BAIRROS[b], x = B.x0 + i * PASSO + LOTE.tam / 2, z = B.z0 + j * PASSO + LOTE.tam / 2, out = [];
+  for (let k = 0; k < n; k++) { const u = (k + hash(i, j, k + 31)) / n, a = u * 6.283 * 2.618 + hash(i, j, 7) * 6.283, r = n === 1 ? 0 : 0.35 + Math.sqrt((k + 0.5) / n) * 1.55;
+    out.push({ x: x + Math.cos(a) * r, z: z + Math.sin(a) * r, y: 0.02, s: 0.72 + hash(i, j, k + 51) * 0.36, kind: hash(i, j, k + 61) < 0.18 ? 'conifera' : n >= 8 && k % 3 === 0 ? (k % 2 ? 'folha2' : 'folha') : k % 2 ? 'folhaLow2' : 'folhaLow', pal: 'mata', h: 1.15 }); }
+  return out;
+}
+function mataBairro(b, limpos, n) {
+  const B = BAIRROS[b], l = []; for (let j = 0; j < B.nz; j++) for (let i = 0; i < B.nx; i++) if (!limpos.has(`${b}:${i}:${j}`)) l.push(...arvoresLote(b, i, j, n));
+  if (!l.length) return null; const g = treeGroup(l, { name: 'mata-' + b }); g.userData.semFusao = true; return g;
+}
 // postes nos cruzamentos dos bairros abertos (duas malhas instanciadas: haste e luminária)
-function postes(abertos) {
-  const pts = []; for (const b of abertos) { const B = BAIRROS[b]; for (let j = 0; j <= B.nz; j += 1) for (let i = 0; i <= B.nx; i += 2) pts.push([B.x0 + i * PASSO - LOTE.rua / 2 - 0.45, B.z0 + j * PASSO - LOTE.rua / 2 - 0.45]); }
+function postes(abertos, limpos) {
+  const pts = []; for (const b of abertos) { const B = BAIRROS[b]; const tem = (i, j) => limpos.has(`${b}:${i}:${j}`);
+    for (let j = 0; j <= B.nz; j += 1) for (let i = 0; i <= B.nx; i += 2) { const borda = i === 0 || j === 0 || i === B.nx || j === B.nz; if (borda || tem(i, j) || tem(i - 1, j) || tem(i, j - 1) || tem(i - 1, j - 1)) pts.push([B.x0 + i * PASSO - LOTE.rua / 2 - 0.45, B.z0 + j * PASSO - LOTE.rua / 2 - 0.45]); } }
   if (!pts.length) return null;
   const g = new THREE.Group(); g.name = 'postes'; const m4 = new THREE.Matrix4();
   const haste = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.025, 0.035, 0.9, 5).translate(0, 0.45, 0), M.steelDark, pts.length);
@@ -459,8 +523,8 @@ function postes(abertos) {
 }
 
 // árvores de rua: duas na calçada da frente de cada lote dos bairros abertos (uma malha instanciada)
-function arvoresRua(abertos) {
-  const l = []; for (const b of abertos) for (const q of lotesDoBairroLocal(b)) for (const dx of [-1.25, 1.25]) l.push({ x: q.x + dx + (hash(q.i, q.j, 5 + dx) - 0.5) * 0.3, z: q.z + LOTE.tam / 2 + 0.36, y: 0.03, s: 0.36 + hash(q.i, q.j, 9 + dx) * 0.12, kind: 'folha', pal: hash(q.i, q.j, 13 + dx) < 0.08 ? 'outono' : 'jardim', h: 1, trunk: true });
+function arvoresRua(abertos, limpos) {
+  const l = []; for (const b of abertos) for (const q of lotesDoBairroLocal(b)) if (limpos.has(`${b}:${q.i}:${q.j}`)) for (const dx of [-1.25, 1.25]) l.push({ x: q.x + dx + (hash(q.i, q.j, 5 + dx) - 0.5) * 0.3, z: q.z + LOTE.tam / 2 + 0.36, y: 0.03, s: 0.36 + hash(q.i, q.j, 9 + dx) * 0.12, kind: 'folha', pal: hash(q.i, q.j, 13 + dx) < 0.08 ? 'outono' : 'jardim', h: 1, trunk: true });
   if (!l.length) return null; const g = treeGroup(l, { name: 'arvores-rua', trunks: true }); return g;
 }
 const lotesDoBairroLocal = (b) => { const B = BAIRROS[b], out = []; for (let j = 0; j < B.nz; j++) for (let i = 0; i < B.nx; i++) out.push({ i, j, x: B.x0 + i * PASSO + LOTE.tam / 2, z: B.z0 + j * PASSO + LOTE.tam / 2 }); return out; };
@@ -468,8 +532,8 @@ const lotesDoBairroLocal = (b) => { const B = BAIRROS[b], out = []; for (let j =
 // ---------------------------------------------------------------- vida na cidade
 // gente nas calçadas (três por prédio pronto, dando a volta no lote) e carros nas ruas dos bairros abertos, pela
 // qualidade (o dono liberou o triplo do volume)
-const GENTE_CIDADE = { ultra: 420, alta: 320, media: 200, leve: 100 };
-const CARROS_CIDADE = { ultra: 120, alta: 90, media: 60, leve: 30 };
+const GENTE_CIDADE = { ultra: 1600, alta: 900, media: 420, leve: 150 }; // (o dono liberou até 100 vezes; o celular fica no leve)
+const CARROS_CIDADE = { ultra: 400, alta: 240, media: 120, leve: 50 };
 const COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xd8d8d0, 0xe8c840, 0x2a2e36, 0x8a2e2e, 0x2e7a5a];
 function carrosCidade(max) {
   const pinta = (g, c) => { g = g.toNonIndexed(); const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
@@ -477,26 +541,36 @@ function carrosCidade(max) {
   const farol = pinta(new THREE.BoxGeometry(0.02, 0.04, 0.16).translate(0.21, 0.12, 0), [2.2, 2.0, 1.6]);
   const geo = mergeGeometries([corpo, cab, farol]); const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3 });
   const mesh = new THREE.InstancedMesh(geo, mat, max); mesh.count = 0; mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.userData.semHAO = true; mesh.name = 'carros-cidade';
-  const lista = []; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s1 = new THREE.Vector3(1, 1, 1), c = new THREE.Color();
+  // esportivos de luxo: baixos e compridos, cabine recuada, cores fortes (mais deles com os residenciais de luxo)
+  const eCorpo = pinta(new THREE.BoxGeometry(0.46, 0.1, 0.21).translate(0, 0.08, 0), [1, 1, 1]), eCab = pinta(new THREE.BoxGeometry(0.18, 0.07, 0.17).translate(-0.06, 0.165, 0), [0.03, 0.03, 0.04]);
+  const eFrente = pinta(new THREE.BoxGeometry(0.14, 0.04, 0.21).translate(0.19, 0.145, 0), [1, 1, 1]), eAsa = pinta(new THREE.BoxGeometry(0.04, 0.02, 0.2).translate(-0.22, 0.18, 0), [0.05, 0.05, 0.06]);
+  const esp = new THREE.InstancedMesh(mergeGeometries([eCorpo, eCab, eFrente, eAsa, farol.clone().translate(0.02, -0.02, 0)]), mat, 80); esp.count = 0; esp.castShadow = true; esp.frustumCulled = false; esp.userData.semHAO = true; esp.name = 'esportivos';
+  const COR_LUXO = [0xd0202a, 0xf2c200, 0x111114, 0xf4f4f0, 0xff6a00, 0x1f4fbf, 0x6e6e74];
+  const lista = [], listaL = []; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s1 = new THREE.Vector3(1, 1, 1), c = new THREE.Color();
+  const anda = (L, M2, dt) => {
+    for (let k = 0; k < L.length; k++) {
+      const o = L[k], r = o.r, len = r.b - r.a; o.s += o.dir * o.v * dt; if (o.s > len) { o.s = len; o.dir = -1; } else if (o.s < 0) { o.s = 0; o.dir = 1; }
+      const lane = 0.24 * o.dir;
+      if (r.h) { p.set(r.a + o.s, 0.03, r.f + lane); e.set(0, o.dir > 0 ? 0 : Math.PI, 0); } else { p.set(r.f - lane, 0.03, r.a + o.s); e.set(0, o.dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0); }
+      q.setFromEuler(e); M2.setMatrixAt(k, m4.compose(p, q, s1));
+    }
+    if (L.length) M2.instanceMatrix.needsUpdate = true;
+  };
   return {
-    mesh,
+    mesh, esp,
     // ruas dos bairros abertos (linhas e colunas da grade) e n carros sorteados nelas
-    rotas(abertos, n) {
+    rotas(abertos, n, limpos, nLux = 0) {
       const ruas = []; for (const b of abertos) { const B = BAIRROS[b], x0 = B.x0 - LOTE.rua / 2, x1 = B.x0 + B.nx * PASSO - LOTE.rua / 2, z0 = B.z0 - LOTE.rua / 2, z1 = B.z0 + B.nz * PASSO - LOTE.rua / 2;
-        for (let j = 0; j <= B.nz; j++) ruas.push({ h: true, a: x0, b: x1, f: z0 + j * PASSO }); for (let i = 0; i <= B.nx; i++) ruas.push({ h: false, a: z0, b: z1, f: x0 + i * PASSO }); }
-      lista.length = 0; const N = ruas.length ? Math.min(max, n, abertos.length * 14) : 0;
+        ruas.push({ h: true, a: x0, b: x1, f: z0 }, { h: true, a: x0, b: x1, f: z1 }, { h: false, a: z0, b: z1, f: x0 }, { h: false, a: z0, b: z1, f: x1 }); // avenida
+        for (let j = 0; j < B.nz; j++) for (let i = 0; i < B.nx; i++) if (limpos.has(`${b}:${i}:${j}`)) { const xa = x0 + i * PASSO, za = z0 + j * PASSO; ruas.push({ h: true, a: xa, b: xa + PASSO, f: za + PASSO }, { h: false, a: za, b: za + PASSO, f: xa + PASSO }); } }
+      lista.length = 0; const N = ruas.length ? Math.min(max, n, abertos.length * 6 + limpos.size * 2) : 0;
       for (let k = 0; k < N; k++) { const r = ruas[(hash(k, 3, 881) * ruas.length) | 0]; lista.push({ r, s: hash(k, 5, 881) * (r.b - r.a), dir: hash(k, 7, 881) < 0.5 ? 1 : -1, v: 0.8 + hash(k, 9, 881) * 0.6 }); mesh.setColorAt(k, c.setHex(COR_CARRO[(hash(k, 11, 881) * COR_CARRO.length) | 0])); }
-      mesh.count = lista.length; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; this.update(0);
+      mesh.count = lista.length; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      listaL.length = 0; const NL = ruas.length ? Math.min(80, nLux) : 0;
+      for (let k = 0; k < NL; k++) { const r = ruas[(hash(k, 13, 882) * ruas.length) | 0]; listaL.push({ r, s: hash(k, 15, 882) * (r.b - r.a), dir: hash(k, 17, 882) < 0.5 ? 1 : -1, v: 1.3 + hash(k, 19, 882) * 0.7 }); esp.setColorAt(k, c.setHex(COR_LUXO[(hash(k, 21, 882) * COR_LUXO.length) | 0])); }
+      esp.count = listaL.length; if (esp.instanceColor) esp.instanceColor.needsUpdate = true; this.update(0);
     },
-    update(dt) {
-      for (let k = 0; k < lista.length; k++) {
-        const o = lista[k], r = o.r, L = r.b - r.a; o.s += o.dir * o.v * dt; if (o.s > L) { o.s = L; o.dir = -1; } else if (o.s < 0) { o.s = 0; o.dir = 1; }
-        const lane = 0.24 * o.dir;
-        if (r.h) { p.set(r.a + o.s, 0.03, r.f + lane); e.set(0, o.dir > 0 ? 0 : Math.PI, 0); } else { p.set(r.f - lane, 0.03, r.a + o.s); e.set(0, o.dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0); }
-        q.setFromEuler(e); mesh.setMatrixAt(k, m4.compose(p, q, s1));
-      }
-      if (lista.length) mesh.instanceMatrix.needsUpdate = true;
-    },
+    update(dt) { anda(lista, mesh, dt); anda(listaL, esp, dt); },
   };
 }
 
@@ -513,9 +587,10 @@ export class Cidade {
     this.marcas = new THREE.InstancedMesh(q, mm, MAX_MARCAS); this.marcas.setColorAt(0, new THREE.Color(1, 1, 1)); this.marcas.count = 0; this.marcas.renderOrder = 5; this.marcas.userData.semHAO = true; this.marcas.frustumCulled = false; this.marcas.visible = false;
     this.group.add(this.marcas);
     // vida: gente nas calçadas e carros nas ruas (refeitos quando a cidade muda, no máximo a cada 1,5 s)
-    this.povo = new Crowd('pessoa', 420, { lod: true }); this.povo.mesh.userData.semHAO = true; this.group.add(this.povo.mesh);
-    this.carros = carrosCidade(120); this.group.add(this.carros.mesh); this._tPovo = -1e9; this.sujo = true;
-    this.aereo = new Aereo(); this.group.add(this.aereo.group); // aviões do aeroporto e helicópteros entre os helipontos
+    this.povo = new Crowd('pessoa', GENTE_CIDADE.ultra, { lod: true }); this.povo.mesh.userData.semHAO = true; this.group.add(this.povo.mesh);
+    this.carros = carrosCidade(CARROS_CIDADE.ultra); this.group.add(this.carros.mesh, this.carros.esp); this._tPovo = -1e9; this.sujo = true;
+    this.aereo = new Aereo(); this.group.add(this.aereo.group); // aviões e jatinhos do aeroporto e helicópteros entre os helipontos
+    this.maritimo = new Maritimo(); this.group.add(this.maritimo.group); // iates, cargueiro e cruzeiro do porto
   }
   _povoar() {
     const C = this.povo; C.clear(); const q = this.e.q?.id || 'alta', lim = GENTE_CIDADE[q] || 300;
@@ -527,11 +602,13 @@ export class Cidade {
         C.add(k % 2 ? path.slice().reverse() : path, { loop: 'loop', speed: 0.1 + hash(m.seed, k, 5) * 0.06, phase: hash(m.seed, k, 7), idle: hash(m.seed, k, 9) < 0.2 ? 1 : 0 });
       }
     }
-    this.carros.rotas(this.abertos, CARROS_CIDADE[q] || 90); this._sincAereo();
+    const nLux = (this.faixas.cidLuxo?.mods || []).reduce((a, m) => a + (m?.nivel || 0), 0) * 4 + (this.faixas.cidAeroporto?.mods[0]?.nivel || 0) * 3;
+    this.carros.rotas(this.abertos, CARROS_CIDADE[q] || 90, this.limpos || new Set(), nLux); this._sincAereo();
   }
   // aviões (um por nível do aeroporto) e os helipontos: residenciais de luxo do nível 3 em diante, hospitais e o aeroporto
   _sincAereo() {
-    const fa = this.faixas.cidAeroporto?.mods.find((m) => m && m.nivel >= 1); const A = fa ? { n: fa.nivel, px: fa.x + PISTA_X, L: PISTA_Z, ax: fa.x + 0.5, cx: 50, cz: -5, R: 140 } : null;
+    const fa = this.faixas.cidAeroporto?.mods.find((m) => m && m.nivel >= 1); const A = fa ? { n: fa.nivel, jatos: fa.nivel >= 2 ? fa.nivel : 0, px: fa.x + PISTA_X, L: PISTA_Z, ax: fa.x + 0.5, cx: 50, cz: -5, R: 140 } : null;
+    const fp = this.faixas.cidPorto?.mods.find((m) => m && m.nivel >= 1); this.maritimo.sincronizar(fp ? { nivel: fp.nivel, x: fp.x, z: fp.z } : null);
     const pads = []; for (const m of this.faixas.cidLuxo?.mods || []) if (m?.nivel >= 3) pads.push([m.x - 0.5, (2 + (m.nivel - 1) * 4) * FH_C + 0.08, m.z - 0.6]);
     for (const m of this.faixas.cidHospital?.mods || []) if (m?.nivel >= 1) { const c = Math.cos(m.rot), s = Math.sin(m.rot); pads.push([m.x + c * -0.9 + s * -0.2, 4 * FH_C + 0.06, m.z - s * -0.9 + c * -0.2]); }
     if (fa && fa.nivel >= 2) pads.push([fa.x - 4, 0.03, fa.z + 17]);
@@ -540,18 +617,44 @@ export class Cidade {
   update(dt, t) {
     if (this.sujo && t - this._tPovo > 1500) { this.sujo = false; this._tPovo = t; this._povoar(); }
     const cam = this.e.camera; if (this.povo.walkers.length) this.povo.update(dt, t, cam.position, (0.27 * (this.e.H || 720)) / (2 * Math.tan((cam.fov * Math.PI) / 360) * 12));
-    this.carros.update(Math.min(dt, 0.1)); this.aereo.update(dt);
+    this.carros.update(Math.min(dt, 0.1)); this.aereo.update(dt); this.maritimo.update(dt); this._derrubar(Math.min(dt, 0.1));
   }
   faixa(f) { return this.faixas[f]; }
   centroLote(id) { const l = loteDe(id); return l ? { x: l.x, z: l.z } : null; }
   // chão e postes dos bairros abertos (refeitos só quando muda a lista)
-  bairros(abertos) {
-    const k = abertos.join(); if (k === this._chaveBairros) return; this._chaveBairros = k; this.abertos = abertos.slice();
-    for (const c of this.chao.children.slice()) { this.chao.remove(c); c.geometry.dispose(); c.material.map?.dispose(); c.material.dispose(); }
-    for (const b of ORDEM_BAIRROS) if (abertos.includes(b)) this.chao.add(chaoBairro(b));
-    if (this._postes) { this.group.remove(this._postes); this._postes = null; } this._postes = postes(abertos); if (this._postes) this.group.add(this._postes);
-    if (this._arvRua) { this.group.remove(this._arvRua); this._arvRua = null; } this._arvRua = arvoresRua(abertos); if (this._arvRua) this.group.add(this._arvRua);
+  // chão, mata, postes e árvores de rua dos bairros abertos (limpos: lotes desmatados e ocupados); cada bairro só é refeito
+  // quando os lotes limpos dele mudam
+  bairros(abertos, limpos = new Set()) {
+    const nArv = ARV_LOTE[this.e.q?.id] || 3; const k = abertos.join() + '|' + limpos.size + '|' + nArv; if (k === this._chaveBairros) return; this._chaveBairros = k; this.abertos = abertos.slice(); this.limpos = limpos;
+    const C = (this._bairros ||= {});
+    for (const b of ORDEM_BAIRROS) {
+      const aberto = abertos.includes(b); const kb = aberto ? [...limpos].filter((id) => id.startsWith(b + ':')).sort().join(',') + '|' + nArv : null; const ant = C[b];
+      if (ant && ant.k === kb) continue;
+      if (ant) { this.chao.remove(ant.m); ant.m.geometry.dispose(); ant.m.material.map?.dispose(); ant.m.material.dispose(); if (ant.mt) { this.group.remove(ant.mt); for (const c of ant.mt.children) c.dispose?.(); } delete C[b]; }
+      if (!aberto) continue;
+      const m = chaoBairro(b, limpos); this.chao.add(m); const mt = mataBairro(b, limpos, nArv); if (mt) this.group.add(mt); C[b] = { k: kb, m, mt };
+    }
+    if (this._postes) { this.group.remove(this._postes); this._postes = null; } this._postes = postes(abertos, limpos); if (this._postes) this.group.add(this._postes);
+    if (this._arvRua) { this.group.remove(this._arvRua); for (const c of this._arvRua.children) c.dispose?.(); this._arvRua = null; } this._arvRua = arvoresRua(abertos, limpos); if (this._arvRua) this.group.add(this._arvRua);
     this.e.shadowDirty = true; this.sujo = true;
+  }
+  // desmate: as árvores do lote tombam (0,9 s), afundam (0,7 s) e ficam três toras no chão por alguns segundos
+  derrubar(id) {
+    const l = loteDe(id); if (!l || !BAIRROS[l.bairro]) return; const arv = arvoresLote(l.bairro, l.i, l.j, ARV_LOTE[this.e.q?.id] || 3); const g = treeGroup(arv, { name: 'derrubada' });
+    const inst = []; const m4 = new THREE.Matrix4();
+    for (const im of g.children) { if (!im.isInstancedMesh || !im.userData.kind) continue; const lista = arv.filter((t) => (t.kind || 'folha') === im.userData.kind);
+      lista.forEach((t, k) => { im.getMatrixAt(k, m4); const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(); m4.decompose(p, q, sc); inst.push({ im, k, base: new THREE.Vector3(t.x, t._y, t.z), lift: t._lift, q0: q, s0: sc, dir: hash(l.i, l.j, k + 71) * 6.283 + (k % 2) * 3.1 }); }); }
+    const toras = new THREE.Group(); for (let k = 0; k < 3; k++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.8, 7), M.wood || M.trunk); c.rotation.set(0, (k - 1) * 0.35, Math.PI / 2); c.position.set(l.x - 0.2 + k * 0.05, 0.08 + (k === 2 ? 0.1 : 0), l.z - 0.1 + k * 0.12 - (k === 2 ? 0.06 : 0)); c.castShadow = true; toras.add(c); }
+    toras.scale.setScalar(0.001); g.add(toras); this.group.add(g); (this._derrubadas ||= []).push({ g, inst, toras, t: 0 }); this.e.acordar?.(5000);
+  }
+  _derrubar(dt) {
+    const D = this._derrubadas; if (!D?.length) return; const q = new THREE.Quaternion(), ax = new THREE.Vector3(), p = new THREE.Vector3(), s = new THREE.Vector3(), m4 = new THREE.Matrix4();
+    for (let i = D.length - 1; i >= 0; i--) {
+      const d = D[i]; d.t += dt; const t = d.t, ang = 1.45 * Math.min(1, (t / 0.9) ** 2), k = 1 - Math.min(1, Math.max(0, (t - 0.9) / 0.7));
+      for (const o of d.inst) { ax.set(Math.sin(o.dir), 0, -Math.cos(o.dir)); q.setFromAxisAngle(ax, ang); p.set(0, o.lift, 0).applyQuaternion(q).add(o.base); p.y -= (1 - k) * o.lift; s.copy(o.s0).multiplyScalar(Math.max(0.001, k)); q.multiply(o.q0); o.im.setMatrixAt(o.k, m4.compose(p, q, s)); o.im.instanceMatrix.needsUpdate = true; }
+      d.toras.scale.setScalar(Math.max(0.001, Math.min(1, (t - 0.8) * 4)) * (t > 4 ? Math.max(0.001, 1 - (t - 4) * 2) : 1));
+      if (t > 4.6) { this.group.remove(d.g); for (const c of d.g.children) if (c.isInstancedMesh) c.dispose(); D.splice(i, 1); }
+    }
   }
   // os prédios de cada tipo seguem o estado (quantidade, lote e nível; o nível de quem está em obra é o de antes)
   sincronizar(modulos) {

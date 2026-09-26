@@ -1068,3 +1068,6 @@ img{-webkit-user-drag:none}
 .folha .compra-tempo .ct small img{width:14px;height:14px}
 .folha .compra-tempo .ct.fraco{opacity:.55}
 .folha .compra-tempo .ct:active{transform:translateY(2px);box-shadow:none}
+
+/* painel de desempenho (Configurações > Vídeo) */
+.desempenho { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 58px); left: 50%; transform: translateX(-50%); z-index: 60; pointer-events: none; font: 600 11.5px/1.3 system-ui, sans-serif; color: #e8f4ff; background: rgba(8, 14, 28, .72); border: 1px solid rgba(160, 200, 255, .25); border-radius: 8px; padding: 4px 10px; white-space: nowrap; max-width: 96vw; overflow: hidden; text-overflow: ellipsis; }

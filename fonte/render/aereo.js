@@ -7,6 +7,7 @@
 // Cada aeronave é um grupo pequeno de malhas simples (poucos triângulos); tudo anda no update sem alocar.
 import * as THREE from 'three';
 import { M } from './materials.js';
+import { bake } from './geom.js'; // cada aeronave vira poucas malhas (uma por material); o rotor fica solto
 
 const caixa = (w, h, d, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; return m; };
 
@@ -19,13 +20,20 @@ function aviao() {
   for (const x of [-0.8, 0.8]) { const mo = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.45, 10), M.steel); mo.rotation.x = Math.PI / 2; mo.position.set(x, -0.14, 0.3); g.add(mo); }
   g.add(caixa(0.06, 0.06, 0.06, M.redGlow, -1.7, -0.04, 0.1)); g.add(caixa(0.06, 0.06, 0.06, M.cyanGlow, 1.7, -0.04, 0.1)); return g;
 }
+// jatinho executivo: fuselagem fina azul-marinho com faixa dourada, asas enflechadas, cauda em T e motores atrás
+function jatinho() {
+  const g = new THREE.Group(), B = M.whiteSmooth || M.white; const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 1.9, 10), B); corpo.rotation.x = Math.PI / 2; corpo.castShadow = true; g.add(corpo);
+  const nariz = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 6), B); nariz.position.z = 0.95; nariz.scale.z = 1.9; g.add(nariz); g.add(caixa(0.28, 0.06, 1.6, M.blue, 0, -0.1, 0.05)); g.add(caixa(0.29, 0.02, 1.7, M.yellow, 0, -0.02, 0.05));
+  for (const s of [-1, 1]) { const asa = caixa(0.95, 0.03, 0.34, B, s * 0.5, -0.06, 0.05); asa.rotation.y = s * 0.45; g.add(asa); const mo = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.34, 8), M.steel); mo.rotation.x = Math.PI / 2; mo.position.set(s * 0.2, 0.08, -0.62); g.add(mo); }
+  g.add(caixa(0.03, 0.42, 0.3, M.blue, 0, 0.1, -0.85)); g.add(caixa(0.62, 0.03, 0.2, B, 0, 0.5, -0.92)); return g;
+}
 function helicoptero() {
   const g = new THREE.Group(); const cab = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), M.red); cab.scale.set(0.9, 0.85, 1.3); cab.castShadow = true; g.add(cab);
   const vid = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), M.glass); vid.rotation.x = Math.PI / 2 - 0.4; vid.position.set(0, 0.04, 0.2); g.add(vid);
   g.add(caixa(0.07, 0.07, 0.9, M.red, 0, 0.06, -0.7)); g.add(caixa(0.03, 0.26, 0.14, M.red, 0, 0.16, -1.12));
   for (const x of [-0.18, 0.18]) g.add(caixa(0.03, 0.03, 0.7, M.steelDark, x, -0.3, 0));
   const rotor = new THREE.Group(); rotor.add(caixa(2.0, 0.015, 0.06, M.dark)); rotor.add(caixa(0.06, 0.015, 2.0, M.dark)); rotor.position.y = 0.34; g.add(rotor);
-  const cauda = caixa(0.02, 0.4, 0.04, M.dark, 0.05, 0.16, -1.12); g.add(cauda); g.userData.rotor = rotor; g.userData.cauda = cauda; return g;
+  const cauda = caixa(0.02, 0.4, 0.04, M.dark, 0.05, 0.16, -1.12); g.add(cauda); rotor.userData.keep = true; cauda.userData.keep = true; bake(g); g.userData.rotor = rotor; g.userData.cauda = cauda; return g;
 }
 
 export class Aereo {
@@ -51,10 +59,11 @@ export class Aereo {
   }
   // A: {px, L, ax, cx, cz, R, n} (n aviões) ou null; pads: [[x, y, z]]
   sincronizar(A, pads) {
-    const chave = (A ? `${A.n}:${A.px}` : '-') + '|' + pads.map((p) => p.map((v) => v.toFixed(1)).join(',')).join(';'); if (chave === this._chave) return; this._chave = chave;
+    const chave = (A ? `${A.n}:${A.jatos || 0}:${A.px}` : '-') + '|' + pads.map((p) => p.map((v) => v.toFixed(1)).join(',')).join(';'); if (chave === this._chave) return; this._chave = chave;
     if (A && !this._laco) this._laco = this._fazLaco(A);
-    const nA = A ? A.n : 0; while (this.avioes.length < nA) { const g = aviao(); g.userData.u = this.avioes.length / 3; this.avioes.push(g); this.group.add(g); }
-    while (this.avioes.length > nA) this.group.remove(this.avioes.pop());
+    // aviões de linha (um por nível) e jatinhos executivos (a partir do nível 2), espaçados no laço
+    const nA = A ? A.n + (A.jatos || 0) : 0; while (this.avioes.length) this.group.remove(this.avioes.pop());
+    for (let k = 0; k < nA; k++) { const g = bake(k < A.n ? aviao() : jatinho()); g.userData.u = k / nA; this.avioes.push(g); this.group.add(g); }
     this._pads = pads; const nH = pads.length >= 2 ? Math.min(4, pads.length - 1) : 0;
     while (this.helis.length < nH) { const g = helicoptero(); const k = this.helis.length; g.userData.de = k % pads.length; g.userData.para = (k + 1) % pads.length; g.userData.t = -k * 4; this.helis.push(g); this.group.add(g); }
     while (this.helis.length > nH) this.group.remove(this.helis.pop());

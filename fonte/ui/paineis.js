@@ -27,6 +27,7 @@ const pct = (x) => (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 
 function efeitoCidade(M, ic = false) {
   const i = (k) => (ic ? img(k) : '');
   if (M.cat === 'moradia') return `${i('pop')}até ${fmt(M.popNivel[M.max])} moradores`;
+  if (M.lugar === 'porto') return `${i('creditos')}+${pct(M.renda)} de renda (comércio exterior e turismo) por nível e +${M.bem} de bem-estar; iates, cargueiros e cruzeiros no mar`;
   if (M.lugar === 'aeroporto') return `${i('creditos')}+${pct(M.renda)} de renda (turismo) por nível e +${M.bem} de bem-estar; aviões e helicópteros no céu`;
   if (M.cat === 'empresa') return `${i('creditos')}${fmt(M.lucro)}/h de lucro e ${M.empregos} empregos por nível; ${M.efeito}`;
   if (M.cat === 'comercio') return `${i('creditos')}+${pct(M.renda)} de renda${M.max > 1 ? ' por nível' : ''}${M.bem ? ` e +${M.bem} de bem-estar` : ''}`;
@@ -412,7 +413,7 @@ export class Paineis {
     const J = this.J, M = MODULOS[f], m = J.S.modulos[f][i]; const s = J.situacaoModulo(f, i);
     const popAgora = J.popModulo(f, m.nivel); const cid = !!M.cidade, efeitoCid = cid ? efeitoCidade(M) : '';
     const r0 = s === 'disponivel' ? J.requisitosModulo(f, i) : null;
-    let corpo = (cid && M.cat !== 'moradia' ? '' : this._servicosHtml(r0)) + `<div class="passos">${Array.from({ length: M.max }, (_, k) => `<i class="${k < m.nivel ? 'f' : k === m.nivel ? 'a' : ''}"></i>`).join('')}</div><p class="desc">${M.nomeCurto ? `<span class="nome-longo">${M.nome}</span>` : ''}${M.sub}. ${cid ? (M.cat === 'moradia' ? 'Cada nível acrescenta pavimentos e moradores.' : M.lugar ? `Na área própria, a leste do Leste Alto. Cada nível amplia o aeroporto (pista, terminal, torre e hangares): ${efeitoCid}.` : M.cat === 'empresa' ? `Empresa da Holding. Cada nível amplia a empresa: ${efeitoCid}.` : M.cat === 'comercio' && M.max > 1 ? `Cada nível acrescenta lojas e escritórios: ${efeitoCid}.` : `Pronto, dá ${efeitoCid}.`) : 'Cada nível acrescenta um pavimento com terraço.'}</p>`;
+    let corpo = (cid && M.cat !== 'moradia' ? '' : this._servicosHtml(r0)) + `<div class="passos">${Array.from({ length: M.max }, (_, k) => `<i class="${k < m.nivel ? 'f' : k === m.nivel ? 'a' : ''}"></i>`).join('')}</div><p class="desc">${M.nomeCurto ? `<span class="nome-longo">${M.nome}</span>` : ''}${M.sub}. ${cid ? (M.cat === 'moradia' ? 'Cada nível acrescenta pavimentos e moradores.' : M.lugar === 'porto' ? `Na costa oeste, entre os bairros Norte e Sul. Cada nível amplia o porto (marina, terminal de contêineres, terminal de cruzeiros e farol): ${efeitoCid}.` : M.lugar ? `Na área própria, a leste do Leste Alto. Cada nível amplia o aeroporto (pista, terminal, torre e hangares): ${efeitoCid}.` : M.cat === 'empresa' ? `Empresa da Holding. Cada nível amplia a empresa: ${efeitoCid}.` : M.cat === 'comercio' && M.max > 1 ? `Cada nível acrescenta lojas e escritórios: ${efeitoCid}.` : `Pronto, dá ${efeitoCid}.`) : 'Cada nível acrescenta um pavimento com terraço.'}</p>`;
     if (s === 'disponivel') {
       const r = r0; const temTudo = Object.entries(r.itens).every(([k, n]) => J.temItem(k, n));
       corpo += `<div class="grade">${Object.entries(r.itens).map(([k, n]) => this.ficha(k, { cls: J.temItem(k, n) ? 'ok' : 'falta', sub: `${J.S.itens[k] || 0}/${n}`, data: J.temItem(k, n) ? '' : `data-a="produtor" data-k="${k}"` })).join('')}</div>`;

@@ -43,6 +43,17 @@ const G = {
 const CICLOS = [['foto', 'Foto'], ['acelerado', 'Acelerado'], ['relogio', 'Celular'], ['dia', 'Sempre dia']];
 export function instalarExtras(C, o) {
   const { engine, env, rig, cfg, fotoURL, versao } = o;
+  // ---------------- painel de desempenho (para medir no PC e no celular) ----------------
+  // quadros por segundo, chamadas de desenho, triângulos, qualidade, resolução, memória do JavaScript e a placa de vídeo
+  C.painelDesempenho = (on) => {
+    clearInterval(C._tDes); C._desEl?.remove(); C._desEl = null; if (!on) return;
+    const d = (C._desEl = document.createElement('div')); d.className = 'desempenho'; d.setAttribute('aria-hidden', 'true'); document.body.appendChild(d);
+    const gpu = String(engine.gpu || '').replace(/^ANGLE \(|\)$/g, '').split(',').slice(0, 2).join(',').slice(0, 60);
+    const at = () => { const s = engine.stats, mem = performance.memory ? ` · ${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : '';
+      d.textContent = `${Math.round(s.fps)} fps · ${s.calls} chamadas · ${Math.round(s.tris / 1000)} mil triângulos · ${engine.q?.label || engine.q?.id} · ${engine.W}x${engine.H}${mem} · ${gpu}`; };
+    at(); C._tDes = setInterval(at, 1000);
+  };
+  if (cfg.desempenho) setTimeout(() => C.painelDesempenho(true), 1500);
   // ---------------- rótulos: legendas de maquete ----------------
   // Texto curto com linha-guia até o pé projetado. No Apreciar: no máximo 6 visíveis, os mais perto do centro da tela
   // primeiro; um rótulo some quando a caixa cruza um retângulo do HUD (hud.retangulos, como o _sob dos balões), a folha ou
@@ -233,6 +244,7 @@ export function instalarExtras(C, o) {
       ${op('Qualidade gráfica<small>Automática ajusta a resolução</small>', seg('qualidade', [['auto', 'Auto'], ...Object.values(QUALITY).map((q) => [q.id, q.label])], cfg.qualidade || 'auto'))}
       ${op('Quadros por segundo<small>120 exige Chrome 156+</small>', seg('fps', [[30, '30'], [60, '60'], [120, '120']], cfg.fps || 60))}
       ${op('Tela cheia', `<button class="botao sec" data-y="tela">${img('tela')} Alternar</button>`)}
+      ${op('Painel de desempenho<small>Quadros, chamadas, triângulos e placa de vídeo</small>', seg('desempenho', [[0, 'Não'], [1, 'Sim']], cfg.desempenho ? 1 : 0))}
       ${sec('Som e toque')}
       ${op('Efeitos sonoros', seg('efeitos', [[1, 'Sim'], [0, 'Não']], cfg.efeitos === false ? 0 : 1))}
       ${op('Música ambiente', seg('musica', [[1, 'Sim'], [0, 'Não']], cfg.musica === false ? 0 : 1))}
@@ -256,6 +268,7 @@ export function instalarExtras(C, o) {
         const sb = e.target.closest('.seg button'); if (sb) { const nome = sb.parentElement.dataset.cfg, val = sb.dataset.v; C.som.toque();
           if (nome === 'qualidade') { cfg.qualidade = val; engine.setQuality(val === 'auto' ? o.qualidadeAuto : val); }
           else if (nome === 'fps') { cfg.fps = +val; engine.fpsCap = +val; }
+          else if (nome === 'desempenho') { cfg.desempenho = val === '1'; C.painelDesempenho(cfg.desempenho); }
           else if (nome === 'ritmo') { C.S.ritmo = +val; C.hud.brinde('Ritmo ' + val + '× para as próximas produções e obras'); }
           else if (nome === 'ciclo') { cfg.ciclo = val; delete cfg.luz; env.setCiclo?.(val); engine.acordar?.(800); } // (a luz antiga de exposição não vale mais)
           else if (nome === 'efeitos') { cfg.efeitos = val === '1'; C.som.setEfeitos(cfg.efeitos); }

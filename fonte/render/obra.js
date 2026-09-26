@@ -893,6 +893,8 @@ export class Obras {
       for (let i = 0; i < 90; i++) { const u = rnd(s) * 2 - 1, a = rnd(s) * TAU, q = Math.sqrt(1 - u * u), v = 1.3 + rnd(s) * 0.5; Pt.add(x0, y + alt, z0, q * Math.cos(a) * v, u * v + 0.3, q * Math.sin(a) * v, t0 + 0.6, 1.4, 0.9 + rnd(s) * 0.4, 2, cores[i % 3]); }
     }
   }
+  // poeira no chão fora de um canteiro (desmate de um lote da cidade)
+  poeiraEm(x, z, raio = 1.5, n = 20) { const Pt = this.pontos, t0 = this._tl || performance.now() / 1000, cor = lin(0xb8a888); for (let i = 0; i < n; i++) { const a = Math.random() * TAU, r = raio * (0.3 + Math.random() * 0.7), px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; Pt.add(px, 0.08, pz, Math.cos(a) * 0.3, 0.12 + Math.random() * 0.2, Math.sin(a) * 0.3, t0 + Math.random() * 0.8, 1.2 + Math.random() * 0.8, 0.7, 0, cor); } }
   _poeira(s, n, alfa = 0.45, cx = null, cz = null, raio = null) {
     const Pt = this.pontos, t0 = this._tl, cor = lin(0xcdbfa6);
     for (let i = 0; i < n; i++) { let x, z; if (cx !== null) { const a = rnd(s) * TAU, rr = (raio ?? 0.5) * (0.4 + rnd(s) * 0.6); x = cx + Math.cos(a) * rr; z = cz + Math.sin(a) * rr; } else { const h = s.hull[(rnd(s) * s.hull.length) | 0]; x = h[0] + (h[0] - s.cx) * 0.05; z = h[1] + (h[1] - s.cz) * 0.05; }
