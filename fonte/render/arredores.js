@@ -6,6 +6,7 @@
 // Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
 import { MESA, A } from '../data/planta.js';
+import { ORDEM_BAIRROS, areaBairro } from '../data/cidade.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
 import { tex } from './textures.js';
 import { treeGroup } from './forest.js';
@@ -32,6 +33,10 @@ const naFaixa = (x, z) => {
 };
 // posição relativa dentro da faixa (0 na borda da planta, 1 na orla de fora)
 const borda = (x, z) => { const dx = x < MESA.x0 ? MESA.x0 - x : x > MESA.x1 ? x - MESA.x1 : 0, dz = z < MESA.z0 ? MESA.z0 - z : z > MESA.z1 ? z - MESA.z1 : 0; return Math.max(dx / (x < CX ? FAIXA.oeste : FAIXA.leste), dz / (z < CZ ? FAIXA.fundo : FAIXA.frente)); };
+// bairros da cidade (abertos ou à venda): 1 dentro (com a rua em volta), caindo a 0 em 5 unidades para fora. Neles o
+// terreno é plano, sem mata, campos nem bosques (terra para a cidade crescer em volta da Arcologia)
+const AREAS = ORDEM_BAIRROS.map(areaBairro);
+export function zonaCidade(x, z) { let k = 0; for (const a of AREAS) { const dx = Math.max(a.x0 - x, 0, x - a.x1), dz = Math.max(a.z0 - z, 0, z - a.z1); if (dx < 5 && dz < 5) k = Math.max(k, 1 - sm(0, 5, Math.hypot(dx, dz))); } return k; }
 // mancha de mata longe da obra (morros e bosques)
 const mataLonge = (x, z) => sm(0.5, 0.62, fbm(x * 0.02 + 3.1, z * 0.02 - 1.7, 1, 717, 3));
 
@@ -47,6 +52,7 @@ export function alturaArredor(x, z) {
   const serra = Math.max(sm(-120, -230, z), sm(150, 260, x) * 0.8) * sm(10, 40, c);
   if (serra > 0) { const r = 1 - Math.abs(fbm(x * 0.011, z * 0.011, 1, 747, 4) * 2 - 1); h += serra * (18 + 52 * r * r); }
   h = Math.max(h, -0.1 * k);
+  const zc = zonaCidade(x, z); if (zc > 0) h *= 1 - zc; // bairros planos
   // praia: sobe do nível do mar a +0,15 em 4 unidades e encontra o chão
   const praia = MAR_Y + Math.min(c, 4) * 0.1;
   return c < 9 ? praia + (Math.max(praia, h) - praia) * sm(3, 9, c) : h;
@@ -73,9 +79,9 @@ function terreno() {
     col = mix(col, COR.serra, sm(8, 22, h)); col = mix(col, COR.rocha, sm(34, 56, h) * 0.8);
     const v = 0.93 + 0.14 * hash(i, j, 757); C[k * 3] = col[0] * v; C[k * 3 + 1] = col[1] * v; C[k * 3 + 2] = col[2] * v;
     // máscaras: mata (faixa em volta da obra, manchas e encostas) e campos (planície longe da obra e da praia)
-    const faixa = d < 0.1 || naFaixa(x, z) ? 1 : 0;
-    const mata = c < 7 ? 0 : Math.max(faixa, mataLonge(x, z) * sm(8, 16, d), sm(6, 16, h) * 0.9);
-    const campo = (1 - mata) * sm(14, 22, d) * sm(12, 18, c) * (1 - sm(4, 10, h)) * sm(0.35, 0.45, fbm(x * 0.012, z * 0.012, 1, 767, 2));
+    const faixa = d < 0.1 || naFaixa(x, z) ? 1 : 0; const zc = zonaCidade(x, z);
+    const mata = (c < 7 ? 0 : Math.max(faixa, mataLonge(x, z) * sm(8, 16, d), sm(6, 16, h) * 0.9)) * (1 - zc);
+    const campo = (1 - mata) * sm(14, 22, d) * sm(12, 18, c) * (1 - sm(4, 10, h)) * sm(0.35, 0.45, fbm(x * 0.012, z * 0.012, 1, 767, 2)) * (1 - zc);
     T[k * 2] = campo; T[k * 2 + 1] = mata;
   }
   const I = [];
@@ -259,7 +265,7 @@ function arvoresFaixa() {
   const x0 = MESA.x0 - FAIXA.oeste - 3, x1 = MESA.x1 + FAIXA.leste + 3, z0 = MESA.z0 - FAIXA.fundo - 3, z1 = MESA.z1 + FAIXA.frente + 3;
   for (let z = z0; z < z1; z += passo) for (let x = x0; x < x1; x += passo) {
     const jx = x + (R() - 0.5) * passo * 0.9, jz = z + (R() - 0.5) * passo * 0.9; const d = distPlanta(jx, jz);
-    if (d < 0.15 || !naFaixa(jx, jz) || jx - costaX(jz) < 7.5) continue;
+    if (d < 0.15 || !naFaixa(jx, jz) || jx - costaX(jz) < 7.5 || zonaCidade(jx, jz) > 0.05) continue;
     const dens = fbm(jx, jz, 6, 21, 3); if (dens < 0.3 && R() < 0.5) continue;
     if (R() < sm(0.6, 1.25, borda(jx, jz))) continue; // a mata rareia na orla de fora
     // as mesmas três classes da mata da planta (arbusto, média, emergente), em manchas
@@ -279,7 +285,7 @@ function bosques() {
   const R = rng(8181); const l = [];
   for (let i = 0; i < 1400 && l.length < 360; i++) {
     const x = -150 + R() * 300, z = -120 + R() * 190; const d = distPlanta(x, z), c = x - costaX(z);
-    if (d < 11 || c < 10 || naFaixa(x, z)) continue;
+    if (d < 11 || c < 10 || naFaixa(x, z) || zonaCidade(x, z) > 0.05) continue;
     const g = fbm(x * 0.05, z * 0.05, 1, 818, 2); if (g < 0.56) continue; // bosques em grupos
     const h = alturaArredor(x, z); if (h > 20) continue;
     l.push({ x, z, y: h, s: 0.7 + R() * 0.5, kind: 'folhaLow', pal: R() < 0.1 ? 'savana' : 'mata', h: 1 });

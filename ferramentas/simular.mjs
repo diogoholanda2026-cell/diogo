@@ -298,7 +298,7 @@ export function invariantes() {
   const erros = [];
   for (let c = 1; c <= 5; c++) {
     let pop = 0, min5 = Infinity; const lim = (f) => { const L = LIMITE_CAP[f]; if (!L) return MODULOS[f].max; let v = 0; for (const [k, n] of Object.entries(L)) if (c >= +k) v = n; return v; };
-    for (const [f, M] of Object.entries(MODULOS)) if (M.cap <= c) { const n = Math.min(M.max, lim(f)); pop += N_MODULOS[f] * Math.round(M.pop * POP_NIVEL[n]); if (n >= 5) min5 = Math.min(min5, Math.round(M.pop * (POP_NIVEL[5] - POP_NIVEL[4]))); }
+    for (const [f, M] of Object.entries(MODULOS)) if (M.cap <= c && !M.cidade) { const n = Math.min(M.max, lim(f)); pop += N_MODULOS[f] * Math.round(M.pop * POP_NIVEL[n]); if (n >= 5) min5 = Math.min(min5, Math.round(M.pop * (POP_NIVEL[5] - POP_NIVEL[4]))); }
     const serv = { agua: 0, energia: 0, saneamento: 0 }; let bem = 0;
     for (const p of PROJETOS) for (const e of p.etapas) if ((e.cap || p.cap) <= c) { for (const [k, v] of Object.entries(e.servico || {})) serv[k] += v; bem += e.bem || 0; }
     // pior escolha possível nos capítulos anteriores

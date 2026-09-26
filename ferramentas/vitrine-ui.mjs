@@ -71,6 +71,7 @@ import { A, VISTA_FOTO } from './data/planta.js';
 import { TUTORIAL } from './data/historia.js';
 import { PREDIOS, ITENS } from './data/itens.js';
 import { PROJ } from './data/obras.js';
+import { CIDADE, loteDe } from './data/cidade.js';
 const stubEconomia = ${stubEconomia.toString()};
 const nop = () => {};
 const W = innerWidth, H = innerHeight;
@@ -82,7 +83,11 @@ const centroDe = (k) => { const a = A[k]; if (a?.c) return a.c; return [0, 0]; }
 const faixa = (k, n) => ({ mods: Array.from({ length: n }, () => ({ nivel: 0 })), centro: (i) => { const [x, z] = centroDe(k); return [x + (i - n / 2) * 1.6, z]; }, alturaTopo: (nv) => 0.6 + nv * 0.55, setTodos: nop, setNivel: nop, refresh: nop, andar: () => ({ acabado: new THREE.Group() }), def: {} });
 const faixas = new Proxy({}, { get: (o, k) => (o[k] ||= faixa(k, 8)) });
 const modelos = new Proxy({}, { get: (o, k) => (o[k] ||= { ancora: [...(A[k]?.c ? [A[k].c[0], 2, A[k].c[1]] : [0, 2, 0])], foco: null, partes: {} }) });
-const mundo = { faixas, casas: faixa('vila', 6), modelos, canteiro: { visible: true, children: [] }, predios: {}, root: new THREE.Group(), parte: () => null, setEtapa: nop, refundir: nop, povoar: nop, pick: () => null, mostrarFantasma: nop };
+// cidade: um grupo por tipo que acompanha S.modulos (centro no lote), sem 3D
+const cidFaixa = () => ({ mods: [], centro(i) { const l = loteDe(this.mods[i]?.lote); return l ? [l.x, l.z] : [0, 0]; }, alturaTopo: (nv) => 0.6 + nv * 0.4, setTodos: nop, setNivel: nop, refresh: nop, andar: () => ({ acabado: new THREE.Group() }) });
+const cidade = { faixas: Object.fromEntries(Object.keys(CIDADE).map((f) => [f, cidFaixa()])), bairros: nop, mostrarLotes: nop, fontes: nop, picks: nop, centroLote: (id) => { const l = loteDe(id); return l ? { x: l.x, z: l.z } : null; },
+  sincronizar(mods) { for (const [f, F] of Object.entries(this.faixas)) F.mods = (mods[f] || []).map((m) => ({ nivel: m.nivel, lote: m.lote })); } };
+const mundo = { faixas, casas: faixa('vila', 6), modelos, cidade, grupoModulo: (f) => (f === 'casas' ? mundo.casas : cidade.faixas[f] || faixas[f]), canteiro: { visible: true, children: [] }, predios: {}, root: new THREE.Group(), parte: () => null, setEtapa: nop, refundir: nop, povoar: nop, pick: () => null, mostrarFantasma: nop };
 const obras = { iniciar: () => ({ box: null }), progresso: nop, pronta: nop, remover: nop, producao: nop, ancora: () => null, concluir: (k, cb, o = {}) => { setTimeout(() => o.aoImpacto && o.aoImpacto(), 380); setTimeout(() => cb && cb(), 1200); } };
 const ground = { lake: { position: { y: 0 } }, flags: {}, paint: nop, tampa: {} };
 const env = { mode: 'exposicao', setMode(m) { this.mode = m; } };
@@ -116,6 +121,8 @@ const CENAS = {
   oficina: (H) => { base(H); H.J.enfileirar('carpintaria', 'viga'); H.C.paineis.abrir('oficina', 'carpintaria'); },
   almox: (H) => { base(H); H.C.paineis.abrir('almox'); },
   obras: (H) => { base(H); H.C.paineis.abrir('obras'); },
+  cidade: (H) => { base(H); H.S.cap = 2; H.S.creditos = 20000; H.J.construirCidade('cidCasas', 'sul:3:0'); H.J._derivar(); H.C.sincronizar(); H.C.paineis.abrir('cidade'); },
+  'cidade-colocar': (H) => { base(H); H.S.creditos = 20000; H.C.colocarCidade('cidCasas'); },
   prancha: (H) => { base(H); H.S.itens.brita = 20; H.S.itens.madeira = 20; H.C.paineis.abrir('etapa', 'pas_frente.e1'); },
   'prancha-falta': (H) => { base(H); H.S.etapas['pas_frente.e1'] = { estado: 'feita', entregue: {} }; H.S.etapas['lago.e1'] = { estado: 'feita', entregue: {} }; H.S.itens.estaca = 0; H.J._derivar(); H.C.paineis.abrir('etapa', 'sede.e1'); },
   modulo: (H) => { base(H); H.S.cap = 2; H.S.modulos.anel[0].nivel = 2; H.J._derivar(); H.C.paineis.abrir('modulo', ['anel', 0]); },

@@ -7,8 +7,9 @@
 (async () => {
   const H = window.__held, C = H.C, J = H.J; const esp = (ms) => new Promise((r) => setTimeout(r, ms));
   const log = []; const t0 = Date.now(); J.S.ritmo = 4000; J.S.creditos = 200000; J.S.mutirao = 5;
-  const paineis = ['obras', 'producao', 'almox', 'pedidos', 'deposito', 'escritorio'];
-  const eco = { lotes: 0, auto: 0, coletas: 0, acelerados: 0, pedidosFab: 0, emprestimo: null, valuation: 0, calendario: null, erros: [] };
+  const paineis = ['obras', 'producao', 'almox', 'pedidos', 'deposito', 'escritorio', 'cidade'];
+  const eco = { lotes: 0, auto: 0, coletas: 0, acelerados: 0, pedidosFab: 0, emprestimo: null, valuation: 0, calendario: null, erros: [], cidade: 0 };
+  const CID = ['cidCasas', 'cidAgua', 'cidPraca', 'cidTerraco', 'cidEnergia', 'cidSaude', 'cidCasas', 'cidSaneamento', 'cidEscola', 'cidParque', 'cidTorre', 'cidSeguranca'];
   const ok = (r, oque) => { if (r !== 'ok') eco.erros.push(oque + ':' + r); return r === 'ok'; };
   J.on((t, d) => { if (t === 'coleta' && d.auto) eco.coletas += d.n; });
   const brutos = ['madeira', 'brita', 'aco', 'argila', 'mudas', 'vidro', 'cobre', 'fibra'];
@@ -29,6 +30,10 @@
     // aceleradores das etapas na obra mais longa; Usina de Pedidos no primeiro pedido aberto; empréstimo tomado e quitado
     if (J.S.aceleradores?.obra > 0) { let best = null, bf = 0; for (const [k, st] of Object.entries(J.S.etapas)) if (st.estado === 'obra' && st.fim - J.agora > bf) { bf = st.fim - J.agora; best = k; } if (best && ok(J.acelerar({ etapa: best }), 'acelerar')) eco.acelerados++; }
     if (J.S.predios.usina2?.ok && !J.S.pedidos.some((p) => p.auto)) { const i = J.S.pedidos.findIndex((p) => p.itens); if (i >= 0) { const r = J.fabricarPedido(i); if (r === 'ok') eco.pedidosFab++; else if (r !== 'nada') eco.erros.push('fabricarPedido:' + r); } }
+    // cidade: a cada 40 voltas um prédio novo pelo modo de colocar do Controle (os níveis sobem pelo laço dos módulos e as
+    // obras prontas são aprovadas como as dos módulos); no capítulo 2 compra o Bairro Leste e passa a construir nele
+    if (volta % 40 === 20 && eco.cidade < CID.length) { const f = CID[eco.cidade]; if (J.tipoCidadeLiberado(f)) { const b = J.bairroAberto('leste') && eco.cidade % 2 ? 'leste' : 'sul'; const id = J.lotesLivres(b)[eco.cidade * 3 % 20]; const p = id && H.mundo.cidade.centroLote(id); C.colocarCidade(f); if (p) { const n0 = J.S.modulos[f].length; C._colocarEm(p); if (J.S.modulos[f].length > n0) eco.cidade++; else eco.erros.push('cidade:' + f); } C.cancelarColocar(); } }
+    if (J.S.cap >= 2 && !J.bairroAberto('leste')) { ok(J.comprarBairro('leste'), 'comprarBairro'); C.sincronizar(); }
     if (volta === 5) { ok(J.emprestar(10000), 'emprestar'); eco.emprestimo = J.emprestimoInfo().divida; } if (volta === 9) ok(J.quitar(), 'quitar');
     if (volta % 7 === 0) { const t = paineis[(volta / 7) % paineis.length | 0]; C.paineis.abrir(t); await esp(30); C.paineis.fechar(true); }
     if (volta % 11 === 0) { C.paineis.abrir('usina', 'usina1'); await esp(20); C.paineis.fechar(true); C.paineis.abrir('oficina', 'carpintaria'); await esp(20); C.paineis.fechar(true); C.paineis.abrir('modulo', ['anel', 0]); await esp(20); C.paineis.fechar(true); }
@@ -39,7 +44,7 @@
     await esp(120);
     log.push(J.S.cap); if (J.S.etapas['reflorestar.e1']?.estado === 'feita') { await esp(6000); break; }
   }
-  eco.valuation = J.valuation().total; eco.calendario = J.calendario(); eco.dividaFim = J.emprestimoInfo().divida; eco.aceleradoresRestantes = { ...J.S.aceleradores }; eco.renda = J.rendaHora(); eco.tarifa = J.tarifaMorador();
+  eco.cidadeInfo = J.cidadeInfo(); eco.valuation = J.valuation().total; eco.calendario = J.calendario(); eco.dividaFim = J.emprestimoInfo().divida; eco.aceleradoresRestantes = { ...J.S.aceleradores }; eco.renda = J.rendaHora(); eco.tarifa = J.tarifaMorador();
   const pend = []; for (const p of window.__PROJ) { const nx = J.proximaEtapa(p); if (nx) pend.push(p.id + '.' + nx.e.id + ':' + nx.s); }
   const mods = Object.entries(J.S.modulos).map(([f, a]) => f + ':' + a.map((m, i) => m.nivel + (m.obra ? '(' + m.obra.estado + ')' : '') + J.situacaoModulo(f, i)[0]).join(','));
   const sites = [...C.sites.entries()].map(([k, s]) => k + (s.concluindo ? '*' : ''));

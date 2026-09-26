@@ -14,6 +14,7 @@ import { Crowd } from './figuras.js';
 import { inPoly, rng } from '../core/util.js';
 import { bake, normals, FH } from './geom.js';
 import { Bando, sombrasContato, tempoAnimais } from './animais.js';
+import { Cidade } from './cidade.js';
 
 const _mi = new THREE.Matrix4(), _mw = new THREE.Matrix4(), _m3 = new THREE.Matrix3(), _cor = new THREE.Color(), _v = new THREE.Vector3();
 // Junta geometrias numa só. blocos: [[fonte, itens]], itens {g, m} (matriz de mundo) ou {g, o, i}
@@ -101,6 +102,8 @@ export class Mundo {
     const FP = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
     for (const [k, f] of Object.entries(this.faixas)) { this.root.add(f.group); f.refresh(); f.group.userData.pick = FP[k] ? { tipo: 'proj', id: FP[k] } : { tipo: 'modulos', id: k }; }
     this.root.add(this.casas.group); this.casas.group.userData.pick = { tipo: 'modulos', id: 'casas' };
+    // cidade em volta da Arcologia (chão dos bairros abertos, prédios por tipo e marcas dos lotes livres)
+    this.cidade = new Cidade(engine); this.root.add(this.cidade.group);
     // marcos com etapas
     const list = [biblioteca(), crd(), bioma(), anfiteatro(), gorilas(), acelerador(), savana(), santuarioInterior(), ciencias(), lago(ground), sedePatio(), escola(), campo(), engenharia(), instituto(), gramadoUni(), praca(), ponteCoberta()];
     for (const id of Object.keys(PASSARELAS)) list.push(passarela(id));
@@ -189,6 +192,7 @@ export class Mundo {
     for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) if (p.userData.feito && !p.userData.manadas && !p.userData.update && !this._vivo(p)) F.set(p, 'p' + p.children.length);
     for (const f of Object.values(this.faixas)) { F.set(f.merged, filhos(f.merged)); F.set(f.extras, filhos(f.extras)); }
     F.set(this.casas.group, this.casas.mods.map((m) => (m.g ? m.g.uuid : '-')).join());
+    this.cidade.fontes(F);
     if (this.canteiro.visible) for (const g of Object.values(this.predios)) if (g.userData.pronto && !g.userData.animando) F.set(g, 'q');
     return F;
   }
@@ -213,9 +217,11 @@ export class Mundo {
     };
     anda(f, true, false);
     const b = this._caixa(f, true); const cx = b.isEmpty() ? 0 : (b.min.x + b.max.x) / 2, cz = b.isEmpty() ? 0 : (b.min.z + b.max.z) / 2;
-    const c = { ass, por, tris, quad: (cx < 0 ? 0 : 1) + (cz < 2 ? 0 : 2) }; this._cache.set(f, c); return c;
+    const bq = f.userData.bairro; const c = { ass, por, tris, quad: bq ? 'b:' + bq : (cx < 0 ? 0 : 1) + (cz < 2 ? 0 : 2) }; this._cache.set(f, c); return c; // (a cidade funde por bairro, longe das malhas da Arcologia)
   }
-  _chave(k, quad) { const kq = k + ':' + quad; return this._grandes.has(kq) ? kq : k; }
+  _chave(k, quad) { const kq = k + ':' + quad; return typeof quad === 'string' || this._grandes.has(kq) ? kq : k; }
+  // grupo 3D dos módulos de uma faixa: as casas da Vila, um tipo da cidade ou um edifício-fita
+  grupoModulo(f) { return f === 'casas' ? this.casas : this.cidade.faixas[f] || this.faixas[f]; }
   _malha(fk, b, blocos) {
     const { geo, faixas } = fundirLista(blocos); const mesh = new THREE.Mesh(geo, b.mat); mesh.castShadow = b.cast; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.raycast = () => {};
     mesh.userData.chave = fk; mesh.userData.base = b.base; mesh.userData.faixas = faixas; mesh.userData.cullCaixa = geo.boundingBox; if (b.sem) mesh.userData.semHAO = true;
@@ -298,6 +304,7 @@ export class Mundo {
     for (const m of Object.values(this.modelos)) { const pk = m.root.userData.pick; for (const p of Object.values(m.partes)) { if (!p.children.length) continue; (p.userData.feito ? P : F).push({ box: this._caixa(p), pick: pk, fonte: p }); } }
     for (const f of Object.values(this.faixas)) { const pk = f.group.userData.pick; f.mods.forEach((md, i) => { if (md.nivel > 0 || md.lote) P.push({ box: this._caixaModulo(f, i), pick: pk, faixa: f, i }); }); }
     const cp = this.casas.group.userData.pick; for (const md of this.casas.mods) if (md.g) P.push({ box: this._caixa(md.g, true), pick: cp, fonte: md.g });
+    this.cidade.picks(P, (o, n) => this._caixa(o, n));
     if (this.canteiro.visible) for (const g of Object.values(this.predios)) if (g.userData.pronto || g.visible) P.push({ box: this._caixa(g, true), pick: g.userData.pick, fonte: g });
     this.picks = P; this.picksFuturos = F; this._prepararGrades();
   }

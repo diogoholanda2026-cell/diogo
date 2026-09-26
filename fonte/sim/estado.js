@@ -71,6 +71,8 @@
 //   J.precoBase(k) (3 × o valor), J.precoVenda(k) = 150% do preço base; J.vendasDeposito() → {feitas, max: 100};
 //   J.comprar(k) → 'ok'|'esgotado'|'creditos'|'almox'|'bloqueado'; J.vender(k, n) → 'ok'|'limite'|'nada'|'nao'.
 // J.servicoInfo(tipo) → {cap, uso} (tipo 'agua'|'energia'|'saneamento'); J.bemInfo() → {total, fontes[], pressao}.
+// Cidade: J.construirCidade(f, lote) (coloca e começa o nível 1), J.comprarBairro(b), J.lotesLivres(b?), J.ocupacaoCidade(),
+//   J.cidadeInfo(), J.podeConstruir(f), J.bairroAberto(b), J.popModulo(f, nivel); os prédios são módulos (S.modulos[f][i].lote).
 // Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera, auto} com
 //   recompensa = {creditos, xp, itens?:{id:n}, bem?:{n,h}, disposicao?}; (creditos, xp, especial: cópias antigas).
 // Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, porque, dica (as três juntas)}; valem nos capítulos seguintes.
@@ -89,9 +91,11 @@
 import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data/itens.js';
 import { PROJETOS, PROJ, MODULOS, LIMITE_CAP, POP_NIVEL, POOL_NIVEL, CUSTO_NIVEL, TEMPO_NIVEL, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../data/obras.js';
 import { CAPITULOS, EFEITOS, MARCOS, FALAS_ETAPA, EPILOGO, PEDIDOS } from '../data/historia.js';
+import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO } from '../data/cidade.js';
 
 export const VERSAO_SAVE = 3;
 const N_MODULOS = { anel: 8, uni: 4, anelBib: 3, casas: 6, santuario: 5 };
+// cidade: cada tipo de prédio é uma faixa que cresce um item por prédio colocado ({nivel, obra, pedido?, lote})
 const MAX_ESPECIAL = 999;
 // ajuste global de ritmo (o jogador ainda escolhe 1x, 2x ou 4x nas configurações)
 const F_ITEM = 0.65, F_MODULO = 0.8, F_OBRA_ANTIGO = 0.7;
@@ -161,6 +165,8 @@ export function novoEstado(agora = Date.now()) {
     else S.predios[id] = { ok: true };
   }
   for (const [f, n] of Object.entries(N_MODULOS)) S.modulos[f] = Array.from({ length: n }, () => ({ nivel: 0, obra: null }));
+  for (const f of TIPOS_CIDADE) S.modulos[f] = [];
+  S.cidade = { bairros: { sul: true } };
   return S;
 }
 
@@ -305,7 +311,20 @@ export function normalizar(S, agora = Date.now()) {
     });
     if (arr.length > N) guarda('modulos', f, arr.slice(N));
   }
-  for (const [f, v] of Object.entries(objeto(S.modulos) ? S.modulos : {})) if (!tem(N_MODULOS, f)) guarda('modulos', f, v);
+  // cidade: bairros abertos e um item por prédio, com o lote válido e sem repetir lote
+  { const c = objeto(S.cidade) ? S.cidade : {}; const b = objeto(c.bairros) ? c.bairros : {}; O.cidade = { bairros: { sul: true } }; for (const k of ORDEM_BAIRROS) if (b[k] === true) O.cidade.bairros[k] = true; }
+  const usados = new Set();
+  for (const f of TIPOS_CIDADE) {
+    const arr = Array.isArray(S.modulos?.[f]) ? S.modulos[f] : []; const M = MODULOS[f];
+    O.modulos[f] = arr.filter((m) => objeto(m) && loteDe(m.lote) && O.cidade.bairros[loteDe(m.lote).bairro] && !usados.has(m.lote) && usados.add(m.lote)).slice(0, MAX_POR_TIPO).map((m) => {
+      const out = { nivel: clamp(num(m.nivel) | 0, 0, M.max), obra: null, lote: m.lote };
+      if (objeto(m.obra) && ['obra', 'pronta'].includes(m.obra.estado) && num(m.obra.para) > out.nivel && num(m.obra.para) <= M.max) { out.obra = { estado: m.obra.estado, para: m.obra.para | 0, ini: num(m.obra.ini, O.t), fim: num(m.obra.fim, O.t) }; if (m.obra.pago != null) out.obra.pago = Math.max(0, Math.round(num(m.obra.pago))); if (objeto(m.obra.itens)) { const its = {}; for (const [k, q] of Object.entries(m.obra.itens)) if (tem(ITENS, k) && num(q) > 0) its[k] = Math.round(num(q)); out.obra.itens = its; } }
+      if (objeto(m.pedido) && objeto(m.pedido.itens) && Object.keys(m.pedido.itens).every((k) => tem(ITENS, k))) out.pedido = { nivel: num(m.pedido.nivel) | 0, itens: { ...m.pedido.itens } };
+      if (out.nivel === 0 && !out.obra) out.obra = { estado: 'obra', para: 1, ini: O.t, fim: O.t, pago: CIDADE[f].custo[1] }; // colocado e não começado: a construção fica pronta
+      return out;
+    });
+  }
+  for (const [f, v] of Object.entries(objeto(S.modulos) ? S.modulos : {})) if (!tem(N_MODULOS, f) && !MODULOS[f]?.cidade) guarda('modulos', f, v);
   // pedidos, topógrafo, bem-estar temporário, escolhas
   O.pedidos = (Array.isArray(S.pedidos) ? S.pedidos : []).filter(objeto).map((p) => (p.itens && (!objeto(p.itens) || Object.keys(p.itens).some((k) => !tem(ITENS, k))) ? { id: num(p.id, O.seq++) | 0, espera: O.t, itens: null } : { ...p, id: num(p.id, O.seq++) | 0, espera: num(p.espera, O.t), auto: !!p.auto && !!p.itens }));
   O.topografo = objeto(S.topografo) && typeof S.topografo.k === 'string' && tem(TOPOGRAFO, S.topografo.k) ? { k: S.topografo.k, ini: num(S.topografo.ini, O.t), fim: num(S.topografo.fim, O.t) } : null;
@@ -359,12 +378,13 @@ export class Jogo {
   durEtapa(p, e) { return this.dur(e.t, 'obra', this.capEtapa(p, e)) * (1 + (this.ef.tempoEtapa[p.id + '.' + e.id] || 0)); }
   _pe(key) { const [pid, eid] = key.split('.'); const p = PROJ[pid]; return [p, p?.etapas.find((x) => x.id === eid)]; }
   // módulos
-  limiteModulo(f) { const L = LIMITE_CAP[f]; if (!L) return MODULOS[f].max; let v = 0; for (const [c, n] of Object.entries(L)) if (this.S.cap >= +c) v = n; return v; }
+  limiteModulo(f) { const L = LIMITE_CAP[f]; if (!L || MODULOS[f].cidade) return MODULOS[f].max; let v = 0; for (const [c, n] of Object.entries(L)) if (this.S.cap >= +c) v = n; return v; }
   moduloAberto(f, i) {
-    const M = MODULOS[f]; if (M.cap > this.S.cap) return false; if (!(M.requer || []).every((r) => this.feita(r))) return false;
+    const M = MODULOS[f]; if (M.cap > this.S.cap) return false; if (M.cidade) return true; if (!(M.requer || []).every((r) => this.feita(r))) return false;
     if (f === 'anel' && this.S.cap === 1 && i >= M.inicio) return false; return true;
   }
   pedidoModulo(f, i, nivel) { // itens pedidos para subir ao "nivel" (sorteio fixo por módulo e nível)
+    if (MODULOS[f].cidade && (nivel <= 1 || MODULOS[f].cat !== 'moradia')) return {}; // a construção na cidade só pede créditos
     const S = this.S; const pool = (POOL_NIVEL[nivel] || []).filter((k) => ITENS[k].nivel <= Math.max(S.nivel, 1) && (ITENS[k].cap || 1) <= S.cap && (!ITENS[k].oficina || S.predios[ITENS[k].oficina]?.ok || ITENS[k].tipo === 'bruto'));
     const base = pool.length ? pool : ['viga'];
     const n = Math.min(nivel === 1 ? 2 : 3, base.length); const out = {};
@@ -372,18 +392,23 @@ export class Jogo {
     for (const k of ord.slice(0, n)) out[k] = 1 + ((hashS(f + i + nivel + k + 'q') * (nivel >= 4 ? 3 : 2)) | 0);
     return out;
   }
-  populacao() { let p = 0; for (const [f, arr] of Object.entries(this.S.modulos)) for (const m of arr) p += Math.round(MODULOS[f].pop * POP_NIVEL[m.nivel]); return p; }
+  popModulo(f, n) { const M = MODULOS[f]; return M.popNivel ? M.popNivel[n] || 0 : Math.round(M.pop * POP_NIVEL[n]); }
+  populacao() { let p = 0; for (const [f, arr] of Object.entries(this.S.modulos)) for (const m of arr) p += this.popModulo(f, m.nivel); return p; }
   servicos() {
     const s = { agua: 0, energia: 0, saneamento: 0 };
     for (const p of PROJETOS) for (const e of p.etapas) if (e.servico && this.feita(p.id + '.' + e.id)) for (const [k, v] of Object.entries(e.servico)) s[k] += v;
+    for (const f of TIPOS_CIDADE) { const sv = CIDADE[f].servico; if (sv) for (const m of this.S.modulos[f] || []) if (m.nivel >= 1) for (const [k, v] of Object.entries(sv)) s[k] += v; } // estações da cidade
     s.energia = Math.max(0, s.energia + this.ef.energia); return s;
   }
   servicoInfo(tipo) { return { cap: this.serv[tipo] || 0, uso: this.pop }; }
   _bemTemp() { let n = 0; for (const b of this.S.bemTemp) if (b.fim > this.agora) n += b.n; return Math.min(6, n); }
   // bem-estar: obras de lazer menos a pressão de moradia (quanto mais gente, mais praça e verde é preciso)
-  bemEstar() { let b = 35 + this.ef.bem + this._bemTemp() - this.populacao() / PRESSAO_MORADIA; for (const p of PROJETOS) for (const e of p.etapas) if (e.bem && this.feita(p.id + '.' + e.id)) b += e.bem; return Math.round(clamp(b, 0, 100)); }
+  // bem-estar da cidade: cada tipo de serviço ou lazer pronto soma o seu bem (os quatro primeiros inteiros, os seguintes pela metade)
+  _bemCidade(f) { const B = CIDADE[f].bem; if (!B) return 0; const n = (this.S.modulos[f] || []).filter((m) => m.nivel >= 1).length; return B * (Math.min(n, 4) + Math.max(0, n - 4) * 0.5); }
+  bemEstar() { let b = 35 + this.ef.bem + this._bemTemp() - this.populacao() / PRESSAO_MORADIA; for (const p of PROJETOS) for (const e of p.etapas) if (e.bem && this.feita(p.id + '.' + e.id)) b += e.bem; for (const f of TIPOS_CIDADE) b += this._bemCidade(f); return Math.round(clamp(b, 0, 100)); }
   bemInfo() {
     const fontes = []; for (const p of PROJETOS) for (const e of p.etapas) if (e.bem && this.feita(p.id + '.' + e.id)) fontes.push({ txt: p.nome, v: e.bem });
+    for (const f of TIPOS_CIDADE) { const v = this._bemCidade(f); if (v) fontes.push({ txt: CIDADE[f].nome, v: Math.round(v) }); }
     if (this.ef.bem) fontes.push({ txt: 'Escolhas do Conselho', v: this.ef.bem }); const t = this._bemTemp(); if (t) fontes.push({ txt: 'Pedidos atendidos', v: t });
     fontes.sort((a, b) => b.v - a.v); return { total: this.bem, base: 35, fontes, pressao: Math.round(this.pop / PRESSAO_MORADIA) };
   }
@@ -395,7 +420,7 @@ export class Jogo {
   vida() { // porcentagem da composição concluída
     let tot = 0, ok = 0;
     for (const p of PROJETOS) for (const e of p.etapas) { tot += 1; if (this.feita(p.id + '.' + e.id)) ok += 1; }
-    for (const [f, arr] of Object.entries(this.S.modulos)) for (const m of arr) { tot += MODULOS[f].max * 0.5; ok += m.nivel * 0.5; }
+    for (const [f, arr] of Object.entries(this.S.modulos)) { if (MODULOS[f].cidade) continue; for (const m of arr) { tot += MODULOS[f].max * 0.5; ok += m.nivel * 0.5; } } // a cidade não entra na composição
     return (ok / tot) * 100;
   }
   // valuation: quanto a construção vale (calculado na hora): etapas feitas e pavimentos a 150% do que custaram, prédios e
@@ -403,7 +428,7 @@ export class Jogo {
   valuation() {
     const S = this.S; let obras = 0, modulos = 0, predios = 0;
     for (const p of PROJETOS) for (const e of p.etapas) { if (this.etapa(p.id + '.' + e.id).estado !== 'feita') continue; let v = this.custoEtapa(p, e); for (const [k, q] of Object.entries(this.itensEtapa(p, e))) v += (ITENS[k]?.valor || 0) * q; obras += v; }
-    for (const arr of Object.values(S.modulos)) for (const m of arr) for (let n = 1; n <= m.nivel; n++) modulos += CUSTO_NIVEL[n] || 0;
+    for (const [f, arr] of Object.entries(S.modulos)) { const cu = MODULOS[f].custo || CUSTO_NIVEL; for (const m of arr) for (let n = 1; n <= m.nivel; n++) modulos += cu[n] || 0; }
     for (const [id, P] of Object.entries(PREDIOS)) { const st = S.predios[id]; if (!st?.ok) continue; predios += P.custo || 0; const n = P.tipo === 'usina' ? st.nSlots : P.tipo === 'oficina' ? st.nFila : 0; for (let k = 3; k < n; k++) predios += Math.round(300 * Math.pow(2.2, k - 3)); }
     obras = Math.round(RECOMPENSA * obras); modulos = Math.round(RECOMPENSA * modulos); const moradores = this.pop * 100; const E = S.emprestimo; const caixa = Math.round(S.creditos - E.principal - E.juros);
     const total = obras + modulos + predios + moradores + caixa; if (total > S.valuationMax) S.valuationMax = total;
@@ -742,10 +767,10 @@ export class Jogo {
   requisitosModulo(f, i) { // consulta pura
     const m = this.S.modulos[f][i]; const n = m.nivel + 1; const base = m.pedido?.nivel === n ? m.pedido.itens : this.pedidoModulo(f, i, n);
     const extra = this.ef.modulo[f]?.[n]; const itens = extra ? { ...base } : base; if (extra) for (const [k, q] of Object.entries(extra)) itens[k] = (itens[k] || 0) + q;
-    const custo = CUSTO_NIVEL[n]; const servicos = servicosDoNivel(n);
-    const popDepois = this.pop + Math.round(MODULOS[f].pop * ((POP_NIVEL[n] ?? 1) - POP_NIVEL[m.nivel]));
-    const servOk = servicos.every((k) => this.serv[k] >= popDepois); const bemMin = bemMinimo(n); const bemOk = this.bem >= bemMin;
-    return { nivel: n, itens, custo, servico: servicos.length ? servicos : null, servicos, servOk, bemOk, bemMin, tempo: TEMPO_NIVEL[n], popDepois };
+    const M = MODULOS[f], mora = !M.cidade || M.cat === 'moradia'; const custo = M.custo ? M.custo[n] : CUSTO_NIVEL[n]; const servicos = mora ? servicosDoNivel(n) : [];
+    const popDepois = this.pop + this.popModulo(f, n) - this.popModulo(f, m.nivel);
+    const servOk = servicos.every((k) => this.serv[k] >= popDepois); const bemMin = mora ? bemMinimo(n) : 0; const bemOk = this.bem >= bemMin;
+    return { nivel: n, itens, custo, servico: servicos.length ? servicos : null, servicos, servOk, bemOk, bemMin, tempo: M.tempo ? M.tempo[n] : TEMPO_NIVEL[n], popDepois };
   }
   melhorarModulo(f, i) {
     const s = this.situacaoModulo(f, i); if (s !== 'disponivel') return s; const r = this.requisitosModulo(f, i);
@@ -761,6 +786,32 @@ export class Jogo {
     this._xp(30 * m.nivel, 'modulo'); this._derivar(); this._valuation(); this.emit('moduloFeito', { faixa: f, i, nivel: m.nivel, recompensa: med });
     this.emit('aviso', { texto: `Recompensa do pavimento: +${fmtN(med)} (150% do custo)`, icone: 'creditos', creditos: med });
     this._disposicao(DISP.modulo); this._pedidoModulos(); this._verCapitulo(); return 'ok';
+  }
+  // ---------------- cidade em volta da Arcologia ----------------
+  bairroAberto(b) { return this.S.cidade?.bairros?.[b] === true; }
+  // lote → [tipo, índice] de quem está nele
+  ocupacaoCidade() { const o = new Map(); for (const f of TIPOS_CIDADE) (this.S.modulos[f] || []).forEach((m, i) => o.set(m.lote, [f, i])); return o; }
+  lotesLivres(b) { const o = this.ocupacaoCidade(); const out = []; for (const bb of b ? [b] : ORDEM_BAIRROS) if (this.bairroAberto(bb)) for (let j = 0; j < BAIRROS[bb].nz; j++) for (let i = 0; i < BAIRROS[bb].nx; i++) { const id = `${bb}:${i}:${j}`; if (!o.has(id)) out.push(id); } return out; }
+  tipoCidadeLiberado(f) { return !!CIDADE[f] && CIDADE[f].cap <= this.S.cap; }
+  // o que falta para construir o tipo f (sem o lote): null se pode
+  podeConstruir(f) { if (!this.tipoCidadeLiberado(f)) return 'capitulo'; if ((this.S.modulos[f] || []).length >= MAX_POR_TIPO) return 'teto'; if (this.S.creditos < CIDADE[f].custo[1]) return 'creditos'; return null; }
+  // coloca um prédio do tipo f no lote e começa a obra do nível 1 (só créditos)
+  construirCidade(f, loteId) {
+    const l = loteDe(loteId); if (!l) return 'lote'; if (!this.bairroAberto(l.bairro)) return 'bairro'; if (this.ocupacaoCidade().has(loteId)) return 'ocupado';
+    const falta = this.podeConstruir(f); if (falta) return falta;
+    const arr = this.S.modulos[f]; arr.push({ nivel: 0, obra: null, lote: loteId }); const i = arr.length - 1;
+    const r = this.melhorarModulo(f, i); if (r !== 'ok') { arr.pop(); return r; }
+    this.S.stats.cidade = (this.S.stats.cidade || 0) + 1; this.emit('cidadeConstruida', { faixa: f, i, lote: loteId }); return 'ok';
+  }
+  comprarBairro(b) {
+    const B = BAIRROS[b]; if (!B) return 'nada'; if (this.bairroAberto(b)) return 'aberto'; if (B.cap > this.S.cap) return 'capitulo'; if (this.S.creditos < B.preco) return 'creditos';
+    this.S.creditos -= B.preco; this.S.cidade.bairros[b] = true; this._valuation(); this.emit('bairroComprado', { bairro: b }); return 'ok';
+  }
+  // resumo da cidade: prédios por categoria, moradores da cidade, lotes livres
+  cidadeInfo() {
+    const n = { moradia: 0, servico: 0, lazer: 0 }; let pop = 0;
+    for (const f of TIPOS_CIDADE) for (const m of this.S.modulos[f] || []) { n[CIDADE[f].cat]++; pop += this.popModulo(f, m.nivel); }
+    return { predios: n, pop, livres: this.lotesLivres().length, bairros: ORDEM_BAIRROS.filter((b) => this.bairroAberto(b)) };
   }
   // Mutirão: a comunidade adianta até 2 horas de um cronômetro
   mutirao(alvo) {

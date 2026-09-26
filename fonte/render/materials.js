@@ -170,6 +170,8 @@ export function makeMaterials() {
   // aquário do Bioma: continua translúcido (a fauna nada dentro do volume de água)
   M.waterDeep = std({ color: 0x2294c0, roughness: 0.05, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.25, 0.25), transparent: true, opacity: 0.82, emissive: 0x0d6788, emissiveIntensity: 0.08, envMapIntensity: 1.3 });
   M.pool = std({ color: 0x2699b2, roughness: 0.3, metalness: 0.05, normalMap: wn, normalScale: new THREE.Vector2(0.12, 0.12), envMapIntensity: 1.0, emissive: 0x2cc4d4, emissiveIntensity: 0 }); // espelhos d'água turquesa; à noite acesos por dentro, como na foto
+  M.solar = std({ color: 0x1c2a44, roughness: 0.22, metalness: 0.55, envMapIntensity: 1.3 }); // placas solares da cidade
+  M.cruzVerde = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x3ee07a).multiplyScalar(1.6) }); // cruz do posto de saúde
   M.yellow = std({ color: 0xf8c83a, roughness: 0.5 });
   M.orange = std({ color: 0xf28a3a, roughness: 0.5 });
   M.red = std({ color: 0xe2543f, roughness: 0.55 });

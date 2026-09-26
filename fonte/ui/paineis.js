@@ -17,10 +17,18 @@ import { ITENS, PREDIOS, USINAS, OFICINAS, BRUTOS, receitas } from '../data/iten
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP } from '../data/obras.js';
 import { REGRAS, TOPOGRAFO } from '../sim/estado.js';
 import { depositoAberto, calendarioDe, rendaHoraDe } from './hud.js';
+import { CIDADE, CATEGORIAS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe } from '../data/cidade.js';
 
 const nomeIt = (k) => ITENS[k]?.nome || k;
 const NOME_SERV = { agua: 'Água', energia: 'Energia', saneamento: 'Saneamento' };
 const hhmm = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+// efeito de um prédio da cidade em texto (com ícone): moradores no nível máximo, capacidade de serviço ou bem-estar
+function efeitoCidade(M, ic = false) {
+  const i = (k) => (ic ? img(k) : '');
+  if (M.cat === 'moradia') return `${i('pop')}até ${fmt(M.popNivel[M.max])} moradores`;
+  if (M.servico) return Object.entries(M.servico).map(([k, v]) => `${i(k)}+${fmt(v)} de ${NOME_SERV[k].toLowerCase()}`).join(' ');
+  return `${i('bem')}+${M.bem} de bem-estar`;
+}
 function reqTxt(r) { const [a, b] = r.split('.'); if (MODULOS[a]) return `${MODULOS[a].nome} com um módulo no nível ${b}`; const p = PROJ[a]; const e = p?.etapas.find((x) => x.id === b); return `${p?.nome}: ${e?.nome}`; }
 const titulo = (t) => `<h3 class="secao">${t}</h3>`;
 const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
@@ -191,6 +199,8 @@ export class Paineis {
       case 'melhorar': { const r = J.melhorarModulo(d.f, +d.i); const q = J.requisitosModulo(d.f, +d.i); if (r === 'servico') C._dica(q.servicos.includes('energia') ? 'servicoEnergia' : 'servicoAgua'); else if (r === 'bem') C._dica('bemNivel');
         res(r, () => { C.som.obra(); C.vibra.sucesso(); }, { bemMin: q.bemMin, servicos: q.servicos }); C.sincronizar(); if (r === 'ok') setTimeout(() => { if (this.atual?.tipo === 'modulo') this.fechar(true); C.irPara({ modulo: [d.f, +d.i] }, false); }, 250); break; }
       case 'aprovarMod': C.aprovarModulo(d.f, +d.i); break;
+      case 'cidadeColocar': this.fechar(true); C.colocarCidade(d.f); break;
+      case 'comprarBairro': res(J.comprarBairro(d.b), () => { C.som.moedas?.(); C.hud.brinde(`${BAIRROS[d.b].nome}: novos lotes para a cidade`, 'cidade'); C.sincronizar(); }); break;
       case 'ir': this._empilhar = true; C.irPara(JSON.parse(d.alvo)); this._empilhar = false; break;
       case 'aba': this.aba[this.atual.tipo] = d.v; this.destaque = null; this.render(true); break;
       case 'ampliarAlmox': { if (!this._dois('ampliarAlmox')) break; const cap0 = J.capacidade; res(J.ampliarAlmox(), () => C.hud.brinde(`Almoxarifado ampliado: +${J.capacidade - cap0} vagas`, 'almox')); break; }
@@ -380,15 +390,15 @@ export class Paineis {
   }
   r_modulo([f, i]) {
     const J = this.J, M = MODULOS[f], m = J.S.modulos[f][i]; const s = J.situacaoModulo(f, i);
-    const popAgora = Math.round(M.pop * POP_NIVEL[m.nivel]);
+    const popAgora = J.popModulo(f, m.nivel); const cid = !!M.cidade, efeitoCid = cid ? efeitoCidade(M) : '';
     const r0 = s === 'disponivel' ? J.requisitosModulo(f, i) : null;
-    let corpo = this._servicosHtml(r0) + `<div class="passos">${Array.from({ length: M.max }, (_, k) => `<i class="${k < m.nivel ? 'f' : k === m.nivel ? 'a' : ''}"></i>`).join('')}</div><p class="desc">${M.nomeCurto ? `<span class="nome-longo">${M.nome}</span>` : ''}${M.sub}. Cada nível acrescenta um pavimento com terraço.</p>`;
+    let corpo = this._servicosHtml(r0) + `<div class="passos">${Array.from({ length: M.max }, (_, k) => `<i class="${k < m.nivel ? 'f' : k === m.nivel ? 'a' : ''}"></i>`).join('')}</div><p class="desc">${M.nomeCurto ? `<span class="nome-longo">${M.nome}</span>` : ''}${M.sub}. ${cid ? (M.cat === 'moradia' ? 'Cada nível acrescenta pavimentos e moradores.' : `Pronto, dá ${efeitoCid}.`) : 'Cada nível acrescenta um pavimento com terraço.'}</p>`;
     if (s === 'disponivel') {
       const r = r0; const temTudo = Object.entries(r.itens).every(([k, n]) => J.temItem(k, n));
       corpo += `<div class="grade">${Object.entries(r.itens).map(([k, n]) => this.ficha(k, { cls: J.temItem(k, n) ? 'ok' : 'falta', sub: `${J.S.itens[k] || 0}/${n}`, data: J.temItem(k, n) ? '' : `data-a="produtor" data-k="${k}"` })).join('')}</div>`;
       const et = [];
       if (r.bemMin) et.push(`<span class="etiq ${r.bemOk ? 'ok' : 'nao'}">${img('bem')}Bem-estar ${J.bem}% (mín. ${r.bemMin}%)</span>`);
-      et.push(`<span class="etiq">${img('pop')}+${fmt(Math.round(M.pop * (POP_NIVEL[r.nivel] - POP_NIVEL[m.nivel])))} moradores</span>`);
+      if (!cid || M.cat === 'moradia') et.push(`<span class="etiq">${img('pop')}+${fmt(J.popModulo(f, r.nivel) - J.popModulo(f, m.nivel))} moradores</span>`);
       const caro = J.S.creditos < r.custo; const pode = temTudo && r.servOk && r.bemOk && !caro;
       // motivo do bloqueio em um cartão com "Ir" para quem resolve; o botão diz o motivo em uma ou duas palavras
       let motivo = '';
@@ -406,8 +416,29 @@ export class Paineis {
     else if (s === 'bloqueado') corpo += `<p class="desc">${M.cap > J.S.cap ? 'Abre no capítulo ' + M.cap + '.' : f === 'anel' && J.S.cap === 1 ? 'Este lote abre no capítulo 2.' : 'Antes, conclua: ' + (M.requer || []).map(reqTxt).join(' · ')}</p>`;
     else if (s === 'obra') corpo += `<div class="linha" data-ini="${m.obra.ini}" data-fim="${m.obra.fim}"><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div><div class="linha acoes">${this.mutiraoBt({ modulo: [f, i] }, `Mutirão: adiantar ${REGRAS.mutiraoH} h`)}${this.aceleraBt({ modulo: [f, i] }, 'obra')}</div>`;
     else if (s === 'pronta') corpo += `<div class="linha acoes fixa"><button class="botao grande" data-a="aprovarMod" data-f="${f}" data-i="${i}">${img('ok')} Aprovar o pavimento</button></div>`;
-    else if (s === 'max') corpo += `<p class="desc">Módulo completo, igual ao projeto.</p>`;
+    else if (s === 'max') corpo += `<p class="desc">${cid ? (M.cat === 'moradia' ? 'Prédio completo: o nível mais alto da cidade.' : `Prédio pronto: ${efeitoCid}.`) : 'Módulo completo, igual ao projeto.'}</p>`;
+    if (cid) { const b = BAIRROS[loteDe(m.lote)?.bairro]?.nome || 'Cidade'; return { icone: M.icone, titulo: M.nome, nome: `${M.nome}, ${b}`, sub: M.cat === 'moradia' ? `${b} · nível ${m.nivel} de ${M.max} · ${fmt(popAgora)} moradores` : `${b} · ${m.nivel ? 'pronto' : 'em obra'}`, corpo }; }
     return { icone: 'modulo', foto: M.foto, titulo: `${M.nomeCurto || M.nome} · módulo ${i + 1}`, nome: `${M.nome}, módulo ${i + 1}`, sub: `Nível ${m.nivel} de ${M.max} · ${fmt(popAgora)} moradores`, corpo };
+  }
+  // ---------- cidade em volta da Arcologia: catálogo por categoria, obras da cidade e bairros ----------
+  r_cidade() {
+    const J = this.J, S = J.S; const inf = J.cidadeInfo();
+    const card = (f) => {
+      const M = CIDADE[f]; const falta = J.podeConstruir(f); const n = (S.modulos[f] || []).length;
+      const st = falta === 'capitulo' ? `Abre no capítulo ${M.cap}` : falta === 'creditos' ? 'Sem créditos' : falta === 'teto' ? 'Limite' : 'Construir';
+      return `<div class="cartao cid ${falta ? 'fraco' : ''}"><span class="anel-ic">${img(M.icone)}${falta === 'capitulo' ? img('cadeado', 'cad') : ''}</span><div class="tx"><b>${M.nome}</b><small>${M.sub}</small><small class="ef">${efeitoCidade(M, true)}${n ? ` · ${n} na cidade` : ''}</small></div>`
+        + `<button class="botao ${falta ? 'fraco' : ''}" ${falta ? `data-a="fraco" data-motivo="${falta}"` : `data-a="cidadeColocar" data-f="${f}"`} aria-label="${st}: ${M.nome}. Custo: ${fmt(M.custo[1])} créditos">${rot(st, custoTx(M.custo[1], J.dur(M.tempo[1], 'modulo')))}</button></div>`;
+    };
+    let corpo = `<p class="desc">A cidade cresce em volta da Arcologia. Escolha um prédio e toque num lote livre: a obra começa na hora. As moradias sobem de nível com materiais, como os módulos do Anel; serviços dão água, energia e saneamento para mais gente, e saúde, escola, segurança e lazer dão bem-estar.</p>`;
+    const obras = []; for (const f of Object.keys(CIDADE)) (S.modulos[f] || []).forEach((m, i) => { if (m.obra) obras.push([f, i, m]); });
+    if (obras.length) corpo += titulo('Obras da cidade') + `<div class="lista">${obras.map(([f, i, m]) => `<button class="item-lista st-${m.obra.estado === 'pronta' ? 'pronta' : 'obra'}" data-a="ir" data-alvo='${JSON.stringify({ modulo: [f, i] })}'><span class="anel-ic">${img(CIDADE[f].icone)}</span><div class="tx"><b>${CIDADE[f].nome}</b><small class="st">${m.obra.estado === 'pronta' ? img('check') + 'Pronta para aprovar' : `Em obra: nível ${m.obra.para}`}</small></div></button>`).join('')}</div>`;
+    for (const [cat, nome] of CATEGORIAS_CIDADE) corpo += titulo(nome) + `<div class="lista">${Object.keys(CIDADE).filter((f) => CIDADE[f].cat === cat).map(card).join('')}</div>`;
+    corpo += titulo('Bairros') + `<div class="lista">${ORDEM_BAIRROS.map((b) => {
+      const B = BAIRROS[b], tot = B.nx * B.nz; if (J.bairroAberto(b)) return `<div class="cartao cid"><span class="anel-ic">${img('cidade')}</span><div class="tx"><b>${B.nome}</b><small>${tot} lotes · ${J.lotesLivres(b).length} livres</small></div></div>`;
+      const trava = B.cap > S.cap ? 'capitulo' : S.creditos < B.preco ? 'creditos' : null;
+      return `<div class="cartao cid ${trava ? 'fraco' : ''}"><span class="anel-ic">${img('cidade')}${img('cadeado', 'cad')}</span><div class="tx"><b>${B.nome}</b><small>${tot} lotes para a cidade crescer${B.cap > S.cap ? ` · abre no capítulo ${B.cap}` : ''}</small></div><button class="botao ${trava ? 'fraco' : 'ouro'}" ${trava ? `data-a="fraco" data-motivo="${trava}"` : `data-a="comprarBairro" data-b="${b}"`} aria-label="Comprar ${B.nome} por ${fmt(B.preco)} créditos">${rot('Comprar', custoTx(B.preco))}</button></div>`;
+    }).join('')}</div>`;
+    return { icone: 'cidade', titulo: 'Cidade', sub: `${fmt(inf.pop)} moradores na cidade · ${inf.livres} lotes livres`, corpo };
   }
   // ---------- lista de obras (o que pede ação primeiro) ----------
   // três estados com verbo e cor: pronta para aprovar (verde, check), pronta para iniciar (verde), faltam N materiais
@@ -427,7 +458,7 @@ export class Paineis {
       itens.push([ORD[cls], card({ cls, icone: p.icone || 'obras', curto: p.nomeCurto || p.nome, nome: p.nome, st, stTx, cont: `${feitas}/${p.etapas.length} etapas${nx ? ' · ' + nx.e.nome : ''}`, p: (feitas / p.etapas.length) * 100, alvo: JSON.stringify({ etapa: key }), minis, extra })]);
     }
     itens.sort((a, b) => a[0] - b[0]);
-    const mods = Object.entries(MODULOS).filter(([, M]) => M.cap <= S.cap).map(([f, M]) => {
+    const mods = Object.entries(MODULOS).filter(([, M]) => M.cap <= S.cap && !M.cidade).map(([f, M]) => {
       const arr = S.modulos[f]; const sits = arr.map((m, k) => J.situacaoModulo(f, k)); let i = -1; for (const x of ['pronta', 'disponivel', 'obra']) if (i < 0) i = sits.indexOf(x); if (i < 0) i = 0;
       const soma = arr.reduce((a, m) => a + m.nivel, 0), tot = arr.length * M.max; let cls, st;
       if (sits.includes('pronta')) { cls = 'pronta'; st = 'Pavimento pronto para aprovar'; } else if (sits.includes('obra')) { cls = 'obra'; st = 'Pavimento em obra'; }

@@ -11,6 +11,7 @@ import { PROJETOS, PROJ, MODULOS, POP_NIVEL, alvoEtapa } from './data/obras.js';
 import { CAPITULOS, DICAS, ABERTURA, CONSELHO, TUTORIAL, EFEITOS } from './data/historia.js';
 import { LOTES } from './render/models/canteiro.js';
 import { A } from './data/planta.js';
+import { ORDEM_BAIRROS, CIDADE, BAIRROS, loteDe, loteEm } from './data/cidade.js';
 import { M } from './render/materials.js';
 import { gravar } from './core/salvar.js';
 import { descartar } from './render/descartar.js';
@@ -93,6 +94,7 @@ export class Controle {
       if (b.classList.contains('trancado')) { this.hud.info(b, `<h4>${a === 'pedidos' ? 'Pedidos da comunidade' : 'Depósito de Trocas'}</h4><p>Abre no capítulo ${a === 'pedidos' ? REGRAS.capPedidos : ABRE.trocasCap}.</p>`, 4000); return; }
       switch (a) {
         case 'obras': case 'producao': this.paineis.abrir(a); break;
+        case 'cidade': if (this._colocar) this.cancelarColocar(); this.paineis.abrir('cidade'); this._dica?.('cidade'); break;
         case 'almox': this.paineis.abrir('almox'); this.irPara({ predio: 'almox' }, false); break;
         case 'pedidos': this.paineis.abrir('pedidos'); if (this.S.cap >= REGRAS.capPedidos) this._dica('pedidos'); break;
         case 'trocas': this.paineis.abrir('deposito'); this._dica('deposito'); break;
@@ -134,8 +136,10 @@ export class Controle {
     const praca = J.feita('praca.e1'); const ck = JSON.stringify(verde) + praca;
     if (ck !== this._chaoKey) { this._chaoKey = ck; this.ground.flags.verde = verde; this.ground.flags.praca = praca; this.ground.paint(); }
     this.ground.tampa.visible = !['obra', 'pronta', 'feita'].includes(J.etapa('acelerador.e1').estado);
+    // cidade: chão dos bairros abertos e os prédios de cada tipo (no nível aprovado)
+    W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b))); W.cidade.sincronizar(this.S.modulos);
     for (const [f, arr] of Object.entries(this.S.modulos)) {
-      const F = f === 'casas' ? W.casas : W.faixas[f]; let muda = false;
+      if (MODULOS[f].cidade) continue; const F = W.grupoModulo(f); let muda = false;
       arr.forEach((m, i) => { const mod = F.mods[i]; if (f === 'casas') { if (mod.nivel !== m.nivel) F.setNivel(i, m.nivel); return; } const lote = m.nivel === 0 && J.situacaoModulo(f, i) === 'disponivel' && !m.obra; if (mod.nivel !== m.nivel || !!mod.lote !== lote) { mod.nivel = m.nivel; mod.lote = lote; muda = true; } });
       if (muda && F.refresh) F.refresh();
     }
@@ -216,13 +220,13 @@ export class Controle {
     return out;
   }
   _siteModulo(f, i) {
-    const W = this.mundo; const m = this.S.modulos[f][i]; const F = f === 'casas' ? W.casas : W.faixas[f]; const para = m.obra.para;
+    const W = this.mundo; const m = this.S.modulos[f][i]; if (MODULOS[f].cidade) W.cidade.sincronizar(this.S.modulos); const F = W.grupoModulo(f); const para = m.obra.para;
     const a = F.andar(i, para - 1, para); const G = a.acabado; if (f === 'casas') { G.position.copy(F.group.position); G.rotation.copy(F.group.rotation); }
     W.root.add(G); const site = { tipo: 'modulo', f, i, ini: m.obra.ini, fim: m.obra.fim, extras: [G] }; const c = a.caminho ? { ...a.caminho, o0: F.prof?.o0, o1: F.prof?.o1 } : undefined;
     if (a.esqueleto) { W.root.add(a.esqueleto); site.extras.push(a.esqueleto); }
     G.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(G);
     site.aoFim = () => { F.setNivel(i, para); if (F.mods[i]) F.mods[i].lote = false; };
-    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: para >= 3 && f !== 'casas', caminho: c, operarios: 6, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
+    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: MODULOS[f].cidade ? !['cidCasas', 'cidPraca', 'cidParque'].includes(f) : para >= 3 && f !== 'casas', caminho: c, operarios: 6, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
     this.sites.set(`m:${f}:${i}`, site); if (m.obra.estado === 'pronta') this.obras.pronta(`m:${f}:${i}`);
   }
   _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); s.aoRemover?.(); }
@@ -315,7 +319,7 @@ export class Controle {
       case 'fogos': this.som.fogos?.(); break;
     }
   }
-  _nomeSite(k) { if (k.startsWith('e:')) { const [pid, eid] = k.slice(2).split('.'); const p = PROJ[pid]; const e = p?.etapas.find((x) => x.id === eid); return p ? `${p.nome}${e ? ' (' + e.nome + ')' : ''}` : k; } const [, f, i] = k.split(':'); return `${MODULOS[f]?.nome || f}, módulo ${+i + 1}`; }
+  _nomeSite(k) { if (k.startsWith('e:')) { const [pid, eid] = k.slice(2).split('.'); const p = PROJ[pid]; const e = p?.etapas.find((x) => x.id === eid); return p ? `${p.nome}${e ? ' (' + e.nome + ')' : ''}` : k; } const [, f, i] = k.split(':'); return MODULOS[f]?.cidade ? MODULOS[f].nome : `${MODULOS[f]?.nome || f}, módulo ${+i + 1}`; }
   _timelapse(k, de, para) {
     const n = Math.round((para - de) * 100); if (n < 5) return; const mut = performance.now() - (this._mutiraoT || -1e9) < 4000;
     this.hud.brinde(`${mut ? 'Mutirão' : 'Enquanto você esteve fora'}: +${n}% na obra ${this._nomeSite(k)}`, mut ? 'mutirao' : 'grua', 3600);
@@ -393,6 +397,7 @@ export class Controle {
     this.som.erro(); this.vibra.erro();
     const serv = (fx.servicos || []).map((k) => ({ agua: 'água', energia: 'energia', saneamento: 'saneamento' }[k])).filter(Boolean).join(', ');
     const msg = { creditos: 'Créditos insuficientes', falta: 'Faltam materiais no almoxarifado', faltaPrancha: 'Entregue todos os materiais na prancha', nadaEntregar: 'Nada no almoxarifado para esta prancha: toque num material para produzir', cheio: 'Todos os espaços estão ocupados', almox: 'Almoxarifado cheio', nivel: 'Nível insuficiente', requer: 'Antes, conclua a obra que libera este prédio', bloqueado: 'Ainda não liberado', bloqueada: 'Etapa ainda não liberada', fechado: 'Construa o prédio primeiro',
+      capitulo: 'Abre num capítulo adiante', teto: 'Limite de prédios deste tipo', ocupado: 'Este lote já tem um prédio', bairro: 'Bairro fechado: compre o bairro no painel Cidade', lote: 'Toque num lote livre da cidade', aberto: 'Este bairro já é seu',
       servico: `Faltam serviços para os novos moradores${serv ? ': ' + serv : ''}`, bem: `Bem-estar abaixo de ${fx.bemMin || 'mínimo'}${fx.bemMin ? '%' : ''}`, sem: 'Sem fichas de Mutirão: a disposição da comunidade enche a próxima', max: 'Já está no máximo', nada: 'Nada para fazer aqui', ja: 'Já construído', esgotado: 'Esgotado nesta janela: o estoque renova em breve', limite: 'Limite de vendas desta janela', ocupado: 'O Topógrafo já está fazendo uma licença', nao: 'Este item não é vendido', limiteCap: 'Nível máximo por enquanto' }[r] || 'Não foi possível';
     this.hud.brinde(msg, r === 'creditos' ? 'creditos' : r === 'almox' ? 'almox' : r === 'sem' ? 'mutirao' : null, 2800);
   }
@@ -422,7 +427,7 @@ export class Controle {
     const W = this.mundo; if (p.faixa) { const F = W.faixas[p.faixa]; const n = Math.max(e.nivel || 0, this.nivelFaixaProj(p)); const i = (F.mods.length / 2) | 0; const [x, z] = F.centro(Math.min(i, F.mods.length - 1)); return [x, F.alturaTopo(n) + 0.8, z]; }
     const a = alvoEtapa(p, e); const m = W.modelos[a.modelo]; return m?.ancora || [0, 2, 0];
   }
-  ancoraModulo(f, i) { const W = this.mundo; const F = f === 'casas' ? W.casas : W.faixas[f]; const [x, z] = F.centro(i); const m = this.S.modulos[f][i]; return [x, F.alturaTopo(Math.max(1, m.obra ? m.obra.para : m.nivel)) + 0.5, z]; }
+  ancoraModulo(f, i) { const W = this.mundo; const F = W.grupoModulo(f); const [x, z] = F.centro(i); const m = this.S.modulos[f][i]; return [x, F.alturaTopo(Math.max(1, m.obra ? m.obra.para : m.nivel)) + 0.5, z]; }
   calcBolhas() {
     const J = this.J, S = this.S, W = this.mundo, L = [];
     // canteiro desmontado (ou sendo desmontado): sem balões de produção sobre a mata
@@ -569,6 +574,7 @@ export class Controle {
   _irMundo(pos, alvo, k) { if (!pos) return; this.rig.pitchFix = null; if (k) { this.rig.flyTo({ x: pos[0], z: pos[2] + 0.6, dist: Math.max(this.rig.minDist || 4, this.rig.dist * k) }); return; } this.rig.flyTo({ x: pos[0], z: pos[2] + 1.5, dist: Math.min(this.rig.dist, 16), tilt: 0 }); }
   toque(x, y) {
     if (this.modoApreciar) { this.aoToqueApreciar?.(); return; }
+    if (this._colocar) { this._colocarEm(this.rig.ground(x, y)); return; } // modo de colocar um prédio da cidade
     this.hud.alternarMetas(false); this.hud.fecharInfo(); if (this._cineEl) this._cineFim?.();
     const ray = this.rig.ray(x, y); let p = null;
     if (this.mundo.pick) { const h = this.mundo.pick(ray); if (h) p = { pick: h.pick, point: h.point }; }
@@ -577,9 +583,33 @@ export class Controle {
     const alvo = p ? this._pickAlvo(p.pick, g) : this._maisProximo(g);
     if (alvo) { this.som.toque(); this.vibra.tique(); this.irPara(alvo, true); } else this.paineis.fechar();
   }
+  // ---------------- cidade: modo de colocar um prédio ----------------
+  // lotes livres destacados, a câmera vai ao lote livre mais perto e uma faixa no alto diz o que fazer (Cancelar sai);
+  // o toque num lote livre constrói e a obra do nível 1 começa na hora
+  colocarCidade(f) {
+    const J = this.J; const falta = J.podeConstruir(f); if (falta) { this.falha(falta); return; }
+    const livres = J.lotesLivres(); if (!livres.length) { this.falha('lote'); return; }
+    this._colocar = { f }; this.mundo.cidade.mostrarLotes(livres); this.paineis.fechar(true);
+    const t = this.rig.target; let best = null, bd = 1e9; for (const id of livres) { const l = loteDe(id); const d = Math.hypot(l.x - t.x, l.z - t.z); if (d < bd) { bd = d; best = l; } }
+    if (best) { this.rig.pitchFix = null; this.rig.flyTo({ x: best.x, z: best.z - 3, dist: clamp(this.rig.dist, 26, 44) }, 900); }
+    this._faixaColocar(true); this.engine.acordar?.(1200);
+  }
+  _faixaColocar(on) {
+    if (!on) { this._colocarEl?.remove(); this._colocarEl = null; return; }
+    const M = CIDADE[this._colocar.f];
+    if (!this._colocarEl) { this._colocarEl = el('div', 'colocar'); this._colocarEl.setAttribute('role', 'status'); this.ui.appendChild(this._colocarEl); this._colocarEl.addEventListener('click', (e) => { if (e.target.closest('[data-x="cancelar"]')) { this.som.toque(); this.cancelarColocar(); } }); }
+    this._colocarEl.innerHTML = `${img(M.icone)}<span><b>${M.nome}</b><small>Toque num lote livre (azul) para construir</small></span><button class="botao fraco" data-x="cancelar">Cancelar</button>`;
+  }
+  cancelarColocar() { this._colocar = null; this.mundo.cidade.mostrarLotes([]); this._faixaColocar(false); }
+  _colocarEm(g) {
+    const l = g && loteEm(g.x, g.z); if (!l) { this.falha('lote'); return; }
+    const f = this._colocar.f; const r = this.J.construirCidade(f, l.id); if (r !== 'ok') { this.falha(r); return; }
+    this.cancelarColocar(); this.som.obra?.(); this.vibra.sucesso?.(); this.sincronizar();
+    const i = this.S.modulos[f].length - 1; setTimeout(() => this.irPara({ modulo: [f, i] }, false), 200);
+  }
   _pickAlvo(pick, pt) {
     if (pick.tipo === 'predio') return this.mundo.canteiro.visible ? { predio: pick.id } : null;
-    if (pick.tipo === 'modulos') { const F = pick.id === 'casas' ? this.mundo.casas : this.mundo.faixas[pick.id]; let best = 0, bd = 1e9; F.mods.forEach((m, i) => { const [x, z] = F.centro(i); const d = Math.hypot(x - pt.x, z - pt.z); if (d < bd) { bd = d; best = i; } }); return { modulo: [pick.id, best] }; }
+    if (pick.tipo === 'modulos') { const F = this.mundo.grupoModulo(pick.id); let best = 0, bd = 1e9; F.mods.forEach((m, i) => { const [x, z] = F.centro(i); const d = Math.hypot(x - pt.x, z - pt.z); if (d < bd) { bd = d; best = i; } }); return { modulo: [pick.id, best] }; }
     if (pick.tipo === 'proj') { const p = PROJ[pick.id]; if (!p) return this._maisProximo(pt); const nx = this.J.proximaEtapa(p) || { e: p.etapas[p.etapas.length - 1] }; return { etapa: p.id + '.' + nx.e.id }; }
     return this._maisProximo(pt);
   }
@@ -587,7 +617,7 @@ export class Controle {
     let best = null, bd = 1e9; const cand = (d, a, r) => { if (d < r && d < bd) { bd = d; best = a; } };
     for (const [id, l] of Object.entries(LOTES)) if (this.mundo.canteiro.visible) cand(Math.hypot(l.x - g.x, l.z - g.z), { predio: id }, 1.4);
     for (const p of PROJETOS) { if (p.cap > this.S.cap || p.faixa) continue; const nx = this.J.proximaEtapa(p); const e = nx ? nx.e : p.etapas[p.etapas.length - 1]; const an = this.ancoraEtapa(p, e); cand(Math.hypot(an[0] - g.x, an[2] - g.z), { etapa: p.id + '.' + e.id }, 2.6); }
-    for (const [f, arr] of Object.entries(this.S.modulos)) { if (MODULOS[f].cap > this.S.cap) continue; arr.forEach((m, i) => { const [x, z] = (f === 'casas' ? this.mundo.casas : this.mundo.faixas[f]).centro(i); cand(Math.hypot(x - g.x, z - g.z), { modulo: [f, i] }, 1.8); }); }
+    for (const [f, arr] of Object.entries(this.S.modulos)) { if (MODULOS[f].cap > this.S.cap) continue; arr.forEach((m, i) => { const [x, z] = this.mundo.grupoModulo(f).centro(i); cand(Math.hypot(x - g.x, z - g.z), { modulo: [f, i] }, 1.8); }); }
     for (const [pid, fid] of Object.entries(FAIXA_PROJ)) { const p = PROJ[pid]; if (p.cap > this.S.cap) continue; const F = this.mundo.faixas[fid]; const nx = this.J.proximaEtapa(p); const e = nx ? nx.e : p.etapas[p.etapas.length - 1]; F.mods.forEach((m, i) => { const [x, z] = F.centro(i); cand(Math.hypot(x - g.x, z - g.z), { etapa: p.id + '.' + e.id }, 2.2); }); }
     return best;
   }

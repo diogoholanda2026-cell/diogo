@@ -91,7 +91,7 @@ export class Hud {
     this.brindes = el('div', 'brindes');
     // coluna direita de botões-ícone (halo e rótulo em mini pílula) e o capacete de Obras embaixo
     this.dir = el('div', 'dir');
-    const bts = [['producao', 'producao', 'Produção', 'Produção'], ['almox', 'almox', 'Estoque', 'Almoxarifado'], ['pedidos', 'pedidos', 'Pedidos', 'Pedidos da comunidade'], ['trocas', 'troca', 'Trocas', 'Depósito de Trocas']];
+    const bts = [['cidade', 'cidade', 'Cidade', 'Cidade em volta da Arcologia'], ['producao', 'producao', 'Produção', 'Produção'], ['almox', 'almox', 'Estoque', 'Almoxarifado'], ['pedidos', 'pedidos', 'Pedidos', 'Pedidos da comunidade'], ['trocas', 'troca', 'Trocas', 'Depósito de Trocas']];
     this.dir.innerHTML = bts.map(([a, i, t, l]) => `<button class="bt" data-a="${a}" aria-label="${l}">${img(i)}${img('cadeado', 'cad')}<span>${t}</span></button>`).join('');
     this.obrasBt = el('button', 'obras-bt'); this.obrasBt.dataset.a = 'obras'; this.obrasBt.setAttribute('aria-label', 'Obras'); this.obrasBt.innerHTML = `${img('obras')}<span>Obras</span>`;
     this.prox = el('button', 'proximo oculto'); this.prox.dataset.a = 'proximo'; this.prox.innerHTML = `${img('subir')}<span><small>Próximo</small><b>Ir</b></span>`;

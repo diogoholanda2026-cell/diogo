@@ -11,6 +11,7 @@ import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
 import { modeloReflorestar } from './render/models/canteiro.js';
 import { MESA, VISTA_FOTO } from './data/planta.js';
+import { ORDEM_BAIRROS, areaBairro } from './data/cidade.js';
 import { PROJETOS } from './data/obras.js';
 import { novoEstado, Jogo, prepararSave, VERSAO_SAVE } from './sim/estado.js';
 import { Controle } from './jogo.js';
@@ -60,7 +61,9 @@ async function iniciar() {
   const ground = new Ground(engine); await passo(30);
   forest = new Forest(engine); forest.setShadows(engine.q.treeShadow); await passo(40);
   const arredores = new Arredores(engine, forest); await passo(45);
-  const rig = new CameraRig(engine, canvas, MESA);
+  // a câmera anda pela Arcologia e pelos bairros da cidade em volta (mundo aberto), com um zoom máximo maior
+  const LIM = { ...MESA }; for (const b of ORDEM_BAIRROS) { const a = areaBairro(b); LIM.x0 = Math.min(LIM.x0, a.x0); LIM.x1 = Math.max(LIM.x1, a.x1); LIM.z0 = Math.min(LIM.z0, a.z0); LIM.z1 = Math.max(LIM.z1, a.z1); }
+  const rig = new CameraRig(engine, canvas, LIM); rig.maxDist = 96;
   const mundo = new Mundo(engine, ground, forest); await passo(70);
   // epílogo (desmontar o canteiro e replantar): etapas sem peça própria; o modelo só dá foco e âncora,
   // e as obras (modos 'desmontar' e 'replantar') desmontam os prédios do canteiro e plantam a mata

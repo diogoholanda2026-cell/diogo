@@ -6,6 +6,7 @@
 // Apresentação (só interface): nomeCurto para títulos de uma linha e foto:[x,y,w,h], o recorte da foto de referência
 // (1376x768) que vira a miniatura no cabeçalho da folha. Nada disso entra na mecânica.
 import { PASSARELAS } from './planta.js';
+import { CIDADE } from './cidade.js';
 
 const E = (id, nome, desc, min, custo, itens, o = {}) => ({ id, nome, desc, t: min * 60, custo, itens, ...o });
 
@@ -168,6 +169,9 @@ export const MODULOS = {
   casas: { nome: 'Vila Estudantil Expandida', sub: 'Casas brancas empilhadas', cap: 4, nomeCurto: 'Vila Estudantil', foto: [960, 400, 280, 200], pop: 130, max: 3, requer: ['anfiteatro.e1'] },
   santuario: { nome: 'Santuário de Animais e Centro de Conservação', sub: 'Clínicas, pesquisa e moradia de pesquisadores', cap: 5, nomeCurto: 'Santuário', foto: [880, 80, 320, 229], pop: 320, max: 4 },
 };
+// os prédios da cidade em volta da Arcologia também são faixas de módulos (de tamanho variável: um item por prédio
+// colocado); pop é a do nível máximo e popNivel dá os moradores de cada nível
+for (const [k, v] of Object.entries(CIDADE)) MODULOS[k] = { ...v, pop: v.popNivel ? v.popNivel[v.max] : 0, cidade: true };
 // limites de nível por capítulo (o Anel cresce aos poucos ao longo da história)
 export const LIMITE_CAP = { anel: { 1: 2, 2: 3, 3: 4, 4: 5, 5: 5, 6: 5 }, uni: { 3: 4, 4: 5, 5: 5, 6: 5 } };
 export const POP_NIVEL = [0, 0.08, 0.2, 0.4, 0.7, 1.0];
