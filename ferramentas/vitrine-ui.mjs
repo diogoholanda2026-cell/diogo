@@ -163,6 +163,13 @@ const CENAS = {
   'almox-vazio': (H) => { base(H); H.S.itens.viga = 0; H.S.itens.cimento = 0; H.J._derivar(); H.C.paineis.aba.almox = 'produto'; H.C.paineis.abrir('almox'); },
   'rotulo-foco': (H) => { base(H); H.S.cap = 3; H.J._derivar(); H.C.paineis.abrir('etapa', 'biblioteca.e1'); H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.C.atualizarRotulos?.(); },
   'rotulo-obra': (H) => { base(H); H.S.cap = 3; const t = Date.now(); H.S.etapas['biblioteca.e1'] = { estado: 'obra', entregue: {}, ini: t - 40000, fim: t + 600000 }; H.J._derivar(); H.C.paineis.abrir('etapa', 'biblioteca.e1'); H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.C.atualizarRotulos?.(); },
+  // ---- leva 2: Apreciar (Comparar com o cabo, linha Mais com um enquadramento), cartão do Fotografar e selo do nível ----
+  'apreciar-comparar': (H) => { H.C.apreciar(true); H.C.comparar(true); },
+  'apreciar-mais': (H) => { H.C.apreciar(true); const q = (x) => document.querySelector(`.apreciar [data-x="${x}"]`); q('mais').click(); q('enq').click(); const E = H.C._enq; H.C.rig.target.set(E.x, 0, E.z); H.C.rig.dist = E.dist; H.C.atualizarRotulos?.(); },
+  // o quadro do jogo (sem WebGL aqui) é o próprio fundo da vitrine, desenhado no canvas do motor de mentira; o cartão
+  // entra na página como canvas (por file:// a foto suja o canvas e ele não vira imagem)
+  'fotografar-cartao': async (H) => { await CENAS['apreciar-mais'](H); const gl = H.C.engine.renderer.domElement; const u = getComputedStyle(document.body).backgroundImage.match(/url\("?(.*?)"?\)/)[1]; const im = new Image(); im.src = u; await im.decode(); gl.width = innerWidth; gl.height = innerHeight; const k = Math.max(gl.width / im.width, gl.height / im.height); gl.getContext('2d').drawImage(im, (gl.width - im.width * k) / 2, (gl.height - im.height * k) / 2, im.width * k, im.height * k); const cv = await H.C.cartaoFoto(); const o = cv; o.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(96vw,calc(96vh*1200/630));z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.5)'; document.body.appendChild(o); },
+  'nivel-selo': (H) => { base(H); H.S.xp = 1950; H.C.hud.mostra.xp = null; H.C.hud.atualizar(); },
   'apreciar-rotulos': (H) => { for (const k of ['escola.e1', 'sede.e2', 'ciencias.e1', 'biblioteca.e1', 'bioma.e1', 'anfiteatro.e1', 'humanidades.e1', 'instituto.e1', 'engenharia.e1', 'acelerador.e1', 'savana.e1']) H.S.etapas[k] = { estado: 'feita', entregue: {} }; H.S.modulos.uni[0].nivel = 1; H.S.modulos.santuario[0].nivel = 1; H.J._derivar(); H.C.apreciar(true); H.C.atualizarRotulos?.(); },
 };
 // estado da economia nova: dia 12 do mês 3, empréstimos (um vencido), aceleradores, lotes em andamento (um em
