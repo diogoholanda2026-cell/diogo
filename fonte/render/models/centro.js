@@ -253,7 +253,7 @@ export function sedePatio() {
   addMap(P.e1, fund(curve(sd.interna.alta, false, 60), -1.4), () => M.concreto);
   addMap(P.e1, fund(curve(sd.interna.baixa, false, 80), -1.3), () => M.concreto);
   // e4: piscina redonda de borda branca no nordeste da água (plataforma que desce até o leito) e o pavilhão
-  const pc = sd.piscina; if (pc) { const rim = new THREE.Mesh(new THREE.CylinderGeometry(pc.r + 0.15, pc.r + 0.15, 0.4, 40), M.whiteSmooth); rim.position.set(pc.c[0], -0.12, pc.c[1]); rim.castShadow = true; rim.receiveShadow = true; P.e4.add(rim); const w = new THREE.Mesh(new THREE.CircleGeometry(pc.r, 40), M.pool); w.rotation.x = -Math.PI / 2; w.position.set(pc.c[0], 0.0, pc.c[1]); w.receiveShadow = true; P.e4.add(w); }
+  const pc = sd.piscina; if (pc) { const rim = new THREE.Mesh(new THREE.CylinderGeometry(pc.r + 0.15, pc.r + 0.15, 0.4, 40), M.whiteSmooth); rim.position.set(pc.c[0], -0.12, pc.c[1]); rim.castShadow = true; rim.receiveShadow = true; P.e4.add(rim); const w = new THREE.Mesh(new THREE.CircleGeometry(pc.r, 40), M.pool); w.rotation.x = -Math.PI / 2; w.position.set(pc.c[0], 0.085, pc.c[1]); w.receiveShadow = true; P.e4.add(w); }
   const pv = sd.pavilhao; if (pv) {
     const gpv = new THREE.Group(); gpv.position.set(pv.c[0], 0, pv.c[1]); gpv.rotation.y = -(pv.rot || 0); P.e4.add(gpv);
     const placa = mesh(new THREE.BoxGeometry(pv.w, 0.05, pv.d), M.whiteSmooth); placa.position.y = pv.h + 0.025; gpv.add(placa);

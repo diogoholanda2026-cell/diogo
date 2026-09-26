@@ -122,14 +122,14 @@ export function praca() {
   // arborizada do espelho grande, o espelho retangular afunilado sob o Bulevar e os canteiros de grama
   const R = rng(19); const arb = [], ilhaArv = [];
   A.lagosPraca.forEach((l, li) => {
-    P.e2.add(plate(blobPts(l.c[0], l.c[1], l.rx + 0.12, l.rz + 0.12, l.rot, 30 + li), 0.0, 0.08, M.whiteSmooth));
-    P.e2.add(plate(blobPts(l.c[0], l.c[1], l.rx, l.rz, l.rot, 30 + li), 0.0, 0.065, M.pool));
+    P.e2.add(plate(blobPts(l.c[0], l.c[1], l.rx + 0.12, l.rz + 0.12, l.rot, 30 + li), 0.0, 0.06, M.whiteSmooth));
+    P.e2.add(plate(blobPts(l.c[0], l.c[1], l.rx, l.rz, l.rot, 30 + li), 0.0, 0.07, M.pool));
     const b = blobPts(l.c[0], l.c[1], l.rx + 0.16, l.rz + 0.16, l.rot, 30 + li, 24);
     for (let i = 0, k = 0; i < 24 && k < 12; i++) { const [x, z] = b[i]; if (z > l.c[1] - 0.1) continue; k++; arb.push({ x: x + (R() - 0.5) * 0.1, z: z + (R() - 0.5) * 0.1, y: 0.06, s: 0.1 + R() * 0.05, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); }
     if (li === 0) { const ix = l.c[0] - l.rx * 0.35, iz = l.c[1] + 0.05; P.e2.add(plate(blobPts(ix, iz, 0.42, 0.26, l.rot, 77), 0.0, 0.09, M.planter)); for (let i = 0; i < 3; i++) { const a = (i / 3) * 6.28 + 0.4; ilhaArv.push({ x: ix + Math.cos(a) * 0.18, z: iz + Math.sin(a) * 0.1, y: 0.09, s: 0.34, kind: 'folha', pal: 'jardim', h: 1.1 }); } }
   });
   P.e2.add(plate([[3.5, 12.2], [4.8, 12.2], [4.65, 14.8], [3.65, 14.8]], 0.0, 0.075, M.whiteSmooth)); P.e2.add(plate(RET, 0.0, 0.06 + 0.02, M.pool));
-  const canteiros = CANTEIROS.filter(([x, z, rx, rz]) => inP(x, z) && !nearPool(x, z, 0.3) && !noRet(x, z) && !noCaminho(x, z, Math.min(rx, rz) * 0.9 + 0.15));
+  const canteiros = CANTEIROS.filter(([x, z, rx, rz], i) => inP(x, z) && !nearPool(x, z, 0.3) && !noRet(x, z) && (i === 0 || !noCaminho(x, z, Math.min(rx, rz) * 0.9 + 0.15))); // (a faixa diagonal atravessa um caminho do leque, como na foto)
   canteiros.forEach(([x, z, rx, rz, rot], i) => { P.e2.add(plate(blobPts(x, z, rx, rz, rot, 50 + i, 40), 0.0, 0.08, M.planter)); const b = blobPts(x, z, rx - 0.06, rz - 0.06, rot, 50 + i, 10); for (const [bx, bz] of b) arb.push({ x: bx, z: bz, y: 0.07, s: 0.08 + R() * 0.05, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); });
   P.e2.add(treeGroup(arb, { cast: false, name: 'borda-lagos' })); P.e2.add(treeGroup(ilhaArv, { name: 'ilha-praca' }));
   // e3: a faixa diagonal de copas escuras grandes (canteiro 0, duas linhas), árvores de copa larga em grupos junto aos
