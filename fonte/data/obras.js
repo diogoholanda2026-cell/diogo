@@ -13,18 +13,18 @@ const E = (id, nome, desc, min, custo, itens, o = {}) => ({ id, nome, desc, t: m
 export const PROJETOS = [
   // ---------------- Capítulo 1 — Fundação ----------------
   { id: 'pas_frente', nome: 'Caminho da Frente', cap: 1, icone: 'caminho', foto: [300, 520, 280, 200], etapas: [
-    E('e1', 'Abrir o caminho', 'Deque baixo de madeira sobre brita: o acesso do canteiro até a praça, sem cortar árvores.', 1, 150, { madeira: 3, brita: 2 }, { xp: 40 }),
+    E('e1', 'Abrir o caminho', 'Deque baixo de madeira sobre brita, da praça até a abertura sul do Anel, rente ao anel viário.', 1, 150, { madeira: 3, brita: 2 }, { xp: 40 }),
   ] },
-  { id: 'lago', nome: 'Lago Central', cap: 1, icone: 'lago', foto: [590, 140, 280, 200], etapas: [
+  { id: 'lago', nome: 'Lago da Sede', cap: 1, icone: 'lago', foto: [590, 140, 280, 200], etapas: [
     E('e1', 'Desassoreamento', 'Retirar o lodo acumulado pela pastagem antiga. O nível da água volta a subir.', 3, 300, { brita: 4, madeira: 2 }, { servico: { agua: 2000 }, modo: 'nivel' }),
-    E('e2', 'Margens vivas', 'Juncos, mudas nas margens e na ilha: as raízes seguram o barranco e filtram a água.', 10, 2500, { grama: 4, muda: 3, substrato: 2 }, { bem: 5, modo: 'crescer', cap: 2 }),
-    E('e3', 'Estação natural de água', 'Ilhas flutuantes filtrantes, deque e casa de bombas: água limpa para toda a arcologia.', 15, 5000, { deque: 3, painel: 2, bloco: 3 }, { servico: { agua: 5000, saneamento: 2000 }, cap: 2 }),
+    E('e2', 'Margens vivas', 'Juncos, pedras claras e mudas nas margens: as raízes seguram o barranco e filtram a água.', 10, 2500, { grama: 4, muda: 3, substrato: 2 }, { bem: 5, modo: 'crescer', cap: 2 }),
+    E('e3', 'Estação natural de água', 'Jardins flutuantes filtrantes, repuxos no eixo e a calçada da margem: água limpa para toda a arcologia.', 15, 5000, { deque: 3, painel: 2, bloco: 3 }, { servico: { agua: 5000, saneamento: 2000 }, cap: 2 }),
   ] },
   { id: 'sede', nome: 'Sede Administrativa da Holding Guarda-Chuva', cap: 1, icone: 'sede', nomeCurto: 'Sede da Holding', foto: [585, 75, 320, 229], faixa: 'sede', etapas: [
-    E('e1', 'Terraplenagem e fundações', 'Topografia, corte mínimo do terreno e o anel de fundações.', 3, 600, { brita: 6, concreto: 2 }, { licencas: { estaca: 1 }, alvo: { modelo: 'sedePatio', parte: 'e1' }, modo: 'terra' }),
-    E('e2', 'Térreo e núcleo', 'O primeiro pavimento do anel. A Sede passa a receber a renda dos moradores (antes no Escritório).', 6, 1200, { concreto: 3, viga: 4 }, { nivel: 1 }),
+    E('e1', 'Terraplenagem e fundações', 'Topografia, corte mínimo do terreno, as fundações da fita em U e o radier da torre.', 3, 600, { brita: 6, concreto: 2 }, { licencas: { estaca: 1 }, alvo: { modelo: 'sedePatio', parte: 'e1' }, modo: 'terra' }),
+    E('e2', 'Térreo e núcleo', 'O primeiro pavimento da fita em U. A Sede passa a receber a renda dos moradores (antes no Escritório).', 6, 1200, { concreto: 3, viga: 4 }, { nivel: 1 }),
     E('e3', 'Anel de vidro solar', 'Dois pavimentos de vidro fotovoltaico: a fachada gera energia.', 20, 6000, { painel: 6, premoldado: 4, perfil: 4 }, { nivel: 3, servico: { energia: 3000 }, cap: 2 }),
-    E('e4', 'Cobertura e pátio', 'Último pavimento, cobertura verde, orla de deque, piscina e árvores entre a Sede e o lago.', 30, 10500, { duplo: 3, grama: 5, muda: 3 }, { nivel: 4, servico: { energia: 2500, agua: 1500 }, extra: { modelo: 'sedePatio', parte: 'e4' }, cap: 3 }),
+    E('e4', 'Torre da Holding e pátio', 'Último pavimento, a Torre da Holding com o heliponto e o helicóptero exclusivo, as piscinas, o pátio e o pavilhão guarda-chuva no lago.', 30, 10500, { duplo: 3, grama: 5, muda: 3 }, { nivel: 4, servico: { energia: 2500, agua: 1500 }, extra: { modelo: 'sedePatio', parte: 'e4' }, cap: 3 }),
   ] },
   // ---------------- Capítulo 2 — Água que corre ----------------
   { id: 'escola', nome: 'Escola e Campus para Jovens (10–17 anos)', cap: 2, icone: 'escola', nomeCurto: 'Escola e Campus', foto: [45, 255, 280, 200], etapas: [
@@ -37,20 +37,20 @@ export const PROJETOS = [
     E('e2', 'Gramado e marcações', 'Grama nativa resistente e as linhas do campo.', 8, 2000, { grama: 6, substrato: 3 }, { modo: 'crescer' }),
     E('e3', 'Arquibancadas e iluminação', 'Degraus de concreto e torres de luz de LED.', 15, 4500, { bloco: 4, perfil: 2, luminaria: 2 }, { bem: 6 }),
   ] },
-  { id: 'praca', nome: 'Praça Central', cap: 2, icone: 'praca', foto: [450, 430, 280, 200], etapas: [
-    E('e1', 'Pavimentação', 'Piso drenante de blocos claros, em círculos concêntricos.', 8, 2000, { brita: 8, cimento: 4 }, { modo: 'terra' }),
-    E('e2', 'Jardins filtrantes', 'Os espelhos d’água são jardins que tratam o esgoto com plantas.', 12, 4000, { bloco: 3, grama: 4, substrato: 3 }, { servico: { saneamento: 3000 } }),
-    E('e3', 'Palmeiras, bancos e luzes', 'Sombra, lugar para sentar e luz para a noite.', 20, 5000, { muda: 5, deque: 2, luminaria: 2 }, { bem: 7, modo: 'crescer', cap: 3 }),
+  { id: 'praca', nome: 'Praça da Entrada', cap: 2, icone: 'praca', foto: [450, 430, 280, 200], etapas: [
+    E('e1', 'Pavimentação', 'Piso drenante de blocos claros na praça e no eixo monumental, do portão sul até o lago da Sede.', 8, 2000, { brita: 8, cimento: 4 }, { modo: 'terra' }),
+    E('e2', 'Jardins filtrantes', 'Os espelhos d’água da praça e do eixo são jardins que tratam o esgoto com plantas.', 12, 4000, { bloco: 3, grama: 4, substrato: 3 }, { servico: { saneamento: 3000 } }),
+    E('e3', 'Marco, árvores e luzes', 'O Marco da Holding na rotatória, sombra, lugar para sentar e luz para a noite.', 20, 5000, { muda: 5, deque: 2, luminaria: 2 }, { bem: 7, modo: 'crescer', cap: 3 }),
   ] },
   { id: 'pas_bulevar', nome: 'Bulevar Verde', cap: 2, icone: 'passarela', foto: [380, 480, 280, 200], requer: ['praca.e1'], etapas: [
-    E('e1', 'Passarela elevada', 'Deque branco sobre pilares finos, guarda-corpo de vidro e jardineiras.', 15, 4500, { perfil: 4, deque: 3, guarda: 2 }, { bem: 2 }),
+    E('e1', 'Passarela elevada', 'Deque branco no eixo, da praça até a rotatória, sobre pilares finos, com guarda-corpo de vidro e jardineiras.', 15, 4500, { perfil: 4, deque: 3, guarda: 2 }, { bem: 2 }),
   ] },
   { id: 'pas_anel', nome: 'Passeio do Anel', cap: 2, icone: 'passarela', foto: [120, 380, 280, 200], requer: ['anel.2', 'pas_frente.e1'], etapas: [
-    E('e1', 'Passarela elevada', 'Contorna a frente do Anel pela mata, sem tocar nas raízes.', 12, 3500, { deque: 3, perfil: 2, guarda: 1 }, { bem: 2 }),
+    E('e1', 'Passarela elevada', 'Da rotatória até o pé do Anel, por cima do gramado.', 12, 3500, { deque: 3, perfil: 2, guarda: 1 }, { bem: 2 }),
   ] },
-  // a Fita da Frente sai do Passeio do Anel, junto ao canteiro, e pousa na praça pavimentada
+  // a Fita da Frente sai da praça pavimentada e sobe até o CRD da Biblioteca
   ...(PASSARELAS.frente2 ? [{ id: 'pas_frente2', nome: PASSARELAS.frente2.nome || 'Fita da Frente', cap: 2, icone: 'passarela', foto: [300, 500, 280, 200], requer: ['pas_anel.e1', 'praca.e1'], etapas: [
-    E('e1', 'Passarela em camadas', 'Uma segunda fita sobre o Caminho da Frente, com floreiras dos dois lados, até a praça.', 12, 4500, { deque: 3, perfil: 2, guarda: 1 }, { bem: 2 }),
+    E('e1', 'Passarela em camadas', 'Uma fita elevada da praça até o CRD da Biblioteca, com floreiras dos dois lados.', 12, 4500, { deque: 3, perfil: 2, guarda: 1 }, { bem: 2 }),
   ] }] : []),
   // ---------------- Capítulo 3 — Saber de madeira ----------------
   { id: 'biblioteca', nome: 'Biblioteca Central', cap: 3, icone: 'biblioteca', foto: [700, 260, 320, 229], etapas: [
@@ -91,18 +91,18 @@ export const PROJETOS = [
     E('e1', 'Gramado e campo', 'O gramado central do campus com árvores ao redor.', 12, 3500, { grama: 5, muda: 3 }, { bem: 3, modo: 'crescer', servico: { saneamento: 2000 } }),
   ] },
   { id: 'uniElo', nome: 'Elo Norte', cap: 3, icone: 'passarela', foto: [250, 120, 280, 200], faixa: 'uniElo', requer: ['uni.1', 'anel.2'], etapas: [
-    E('e1', 'Fita de ligação', 'Um prédio-ponte entre o Anel e o Campus Universitário.', 15, 5500, { premoldado: 2, painel: 2, viga: 2 }, { nivel: 2 }),
+    E('e1', 'Fita de ligação', 'Um prédio-ponte que desce do Campus Universitário pelo oeste da Ciências até a avenida.', 15, 5500, { premoldado: 2, painel: 2, viga: 2 }, { nivel: 2 }),
     E('e2', 'Terraço do elo', 'Terceiro pavimento e terraço-jardim.', 15, 5500, { grama: 2, duplo: 2, guarda: 2 }, { nivel: 3 }),
   ] },
-  { id: 'pas_ponte', nome: 'Ponte do Instituto', cap: 3, icone: 'passarela', foto: [430, 380, 280, 200], requer: ['instituto.e1'], etapas: [
-    E('e1', 'Passarela elevada', 'Liga o Instituto à praça por cima do jardim.', 15, 3500, { perfil: 3, deque: 2, guarda: 2 }),
+  { id: 'pas_ponte', nome: 'Passeio da Holding', cap: 3, icone: 'passarela', foto: [430, 380, 280, 200], requer: ['instituto.e1'], etapas: [
+    E('e1', 'Passarela elevada', 'Da rotatória até o pavilhão do lago da Sede, pelo eixo.', 15, 3500, { perfil: 3, deque: 2, guarda: 2 }),
   ] },
   // o Caracol sobe em espiral do chão do vale ao terraço do Anel (que existe a partir do 3º pavimento)
   ...(PASSARELAS.caracol ? [{ id: 'pas_caracol', nome: PASSARELAS.caracol.nome || 'Caracol do Anel', cap: 3, icone: 'passarela', foto: [150, 200, 280, 200], requer: ['anel.3'], etapas: [
-    E('e1', 'Rampa em espiral', 'Uma rampa suave em caracol, sem degraus, do chão do vale ao terraço do Anel.', 12, 5000, { deque: 3, perfil: 3, guarda: 2 }, { bem: 2 }),
+    E('e1', 'Rampa em espiral', 'Uma rampa suave em caracol, sem degraus, do chão ao terraço do Anel.', 12, 5000, { deque: 3, perfil: 3, guarda: 2 }, { bem: 2 }),
   ] }] : []),
   { id: 'ponteCoberta', nome: 'Ponte Coberta', cap: 3, icone: 'passarela', foto: [640, 250, 280, 200], requer: ['ciencias.e1', 'biblioteca.e2'], etapas: [
-    E('e1', 'Pilares', 'Pilares finos sobre o jardim, entre a Faculdade e a Biblioteca.', 10, 3000, { concreto: 2, perfil: 2 }),
+    E('e1', 'Pilares', 'Pilares finos entre a proa da Faculdade de Ciências e a fita da Sede.', 10, 3000, { concreto: 2, perfil: 2 }),
     E('e2', 'Tubo de vidro', 'Um corredor envidraçado para atravessar com chuva.', 20, 5500, { painel: 3, duplo: 2, perfil: 2 }),
   ] },
   // ---------------- Capítulo 4 — Energia escondida ----------------
@@ -117,39 +117,39 @@ export const PROJETOS = [
     E('e2', 'Palco e iluminação', 'Palco de madeira, fundo curvo e luminárias.', 20, 17000, { deque: 4, luminaria: 4, perfil: 2 }, { bem: 10 }),
   ] },
   { id: 'pas_vila', nome: 'Passarela da Vila', cap: 4, icone: 'passarela', foto: [960, 420, 280, 200], requer: ['anfiteatro.e1'], etapas: [
-    E('e1', 'Passarela elevada', 'Da Biblioteca até a Vila Estudantil, por cima da mata.', 15, 9000, { perfil: 4, deque: 3, guarda: 3 }, { bem: 3 }),
+    E('e1', 'Passarela elevada', 'Da Biblioteca até o anfiteatro da Vila Estudantil, por cima do gramado.', 15, 9000, { perfil: 4, deque: 3, guarda: 3 }, { bem: 3 }),
   ] },
   // ---------------- Capítulo 5 — Casa dos gigantes ----------------
-  { id: 'santuarioInt', nome: 'Santuário: mata e fauna', cap: 5, icone: 'santuario', foto: [900, 90, 320, 229], requer: ['santuario.1'], etapas: [
-    E('e1', 'Clareiras e mirantes', 'Rochas, clareiras e um biodigestor que transforma resíduos em energia.', 20, 19500, { brita: 5, deque: 3, muda: 3 }, { servico: { saneamento: 3000 } }),
-    E('e2', 'Fauna resgatada', 'Elefantes e rinocerontes vindos de zoológicos fechados.', 40, 35500, { racao: 5, kitvet: 2 }, { bem: 2 }),
+  { id: 'santuarioInt', nome: 'Galeria da Cúpula', cap: 5, icone: 'santuario', foto: [900, 90, 320, 229], requer: ['santuario.1'], etapas: [
+    E('e1', 'Galeria de entrada', 'O saguão envidraçado onde chega a Trilha da Cúpula, com um biodigestor que transforma resíduos em energia.', 20, 19500, { brita: 5, deque: 3, muda: 3 }, { servico: { saneamento: 3000 } }),
+    E('e2', 'Passarela nas copas', 'Um anel elevado por dentro da cúpula, entre as copas. Elefantes e rinocerontes resgatados chegam e vivem escondidos na mata.', 40, 35500, { racao: 5, kitvet: 2 }, { bem: 2 }),
   ] },
-  { id: 'savana', nome: 'Habitats Expandidos e Centro de Reabilitação', cap: 5, icone: 'savana', nomeCurto: 'Habitats e Reabilitação', foto: [870, 220, 280, 200], etapas: [
-    E('e1', 'Cercados e trilhas', 'Cercas de madeira e trilhas de cascalho.', 15, 12500, { madeira: 7, deque: 3 }, { modo: 'crescer' }),
-    E('e2', 'Lagoa e abrigos', 'Bebedouros, abrigos de sombra, rochas e acácias.', 25, 19500, { substrato: 3, muda: 5, bloco: 2 }, { modo: 'crescer', servico: { saneamento: 2000 } }),
-    E('e3', 'Elefantes', 'Uma manada chega ao centro de reabilitação.', 40, 33500, { racao: 5, kitvet: 2 }, { modo: 'surgir' }),
-    E('e4', 'Girafas e rinocerontes', 'O habitat se completa.', 45, 38500, { racao: 5, kitvet: 2 }, { bem: 2, modo: 'surgir' }),
+  { id: 'savana', nome: 'Mata da Cúpula', cap: 5, icone: 'savana', nomeCurto: 'Mata da Cúpula', foto: [870, 220, 280, 200], etapas: [
+    E('e1', 'Chão, lago e riacho', 'Terra, gramado, o lago de dentro e o riacho.', 15, 12500, { madeira: 7, deque: 3 }, { modo: 'crescer' }),
+    E('e2', 'Rochedo e cascata', 'O rochedo de arenito e a cascata que desce ao lago.', 25, 19500, { substrato: 3, muda: 5, bloco: 2 }, { modo: 'crescer', servico: { saneamento: 2000 } }),
+    E('e3', 'Mata tropical', 'Copas largas e palmeiras. Uma manada de elefantes chega e vive escondida na mata.', 40, 33500, { racao: 5, kitvet: 2 }, { modo: 'crescer' }),
+    E('e4', 'Emergentes e sub-bosque', 'Árvores altas até a névoa e o sub-bosque florido. Girafas e rinocerontes completam a casa.', 45, 38500, { racao: 5, kitvet: 2 }, { bem: 2, modo: 'crescer' }),
   ] },
-  { id: 'bioma', nome: 'Bioma Aquático de Conservação', cap: 5, icone: 'bioma', nomeCurto: 'Bioma Aquático', foto: [1010, 250, 280, 200], etapas: [
-    E('e1', 'Fundação e tanque', 'O tanque do aquário, areia e rochas.', 30, 27500, { concreto: 5, premoldado: 3 }, { licencas: { estaca: 3, baliza: 3, trena: 3 } }),
+  { id: 'bioma', nome: 'Cúpula da Vida', cap: 5, icone: 'bioma', nomeCurto: 'Cúpula da Vida', foto: [1010, 250, 280, 200], etapas: [
+    E('e1', 'Plinto e piso', 'O plinto de concreto claro, o piso de terra e as portas envidraçadas.', 30, 27500, { concreto: 5, premoldado: 3 }, { licencas: { estaca: 3, baliza: 3, trena: 3 } }),
     E('e2', 'Estrutura geodésica', 'Milhares de barras e nós formam a cúpula.', 45, 41500, { no: 7, perfil: 5 }),
     E('e3', 'Painéis de vidro', 'Cada triângulo recebe seu painel.', 60, 49500, { cupula: 9 }),
-    E('e4', 'Aquário vivo', 'Água, baleia, arraias e cardumes em recuperação.', 60, 55000, { acrilico: 5, sensor: 2, racao: 3 }, { bem: 3, requer: ['lago.e3'] }),
+    E('e4', 'Lanterna e névoa', 'A lanterna no topo, as luzes da base e a névoa por dentro: a cúpula fechada ganha o seu clima.', 60, 55000, { acrilico: 5, sensor: 2, racao: 3 }, { bem: 3, requer: ['lago.e3'] }),
   ] },
-  { id: 'gorilas', nome: 'Recinto dos Gorilas', cap: 5, icone: 'gorilas', foto: [1010, 520, 280, 200], etapas: [
-    E('e1', 'Rochedos e fosso', 'Rochedos de arenito e o gramado do recinto.', 20, 19500, { brita: 7, concreto: 3 }),
-    E('e2', 'Passarela anelar', 'Um anel elevado com vidro para ver sem incomodar.', 30, 27500, { perfil: 5, deque: 3, guarda: 3 }),
-    E('e3', 'Abrigo e árvores', 'Sombra e esconderijos.', 20, 19500, { muda: 5, madeira: 5 }, { modo: 'crescer' }),
-    E('e4', 'Família de gorilas', 'Cinco gorilas resgatados chegam juntos.', 45, 41500, { racao: 5, kitvet: 2 }, { bem: 2, modo: 'surgir' }),
+  { id: 'gorilas', nome: 'Estufa Anexa', cap: 5, icone: 'gorilas', foto: [1010, 520, 280, 200], etapas: [
+    E('e1', 'Plinto e tubo', 'O plinto da estufa e a laje do tubo que a liga à cúpula.', 20, 19500, { brita: 7, concreto: 3 }),
+    E('e2', 'Estrutura', 'A malha geodésica da estufa e as costelas do tubo.', 30, 27500, { perfil: 5, deque: 3, guarda: 3 }),
+    E('e3', 'Vidro', 'O vidro da estufa e a abóbada do tubo de vidro.', 20, 19500, { muda: 5, madeira: 5 }),
+    E('e4', 'Jardim de dentro', 'Copas floridas, samambaias e o repuxo. Os gorilas resgatados ganham a sua casa, longe dos olhos.', 45, 41500, { racao: 5, kitvet: 2 }, { bem: 2, modo: 'crescer' }),
   ] },
-  { id: 'pas_trilhaBioma', nome: 'Trilha do Bioma', cap: 5, icone: 'passarela', foto: [1000, 400, 280, 200], requer: ['bioma.e1'], etapas: [
-    E('e1', 'Passarela sinuosa', 'Contorna a cúpula e desce até os gorilas.', 20, 12500, { perfil: 4, deque: 3, guarda: 2 }),
+  { id: 'pas_trilhaBioma', nome: 'Trilha da Cúpula', cap: 5, icone: 'passarela', foto: [1000, 400, 280, 200], requer: ['bioma.e1'], etapas: [
+    E('e1', 'Passarela elevada', 'Da rotatória, em linha reta, até a galeria de entrada da Cúpula.', 20, 12500, { perfil: 4, deque: 3, guarda: 2 }),
   ] },
   { id: 'pas_elo', nome: 'Elo do Santuário', cap: 5, icone: 'passarela', foto: [900, 180, 280, 200], requer: ['savana.e1'], etapas: [
-    E('e1', 'Passarela elevada', 'Liga a savana ao anel do santuário.', 20, 12500, { perfil: 4, deque: 3, guarda: 2 }),
+    E('e1', 'Passarela elevada', 'Da Biblioteca, por cima da avenida, até o flanco sul da Cúpula.', 20, 12500, { perfil: 4, deque: 3, guarda: 2 }),
   ] },
   { id: 'pas_santuario', nome: 'Passeio do Santuário', cap: 5, icone: 'passarela', foto: [1050, 120, 280, 200], requer: ['santuario.1', 'savana.e1'], etapas: [
-    E('e1', 'Passarela elevada', 'Um mirante contínuo sobre a mata do santuário.', 20, 12500, { perfil: 4, deque: 3, guarda: 2 }),
+    E('e1', 'Passeio', 'Um caminho no chão entre a Cúpula e a fita do Santuário, de ponta a ponta do arco.', 20, 12500, { perfil: 4, deque: 3, guarda: 2 }),
   ] },
   // ---------------- Epílogo ----------------
   { id: 'reflorestar', nome: 'Reflorestar o canteiro', cap: 6, icone: 'floresta', foto: [20, 520, 280, 200], etapas: [

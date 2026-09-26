@@ -116,6 +116,12 @@ export const CIDADE = {
   cidMercado: { cat: 'comercio', nome: 'Mercado municipal', sub: 'Galpão de vidro com feira', icone: 'mercado', cap: 2, max: 1, renda: 0.03, bem: 3, custo: [0, 4000], tempo: [0, 180] },
 };
 export const RENDA_CIDADE_MAX = 0.45;
+// cores que o jogador escolhe para um prédio da cidade ou uma estrutura da Arcologia (0 = as cores originais)
+export const PALETA = [
+  { id: 'original', nome: 'Original', cor: null, amostra: '#efe3c8' }, { id: 'branco', nome: 'Branco', cor: 0xf6f4ee }, { id: 'areia', nome: 'Areia', cor: 0xe2cfa2 },
+  { id: 'terracota', nome: 'Terracota', cor: 0xc9744f }, { id: 'salvia', nome: 'Verde-sálvia', cor: 0xa3bb9c }, { id: 'petroleo', nome: 'Azul-petróleo', cor: 0x4c7f8a },
+  { id: 'grafite', nome: 'Grafite', cor: 0x55595f }, { id: 'dourado', nome: 'Dourado', cor: 0xd2aa52 }, { id: 'rosa', nome: 'Rosa-argila', cor: 0xd79b8f }, { id: 'marinho', nome: 'Azul-marinho', cor: 0x34466a },
+];
 // serviços com área de atendimento: a moradia da cidade só sobe de nível com eles por perto (a Prefeitura vale para a
 // cidade inteira). Nível 2 pede polícia e escola; 3, saúde; 4, faculdade; 5, a Prefeitura.
 export const COBERTURAS = {

@@ -26,7 +26,7 @@ const HORAS = [{ t: 'Automático', ic: 'ciclo' }, { t: 'Manhã', h: 7, ic: 'manh
 // enquadramentos prontos do Apreciar: o centro de cada conjunto na planta, uma distância fixa, o nome (placa e cartão da
 // foto), a obra (recorte da foto de referência) e os rótulos que ficam acesos por 3 s depois do voo
 const centroDe = (a) => (a?.c ? a.c : a?.poly ? a.poly.reduce((s, [x, z]) => [s[0] + x / a.poly.length, s[1] + z / a.poly.length], [0, 0]) : [0, 0]);
-const ENQ = [['sede', 'Sede da Holding', 24, 'sede', ['sede']], ['ciencias', 'Faculdade de Ciências', 22, 'ciencias', ['ciencias']], ['biblio', 'Biblioteca Central', 17, 'biblioteca', ['biblioteca']], ['bioma', 'Bioma Aquático', 16, 'bioma', ['bioma']], ['praca', 'Praça Central', 21, 'praca', []], ['anel', 'Anel do Campus', 31, 'escola', ['escola', 'humanidades', 'instituto', 'engenharia']]]
+const ENQ = [['sede', 'Sede da Holding', 28, 'sede', ['sede']], ['ciencias', 'Faculdade de Ciências', 22, 'ciencias', ['ciencias']], ['biblio', 'Biblioteca Central', 20, 'biblioteca', ['biblioteca']], ['bioma', 'Cúpula da Vida', 28, 'bioma', ['bioma', 'gorilas', 'santuario']], ['praca', 'Praça da Entrada', 21, 'praca', ['praca']], ['anel', 'Anel do Campus', 31, 'escola', ['escola', 'humanidades', 'instituto', 'engenharia']]]
   .map(([id, nome, dist, obra, rot]) => { const [x, z] = centroDe(A[id]); return { id, nome, dist, obra, rot, x, z }; });
 // glifos monocromáticos da barra do Apreciar (traço na cor do texto)
 const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;

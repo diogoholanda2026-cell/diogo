@@ -77,16 +77,17 @@ function blocosArco(cx, cz, rx, rz, rot, t0, t1, nAlong, nAcross, seed, fMin = 2
   equipamentos(high, equip); return { low, high };
 }
 
+// (desenhada na planta antiga: os números já vêm com o deslocamento do Anel, DESLOC.anel)
 export function escola() {
   const root = new THREE.Group(); root.name = 'escola'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
   // e1: bloco escolar em "S" (3 andares) — é uma fita própria, com beirais finos como o Anel
-  const bloco = new Faixa({ id: 'escolaBloco', closed: false, path: curve([[-16.6, 10.5], [-15.4, 12.0], [-13.4, 11.7], [-11.9, 12.8]], false, 60), modulos: 1, ponta: 1.0, passo: 0.26,
+  const bloco = new Faixa({ id: 'escolaBloco', closed: false, path: curve([[-25.6, 15.7], [-24.4, 17.2], [-22.4, 16.9], [-20.9, 18.0001]], false, 60), modulos: 1, ponta: 1.0, passo: 0.26,
     prof: { o0: -0.5, o1: 0.5, setIn: 0.12, setOut: 0.12, beiral: 0.12, slab: 0.05, curb: 0.04, curbW: 0.08, passeioW: 0.12, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 3 });
   bloco.setTodos(3); P.e1.add(bloco.group);
   // e2: pátios de piso terracota salmão: dois em plataformas altas (no nível dos terraços do setor oeste do Anel) e um
   // no chão, com brinquedos tubulares laranja; rampa clara da plataforma A ao campo
   const terracota = M.terracota || M.pavers; const aro = M.fasciaBeiral || M.fascia;
-  const A1 = { x: -16.4, z: 6.2, rx: 2.0, rz: 1.25, rot: 0.9, h: 1.6, sd: 11 }, B1 = { x: -14.9, z: 8.9, rx: 1.5, rz: 1.0, rot: 0.4, h: 1.2, sd: 12 };
+  const A1 = { x: -25.4, z: 11.4, rx: 2.0, rz: 1.25, rot: 0.9, h: 1.6, sd: 11 }, B1 = { x: -23.9, z: 14.1, rx: 1.5, rz: 1.0, rot: 0.4, h: 1.2, sd: 12 };
   for (const q of [A1, B1]) {
     // a plataforma pousa num morro em três degraus de grama (como os terraços do talude do Anel na foto), não num pilar
     for (const [dr, k] of [[0.62, 0.42], [0.32, 0.74]]) { P.e2.add(plate(blobPts(q.x, q.z, q.rx + dr, q.rz + dr, q.rot, q.sd), 0, q.h * k, M.roof)); P.e2.add(plate(blobPts(q.x, q.z, q.rx + dr + 0.03, q.rz + dr + 0.03, q.rot, q.sd), q.h * k, 0.03, aro)); }
@@ -94,14 +95,14 @@ export function escola() {
   }
   { const co = Math.cos(A1.rot), si = Math.sin(A1.rot); P.e2.add(brinquedos(A1.x + 0.8 * co, A1.z + 0.8 * si, A1.h + 0.06, 11, 3, 0.03, 0.6)); }
   P.e2.add(brinquedos(B1.x, B1.z, B1.h + 0.06, 12, 3, 0.03, 0.7));
-  P.e2.add(plate(blobPts(-11.4, 7.6, 0.9, 0.6, 0.2, 13), 0, 0.03, terracota)); P.e2.add(brinquedos(-11.4, 7.6, 0.03, 13, 4, 0.045, 0.5));
-  P.e2.add(mesh(deckGeo([[-14.75, A1.h + 0.02, 6.95], [-13.7, 1.15, 7.5], [-12.6, 0.6, 8.1], [-11.6, 0.04, 8.75]], 0.28, 0.05), M.caminhoTeto || M.concreto));
+  P.e2.add(plate(blobPts(-20.4, 12.8, 0.9, 0.6, 0.2, 13), 0, 0.03, terracota)); P.e2.add(brinquedos(-20.4, 12.8, 0.03, 13, 4, 0.045, 0.5));
+  P.e2.add(mesh(deckGeo([[-23.75, A1.h + 0.02, 12.15], [-22.7, 1.15, 12.7], [-21.6, 0.6, 13.3], [-20.6, 0.04, 13.95]], 0.28, 0.05), M.caminhoTeto || M.concreto));
   // e3: piscina afunilada turquesa na plataforma A, com aro claro e 4 ilhas de areia
   { const co = Math.cos(A1.rot), si = Math.sin(A1.rot); const pc = [A1.x - 0.55 * co, A1.z - 0.55 * si]; const y = A1.h + 0.02;
     P.e3.add(plate(retRed(pc, 1.85, 0.9, A1.rot, 0.3, 4), y, 0.03, aro)); P.e3.add(plate(retRed(pc, 1.7, 0.75, A1.rot, 0.28, 4), y + 0.01, 0.03, M.pool));
     for (const [u, v, r] of [[-0.55, 0.05, 0.2], [-0.1, -0.15, 0.24], [0.3, 0.12, 0.3], [0.62, -0.1, 0.18]]) P.e3.add(plate(blobPts(pc[0] + u * co - v * si, pc[1] + u * si + v * co, r, r * 0.7, 0.3, 21 + (r * 10 | 0)), y + 0.03, 0.03, M.sand)); }
   for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'escola', root, partes: P, esqueletos: {}, grua: { e1: true }, foco: { x: -15.2, z: 8.6, dist: 12 }, ancora: [-15.2, 2.2, 9] };
+  return { id: 'escola', root, partes: P, esqueletos: {}, grua: { e1: true }, foco: { x: -24.2, z: 13.8, dist: 12 }, ancora: [-24.2, 2.2, 14.2] };
 }
 // setor de coroa circular (degrau curvo) no plano, de r0 a r1 e de a0 a a1, com altura h
 function setor(r0, r1, a0, a1, h, y, mat, seg = 16) {

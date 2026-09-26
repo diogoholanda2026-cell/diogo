@@ -17,7 +17,7 @@ import { ITENS, PREDIOS, USINAS, OFICINAS, BRUTOS, receitas } from '../data/iten
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP } from '../data/obras.js';
 import { REGRAS, TOPOGRAFO } from '../sim/estado.js';
 import { depositoAberto, calendarioDe, rendaHoraDe } from './hud.js';
-import { CIDADE, CATEGORIAS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, COBERTURAS, PASSO, TIPOS_CIDADE } from '../data/cidade.js';
+import { CIDADE, CATEGORIAS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, COBERTURAS, PASSO, TIPOS_CIDADE, PALETA } from '../data/cidade.js';
 
 const nomeIt = (k) => ITENS[k]?.nome || k;
 const NOME_SERV = { agua: 'Água', energia: 'Energia', saneamento: 'Saneamento' };
@@ -213,6 +213,8 @@ export class Paineis {
       case 'melhorar': { const r = J.melhorarModulo(d.f, +d.i); const q = J.requisitosModulo(d.f, +d.i); if (r === 'servico') C._dica(q.servicos.includes('energia') ? 'servicoEnergia' : 'servicoAgua'); else if (r === 'bem') C._dica('bemNivel');
         res(r, () => { C.som.obra(); C.vibra.sucesso(); }, { bemMin: q.bemMin, servicos: q.servicos, cobFalta: q.cobFalta }); C.sincronizar(); if (r === 'ok') setTimeout(() => { if (this.atual?.tipo === 'modulo') this.fechar(true); C.irPara({ modulo: [d.f, +d.i] }, false); }, 250); break; }
       case 'aprovarMod': C.aprovarModulo(d.f, +d.i); break;
+      case 'pintar': if (J.pintarCidade(d.f, +d.i, +d.cor) === 'ok') { C.som.toque?.(); C.vibra.tique(); } break;
+      case 'pintarObra': if (J.pintarObra(d.id, +d.cor) === 'ok') { C.som.toque?.(); C.vibra.tique(); } break;
       case 'comprarTempo': res(J.comprarTempo(JSON.parse(d.alvo), +d.min), () => { C.som.moedas?.(); C.hud.brinde(`Tempo comprado: ${+d.min < 60 ? d.min + ' min' : '1 h'} a menos`, 'relogio'); C.sincronizar(); }); break;
       case 'cidadeColocar': this.fechar(true); C.colocarCidade(d.f); break;
       case 'terrenoColocar': this.fechar(true); C.colocarTerreno(); break;
@@ -400,6 +402,7 @@ export class Paineis {
     else if (s === 'pronta') corpo += `<div class="linha acoes fixa"><button class="botao grande" data-a="aprovar" data-key="${key}">${img('ok')} Aprovar a etapa</button></div>`;
     else if (s === 'feita') { const nx = J.proximaEtapa(p); corpo += `<p class="desc">Etapa concluída.</p>${nx ? `<button class="botao sec" data-a="abrir" data-t="etapa" data-arg='"${pid}.${nx.e.id}"'>Próxima etapa: ${nx.e.nome}</button>` : ''}`; }
     if (!corpo.includes(desc)) corpo = corpo.replace(passos, () => passos + desc);
+    if (pid !== 'reflorestar' && J.feita(pid + '.' + p.etapas[0].id)) corpo += this.coresHtml(`data-a="pintarObra" data-id="${pid}"`, S.cores?.[pid]);
     return { icone: p.icone || 'obras', foto: p.foto, titulo: p.nomeCurto || p.nome, nome: p.nome, sub: `Etapa ${i + 1} de ${p.etapas.length} · ${e.nome}`, corpo };
   }
   // ---------- módulo ----------
@@ -408,6 +411,10 @@ export class Paineis {
   _servicosHtml(r) {
     const J = this.J; return `<div class="servicos">${['agua', 'energia', 'saneamento'].map((k) => { const si = J.servicoInfo ? J.servicoInfo(k) : { cap: J.serv[k] || 0, uso: J.pop }; const pede = r?.servicos?.includes(k); const alvo = pede ? r.popDepois : si.uso; const ok = pede ? si.cap >= r.popDepois : si.cap >= si.uso || !si.uso; const p = si.cap ? Math.min(1, alvo / si.cap) : alvo ? 1 : 0; const key = obraServico(J, k);
       return `<button class="serv ${ok ? 'ok' : 'nao'} ${pede ? 'pede' : ''}" ${key ? `data-a="ir" data-alvo='${JSON.stringify({ etapa: key })}'` : 'data-a="fraco" data-motivo="nada"'} aria-label="${NOME_SERV[k]}: ${fmt(alvo)} de ${fmt(si.cap)}${ok ? '' : ', falta'}">${img(k)}<b>${fmt(alvo)}/${fmt(si.cap)}</b><span class="barra"><i style="width:${(p * 100).toFixed(0)}%"></i></span></button>`; }).join('')}</div>`;
+  }
+  // paleta de cores: um prédio da cidade, ou o projeto (ou a faixa inteira) na Arcologia
+  coresHtml(data, atual) {
+    return `<div class="cores" role="group" aria-label="Cor do prédio"><span>${img('pincel')}Cor</span>${PALETA.map((p, k) => `<button class="cor ${k === (atual | 0) ? 'on' : ''}" style="--c:${p.amostra || '#' + p.cor.toString(16).padStart(6, '0')}" ${data} data-cor="${k}" aria-label="${p.nome}" title="${p.nome}"></button>`).join('')}</div>`;
   }
   r_modulo([f, i]) {
     const J = this.J, M = MODULOS[f], m = J.S.modulos[f][i]; const s = J.situacaoModulo(f, i);
@@ -442,6 +449,7 @@ export class Paineis {
     else if (s === 'obra') corpo += `<div class="linha" data-ini="${m.obra.ini}" data-fim="${m.obra.fim}"><div class="barra"><i style="width:0"></i></div><b class="tt tempo"></b></div><div class="linha acoes">${this.mutiraoBt({ modulo: [f, i] }, `Mutirão: adiantar ${REGRAS.mutiraoH} h`)}${this.aceleraBt({ modulo: [f, i] }, 'obra')}</div>${this.compraTempo({ modulo: [f, i] })}`;
     else if (s === 'pronta') corpo += `<div class="linha acoes fixa"><button class="botao grande" data-a="aprovarMod" data-f="${f}" data-i="${i}">${img('ok')} Aprovar o pavimento</button></div>`;
     else if (s === 'max') corpo += `<p class="desc">${cid ? (M.cat === 'moradia' ? 'Prédio completo: o nível mais alto da cidade.' : `Prédio pronto: ${efeitoCid}.`) : 'Módulo completo, igual ao projeto.'}</p>`;
+    if (m.nivel > 0) corpo += cid ? this.coresHtml(`data-a="pintar" data-f="${f}" data-i="${i}"`, m.cor) : this.coresHtml(`data-a="pintarObra" data-id="${f}"`, J.S.cores?.[f]);
     if (cid) { const b = BAIRROS[loteDe(m.lote)?.bairro]?.nome || 'Cidade'; return { icone: M.icone, titulo: M.nome, nome: `${M.nome}, ${b}`, sub: M.cat === 'moradia' ? `${b} · nível ${m.nivel} de ${M.max} · ${fmt(popAgora)} moradores` : M.cat === 'comercio' ? `${b} · nível ${m.nivel} de ${M.max} · +${pct(M.renda * m.nivel)} de renda` : M.cat === 'empresa' ? `${b} · nível ${m.nivel} de ${M.max} · ${fmt(Math.round(M.lucro * m.nivel * (J.emp?.ocupacao ?? 1)))}/h de lucro` : `${b} · ${m.nivel ? 'pronto' : 'em obra'}`, corpo }; }
     return { icone: 'modulo', foto: M.foto, titulo: `${M.nomeCurto || M.nome} · módulo ${i + 1}`, nome: `${M.nome}, módulo ${i + 1}`, sub: `Nível ${m.nivel} de ${M.max} · ${fmt(popAgora)} moradores`, corpo };
   }

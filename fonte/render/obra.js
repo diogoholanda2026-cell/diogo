@@ -524,12 +524,12 @@ export class Obras {
   }
   // ---------------------------------------------------------------- draga (desassoreamento do lago)
   _prepDraga(s) {
-    const L = A.lago, il = A.ilha; let z0 = 1e9, z1 = -1e9; for (const [, z] of L) { z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    const L = A.lago, il = A.ilha; let z0 = 1e9, z1 = -1e9, lx0 = 1e9, lx1 = -1e9; for (const [x, z] of L) { z0 = Math.min(z0, z); z1 = Math.max(z1, z); lx0 = Math.min(lx0, x - 0.5); lx1 = Math.max(lx1, x + 0.5); }
     // faixas de norte a sul dentro do lago (0,7 da margem e fora da ilha), em zigue-zague
     const pts = []; let lado = 0;
     for (let z = z0 + 0.9; z < z1 - 0.6; z += 1.15) {
       const seg = []; let ini = null;
-      for (let x = -9; x <= 10; x += 0.2) { const ok = inPoly(x, z, L) && inPoly(x - 0.7, z, L) && inPoly(x + 0.7, z, L) && inPoly(x, z - 0.6, L) && inPoly(x, z + 0.6, L) && Math.hypot(x - il.c[0], z - il.c[1]) > il.r + 0.7; if (ok && ini === null) ini = x; if (!ok && ini !== null) { seg.push([ini, x - 0.2]); ini = null; } }
+      for (let x = lx0; x <= lx1; x += 0.2) { const ok = inPoly(x, z, L) && inPoly(x - 0.7, z, L) && inPoly(x + 0.7, z, L) && inPoly(x, z - 0.6, L) && inPoly(x, z + 0.6, L) && Math.hypot(x - il.c[0], z - il.c[1]) > il.r + 0.7; if (ok && ini === null) ini = x; if (!ok && ini !== null) { seg.push([ini, x - 0.2]); ini = null; } }
       for (const [a, b] of lado ? seg.reverse() : seg) { if (b - a < 0.6) continue; pts.push(lado ? [b, z] : [a, z], lado ? [a, z] : [b, z]); }
       lado = 1 - lado;
     }

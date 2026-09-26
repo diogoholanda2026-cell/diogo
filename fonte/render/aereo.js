@@ -92,3 +92,47 @@ export class Aereo {
     }
   }
 }
+
+// ---------------------------------------------------------------- helicóptero da Holding
+// Exclusivo da Holding: preto laqueado com faixas douradas, mais longo e esguio que os da cidade, rotor de cinco pás.
+// Mora no heliponto da Torre da Holding (pousar(pad)); a cada ciclo espera no heliponto com o rotor lento, sobe,
+// dá uma volta larga sobre a Arcologia e a cidade (sobre a praça, a Cúpula, o fundo e o Campus) e pousa de novo.
+function heliHolding() {
+  const g = new THREE.Group(); const L = M.laca || M.dark, O = M.ouro || M.yellow;
+  const cab = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), L); cab.scale.set(0.85, 0.8, 1.45); cab.castShadow = true; g.add(cab);
+  const vid = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), M.glass); vid.rotation.x = Math.PI / 2 - 0.45; vid.position.set(0, 0.05, 0.26); g.add(vid);
+  g.add(caixa(0.6, 0.035, 0.9, O, 0, -0.02, 0.02)); // faixa dourada da cintura
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.1, 1.2, 8), L); cone.rotation.x = Math.PI / 2; cone.position.set(0, 0.08, -0.95); g.add(cone);
+  g.add(caixa(0.025, 0.02, 1.1, O, 0, 0.14, -0.9)); g.add(caixa(0.03, 0.34, 0.18, L, 0, 0.22, -1.52)); g.add(caixa(0.36, 0.025, 0.12, L, 0, 0.06, -1.45));
+  for (const x of [-0.2, 0.2]) { g.add(caixa(0.03, 0.03, 0.85, M.steelDark, x, -0.33, 0.02)); g.add(caixa(0.02, 0.12, 0.02, M.steelDark, x, -0.27, 0.22)); g.add(caixa(0.02, 0.12, 0.02, M.steelDark, x, -0.27, -0.18)); }
+  const rotor = new THREE.Group(); for (let i = 0; i < 5; i++) { const p = caixa(1.25, 0.012, 0.07, M.dark, 0.62, 0, 0); const b = new THREE.Group(); b.add(p); b.rotation.y = (i / 5) * Math.PI * 2; rotor.add(b); }
+  rotor.add(caixa(0.12, 0.08, 0.12, O)); rotor.position.y = 0.38; g.add(rotor);
+  const cauda = new THREE.Group(); cauda.add(caixa(0.02, 0.42, 0.045, M.dark)); cauda.add(caixa(0.02, 0.045, 0.42, M.dark)); cauda.position.set(0.05, 0.22, -1.52); g.add(cauda);
+  rotor.userData.keep = true; cauda.userData.keep = true; bake(g); g.userData.rotor = rotor; g.userData.cauda = cauda; g.scale.setScalar(1.15); return g;
+}
+export class HeliHolding {
+  constructor() { this.g = heliHolding(); this.g.name = 'heli-holding'; this.g.userData.semHAO = true; /* (voa: fora do mapa de alturas da oclusão) */ this.g.visible = false; this.pad = null; this.t = 0; this._v = new THREE.Vector3(); this._w = new THREE.Vector3(); }
+  // pad = [x, y, z] do heliponto (ou null: sem Torre, sem helicóptero)
+  pousar(pad) {
+    const k = pad ? pad.map((v) => v.toFixed(2)).join() : ''; if (k === this._k) return; this._k = k; this.pad = pad; this.g.visible = !!pad; if (!pad) return;
+    const [x, y, z] = pad; const H = y + 6;
+    const P = [[x, H, z], [x + 6, H + 5, z + 10], [x + 18, 17, z + 26], [x + 30, 18, z + 30], [x + 34, 19, z + 12], [x + 26, 18, z - 6], [x + 6, 17, z - 14], [x - 18, 17, z - 10], [x - 34, 18, z + 8], [x - 26, 18, z + 30], [x - 8, 16, z + 26], [x - 3, H + 3, z + 8], [x, H, z]];
+    this.curva = new THREE.CatmullRomCurve3(P.map(([a, b, c]) => new THREE.Vector3(a, b, c)), false, 'centripetal', 0.5); this.L = this.curva.getLength();
+    this.T = [22, 4, this.L / 8, 5]; this.t = 6; // espera, subida, voo, descida (s); começa no heliponto
+    this.g.position.set(x, y + 0.34 * 1.15, z); this.g.rotation.set(0, 0, 0);
+  }
+  update(dt) {
+    if (!this.pad || !this.g.visible) return; dt = Math.min(dt, 0.1); const U = this.g.userData; const [x, y, z] = this.pad, H = y + 6, T = this.T, dy = 0.34 * 1.15;
+    const ciclo = T[0] + T[1] + T[2] + T[3]; this.t = (this.t + dt) % ciclo; const t = this.t; const g = this.g;
+    U.rotor.rotation.y += dt * (t < T[0] ? 4 : 32); U.cauda.rotation.x += dt * (t < T[0] ? 5 : 40);
+    if (t < T[0]) { g.position.set(x, y + dy, z); g.rotation.set(0, 0, 0); return; }
+    if (t < T[0] + T[1]) { const k = (t - T[0]) / T[1]; g.position.set(x, y + dy + (H - y) * k * k * (3 - 2 * k), z); return; }
+    if (t < T[0] + T[1] + T[2]) {
+      const u = (t - T[0] - T[1]) / T[2]; this.curva.getPointAt(u, this._v); this.curva.getPointAt(Math.min(1, u + 0.01), this._w); g.position.copy(this._v); g.position.y += dy;
+      const rumo = Math.atan2(this._w.x - this._v.x, this._w.z - this._v.z); this.curva.getPointAt(Math.min(1, u + 0.03), this._v); const r2 = Math.atan2(this._v.x - this._w.x, this._v.z - this._w.z);
+      let d = r2 - rumo; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; const amort = Math.min(1, u * 8, (1 - u) * 8);
+      g.rotation.set(0.18 * amort, rumo * amort + (1 - amort) * g.rotation.y, Math.max(-0.45, Math.min(0.45, -d * 5)) * amort, 'YXZ'); return;
+    }
+    const k = (t - T[0] - T[1] - T[2]) / T[3]; g.position.set(x, H + dy - (H - y) * k * k * (3 - 2 * k), z); g.rotation.x *= 0.9; g.rotation.z *= 0.9;
+  }
+}

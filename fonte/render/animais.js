@@ -254,7 +254,7 @@ export class Manada {
 // inclina nas curvas; as asas batem no shader. Some à noite (o mundo cuida disso).
 export class Bando {
   constructor(n = 14, o = {}) {
-    this.n = n; this.c = o.centro || [1.5, -6]; this.R = o.raio || [16, 10];
+    this.n = n; this.c = o.centro || [0, -2]; this.R = o.raio || [30, 20];
     this.mesh = new THREE.InstancedMesh(animalGeos().ave, animalMaterial(), n); this.mesh.frustumCulled = false; this.mesh.castShadow = false; this.mesh.receiveShadow = false; this.mesh.userData.semHAO = true; this.mesh.name = 'bando';
     this.off = []; for (let i = 0; i < n; i++) { const r = Math.ceil(i / 2), s = i % 2 ? 1 : -1; this.off.push([-r * 0.34 + (hash(i, 1, 81) - 0.5) * 0.08, (hash(i, 2, 81) - 0.5) * 0.12, s * r * 0.3]); }
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(0, 0, 0, 'YXZ'); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1);

@@ -8,7 +8,7 @@
 // Modelos no padrão da foto: lajes creme, fita de vidro escuro com as salas acesas à noite, canteiros verdes na borda
 // dos terraços, coberturas verdes e árvores da mata.
 import * as THREE from 'three';
-import { M } from './materials.js';
+import { M, pintar } from './materials.js';
 import { FH, bake } from './geom.js';
 import { treeGroup } from './forest.js';
 import { Crowd } from './figuras.js';
@@ -16,7 +16,7 @@ import { Aereo } from './aereo.js';
 import { Maritimo, iate } from './maritimo.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tex } from './textures.js';
-import { BAIRROS, ORDEM_BAIRROS, LOTE, PASSO, areaBairro, loteDe, CIDADE } from '../data/cidade.js';
+import { BAIRROS, ORDEM_BAIRROS, LOTE, PASSO, areaBairro, loteDe, CIDADE, PALETA } from '../data/cidade.js';
 import { hash } from '../core/util.js';
 
 const FH_C = FH; // altura do pavimento da cidade (a mesma da Arcologia)
@@ -443,7 +443,7 @@ export class FaixaCidade {
     return m;
   }
   cortar(n) { for (let i = n; i < this.mods.length; i++) if (this.mods[i]?.g) this.group.remove(this.mods[i].g); this.mods.length = Math.min(this.mods.length, n); }
-  _nivelGeo(m, n) { const g = MODELOS[this.f](n, m.seed); g.position.set(m.x, 0, m.z); g.rotation.y = m.rot; g.userData.bairro = m.bairro; return g; }
+  _nivelGeo(m, n) { const g = MODELOS[this.f](n, m.seed); g.position.set(m.x, 0, m.z); g.rotation.y = m.rot; g.userData.bairro = m.bairro; if (m.cor) pintar(g, PALETA[m.cor]?.cor); return g; } // (cor escolhida pelo jogador)
   // prédio inteiro no nível n: os subgrupos 1..n (no terraço, o teto verde de cada nível some quando o seguinte o cobre)
   _predio(m, n) {
     const g = new THREE.Group(); g.name = this.f + ':' + m.loteId; g.userData.bairro = m.bairro; g.userData.pick = { tipo: 'modulos', id: this.f };
@@ -660,7 +660,7 @@ export class Cidade {
   sincronizar(modulos) {
     for (const [f, F] of Object.entries(this.faixas)) {
       const arr = modulos[f] || []; F.cortar(arr.length);
-      arr.forEach((m, i) => { const mod = F.garantir(i, m.lote); if (mod.nivel !== m.nivel || (m.nivel > 0 && !mod.g)) F.setNivel(i, m.nivel); });
+      arr.forEach((m, i) => { const mod = F.garantir(i, m.lote); if (mod.nivel !== m.nivel || (m.nivel > 0 && !mod.g) || (mod.cor | 0) !== (m.cor | 0)) { mod.cor = m.cor | 0; F.setNivel(i, m.nivel); } });
     }
   }
   // lotes livres destacados no modo de colocar (lista de ids; vazio esconde)

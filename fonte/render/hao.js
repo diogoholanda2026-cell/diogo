@@ -11,7 +11,8 @@ import * as THREE from 'three';
 import { MESA } from '../data/planta.js';
 
 export const CAMADA_HAO = 5;                 // só o que tem esta camada entra no mapa de alturas
-const X0 = -34, X1 = 34, Z0 = -22, Z1 = 22;  // a planta + 2 unidades
+const X0 = MESA.x0 - 2, X1 = MESA.x1 + 2, Z0 = MESA.z0 - 2, Z1 = MESA.z1 + 2; // a planta + 2 unidades
+const AH = Math.round((512 * (Z1 - Z0)) / (X1 - X0) / 8) * 8; // altura do alvo na proporção da planta (texel quadrado)
 export const HAO_U = { tHAO: { value: null }, haoOn: { value: 0 }, haoP: { value: new THREE.Vector4(X0, Z1, 1 / (X1 - X0), -1 / (Z1 - Z0)) }, // v cresce para -z (câmera com up -z)
   haoK: { value: 1 }, ceuTint: { value: new THREE.Vector3(1, 1, 1) }, rimCor: { value: new THREE.Color(0, 0, 0) },
   tNuvemSombra: { value: null }, nuvemK: { value: 0 }, nuvemP: { value: new THREE.Vector3(0, 0, 1 / 70) } }; // nuvemP: deslocamento (x, z) e escala
@@ -103,8 +104,8 @@ export class HAO {
     this.ok = !!(r.extensions.has('EXT_color_buffer_float') || r.extensions.has('EXT_color_buffer_half_float'));
     if (!this.ok) return;
     const o = { type: THREE.HalfFloatType, format: THREE.RGFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping };
-    this.A = new THREE.WebGLRenderTarget(512, 320, { ...o, depthBuffer: true });
-    this.B = new THREE.WebGLRenderTarget(256, 160, { ...o, depthBuffer: false }); this.C = new THREE.WebGLRenderTarget(256, 160, { ...o, depthBuffer: false });
+    this.A = new THREE.WebGLRenderTarget(512, AH, { ...o, depthBuffer: true });
+    this.B = new THREE.WebGLRenderTarget(256, AH / 2, { ...o, depthBuffer: false }); this.C = new THREE.WebGLRenderTarget(256, AH / 2, { ...o, depthBuffer: false });
     this.cam = new THREE.OrthographicCamera(X0, X1, -Z0, -Z1, 1, 120); this.cam.position.set(0, 60, 0); this.cam.up.set(0, 0, -1); this.cam.lookAt(0, 0, 0); this.cam.updateMatrixWorld(); this.cam.layers.set(CAMADA_HAO);
     this.mAlt = new THREE.ShaderMaterial({ vertexShader: HV, fragmentShader: HF, side: THREE.DoubleSide });
     this.mBlur = new THREE.ShaderMaterial({ vertexShader: BV, fragmentShader: BF, uniforms: { tMap: { value: null }, dir: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
@@ -138,7 +139,7 @@ export class HAO {
     r.setClearColor(0x000000, 1); r.setRenderTarget(this.A); r.clear(); r.render(scene, this.cam);
     scene.overrideMaterial = ov; scene.background = bg; r.shadowMap.enabled = sm;
     const U = this.mBlur.uniforms; const pass = (src, dst, dx, dy) => { U.tMap.value = src.texture; U.dir.value.set(dx, dy); r.setRenderTarget(dst); r.render(this.fs, this.fsCam); };
-    pass(this.A, this.B, 1.5 / 512, 0); pass(this.B, this.C, 0, 1.5 / 160); pass(this.C, this.B, 1.5 / 256, 0); pass(this.B, this.C, 0, 1.5 / 160);
+    pass(this.A, this.B, 1.5 / 512, 0); pass(this.B, this.C, 0, 3 / AH); pass(this.C, this.B, 1.5 / 256, 0); pass(this.B, this.C, 0, 3 / AH);
     r.setRenderTarget(rt); r.setClearColor(this._cc, ca);
     this._calculado = true; HAO_U.haoOn.value = this._ativo ? 1 : 0;
   }

@@ -7,7 +7,10 @@ Atualizado em 26/09/2026, depois da fase 1 (desmate, porto, jatinhos, esportivos
 ## 1. Onde estamos
 
 - **Arcologia de Held:** a obra central, em 6 capítulos, com a mecânica do SimCity BuildIt: usinas, oficinas, pranchas,
-  pavimentos, pedidos e obras animadas.
+  pavimentos, pedidos e obras animadas. Desde a fase 1.1 ela segue um plano diretor próprio (eixo e quadras) em vez da
+  disposição da foto: eixo monumental até a Sede com a Torre da Holding (heliponto e helicóptero exclusivo), avenida,
+  rotatória, anel viário ligado aos bairros e ao porto, quadras por função e a Cúpula da Vida (vidro fechado, sem
+  bichos à vista). Prédios da cidade e obras da Arcologia aceitam cor escolhida pelo jogador.
 - **Cidade em volta, em mundo aberto:**
   - 20 bairros e 1.651 lotes que começam cobertos de mata. Tocar nas árvores desmata o lote e abre a rua.
   - Moradias que sobem de nível e serviços com área de atendimento (polícia, saúde, escola, faculdade), mais a
@@ -187,10 +190,24 @@ de longe, e simula o resto em números.
 
 Cada metrópole faz o papel de um país. Tem arquitetura, clima, moeda, leis, recursos e rivais próprios.
 
-- **Os 12 países de referência:** Brasil (onde fica a Arcologia), EUA, Reino Unido, Alemanha, França, China, Japão,
-  Coreia do Sul, Índia, Singapura, Emirados Árabes Unidos e Arábia Saudita.
-- **Nomes:** os nomes de trabalho são fictícios e inspirados em cada país. Isso deixa a política livre de problemas
-  com fatos reais, mas pode ser trocado pelos nomes reais se você preferir.
+**Decidido pelo dono (26/09/2026):** as metrópoles são baseadas nos 12 países reais, com nomes fictícios.
+
+| País de referência | Metrópole | Vocação e arquitetura |
+|---|---|---|
+| Brasil | **Heldópolis** | construção, natureza e agro; a Arcologia de Held é o marco; modernismo tropical, verde nos terraços |
+| EUA | **Nova Libertas** | finanças, tecnologia e mídia; torres de vidro, avenidas largas |
+| Reino Unido | **Albionford** | bancos, seguros e bolsa; tijolo, pedra e vidro às margens de um rio |
+| Alemanha | **Rheinhaven** | indústria, engenharia e automóveis; fábricas limpas, trens e o porto fluvial |
+| França | **Valmonde** | luxo, moda e turismo; bulevares, praças radiais e ateliês |
+| China | **Jinhai** | manufatura, portos e infraestrutura; megatorres e trens-bala |
+| Japão | **Hoshimura** | robótica, trens e eletrônicos; bairros densos e jardins |
+| Coreia do Sul | **Hanbit** | eletrônicos, estaleiros e cultura pop; telões e pontes |
+| Índia | **Suryapur** | serviços, TI e mão de obra; mercados e parques tecnológicos |
+| Singapura | **Singara** | porto, finanças e hub aéreo; jardins verticais |
+| Emirados Árabes Unidos | **Qasr al-Noor** | turismo de luxo, aviação e arranha-céus; ilhas artificiais |
+| Arábia Saudita | **Rimal** | energia e megaprojetos no deserto; cidades lineares |
+
+- **Por que nomes fictícios:** a política e as crises ficam livres de fatos reais.
 - **Mapa-múndi:** liga as metrópoles por rotas de avião e de navio. O porto e o aeroporto de cada uma são a porta de
   entrada.
 - **Abrir filial em outra metrópole pede:**
@@ -205,7 +222,18 @@ Cada metrópole faz o papel de um país. Tem arquitetura, clima, moeda, leis, re
   - corridas por recursos.
 - **O que as crises movem:** os preços das cadeias de produção e as rotas de comércio.
 
-### 5.7 A história em atos
+### 5.7 O tom: drama corporativo e utopia em equilíbrio
+
+**Decidido pelo dono (26/09/2026):** um equilíbrio entre os dois.
+
+- **Dois medidores:** Influência (poder, mercado, política) e Legado (o que a Holding deixa para as cidades: bem-estar,
+  verde, cultura).
+- **Nos eventos de decisão:** em geral, uma opção puxa um medidor e a outra puxa o outro.
+- **Cada ato alterna:** crises e rivalidade (drama) com obras-marco e metas de cidade sustentável (utopia).
+- **Finais diferentes:** conforme o equilíbrio entre os dois medidores ao chegar à 12ª metrópole, você vira império,
+  fundação ou as duas coisas.
+
+### 5.8 A história em atos
 
 1. **A Arcologia (hoje):** a obra que dá origem à Holding.
 2. **A Holding:** a cidade cresce em volta. Surgem os primeiros rivais e a primeira eleição.
@@ -221,6 +249,7 @@ financeira, o advogado, a chefe de relações públicas, os fundadores rivais e 
 | Fase | O que entra | Pronto quando |
 |---|---|---|
 | 1 (feita) | desmate, porto, jatinhos, esportivos, limites maiores, esta visão e a equipe de IA | publicada em 26/09/2026 |
+| 1.1 (feita) | plano diretor da Arcologia (eixo, quadras, anel viário, saídas para a cidade), Torre da Holding com heliponto e helicóptero, Cúpula da Vida, cores dos prédios | publicada em 26/09/2026 |
 | 2 | Holding com divisões, influência, rivais e aliados na primeira metrópole, eventos de decisão com memória, bombeiros, lixo, telecom e marcos | robô vence um rival e completa 10 eventos |
 | 3 | estradas livres (reta, curva, rotatória), zonas com demanda, linhas de ônibus e metrô, trânsito com rotas | uma cidade crescida só por zonas e estradas |
 | 4 | motor em escala: WebGPU, simulação em worker, mapa em blocos, níveis de detalhe, estações e chuva, agentes estatísticos | 50 mil lotes a 60 quadros no PC e 30 no Poco X7 |
@@ -271,7 +300,7 @@ financeira, o advogado, a chefe de relações públicas, os fundadores rivais e 
 
 ### 7.5 O que preciso de você
 
-- **Decidir os nomes das metrópoles:** reais ou fictícios.
-- **Decidir o tom da história:** mais drama corporativo ou mais construção e utopia.
+- ~~Decidir os nomes das metrópoles~~: decidido, países reais com nomes fictícios (seção 5.6).
+- ~~Decidir o tom da história~~: decidido, equilíbrio entre drama corporativo e utopia (seção 5.7).
 - **Testar cada fase no Poco X7 e no PC** e mandar fps e prints. Há um painel de desempenho nas configurações.
 - **Na fase 5, criar uma chave de assinatura do APK** nos secrets do repositório. Eu explico o passo a passo.

@@ -1,4 +1,4 @@
-// Canteiro de obras (canto da frente à esquerda, fora do enquadramento da foto): escritório,
+// Canteiro de obras (pátio de obras no canto noroeste do plano diretor, junto à saída do anel viário): escritório,
 // almoxarifado, usinas de materiais e oficinas. Some no fim, quando a área é reflorestada.
 import * as THREE from 'three';
 import { M, dupla } from '../materials.js';
@@ -6,12 +6,12 @@ import { beams } from '../geom.js';
 import { treeGroup } from '../forest.js';
 
 export const LOTES = {
-  escritorio: { x: -21.9, z: 17.9, r: 0.15 },
-  almox: { x: -24.7, z: 17.7, r: 0.05 },
-  usina1: { x: -28.9, z: 17.6, r: 0 }, usina2: { x: -28.9, z: 14.8, r: 0 }, usina3: { x: -28.9, z: 12.0, r: 0 },
-  carpintaria: { x: -25.4, z: 14.9, r: 0 }, concreto: { x: -22.9, z: 14.7, r: 0.1 },
-  serralheria: { x: -25.4, z: 12.2, r: 0 }, vidracaria: { x: -22.9, z: 12.1, r: 0.1 },
-  eletrica: { x: -21.0, z: 15.4, r: 0.3 }, horto: { x: -27.3, z: 10.9, r: 0 }, laboratorio: { x: -24.3, z: 11.0, r: 0 },
+  escritorio: { x: -27.9, z: -19.6, r: 0.15 },
+  almox: { x: -30.7, z: -19.8, r: 0.05 },
+  usina1: { x: -34.9, z: -19.9, r: 0 }, usina2: { x: -34.9, z: -22.7, r: 0 }, usina3: { x: -34.9, z: -25.5, r: 0 },
+  carpintaria: { x: -31.4, z: -22.6, r: 0 }, concreto: { x: -28.9, z: -22.8, r: 0.1 },
+  serralheria: { x: -31.4, z: -25.3, r: 0 }, vidracaria: { x: -28.9, z: -25.4, r: 0.1 },
+  eletrica: { x: -27.0001, z: -22.1, r: 0.3 }, horto: { x: -33.3, z: -26.6, r: 0 }, laboratorio: { x: -30.3, z: -26.5, r: 0 },
 };
 // Pontos de produção de cada prédio (para a obra/atividade mostrar fumaça, esteira, serra, betoneira e faíscas
 // quando o prédio estiver produzindo). Coordenadas do mundo, já com a posição e o giro do lote.
@@ -86,9 +86,9 @@ export function predioCanteiro(tipo) {
 // pilhas de material, caminhões e cerca: ambientação permanente do canteiro
 export function ambienteCanteiro() {
   const g = new THREE.Group(); g.name = 'canteiroAmb'; const mt = mats();
-  for (const [x, z, r, m] of [[-30.2, 19.0, 0.5, mt.areia], [-29.2, 19.1, 0.4, mt.brita], [-26.6, 19.0, 0.45, mt.areia], [-20.4, 12.4, 0.35, mt.brita]]) { const p = mesh(new THREE.ConeGeometry(r, r * 0.8, 12), m); p.position.set(x, r * 0.4, z); g.add(p); }
-  const fence = []; for (let x = -31; x <= -20.4; x += 0.5) fence.push([[x, 0, 10.05], [x, 0.25, 10.05]]); g.add(beams(fence, 0.012, M.steel, 3));
-  const tape = mesh(new THREE.BoxGeometry(10.6, 0.05, 0.01), M.stripes, false); tape.position.set(-25.7, 0.2, 10.05); g.add(tape);
+  for (const [x, z, r, m] of [[-36.2, -18.5, 0.5, mt.areia], [-35.2, -18.4, 0.4, mt.brita], [-32.6, -18.5, 0.45, mt.areia], [-26.4, -25.1, 0.35, mt.brita]]) { const p = mesh(new THREE.ConeGeometry(r, r * 0.8, 12), m); p.position.set(x, r * 0.4, z); g.add(p); }
+  const fence = []; for (let x = -37.0001; x <= -26.4; x += 0.5) fence.push([[x, 0, -27.45], [x, 0.25, -27.45]]); g.add(beams(fence, 0.012, M.steel, 3));
+  const tape = mesh(new THREE.BoxGeometry(10.6, 0.05, 0.01), M.stripes, false); tape.position.set(-31.7, 0.2, -27.45); g.add(tape);
   return g;
 }
 
@@ -134,7 +134,7 @@ export class AtividadeCanteiro {
       if (tipo === 'horto') { add(id, 'cultivo', W(0, 0.28, 0)); add(id, 'alerta', W(0.8, 0.62, 0)); }
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(O, 3)); geo.setAttribute('aOrig', new THREE.Float32BufferAttribute(O, 3)); geo.setAttribute('aDir', new THREE.Float32BufferAttribute(D, 3)); geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(I, 3));
-    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(-25.6, 0.8, 14.8), 8);
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(-31.6, 0.8, -22.7), 8);
     this.on = new Float32Array(48);
     this.mat = new THREE.ShaderMaterial({ vertexShader: AV, fragmentShader: AF, uniforms: { uT: { value: 0 }, uOn: { value: this.on }, uEsc: { value: 400 }, uPR: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
     this.pontos = new THREE.Points(geo, this.mat); this.pontos.name = 'canteiro-vivo'; this.pontos.renderOrder = 5; this.pontos.userData.semHAO = true; this.pontos.visible = false;
@@ -156,5 +156,5 @@ export class AtividadeCanteiro {
 // Modelo do epílogo (etapas sem peça própria): foco e âncora sobre o canteiro, para a prancha e os balões
 export function modeloReflorestar() {
   const root = new THREE.Group(); root.name = 'reflorestar'; const e0 = new THREE.Group(), e1 = new THREE.Group(); root.add(e0, e1);
-  return { id: 'reflorestar', root, partes: { e0, e1 }, esqueletos: {}, grua: {}, foco: { x: -25.5, z: 15, dist: 16 }, ancora: [-25.5, 2.2, 15] };
+  return { id: 'reflorestar', root, partes: { e0, e1 }, esqueletos: {}, grua: {}, foco: { x: -31.5, z: -22.5, dist: 16 }, ancora: [-31.5, 2.2, -22.5] };
 }

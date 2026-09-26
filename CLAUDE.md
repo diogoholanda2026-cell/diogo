@@ -17,6 +17,13 @@ leia antes de propor ou começar uma fase.
   `data/` (itens, obras, história, cidade: bairros, lotes, tipos, empresas, lugares), `render/` (engine, mundo,
   cidade, obra, arredores, aéreo, marítimo, floresta, figuras), `ui/` (HUD, painéis, ícones em canvas, CSS),
   `jogo.js` (Controle: liga simulação, 3D e interface), `main.js` (arranque, câmera, laço).
+- Plano diretor da Arcologia em `data/planta.js` (mesa 80 x 56): eixo em x = 0, avenida em z = 1, rotatória, anel
+  viário e saídas, quadras (`DESLOC` move cada conjunto antigo inteiro; os modelos com números fixos usam o mesmo
+  deslocamento), passarelas retas e zonas. Não segue mais a disposição da foto. `ferramentas/conexoes.mjs` confere
+  cruzamentos e onde cada passarela pousa. Cúpula da Vida em `render/models/cupula.js` (sem bichos à vista), vias e
+  eixo em `render/models/plano.js`, helicóptero da Holding em `render/aereo.js` (`HeliHolding`).
+- Cores: `PALETA` em `data/cidade.js`; `pintarCidade`/`pintarObra` na simulação; `tinta`/`pintar` em
+  `render/materials.js` (a cor entra na fusão do mundo).
 - `app/` e `arcologia-de-held.html` são gerados por `node ferramentas/montar.mjs`. Nunca editar à mão.
 - `ferramentas/`: `montar.mjs`, `testar.mjs` (Chromium com SwiftShader: sem GPU, poucos quadros por segundo),
   `robo-partida.js` (joga a partida inteira no navegador), `simular.mjs` (simulação sem navegador e `--testes`),

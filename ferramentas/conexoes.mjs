@@ -1,7 +1,7 @@
 // Checagem das conexões e interseções da planta (roda em Node, sem navegador, em ~1 s): fitas, lago, modelos,
 // passarelas, vias e zonas. Aponta o que se cruza e onde começa e termina cada passarela.
 // Uso: node ferramentas/conexoes.mjs        (sai com código 1 se houver cruzamento de passarela ou via)
-import { A, PASSARELAS, ZONAS, SANTUARIO_GRAMADO } from '../fonte/data/planta.js';
+import { A, PASSARELAS, ZONAS } from '../fonte/data/planta.js';
 import { faixas } from '../fonte/render/models/aneis.js';
 import { alaOnda } from '../fonte/render/models/centro.js';
 import { normals, curve } from '../fonte/render/geom.js';
@@ -59,7 +59,7 @@ for (const [k, pts] of Object.entries(pegada)) for (const [n, [c, rx, rz, rot]] 
 // 4) modelos x modelos
 const cn = Object.keys(circ); for (let i = 0; i < cn.length; i++) for (let j = i + 1; j < cn.length; j++) { if ((cn[i] === 'bioma' && cn[j] === 'pastoBioma') || (cn[i] === 'pastoBioma' && cn[j] === 'bioma')) continue; const [c1, a1, b1] = circ[cn[i]], [c2, a2, b2] = circ[cn[j]]; const d = Math.hypot(c1[0] - c2[0], c1[1] - c2[1]) - Math.max(a1, b1) - Math.max(a2, b2); if (d < 0) report(`modelo ${cn[i]} x ${cn[j]}: ${d.toFixed(2)} (aprox. por círculos)`); }
 // 5) passarelas: cruzamentos com fitas e modelos (sem as pontas, que pousam nos prédios) e o que há em cada ponta
-const zonas = [...ZONAS, { id: 'santuarioPasto', elipse: SANTUARIO_GRAMADO.elipse }];
+const zonas = [...ZONAS];
 // ponta: a estrutura mais próxima (fita, modelo, contorno) se estiver a menos de 0.4; senão, a zona de chão
 // que a contém (clareira), ou 'mata' com a distância até a zona mais próxima
 const ponta = (p) => {

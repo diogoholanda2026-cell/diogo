@@ -522,6 +522,12 @@ function testes() {
       const L = J.lotesConstruiveis('sul'); f(L.limpos.length === 4 && L.mata.includes('sul:4:3') && !L.mata.includes('sul:9:4'), `lotes construíveis (${L.limpos.length}, ${L.mata.length})`);
       f(J.construirCidade('cidCasas', 'sul:5:3') === 'ok' && J.limposSet().has('sul:5:3'), 'casa no lote desmatado');
       const P = prepararSave(JSON.parse(JSON.stringify(S)), T); f(Object.keys(P.cidade.limpos).length === 4, 'lotes limpos sobrevivem ao save'); }
+    // cores: o jogador pinta um prédio da cidade ou uma obra da Arcologia (índice da PALETA; 0 volta ao original), de graça
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 10000; J.desmatar('sul:5:0'); const c0 = S.creditos;
+      f(J.construirCidade('cidCasas', 'sul:5:0') === 'ok' && J.pintarCidade('cidCasas', 0, 3) === 'ok' && S.modulos.cidCasas[0].cor === 3, 'prédio da cidade pintado');
+      f(J.pintarCidade('cidCasas', 0, 99) === 'nada' && J.pintarCidade('cidCasas', 5, 2) === 'nada' && J.pintarObra('sede', 5) === 'ok' && J.pintarObra('anel', 2) === 'ok' && S.creditos === c0 - CIDADE.cidCasas.custo[1], 'cores válidas e de graça');
+      const P = prepararSave(JSON.parse(JSON.stringify({ ...S, cores: { ...S.cores, x: 'a', y: 42 } })), T); f(P.modulos.cidCasas[0].cor === 3 && P.cores.sede === 5 && P.cores.anel === 2 && !('x' in P.cores) && !('y' in P.cores), 'cores sobrevivem ao save');
+      f(J.pintarObra('sede', 0) === 'ok' && !('sede' in S.cores) && J.pintarCidade('cidCasas', 0, 0) === 'ok' && !('cor' in S.modulos.cidCasas[0]), 'cor original volta'); }
     // tutorial: cada passo tem fala e teste
     f(TUTORIAL.every((p) => p.id && p.quem && p.fala && p.alvo && typeof p.feito === 'function'), 'tutorial incompleto');
   } catch (e) { falhas.push('teste: exceção ' + (e.stack || e.message)); }

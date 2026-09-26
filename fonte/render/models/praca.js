@@ -1,9 +1,9 @@
-// Praça central (piso plano em leque, dois espelhos d'água de meio-fio claro e água escura, espelho retangular
-// turquesa sob o Bulevar com totens, faixa diagonal de copas grandes, laços brancos em gota com jardineiras
-// floridas sobre a via do sul), passarelas elevadas com piso cinza-claro, borda verde e jardineiras contínuas,
-// a ponte coberta e o caminho da frente.
+// Praça da Entrada (no eixo, junto ao portão sul: piso plano em leque, dois espelhos d'água simétricos de meio-fio
+// claro e água escura, espelho afunilado turquesa no pouso do Bulevar com dois totens, renque de copas grandes,
+// laços brancos em gota com jardineiras floridas sobre o anel viário), passarelas elevadas com piso cinza-claro,
+// borda verde e jardineiras contínuas, e a ponte coberta.
 import * as THREE from 'three';
-import { A, PASSARELAS } from '../../data/planta.js';
+import { A, PASSARELAS, ANEL_VIARIO } from '../../data/planta.js';
 import { M, dupla } from '../materials.js';
 import { beams } from '../geom.js';
 import { treeGroup } from '../forest.js';
@@ -14,8 +14,8 @@ const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShad
 function plate(pts, y, h, mat) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); return mesh(g, mat); }
 const distSeg = (x, z, a, b) => { const vx = b[0] - a[0], vz = b[1] - a[1]; const t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz || 1))); return Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t); };
 const distLinha = (x, z, l) => { let d = 1e9; for (let i = 1; i < l.length; i++) d = Math.min(d, distSeg(x, z, l[i - 1], l[i])); return d; };
-// via do sul (planta da área A; enquanto não existe, o traçado da especificação)
-const viaSul = () => (A.vias || []).find((v) => v.id === 'sul')?.pts || [[-3.2, 19.95], [0.5, 19.75], [4.0, 19.5], [7.0, 19.35], [8.9, 19.6], [9.8, 20.0]];
+// trecho sul do anel viário (os laços da praça passam por cima; os pilares ficam fora da pista)
+const viaSul = () => [[ANEL_VIARIO.x0 + ANEL_VIARIO.r, ANEL_VIARIO.z1], [ANEL_VIARIO.x1 - ANEL_VIARIO.r, ANEL_VIARIO.z1]];
 
 // Deque elevado ao longo de uma curva 3D: piso cinza-claro de concreto (ou branco, o.topo = 'branco') com borda
 // clara grossa (fita de luz à noite), linha verde contínua nas duas bordas, corrimão branco e pilares.
@@ -80,11 +80,11 @@ export function passarela(id) {
   const m = pts[(pts.length / 2) | 0];
   return { id: 'pas_' + id, root, partes: P, esqueletos: {}, grua: {}, foco: { x: m[0], z: m[1], dist: 10 }, ancora: [m[0], m[2] + 1.2, m[1]], caminho: P.e1.userData.caminho };
 }
-// Ponte coberta (tubo envidraçado) entre a Faculdade de Ciências e a Biblioteca
+// Ponte coberta (tubo envidraçado) entre a proa da Faculdade de Ciências e a perna oeste da Sede
 export function ponteCoberta() {
   const root = new THREE.Group(); root.name = 'ponteCoberta'; const P = { e1: new THREE.Group(), e2: new THREE.Group() };
-  // sai do piso térreo elevado da Faculdade de Ciências e pousa no deque da Ponte do Instituto
-  const a = new THREE.Vector3(0.8, 1.5, -2.6), b = new THREE.Vector3(3.4, 1.25, 4.9); const d = b.clone().sub(a); const L = d.length(); const ang = Math.atan2(d.x, d.z);
+  // sai do vão da proa da Faculdade de Ciências e entra na fachada da perna oeste da Sede
+  const a = new THREE.Vector3(-13.2, 1.5, -11.6), b = new THREE.Vector3(-9.6, 1.35, -11.4); const d = b.clone().sub(a); const L = d.length(); const ang = Math.atan2(d.x, d.z);
   const body = new THREE.Group(); body.position.copy(a).add(b).multiplyScalar(0.5); body.rotation.set(-Math.atan2(d.y, Math.hypot(d.x, d.z)), ang, 0, 'YXZ'); P.e2.add(body);
   const tube = mesh(new THREE.BoxGeometry(0.55, 0.45, L), M.fac_lab); const uv = tube.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.6, uv.getY(i) * 0.3); body.add(tube);
   const roof = mesh(new THREE.BoxGeometry(0.62, 0.06, L + 0.05), M.steel); roof.position.y = 0.25; body.add(roof);
@@ -92,7 +92,7 @@ export function ponteCoberta() {
   const cols = []; for (let t = 0.12; t < 1; t += 0.25) { const p = a.clone().lerp(b, t); cols.push([[p.x, heightAt(p.x, p.z) - 0.1, p.z], [p.x, p.y - 0.27, p.z]]); }
   P.e1.add(beams(cols, 0.06, M.whiteSmooth, 6));
   root.add(P.e1, P.e2);
-  return { id: 'ponteCoberta', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: 2.1, z: 1.2, dist: 10 }, ancora: [2.1, 2.5, 1.2] };
+  return { id: 'ponteCoberta', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: -11.4, z: -11.5, dist: 10 }, ancora: [-11.4, 2.5, -11.5] };
 }
 
 // contorno orgânico (elipse com bojos) — mesmos coeficientes dos pátios do Anel
@@ -102,11 +102,11 @@ function aoLongo(l, d) { for (let i = 1; i < l.length; i++) { const a = l[i - 1]
 const compr = (l) => { let s = 0; for (let i = 1; i < l.length; i++) s += Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]); return s; };
 // canteiros orgânicos de grama da praça: [x, z, rx, rz, rot]; o primeiro é a faixa diagonal de copas escuras entre os
 // espelhos; os que caem em cima de um espelho saem
-const CANTEIROS = [[3.4, 15.3, 1.7, 0.45, -0.55], [-0.7, 14.8, 0.8, 0.5, 0.3], [6.3, 14.2, 0.7, 0.4, 0.5], [8.4, 15.5, 0.5, 0.35, 0.8], [0.3, 12.5, 0.55, 0.38, 0.1], [3.6, 18.0, 0.6, 0.35, 0.05]];
-// laços brancos em gota sobre a via do sul (rampas de passeio com jardineiras floridas)
+const CANTEIROS = [[0.0001, 21.4, 1.9, 0.4, 0.0001], [-5.2, 16.3, 0.7, 0.4, 0.3], [5.2, 16.3, 0.7, 0.4, -0.3], [-5.5, 21.1, 0.6, 0.35, 0.0001], [5.5, 21.1, 0.6, 0.35, 0.0001]];
+// laços brancos em gota sobre o anel viário, um de cada lado do eixo (rampas de passeio com jardineiras floridas)
 const LACOS = [
-  [[-1.2, 17.9, 0.08], [-2.6, 18.9, 0.45], [-2.2, 19.75, 0.55], [-0.4, 19.7, 0.5], [0.5, 19.0, 0.3], [0.2, 18.2, 0.08]],
-  [[7.0, 18.1, 0.08], [8.2, 19.0, 0.45], [8.0, 19.8, 0.55], [6.4, 19.9, 0.5], [5.6, 19.2, 0.3], [6.0, 18.4, 0.08]],
+  [[-3.4, 22.2, 0.08], [-4.6, 23.3, 0.45], [-4.2, 24.5, 0.55], [-2.4, 24.4, 0.5], [-1.8, 23.4, 0.3], [-2.2, 22.4, 0.08]],
+  [[3.4, 22.2, 0.08], [4.6, 23.3, 0.45], [4.2, 24.5, 0.55], [2.4, 24.4, 0.5], [1.8, 23.4, 0.3], [2.2, 22.4, 0.08]],
 ];
 function lacos() { const g = new THREE.Group(); g.name = 'lacos'; const via = viaSul(); for (const pts of LACOS) g.add(deck(pts, 0.45, { flores: true, topo: 'branco', via })); return g; }
 
@@ -117,7 +117,7 @@ export function praca() {
   const inP = (x, z) => { let ins = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
   const nearPool = (x, z, m = 0.5) => A.lagosPraca.some((l) => { const c = Math.cos(-l.rot), s = Math.sin(-l.rot); const dx = x - l.c[0], dz = z - l.c[1]; const u = dx * c - dz * s, v = dx * s + dz * c; return Math.hypot(u / (l.rx * 1.18 + m), v / (l.rz * 1.18 + m)) < 1; });
   const noCaminho = (x, z, m) => cam.some((l) => distLinha(x, z, l) < m);
-  const RET = [[3.6, 12.3], [4.7, 12.3], [4.55, 14.7], [3.75, 14.7]]; const noRet = (x, z) => x > 3.3 && x < 5.0 && z > 12.0 && z < 15.0;
+  const RET = [[-0.65, 15.5], [0.65, 15.5], [0.55, 18.2], [-0.55, 18.2]]; const noRet = (x, z) => x > -0.95 && x < 0.95 && z > 15.2 && z < 18.5; // espelho afunilado no pouso do Bulevar
   // e2: espelhos d'água orgânicos com meio-fio claro fino e água escura espelhada (arbustos só no lado norte), a ilha
   // arborizada do espelho grande, o espelho retangular afunilado sob o Bulevar e os canteiros de grama
   const R = rng(19); const arb = [], ilhaArv = [];
@@ -128,7 +128,7 @@ export function praca() {
     for (let i = 0, k = 0; i < 24 && k < 12; i++) { const [x, z] = b[i]; if (z > l.c[1] - 0.1) continue; k++; arb.push({ x: x + (R() - 0.5) * 0.1, z: z + (R() - 0.5) * 0.1, y: 0.06, s: 0.1 + R() * 0.05, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); }
     if (li === 0) { const ix = l.c[0] - l.rx * 0.35, iz = l.c[1] + 0.05; P.e2.add(plate(blobPts(ix, iz, 0.42, 0.26, l.rot, 77), 0.0, 0.09, M.planter)); for (let i = 0; i < 3; i++) { const a = (i / 3) * 6.28 + 0.4; ilhaArv.push({ x: ix + Math.cos(a) * 0.18, z: iz + Math.sin(a) * 0.1, y: 0.09, s: 0.34, kind: 'folha', pal: 'jardim', h: 1.1 }); } }
   });
-  P.e2.add(plate([[3.5, 12.2], [4.8, 12.2], [4.65, 14.8], [3.65, 14.8]], 0.0, 0.075, M.whiteSmooth)); P.e2.add(plate(RET, 0.0, 0.06 + 0.02, M.pool));
+  P.e2.add(plate([[-0.77, 15.4], [0.77, 15.4], [0.66, 18.3], [-0.66, 18.3]], 0.0, 0.075, M.whiteSmooth)); P.e2.add(plate(RET, 0.0, 0.06 + 0.02, M.pool));
   const canteiros = CANTEIROS.filter(([x, z, rx, rz], i) => inP(x, z) && !nearPool(x, z, 0.3) && !noRet(x, z) && (i === 0 || !noCaminho(x, z, Math.min(rx, rz) * 0.9 + 0.15))); // (a faixa diagonal atravessa um caminho do leque, como na foto)
   canteiros.forEach(([x, z, rx, rz, rot], i) => { P.e2.add(plate(blobPts(x, z, rx, rz, rot, 50 + i, 40), 0.0, 0.08, M.planter)); const b = blobPts(x, z, rx - 0.06, rz - 0.06, rot, 50 + i, 10); for (const [bx, bz] of b) arb.push({ x: bx, z: bz, y: 0.07, s: 0.08 + R() * 0.05, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); });
   P.e2.add(treeGroup(arb, { cast: false, name: 'borda-lagos' })); P.e2.add(treeGroup(ilhaArv, { name: 'ilha-praca' }));
@@ -147,7 +147,7 @@ export function praca() {
     for (let k = 0, u = 0; k < n && trees.length < 34 && u < 20; u++) { const x = cx + (R() - 0.5) * 1.2, z = cz + (R() - 0.5) * 1.2; if (!livre(x, z)) continue; k++; const palm = R() < 0.12; trees.push({ x, z, y: 0.02, s: palm ? 0.24 + R() * 0.06 : 0.32 + R() * 0.14, kind: palm ? 'palmeira' : 'folha', pal: 'jardim', h: palm ? 1.2 : 1.0 }); }
   }
   P.e3.add(treeGroup(trees, { trunks: true }));
-  const TOTENS = [[3.2, 12.2], [5.1, 12.15]];
+  const TOTENS = [[-1.05, 15.45], [1.05, 15.45]];
   P.e3.add(beams(TOTENS.map(([x, z]) => [[x, 0, z], [x, 1.2, z]]), 0.03, M.whiteSmooth, 6));
   const lamps = []; const total = cam.reduce((s, l) => s + compr(l), 0);
   for (let i = 0; i < 20; i++) { let d = ((i + 0.5) / 20) * total; let l = null; for (const c of cam) { const L = compr(c); if (d <= L) { l = c; break; } d -= L; } if (!l) continue; const q = aoLongo(l, d); const lado = i % 2 ? 1 : -1; const x = q.p[0] + q.n[0] * 0.38 * lado, z = q.p[1] + q.n[1] * 0.38 * lado; if (!inP(x, z) || nearPool(x, z, 0.1) || noRet(x, z)) continue; lamps.push([x, 0.12, z]); }
@@ -156,5 +156,5 @@ export function praca() {
   P.e3.add(lacos());
   P.e3.userData.pessoas = { area: poly, n: 90 };
   for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'praca', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'terra', e3: 'crescer' }, foco: { x: 4.2, z: 15.8, dist: 13 }, ancora: [4.2, 1.2, 15.8] };
+  return { id: 'praca', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'terra', e3: 'crescer' }, foco: { x: 0, z: 18.6, dist: 14 }, ancora: [0, 1.2, 18.6] };
 }

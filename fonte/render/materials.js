@@ -132,6 +132,8 @@ export function makeMaterials() {
   M.dark = std({ color: 0x3a4250, roughness: 0.75 });
   M.steel = std({ color: 0xd2d7de, roughness: 0.32, metalness: 0.75 });
   M.steelDark = std({ color: 0x75808e, roughness: 0.4, metalness: 0.7 });
+  M.ouro = std({ color: 0xd4a847, roughness: 0.3, metalness: 0.85, envMapIntensity: 1.4 }); // ouro escovado: aletas da Torre da Holding, faixas do helicóptero
+  M.laca = std({ color: 0x17191f, roughness: 0.24, metalness: 0.35, envMapIntensity: 1.2 }); // preto laqueado da Holding
   M.roofMetal = std({ color: 0xbcbab2, roughness: 0.55, metalness: 0.25 }); // cobertura cinza-clara (a Sede da foto), sem espelhar o céu escuro
   M.bandaCinza = std({ color: 0xa3b09f, roughness: 0.7 }); // tampo sálvia clara da Ciências
   M.concretoClaro = std({ color: 0xe3dccb, roughness: 0.9 }); // muros de pedra clara, muro do pátio do CRD, margens das lagoas
@@ -205,6 +207,7 @@ export function makeMaterials() {
   }
   acesa(M.glassWarm, 0.6); acesa(M.pool, 0.35);
   acesa(M.waterDeep, 0.5); // o aquário do Bioma acende à noite, azul, como na foto
+  for (const [k, m] of Object.entries(M)) if (m?.isMaterial) m.userData.nomeMat = k;
   setNight(nightLevel, nightExtra);
   return M;
 }
@@ -221,6 +224,25 @@ function ganchos(de, para) { if (Object.prototype.hasOwnProperty.call(de, 'onBef
 // versão dupla-face (cache) de um material
 const _dupla = new Map();
 export function dupla(m) { if (m.side === THREE.DoubleSide) return m; if (!_dupla.has(m)) { const c = ganchos(m, m.clone()); c.side = THREE.DoubleSide; if (m.userData.baseEmissive) { c.userData.baseEmissive = m.userData.baseEmissive; c.userData.modoLuz = m.userData.modoLuz; litMats.push(c); c.emissiveIntensity = m.emissiveIntensity; } _dupla.set(m, c); } return _dupla.get(m); }
+// pintura (cor escolhida pelo jogador): cópia do material com a cor da paleta, em cache por material e cor. Pinta
+// paredes, beirais, lajes e coberturas claras; nas fachadas de vidro só puxa os caixilhos para a cor (mistura leve)
+const PINTA = { white: 1, whiteSmooth: 1, fascia: 1, fasciaBeiral: 1, fasciaLuz: 1, cream: 1, concreto: 0.9, concretoClaro: 1, roofMetal: 0.7, bandaCinza: 1, grey: 0.9, caminhoTeto: 0.8, madeiraClara: 0.5, woodFrame: 0.5, fac_quente: 0.35, fac_lab: 0.35, fac_escuro: 0.35, fac_madeira: 0.3, fac_fita: 0.35, fac_celular: 0.35, fac_ambar: 0.35, fac_colmeia: 0.35 };
+const _tintas = new Map(), _tc = new THREE.Color();
+export function tinta(m, cor) {
+  if (!cor || !m?.isMaterial || m.userData.pintado) return m; const f = PINTA[m.userData.nomeMat]; if (!f) return m;
+  let c = _tintas.get(m); if (!c) _tintas.set(m, (c = new Map()));
+  if (!c.has(cor)) {
+    const t = ganchos(m, m.clone()); _tc.setHex(cor); if (f >= 1) t.color.copy(_tc).multiplyScalar(Math.min(1, Math.max(m.color.r, m.color.g, m.color.b) / 0.95)); else t.color.copy(m.color).lerp(_tc, f);
+    if (m.userData.baseEmissive) { t.userData.baseEmissive = m.userData.baseEmissive; t.userData.modoLuz = m.userData.modoLuz; litMats.push(t); t.emissiveIntensity = m.emissiveIntensity; }
+    t.userData.pintado = cor; c.set(cor, t);
+  }
+  return c.get(cor);
+}
+// troca os materiais pintáveis de um objeto (o original fica em userData.mat0; cor 0/null volta ao original)
+export function pintar(obj, cor) {
+  obj.traverse((o) => { if (!o.material || Array.isArray(o.material)) return; const m0 = o.userData.mat0 || o.material; if (!cor) { if (o.userData.mat0) { o.material = m0; delete o.userData.mat0; } return; } const t = tinta(m0, cor); if (t !== m0) { o.userData.mat0 = m0; o.material = t; } });
+  return obj;
+}
 // clona um material para uso com plano de corte (obra subindo)
 export function clipped(mat, planes) {
   const m = ganchos(mat, mat.clone()); m.clippingPlanes = planes; m.clipShadows = true; return m;

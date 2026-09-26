@@ -5,7 +5,7 @@
 // foto) com mar turquesa → azul, ondas e espuma branca na areia, alguns barcos e nuvens de algodão.
 // Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
-import { MESA, A } from '../data/planta.js';
+import { MESA, A, SAIDAS } from '../data/planta.js';
 import { ORDEM_BAIRROS, areaBairro, AEROPORTO, PORTO } from '../data/cidade.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
 import { tex } from './textures.js';
@@ -24,7 +24,9 @@ const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t
 // distância até o retângulo da planta (0 dentro e na borda)
 export const distPlanta = (x, z) => Math.hypot(Math.max(Math.abs(x - CX) - HX, 0), Math.max(Math.abs(z - CZ) - HZ, 0));
 // faixa de mata em volta da planta (largura por lado: oeste até as dunas, atrás mais larga)
-const FAIXA = { oeste: 6, leste: 7, fundo: 9, frente: 6 };
+const FAIXA = { oeste: 5, leste: 4, fundo: 6, frente: 4 };
+// as saídas do anel viário até a cidade (a mata da faixa não nasce nelas)
+const naSaida = (x, z) => SAIDAS.some(({ pts: [a, b] }) => { const vx = b[0] - a[0], vz = b[1] - a[1]; const t = clamp(((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz), 0, 1); return Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t) < 1.4; });
 const naFaixa = (x, z) => {
   if (distPlanta(x, z) <= 0.05) return false;
   const dx = x < MESA.x0 ? MESA.x0 - x : x > MESA.x1 ? x - MESA.x1 : 0, dz = z < MESA.z0 ? MESA.z0 - z : z > MESA.z1 ? z - MESA.z1 : 0;
@@ -236,10 +238,11 @@ function juntar(lista) {
 }
 
 // ---------------------------------------------------------------- carros
-// 8 a 16 carros nas vias da planta (A.vias: 6 na leste, 4 na oeste, 6 na sul quando existir), numa InstancedMesh
+// Carros nas vias do plano diretor (A.vias: o anel viário, a avenida transversal e a rotatória), numa InstancedMesh
 // com a carroceria colorida por instância e a cabine escura por vértice; andam a 0,9 unidade/s pelas polilinhas
-// suavizadas (as mesmas da pintura do chão), voltando nas pontas; atualizados a cada 2 quadros sem alocar.
-const CARROS = { leste: 12, oeste: 8, sul: 12 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
+// (as mesmas da pintura do chão): nas vias fechadas dão a volta, nas abertas voltam nas pontas; atualizados a cada
+// 2 quadros sem alocar.
+const CARROS = { anel: 22, avenidaO: 6, avenidaL: 6, rotatoria: 3 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
 function carros() {
   const vias = (A.vias || []).filter((v) => CARROS[v.id]); if (!vias.length) return null;
   const partes = [];
@@ -248,9 +251,9 @@ function carros() {
   const geo = juntar(partes);
   // vias amostradas: pontos [x, y, z] a cada ~0,25 (y do terreno) e comprimento acumulado
   const R = rng(4343); const rotas = vias.map((v) => {
-    const pts = suave(v.pts, 6); const P = [], L = [0]; let acc = 0;
+    const pts = v.fechada ? [...v.pts, v.pts[0]] : suave(v.pts, 6); const P = [], L = [0]; let acc = 0;
     for (let i = 0; i < pts.length; i++) { const [x, z] = pts[i]; if (i) acc += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]); P.push(x, heightAt(x, z) + 0.02, z); if (i) L.push(acc); }
-    return { P: new Float32Array(P), L: new Float32Array(L), total: acc, n: pts.length };
+    return { P: new Float32Array(P), L: new Float32Array(L), total: acc, n: pts.length, fechada: !!v.fechada };
   });
   const lista = []; rotas.forEach((r, k) => { for (let i = 0; i < CARROS[vias[k].id]; i++) lista.push({ r, s: R() * r.total, dir: R() < 0.5 ? 1 : -1, i: 0, cor: (R() * COR_CARRO.length) | 0 }); });
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.1 });
@@ -267,7 +270,7 @@ function arvoresFaixa() {
   const x0 = MESA.x0 - FAIXA.oeste - 3, x1 = MESA.x1 + FAIXA.leste + 3, z0 = MESA.z0 - FAIXA.fundo - 3, z1 = MESA.z1 + FAIXA.frente + 3;
   for (let z = z0; z < z1; z += passo) for (let x = x0; x < x1; x += passo) {
     const jx = x + (R() - 0.5) * passo * 0.9, jz = z + (R() - 0.5) * passo * 0.9; const d = distPlanta(jx, jz);
-    if (d < 0.15 || !naFaixa(jx, jz) || jx - costaX(jz) < 7.5 || zonaCidade(jx, jz) > 0.05) continue;
+    if (d < 0.15 || !naFaixa(jx, jz) || jx - costaX(jz) < 7.5 || zonaCidade(jx, jz) > 0.05 || naSaida(jx, jz)) continue;
     const dens = fbm(jx, jz, 6, 21, 3); if (dens < 0.3 && R() < 0.5) continue;
     if (R() < sm(0.6, 1.25, borda(jx, jz))) continue; // a mata rareia na orla de fora
     // as mesmas três classes da mata da planta (arbusto, média, emergente), em manchas
@@ -314,7 +317,8 @@ export class Arredores {
     const im = this.carros, lista = im.userData.lista, P3 = this._p, Q = this._q, E = this._e, S = this._s, M = this._m4; S.set(1, 1, 1);
     for (let k = 0; k < lista.length; k++) {
       const c = lista[k], r = c.r; c.s += c.dir * 0.9 * dt;
-      if (c.s >= r.total) { c.s = r.total; c.dir = -1; } else if (c.s <= 0) { c.s = 0; c.dir = 1; }
+      if (r.fechada) { if (c.s >= r.total) { c.s -= r.total; c.i = 0; } else if (c.s < 0) { c.s += r.total; c.i = r.n - 2; } }
+      else if (c.s >= r.total) { c.s = r.total; c.dir = -1; } else if (c.s <= 0) { c.s = 0; c.dir = 1; }
       while (c.i < r.n - 2 && r.L[c.i + 1] < c.s) c.i++; while (c.i > 0 && r.L[c.i] > c.s) c.i--;
       const i = c.i, a = i * 3, b = a + 3, seg = Math.max(1e-6, r.L[i + 1] - r.L[i]), t = clamp((c.s - r.L[i]) / seg, 0, 1);
       const dx = (r.P[b] - r.P[a]) / seg * c.dir, dz = (r.P[b + 2] - r.P[a + 2]) / seg * c.dir; // direção do movimento (unitária no plano)

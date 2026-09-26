@@ -126,6 +126,9 @@ const CENAS = {
   // Holding: terreno comprado, construtora no nível 2 e banco; a folha rola até a seção da Holding
   'cidade-holding': (H) => { holding(H); H.C.paineis.abrir('cidade'); setTimeout(() => [...document.querySelectorAll('h3.secao')].find((h) => /Holding/.test(h.textContent))?.scrollIntoView({ block: 'start' }), 50); },
   empresa: (H) => { holding(H); H.C.paineis.abrir('modulo', ['cidConstrutora', 0]); },
+  // paleta de cores: prédio da cidade pintado de terracota e a Sede (obra da Arcologia) pintada de grafite
+  cores: (H) => { holding(H); H.J.pintarCidade('cidConstrutora', 0, 3); H.C.paineis.abrir('modulo', ['cidConstrutora', 0]); setTimeout(() => H.C.paineis.el.querySelector('.cores')?.scrollIntoView({ block: 'end' }), 50); },
+  'cores-obra': (H) => { base(H); H.S.etapas['sede.e1'] = { estado: 'feita' }; H.J.pintarObra('sede', 6); H.C.paineis.abrir('etapa', 'sede.e2'); setTimeout(() => H.C.paineis.el.querySelector('.cores')?.scrollIntoView({ block: 'end' }), 50); },
   // casa pronta no nível 1 sem polícia nem escola perto: o cartão de motivo leva a construir a delegacia
   'cidade-cobertura': (H) => { base(H); H.S.cap = 2; H.S.creditos = 20000; cidade(H, 'cidCasas', 'sul:3:0'); const m = H.S.modulos.cidCasas[0]; m.nivel = 1; m.obra = null; H.J._derivar(); const r = H.J.requisitosModulo('cidCasas', 0); for (const [k, n] of Object.entries(r.itens)) H.S.itens[k] = n; H.C.sincronizar(); H.C.paineis.abrir('modulo', ['cidCasas', 0]); },
   prancha: (H) => { base(H); H.S.itens.brita = 20; H.S.itens.madeira = 20; H.C.paineis.abrir('etapa', 'pas_frente.e1'); },

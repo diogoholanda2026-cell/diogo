@@ -113,7 +113,7 @@ try {
       ['d-pavimento-75', 'Praça: piso revelado do centro para fora (75%)', () => { window.__cap.progresso('praca.e1', 0.75); }],
       ['d-terra-campo', 'Terraplenagem do campo (corte vertical e escavadeira, 50%)', () => { window.__cap.obra('campo.e1', 0.5); window.__cap.foco('campo', 10, 0.5); }],
       ['d-plantio-praca', 'Palmeiras, bancos e luzes aparecendo um a um (50%)', () => { window.__cap.obra('praca.e3', 0.5); window.__cap.foco('praca', 12, 0.45); }],
-      ['d-caixas-gorilas', 'Família de gorilas: caixas de transporte chegando (60%)', () => { for (const k of ['gorilas.e1', 'gorilas.e2', 'gorilas.e3']) window.__held.J.S.etapas[k] = { estado: 'feita', entregue: {} }; window.__cap.obra('gorilas.e4', 0.6); window.__cap.foco('gorilas', 7, 0.5); }],
+      ['d-plantio-estufa', 'Estufa anexa da Cúpula: o jardim de dentro aparecendo (60%)', () => { for (const k of ['gorilas.e1', 'gorilas.e2', 'gorilas.e3']) window.__held.J.S.etapas[k] = { estado: 'feita', entregue: {} }; window.__cap.obra('gorilas.e4', 0.6); window.__cap.foco('gorilas', 9, 0.5); }],
       ['d-draga-10', 'Desassoreamento: draga no lago turvo (10%)', () => { delete window.__held.J.S.etapas['lago.e1']; window.__held.J._derivar(); window.__cap.obra('lago.e1', 0.1); window.__cap.cam(-1, -7, 17, 0.35); }],
       ['d-draga-50', 'Desassoreamento (50%): monte de lodo crescendo, nível subindo', () => window.__cap.progresso('lago.e1', 0.5)],
       ['d-draga-90', 'Desassoreamento (90%): água clareando', () => window.__cap.progresso('lago.e1', 0.9)],

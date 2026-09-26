@@ -10,6 +10,7 @@ import { heightAt } from '../ground.js';
 import { rng, inPoly } from '../../core/util.js';
 import { Faixa } from './faixa.js';
 import { deck } from './praca.js';
+import { heliponto } from '../cidade.js';
 
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
 function shapeOf(pts, s = new THREE.Shape()) { pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); return s; }
@@ -174,7 +175,7 @@ export function ciencias() {
   addMap(P.e3, sweepArco(boca, [{ a: [0.0, yT - 0.15], b: [0.0, yT + 0.01], mat: 'borda', uv: 'run' }]), () => M.whiteSmooth);
   const rampas = [
     [[-6.4, -1.5, yT - 0.02], [-7.1, -1.35, yT - 0.12], [-7.7, -1.7, yT * 0.72], [-7.5, -2.5, yT * 0.48], [-6.6, -2.9, yT * 0.27], [-5.6, -2.8, yT * 0.1], [-4.6, -2.4, -0.5]],
-    [[6.6, -0.5, yT - 0.02], [7.4, -0.75, yT - 0.1], [8.3, -0.9, yT * 0.68], [9.3, -0.6, yT * 0.4], [10.0, -0.35, yT * 0.16], [10.6, -0.3, -0.5]], // à direita: desce rumo à cabeceira do lago
+    [[6.3, 0.9, yT - 0.02], [6.9, 1.6, yT - 0.1], [7.2, 2.6, yT * 0.68], [6.9, 3.6, yT * 0.4], [6.3, 4.3, yT * 0.16], [5.6, 4.8, -0.5]], // à direita: desce rumo à avenida
   ];
   for (const r of rampas) { const cv = new THREE.CatmullRomCurve3(r.map(([u, v, y]) => { const [x, z] = T(u, v); return new THREE.Vector3(x, y, z); }), false, 'catmullrom', 0.5); const pts = cv.getSpacedPoints(44).map((p) => [p.x, p.y, p.z]); addMap(P.e3, sweep3(pts, bandaRedonda(0, 0.4, 0.6)), matBanda); }
   // e4: panos de vidro espelhado sobre as células (rentes ao tampo, um pouco abaixo da face superior, para a banda
@@ -183,91 +184,109 @@ export function ciencias() {
   addMap(P.e4, sweepArco(boca, [{ a: [-0.3, y0 + 0.2], b: [-0.3, yT - 0.02], mat: 'espelho', uv: 'run' }]), espelho);
   const m4 = new THREE.Matrix4(); const glow = []; for (let i = 0; i < N; i += 8) glow.push([cont[i][0] - nor[i][0] * 0.3, yT - 0.03, cont[i][1] - nor[i][1] * 0.3]);
   const gl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), M.lampGlow, glow.length); glow.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); P.e4.add(gl);
-  const g = A.ciencias.gota;
+  const g = A.ciencias.gota; if (g) {
   P.e4.add(plate(gotaPts(g.c[0], g.c[1], g.rx + 0.14, g.rz + 0.14, g.rot), 0.0, 0.07, M.whiteSmooth));
   P.e4.add(plate(gotaPts(g.c[0], g.c[1], g.rx, g.rz, g.rot), 0.0, 0.075, M.pool));
   const rep = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 8, 1, true), dupla(M.glassRail)); rep.position.set(g.c[0], 0.3, g.c[1]); rep.castShadow = false; P.e4.add(rep);
   const can = [[g.c[0] + 0.1, g.c[1] + g.rz * 0.9], ...g.canal];
   const cp = curve(can, false, 40, 0.5);
   addMap(P.e4, sweep(cp, false, [{ a: [0.22, 0.0], b: [0.22, 0.07], mat: 'borda', uv: 'run' }, { a: [0.22, 0.07], b: [0.15, 0.07], mat: 'borda', uv: 'plan' }, { a: [0.15, 0.065], b: [-0.15, 0.065], mat: 'agua', uv: 'plan' }, { a: [-0.15, 0.07], b: [-0.22, 0.07], mat: 'borda', uv: 'plan' }, { a: [-0.22, 0.07], b: [-0.22, 0.0], mat: 'borda', uv: 'run' }], { caps: false }), (k) => (k === 'agua' ? M.pool : M.whiteSmooth));
+  }
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'ciencias', root, partes: P, esqueletos: {}, grua: { e1: true, e3: true }, foco: { x: c.c[0], z: c.c[1] + 1, dist: 15 }, ancora: [c.c[0] + 1.5, 3.6, c.c[1]] };
 }
-// Ala em Onda: fita em "S" com terraços entre o Campus Universitário e a Faculdade de Ciências
+// Ala em Onda: fita em "S" com terraços entre o Campus Universitário e a Faculdade de Ciências (caminho da planta)
 export function alaOnda() {
-  return new Faixa({ id: 'onda', closed: false, path: curve([[-15.4, -5.2], [-13.2, -7.6], [-10.8, -6.3], [-8.6, -7.8], [-6.9, -7.3]], false, 120), modulos: 1,
+  return new Faixa({ id: 'onda', closed: false, path: curve(A.onda, false, 120), modulos: 1,
     prof: { o0: -0.5, o1: 0.7, setIn: 0, setOut: 0.28, fac: 'fac_lab', facIn: 'fac_quente' }, niveis: 3 });
 }
 
-// ---------------- planta da Sede (valores da especificação enquanto a área A não publica os campos novos) ----------------
-const SEDE_PATH = [[-6.6, -9.6], [-5.6, -11.6], [-3.0, -13.3], [0.3, -13.9], [3.8, -13.8], [7.2, -12.8], [10.0, -10.8], [11.9, -8.5], [12.4, -5.9], [12.9, -3.6], [12.5, -2.2]];
-const SEDE_INTERNA = { alta: [[8.2, -12.8], [9.0, -11.0], [9.4, -8.6], [9.2, -5.8], [8.6, -3.6]], baixa: [[8.6, -3.6], [7.6, -1.9], [6.4, -1.0], [4.8, -0.8], [3.2, -1.3], [1.5, -1.9]] };
-const SEDE_PISCINA = { c: [5.1, -8.9], r: 1.3 };
-const SEDE_PAVILHAO = { c: [1.2, -10.7], w: 1.8, d: 1.0, rot: 0.05, h: 0.6 };
-function plantaSede() { const s = A.sede; const novo = !!s.path; return { path: s.path || SEDE_PATH, interna: s.interna || SEDE_INTERNA, piscina: novo ? s.piscina : SEDE_PISCINA, pavilhao: s.pavilhao || SEDE_PAVILHAO, o0: novo ? s.o0 : -2.1 }; }
-
-// ---------------- Lago Central ----------------
+// ---------------- Lago da Sede ----------------
+// Oval no eixo, dentro do U da Sede. e1: desassoreamento (o nível da água sobe; animação no mundo); e2: margens vivas
+// (juncos, pedras claras e árvores soltas, fora da fita, do eixo e da torre); e3: estação de água (dois jardins
+// flutuantes simétricos, três repuxos no eixo e a calçada clara da margem)
 const MPedra = new THREE.MeshStandardMaterial({ color: 0xe2dccd, roughness: 0.92 }); // pedras claras da margem
-export function lago(ground) {
+export function lago() {
   const root = new THREE.Group(); root.name = 'lago'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
-  // e1: desassoreamento (o nível da água sobe; animação no mundo)
   P.e1.userData.nivel = true;
-  const sd = plantaSede(); const arcoSede = curve(sd.path, false, 60); const altaSede = curve(sd.interna.alta, false, 30);
-  const naSede = (x, z) => distPoly(x, z, arcoSede, false) < 3.0 || distPoly(x, z, altaSede, false) < 1.7;
-  const pc = sd.piscina; const pertoPiscina = (x, z, m) => !!pc && Math.hypot(x - pc.c[0], z - pc.c[1]) < m;
-  // e2: margens vivas — juncos, pedras claras, a península de mata a leste e árvores soltas na margem
-  const reeds = []; const pedras = []; const poly = A.lago; const R = rng(77);
-  for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; for (let k = 0; k < 7; k++) { const t = R(); const x = a[0] + (b[0] - a[0]) * t + (R() - 0.5) * 0.4, z = a[1] + (b[1] - a[1]) * t + (R() - 0.5) * 0.4; if (pertoPiscina(x, z, 1.6)) continue; reeds.push([x, z, 0.15 + R() * 0.2]); } for (let k = 0; k < 3; k++) { const t = R(); pedras.push([a[0] + (b[0] - a[0]) * t + (R() - 0.5) * 0.3, a[1] + (b[1] - a[1]) * t + (R() - 0.5) * 0.3, 0.13 + R() * 0.2, R() * 6.28]); } }
+  const sd = A.sede; const arcoSede = curve(sd.path, false, 60); const naSede = (x, z) => distPoly(x, z, arcoSede, false) < 2.5;
+  const poly = A.lago; const R = rng(77); let cx = 0, cz = 0; for (const [x, z] of poly) { cx += x / poly.length; cz += z / poly.length; }
+  const noEixo = (x, z) => Math.abs(x) < 1.7 && z > cz; // o pavilhão e o Passeio da Holding chegam pelo sul
+  const perto = (x, z) => naSede(x, z) || noEixo(x, z) || Math.hypot(x - sd.torre.c[0], z - sd.torre.c[1]) < sd.torre.lado;
+  const reeds = [], pedras = [];
+  for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; for (let k = 0; k < 7; k++) { const t = R(); const x = a[0] + (b[0] - a[0]) * t + (R() - 0.5) * 0.4, z = a[1] + (b[1] - a[1]) * t + (R() - 0.5) * 0.4; if (noEixo(x, z)) continue; reeds.push([x, z, 0.15 + R() * 0.2]); } for (let k = 0; k < 2; k++) { const t = R(); const x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t; if (noEixo(x, z)) continue; pedras.push([x, z, 0.12 + R() * 0.1, R() * 6]); } }
   const rg = new THREE.ConeGeometry(0.03, 1, 4); rg.translate(0, 0.5, 0); const rim = new THREE.InstancedMesh(rg, M.planter, reeds.length); const m4 = new THREE.Matrix4();
   reeds.forEach(([x, z, h], i) => rim.setMatrixAt(i, m4.compose(new THREE.Vector3(x, -0.12, z), new THREE.Quaternion(), new THREE.Vector3(1, h * 1.5, 1)))); P.e2.add(rim);
   const pim = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), MPedra, pedras.length); const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), s3 = new THREE.Vector3();
   pedras.forEach(([x, z, s, r], i) => pim.setMatrixAt(i, m4.compose(v.set(x, Math.max(heightAt(x, z), -0.14) + s * 0.15, z), q.setFromEuler(e.set(0, r, 0)), s3.set(s, s * 0.6, s * 0.8)))); pim.castShadow = true; pim.receiveShadow = true; P.e2.add(pim);
   const tr = []; const foraAgua = (x, z, m = 0.35) => !inPoly(x, z, poly) && distPoly(x, z, poly) > m;
-  // península de mata a leste (contínua com a mata do pé do anel), sem entrar na água nem na fita interna
-  for (let i = 0, t = 0; i < 16 && t < 200; t++) { const x = 6.0 + R() * 1.9, z = -8.5 + R() * 3.5; if (!foraAgua(x, z, 0.3) || pertoPiscina(x, z, pc ? pc.r + 0.4 : 0) || distPoly(x, z, altaSede, false) < 1.7) continue; tr.push({ x, z, s: 0.3 + R() * 0.15, pal: 'mata', h: 1.05 }); i++; }
-  // árvores soltas na margem: fora da água, fora da faixa da Sede e longe da piscina
-  for (let i = 0, t = 0; i < 18 && t < 300; t++) { const k = (R() * poly.length) | 0; const a = poly[k], b = poly[(k + 1) % poly.length]; const u = R(); const x = a[0] + (b[0] - a[0]) * u + (R() - 0.5) * 1.6, z = a[1] + (b[1] - a[1]) * u + (R() - 0.5) * 1.6; if (!foraAgua(x, z) || naSede(x, z) || pertoPiscina(x, z, pc ? pc.r + 0.6 : 0)) continue; tr.push({ x, z, s: 0.28 + R() * 0.16, pal: 'jardim' }); i++; }
+  for (let i = 0, t = 0; i < 18 && t < 300; t++) { const k = (R() * poly.length) | 0; const a = poly[k], b = poly[(k + 1) % poly.length]; const u = R(); const x = a[0] + (b[0] - a[0]) * u + (R() - 0.5) * 1.4, z = a[1] + (b[1] - a[1]) * u + (R() - 0.5) * 1.4; if (!foraAgua(x, z) || perto(x, z) || tr.some((o) => Math.hypot(o.x - x, o.z - z) < 0.5)) continue; tr.push({ x, z, s: 0.26 + R() * 0.1, pal: 'mata', h: 1.0 }); i++; }
   P.e2.add(treeGroup(tr.map((t) => ({ ...t, y: Math.max(0, heightAt(t.x, t.z)) }))));
-  // e3: estação natural de água — ilhas flutuantes filtrantes (jardins baixos), píer de madeira na margem oeste, casa
-  // de bombas, o passeio em S que separa o corpo principal da baía a leste e a calçada clara fina de toda a margem
-  for (const [x, z, rx, rz] of [[-1.8, -7.6, 0.42, 0.24], [0.2, -6.6, 0.36, 0.21], [-1.4, -9.2, 0.3, 0.18], [0.6, -5.2, 0.33, 0.18]]) { const g = new THREE.CylinderGeometry(1, 1, 0.05, 20); g.scale(rx, 1, rz); const m = mesh(g, M.planter, false); m.position.set(x, -0.07, z); P.e3.add(m); const sh = []; for (let i = 0; i < 4; i++) sh.push({ x: x + (R() - 0.5) * rx, z: z + (R() - 0.5) * rz, y: -0.05, s: 0.07 + R() * 0.04, pal: 'jardim' }); P.e3.add(treeGroup(sh, { cast: false })); }
-  const deckM = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.05, 0.3), M.woodLight); deckM.position.set(-2.6, 0.02, -6.4); deckM.rotation.y = 1.3; deckM.castShadow = true; P.e3.add(deckM);
-  const house = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.35, 0.45), M.white); house.position.set(7.4, 0.18, -4.4); house.rotation.y = -0.5; house.castShadow = true; P.e3.add(house);
-  const hr = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.04, 0.49), M.roof); hr.position.set(7.4, 0.37, -4.4); hr.rotation.y = -0.5; P.e3.add(hr);
-  P.e3.add(deck([[1.1, -9.9, 0.1], [1.6, -8.8, 0.1], [2.2, -7.7, 0.1], [2.6, -6.9, 0.1], [4.0, -6.2, 0.1], [5.2, -5.8, 0.1], [6.0, -5.5, 0.1]], 0.3, { jardim: false, topo: 'branco' }));
+  // e3: jardins flutuantes (um de cada lado do eixo), repuxos e a calçada clara
+  for (const sx of [-1, 1]) { const x = cx + sx * 3.1, z = cz - 0.2; const g = new THREE.CylinderGeometry(1, 1, 0.05, 20); g.scale(0.62, 1, 0.34); const m = mesh(g, M.planter, false); m.position.set(x, -0.07, z); P.e3.add(m);
+    const sh = []; for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.3; sh.push({ x: x + Math.cos(a) * 0.36, z: z + Math.sin(a) * 0.18, y: -0.05, s: 0.1 + R() * 0.04, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); } P.e3.add(treeGroup(sh, { cast: false, name: 'jardim-flutuante' })); }
+  const jato = dupla(M.glassRail); [[cz + 1.7, 0.8], [cz, 1.25], [cz - 1.7, 0.8]].forEach(([z, h]) => { const b = mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.06, 16), M.whiteSmooth); b.position.set(cx, -0.07, z); P.e3.add(b); const j = new THREE.Mesh(new THREE.ConeGeometry(0.07, h, 8, 1, true), jato); j.position.set(cx, h / 2 - 0.05, z); j.castShadow = false; P.e3.add(j); });
   addMap(P.e3, sweep(curve(poly, true, 120), true, [{ a: [0.02, 0.03], b: [-0.3, 0.03], mat: 'c', uv: 'plan' }], { caps: false }), () => M.caminhoTeto);
   for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'lago', root, partes: P, esqueletos: {}, grua: {}, foco: { x: 0.6, z: -7.4, dist: 17 }, ancora: [0.6, 1.4, -7.4] };
+  return { id: 'lago', root, partes: P, esqueletos: {}, grua: {}, foco: { x: cx, z: cz, dist: 17 }, ancora: [cx, 1.4, cz] };
 }
 
-// ---------------- Pátio da Sede ----------------
-// A Sede é a fita aberta (aneis.js). O pátio é o que acompanha a fita: as fundações (e1) do arco e dos dois
-// trechos da fita interna e, por dentro da curva, a piscina redonda de borda branca na água do lago, o pavilhão de
-// placa plana na margem norte e as árvores do pé do anel e da península (e4).
+// ---------------- Pátio da Sede e Torre da Holding ----------------
+// A Sede é a fita em U (aneis.js). O pátio acompanha a fita: as fundações (e1) da fita e da torre e, no fim da obra
+// (e4), o terraço claro ao fundo do lago, as duas piscinas elevadas, o pavilhão "guarda-chuva" (a marca da Holding:
+// um guarda-chuva branco sobre o salão de vidro, na margem sul, no eixo), renques de árvores por dentro das pernas do
+// U e a Torre da Holding: fuste de vidro escuro com aletas douradas e cintas brancas a cada dois andares, coroa
+// recuada e o heliponto no topo (userData.heliponto = [x, y, z], onde pousa o helicóptero da Holding)
+function quadrado([cx, cz], l, ch = 0.35) { const h = l / 2, c = Math.min(ch, h * 0.4); return [[cx - h + c, cz - h], [cx + h - c, cz - h], [cx + h, cz - h + c], [cx + h, cz + h - c], [cx + h - c, cz + h], [cx - h + c, cz + h], [cx - h, cz + h - c], [cx - h, cz - h + c]]; }
+function torreHolding(T) {
+  const g = new THREE.Group(); g.name = 'torre-holding'; const [cx, cz] = T.c; const L = T.lado, fh = T.fh, n = T.andares; const vidro = M.fac_escuro || M.glass, ouro = M.ouro || M.yellow;
+  // saguão de vidro de pé-direito duplo, um pouco mais largo, com marquise para o lago
+  const base = quadrado(T.c, L + 0.5, 0.5); g.add(plate(base, 0, 0.06, M.whiteSmooth));
+  { const f = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), vidro); f.scale.set((L + 0.3) / 2 / Math.cos(Math.PI / 8), fh * 2 - 0.1, (L + 0.3) / 2 / Math.cos(Math.PI / 8)); f.rotation.y = Math.PI / 8; f.position.set(cx, 0.06 + (fh * 2 - 0.1) / 2, cz); f.castShadow = true; f.receiveShadow = true; g.add(f); }
+  g.add(plate(quadrado([cx, cz + L / 2 + 0.55], 1.6, 0.2).map(([x, z]) => [x, z]), fh * 1.7, 0.06, M.whiteSmooth));
+  // fuste: prisma octogonal de vidro escuro, cinta branca a cada dois andares, aletas douradas nas quinas
+  const y0 = fh * 2, H = (n - 2) * fh; const fuste = quadrado(T.c, L, 0.45);
+  { const f = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), vidro); f.scale.set(L / 2 / Math.cos(Math.PI / 8) * 0.98, H, L / 2 / Math.cos(Math.PI / 8) * 0.98); f.rotation.y = Math.PI / 8; f.position.set(cx, y0 + H / 2, cz); f.castShadow = true; f.receiveShadow = true; g.add(f); }
+  for (let k = 0; k <= n - 2; k += 2) g.add(plate(quadrado(T.c, L + 0.14, 0.5), y0 + k * fh - 0.03, 0.06, M.fasciaBeiral || M.whiteSmooth));
+  const aletas = []; for (const [x, z] of fuste) aletas.push([[x + (x - cx) * 0.04, y0, z + (z - cz) * 0.04], [x + (x - cx) * 0.04, y0 + H + 0.5, z + (z - cz) * 0.04]]); g.add(beams(aletas, 0.045, ouro, 4));
+  // coroa: último pavimento recuado com terraço, laje do heliponto em balanço e o para-raios
+  const yC = y0 + H; g.add(plate(quadrado(T.c, L + 0.2, 0.5), yC, 0.08, M.whiteSmooth));
+  { const f = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), M.glassWarm); const r = (L - 0.9) / 2 / Math.cos(Math.PI / 8); f.scale.set(r, fh, r); f.rotation.y = Math.PI / 8; f.position.set(cx, yC + 0.08 + fh / 2, cz); g.add(f); }
+  const yH = yC + 0.08 + fh; g.add(plate(quadrado(T.c, L + 0.3, 0.6), yH, 0.1, M.laca || M.dark)); g.add(plate(quadrado(T.c, L + 0.36, 0.62), yH + 0.1, 0.03, ouro));
+  const hp = heliponto(yH + 0.13, L * 0.36); hp.position.set(cx, 0, cz); g.add(hp);
+  const luzes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 6, 4), M.redGlow, 8); const q = new THREE.Matrix4(); quadrado(T.c, L + 0.2, 0.6).forEach(([x, z], i) => luzes.setMatrixAt(i, q.makeTranslation(x, yH + 0.2, z))); g.add(luzes);
+  g.userData.heliponto = [cx, yH + 0.13, cz]; g.userData.altura = yH + 0.2;
+  return g;
+}
 export function sedePatio() {
-  const s = A.sede; const sd = plantaSede(); const root = new THREE.Group(); root.name = 'sedePatio'; const P = { e1: new THREE.Group(), e4: new THREE.Group() };
-  const arco = curve(sd.path, false, 200); const nor = normals(arco, false); const o0 = sd.o0;
-  // e1: fundações (faixa de concreto um pouco mais larga que cada fita)
+  const s = A.sede; const root = new THREE.Group(); root.name = 'sedePatio'; const P = { e1: new THREE.Group(), e4: new THREE.Group() };
+  const arco = curve(s.path, false, 200); const nor = normals(arco, false); const o0 = s.o0; const T = s.torre;
+  // e1: fundações (faixa de concreto um pouco mais larga que a fita) e o radier da torre
   const fund = (path, oi) => sweep(path, false, [{ a: [0.15, -0.06], b: [0.15, 0.03], mat: 'c', uv: 'run' }, { a: [0.15, 0.03], b: [oi - 0.15, 0.03], mat: 'c', uv: 'plan' }, { a: [oi - 0.15, 0.03], b: [oi - 0.15, -0.06], mat: 'c', uv: 'run' }]);
   addMap(P.e1, fund(arco, o0), () => M.concreto);
-  addMap(P.e1, fund(curve(sd.interna.alta, false, 60), -1.4), () => M.concreto);
-  addMap(P.e1, fund(curve(sd.interna.baixa, false, 80), -1.3), () => M.concreto);
-  // e4: piscina redonda de borda branca no nordeste da água (plataforma que desce até o leito) e o pavilhão
-  const pc = sd.piscina; if (pc) { const rim = new THREE.Mesh(new THREE.CylinderGeometry(pc.r + 0.15, pc.r + 0.15, 0.4, 40), M.whiteSmooth); rim.position.set(pc.c[0], -0.12, pc.c[1]); rim.castShadow = true; rim.receiveShadow = true; P.e4.add(rim); const w = new THREE.Mesh(new THREE.CircleGeometry(pc.r, 40), M.pool); w.rotation.x = -Math.PI / 2; w.position.set(pc.c[0], 0.085, pc.c[1]); w.receiveShadow = true; P.e4.add(w); }
-  const pv = sd.pavilhao; if (pv) {
-    const gpv = new THREE.Group(); gpv.position.set(pv.c[0], 0, pv.c[1]); gpv.rotation.y = -(pv.rot || 0); P.e4.add(gpv);
-    const placa = mesh(new THREE.BoxGeometry(pv.w, 0.05, pv.d), M.whiteSmooth); placa.position.y = pv.h + 0.025; gpv.add(placa);
-    const caixa = mesh(new THREE.BoxGeometry(pv.w * 0.72, pv.h - 0.1, pv.d * 0.7), M.glass, false); caixa.position.y = (pv.h - 0.1) / 2 + 0.05; caixa.renderOrder = 3; gpv.add(caixa);
-    const pil = []; for (const sx of [-1, 1]) for (const sz of [-1, 1]) pil.push([[sx * (pv.w / 2 - 0.1), -0.05, sz * (pv.d / 2 - 0.1)], [sx * (pv.w / 2 - 0.1), pv.h, sz * (pv.d / 2 - 0.1)]]); gpv.add(beams(pil, 0.03, M.whiteSmooth, 6));
+  P.e1.add(plate(quadrado(T.c, T.lado + 0.9, 0.5), -0.02, 0.06, M.concreto));
+  // e4: terraço claro ao fundo do lago (meio disco até a fita), piscinas elevadas e a torre
+  const [sx, sz] = s.c; const rT = s.r + o0 - 0.4; const terraco = arcoPts(sx, sz, rT, Math.PI + 0.13, Math.PI * 2 - 0.13, 24);
+  P.e4.add(plate(terraco, 0, 0.04, M.pavers));
+  for (const pc of s.piscinas || []) { const rim = mesh(new THREE.CylinderGeometry(pc.r + 0.14, pc.r + 0.16, 0.16, 40), M.whiteSmooth); rim.position.set(pc.c[0], 0.08, pc.c[1]); P.e4.add(rim); const w = new THREE.Mesh(new THREE.CircleGeometry(pc.r, 40), M.pool); w.rotation.x = -Math.PI / 2; w.position.set(pc.c[0], 0.165, pc.c[1]); w.receiveShadow = true; P.e4.add(w); }
+  const torre = torreHolding(T); P.e4.add(torre); P.e4.userData.heliponto = torre.userData.heliponto;
+  // pavilhão guarda-chuva: plataforma redonda meio sobre a água, salão de vidro, coluna e a cobertura em guarda-chuva
+  const pv = s.pavilhao; if (pv) {
+    const gpv = new THREE.Group(); gpv.position.set(pv.c[0], 0, pv.c[1]); P.e4.add(gpv); const r = pv.w / 2;
+    const pl = mesh(new THREE.CylinderGeometry(r * 0.95, r, 0.14, 32), M.whiteSmooth); pl.position.y = -0.03; gpv.add(pl);
+    const sal = mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.5, pv.h - 0.12, 20, 1, true), M.glass, false); sal.position.y = 0.04 + (pv.h - 0.12) / 2; sal.renderOrder = 3; gpv.add(sal);
+    const col = mesh(new THREE.CylinderGeometry(0.06, 0.08, pv.h + 0.1, 10), M.whiteSmooth); col.position.y = (pv.h + 0.1) / 2; gpv.add(col);
+    const teto = mesh(new THREE.ConeGeometry(r * 1.05, 0.34, 8), M.whiteSmooth); teto.position.y = pv.h + 0.2; teto.rotation.y = Math.PI / 8; gpv.add(teto);
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(r * 0.97, 0.022, 4, 8), M.ouro || M.yellow); aro.rotation.set(Math.PI / 2, 0, Math.PI / 8); aro.position.y = pv.h + 0.05; gpv.add(aro);
+    const pto = mesh(new THREE.SphereGeometry(0.05, 8, 6), M.ouro || M.yellow); pto.position.y = pv.h + 0.4; gpv.add(pto);
   }
-  // árvores: 28 no pé interno do anel (fora do lago, longe da piscina e da fita interna) e 16 na península
-  const tr = []; const R = rng(41); const lago = A.lago; const alta = curve(sd.interna.alta, false, 30); const baixa = curve(sd.interna.baixa, false, 30);
-  const livre = (x, z) => !inPoly(x, z, lago) && distPoly(x, z, lago) > 0.4 && !(pc && Math.hypot(x - pc.c[0], z - pc.c[1]) < 1.6) && distPoly(x, z, alta, false) > 1.75 && distPoly(x, z, baixa, false) > 1.65;
-  for (let t = 0; tr.length < 28 && t < 400; t++) { const k = 4 + ((R() * (arco.length - 8)) | 0); const o = o0 - 0.45 - R() * 0.55; const x = arco[k][0] + nor[k][0] * o, z = arco[k][1] + nor[k][1] * o; if (!livre(x, z)) continue; tr.push({ x, z, s: 0.24 + R() * 0.12, pal: 'mata', h: 1.05 }); }
-  for (let t = 0; tr.length < 44 && t < 300; t++) { const x = 6.0 + R() * 1.9, z = -8.5 + R() * 3.5; if (!livre(x, z)) continue; tr.push({ x, z, s: 0.3 + R() * 0.15, pal: 'mata', h: 1.05 }); }
-  P.e4.add(treeGroup(tr.map((t) => ({ ...t, y: Math.max(0, heightAt(t.x, t.z)) }))));
+  // renques de árvores por dentro das pernas do U (entre a fita e o lago) e em volta do terraço
+  const tr = []; const R = rng(41); const lago = A.lago; const ok = (x, z) => !inPoly(x, z, lago) && distPoly(x, z, lago) > 0.45 && Math.hypot(x - T.c[0], z - T.c[1]) > T.lado * 0.8 + 0.5 && (s.piscinas || []).every((pc) => Math.hypot(x - pc.c[0], z - pc.c[1]) > pc.r + 0.5);
+  for (const lado of [-1, 1]) for (let z = -6.9; z > sz + 0.6; z -= 0.95) { const x = lado * (Math.abs(s.path[0][0]) + o0 + 0.75); if (ok(x, z)) tr.push({ x, z, s: 0.3 + R() * 0.06, pal: 'jardim', h: 1.05 }); }
+  for (let k = 0; k < 13; k++) { const a = Math.PI + 0.35 + (k / 12) * (Math.PI - 0.7); const x = sx + Math.cos(a) * (rT - 0.55), z = sz + Math.sin(a) * (rT - 0.55); if (ok(x, z)) tr.push({ x, z, s: 0.26 + R() * 0.06, pal: 'jardim', h: 1.0 }); }
+  P.e4.add(treeGroup(tr.map((t) => ({ ...t, y: 0.04 }))));
   for (const k of Object.keys(P)) root.add(P[k]);
-  const meio = arco[(arco.length * 0.55) | 0];
-  return { id: 'sedePatio', root, partes: P, esqueletos: {}, grua: {}, foco: { x: s.c[0] + 1.5, z: s.c[1] - 1.0, dist: 19 }, ancora: [meio[0], 2.6, meio[1]] };
+  return { id: 'sedePatio', root, partes: P, esqueletos: {}, grua: { e4: true }, foco: { x: sx, z: sz + 1.5, dist: 22 }, ancora: [sx, 3.0, sz + 4] };
 }
+function arcoPts(cx, cz, r, a0, a1, n) { const out = []; for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; out.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]); } return out; }
 function distPoly(x, z, p, fechado = true) { let d = 1e9; for (let i = fechado ? 0 : 1, j = fechado ? p.length - 1 : 0; i < p.length; j = i++) { const [ax, az] = p[j], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; }

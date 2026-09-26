@@ -431,6 +431,14 @@ img{-webkit-user-drag:none}
 .barra.alerta i{background:linear-gradient(180deg,#ffd872,#f0960a)}
 .etiq{display:inline-flex;align-items:center;gap:4px;padding:2px 10px 2px 4px;border-radius:14px;background:#fff;border:2px solid var(--cartaoB);font-size:13px;font-weight:800;line-height:1.2;color:var(--tinta)}
 .etiq img{width:24px;height:24px}
+/* paleta de cores do prédio (painel do módulo e da obra) */
+.cores{display:flex;flex-wrap:wrap;align-items:center;gap:0;margin:8px 0 2px}
+.cores>span{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:800;color:var(--tinta);margin-right:2px}
+.cores>span img{width:24px;height:24px}
+.cores .cor{position:relative;width:44px;height:44px;border:0;background:none;cursor:pointer;padding:0}
+.cores .cor::before{content:'';position:absolute;inset:7px;border-radius:50%;border:3px solid #fff;background:var(--c);box-shadow:0 0 0 2px var(--cartaoB),0 2px 3px rgba(0,0,0,.18)}
+.cores .cor:first-of-type::before{background:conic-gradient(#efe3c8 0 50%,#9ad6f6 0)}
+.cores .cor.on::before{inset:5px;box-shadow:0 0 0 3px #2a8f2a,0 2px 4px rgba(0,0,0,.25)}
 .etiq.ok{background:#ebfbe2;border-color:#b8e6a0;color:#23641a}
 .etiq.nao{background:#ffede9;border-color:#ffc2b8;color:#b8261a}
 .passos{display:flex;gap:4px;margin:0 0 9px}

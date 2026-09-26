@@ -10,7 +10,7 @@ import { CameraRig } from './render/camera.js';
 import { Mundo } from './render/mundo.js';
 import { Obras } from './render/obra.js';
 import { modeloReflorestar } from './render/models/canteiro.js';
-import { MESA, VISTA_FOTO } from './data/planta.js';
+import { MESA, VISTA_FOTO, A } from './data/planta.js';
 import { ORDEM_BAIRROS, areaBairro, AEROPORTO, PORTO } from './data/cidade.js';
 import { PROJETOS } from './data/obras.js';
 import { novoEstado, Jogo, prepararSave, VERSAO_SAVE } from './sim/estado.js';
@@ -30,8 +30,8 @@ const cfg = lerConfig();
 const aplicarAcess = (c) => { const r = document.documentElement; r.style.setProperty('--escala', c.escala === 'grande' ? '1.12' : '1'); if (c.menosMov) r.dataset.menosMov = '1'; else delete r.dataset.menosMov; if (c.contraste) r.dataset.contraste = '1'; else delete r.dataset.contraste; };
 aplicarAcess(cfg);
 const quadro = () => new Promise((r) => requestAnimationFrame(() => r()));
-// vista geral (abertura do jogo e botão da interface): centro da composição, ~47° de inclinação, horizonte reto
-const VISTA_GERAL = { x: 1.5, z: 5, dist: 60, yaw: 0.36, pitch: 0.84, fov: 38, roll: 0 };
+// vista geral (abertura do jogo e botão da interface): do sul, sobre o eixo, ~50° de inclinação, horizonte reto
+const VISTA_GERAL = { x: 0, z: -1.5, dist: 78, yaw: 0, pitch: 0.88, fov: 38, roll: 0 };
 let salvarAgora = () => {}; // grava o localStorage na hora (antes de atualizar a versão ou perder o contexto)
 
 // ---------------- tela de carregamento ----------------
@@ -144,9 +144,9 @@ async function iniciar() {
     if (TESTE) return;
     if (!S.dicas.voo) { // primeira vez: a planta holográfica mostra a meta, depois a câmera desce ao canteiro
       S.dicas.voo = 1; ui.classList.add('intro'); mundo.mostrarFantasma(true, 1600);
-      setTimeout(() => { mundo.mostrarFantasma(false, 1400); rig.flyTo({ x: -24.5, z: 18.5, dist: 16, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 2800, { cine: true }); }, 6000); setTimeout(() => { rig.pitchFix = null; ui.classList.remove('intro'); }, 8800);
+      setTimeout(() => { mundo.mostrarFantasma(false, 1400); rig.flyTo({ x: A.canteiro.c[0] + 1.5, z: A.canteiro.c[1] + 3.5, dist: 16, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 2800, { cine: true }); }, 6000); setTimeout(() => { rig.pitchFix = null; ui.classList.remove('intro'); }, 8800);
     }
-    else { rig.pitchFix = null; rig.roll = 0; rig.flyTo({ x: -24.5, z: 16.5, dist: 22, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 1400, { cine: true }); }
+    else { rig.pitchFix = null; rig.roll = 0; rig.flyTo({ x: A.canteiro.c[0] + 1.5, z: A.canteiro.c[1] + 1.5, dist: 22, yaw: 0.35, tilt: 0, fov: 38, roll: 0 }, 1400, { cine: true }); }
   };
   const bt = carga.querySelector('.toque'); bt.classList.add('vis'); bt.addEventListener('click', entrar, { once: true });
   if (TESTE) entrar();

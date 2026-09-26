@@ -33,7 +33,7 @@ function caixasMalha(o, L) {
 
 const FAIXA_PROJ = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
 // eventos da simulação que mudam o painel aberto (o redesenho só acontece se o HTML mudar)
-const EV_PAINEL = new Set(['produto', 'coleta', 'enfileirar', 'produzir', 'pedido', 'troca', 'entregar', 'etapaIniciada', 'etapaPronta', 'etapaFeita', 'moduloIniciado', 'moduloPronto', 'moduloFeito', 'topografo', 'mutirao', 'ampliar', 'almox', 'repasse', 'predio', 'novoCapitulo', 'aviso']);
+const EV_PAINEL = new Set(['produto', 'coleta', 'enfileirar', 'produzir', 'pedido', 'troca', 'entregar', 'etapaIniciada', 'etapaPronta', 'etapaFeita', 'moduloIniciado', 'moduloPronto', 'moduloFeito', 'topografo', 'mutirao', 'ampliar', 'almox', 'repasse', 'predio', 'novoCapitulo', 'aviso', 'pintado']);
 // passarelas e a praça povoam as vias (a chave muda quando uma delas fica pronta)
 const POVO = [...PROJETOS.filter((p) => p.id.startsWith('pas_')).flatMap((p) => p.etapas.map((e) => p.id + '.' + e.id)), 'praca.e3'];
 const VERBO = { pronta: 'Aprovar', coleta: 'Coletar', moedas: 'Moedas', subir: 'Subir módulo', bloq: 'Módulo', obra: 'Obra' };
@@ -152,7 +152,9 @@ export class Controle {
     // tudo que ficou pronto vira uma malha só por material (a visibilidade do canteiro entra na conta: os prédios dele
     // saem da fusão quando ele some)
     const ass = JSON.stringify([Object.entries(this.S.etapas).filter(([, v]) => v.estado === 'feita').map(([k]) => k).sort(), Object.values(this.S.modulos).map((a) => a.map((m) => m.nivel).join('')), Object.entries(this.S.predios).filter(([k, v]) => v.ok && !W.predios[k]?.userData.animando).map(([k]) => k), !!W.canteiro.visible]);
-    if (ass !== this._assinatura) { this._assinatura = ass; W.refundir(); }
+    const eixo = W.plano.setEixo(['praca.e1', 'praca.e2', 'praca.e3'].filter((k) => J.feita(k)).length); // eixo monumental com a praça
+    const pintou = W.pintar(this.S.cores); // cores escolhidas (a cor entra na assinatura da fonte)
+    if (ass !== this._assinatura || pintou || eixo) { this._assinatura = ass; W.refundir(); }
     this.povoar();
   }
   sincronizar() { this.sincronizarMundo(); this.calcBolhas(); this.hud.atualizar(); this.hud.capitulo(); this.hud.revalidarFalas(); }
@@ -180,7 +182,7 @@ export class Controle {
         const pecas = []; for (const g of Object.values(W.predios)) if (g.userData.pronto || g.visible) pecas.push(g); const amb = W.canteiro.children.find((c) => c.name === 'canteiroAmb'); if (amb) pecas.push(amb);
         const soltar = (lista) => { let n = 0; for (const g of lista) if (g !== amb && g.userData && !g.userData.animando) { g.userData.animando = true; n++; } if (n) W.refundir?.(); for (const g of lista) g.visible = true; };
         const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.5;
-        opts = { ...base, alvo: W.canteiro, alvos: pecas, soltar, modo: 'desmontar', box: b, operarios: 12, acesso: A.vias?.[0]?.pts?.[0] || [-19.6, 16.4] };
+        opts = { ...base, alvo: W.canteiro, alvos: pecas, soltar, modo: 'desmontar', box: b, operarios: 12, acesso: A.canteiro.acesso };
         site.aoFim = () => { W.canteiro.visible = false; for (const g of pecas) if (g.userData) { g.userData.animando = false; if (g.parent === W.canteiro && g !== amb) g.visible = false; } };
         site.aoRemover = () => { let n = 0; for (const g of pecas) if (g !== amb && g.userData?.animando) { g.userData.animando = false; n++; } if (n) W.refundir?.(); }; // obra desfeita sem aprovar: as peças voltam à fusão
       } else if (modo0 === 'reflorestar') { // replantio: mudas em linhas crescendo até virar a mata do canteiro
@@ -276,6 +278,7 @@ export class Controle {
       case 'aviso': this._aviso(d); break;
       case 'mutirao': this._mutiraoT = performance.now(); break;
       case 'moduloFeito': { const bm = bemMinimo(d.nivel + 1); if (bm && J.bem < bm) this._dica('bemEstar'); break; } // o próximo pavimento pede bem-estar
+      case 'pintado': this.sincronizarMundo(); break;
       case 'coleta': if (d.especial) setTimeout(() => this.hud.brinde(`Achado: ${ITENS[d.especial].nome}!`, d.especial, 2600), 500); break;
     }
     if (EV_PAINEL.has(tipo)) this.paineis.agendar();

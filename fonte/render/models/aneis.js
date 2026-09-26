@@ -1,10 +1,10 @@
 // Os edifícios-fita da composição (traçados a partir da foto limpa): Anel do Campus (colina verde em anfiteatro, com
 // talude interno e a ponta leste em degraus), arena do Campus Universitário (parede de células com cinco torres) e o
-// Elo, Anel da Biblioteca, Santuário (fita aberta em "6" com a rampa em patamares), Sede (anel de varandas brancas com
-// a fita interna do leste) e a fita da Faculdade de Humanidades. Vegetação e ripas em faixa.js.
+// Elo, Anel da Biblioteca, Santuário (fita em arco que abraça a Cúpula), Sede (U de varandas brancas no fim do eixo)
+// e a fita da Faculdade de Humanidades. Vegetação e ripas em faixa.js.
 import * as THREE from 'three';
 import { ellipse, curve, sweep, subPath, subPathDenso, terraceFloor, terraceOutline, pathLength, pontaFator, deckGeo, merge, normals, FH } from '../geom.js';
-import { A, SANTUARIO_GRAMADO } from '../../data/planta.js';
+import { A, arco } from '../../data/planta.js';
 import { Faixa, matDe } from './faixa.js';
 import { M } from '../materials.js';
 import { heightAt } from '../ground.js';
@@ -37,44 +37,10 @@ function rampasAnel(F) {
   const g = merge([[deckGeo(linha(pe, bif, 8), 0.5), new THREE.Matrix4()], [deckGeo(linha(bif, [3.5, -1.3, yT], 8), 0.35), new THREE.Matrix4()], [deckGeo(linha(bif, [4.0, -1.3, yT], 8), 0.35), new THREE.Matrix4()]]);
   return new Map([['caminhoTeto', g]]);
 }
-// Fitas internas da Sede: a alta (4 pavimentos) por dentro do anel no leste, com a ponta NE afinada, e a baixa (2
-// pavimentos) que contorna o canto SE e segue até a Ciências, terminando reta encostada na Ponte Coberta
-function frenteSede(F) {
-  const sd = A.sede; const prof = { ...F.prof, passeio: false }; const maps = [];
-  const alta = subPathDenso(curve(sd.interna.alta, false, 120), false, 0, 1, 0.4, 1.0, 0); const pa = { ...prof, o0: -1.4 }; const Wa = alta.s.map((d) => pontaFator(d, 1.0));
-  const Ea = []; for (let f = 0; f < 4; f++) Ea.push(...terraceFloor(f, 4, pa));
-  maps.push(sweep(alta.pts, false, Ea, { caps: 'ini', capPoly: terraceOutline(4, pa), width: (t, k) => Wa[k], widthCenter: (pa.o0 + pa.o1) / 2 }));
-  const baixa = subPathDenso(curve(sd.interna.baixa, false, 200), false, 0, 1, 0.4).pts; const pb = { ...prof, o0: -1.3 };
-  const Eb = []; for (let f = 0; f < 2; f++) Eb.push(...terraceFloor(f, 2, pb));
-  maps.push(sweep(baixa, false, Eb, { caps: 'fim', capPoly: terraceOutline(2, pb) }));
-  return fundir(maps);
-}
-// Rampa do Santuário: três patamares (3, 2 e 1 andares) que descem da ponta oeste da fita, ao longo do campo de
-// rúgbi, até a Sede; o mesmo perfil da fita (beirais alinhados), cada patamar tampado nas duas pontas
-function rampaSantuario(F) {
-  const eixo = curve([...A.santuario.rampa].reverse(), false, 60); const L = pathLength(eixo, false); const prof = { ...F.prof, passeio: false }; const maps = [];
-  [[3, 0, 1 / 3], [2, 1 / 3, 2 / 3], [1, 2 / 3, 1]].forEach(([Fd, s0, s1]) => {
-    const { pts } = subPathDenso(eixo, false, s0, s1, 0.22); const E = []; for (let f = 0; f < Fd; f++) E.push(...terraceFloor(f, Fd, prof));
-    maps.push(sweep(pts, false, E, { caps: true, capPoly: terraceOutline(Fd, prof), u0: s0 * L }));
-  });
-  return fundir(maps);
-}
-// Campo de rúgbi da foto: 9 linhas brancas (e a curta do meio) e a orla clara pela elipse, assentadas no terreno
-function trilhasPasto() {
-  const G = SANTUARIO_GRAMADO; const [[cx, cz], rx, rz, rot] = G.elipse; const c = Math.cos(rot), s = Math.sin(rot); const maps = [];
-  const P = (u, v) => [cx + u * c - v * s, cz + u * s + v * c];
-  for (const u of G.linhas || []) { const v = Math.abs(u - (G.curta ?? 99)) < 1e-6 ? 0.42 : 0.85; maps.push(sweep([P(u * rx, -v * rz), P(u * rx, v * rz)], false, [{ a: [0.03, 0.02], b: [-0.03, 0.02], mat: 'c', uv: 'plan' }], { caps: false })); }
-  for (const t of G.trilhas || []) { const path = t.elipse ? ellipse(t.elipse[0][0], t.elipse[0][1], t.elipse[1], t.elipse[2], t.elipse[3] || 0, 80) : curve(t.pts, false, 40); const w = t.w ?? 0.07; maps.push(sweep(path, !!t.elipse, [{ a: [w, 0.02], b: [-w, 0.02], mat: 'c', uv: 'plan' }], { caps: false })); }
-  const out = [];
-  for (const [, g] of fundir(maps).map((m) => [null, m.geometry])) { const Pp = g.attributes.position; for (let i = 0; i < Pp.count; i++) Pp.setY(i, Math.max(0, heightAt(Pp.getX(i), Pp.getZ(i))) + 0.02); out.push(mesh(g, M.whiteSmooth, false)); }
-  return out;
-}
-
 export function faixas() {
   const a = A.anel, u = A.uni, s = A.santuario, sd = A.sede, b = A.anelBib; const ar = u.arena;
-  // caminho do Santuário: volta interna, U e volta externa (o eixo corre na fresta entre as duas voltas encostadas)
-  const l = s.laco; const pI = curve(l.interna, false, 60), pE = curve(l.externa, false, 110); const pU = curve([pI[pI.length - 1], l.u[0], l.u[1], pE[0]], false, 10).slice(1, -1);
-  const sApex = pathLength(pI, false) + pathLength([pI[pI.length - 1], ...pU], false) / 2;
+  // caminho do Santuário: arco em volta da cúpula (de oeste a leste, pelo norte); a fita cresce para dentro
+  const pS = curve(arco(s.centro[0], s.centro[1], s.r, s.a0, s.a1, 40), false, 220);
   return {
     // anel de 5 pavimentos com dois vãos (cortes 2 e 5: ao sul, na frente, e ao noroeste); lajes finas, terraços
     // internos largos e verdes, os 2 andares de baixo enterrados no talude, passeio claro na borda externa do teto;
@@ -96,18 +62,16 @@ export function faixas() {
     // Anel da Biblioteca: 3 pavimentos de 0,55 em degraus para fora, fachada interna em colmeia, passeio de deque cinza
     anelBib: new Faixa({ id: 'anelBib', closed: false, path: ellipse(b.c[0], b.c[1], b.r1, b.r1 * 0.92, 0, 120, 0, 1, b.a0, b.a1), modulos: 3, ponta: 0.6,
       prof: { o0: -2.8, o1: 0, setIn: 0, setOut: 0.5, fh: 0.55, fac: 'fac_fita', facIn: 'fac_colmeia', caminho: 'grey' }, niveis: 3 }),
-    // fita aberta em "6" de 4 pavimentos: nasce na ponta livre da volta interna, dá a volta no U (onde as duas faixas
-    // se estreitam e se fundem) e segue pela externa até a ponta reta onde encosta a rampa; fachada âmbar, teto verde
-    // com friso claro e sem caminho; atrás, a rampa em patamares e o campo de rúgbi
-    santuario: new Faixa({ id: 'santuario', closed: false, path: [...pI, ...pU, ...pE], modulos: 5, cortes: [0, 0.2, 0.36, 0.55, 0.78, 1], passo: 0.22, ponta: 1.2, pontas: { 5: 0 },
-      centroLargura: 0, largura: (d) => 0.5 + 0.5 * smoothstep(0, 2.0, Math.abs(d - sApex)),
-      prof: { o0: -1.2, o1: 0, setIn: 0.12, setOut: 0.03, curbMat: 'fasciaBeiral', fac: 'fac_ambar', facIn: 'fac_ambar', roof: 'roof', passeio: false }, niveis: 4,
-      arbustoPasso: 0.9, arbustoMax: 400, decor: (F) => [...rampaSantuario(F), ...trilhasPasto()] }),
-    // anel elíptico aberto da Sede: varandas brancas contínuas (laje creme com parapeito), face interna vertical,
-    // cobertura de deque escuro liso; proa de altura cheia à esquerda, ponta reta no canto SE; no nível máximo a
-    // geometria ganha o 5º pavimento e as fitas internas do leste
-    sede: new Faixa({ id: 'sede', closed: false, path: curve(sd.path, false, 260), modulos: 4, passo: 0.32, ponta1: 0, andaresExtra: 1,
+    // fita em arco de 4 pavimentos que abraça a Cúpula pelo norte: fachada âmbar, teto verde com friso claro; as duas
+    // pontas afinam
+    santuario: new Faixa({ id: 'santuario', closed: false, path: pS, modulos: 5, cortes: [0, 0.2, 0.4, 0.6, 0.8, 1], passo: 0.24, ponta: 1.6,
+      prof: { o0: -s.largura, o1: 0, setIn: 0.12, setOut: 0.03, curbMat: 'fasciaBeiral', fac: 'fac_ambar', facIn: 'fac_ambar', roof: 'roof', passeio: false }, niveis: 4,
+      arbustoPasso: 0.9, arbustoMax: 400 }),
+    // Sede da Holding: fita em U aberta para o sul (sobe a perna oeste, contorna o fundo e desce a leste), varandas
+    // brancas contínuas (laje creme com parapeito), face interna vertical e cobertura de deque escuro liso; pontas retas
+    // nas duas pernas (de frente para o eixo); no nível máximo ganha o 5º pavimento
+    sede: new Faixa({ id: 'sede', closed: false, path: curve(sd.path, false, 260), modulos: 4, passo: 0.32, ponta: 0, ponta1: 0, andaresExtra: 1,
       prof: { o0: sd.o0 ?? -2.1, o1: 0, setIn: 0, setOut: 0, beiral: 0.22, slab: 0.07, curb: 0.14, curbW: 0.03, curbMat: 'fasciaBeiral', fac: 'fac_fita', facIn: 'fac_fita', roof: 'roofMetal', passeio: false },
-      niveis: 4, arbustos: false, ripas: false, decor: (F) => frenteSede(F) }),
+      niveis: 4, arbustos: false, ripas: false }),
   };
 }

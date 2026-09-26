@@ -85,6 +85,8 @@
 //   J.custoDesmate(lote), +3 madeira; o lote precisa estar na borda do bairro ou ao lado de um lote limpo, onde a rua chega);
 //   J.loteLimpo(lote), J.limposSet() (limpos e ocupados), J.lotesConstruiveis(b?) → {limpos: [], mata: []} (livres); construir
 //   num lote com mata dá 'mata'.
+// Cores: J.pintarCidade(f, i, cor) (S.modulos[f][i].cor) e J.pintarObra(id, cor) (S.cores[id]: projeto ou faixa da
+//   Arcologia); cor = índice de PALETA (0 = original). De graça, a qualquer momento.
 // Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera, auto} com
 //   recompensa = {creditos, xp, itens?:{id:n}, bem?:{n,h}, disposicao?}; (creditos, xp, especial: cópias antigas).
 // Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, porque, dica (as três juntas)}; valem nos capítulos seguintes.
@@ -103,7 +105,7 @@
 import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data/itens.js';
 import { PROJETOS, PROJ, MODULOS, LIMITE_CAP, POP_NIVEL, POOL_NIVEL, CUSTO_NIVEL, TEMPO_NIVEL, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../data/obras.js';
 import { CAPITULOS, EFEITOS, MARCOS, FALAS_ETAPA, EPILOGO, PEDIDOS } from '../data/historia.js';
-import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO, RENDA_CIDADE_MAX, exigeNivel, PRECO_TERRENO, EFEITO_EMPRESA, TETO_EMPRESA, LUGARES } from '../data/cidade.js';
+import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO, RENDA_CIDADE_MAX, exigeNivel, PRECO_TERRENO, EFEITO_EMPRESA, TETO_EMPRESA, LUGARES, PALETA } from '../data/cidade.js';
 const ehLugar = (b) => Object.prototype.hasOwnProperty.call(LUGARES, b); // aeroporto e porto
 
 export const VERSAO_SAVE = 3;
@@ -181,7 +183,7 @@ export function novoEstado(agora = Date.now()) {
   }
   for (const [f, n] of Object.entries(N_MODULOS)) S.modulos[f] = Array.from({ length: n }, () => ({ nivel: 0, obra: null }));
   for (const f of TIPOS_CIDADE) S.modulos[f] = [];
-  S.cidade = { bairros: { sul: true }, terrenos: {}, fab: 0, limpos: {} };
+  S.cidade = { bairros: { sul: true }, terrenos: {}, fab: 0, limpos: {} }; S.cores = {};
   return S;
 }
 
@@ -334,7 +336,7 @@ export function normalizar(S, agora = Date.now()) {
   for (const f of TIPOS_CIDADE) {
     const arr = Array.isArray(S.modulos?.[f]) ? S.modulos[f] : []; const M = MODULOS[f];
     O.modulos[f] = arr.filter((m) => objeto(m) && loteDe(m.lote) && (O.cidade.bairros[loteDe(m.lote).bairro] || ehLugar(loteDe(m.lote).bairro)) && (ehLugar(loteDe(m.lote).bairro) ? CIDADE[f].lugar === loteDe(m.lote).bairro : !CIDADE[f].lugar) && !usados.has(m.lote) && usados.add(m.lote)).slice(0, MAX_POR_TIPO).map((m) => {
-      const out = { nivel: clamp(num(m.nivel) | 0, 0, M.max), obra: null, lote: m.lote };
+      const out = { nivel: clamp(num(m.nivel) | 0, 0, M.max), obra: null, lote: m.lote }; if ((m.cor | 0) > 0 && (m.cor | 0) < PALETA.length) out.cor = m.cor | 0;
       if (objeto(m.obra) && ['obra', 'pronta'].includes(m.obra.estado) && num(m.obra.para) > out.nivel && num(m.obra.para) <= M.max) { out.obra = { estado: m.obra.estado, para: m.obra.para | 0, ini: num(m.obra.ini, O.t), fim: num(m.obra.fim, O.t) }; if (m.obra.pago != null) out.obra.pago = Math.max(0, Math.round(num(m.obra.pago))); if (objeto(m.obra.itens)) { const its = {}; for (const [k, q] of Object.entries(m.obra.itens)) if (tem(ITENS, k) && num(q) > 0) its[k] = Math.round(num(q)); out.obra.itens = its; } }
       if (objeto(m.pedido) && objeto(m.pedido.itens) && Object.keys(m.pedido.itens).every((k) => tem(ITENS, k))) out.pedido = { nivel: num(m.pedido.nivel) | 0, itens: { ...m.pedido.itens } };
       if (out.nivel === 0 && !out.obra) out.obra = { estado: 'obra', para: 1, ini: O.t, fim: O.t, pago: CIDADE[f].custo[1] }; // colocado e não começado: a construção fica pronta
@@ -346,6 +348,7 @@ export function normalizar(S, agora = Date.now()) {
   O.pedidos = (Array.isArray(S.pedidos) ? S.pedidos : []).filter(objeto).map((p) => (p.itens && (!objeto(p.itens) || Object.keys(p.itens).some((k) => !tem(ITENS, k))) ? { id: num(p.id, O.seq++) | 0, espera: O.t, itens: null } : { ...p, id: num(p.id, O.seq++) | 0, espera: num(p.espera, O.t), auto: !!p.auto && !!p.itens }));
   O.topografo = objeto(S.topografo) && typeof S.topografo.k === 'string' && tem(TOPOGRAFO, S.topografo.k) ? { k: S.topografo.k, ini: num(S.topografo.ini, O.t), fim: num(S.topografo.fim, O.t) } : null;
   O.bemTemp = (Array.isArray(S.bemTemp) ? S.bemTemp : []).filter((b) => objeto(b) && num(b.n) > 0).map((b) => ({ n: num(b.n), fim: num(b.fim) }));
+  O.cores = Object.fromEntries(Object.entries(objeto(S.cores) ? S.cores : {}).filter(([k, v]) => typeof k === 'string' && Number.isInteger(v) && v > 0 && v < PALETA.length));
   O.legado = Array.isArray(S.legado) ? S.legado.filter((k) => typeof k === 'string' && tem(ITENS, k)) : [];
   if (Object.keys(orf).length) O._orfaos = orf; else delete O._orfaos;
   return O;
@@ -860,6 +863,9 @@ export class Jogo {
     if (terreno) { this.S.creditos -= terreno; this.S.cidade.terrenos[loteId] = terreno; this.emit('terrenoComprado', { lote: loteId, preco: terreno, junto: true }); }
     this.S.stats.cidade = (this.S.stats.cidade || 0) + 1; this.emit('cidadeConstruida', { faixa: f, i, lote: loteId }); return 'ok';
   }
+  // ---- cores escolhidas pelo jogador (só aparência) ----
+  pintarCidade(f, i, cor) { const m = this.S.modulos[f]?.[i]; cor = cor | 0; if (!m || !CIDADE[f] || cor < 0 || cor >= PALETA.length) return 'nada'; if (cor) m.cor = cor; else delete m.cor; this.emit('pintado', { faixa: f, i, cor }); return 'ok'; }
+  pintarObra(id, cor) { cor = cor | 0; if (!id || cor < 0 || cor >= PALETA.length) return 'nada'; this.S.cores ||= {}; if (cor) this.S.cores[id] = cor; else delete this.S.cores[id]; this.emit('pintado', { obra: id, cor }); return 'ok'; }
   // ---- desmate: a mata sai lote a lote, e a rua chega junto (borda do bairro ou vizinho de um lote limpo) ----
   loteLimpo(id) { return !!this.S.cidade.limpos?.[id] || this.ocupacaoCidade().has(id); }
   limposSet() { const s = new Set(Object.keys(this.S.cidade.limpos || {})); for (const id of this.ocupacaoCidade().keys()) s.add(id); return s; }

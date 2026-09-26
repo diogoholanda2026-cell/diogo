@@ -1,7 +1,7 @@
 // Árvores instanciadas: floresta ao redor da arcologia (em blocos, com descarte por visão e três níveis
 // de detalhe), e grupos de árvores de paisagismo usados pelos modelos (praças, pátios, savana).
 import * as THREE from 'three';
-import { MESA, A, SANTUARIO_GRAMADO } from '../data/planta.js';
+import { MESA, A } from '../data/planta.js';
 import { hash, vnoise, fbm, clamp, rng, inPoly, inEllipse, smoothstep } from '../core/util.js';
 import { isForest, heightAt, clearance, aldeiaCasas } from './ground.js';
 
@@ -250,7 +250,7 @@ function aldeiaMesh(casas) {
 // célula mais perto da câmera, com histerese): cada malha do bloco desenha só as células do seu nível,
 // e um bloco custa 1 chamada (2 ou 3 só quando mistura níveis). As coníferas ficam em 3 faixas (fundo e
 // laterais), uma chamada cada.
-const BLOCO_X = 16, BLOCO_Z = 10, CEL_X = 8, CEL_Z = 5, RAIO_COPA = 0.45;
+const BLOCO_X = 20, BLOCO_Z = 14, CEL_X = 8, CEL_Z = 5, RAIO_COPA = 0.45; // (4 x 4 blocos na mesa de 80 x 56)
 const LOD = [[15, 13.5], [31, 27]]; // [entra, sai] do nível 1 e do 2 (na vista da foto a 1376x768 quase tudo fica no nível de 15 triângulos)
 export class Forest {
   constructor(engine) {
@@ -260,32 +260,27 @@ export class Forest {
   }
   _build() {
     const step = 0.5; const R = rng(4242); const trees = []; const cant = []; // (mata 44% mais densa: o dono liberou o triplo do volume)
-    const semMata = A.semMata || []; const aldeia = aldeiaCasas(); const ca = (A.aldeia || { c: [-27.5, 3.0] }).c; const ilha = A.santuario.lago?.ilha;
+    const semMata = A.semMata || []; const aldeia = aldeiaCasas(); const ca = (A.aldeia || { c: [-27.5, 3.0] }).c;
     // três classes em manchas de 3 a 6 unidades: arbusto (30%), média (50%) e emergente (20%); perto da aldeia só as duas primeiras
     const classe = (jx, jz, pertoAldeia) => { let f = fbm(jx, jz, 4, 22, 2); if (pertoAldeia && f > 0.62) f = 0.55; return f < 0.41 ? [0.3 + R() * 0.1, 0.7] : f > 0.62 ? [0.72 + R() * 0.23, 1.25 + R() * 0.15] : [0.48 + R() * 0.18, 1.0]; };
-    const noLaco = (x, z) => inEllipse(x, z, 23.8, -9.0, 3.6, 2.9, 0); // miolo do laço do Santuário: 1,3x mais denso, 15% amarelo-esverdeado
     for (let z = MESA.z0 + 0.35; z < MESA.z1 - 0.3; z += step) {
       for (let x = MESA.x0 + 0.35; x < MESA.x1 - 0.3; x += step) {
         const jx = x + (R() - 0.5) * step * 0.9, jz = z + (R() - 0.5) * step * 0.9;
         const inCant = inPoly(jx, jz, A.canteiro.poly);
         if (!inCant && !isForest(jx, jz)) continue;
-        if (!inCant && semMata.some((p) => inPoly(jx, jz, p))) continue; // pegada da fita e da rampa do Santuário
-        if (ilha && Math.hypot(jx - ilha.c[0], jz - ilha.c[1]) < 0.4) continue; // (a copa da ilhota é posta à mão)
-        const cl = inCant ? 2 : clearance(jx, jz); const edge = clamp(cl, 0, 3); const laco = !inCant && noLaco(jx, jz);
+        if (!inCant && semMata.some((p) => inPoly(jx, jz, p))) continue; // pegada da fita do Santuário
+        const cl = inCant ? 2 : clearance(jx, jz); const edge = clamp(cl, 0, 3);
         // ciprestes em grupos de 3 a 8 na orla oeste, na leste e no fundo (4% soltos em toda parte)
-        const largo = Math.abs(jx) > 22 || jz < -14; const pc = (largo ? 0.55 * smoothstep(0.55, 0.72, fbm(jx, jz, 5, 23, 2)) : 0) + 0.04;
+        const largo = Math.abs(jx) > 28 || jz < -20; const pc = (largo ? 0.55 * smoothstep(0.55, 0.72, fbm(jx, jz, 5, 23, 2)) : 0) + 0.04;
         const conif = !inCant && R() < pc;
         const [s0, h] = classe(jx, jz, Math.hypot(jx - ca[0], jz - ca[1]) < 2); const s = s0 * (0.8 + 0.2 * clamp(edge / 1.5, 0, 1));
         const kind = inCant ? 'folha' : conif ? 'conifera' : R() < 0.5 ? 'folha' : 'folha2';
-        const pal = inCant ? 'mata' : conif ? 'conifera' : laco && R() < 0.15 ? 'outonoClaro' : R() < 0.02 ? 'outono' : 'mata';
+        const pal = inCant ? 'mata' : conif ? 'conifera' : R() < 0.02 ? 'outono' : 'mata';
         const t = { x: jx, z: jz, s: conif ? 0.42 + R() * 0.12 : s, kind, pal, h: conif ? 1.1 + R() * 0.4 : h, orla: inCant ? undefined : cl };
         (inCant ? cant : trees).push(t);
-        if (laco && !conif && R() < 0.3) trees.push({ ...t, x: jx + (R() - 0.5) * 0.5, z: jz + (R() - 0.5) * 0.5, kind: R() < 0.5 ? 'folha' : 'folha2', pal: 'mata' });
       }
     }
-    // sebe de folhosas altas ao norte do campo do Santuário, copa da ilhota da lagoa e 6 ciprestes altos junto à aldeia
-    { const [cc, rx] = SANTUARIO_GRAMADO.elipse; for (let x = cc[0] - rx; x <= cc[0] + rx; x += 0.7) { const jx = x + (R() - 0.5) * 0.3, jz = -18.3 + (R() - 0.5) * 0.3; if (!isForest(jx, jz)) continue; trees.push({ x: jx, z: jz, s: 0.7 + R() * 0.2, kind: R() < 0.5 ? 'folha' : 'folha2', pal: 'mata', h: 1.2 + R() * 0.15, orla: clearance(jx, jz) }); } }
-    if (ilha) trees.push({ x: ilha.c[0], z: ilha.c[1], s: 0.3, kind: 'folha', pal: 'jardim', h: 1.0, orla: 0.5 });
+    // 6 ciprestes altos junto à aldeia
     for (let i = 0, n = 0; i < 12 && n < 6; i++) { const [hx, hz] = aldeia[i % aldeia.length] || ca; const a = (i / 6) * 6.283 + R() * 0.5, r = 1.0 + R() * 0.8; const jx = hx + Math.cos(a) * r, jz = hz + Math.sin(a) * r; if (!isForest(jx, jz)) continue; n++; trees.push({ x: jx, z: jz, s: 0.46 + R() * 0.1, kind: 'conifera', pal: 'conifera', h: 1.35 + R() * 0.15, orla: clearance(jx, jz) }); }
     const G = treeGeos();
     // folhosas: blocos de descarte, com as árvores em ordem de célula
@@ -293,7 +288,7 @@ export class Forest {
     for (const t of trees) { if (t.kind === 'conifera') continue; const bx = Math.floor((t.x - MESA.x0) / BLOCO_X), bz = Math.floor((t.z - MESA.z0) / BLOCO_Z), k = bx * 64 + bz; if (!blocos.has(k)) blocos.set(k, { bx, bz, l: [] }); blocos.get(k).l.push(t); }
     for (const { bx, bz, l } of blocos.values()) this.group.add(this._bloco(l, (bx + bz) & 1));
     // ciprestes: três faixas (fundo e laterais), uma chamada cada
-    const faixas = [[], [], []]; for (const t of trees) if (t.kind === 'conifera') faixas[t.z < -14 ? 0 : t.x < 0 ? 1 : 2].push(t);
+    const faixas = [[], [], []]; for (const t of trees) if (t.kind === 'conifera') faixas[t.z < -20 ? 0 : t.x < 0 ? 1 : 2].push(t);
     for (const l of faixas) { if (!l.length) continue; const g = new THREE.Group(); g.name = 'mata'; const cm = this._nova(G.conifera, l.length); preencher(cm, l, 'conifera'); cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); this.group.add(g); this.chunks.push(g); }
     this.count = trees.length; this.coniferas = faixas[0].length + faixas[1].length + faixas[2].length;
     // aldeia de telhados terracota (uma chamada)

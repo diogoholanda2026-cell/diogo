@@ -1,13 +1,13 @@
-// Terreno da maquete: malha com lagos rebaixados e o fosso do acelerador, textura pintada a partir
-// da planta mestra (floresta, gramados, praça, pastos, trilhas, vias) e duas texturas de detalhe (grão
-// de perto e flocagem que some de longe). A água dos lagos lê um mapa da distância até a margem.
+// Terreno da Arcologia: malha com o lago da Sede rebaixado e o fosso do acelerador, textura pintada a partir do plano
+// diretor (mata, gramados, praça e eixo, vias de asfalto com faixa tracejada, pátio de obras) e duas texturas de
+// detalhe (grão de perto e flocagem que some de longe). A água do lago lê um mapa da distância até a margem.
 import * as THREE from 'three';
-import { MESA, A, ZONAS, SANTUARIO_GRAMADO } from '../data/planta.js';
+import { MESA, A, ZONAS, distAnelViario, ANEL_VIARIO, AVENIDA, ROTATORIA, EIXO } from '../data/planta.js';
 import { hash, vnoise, fbm, inPoly, inEllipse, clamp, smooth, rng } from '../core/util.js';
 import { tex, canvasTex } from './textures.js';
 import { AGUA } from './materials.js';
 
-const S = 32; // pixels de textura por unidade
+const S = 28; // pixels de textura por unidade (a mesa do plano diretor tem 80 x 56)
 const W = (MESA.x1 - MESA.x0), D = (MESA.z1 - MESA.z0);
 export const toPx = (x, z) => [(x - MESA.x0) * S, (z - MESA.z0) * S];
 
@@ -23,33 +23,19 @@ function ellDist(x, z, cx, cz, rx, rz, rot = 0) {
   const c = Math.cos(-rot), s = Math.sin(-rot); const dx = x - cx, dz = z - cz; const u = dx * c - dz * s, v = dx * s + dz * c;
   const k = Math.hypot(u / rx, v / rz); return (k - 1) * Math.min(rx, rz);
 }
-// lagoa do Santuário (da planta, se houver; a ilhota nasce do terreno), a lagoa escura oval (só pintura) e o
-// bebedouro da savana. As reservas são objetos fixos: nada é alocado por chamada (heightAt roda no laço dos carros).
-const LAGO_SANT_RESERVA = { c: [21.5, -9.7], rx: 1.0, rz: 0.85, rot: 0.3, ilha: { c: [21.4, -10.1], r: 0.22 } };
-const LAGO2_RESERVA = { c: [21.7, -11.6], rx: 1.45, rz: 0.7, rot: -0.1 };
-const BEBEDOURO_RESERVA = { c: [16.8, -0.4], rx: 1.3, rz: 0.7, rot: 0.2 };
-const lagoSant = () => A.santuario.lago || LAGO_SANT_RESERVA;
-const lago2Sant = () => A.santuario.lago2 || LAGO2_RESERVA;
-const bebedouro = () => A.savana.lago || BEBEDOURO_RESERVA;
-// profundidade da água num ponto (0 = seco)
+// profundidade da água num ponto (0 = seco): o lago da Sede (os lagos de dentro da Cúpula são peças do modelo)
 export function waterDepth(x, z) {
   let d = polyDist(x, z, A.lago);
   const di = Math.hypot(x - A.ilha.c[0], z - A.ilha.c[1]) - A.ilha.r;
   if (d < 0 && di < 0) d = Math.max(d, -di);
-  let wd = d < 0 ? smooth(clamp(-d / 1.2, 0, 1)) : 0;
-  const s = lagoSant(); let ls = ellDist(x, z, s.c[0], s.c[1], s.rx, s.rz, s.rot || 0);
-  if (ls < 0 && s.ilha) { const dj = Math.hypot(x - s.ilha.c[0], z - s.ilha.c[1]) - s.ilha.r; if (dj < 0) ls = Math.max(ls, -dj); }
-  if (ls < 0) wd = Math.max(wd, smooth(clamp(-ls / 0.8, 0, 1)) * 0.8);
-  const b = bebedouro(); const lp = ellDist(x, z, b.c[0], b.c[1], b.rx, b.rz, b.rot || 0); if (lp < 0) wd = Math.max(wd, smooth(clamp(-lp / 0.5, 0, 1)) * 0.6);
-  return wd;
+  return d < 0 ? smooth(clamp(-d / 1.2, 0, 1)) : 0;
 }
-const CAMINHOS_SANT_RESERVA = [[[17.2, -11.2], [19.1, -7.8], [18.7, -5.8], [19.9, -5.0]]];
 export function inPit(x, z) { const p = A.acelerador; return inEllipse(x, z, p.c[0], p.c[1], p.rx, p.rz); }
 export function heightAt(x, z) {
   const w = waterDepth(x, z); if (w > 0) return -0.42 * w;
   let h = 0;
   // relevo suave apenas na floresta (longe das clareiras)
-  const clear = clearance(x, z); if (clear > 0) h += (fbm(x, z, 5, 3, 3) - 0.45) * 0.35 * clamp(clear / 2, 0, 1);
+  const clear = clearance(x, z); if (clear > 0) h += (fbm(x, z, 5, 3, 3) - 0.45) * 0.35 * clamp(clear / 2, 0, 1) * clamp(distVias(x, z) / 1.5, 0, 1); // (plano sob as vias)
   const edge = Math.min(x - MESA.x0, MESA.x1 - x, z - MESA.z0, MESA.z1 - z); h *= clamp(edge / 1.5, 0, 1);
   return h;
 }
@@ -92,7 +78,17 @@ export function aldeiaCasas() {
   }
   return (_aldeia = out);
 }
+// distância até a borda da via do plano mais perto (anel viário, avenida, rotatória e o eixo; 0 em cima dela)
+export function distVias(x, z) {
+  let d = distAnelViario(x, z) - ANEL_VIARIO.w / 2;
+  if (Math.abs(x) < ANEL_VIARIO.x1) d = Math.min(d, Math.abs(z - AVENIDA.z) - AVENIDA.w / 2);
+  d = Math.min(d, Math.hypot(x - ROTATORIA.c[0], z - ROTATORIA.c[1]) - ROTATORIA.r);
+  const ex = Math.abs(x - EIXO.x) - EIXO.meia, ez = Math.max(EIXO.z0 - z, z - EIXO.z1); d = Math.min(d, Math.hypot(Math.max(ex, 0), Math.max(ez, 0)) + Math.min(Math.max(ex, ez), 0));
+  return Math.max(0, d);
+}
+export const naVia = (x, z, m = 0) => distVias(x, z) < m + 1e-9;
 export function isForest(x, z) {
+  if (distVias(x, z) < 0.35) return false;
   if (waterDepth(x, z) > 0.02) return false;
   if (clearance(x, z) < 0.25) return false;
   for (const p of trilhasMata()) if (distPolilinha(x, z, p) < 0.32) return false;
@@ -123,7 +119,7 @@ export class Ground {
     this._pintar();
   }
   _buildMesh() {
-    const SX = 128, SZ = 80; const g = new THREE.PlaneGeometry(W, D, SX, SZ); g.rotateX(-Math.PI / 2); g.translate((MESA.x0 + MESA.x1) / 2, 0, (MESA.z0 + MESA.z1) / 2); // células de 0,5 (o leito do lago ainda cabe na rampa de 1,2)
+    const SX = W * 2, SZ = D * 2; const g = new THREE.PlaneGeometry(W, D, SX, SZ); g.rotateX(-Math.PI / 2); g.translate((MESA.x0 + MESA.x1) / 2, 0, (MESA.z0 + MESA.z1) / 2); // células de 0,5 (o leito do lago ainda cabe na rampa de 1,2)
     const p = g.attributes.position, uv = g.attributes.uv;
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, heightAt(x, z)); uv.setXY(i, (x - MESA.x0) / W, 1 - (z - MESA.z0) / D); }
     // remove os triângulos do fosso do acelerador
@@ -169,12 +165,10 @@ export class Ground {
     this.waterMat = this.e.mats.water;
     this.lake = mk(lago, this.waterMat, -0.1);
     const ell = ({ c: [cx, cz], rx, rz, rot = 0 }) => { const s = new THREE.Shape(); for (let i = 0; i <= 40; i++) { const a = (i / 40) * Math.PI * 2; const u = Math.cos(a) * (rx + 0.05), v = Math.sin(a) * (rz + 0.05); const x = cx + u * Math.cos(rot) - v * Math.sin(rot), z = cz + u * Math.sin(rot) + v * Math.cos(rot); i ? s.lineTo(x, -z) : s.moveTo(x, -z); } return s; };
-    mk(ell(lagoSant()), this.waterMat, -0.08);
-    mk(ell(bebedouro()), this.waterMat, -0.06);
     // mapa da altura do leito sob a água (0,25 unidade por texel; -0,45 a 0,05): a lâmina d'água é a
     // altura da superfície menos o leito, então a margem acompanha o nível (lago assoreado ou cheio);
     // no verde, a máscara do lago central (o único que assoreia)
-    const NX = 256, NZ = 160, dat = new Uint8Array(NX * NZ * 2);
+    const NX = W * 4, NZ = D * 4, dat = new Uint8Array(NX * NZ * 2);
     for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
       const x = MESA.x0 + ((i + 0.5) * W) / NX, z = MESA.z0 + ((j + 0.5) * D) / NZ; const wd = waterDepth(x, z), k = (j * NX + i) * 2;
       dat[k] = clamp(((wd > 0 ? -0.42 * wd : 0.05) + 0.45) / 0.5, 0, 1) * 255; dat[k + 1] = polyDist(x, z, A.lago) < 0.3 ? 255 : 0;
@@ -219,7 +213,7 @@ export class Ground {
     const linhaCrua = (pts, g = c) => { g.beginPath(); pts.forEach(([x, z], i) => { const [px, py] = P(x, z); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke(); };
     const linha = (pts, g = c) => linhaCrua(suave(pts), g);
     const V = flags.verde || {}; const ligado = (id) => !!(V[id] || (id === 'pracaSul' && flags.praca) || Object.keys(V).some((k) => V[k] && id.startsWith(k)));
-    const pronta = (Z) => (Z.id === 'praca' ? !!flags.praca : ligado(Z.id) || (Z.id === 'corredor' && !!V.ciencias)); // zona pavimentada já feita
+    const EIXO_IDS = new Set(['praca', 'eixo', 'rotatoria']); const pronta = (Z) => (EIXO_IDS.has(Z.id) ? !!flags.praca : ligado(Z.id)); // zona pavimentada já feita
     // 1) chão de floresta (copas escuras vistas de cima), da camada fixa
     c.filter = 'none'; c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
     c.drawImage(this._camadaFixa(), 0, 0, w, h);
@@ -232,11 +226,10 @@ export class Ground {
     c.save(); c.globalAlpha = 0.95;
     // (praça por fazer = pasto)
     for (const Z of ZONAS) {
-      if (Z.tipo === 'canteiro' || (Z.tipo === 'praca' && pronta(Z))) continue; const on = ligado(Z.id) && Z.tipo !== 'praca'; if (Z.tipo === 'areia' && on) continue;
+      if (Z.tipo === 'canteiro' || (Z.tipo === 'praca' && pronta(Z))) continue; const on = (Z.sempre || ligado(Z.id)) && Z.tipo !== 'praca'; if (Z.tipo === 'areia' && on) continue;
       if (Z.tipo === 'terra') { c.fillStyle = pat(tex.soil()); zona(Z); c.fill(); c.fillStyle = 'rgba(184,134,90,0.35)'; c.fill(); continue; } // piquete de terra
       c.fillStyle = pat(on && Z.tipo === 'grama' ? tex.grass() : tex.pasto()); zona(Z); c.fill();
     }
-    { const [cc, rx, rz, rot] = SANTUARIO_GRAMADO.elipse; c.fillStyle = pat(V.santuario ? tex.grass() : tex.pasto()); ell(cc, rx, rz, rot); c.fill(); }
     c.restore();
     // 2b) variação ampla nas clareiras: manchas de 3 a 8 unidades (±10%), mais verdes nas baixadas (os
     //     gradientes são criados na origem porque a mancha é desenhada já transladada e girada);
@@ -252,7 +245,7 @@ export class Ground {
     //     1 a 3 unidades, que somem quando a área vira gramado (zonas de grama ligadas e o pasto do
     //     Santuário, coberto pelo gramado dele)
     for (const [zi, Z] of ZONAS.entries()) {
-      if (!(Z.tipo === 'grama' || Z.tipo === 'pasto' || Z.tipo === 'areia' || (Z.tipo === 'praca' && !pronta(Z))) || (ligado(Z.id) && (Z.tipo === 'grama' || Z.id.startsWith('santuario')))) continue;
+      if (Z.sempre || !(Z.tipo === 'grama' || Z.tipo === 'pasto' || Z.tipo === 'areia' || (Z.tipo === 'praca' && !pronta(Z))) || (ligado(Z.id) && Z.tipo === 'grama')) continue;
       const dentro = Z.poly ? (x, z) => inPoly(x, z, Z.poly) : (x, z) => inEllipse(x, z, Z.elipse[0][0], Z.elipse[0][1], Z.elipse[1], Z.elipse[2], Z.elipse[3]);
       let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9; if (Z.poly) for (const [x, z] of Z.poly) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); bz0 = Math.min(bz0, z); bz1 = Math.max(bz1, z); } else { const [[cx, cz], rx, rz] = Z.elipse; const r = Math.max(rx, rz); bx0 = cx - r; bx1 = cx + r; bz0 = cz - r; bz1 = cz + r; }
       const n = Math.min(60, Math.max(5, ((bx1 - bx0) * (bz1 - bz0)) / 3)) | 0;
@@ -263,46 +256,24 @@ export class Ground {
         c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, zi, 616) * 3); c.scale(1, 0.5 + hash(i, zi, 617) * 0.5); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
       }
     }
-    // 3) savana em piquetes de pasto (terra batida escura e capim), com trilhas entre eles
-    if (V.savana) {
-      c.save(); const piq = A.savana.piquetes || [A.savana.poly];
-      piq.forEach((poly, i) => { c.fillStyle = pat(tex.pasto()); path(poly); c.fill(); const k = [1, 0.9, 1.08][i % 3], q = [1, 1.06, 0.95][i % 3]; c.fillStyle = `rgba(${196 * k * q | 0},${176 * k | 0},${96 * k / q | 0},0.32)`; path(poly); c.fill(); }); // capim de savana dourado
-      c.restore();
-    }
     // 2d) borda das clareiras em sombra (a mata projeta sombra no gramado)
     c.save(); c.filter = 'blur(3px)'; c.drawImage(this._bordaClareiras(), 0, 0, w, h); c.restore();
-    // 4) margens e leitos d'água (linha de pedra cinza fina nas bordas, fundo escuro sob a água)
-    // (o leito, lodo, só aparece na encosta do lago assoreado; a margem de pedra cobre a beira)
-    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#8a8a66'; path(A.lago); c.fill(); for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx + 0.1, l.rz + 0.1, l.rot || 0); c.fill(); }
-    c.lineWidth = 0.3 * S; c.strokeStyle = '#cfcabb'; path(A.lago); c.stroke(); c.lineWidth = 0.15 * S; for (const l of [lagoSant(), bebedouro()]) { ell(l.c, l.rx, l.rz, l.rot || 0); c.stroke(); }
-    { const s = lagoSant(); if (s.ilha) { c.fillStyle = '#d6cfae'; ell(s.ilha.c, s.ilha.r + 0.04, s.ilha.r + 0.04); c.fill(); } } // ilhota da lagoa
-    c.restore();
-    // 4b) lagoa escura oval do Santuário (só pintura, margem clara fina)
-    { const l = lago2Sant(); c.save(); c.filter = 'blur(0.5px)'; c.fillStyle = '#2E8A78'; ell(l.c, l.rx, l.rz, l.rot || 0); c.fill(); c.lineWidth = 0.15 * S; c.strokeStyle = '#e8d6a6'; c.stroke(); c.restore(); }
-    // 5) trilhas de terra/cascalho pelos gramados e pela savana
+    // 4) margem e leito do lago da Sede (linha de pedra cinza fina na borda, fundo escuro sob a água)
+    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#8a8a66'; path(A.lago); c.fill();
+    c.lineWidth = 0.3 * S; c.strokeStyle = '#cfcabb'; path(A.lago); c.stroke(); c.restore();
+    // 5) trilhas bege pela mata (se a planta tiver)
     c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.filter = 'blur(1px)';
-    c.strokeStyle = 'rgba(240,230,204,0.95)'; c.lineWidth = 0.32 * S;
-    const T = [
-      ['bioma', [[20.4, 9.8], [22.4, 9.6], [26.4, 9.6], [27.4, 8.0]]], ['vila', [[18.4, 11.2], [21.0, 11.4], [23.4, 12.0]]],
-      ['acelerador', [[8.6, 14.2], [10.4, 15.4], [11.9, 15.8]]], ['ciencias', [[-3.6, -2.4], [0.8, -2.8], [5.4, -2.2], [8.6, -0.6]]],
-      ['uni', [[-15.6, -6.8], [-12.4, -5.6], [-9.8, -4.8]]],
-    ];
-    for (const [id, pts] of T) if (V[id]) linha(pts);
-    // caminhos cinza do Santuário (a oeste da lagoa) e trilhas bege pela mata (sempre)
-    if (V.santuario) { c.strokeStyle = 'rgba(214,214,206,0.95)'; c.lineWidth = 0.3 * S; for (const pts of A.santuario.caminhos || CAMINHOS_SANT_RESERVA) linha(pts); }
     c.strokeStyle = '#e6dcc0'; c.lineWidth = 0.3 * S; for (const pts of trilhasMata()) linhaCrua(pts);
-    if (V.savana) {
-      c.strokeStyle = '#dcc89e'; c.lineWidth = 0.35 * S;
-      for (const pts of A.savanaTrilhas || [[[11.6, -2.6], [14.2, 0.4], [13.6, 3.4], [16.8, 5.0], [19.4, 3.0]], [[18.2, -2.0], [19.6, 0.6], [18.6, 4.4]]]) linha(pts);
-    }
     c.restore();
     // 5b) vias de asfalto no nível do chão (da planta); terra batida enquanto a obra vizinha não sai
     if (A.vias) {
       c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
       for (const v of A.vias) {
         const asfalto = !v.quando || (v.quando === 'praca' ? !!flags.praca : ligado(v.quando)) || flags.reflorestado; if (flags.vias && flags.vias[v.id] === false) continue;
-        c.strokeStyle = asfalto ? 'rgba(244,244,236,.85)' : 'rgba(196,172,136,.6)'; c.lineWidth = v.w * S + 2; linha(v.pts);
-        c.strokeStyle = asfalto ? '#52565e' : '#a8886a'; c.lineWidth = v.w * S - 1; linha(v.pts);
+        const traco = v.fechada ? (pts) => { linhaCrua([...pts, pts[0]]); } : linha; // (a via fechada já vem densa)
+        c.strokeStyle = asfalto ? 'rgba(244,244,236,.85)' : 'rgba(196,172,136,.6)'; c.lineWidth = v.w * S + 3; traco(v.pts);
+        c.strokeStyle = asfalto ? '#52565e' : '#a8886a'; c.lineWidth = v.w * S - 2; traco(v.pts);
+        if (asfalto && v.w >= 1.2) { c.setLineDash([0.45 * S, 0.45 * S]); c.strokeStyle = 'rgba(250,246,230,.75)'; c.lineWidth = 0.06 * S; traco(v.pts); c.setLineDash([]); } // faixa central tracejada
       }
       c.restore();
     }
@@ -336,7 +307,7 @@ export class Ground {
     }
     // 7) canteiro de obras (terra batida) ou reflorestamento
     c.save(); path(A.canteiro.poly);
-    if (!flags.reflorestado) { c.filter = 'blur(2px)'; c.fillStyle = pat(tex.soil()); c.fill(); c.strokeStyle = 'rgba(80,60,40,.5)'; c.lineWidth = 2; for (let i = 0; i < 40; i++) { const [px, py] = P(-30 + hash(i, 1, 77) * 9, 11 + hash(i, 2, 77) * 8); c.beginPath(); c.moveTo(px, py); c.lineTo(px + 40, py + 6); c.stroke(); } }
+    if (!flags.reflorestado) { c.filter = 'blur(2px)'; c.fillStyle = pat(tex.soil()); c.fill(); c.strokeStyle = 'rgba(80,60,40,.5)'; c.lineWidth = 2; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of A.canteiro.poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } for (let i = 0; i < 40; i++) { const [px, py] = P(x0 + 1 + hash(i, 1, 77) * (x1 - x0 - 3), z0 + 0.8 + hash(i, 2, 77) * (z1 - z0 - 1.6)); c.beginPath(); c.moveTo(px, py); c.lineTo(px + 40, py + 6); c.stroke(); } }
     c.restore();
     this.tex.needsUpdate = true;
     this.stats.pinturas++; this.stats.ms = performance.now() - t0;

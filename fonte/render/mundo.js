@@ -4,7 +4,10 @@
 import * as THREE from 'three';
 import { faixas } from './models/aneis.js';
 import { biblioteca, crd } from './models/biblioteca.js';
-import { bioma, anfiteatro, gorilas, acelerador, savana, santuarioInterior, CasasVila } from './models/leste.js';
+import { anfiteatro, acelerador, CasasVila } from './models/leste.js';
+import { bioma, gorilas, savana, santuarioInterior } from './models/cupula.js';
+import { plano } from './models/plano.js';
+import { HeliHolding } from './aereo.js';
 import { ciencias, alaOnda, lago, sedePatio } from './models/centro.js';
 import { escola, campo, engenharia, instituto, gramadoUni } from './models/campus.js';
 import { praca, passarela, ponteCoberta } from './models/praca.js';
@@ -15,6 +18,9 @@ import { inPoly, rng } from '../core/util.js';
 import { bake, normals, FH } from './geom.js';
 import { Bando, sombrasContato, tempoAnimais } from './animais.js';
 import { Cidade } from './cidade.js';
+import { tinta } from './materials.js';
+import { PALETA } from '../data/cidade.js';
+const PROJ_DE = { sedePatio: 'sede' };
 
 const _mi = new THREE.Matrix4(), _mw = new THREE.Matrix4(), _m3 = new THREE.Matrix3(), _cor = new THREE.Color(), _v = new THREE.Vector3();
 // Junta geometrias numa só. blocos: [[fonte, itens]], itens {g, m} (matriz de mundo) ou {g, o, i}
@@ -108,8 +114,10 @@ export class Mundo {
     // marcos com etapas
     const list = [biblioteca(), crd(), bioma(), anfiteatro(), gorilas(), acelerador(), savana(), santuarioInterior(), ciencias(), lago(ground), sedePatio(), escola(), campo(), engenharia(), instituto(), gramadoUni(), praca(), ponteCoberta()];
     for (const id of Object.keys(PASSARELAS)) list.push(passarela(id));
-    const PROJ_DE = { sedePatio: 'sede' };
     this.modelos = {}; for (const m of list) { this.modelos[m.id] = m; this.root.add(m.root); m.root.userData.pick = { tipo: 'proj', id: PROJ_DE[m.id] || m.id }; for (const p of Object.values(m.partes)) { bake(p); p.visible = false; p.userData.feito = false; } for (const s of Object.values(m.esqueletos || {})) { bake(s); s.visible = false; } }
+    // plano diretor (postes, renques, saídas para a cidade e o eixo monumental) e o helicóptero da Holding
+    this.plano = plano(); this.root.add(this.plano.root);
+    this.heli = new HeliHolding(); this.root.add(this.heli.g);
     // canteiro de obras
     this.canteiro = new THREE.Group(); this.canteiro.name = 'canteiro'; this.root.add(this.canteiro); this.canteiro.add(ambienteCanteiro()); this.predios = {};
     for (const [id, l] of Object.entries(LOTES)) { const g = predioCanteiro(id.startsWith('usina') ? 'usina' : id); g.position.set(l.x, 0, l.z); g.rotation.y = l.r; g.visible = false; g.userData.pick = { tipo: 'predio', id }; this.canteiro.add(g); this.predios[id] = g; }
@@ -129,14 +137,27 @@ export class Mundo {
     engine.aoQualidade?.push(() => { if (this.povo.walkers.length) this.povoar(); });
     this._animados(); // as partes nascem escondidas: some a sombra de contato das manadas delas
   }
+  // cores escolhidas pelo jogador (S.cores: projeto, faixa da Arcologia ou 'casas' → índice da PALETA). A cor entra
+  // na fusão: as fontes fundidas trocam os materiais pintáveis pela cópia tingida (materials.tinta)
+  pintar(cores) {
+    const hex = (id) => PALETA[cores?.[id] | 0]?.cor || 0; let mudou = false;
+    const marca = (o, c) => { if (o && (o.userData.cor || 0) !== c) { if (c) o.userData.cor = c; else delete o.userData.cor; mudou = true; } };
+    for (const m of Object.values(this.modelos)) { const c = hex(PROJ_DE[m.id] || m.id); for (const p of Object.values(m.partes)) marca(p, c); }
+    for (const [k, f] of Object.entries(this.faixas)) { const c = hex(k); marca(f.merged, c); marca(f.extras, c); }
+    marca(this.casas.group, hex('casas'));
+    return mudou; // (quem chama refunde)
+  }
   parte(modelo, etapa) { return this.modelos[modelo]?.partes[etapa]; }
   setEtapa(modelo, etapa, feito) {
     const p = this.parte(modelo, etapa); if (!p) return; p.visible = feito; p.userData.feito = feito;
     if (feito && p.userData.chao) { this.ground.flags[p.userData.chao] = true; this.ground.paint(); }
     if (feito && p.userData.nivel && modelo === 'lago') this.ground.lake.position.y = -0.1;
     if (!feito && p.userData.nivel && modelo === 'lago') this.ground.lake.position.y = -0.3;
+    if (modelo === 'sedePatio') this._heli();
     this._animados(); this.e.shadowDirty = true; this.e.marcarHAO?.(); this._sujarPicks();
   }
+  // o helicóptero da Holding mora no heliponto da Torre (pátio da Sede, etapa final)
+  _heli() { const p = this.parte('sedePatio', 'e4'); this.heli.pousar(p?.userData.feito ? p.userData.heliponto : null); }
   _animados() {
     this.animados = [];
     for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) {
@@ -148,7 +169,7 @@ export class Mundo {
   tudoPronto() {
     for (const f of Object.values(this.faixas)) f.setTodos(f.max); this.casas.setTodos(this.casas.max);
     for (const [id, m] of Object.entries(this.modelos)) for (const k of Object.keys(m.partes)) this.setEtapa(id, k, true);
-    this.refundirAgora();
+    this.plano.setEixo(3); this.refundirAgora();
     this.ground.flags.praca = true; this.ground.flags.verde = Object.fromEntries(['anel', 'uni', 'ciencias', 'sede', 'biblio', 'savana', 'bioma', 'vila', 'gorilas', 'acelerador', 'santuario'].map((k) => [k, true])); this.ground.paint(); this.ground.lake.position.y = -0.1; this.ground.tampa.visible = false;
     this.povoar();
   }
@@ -193,8 +214,10 @@ export class Mundo {
     for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) if (p.userData.feito && !p.userData.manadas && !p.userData.update && !this._vivo(p)) F.set(p, 'p' + p.children.length);
     for (const f of Object.values(this.faixas)) { F.set(f.merged, filhos(f.merged)); F.set(f.extras, filhos(f.extras)); }
     F.set(this.casas.group, this.casas.mods.map((m) => (m.g ? m.g.uuid : '-')).join());
+    F.set(this.plano.base, 'plano'); for (const [k, g] of Object.entries(this.plano.eixo)) if (g.userData.feito) F.set(g, 'eixo' + k);
     this.cidade.fontes(F);
     if (this.canteiro.visible) for (const g of Object.values(this.predios)) if (g.userData.pronto && !g.userData.animando) F.set(g, 'q');
+    for (const [f, a] of F) if (f.userData.cor) F.set(f, a + '#' + f.userData.cor); // pintada: a cor entra na assinatura
     return F;
   }
   // peça com bicho animado no shader (respiração, cauda, asas: material com userData.movel) fica
@@ -208,8 +231,8 @@ export class Mundo {
   // o que a fonte põe em cada material (cache pela assinatura); quadrante pelo centro da caixa
   _contrib(f, ass) {
     const c0 = this._cache.get(f); if (c0 && c0.ass === ass) return c0;
-    const por = new Map(), tris = new Map();
-    const add = (o, item, sem) => { const g = o.geometry, mat = o.material; if (!g?.attributes?.position || !mat || Array.isArray(mat)) return; const k = mat.uuid + (o.castShadow ? 'c' : 'n') + (sem ? 's' : ''); let l = por.get(k); if (!l) por.set(k, (l = { mat, cast: o.castShadow, sem, itens: [] })); l.itens.push(item); tris.set(k, (tris.get(k) || 0) + (g.index ? g.index.count : g.attributes.position.count) / 3); };
+    const por = new Map(), tris = new Map(), cor = f.userData.cor;
+    const add = (o, item, sem) => { const g = o.geometry, mat = cor ? tinta(o.material, cor) : o.material; if (!g?.attributes?.position || !mat || Array.isArray(mat)) return; const k = mat.uuid + (o.castShadow ? 'c' : 'n') + (sem ? 's' : ''); let l = por.get(k); if (!l) por.set(k, (l = { mat, cast: o.castShadow, sem, itens: [] })); l.itens.push(item); tris.set(k, (tris.get(k) || 0) + (g.index ? g.index.count : g.attributes.position.count) / 3); };
     const anda = (o, raiz, sem) => {
       if (!raiz && !o.visible) return; sem = sem || !!o.userData.semHAO;
       if (o.isInstancedMesh) { for (let i = 0; i < o.count; i++) add(o, { g: o.geometry, o, i }, sem); return; }
@@ -391,7 +414,7 @@ export class Mundo {
     // gente: figura inteira só quando passaria de ~12 px de altura na tela (0,27 de altura)
     if (this.povo.mesh.visible) { const c = this.e.camera; this.povo.update(dt, t, c.position, (0.27 * (this.e.H || 720)) / (2 * Math.tan((c.fov * Math.PI) / 360) * 12)); }
     const noite = this.e.modoLuz === 'noite'; this.bando.mesh.visible = !noite; if (!noite) this.bando.update(dt, t);
-    this.cidade.update(dt, t);
+    this.cidade.update(dt, t); this.heli.update(dt);
     this.blobs.mesh.material.uniforms.opac.value = noite ? 0.2 : 0.35;
   }
 }
