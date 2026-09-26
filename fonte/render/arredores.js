@@ -6,7 +6,7 @@
 // Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
 import { MESA, A } from '../data/planta.js';
-import { ORDEM_BAIRROS, areaBairro } from '../data/cidade.js';
+import { ORDEM_BAIRROS, areaBairro, AEROPORTO } from '../data/cidade.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
 import { tex } from './textures.js';
 import { treeGroup } from './forest.js';
@@ -35,7 +35,7 @@ const naFaixa = (x, z) => {
 const borda = (x, z) => { const dx = x < MESA.x0 ? MESA.x0 - x : x > MESA.x1 ? x - MESA.x1 : 0, dz = z < MESA.z0 ? MESA.z0 - z : z > MESA.z1 ? z - MESA.z1 : 0; return Math.max(dx / (x < CX ? FAIXA.oeste : FAIXA.leste), dz / (z < CZ ? FAIXA.fundo : FAIXA.frente)); };
 // bairros da cidade (abertos ou à venda): 1 dentro (com a rua em volta), caindo a 0 em 5 unidades para fora. Neles o
 // terreno é plano, sem mata, campos nem bosques (terra para a cidade crescer em volta da Arcologia)
-const AREAS = ORDEM_BAIRROS.map(areaBairro);
+const AREAS = [...ORDEM_BAIRROS.map(areaBairro), AEROPORTO]; // (e a área do aeroporto)
 export function zonaCidade(x, z) { let k = 0; for (const a of AREAS) { const dx = Math.max(a.x0 - x, 0, x - a.x1), dz = Math.max(a.z0 - z, 0, z - a.z1); if (dx < 5 && dz < 5) k = Math.max(k, 1 - sm(0, 5, Math.hypot(dx, dz))); } return k; }
 // mancha de mata longe da obra (morros e bosques)
 const mataLonge = (x, z) => sm(0.5, 0.62, fbm(x * 0.02 + 3.1, z * 0.02 - 1.7, 1, 717, 3));
@@ -200,9 +200,9 @@ const NUV_F = /* glsl */`
   }`;
 function nuvens() {
   const R = rng(9091); const lista = [];
-  // anel largo em volta da obra, baixo o bastante para aparecer nas bordas da vista (fora da planta, nunca entre a
-  // câmera e a obra nas vistas de cima)
-  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2 + R() * 0.4, r = 72 + R() * 55; lista.push([Math.cos(a) * r * 1.2, Math.sin(a) * r, 12 + R() * 9, 26 + R() * 22, R()]); }
+  // anel largo além da cidade (os bairros vão até ~140 do centro), baixo o bastante para aparecer nas bordas da vista,
+  // nunca entre a câmera e a cidade; com a câmera muito alta elas somem (update)
+  for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2 + R() * 0.4, r = 175 + R() * 60; lista.push([40 + Math.cos(a) * r * 1.15, Math.sin(a) * r, 14 + R() * 10, 30 + R() * 24, R()]); }
   const g = new THREE.PlaneGeometry(1, 1); g.userData.compartilhada = true;
   const mat = new THREE.ShaderMaterial({ vertexShader: NUV_V, fragmentShader: NUV_F, transparent: true, depthWrite: false, fog: false,
     uniforms: { tNuvem: { value: tex.nuvem() }, nuvT: { value: 0 }, corLuz: { value: new THREE.Color(1, 1, 1) }, corSombra: { value: new THREE.Color(0.75, 0.8, 0.9) }, opac: { value: 0.92 },
@@ -341,6 +341,7 @@ export class Arredores {
     const U = this.nuvens.material.uniforms; U.nuvT.value = s; const f = this.e.scene.fog;
     if (env?.cores) { U.corLuz.value.copy(env.cores.nuvem); U.corSombra.value.copy(env.cores.nuvemSombra); }
     if (f) { U.fogColor.value.copy(f.color); U.fogNear.value = f.near; U.fogFar.value = f.far; }
+    { const y = this.e.camera.position.y, k = Math.min(1, Math.max(0, (y - 55) / 40)); U.opac.value = 0.92 * (1 - k * k * (3 - 2 * k)); }
     if ((this._q2 = (this._q2 || 0) + 1) % 2 === 0) this._barcos(s);
   }
 }

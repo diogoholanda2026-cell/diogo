@@ -74,7 +74,13 @@
 // Compra de tempo: J.comprarTempo(alvo, min) (REGRAS.compraTempo: 1 min 100, 5 min 500, 10 min 1.000, 30 min 2.500, 60 min 5.000).
 // Cidade: J.construirCidade(f, lote) (coloca e começa o nível 1), J.comprarBairro(b), J.lotesLivres(b?), J.ocupacaoCidade(),
 //   J.cidadeInfo(), J.podeConstruir(f), J.bairroAberto(b), J.popModulo(f, nivel), J.rendaCidade() (bônus do comércio); os prédios
-//   são módulos (S.modulos[f][i].lote).
+//   são módulos (S.modulos[f][i].lote). Serviços com área: J.coberturaLote(lote) → Set('policia'|'educacao'|'saude'|'superior'|
+//   'prefeitura'); requisitosModulo de uma moradia da cidade traz {cobertura[], cobFalta[], cobOk}; J.temPrefeitura() (exigida
+//   para comprar bairros além do Sul e para o nível 5).
+// Holding: J.precoTerreno(lote) (base do bairro, valoriza com a ocupação), J.comprarTerreno(lote), J.venderTerreno(lote),
+//   J.terrenoDaHolding(lote), J.terrenosInfo() → {n, valor, pago, livres}; empresas (CIDADE[f].cat 'empresa') só em terreno
+//   da Holding (construirCidade compra o terreno junto); J.emp = {obra, fabrica, almox, renda, juros, lucro, lucroBase,
+//   empregos, ocupacao} (efeitos somados por nível, com tetos); J.lucroEmpresas() entra na renda por hora; J.taxaJuros().
 // Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera, auto} com
 //   recompensa = {creditos, xp, itens?:{id:n}, bem?:{n,h}, disposicao?}; (creditos, xp, especial: cópias antigas).
 // Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, porque, dica (as três juntas)}; valem nos capítulos seguintes.
@@ -93,7 +99,7 @@
 import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data/itens.js';
 import { PROJETOS, PROJ, MODULOS, LIMITE_CAP, POP_NIVEL, POOL_NIVEL, CUSTO_NIVEL, TEMPO_NIVEL, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../data/obras.js';
 import { CAPITULOS, EFEITOS, MARCOS, FALAS_ETAPA, EPILOGO, PEDIDOS } from '../data/historia.js';
-import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO, RENDA_CIDADE_MAX } from '../data/cidade.js';
+import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO, RENDA_CIDADE_MAX, exigeNivel, PRECO_TERRENO, EFEITO_EMPRESA, TETO_EMPRESA } from '../data/cidade.js';
 
 export const VERSAO_SAVE = 3;
 const N_MODULOS = { anel: 8, uni: 4, anelBib: 3, casas: 6, santuario: 5 };
@@ -170,7 +176,7 @@ export function novoEstado(agora = Date.now()) {
   }
   for (const [f, n] of Object.entries(N_MODULOS)) S.modulos[f] = Array.from({ length: n }, () => ({ nivel: 0, obra: null }));
   for (const f of TIPOS_CIDADE) S.modulos[f] = [];
-  S.cidade = { bairros: { sul: true } };
+  S.cidade = { bairros: { sul: true }, terrenos: {}, fab: 0 };
   return S;
 }
 
@@ -316,11 +322,12 @@ export function normalizar(S, agora = Date.now()) {
     if (arr.length > N) guarda('modulos', f, arr.slice(N));
   }
   // cidade: bairros abertos e um item por prédio, com o lote válido e sem repetir lote
-  { const c = objeto(S.cidade) ? S.cidade : {}; const b = objeto(c.bairros) ? c.bairros : {}; O.cidade = { bairros: { sul: true } }; for (const k of ORDEM_BAIRROS) if (b[k] === true) O.cidade.bairros[k] = true; }
+  { const c = objeto(S.cidade) ? S.cidade : {}; const b = objeto(c.bairros) ? c.bairros : {}; O.cidade = { bairros: { sul: true }, terrenos: {}, fab: Math.max(0, num(c.fab, 0)) }; for (const k of ORDEM_BAIRROS) if (b[k] === true) O.cidade.bairros[k] = true;
+    for (const [id, v] of Object.entries(objeto(c.terrenos) ? c.terrenos : {})) { const l = loteDe(id); if (l && O.cidade.bairros[l.bairro] && Number.isFinite(+v) && +v >= 0) O.cidade.terrenos[id] = +v; } }
   const usados = new Set();
   for (const f of TIPOS_CIDADE) {
     const arr = Array.isArray(S.modulos?.[f]) ? S.modulos[f] : []; const M = MODULOS[f];
-    O.modulos[f] = arr.filter((m) => objeto(m) && loteDe(m.lote) && O.cidade.bairros[loteDe(m.lote).bairro] && !usados.has(m.lote) && usados.add(m.lote)).slice(0, MAX_POR_TIPO).map((m) => {
+    O.modulos[f] = arr.filter((m) => objeto(m) && loteDe(m.lote) && (O.cidade.bairros[loteDe(m.lote).bairro] || loteDe(m.lote).bairro === 'aeroporto') && (loteDe(m.lote).bairro === 'aeroporto') === (CIDADE[f].lugar === 'aeroporto') && !usados.has(m.lote) && usados.add(m.lote)).slice(0, MAX_POR_TIPO).map((m) => {
       const out = { nivel: clamp(num(m.nivel) | 0, 0, M.max), obra: null, lote: m.lote };
       if (objeto(m.obra) && ['obra', 'pronta'].includes(m.obra.estado) && num(m.obra.para) > out.nivel && num(m.obra.para) <= M.max) { out.obra = { estado: m.obra.estado, para: m.obra.para | 0, ini: num(m.obra.ini, O.t), fim: num(m.obra.fim, O.t) }; if (m.obra.pago != null) out.obra.pago = Math.max(0, Math.round(num(m.obra.pago))); if (objeto(m.obra.itens)) { const its = {}; for (const [k, q] of Object.entries(m.obra.itens)) if (tem(ITENS, k) && num(q) > 0) its[k] = Math.round(num(q)); out.obra.itens = its; } }
       if (objeto(m.pedido) && objeto(m.pedido.itens) && Object.keys(m.pedido.itens).every((k) => tem(ITENS, k))) out.pedido = { nivel: num(m.pedido.nivel) | 0, itens: { ...m.pedido.itens } };
@@ -344,7 +351,7 @@ export class Jogo {
   on(fn) { this.ouvintes.push(fn); }
   emit(tipo, dados = {}) { for (const f of this.ouvintes) f(tipo, dados); }
   // ---------------- consultas ----------------
-  get capacidade() { return ALMOX_BASE + ALMOX_NIVEL * (this.S.almoxNivel - 1) + this.ef.almox; } // com lotes de 10 e pedidos 5 × maiores, o almoxarifado começa em 120 vagas
+  get capacidade() { return ALMOX_BASE + ALMOX_NIVEL * (this.S.almoxNivel - 1) + this.ef.almox + (this.emp?.almox || 0); } // com lotes de 10 e pedidos 5 × maiores, o almoxarifado começa em 120 vagas
   get ocupado() { let n = 0; for (const [k, v] of Object.entries(this.S.itens)) if (ITENS[k] && ITENS[k].tipo !== 'especial') n += v; return n; }
   get livre() { return this.capacidade - this.ocupado; }
   temItem(k, n = 1) { return (this.S.itens[k] || 0) >= n; }
@@ -420,9 +427,9 @@ export class Jogo {
   tarifaMorador() { return this._faixaTarifa()[1]; } // créditos por morador por hora (5, 8 ou 11 pelo bem-estar geral)
   // comércio da cidade: cada nível soma a sua renda (rua comercial 1%, centro de negócios 1,5%, mercado 3%), até +45%
   rendaCidade() { let r = 0; for (const f of TIPOS_CIDADE) { const k = CIDADE[f].renda; if (k) for (const m of this.S.modulos[f] || []) r += k * m.nivel; } return Math.min(RENDA_CIDADE_MAX, r); }
-  rendaHora() { return this.pop * this.tarifaMorador() * Math.max(0, 1 + this.ef.repasse + this.rendaCidade()); } // créditos por hora, online
+  rendaHora() { return this.pop * this.tarifaMorador() * Math.max(0, 1 + this.ef.repasse + this.rendaCidade() + (this.emp?.renda || 0)) + this.lucroEmpresas(); } // créditos por hora, online (moradores e empresas)
   taxaRepasse() { return this.rendaHora() / 60; } // créditos por minuto (nome antigo, usado pela interface)
-  rendaInfo() { const f = this._faixaTarifa(), por = this.rendaHora(); return { tarifa: f[1], faixa: f[2], porHora: por, comercio: this.rendaCidade(), cofre: Math.floor(this.S.repasse.acum), cofreMax: por * COFRE_H, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR }; }
+  rendaInfo() { const f = this._faixaTarifa(), por = this.rendaHora(); return { tarifa: f[1], faixa: f[2], porHora: por, comercio: this.rendaCidade(), empresas: this.lucroEmpresas(), shopping: this.emp?.renda || 0, cofre: Math.floor(this.S.repasse.acum), cofreMax: por * COFRE_H, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR }; }
   vida() { // porcentagem da composição concluída
     let tot = 0, ok = 0;
     for (const p of PROJETOS) for (const e of p.etapas) { tot += 1; if (this.feita(p.id + '.' + e.id)) ok += 1; }
@@ -437,12 +444,22 @@ export class Jogo {
     for (const [f, arr] of Object.entries(S.modulos)) { const cu = MODULOS[f].custo || CUSTO_NIVEL; for (const m of arr) for (let n = 1; n <= m.nivel; n++) modulos += cu[n] || 0; }
     for (const [id, P] of Object.entries(PREDIOS)) { const st = S.predios[id]; if (!st?.ok) continue; predios += P.custo || 0; const n = P.tipo === 'usina' ? st.nSlots : P.tipo === 'oficina' ? st.nFila : 0; for (let k = 3; k < n; k++) predios += Math.round(300 * Math.pow(2.2, k - 3)); }
     obras = Math.round(RECOMPENSA * obras); modulos = Math.round(RECOMPENSA * modulos); const moradores = this.pop * 100; const E = S.emprestimo; const caixa = Math.round(S.creditos - E.principal - E.juros);
-    const total = obras + modulos + predios + moradores + caixa; if (total > S.valuationMax) S.valuationMax = total;
-    return { total, partes: { obras, modulos, predios, moradores, caixa }, max: S.valuationMax };
+    const terrenos = Math.round(this.terrenosInfo().valor); const total = obras + modulos + predios + moradores + caixa + terrenos; if (total > S.valuationMax) S.valuationMax = total;
+    return { total, partes: { obras, modulos, predios, moradores, caixa, terrenos }, max: S.valuationMax };
   }
   _valuation() { this.emit('valuation', this.valuation()); }
   _efeitos() { return efeitos(this.S); }
-  _derivar() { this.ef = this._efeitos(); this.pop = this.populacao(); this.serv = this.servicos(); this.bem = this.bemEstar(); }
+  _derivar() { this.ef = this._efeitos(); this.pop = this.populacao(); this.emp = this._empresas(); this.serv = this.servicos(); this.bem = this.bemEstar(); }
+  // empresas da Holding: efeitos somados por nível (com tetos), lucro e empregos; o lucro cai na proporção dos empregos que
+  // a população (60% dela trabalha) não preenche
+  _empresas() {
+    const S = this.S, e = { obra: 0, fabrica: 0, almox: 0, renda: 0, juros: 0, lucroBase: 0, empregos: 0 };
+    for (const [f, ef] of Object.entries(EFEITO_EMPRESA)) for (const m of S.modulos[f] || []) { if (m.nivel < 1) continue; for (const [k, v] of Object.entries(ef)) e[k] += v * m.nivel; e.lucroBase += CIDADE[f].lucro * m.nivel; e.empregos += CIDADE[f].empregos * m.nivel; }
+    e.obra = Math.min(TETO_EMPRESA.obra, e.obra); e.renda = Math.min(TETO_EMPRESA.renda, e.renda);
+    e.ocupacao = e.empregos ? Math.min(1, (this.pop * 0.6) / e.empregos) : 1; e.lucro = Math.round(e.lucroBase * e.ocupacao); return e;
+  }
+  lucroEmpresas() { return this.emp?.lucro || 0; }
+  taxaJuros() { return Math.max(TETO_EMPRESA.taxaMin, EMP.taxa - (this.emp?.juros || 0)); }
   // ---------------- relógio ----------------
   _rampa() { const m = this.S.migradoEm; return m ? clamp((this.agora - m) / RAMPA_MS, 0, 1) : 1; } // saves antigos entram no ritmo novo em 48 h
   fObra(cap) { const f = F_OBRA[cap] ?? F_OBRA[6]; return F_OBRA_ANTIGO + (f - F_OBRA_ANTIGO) * this._rampa(); }
@@ -450,8 +467,9 @@ export class Jogo {
     const S = this.S, ef = this.ef;
     if (tipo === 'usina') return (seg * 1000 * F_ITEM) / (S.ritmo * (1 + ef.usina));
     if (tipo === 'oficina') return (seg * 1000 * F_PRODUTO) / (S.ritmo * (1 + ef.oficina));
-    if (tipo === 'obra') return (seg * 1000 * this.fObra(cap ?? S.cap)) / S.ritmo;
-    if (tipo === 'modulo') return (seg * 1000 * F_MODULO) / S.ritmo;
+    const k = 1 - (this.emp?.obra || 0); // construtoras da Holding
+    if (tipo === 'obra') return (seg * 1000 * this.fObra(cap ?? S.cap) * k) / S.ritmo;
+    if (tipo === 'modulo') return (seg * 1000 * F_MODULO * k) / S.ritmo;
     return (seg * 1000) / S.ritmo;
   }
   durLote(k, n = 1) { return this.durItem(k) * Math.max(1, n * F_LOTE); } // 1 unidade leva o tempo dela; 10 levam 8 vezes isso
@@ -467,7 +485,7 @@ export class Jogo {
     // tempo fechado: as oficinas andam em passos (uma pode esperar o produto da outra), com teto de custo
     if (dt > PASSO_OFF * 1.5) { const n = Math.min(PASSOS_MAX, Math.ceil(dt / PASSO_OFF)); for (let i = 1; i < n; i++) { this.agora = t0 + (dt * i) / n; this._usinas(this.agora); this._oficinas(this.agora); } }
     S.t = agora; this.agora = agora; S.stats.jogadoMs += Math.min(dt, 5000);
-    this._usinas(agora); this._oficinas(agora);
+    this._usinas(agora); this._oficinas(agora); this._fabricas(dt);
     // obras e módulos
     for (const [key, st] of Object.entries(S.etapas)) if (st.estado === 'obra' && st.fim <= agora) { st.estado = 'pronta'; this.emit('etapaPronta', { key }); }
     for (const [f, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => { if (m.obra && m.obra.estado === 'obra' && m.obra.fim <= agora) { m.obra.estado = 'pronta'; this.emit('moduloPronto', { faixa: f, i }); } });
@@ -483,7 +501,7 @@ export class Jogo {
   // ---------------- empréstimo (Escritório): até 50 mil por ano do jogo, dívida máxima de 500 mil, 10% ao ano ----------------
   _juros(agora) { // os juros devidos acumulam proporcionalmente ao tempo (fechado também); contrato vencido rende a mora
     const E = this.S.emprestimo; const dt = Math.max(0, agora - E.ultimoJuro); E.ultimoJuro = agora; if (dt <= 0 || !E.contratos.length) return;
-    let j = 0; for (const c of E.contratos) if (c.saldo > 0) { const venc = clamp(agora - c.fim, 0, dt); j += (c.saldo * (EMP.taxa * (dt - venc) + EMP.mora * venc)) / ANO_MS; }
+    let j = 0; for (const c of E.contratos) if (c.saldo > 0) { const venc = clamp(agora - c.fim, 0, dt); j += (c.saldo * (this.taxaJuros() * (dt - venc) + EMP.mora * venc)) / ANO_MS; }
     if (j > 0) E.juros += j;
   }
   _ano() { return this.calendario().ano; }
@@ -495,7 +513,7 @@ export class Jogo {
     const contratos = E.contratos.filter((c) => c.saldo > 0).map((c) => ({ id: c.id, ano: c.ano, valor: c.valor, saldo: c.saldo, ini: c.ini, fim: c.fim, vencido: this.agora > c.fim }));
     const jurosPorDia = contratos.reduce((a, c) => a + (c.saldo * (c.vencido ? EMP.mora : EMP.taxa)) / ANO_DIAS, 0);
     const disp = Math.max(0, Math.floor(Math.min(EMP.ano - tomado, EMP.max - divida) / EMP.passo) * EMP.passo);
-    return { principal: E.principal, juros: E.juros, divida, disponivelAno: disp, tomadoAno: tomado, ano, limiteAno: EMP.ano, limiteDivida: EMP.max, taxaAno: EMP.taxa, mora: EMP.mora, passo: EMP.passo, prazoAnos: EMP.prazoAnos, parcela: this._parcela(), contratos, jurosPorDia };
+    return { principal: E.principal, juros: E.juros, divida, disponivelAno: disp, tomadoAno: tomado, ano, limiteAno: EMP.ano, limiteDivida: EMP.max, taxaAno: this.taxaJuros(), mora: EMP.mora, passo: EMP.passo, prazoAnos: EMP.prazoAnos, parcela: this._parcela(), contratos, jurosPorDia };
   }
   emprestar(v) {
     v = +v; if (!Number.isInteger(v) || v < EMP.passo || v % EMP.passo) return 'valor';
@@ -791,11 +809,13 @@ export class Jogo {
     const M = MODULOS[f], mora = !M.cidade || M.cat === 'moradia'; const custo = M.custo ? M.custo[n] : CUSTO_NIVEL[n]; const servicos = mora ? servicosDoNivel(n) : [];
     const popDepois = this.pop + this.popModulo(f, n) - this.popModulo(f, m.nivel);
     const servOk = servicos.every((k) => this.serv[k] >= popDepois); const bemMin = mora ? bemMinimo(n) : 0; const bemOk = this.bem >= bemMin;
-    return { nivel: n, itens, custo, servico: servicos.length ? servicos : null, servicos, servOk, bemOk, bemMin, tempo: M.tempo ? M.tempo[n] : TEMPO_NIVEL[n], popDepois };
+    // moradia da cidade: polícia e escola perto a partir do nível 2, saúde no 3, faculdade no 4 e a Prefeitura no 5
+    const cobertura = M.cidade && M.cat === 'moradia' ? exigeNivel(n) : []; const tem = cobertura.length ? this.coberturaLote(m.lote) : null; const cobFalta = cobertura.filter((k) => !tem.has(k));
+    return { nivel: n, itens, custo, servico: servicos.length ? servicos : null, servicos, servOk, bemOk, bemMin, cobertura, cobFalta, cobOk: !cobFalta.length, tempo: M.tempo ? M.tempo[n] : TEMPO_NIVEL[n], popDepois };
   }
   melhorarModulo(f, i) {
     const s = this.situacaoModulo(f, i); if (s !== 'disponivel') return s; const r = this.requisitosModulo(f, i);
-    if (!r.servOk) return 'servico'; if (!r.bemOk) return 'bem'; if (this.S.creditos < r.custo) return 'creditos';
+    if (!r.servOk) return 'servico'; if (!r.cobOk) return 'cobertura'; if (!r.bemOk) return 'bem'; if (this.S.creditos < r.custo) return 'creditos';
     for (const [k, n] of Object.entries(r.itens)) if (!this.temItem(k, n)) return 'falta';
     for (const [k, n] of Object.entries(r.itens)) this.S.itens[k] -= n; this.S.creditos -= r.custo;
     this.S.modulos[f][i].obra = { estado: 'obra', para: r.nivel, ini: this.agora, fim: this.agora + this.dur(r.tempo, 'modulo'), pago: r.custo, itens: { ...r.itens } };
@@ -809,30 +829,61 @@ export class Jogo {
     this._disposicao(DISP.modulo); this._pedidoModulos(); this._verCapitulo(); return 'ok';
   }
   // ---------------- cidade em volta da Arcologia ----------------
-  bairroAberto(b) { return this.S.cidade?.bairros?.[b] === true; }
+  bairroAberto(b) { return b === 'aeroporto' || this.S.cidade?.bairros?.[b] === true; } // (a área do aeroporto é sempre da cidade)
   // lote → [tipo, índice] de quem está nele
   ocupacaoCidade() { const o = new Map(); for (const f of TIPOS_CIDADE) (this.S.modulos[f] || []).forEach((m, i) => o.set(m.lote, [f, i])); return o; }
   lotesLivres(b) { const o = this.ocupacaoCidade(); const out = []; for (const bb of b ? [b] : ORDEM_BAIRROS) if (this.bairroAberto(bb)) for (let j = 0; j < BAIRROS[bb].nz; j++) for (let i = 0; i < BAIRROS[bb].nx; i++) { const id = `${bb}:${i}:${j}`; if (!o.has(id)) out.push(id); } return out; }
   tipoCidadeLiberado(f) { return !!CIDADE[f] && CIDADE[f].cap <= this.S.cap; }
   // o que falta para construir o tipo f (sem o lote): null se pode
-  podeConstruir(f) { if (!this.tipoCidadeLiberado(f)) return 'capitulo'; if ((this.S.modulos[f] || []).length >= MAX_POR_TIPO) return 'teto'; if (this.S.creditos < CIDADE[f].custo[1]) return 'creditos'; return null; }
-  // coloca um prédio do tipo f no lote e começa a obra do nível 1 (só créditos)
+  podeConstruir(f) { const n = (this.S.modulos[f] || []).length; if (!this.tipoCidadeLiberado(f)) return 'capitulo'; if (CIDADE[f].unico && n >= 1) return 'unico'; if (n >= MAX_POR_TIPO) return 'teto'; if (this.S.creditos < CIDADE[f].custo[1]) return 'creditos'; return null; }
+  // serviços com área de atendimento prontos: [{k, x, z, r}] (a consulta de muitos lotes passa a lista uma vez só)
+  fontesCobertura() { const out = []; for (const f of TIPOS_CIDADE) { const c = CIDADE[f].cobre; if (c) for (const m of this.S.modulos[f] || []) { const l = m.nivel >= 1 && loteDe(m.lote); if (l) for (const [k, r] of Object.entries(c)) out.push({ k, x: l.x, z: l.z, r }); } } return out; }
+  temPrefeitura() { return (this.S.modulos.cidPrefeitura || []).some((m) => m.nivel >= 1); }
+  coberturaLote(loteId, fontes = this.fontesCobertura(), pref = this.temPrefeitura()) {
+    const l = loteDe(loteId), s = new Set(); if (!l) return s; for (const q of fontes) if (!s.has(q.k) && Math.hypot(q.x - l.x, q.z - l.z) <= q.r) s.add(q.k); if (pref) s.add('prefeitura'); return s;
+  }
+  // coloca um prédio do tipo f no lote e começa a obra do nível 1 (só créditos); empresa fora de terreno da Holding
+  // compra o terreno junto
   construirCidade(f, loteId) {
-    const l = loteDe(loteId); if (!l) return 'lote'; if (!this.bairroAberto(l.bairro)) return 'bairro'; if (this.ocupacaoCidade().has(loteId)) return 'loteOcupado';
+    const l = loteDe(loteId); if (!l || (l.bairro === 'aeroporto') !== (CIDADE[f]?.lugar === 'aeroporto')) return 'lote'; if (!this.bairroAberto(l.bairro)) return 'bairro'; if (this.ocupacaoCidade().has(loteId)) return 'loteOcupado';
     const falta = this.podeConstruir(f); if (falta) return falta;
+    const terreno = CIDADE[f].cat === 'empresa' && !this.terrenoDaHolding(loteId) ? this.precoTerreno(loteId) : 0; if (terreno && this.S.creditos < CIDADE[f].custo[1] + terreno) return 'creditos';
     const arr = this.S.modulos[f]; arr.push({ nivel: 0, obra: null, lote: loteId }); const i = arr.length - 1;
     const r = this.melhorarModulo(f, i); if (r !== 'ok') { arr.pop(); return r; }
+    if (terreno) { this.S.creditos -= terreno; this.S.cidade.terrenos[loteId] = terreno; this.emit('terrenoComprado', { lote: loteId, preco: terreno, junto: true }); }
     this.S.stats.cidade = (this.S.stats.cidade || 0) + 1; this.emit('cidadeConstruida', { faixa: f, i, lote: loteId }); return 'ok';
   }
+  // ---- terrenos da Holding: preço do lote = base do bairro × (1 + 2 × ocupação do bairro) ----
+  _ocupacoes() { const o = {}; for (const b of ORDEM_BAIRROS) o[b] = 0; for (const f of TIPOS_CIDADE) for (const m of this.S.modulos[f] || []) { const b = loteDe(m.lote)?.bairro; if (b in o) o[b]++; } for (const b of ORDEM_BAIRROS) o[b] /= BAIRROS[b].nx * BAIRROS[b].nz; return o; }
+  precoTerreno(loteId, oc = this._ocupacoes()) { const l = loteDe(loteId); if (!l) return 0; return Math.round(((PRECO_TERRENO[l.bairro] || 500) * (1 + 2 * (oc[l.bairro] || 0))) / 10) * 10; }
+  terrenoDaHolding(id) { return !!this.S.cidade.terrenos && Object.prototype.hasOwnProperty.call(this.S.cidade.terrenos, id); }
+  comprarTerreno(id) {
+    const l = loteDe(id); if (!l || l.bairro === 'aeroporto') return 'lote'; if (!this.bairroAberto(l.bairro)) return 'bairro'; if (this.terrenoDaHolding(id)) return 'jaTem'; if (this.ocupacaoCidade().has(id)) return 'loteOcupado';
+    const p = this.precoTerreno(id); if (this.S.creditos < p) return 'creditos'; this.S.creditos -= p; this.S.cidade.terrenos[id] = p; this.S.stats.terrenos = (this.S.stats.terrenos || 0) + 1;
+    this._valuation(); this.emit('terrenoComprado', { lote: id, preco: p }); return 'ok';
+  }
+  venderTerreno(id) {
+    if (!this.terrenoDaHolding(id)) return 'nada'; if (this.ocupacaoCidade().has(id)) return 'loteOcupado'; const p = this.precoTerreno(id), pago = this.S.cidade.terrenos[id];
+    delete this.S.cidade.terrenos[id]; this.S.creditos += p; this._valuation(); this.emit('terrenoVendido', { lote: id, preco: p, lucro: p - pago }); return 'ok';
+  }
+  terrenosInfo() { const T = this.S.cidade.terrenos || {}, oc = this._ocupacoes(), occ = this.ocupacaoCidade(); let valor = 0, pago = 0, n = 0, livres = 0; for (const [id, v] of Object.entries(T)) { n++; pago += v; valor += this.precoTerreno(id, oc); if (!occ.has(id)) livres++; } return { n, valor, pago, livres }; }
+  // fábricas de materiais: 2 unidades por hora e por nível da matéria-prima liberada com menos estoque (fechado, até OFFLINE_H)
+  _fabricas(dt) {
+    const n = this.emp?.fabrica || 0, c = this.S.cidade; if (!n || dt <= 0 || !c) return; const passo = 3600e3 / n;
+    c.fab = (c.fab || 0) + Math.min(dt, OFFLINE_H * 3600e3) * this.S.ritmo;
+    const brutos = Object.keys(ITENS).filter((k) => ITENS[k].tipo === 'bruto' && this.liberado(k)); if (!brutos.length) { c.fab = 0; return; }
+    let feitos = 0; while (c.fab >= passo) { if (this.livre < 1) { c.fab = 0; break; } c.fab -= passo; let k = brutos[0]; for (const b of brutos) if ((this.S.itens[b] || 0) < (this.S.itens[k] || 0)) k = b; this.S.itens[k] = (this.S.itens[k] || 0) + 1; feitos++; }
+    if (feitos) { this.S.stats.fabricados = (this.S.stats.fabricados || 0) + feitos; this.emit('fabricaProduziu', { n: feitos }); }
+  }
   comprarBairro(b) {
-    const B = BAIRROS[b]; if (!B) return 'nada'; if (this.bairroAberto(b)) return 'aberto'; if (B.cap > this.S.cap) return 'capitulo'; if (this.S.creditos < B.preco) return 'creditos';
+    const B = BAIRROS[b]; if (!B) return 'nada'; if (this.bairroAberto(b)) return 'aberto'; if (B.cap > this.S.cap) return 'capitulo'; if (!this.temPrefeitura()) return 'prefeitura'; if (this.S.creditos < B.preco) return 'creditos';
     this.S.creditos -= B.preco; this.S.cidade.bairros[b] = true; this._valuation(); this.emit('bairroComprado', { bairro: b }); return 'ok';
   }
   // resumo da cidade: prédios por categoria, moradores da cidade, lotes livres
   cidadeInfo() {
-    const n = { moradia: 0, comercio: 0, servico: 0, lazer: 0 }; let pop = 0;
+    const n = { moradia: 0, comercio: 0, servico: 0, lazer: 0, empresa: 0 }; let pop = 0;
     for (const f of TIPOS_CIDADE) for (const m of this.S.modulos[f] || []) { n[CIDADE[f].cat]++; pop += this.popModulo(f, m.nivel); }
-    return { predios: n, pop, renda: this.rendaCidade(), livres: this.lotesLivres().length, bairros: ORDEM_BAIRROS.filter((b) => this.bairroAberto(b)) };
+    return { predios: n, pop, renda: this.rendaCidade(), livres: this.lotesLivres().length, bairros: ORDEM_BAIRROS.filter((b) => this.bairroAberto(b)), prefeitura: this.temPrefeitura(), empresas: { ...this.emp }, terrenos: this.terrenosInfo() };
   }
   // Mutirão: a comunidade adianta até 2 horas de um cronômetro
   mutirao(alvo) {

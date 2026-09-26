@@ -169,7 +169,7 @@ export const DICAS = {
   primeiraEtapa: ['iris', 'Cada placa é uma obra. Na prancha, entregue os materiais aos poucos e inicie quando estiver tudo lá.'],
   obraComecou: ['tome', 'A obra começou. O canteiro trabalha mesmo com o jogo fechado; ao aprovar, a Holding devolve 150% do custo e dá dois aceleradores.'],
   modulo: ['iris', 'Os módulos do Anel crescem um andar por nível, como uma cidade de verdade.'],
-  cidade: ['iris', 'A Arcologia é o centro de uma cidade que você constrói em volta: casas e prédios no Bairro Sul, e água, energia, saúde e praças para quem chega.'],
+  cidade: ['iris', 'A Arcologia é o centro de uma cidade que você constrói em volta. Comece pela Prefeitura; as moradias só crescem com delegacia e escola por perto, depois saúde e faculdade.'],
   servicoAgua: ['cida', 'Para passar do nível 2, os moradores precisam de água tratada. O lago resolve.'],
   servicoEnergia: ['tome', 'O nível 4 pede energia e saneamento: a fachada solar da Sede e os jardins filtrantes da praça.'],
   servicoSaneamento: ['nara', 'Saneamento vem das plantas: jardins filtrantes, gramados e a bacia do anfiteatro tratam o esgoto.'],

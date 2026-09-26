@@ -123,6 +123,11 @@ const CENAS = {
   obras: (H) => { base(H); H.C.paineis.abrir('obras'); },
   cidade: (H) => { base(H); H.S.cap = 2; H.S.creditos = 20000; H.J.construirCidade('cidCasas', 'sul:3:0'); H.J._derivar(); H.C.sincronizar(); H.C.paineis.abrir('cidade'); },
   'cidade-colocar': (H) => { base(H); H.S.creditos = 20000; H.C.colocarCidade('cidCasas'); },
+  // Holding: terreno comprado, construtora no nível 2 e banco; a folha rola até a seção da Holding
+  'cidade-holding': (H) => { holding(H); H.C.paineis.abrir('cidade'); setTimeout(() => [...document.querySelectorAll('h3.secao')].find((h) => /Holding/.test(h.textContent))?.scrollIntoView({ block: 'start' }), 50); },
+  empresa: (H) => { holding(H); H.C.paineis.abrir('modulo', ['cidConstrutora', 0]); },
+  // casa pronta no nível 1 sem polícia nem escola perto: o cartão de motivo leva a construir a delegacia
+  'cidade-cobertura': (H) => { base(H); H.S.cap = 2; H.S.creditos = 20000; H.J.construirCidade('cidCasas', 'sul:3:0'); const m = H.S.modulos.cidCasas[0]; m.nivel = 1; m.obra = null; H.J._derivar(); const r = H.J.requisitosModulo('cidCasas', 0); for (const [k, n] of Object.entries(r.itens)) H.S.itens[k] = n; H.C.sincronizar(); H.C.paineis.abrir('modulo', ['cidCasas', 0]); },
   prancha: (H) => { base(H); H.S.itens.brita = 20; H.S.itens.madeira = 20; H.C.paineis.abrir('etapa', 'pas_frente.e1'); },
   'prancha-falta': (H) => { base(H); H.S.etapas['pas_frente.e1'] = { estado: 'feita', entregue: {} }; H.S.etapas['lago.e1'] = { estado: 'feita', entregue: {} }; H.S.itens.estaca = 0; H.J._derivar(); H.C.paineis.abrir('etapa', 'sede.e1'); },
   modulo: (H) => { base(H); H.S.cap = 2; H.S.modulos.anel[0].nivel = 2; H.J._derivar(); H.C.paineis.abrir('modulo', ['anel', 0]); },
@@ -192,9 +197,11 @@ function economia(H) {
 }
 function rolar(H, y) { const c = H.C.paineis.el?.querySelector('.corpo'); if (c) c.scrollTop = y; }
 function pedidosEco(H) { const S = H.S, J = H.J; S.cap = 4; S.nivel = 14; J._derivar(); J.tick(Date.now()); for (const k of ['viga', 'deque', 'concreto', 'madeira', 'brita', 'aco']) S.itens[k] = 3; const i = S.pedidos.findIndex((p) => p.itens && Object.entries(p.itens).some(([k, n]) => (S.itens[k] || 0) < n)); if (i >= 0) J.fabricarPedido?.(i); }
+function holding(H) { base(H); H.S.cap = 4; H.S.creditos = 1e6; const J = H.J; J.comprarTerreno('sul:5:1'); J.construirCidade('cidPrefeitura', 'sul:3:1'); J.construirCidade('cidConstrutora', 'sul:6:1'); J.construirCidade('cidBanco', 'sul:7:1'); J.construirCidade('cidCasas', 'sul:4:1');
+  for (const [f, n] of [['cidPrefeitura', 1], ['cidConstrutora', 2], ['cidBanco', 1], ['cidCasas', 3]]) { const m = H.S.modulos[f][0]; m.nivel = n; m.obra = null; } J._derivar(); H.C.sincronizar(); }
 function base(H) { H.S.nivel = 9; H.S.xp = 1700; H.S.creditos = 12000; H.S.predios.carpintaria.ok = true; H.S.predios.concreto.ok = true; H.S.predios.usina2.ok = true; H.J.produzir('usina1', 'madeira'); H.J.produzir('usina1', 'brita'); H.J.produzir('usina1', 'aco'); H.S.predios.usina1.slots[0].fim = Date.now() - 10; H.S.itens.viga = 2; H.S.itens.cimento = 3; H.S.dicas.guia = H.TUTORIAL.length; H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.J._derivar(); H.C.calcBolhas(); H.C.hud.atualizar(); }
 function completarCap1(H) { const S = H.S; S.predios.carpintaria.ok = true; for (const k of ['pas_frente.e1', 'lago.e1', 'sede.e1', 'sede.e2']) S.etapas[k] = { estado: 'feita', entregue: {} }; S.modulos.anel.slice(0, 3).forEach((m) => (m.nivel = 2)); S.dicas.guia = H.TUTORIAL.length; H.C.hud.filaFalas.length = 0; H.C.hud._proxFala(); H.J._derivar(); H.C.hud.capitulo(); }
-const CODIGO = `window.base=${base.toString()};window.completarCap1=${completarCap1.toString()};window.economia=${economia.toString()};window.pedidosEco=${pedidosEco.toString()};window.rolar=${rolar.toString()};window.CENAS={${Object.entries(CENAS).map(([k, f]) => JSON.stringify(k) + ':' + f.toString()).join(',')}};`;
+const CODIGO = `window.base=${base.toString()};window.holding=${holding.toString()};window.completarCap1=${completarCap1.toString()};window.economia=${economia.toString()};window.pedidosEco=${pedidosEco.toString()};window.rolar=${rolar.toString()};window.CENAS={${Object.entries(CENAS).map(([k, f]) => JSON.stringify(k) + ':' + f.toString()).join(',')}};`;
 const nomes = cenasArg === 'todas' ? Object.keys(CENAS) : cenasArg.split(',');
 const tamanhos = tamArg.split(',').map((s) => s.split('x').map(Number));
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });

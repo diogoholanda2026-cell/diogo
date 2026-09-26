@@ -474,9 +474,41 @@ function testes() {
     { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 1e6; const l0 = J.lotesLivres('sul')[0];
       f(J.construirCidade('cidCasas', l0) === 'ok' && S.modulos.cidCasas.length === 1 && S.modulos.cidCasas[0].obra?.estado === 'obra', 'casa colocada no Sul começa a obra do nível 1');
       f(J.construirCidade('cidPraca', l0) === 'loteOcupado' && J.construirCidade('cidCasas', 'leste:0:0') === 'bairro' && J.comprarBairro('leste') === 'capitulo', 'lote ocupado e bairro fechado');
-      S.cap = 2; const c0 = S.creditos; f(J.comprarBairro('leste') === 'ok' && S.creditos === c0 - BAIRROS.leste.preco && J.comprarBairro('leste') === 'aberto', 'bairro comprado');
+      const fim = (t) => { J.tick(t); for (const [g, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => m.obra?.estado === 'pronta' && J.aprovarModulo(g, i)); };
+      S.cap = 2; f(J.comprarBairro('leste') === 'prefeitura', 'sem a Prefeitura não compra bairro'); f(J.construirCidade('cidPrefeitura', 'sul:9:6') === 'ok' && J.construirCidade('cidPrefeitura', 'sul:10:6') === 'unico', 'Prefeitura é única');
+      fim(T + H); const c0 = S.creditos; f(J.temPrefeitura() && J.comprarBairro('leste') === 'ok' && S.creditos === c0 - BAIRROS.leste.preco && J.comprarBairro('leste') === 'aberto', 'bairro comprado com a Prefeitura pronta');
       f(J.construirCidade('cidComercio', 'leste:0:0') === 'ok' && J.rendaCidade() === 0, 'comércio em obra ainda não rende');
-      J.tick(T + 2 * H); S.modulos.cidComercio.forEach((m, i) => m.obra?.estado === 'pronta' && J.aprovarModulo('cidComercio', i)); f(Math.abs(J.rendaCidade() - CIDADE.cidComercio.renda) < 1e-9, `comércio pronto rende (${J.rendaCidade()})`); }
+      fim(T + 2 * H); f(Math.abs(J.rendaCidade() - CIDADE.cidComercio.renda) < 1e-9, `comércio pronto rende (${J.rendaCidade()})`); }
+    // serviços com área: a casa só sobe ao nível 2 com delegacia e escola perto (raio entre os centros dos lotes)
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 1e6; S.cap = 3; let t = T; const fim = () => { t += 3 * H; J.tick(t); for (const [g, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => m.obra?.estado === 'pronta' && J.aprovarModulo(g, i)); };
+      const sobe = () => { S.modulos.cidCasas[0].pedido = null; J._pedidoModulos(); const r = J.requisitosModulo('cidCasas', 0); for (const [k, n] of Object.entries(r.itens)) S.itens[k] = (S.itens[k] || 0) + n; return [J.melhorarModulo('cidCasas', 0), r]; };
+      J.construirCidade('cidCasas', 'sul:9:3'); fim(); let [r1, q] = sobe(); f(r1 === 'cobertura' && q.cobFalta.join() === 'policia,educacao', `sem polícia e escola perto (${r1}, ${q.cobFalta})`);
+      J.construirCidade('cidSeguranca', 'sul:10:3'); J.construirCidade('cidEscola', 'sul:18:6'); fim(); [r1, q] = sobe(); f(r1 === 'cobertura' && q.cobFalta.join() === 'educacao', `escola longe não atende (${r1}, ${q.cobFalta})`);
+      f(J.coberturaLote('sul:18:5').has('educacao') && !J.coberturaLote('sul:9:3').has('educacao') && J.coberturaLote('sul:9:3').has('policia'), 'cobertura por lote');
+      S.modulos.cidEscola.length = 0; J.construirCidade('cidEscola', 'sul:8:3'); fim(); [r1, q] = sobe(); f(r1 === 'ok' && q.cobOk, `com polícia e escola perto sobe (${r1})`); fim();
+      [r1, q] = sobe(); f(r1 !== 'ok' && !q.cobOk && q.cobFalta.join() === 'saude', `o nível 3 pede saúde (${r1}, ${q.cobFalta})`); }
+    // terrenos e empresas da Holding: preço que valoriza, compra e venda, empresa compra o terreno junto, efeitos e lucro
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 1e6; S.cap = 4; let t = T; const fim = () => { t += 6 * H; J.tick(t); for (const [g, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => m.obra?.estado === 'pronta' && J.aprovarModulo(g, i)); };
+      f(J.precoTerreno('sul:0:0') === 400, `terreno do Sul vazio custa 400 (${J.precoTerreno('sul:0:0')})`);
+      const c0 = S.creditos; f(J.comprarTerreno('sul:0:0') === 'ok' && S.creditos === c0 - 400 && J.terrenoDaHolding('sul:0:0') && J.comprarTerreno('sul:0:0') === 'jaTem' && J.comprarTerreno('leste:0:0') === 'bairro', 'compra de terreno');
+      const c1 = S.creditos; f(J.construirCidade('cidConstrutora', 'sul:0:0') === 'ok' && S.creditos === c1 - CIDADE.cidConstrutora.custo[1], 'construtora no terreno da Holding não paga terreno');
+      const c2 = S.creditos, pt = J.precoTerreno('sul:1:0'); f(J.construirCidade('cidFabrica', 'sul:1:0') === 'ok' && S.creditos === c2 - CIDADE.cidFabrica.custo[1] - pt && J.terrenoDaHolding('sul:1:0'), 'empresa fora do terreno da Holding compra o terreno junto');
+      f(J.precoTerreno('sul:5:5') > 400 && J.venderTerreno('sul:0:0') === 'loteOcupado', 'terreno valoriza com a ocupação; com prédio não se vende');
+      const cap0 = J.capacidade, d0 = J.dur(100, 'modulo'); J.construirCidade('cidLogistica', 'sul:2:0'); J.construirCidade('cidBanco', 'sul:3:0'); fim();
+      f(J.capacidade === cap0 + 30 && Math.abs(J.dur(100, 'modulo') / d0 - 0.97) < 1e-9, `logística +30 vagas e construtora 3% mais rápida (${J.capacidade - cap0}, ${J.dur(100, 'modulo') / d0})`);
+      f(Math.abs(J.taxaJuros() - (REGRAS.emprestimo?.taxa ?? 0.1) + 0.02) < 1e-9 || Math.abs(J.taxaJuros() - 0.08) < 1e-9, `banco baixa os juros (${J.taxaJuros()})`);
+      f(J.emp.lucroBase === 250 + 300 + 280 + 800 && J.emp.empregos === 60 + 90 + 70 + 50 && J.lucroEmpresas() === Math.round(J.emp.lucroBase * J.emp.ocupacao), `lucro e empregos (${J.emp.lucroBase}, ${J.emp.empregos}, ${J.emp.ocupacao})`);
+      const soma = () => Object.entries(S.itens).filter(([k]) => ITENS[k].tipo === 'bruto').reduce((a, [, n]) => a + n, 0); const b0 = soma(); t += 3600e3; J.tick(t); f(soma() - b0 >= 2 && soma() - b0 <= 3, `fábrica: 2 matérias-primas por hora (${soma() - b0})`);
+      const c3 = S.creditos; f(J.comprarTerreno('sul:6:6') === 'ok' && J.venderTerreno('sul:6:6') === 'ok' && S.creditos === c3 && !J.terrenoDaHolding('sul:6:6'), 'venda do terreno pelo preço atual');
+      f(J.valuation().partes.terrenos === J.terrenosInfo().valor && J.terrenosInfo().n === 4, `valuation soma os terrenos (${JSON.stringify(J.terrenosInfo())})`);
+      const P = prepararSave(JSON.parse(JSON.stringify(S)), t); f(Object.keys(P.cidade.terrenos).length === 4 && P.modulos.cidBanco.length === 1, 'terrenos e empresas sobrevivem ao save'); }
+    // aeroporto: área própria (lote especial), único, fora dos lotes comuns; residencial de luxo dá renda por nível
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 1e7; S.cap = 5;
+      f(J.construirCidade('cidAeroporto', 'sul:0:0') === 'lote' && J.construirCidade('cidCasas', 'aeroporto') === 'lote' && J.comprarTerreno('aeroporto') === 'lote', 'aeroporto só no lote dele');
+      f(J.construirCidade('cidAeroporto', 'aeroporto') === 'ok' && J.podeConstruir('cidAeroporto') === 'unico' && !J.lotesLivres().includes('aeroporto'), 'aeroporto construído e único');
+      f(J.construirCidade('cidLuxo', 'sul:4:4') === 'ok', 'residencial de luxo colocado'); J.tick(T + 6 * H); for (const [g, arr] of Object.entries(S.modulos)) arr.forEach((m, i) => m.obra?.estado === 'pronta' && J.aprovarModulo(g, i));
+      f(Math.abs(J.rendaCidade() - (CIDADE.cidAeroporto.renda + CIDADE.cidLuxo.renda)) < 1e-9, `turismo e luxo somam renda (${J.rendaCidade()})`);
+      const P = prepararSave(JSON.parse(JSON.stringify(S)), T + 6 * H); f(P.modulos.cidAeroporto.length === 1 && P.modulos.cidAeroporto[0].lote === 'aeroporto' && P.modulos.cidLuxo.length === 1, 'aeroporto sobrevive ao save'); }
     // tutorial: cada passo tem fala e teste
     f(TUTORIAL.every((p) => p.id && p.quem && p.fala && p.alvo && typeof p.feito === 'function'), 'tutorial incompleto');
   } catch (e) { falhas.push('teste: exceção ' + (e.stack || e.message)); }

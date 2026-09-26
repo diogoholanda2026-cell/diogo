@@ -147,6 +147,7 @@ const CARGA = Object.create(null);
 for (const [t, ks] of Object.entries({ madeira: 'madeira viga trelica deque estante', saco: 'cimento concreto brita argila', laje: 'premoldado bloco', vidro: 'painel duplo cupula acrilico vidro solar', aco: 'perfil conector aco no guarda cobre', muda: 'muda grama substrato jardim mudas' })) for (const k of ks.split(' ')) CARGA[k] = t;
 const tipoCarga = (k) => CARGA[k] || 'caixote';
 const tipoDe = (s, i) => { const n = s.tipos.length; return s.tipos[(((i + s.seed) % n) + n) % n]; }; // a semente pode ser negativa
+const FAISCA = [[1.0, 0.62, 0.18], [1.0, 0.92, 0.7]]; // laranja da solda e o miolo quase branco (linear, somado)
 const ALT_CARGA = { madeira: 0.1, saco: 0.1, laje: 0.09, vidro: 0.17, aco: 0.08, muda: 0.07, caixote: 0.12 };
 
 // ---------------------------------------------------------------- lote de instâncias reescrito a cada quadro
@@ -682,7 +683,9 @@ export class Obras {
   _prepOperarios(s) {
     const n = s.opts.operarios ?? 8; const P = s.patio; const C = this.crowd;
     const cats = ['mestre']; const resto = n - 1;
-    const modos = s.modo === 'subir' ? [['andaime', 0.4], ['laje', 0.3], ['patio', 0.3]] : s.modo === 'draga' ? [['frente', 0.35], ['patio', 0.65]] : [['frente', 0.7], ['patio', 0.3]];
+    // carregadores levam material da pilha até a borda do prédio (onde há pilha: não na draga, no desmonte nem no replantio)
+    const pilha = !['draga', 'desmontar', 'replantar'].includes(s.modo);
+    const modos = s.modo === 'subir' ? [['andaime', 0.35], ['laje', 0.25], ['carrega', 0.22], ['patio', 0.18]] : s.modo === 'draga' ? [['frente', 0.35], ['patio', 0.65]] : pilha ? [['frente', 0.6], ['carrega', 0.18], ['patio', 0.22]] : [['frente', 0.7], ['patio', 0.3]];
     for (const [c, f] of modos) for (let i = 0; i < Math.round(resto * f); i++) cats.push(c);
     while (cats.length < n) cats.push('patio');
     const faixa = s.opts.caminho && s.modo === 'subir' ? this._faixaOperarios(s) : null;
@@ -719,6 +722,15 @@ export class Obras {
       C.setPosto(w, [x, this._yLaje(s), z], 'trabalhar', { dur }); return;
     }
     if (w.cat === 'frente') { const f = this._frente(s, w); if (f) { C.setPosto(w, f, 'trabalhar', { olhar: f.olhar, dur: f.dur ?? dur }); return; } }
+    // carregador: pilha (pega uma unidade) → borda do prédio mais perto da pilha (entrega) → pilha
+    if (w.cat === 'carrega' && s.pilha && s.pilha.n > 0) {
+      const pl = s.pilha;
+      if (w.pega) { w.pega = false; w.leva = tipoDe(s, (rnd(s) * 12) | 0); let h = s.hull[0], bd = 1e9; for (let k = 0; k < 4; k++) { const q = s.hull[(rnd(s) * s.hull.length) | 0], d = Math.hypot(q[0] - pl.x, q[1] - pl.z); if (d < bd) { bd = d; h = q; } }
+        const dx = h[0] - s.cx, dz = h[1] - s.cz, d = Math.hypot(dx, dz) || 1, x = h[0] + (dx / d) * 0.22, z = h[1] + (dz / d) * 0.22; C.setPosto(w, [x, chao(x, z), z], 'trabalhar', { olhar: [s.cx, s.cz], dur: 0.8 + rnd(s) * 0.6 }); return; }
+      if (w.leva && !primeiro && rnd(s) < 0.4) this._poeira(s, 2, 0.25, w.x, w.z, 0.15);
+      w.leva = null; w.pega = true; const a = rnd(s) * TAU, x = pl.x + Math.cos(a) * 0.32, z = pl.z + Math.sin(a) * 0.32; C.setPosto(w, [x, chao(x, z), z], 'trabalhar', { olhar: [pl.x, pl.z], dur: 0.7 + rnd(s) * 0.5 }); return;
+    }
+    if (w.cat === 'carrega') { w.leva = null; w.pega = false; } // pilha vazia: ajuda no pátio
     // pátio: entre a pilha e o caminhão
     const a = rnd(s) * TAU, r = 0.25 + rnd(s) * 0.7; const x = (rnd(s) < 0.5 ? s.pilha.x : P.x) + Math.cos(a) * r, z = (rnd(s) < 0.5 ? s.pilha.z : P.z) + Math.sin(a) * r;
     C.setPosto(w, [x, chao(x, z), z], rnd(s) < 0.6 ? 'trabalhar' : 'parado', { olhar: [s.pilha.x, s.pilha.z], dur });
@@ -1319,7 +1331,13 @@ export class Obras {
       if (s.estado === 'pronta' && w.cat === 'faixa' && !w.posto) this._postoPronta(s, w);
       if (s.velOps > 1 && w.posto) w.v = (w.v0 || (w.v0 = w.v)) * s.velOps; else if (w.v0) { w.v = w.v0; w.v0 = 0; }
       if (s.estado === 'obra' && w.cat === 'laje' && w.posto && Math.abs(w.posto.y - this._yLaje(s)) > 0.05) w.posto.y = this._yLaje(s);
+      if (w.leva) { if (s.estado !== 'obra') w.leva = null; else if (w.esc > 0.3) this._unidade(w.x, w.y + 0.25, w.z, -(w.ang || 0), w.leva, 0.5 * w.esc); } // a carga na cabeça
     }
+    // faíscas de solda no andaime e na laje: a cada 0,2 s à noite (0,45 s de dia) um operário trabalhando solta um leque
+    if (s.estado === 'obra' && s.modo === 'subir') { s.tSolda = (s.tSolda || 0) + dt * (s.velOps > 1 ? s.velOps : 1); const passo = this._noite ? 0.2 : 0.45;
+      if (s.tSolda > passo) { s.tSolda = 0; const cand = s.ops.filter((w) => (w.cat === 'andaime' || w.cat === 'laje') && w.trab > 0.4 && w.esc > 0.8); const w = cand[(rnd(s) * cand.length) | 0];
+        if (w) { const Pt = this.pontos, t0 = this._tl, dx = s.cx - w.x, dz = s.cz - w.z, d = Math.hypot(dx, dz) || 1, x = w.x + (dx / d) * 0.1, z = w.z + (dz / d) * 0.1, y = w.y + 0.14;
+          for (let k = 0; k < 7; k++) Pt.add(x, y, z, (rnd(s) - 0.5) * 0.9, 0.3 + rnd(s) * 0.7, (rnd(s) - 0.5) * 0.9, t0 + k * 0.02, 0.3 + rnd(s) * 0.3, 0.42, 2, k % 3 ? FAISCA[0] : FAISCA[1]); } } }
     void C;
   }
 

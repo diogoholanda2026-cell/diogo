@@ -11,7 +11,7 @@ import { PROJETOS, PROJ, MODULOS, POP_NIVEL, alvoEtapa } from './data/obras.js';
 import { CAPITULOS, DICAS, ABERTURA, CONSELHO, TUTORIAL, EFEITOS } from './data/historia.js';
 import { LOTES } from './render/models/canteiro.js';
 import { A } from './data/planta.js';
-import { ORDEM_BAIRROS, CIDADE, BAIRROS, loteDe, loteEm } from './data/cidade.js';
+import { ORDEM_BAIRROS, CIDADE, BAIRROS, loteDe, loteEm, COBERTURAS } from './data/cidade.js';
 import { M } from './render/materials.js';
 import { gravar } from './core/salvar.js';
 import { descartar } from './render/descartar.js';
@@ -137,7 +137,7 @@ export class Controle {
     if (ck !== this._chaoKey) { this._chaoKey = ck; this.ground.flags.verde = verde; this.ground.flags.praca = praca; this.ground.paint(); }
     this.ground.tampa.visible = !['obra', 'pronta', 'feita'].includes(J.etapa('acelerador.e1').estado);
     // cidade: chão dos bairros abertos e os prédios de cada tipo (no nível aprovado)
-    W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b))); W.cidade.sincronizar(this.S.modulos);
+    W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b))); W.cidade.sincronizar(this.S.modulos); { const oc = J.ocupacaoCidade(); W.cidade.terrenos(Object.keys(this.S.cidade.terrenos || {}).filter((id) => !oc.has(id))); }
     for (const [f, arr] of Object.entries(this.S.modulos)) {
       if (MODULOS[f].cidade) continue; const F = W.grupoModulo(f); let muda = false;
       arr.forEach((m, i) => { const mod = F.mods[i]; if (f === 'casas') { if (mod.nivel !== m.nivel) F.setNivel(i, m.nivel); return; } const lote = m.nivel === 0 && J.situacaoModulo(f, i) === 'disponivel' && !m.obra; if (mod.nivel !== m.nivel || !!mod.lote !== lote) { mod.nivel = m.nivel; mod.lote = lote; muda = true; } });
@@ -169,23 +169,23 @@ export class Controle {
       const F = W.faixas[p.faixa]; const cur = this.nivelFaixaProj(p); const G = new THREE.Group(), SK = new THREE.Group();
       F.mods.forEach((m, i) => { for (let f = cur; f < e.nivel; f++) { const a = F.andar(i, f, e.nivel); G.add(a.acabado); if (a.esqueleto) SK.add(a.esqueleto); } });
       W.root.add(G, SK); SK.visible = false; site.extras.push(G, SK); site.aoFim = () => F.setTodos(e.nivel);
-      opts = { ...base, alvo: G, esqueleto: SK, grua: true, caminho: { path: F.def.path, closed: F.def.closed, o: F.prof.o1 + 0.2, o0: F.prof.o0, o1: F.prof.o1 }, operarios: 12 };
+      opts = { ...base, alvo: G, esqueleto: SK, grua: true, caminho: { path: F.def.path, closed: F.def.closed, o: F.prof.o1 + 0.2, o0: F.prof.o0, o1: F.prof.o1 }, operarios: 18 }; // (turmas 50% maiores: o dono liberou o triplo do volume)
     } else {
       const a = alvoEtapa(p, e); const mod = W.modelos[a.modelo]; let alvo = W.parte(a.modelo, a.parte); const modo0 = e.modo || mod?.modos?.[a.parte] || 'subir';
       if (modo0 === 'nivel') { // desassoreamento: draga no lago, o nível sobe e a água clareia (AGUA.turvo segue o nível)
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.lago) b.expandByPoint(new THREE.Vector3(x, -0.3, z)); b.max.y = 0.3;
-        opts = { ...base, alvo, modo: 'draga', box: b, operarios: 5, nivelAgua: () => this.ground.lake.position.y, anim: (k) => { this.ground.lake.position.y = lerp(-0.32, -0.1, k); } };
+        opts = { ...base, alvo, modo: 'draga', box: b, operarios: 8, nivelAgua: () => this.ground.lake.position.y, anim: (k) => { this.ground.lake.position.y = lerp(-0.32, -0.1, k); } };
         site.aoFim = () => { this.ground.lake.position.y = -0.1; };
       } else if (modo0 === 'desmontar') { // os prédios do canteiro são desmontados um a um; cada um sai da fusão só na sua vez
         const pecas = []; for (const g of Object.values(W.predios)) if (g.userData.pronto || g.visible) pecas.push(g); const amb = W.canteiro.children.find((c) => c.name === 'canteiroAmb'); if (amb) pecas.push(amb);
         const soltar = (lista) => { let n = 0; for (const g of lista) if (g !== amb && g.userData && !g.userData.animando) { g.userData.animando = true; n++; } if (n) W.refundir?.(); for (const g of lista) g.visible = true; };
         const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.5;
-        opts = { ...base, alvo: W.canteiro, alvos: pecas, soltar, modo: 'desmontar', box: b, operarios: 8, acesso: A.vias?.[0]?.pts?.[0] || [-19.6, 16.4] };
+        opts = { ...base, alvo: W.canteiro, alvos: pecas, soltar, modo: 'desmontar', box: b, operarios: 12, acesso: A.vias?.[0]?.pts?.[0] || [-19.6, 16.4] };
         site.aoFim = () => { W.canteiro.visible = false; for (const g of pecas) if (g.userData) { g.userData.animando = false; if (g.parent === W.canteiro && g !== amb) g.visible = false; } };
         site.aoRemover = () => { let n = 0; for (const g of pecas) if (g !== amb && g.userData?.animando) { g.userData.animando = false; n++; } if (n) W.refundir?.(); }; // obra desfeita sem aprovar: as peças voltam à fusão
       } else if (modo0 === 'reflorestar') { // replantio: mudas em linhas crescendo até virar a mata do canteiro
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.canteiro.poly) b.expandByPoint(new THREE.Vector3(x, 0, z)); b.max.y = 1.2;
-        opts = { ...base, alvo, modo: 'replantar', box: b, floresta: this.forest, operarios: 9 };
+        opts = { ...base, alvo, modo: 'replantar', box: b, floresta: this.forest, operarios: 14 };
       } else {
         let placa = false;
         if (alvo && alvo.children.length === 0 && alvo.userData.chao) { // piso pintado no terreno: placa de terra provisória
@@ -197,7 +197,7 @@ export class Controle {
         const linear = a.modelo.startsWith('pas_') || a.modelo === 'ponteCoberta';
         let bichos = !!alvo?.userData.manadas; if (!bichos && modo0 === 'surgir') alvo?.traverse((o) => { if (o.isInstancedMesh) bichos = true; }); // bichos são sempre instanciados
         const modo = linear ? 'caminho' : modo0 === 'terra' ? (placa ? 'pavimento' : 'terra') : modo0 === 'crescer' ? 'plantio' : bichos ? 'caixas' : modo0 === 'surgir' ? 'plantio' : 'subir';
-        opts = { ...base, alvo, esqueleto: mod?.esqueletos?.[a.parte], modo, grua: !!mod?.grua?.[a.parte], box, operarios: modo === 'caixas' ? 4 : modo === 'plantio' ? 5 : modo === 'caminho' ? 5 : 8,
+        opts = { ...base, alvo, esqueleto: mod?.esqueletos?.[a.parte], modo, grua: !!mod?.grua?.[a.parte], box, operarios: modo === 'caixas' ? 6 : modo === 'plantio' ? 8 : modo === 'caminho' ? 8 : 12,
           caminho: linear && mod?.caminho ? { path3: mod.caminho } : undefined, poligono: modo === 'pavimento' ? A.praca.poly : undefined, centro: modo === 'pavimento' ? A.pracaCaminhos?.[0]?.[0] : undefined };
       }
     }
@@ -226,7 +226,7 @@ export class Controle {
     if (a.esqueleto) { W.root.add(a.esqueleto); site.extras.push(a.esqueleto); }
     G.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(G);
     site.aoFim = () => { F.setNivel(i, para); if (F.mods[i]) F.mods[i].lote = false; };
-    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: MODULOS[f].cidade ? !['cidCasas', 'cidPraca', 'cidParque'].includes(f) : para >= 3 && f !== 'casas', caminho: c, operarios: 6, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
+    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: MODULOS[f].cidade ? !['cidCasas', 'cidPraca', 'cidParque'].includes(f) : para >= 3 && f !== 'casas', caminho: c, operarios: 9, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
     this.sites.set(`m:${f}:${i}`, site); if (m.obra.estado === 'pronta') this.obras.pronta(`m:${f}:${i}`);
   }
   _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); s.aoRemover?.(); }
@@ -396,8 +396,9 @@ export class Controle {
   falha(r, fx = {}) {
     this.som.erro(); this.vibra.erro();
     const serv = (fx.servicos || []).map((k) => ({ agua: 'água', energia: 'energia', saneamento: 'saneamento' }[k])).filter(Boolean).join(', ');
+    const cob = (fx.cobFalta || []).map((k) => COBERTURAS[k]?.nome.toLowerCase()).filter(Boolean).join(', ');
     const msg = { creditos: 'Créditos insuficientes', falta: 'Faltam materiais no almoxarifado', faltaPrancha: 'Entregue todos os materiais na prancha', nadaEntregar: 'Nada no almoxarifado para esta prancha: toque num material para produzir', cheio: 'Todos os espaços estão ocupados', almox: 'Almoxarifado cheio', nivel: 'Nível insuficiente', requer: 'Antes, conclua a obra que libera este prédio', bloqueado: 'Ainda não liberado', bloqueada: 'Etapa ainda não liberada', fechado: 'Construa o prédio primeiro',
-      capitulo: 'Abre num capítulo adiante', teto: 'Limite de prédios deste tipo', loteOcupado: 'Este lote já tem um prédio', bairro: 'Bairro fechado: compre o bairro no painel Cidade', lote: 'Toque num lote livre da cidade', aberto: 'Este bairro já é seu',
+      capitulo: 'Abre num capítulo adiante', teto: 'Limite de prédios deste tipo', loteOcupado: 'Este lote já tem um prédio', bairro: 'Bairro fechado: compre o bairro no painel Cidade', unico: 'Só pode haver um destes na cidade', jaTem: 'Este terreno já é da Holding', prefeitura: 'Construa a Prefeitura antes de comprar outro bairro', cobertura: `Faltam serviços perto${cob ? ': ' + cob : ''}`, lote: 'Toque num lote livre da cidade', aberto: 'Este bairro já é seu',
       servico: `Faltam serviços para os novos moradores${serv ? ': ' + serv : ''}`, bem: `Bem-estar abaixo de ${fx.bemMin || 'mínimo'}${fx.bemMin ? '%' : ''}`, sem: 'Sem fichas de Mutirão: a disposição da comunidade enche a próxima', max: 'Já está no máximo', nada: 'Nada para fazer aqui', ja: 'Já construído', esgotado: 'Esgotado nesta janela: o estoque renova em breve', limite: 'Limite de vendas desta janela', ocupado: 'O Topógrafo já está fazendo uma licença', nao: 'Este item não é vendido', limiteCap: 'Nível máximo por enquanto' }[r] || 'Não foi possível';
     this.hud.brinde(msg, r === 'creditos' ? 'creditos' : r === 'almox' ? 'almox' : r === 'sem' ? 'mutirao' : null, 2800);
   }
@@ -588,21 +589,52 @@ export class Controle {
   // o toque num lote livre constrói e a obra do nível 1 começa na hora
   colocarCidade(f) {
     const J = this.J; const falta = J.podeConstruir(f); if (falta) { this.falha(falta); return; }
+    if (CIDADE[f].lugar) { // o aeroporto tem área própria: constrói direto e leva a câmera até lá
+      const r = J.construirCidade(f, CIDADE[f].lugar); if (r !== 'ok') { this.falha(r); return; } this.paineis.fechar(true); this.som.obra?.(); this.vibra.sucesso?.(); this.sincronizar();
+      const i = this.S.modulos[f].length - 1; setTimeout(() => this.irPara({ modulo: [f, i] }, false), 200); return; }
     const livres = J.lotesLivres(); if (!livres.length) { this.falha('lote'); return; }
-    this._colocar = { f }; this.mundo.cidade.mostrarLotes(livres); this.paineis.fechar(true);
+    this._colocar = { f }; this.mundo.cidade.mostrarLotes(livres, this._corLote(f)); this.paineis.fechar(true);
     const t = this.rig.target; let best = null, bd = 1e9; for (const id of livres) { const l = loteDe(id); const d = Math.hypot(l.x - t.x, l.z - t.z); if (d < bd) { bd = d; best = l; } }
     if (best) { this.rig.pitchFix = null; this.rig.flyTo({ x: best.x, z: best.z - 3, dist: clamp(this.rig.dist, 26, 44) }, 900); }
     this._faixaColocar(true); this.engine.acordar?.(1200);
   }
+  // cor de cada lote livre no modo de colocar: para um serviço com área, verde onde ele já atende (azul onde falta);
+  // para moradia, verde com polícia, escola e saúde perto, amarelo com parte deles, azul sem nenhum
+  _corLote(f) {
+    const J = this.J, M = CIDADE[f], F = J.fontesCobertura(), pref = J.temPrefeitura();
+    if (M.cat === 'empresa') return (id) => (J.terrenoDaHolding(id) ? 0xffd23a : null);
+    if (M.cobre) { const k = Object.keys(M.cobre)[0]; return (id) => (J.coberturaLote(id, F, pref).has(k) ? 0x7be08a : null); }
+    if (M.cat === 'moradia') return (id) => { const c = J.coberturaLote(id, F, pref); const n = ['policia', 'educacao', 'saude'].filter((k) => c.has(k)).length; return n === 3 ? 0x7be08a : n ? 0xffc44a : null; };
+    return null;
+  }
+  // modo de comprar terrenos: lotes livres azuis (compra) e dourados (da Holding: dois toques vendem pelo preço atual)
+  colocarTerreno() {
+    const J = this.J; const livres = J.lotesLivres(); if (!livres.length) { this.falha('lote'); return; }
+    this._colocar = { terreno: true }; this._vender = null; this.mundo.cidade.mostrarLotes(livres, (id) => (J.terrenoDaHolding(id) ? 0xffd23a : null)); this.paineis.fechar(true);
+    const t = this.rig.target; let best = null, bd = 1e9; for (const id of livres) { const l = loteDe(id); const d = Math.hypot(l.x - t.x, l.z - t.z); if (d < bd) { bd = d; best = l; } }
+    if (best) { this.rig.pitchFix = null; this.rig.flyTo({ x: best.x, z: best.z - 3, dist: clamp(this.rig.dist, 26, 44) }, 900); }
+    this._faixaColocar(true); this.engine.acordar?.(1200);
+  }
+  _terrenoEm(l) {
+    const J = this.J; const id = l.id;
+    if (J.terrenoDaHolding(id) && !J.ocupacaoCidade().has(id)) {
+      const p = J.precoTerreno(id); if (this._vender !== id) { this._vender = id; this.som.toque(); this.hud.brinde(`Terreno da Holding: toque de novo para vender por ${fmt(p)}`, 'terreno', 2600); return; }
+      const pago = this.S.cidade.terrenos[id]; const r = J.venderTerreno(id); if (r !== 'ok') { this.falha(r); return; } this._vender = null; this.som.moedas?.(); this.hud.brinde(`Terreno vendido por ${fmt(p)} (${p >= pago ? 'lucro' : 'perda'} de ${fmt(Math.abs(p - pago))})`, 'creditos');
+    } else { const p = J.precoTerreno(id); const r = J.comprarTerreno(id); if (r !== 'ok') { this.falha(r); return; } this._vender = null; this.som.moedas?.(); this.vibra.tique?.(); this.hud.brinde(`Terreno comprado por ${fmt(p)}: pronto para uma empresa`, 'terreno'); }
+    this.mundo.cidade.mostrarLotes(J.lotesLivres(), (x) => (J.terrenoDaHolding(x) ? 0xffd23a : null)); this.sincronizar(); this._faixaColocar(true);
+  }
   _faixaColocar(on) {
     if (!on) { this._colocarEl?.remove(); this._colocarEl = null; return; }
-    const M = CIDADE[this._colocar.f];
     if (!this._colocarEl) { this._colocarEl = el('div', 'colocar'); this._colocarEl.setAttribute('role', 'status'); this.ui.appendChild(this._colocarEl); this._colocarEl.addEventListener('click', (e) => { if (e.target.closest('[data-x="cancelar"]')) { this.som.toque(); this.cancelarColocar(); } }); }
-    this._colocarEl.innerHTML = `${img(M.icone)}<span><b>${M.nome}</b><small>Toque num lote livre (azul) para construir</small></span><button class="botao fraco" data-x="cancelar">Cancelar</button>`;
+    if (this._colocar.terreno) { const T = this.J.terrenosInfo(); this._colocarEl.innerHTML = `${img('terreno')}<span><b>Terrenos da Holding: ${T.n} (valem ${fmt(T.valor)})</b><small>Toque num lote azul para comprar; num dourado, duas vezes para vender pelo preço atual</small></span><button class="botao fraco" data-x="cancelar">Pronto</button>`; return; }
+    const M = CIDADE[this._colocar.f];
+    const leg = M.cat === 'empresa' ? 'Dourado: terreno da Holding; nos azuis o terreno é comprado junto' : M.cobre ? `Verde: já tem ${COBERTURAS[Object.keys(M.cobre)[0]].nome.toLowerCase()} perto` : M.cat === 'moradia' ? 'Verde: polícia, escola e saúde perto; amarelo: parte deles' : '';
+    this._colocarEl.innerHTML = `${img(M.icone)}<span><b>${M.nome}</b><small>Toque num lote livre para construir${leg ? '. ' + leg : ''}</small></span><button class="botao fraco" data-x="cancelar">Cancelar</button>`;
   }
   cancelarColocar() { this._colocar = null; this.mundo.cidade.mostrarLotes([]); this._faixaColocar(false); }
   _colocarEm(g) {
     const l = g && loteEm(g.x, g.z); if (!l) { this.falha('lote'); return; }
+    if (this._colocar.terreno) { this._terrenoEm(l); return; }
     const f = this._colocar.f; const r = this.J.construirCidade(f, l.id); if (r !== 'ok') { this.falha(r); return; }
     this.cancelarColocar(); this.som.obra?.(); this.vibra.sucesso?.(); this.sincronizar();
     const i = this.S.modulos[f].length - 1; setTimeout(() => this.irPara({ modulo: [f, i] }, false), 200);
