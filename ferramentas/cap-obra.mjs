@@ -69,6 +69,8 @@ async function abre(q, W, H) {
 }
 const run = (pg, f, ...a) => pg.evaluate(f, ...a);
 async function foto(pg, nome, desc, n = 2) {
+  // modais da fila (a aprovação de um grupo deixa o "Etapa aprovada" para os grupos seguintes) não entram na foto
+  await pg.evaluate(() => { const C = window.__held.C; C._filaModais.length = 0; for (const v of document.querySelectorAll('.veu')) v.remove(); });
   await pg.evaluate((n) => window.__cap.quadros(n), n);
   const arq = join(saida, nome + '.png'); await pg.screenshot({ path: arq, timeout: 240000 });
   const st = await pg.evaluate(() => window.__cap.stats());
