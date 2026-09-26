@@ -185,7 +185,6 @@ export function gramadoUni() {
   if (cp.pista) { const ps = cp.pista; addMap(P.e1, sweep(ellipse(ps.c[0], ps.c[1], ps.rx, ps.rz, ps.rot, 64), true, [{ a: [0.1, 0.045], b: [-0.1, 0.045], mat: 'c', uv: 'plan' }]), () => M.caminhoTeto || M.concreto); }
   const tr = []; const R = rng(88);
   for (const [x, z] of ellipse(ar.c[0], ar.c[1], ar.rx - 1.95, ar.rz - 1.9, ar.rot, 24, 0, 1, ar.a0 + 0.08, ar.a1 - 0.08)) tr.push({ x: x + (R() - 0.5) * 0.2, z: z + (R() - 0.5) * 0.2, s: 0.16 + R() * 0.06, pal: 'jardim' });
-  for (let i = 0; i < 9; i++) tr.push({ x: -15.2 + R() * 1.4, z: -13.0 + R() * 1.8, s: 0.2 + R() * 0.06, pal: 'jardim' });
   P.e1.add(treeGroup(tr));
   alaPortal(al, P.e1);
   if (u.frente) { const { E, poly } = perfilFita((u.laco?.fita || 0.9) / 2); addMap(P.e1, sweep(curve(u.frente, false, 12), false, E, { caps: true, capPoly: poly, capMat: 'fasciaBeiral' }), (k) => matDe(k)); }

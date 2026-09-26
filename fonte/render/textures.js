@@ -201,7 +201,7 @@ export const tex = {
   }, { linear: true }),
   // grama limpa e viva (pouco ruído: sem manchas de longe)
   grass: () => canvasTex('grass', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [98, 126, 56], 12, 31, 2, 21);
+    noiseRectP(g, w, [102, 138, 54], 12, 31, 2, 21); // gramado vivo (BuildIt)
     for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(60,96,30,.16)' : 'rgba(214,230,150,.14)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
   }),
   // pasto degradado (antes da obra): capim seco amarelado, com manchas suaves

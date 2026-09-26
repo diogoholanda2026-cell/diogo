@@ -41,7 +41,7 @@ const AMANHECER = {
 // oclusão cheia e névoa mais perto; a saturação fica em 1,06 para o verde continuar vivo)
 const DIA = {
   luz: [0xfff0d6, 3.7], ceuH: 0xa6d0ff, chaoH: 0x86a85a, hemi: 0.95, env: 0.95,
-  zen: 0x3f84e8, hor: 0xd2e8fa, baixo: 0x6e7e5e, brilho: [0xfff2d8, 0.45], nevoa: [100, 440], nuvem: [0xffffff, 0xb6c6e0],
+  zen: 0x3f84e8, hor: 0xd2e8fa, baixo: 0x6e7e5e, brilho: [0xfff2d8, 0.45], nevoa: [115, 470], nuvem: [0xffffff, 0xb6c6e0],
   noite: 0, estrelas: 0, sombra: 0.9, hao: 0.9, lua: 0, cidade: 0, rim: [0xcfe6ff, 0.3], nuvK: 0.42,
   P: { exposure: 1.18, saturation: 1.1, contrast: 1.09, vignette: 0.06, wb: [1.0, 1.0, 1.0], shadowTint: [0.0, 0.002, 0.006], highTint: [0.006, 0.003, -0.004], threshold: 1.15, bloomStrength: 0.35 },
 };

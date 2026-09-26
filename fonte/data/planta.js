@@ -37,7 +37,7 @@ export const A = {
   uni: { c: [-17.0, -8.8],
     arena: { c: [-15.6, -12.2], rx: 7.7, rz: 3.8, rot: 0, a0: 2.95, a1: 5.64, torres: [0.17, 0.36, 0.51, 0.68, 0.94], torreW: [2.0, 1.2, 1.6, 2.0, 2.0], torreH: [1.1, 0.88, 0.88, 0.88, 1.1] },
     elo: [[-23.3, -11.7], [-25.6, -9.4], [-25.0, -5.0], [-20.6, -1.6], [-14.2, 0.1]],
-    campo: { c: [-18.0, -12.2], w: 4.0, d: 2.4, rot: -0.1, pista: { c: [-16.8, -12.1], rx: 3.3, rz: 1.5, rot: -0.1 } },
+    campo: { c: [-17.6, -12.6], w: 4.6, d: 2.5, rot: -0.06, pista: { c: [-17.6, -12.6], rx: 3.3, rz: 1.6, rot: -0.06 } },
     ala: { c: [-21.5, -10.2], w: 3.6, d: 1.2, rot: 0.15, faixas: 8, rampa: 1.1, tambor: { r: 0.5, h: 1.0 } },
     frente: [[-19.5, -9.7], [-14.6, -10.3]], laco: { c: [-12.6, -11.8], w: 3.0, d: 2.6, fita: 0.9, degraus: 8 }, rampa: [[-9.8, -13.6], [-10.9, -12.0]] },
   // Faculdade de Ciências Avançadas e Tecnologia (platô de concreto com células de vidro espelhado)

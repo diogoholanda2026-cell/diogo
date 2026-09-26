@@ -123,7 +123,7 @@ export class Ground {
     this._pintar();
   }
   _buildMesh() {
-    const SX = 128, SZ = 80; const g = new THREE.PlaneGeometry(W, D, SX, SZ); // células de 0,5 (o leito do lago ainda cabe na rampa de 1,2) g.rotateX(-Math.PI / 2); g.translate((MESA.x0 + MESA.x1) / 2, 0, (MESA.z0 + MESA.z1) / 2);
+    const SX = 128, SZ = 80; const g = new THREE.PlaneGeometry(W, D, SX, SZ); g.rotateX(-Math.PI / 2); g.translate((MESA.x0 + MESA.x1) / 2, 0, (MESA.z0 + MESA.z1) / 2); // células de 0,5 (o leito do lago ainda cabe na rampa de 1,2)
     const p = g.attributes.position, uv = g.attributes.uv;
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, heightAt(x, z)); uv.setXY(i, (x - MESA.x0) / W, 1 - (z - MESA.z0) / D); }
     // remove os triângulos do fosso do acelerador
@@ -226,7 +226,7 @@ export class Ground {
     // 2) clareiras: halo desfocado (desenhado a 1/4 e ampliado), depois pasto degradado no início e
     //    gramado quando a obra da área começa
     if (!this._zonas) { this._zonas = document.createElement('canvas'); this._zonas.width = w >> 2; this._zonas.height = h >> 2; }
-    const zc = this._zonas.getContext('2d'); zc.clearRect(0, 0, w >> 2, h >> 2); zc.filter = 'blur(2.5px)'; zc.fillStyle = '#66783e';
+    const zc = this._zonas.getContext('2d'); zc.clearRect(0, 0, w >> 2, h >> 2); zc.filter = 'blur(2.5px)'; zc.fillStyle = '#7c8e4c';
     for (const Z of ZONAS) { zona(Z, zc, 0.25, Z.poly ? 0 : 0.5); zc.fill(); }
     zc.filter = 'none'; c.drawImage(this._zonas, 0, 0, w, h);
     c.save(); c.globalAlpha = 0.95;
