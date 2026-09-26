@@ -1,5 +1,5 @@
-// Ícones desenhados em canvas no estilo do SimCity BuildIt: cores saturadas, volume por degradê, brilho no alto,
-// contorno escuro fino e sombra projetada suave. Cada desenho é feito num espaço de 96 unidades e tela() dá a
+// Ícones desenhados em canvas no estilo do SimCity BuildIt: cores saturadas, volume por degradê, luz do alto à esquerda,
+// contorno escuro fino (1,8 px) e sombra de contato. Cada desenho é feito num espaço de 96 unidades e tela() dá a
 // todos o mesmo acabamento (brilho só onde há tinta, contorno da silhueta, sombra e cor mais viva), a 160 px
 // (nítidos até ~58 px CSS em DPR 2,75). Os retratos dos conselheiros ocupam o círculo inteiro, sem contorno.
 // prepararIcones() gera todos uma vez como blob: (URLs curtas no HTML dos painéis); o que faltar sai na hora
@@ -44,14 +44,128 @@ function capacete(c, cores, emblema) {
   if (emblema) emblema();
   reflexo(c, 32, 34, 11, 6, 0.85, -0.9);
 }
-// carinha do bem-estar: humor 1 (feliz), 0 (neutra) e -1 (triste)
-function carinha(c, cores, humor) {
-  c.beginPath(); c.arc(48, 50, 34, 0, 7); c.fillStyle = rad(c, 38, 36, 3, 44, [[0, cores[0]], [0.55, cores[1]], [1, cores[2]]]); c.fill(); contorno(c, 2.4);
-  c.fillStyle = '#20243a'; for (const x of [37, 59]) { c.beginPath(); c.ellipse(x, 42, 4.2, 6, 0, 0, 7); c.fill(); c.beginPath(); c.arc(x + 1.2, 40, 1.5, 0, 7); c.fillStyle = '#fff'; c.fill(); c.fillStyle = '#20243a'; }
-  c.lineCap = 'round'; c.strokeStyle = '#20243a'; c.lineWidth = 4.2; c.beginPath();
-  if (humor > 0) { c.moveTo(32, 56); c.quadraticCurveTo(48, 74, 64, 56); } else if (humor === 0) { c.moveTo(35, 62); c.quadraticCurveTo(48, 66, 61, 61); } else { c.moveTo(34, 68); c.quadraticCurveTo(48, 54, 62, 68); }
-  c.stroke(); if (humor > 0) { c.fillStyle = 'rgba(255,120,120,.45)'; for (const x of [28, 68]) { c.beginPath(); c.ellipse(x, 56, 5, 3.4, 0, 0, 7); c.fill(); } }
-  reflexo(c, 36, 30, 12, 7, 0.75, -0.6);
+// folha do bem-estar (no lugar da carinha): humor 1 folha verde de pé com um brilho, 0 amarelada e inclinada, -1 laranja,
+// caída, com a ponta enrolada e manchas (forma e cor mudam juntas, para quem não distingue as cores)
+function folhaBem(c, cores, humor) {
+  c.save(); c.translate(46, 50); c.rotate(humor > 0 ? -0.3 : humor === 0 ? 0.38 : 1.2);
+  c.strokeStyle = cores[2]; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 26); c.quadraticCurveTo(1, 36, -5, 42); c.stroke();
+  c.beginPath(); c.moveTo(0, 30);
+  if (humor < 0) { c.bezierCurveTo(-30, 18, -30, -22, -4, -34); c.quadraticCurveTo(7, -41, 11, -30); c.quadraticCurveTo(4, -31, 6, -24); c.bezierCurveTo(30, -12, 27, 18, 0, 30); }
+  else { c.bezierCurveTo(-32, 16, -30, -26, 0, -40); c.bezierCurveTo(30, -26, 32, 16, 0, 30); }
+  c.closePath(); c.fillStyle = rad(c, -10, -14, 3, 52, [[0, cores[0]], [0.55, cores[1]], [1, cores[2]]]); c.fill(); contorno(c, 2.2);
+  c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 26); c.quadraticCurveTo(2, -2, 0, humor < 0 ? -24 : -34); c.stroke();
+  c.lineWidth = 1.7; for (const y of [12, -2, -16]) for (const k of [-1, 1]) { c.beginPath(); c.moveTo(0.5, y); c.quadraticCurveTo(k * 9, y - 3, k * 16, y - 11); c.stroke(); }
+  if (humor < 0) { c.fillStyle = 'rgba(122,56,16,.55)'; for (const [x, y, r] of [[-12, 4, 4], [10, -8, 3], [8, 14, 2.6]]) { c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); } }
+  c.restore();
+  if (humor > 0) { estrela(c, 76, 20, 2.6, 10, 4); c.fillStyle = '#ffffff'; c.fill(); contorno(c, 1.3); }
+  if (humor >= 0) reflexo(c, 36, 32, 8, 4, 0.6, -0.9);
+}
+// planta da composição vista de cima (Composição concluída): prato claro da maquete, mata, lago, Sede, Anel do
+// Campus, Biblioteca, Bioma e os caminhos
+function plantaSitio(c) {
+  c.beginPath(); c.arc(48, 48, 42, 0, 7); c.fillStyle = lin(c, 0, 6, 0, 90, [[0, '#fffaf0'], [1, '#d6cab2']]); c.fill(); contorno(c, 2.2);
+  c.beginPath(); c.arc(48, 48, 37, 0, 7); c.fillStyle = rad(c, 40, 36, 4, 46, [[0, '#a6e072'], [1, '#3f8a2a']]); c.fill(); contorno(c, 1.2);
+  c.save(); c.beginPath(); c.arc(48, 48, 37, 0, 7); c.clip();
+  c.strokeStyle = '#fbf3e0'; c.lineCap = 'round'; c.lineWidth = 3.4; c.beginPath(); c.moveTo(12, 72); c.quadraticCurveTo(40, 60, 52, 71); c.quadraticCurveTo(62, 80, 86, 70); c.stroke();
+  c.beginPath(); c.ellipse(55, 30, 14, 8.5, -0.25, 0, 7); c.fillStyle = rad(c, 50, 27, 1, 15, [[0, '#c8f0ff'], [1, '#2f8fd8']]); c.fill(); contorno(c, 1.3);
+  c.strokeStyle = '#fffaf0'; c.lineWidth = 4.6; c.beginPath(); c.arc(55, 36, 19, Math.PI * 1.1, Math.PI * 1.62); c.stroke();
+  c.restore();
+  c.beginPath(); c.arc(31, 55, 15, 0, Math.PI * 2); c.moveTo(39.5, 55); c.arc(31, 55, 8.5, 0, Math.PI * 2, true); c.fillStyle = '#fffaf0'; c.fill(); contorno(c, 1.4);
+  c.beginPath(); c.arc(31, 55, 8.5, 0, 7); c.fillStyle = rad(c, 29, 53, 1, 9, [[0, '#7cd05a'], [1, '#2f7a22']]); c.fill(); contorno(c, 1);
+  c.beginPath(); c.arc(66, 57, 7, 0, 7); c.fillStyle = rad(c, 64, 55, 1, 8, [[0, '#ffffff'], [1, '#d8d0c0']]); c.fill(); contorno(c, 1.3);
+  c.beginPath(); c.arc(76, 42, 5.5, 0, 7); c.fillStyle = rad(c, 74, 40, 1, 6, [[0, '#e8fbff'], [1, '#6cc4ec']]); c.fill(); contorno(c, 1.2);
+}
+// Anel do Campus visto de cima (selo do nível): o prédio em coroa branca quente com as janelas acesas, o terraço e o
+// campo no centro. No selo do HUD o terraço fica vazado (o XP o pinta por baixo, em verde, no sentido horário);
+// cheio = o terraço verde (o selo do modal de subir de nível).
+function anelCampus(c, cheio) {
+  const X = 48, Y = 48, O = Math.PI * 2, coroa = (a, b) => { c.beginPath(); c.arc(X, Y, b, 0, O); c.moveTo(X + a, Y); c.arc(X, Y, a, 0, O, true); };
+  c.beginPath(); c.arc(X, Y, 46, 0, O); c.fillStyle = rad(c, 34, 28, 4, 64, [[0, '#ffffff'], [0.55, '#f6f1e6'], [1, '#d6c9b0']]); c.fill(); contorno(c, 2.2);
+  c.strokeStyle = 'rgba(96,78,50,.45)'; c.lineWidth = 1.1; c.beginPath(); c.arc(X, Y, 44.2, 0, O); c.stroke();
+  c.save(); c.setLineDash([3.2, 2.2]); c.strokeStyle = '#eeae48'; c.lineWidth = 2.6; c.beginPath(); c.arc(X, Y, 40.8, 0, O); c.stroke(); c.restore();
+  if (cheio) { coroa(21.5, 36.5); c.fillStyle = rad(c, 38, 34, 4, 50, [[0, '#a6e27c'], [1, '#4f9a36']]); c.fill(); contorno(c, 1.2); c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1.3; c.beginPath(); c.arc(X, Y, 29, 0, O); c.stroke(); }
+  else { c.save(); c.globalCompositeOperation = 'destination-out'; coroa(21.5, 36.5); c.fill(); c.restore(); }
+  c.beginPath(); c.arc(X, Y, 21.5, 0, O); c.fillStyle = '#f6f1e6'; c.fill(); contorno(c, 1.2);
+  c.beginPath(); c.arc(X, Y, 19, 0, O); c.fillStyle = rad(c, 43, 42, 2, 22, [[0, '#62b842'], [1, '#2c6f20']]); c.fill(); contorno(c, 1.2);
+  c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1.1; c.beginPath(); c.arc(X, Y, 15, 0, O); c.stroke();
+}
+// ---- prédios do canteiro: os galpões do mundo (render/models/canteiro.js), fachada de frente e o fundo em oblíquo ----
+const PAREDE = { branca: ['#fffdf7', '#e8e1d3', '#c3baa8'], chapa: ['#f4f7fa', '#cdd5de', '#96a2b0'], madeira: ['#f8d7a4', '#dca466', '#a86e36'], concreto: ['#eceae4', '#c6c1b7', '#9b968c'] };
+const bez = (a, b, e, d, t) => { const u = 1 - t; return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * e + t * t * t * d; };
+// galpão: fachada (x, y, w, h), fundo d; telhado 'abobada' (chapa curva), 'serra' (dentes azuis com vidro âmbar) ou
+// 'vidro' (estufa); porta 'vidro' (âmbar), 'enrolar' (de aço) ou nenhuma; dentro(c) desenha o que aparece pelo vidro
+function galpao(c, x, y, w, h, d, par, tel = 'abobada', porta = 'vidro', dentro = null) {
+  const dx = d, dy = -d * 0.6, vid = tel === 'vidro', n = 4, p = w / n, t = Math.min(h * 0.45, p * 0.9), r = Math.min(w * 0.26, 15), k = (r * 4) / 3;
+  c.beginPath(); c.moveTo(x + w, y); c.lineTo(x + w + dx, y + dy); c.lineTo(x + w + dx, y + h + dy); c.lineTo(x + w, y + h); c.closePath(); c.fillStyle = par[2]; c.fill(); contorno(c, 1.4);
+  if (tel === 'serra') for (let i = 0; i < n; i++) { const x0 = x + i * p, x1 = x0 + p;
+    c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y - t); c.lineTo(x1 + dx, y - t + dy); c.lineTo(x0 + dx, y + dy); c.closePath(); c.fillStyle = lin(c, 0, y - t + dy, 0, y, [[0, '#9ad6ff'], [1, '#2a7fd4']]); c.fill(); contorno(c, 1.2);
+    c.beginPath(); c.moveTo(x1, y - t); c.lineTo(x1, y); c.lineTo(x1 + dx, y + dy); c.lineTo(x1 + dx, y - t + dy); c.closePath(); c.fillStyle = lin(c, x1, 0, x1 + dx, 0, [[0, '#fff0c0'], [1, '#f2b24a']]); c.fill(); contorno(c, 1.2); }
+  else {
+    c.beginPath(); c.moveTo(x, y); c.bezierCurveTo(x, y - k, x + w, y - k, x + w, y); c.lineTo(x + w + dx, y + dy); c.bezierCurveTo(x + w + dx, y + dy - k, x + dx, y + dy - k, x + dx, y + dy); c.closePath();
+    c.fillStyle = vid ? 'rgba(200,238,250,.8)' : lin(c, 0, y - r + dy, 0, y, [[0, '#ffffff'], [0.55, '#d6dde5'], [1, '#98a3b0']]); c.fill(); contorno(c, 1.4);
+    c.strokeStyle = vid ? 'rgba(255,255,255,.95)' : 'rgba(96,110,128,.5)'; c.lineWidth = vid ? 1.6 : 1.1;
+    for (let s = 0.125; s < 1; s += 0.125) { const px = bez(x, x, x + w, x + w, s), py = bez(y, y - k, y - k, y, s); c.beginPath(); c.moveTo(px, py); c.lineTo(px + dx, py + dy); c.stroke(); }
+  }
+  if (dentro) dentro(c);
+  c.beginPath(); c.moveTo(x, y + h); c.lineTo(x, y);
+  if (tel === 'serra') for (let i = 0; i < n; i++) { const x1 = x + (i + 1) * p; c.lineTo(x1, y - t); c.lineTo(x1, y); } else c.bezierCurveTo(x, y - k, x + w, y - k, x + w, y);
+  c.lineTo(x + w, y + h); c.closePath();
+  c.fillStyle = vid ? 'rgba(206,242,252,.5)' : lin(c, 0, y - (tel === 'serra' ? t : r), 0, y + h, [[0, par[0]], [1, par[1]]]); c.fill(); contorno(c, 1.5);
+  if (vid) { c.strokeStyle = 'rgba(255,255,255,.95)'; c.lineWidth = 1.6; for (let i = 1; i < 4; i++) { const xx = x + (i * w) / 4; c.beginPath(); c.moveTo(xx, y + h); c.lineTo(xx, y - Math.sin((i / 4) * Math.PI) * r); c.stroke(); } c.beginPath(); c.moveTo(x, y); c.lineTo(x + w, y); c.stroke(); }
+  if (porta === 'vidro') { const pw = w * 0.3, ph = h * 0.64, px = x + (w - pw) / 2; rr(c, px, y + h - ph, pw, ph, 1.5); c.fillStyle = lin(c, 0, y + h - ph, 0, y + h, [[0, '#fff0c0'], [1, '#eaa640']]); c.fill(); contorno(c, 1.2); c.strokeStyle = 'rgba(130,76,20,.45)'; c.lineWidth = 1; c.beginPath(); c.moveTo(px + pw / 2, y + h - ph); c.lineTo(px + pw / 2, y + h); c.stroke(); }
+  else if (porta === 'enrolar') { const pw = w * 0.46, ph = h * 0.7, px = x + (w - pw) / 2; c.beginPath(); c.rect(px, y + h - ph, pw, ph); c.fillStyle = lin(c, 0, y + h - ph, 0, y + h, [[0, '#8a97a6'], [1, '#56626f']]); c.fill(); contorno(c, 1.2); c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1; for (let yy = y + h - ph + 3; yy < y + h; yy += 3.2) { c.beginPath(); c.moveTo(px + 1, yy); c.lineTo(px + pw - 1, yy); c.stroke(); } }
+}
+// contêiner do Escritório: chapa com nervuras e a faixa de janela âmbar
+function conteiner(c, x, y, w, h, d, azul) {
+  const P = azul ? ['#9ccff4', '#3f8ccc', '#2a6496'] : ['#ffffff', '#ebe4d6', '#c4bba9'];
+  caixa(c, x, y, w, h, d, P[0], lin(c, 0, y, 0, y + h, [[0, P[0]], [1, P[1]]]), P[2]);
+  c.strokeStyle = 'rgba(20,40,70,.2)'; c.lineWidth = 1; for (let i = 1; i < 8; i++) { const xx = x + (i * w) / 8; c.beginPath(); c.moveTo(xx, y + 2); c.lineTo(xx, y + h - 2); c.stroke(); }
+  rr(c, x + w * 0.14, y + h * 0.3, w * 0.62, h * 0.34, 1.5); c.fillStyle = lin(c, 0, y + h * 0.3, 0, y + h * 0.64, [[0, '#fff0c0'], [1, '#f2b24a']]); c.fill(); contorno(c, 1.1);
+}
+// silo de chapa com o chapéu cônico
+function silo(c, x, yb, r, h) {
+  c.beginPath(); c.moveTo(x - r, yb - h); c.lineTo(x - r, yb); c.ellipse(x, yb, r, r * 0.35, 0, Math.PI, 0, true); c.lineTo(x + r, yb - h); c.closePath();
+  c.fillStyle = lin(c, x - r, 0, x + r, 0, [[0, '#ffffff'], [0.4, '#dfe5ec'], [1, '#8a96a4']]); c.fill(); contorno(c, 1.3);
+  c.strokeStyle = 'rgba(96,110,128,.45)'; c.lineWidth = 1; for (const q of [0.3, 0.62]) { c.beginPath(); c.ellipse(x, yb - h * q, r, r * 0.35, 0, 0, Math.PI); c.stroke(); }
+  c.beginPath(); c.moveTo(x - r - 1.2, yb - h); c.lineTo(x, yb - h - r * 0.95); c.lineTo(x + r + 1.2, yb - h); c.ellipse(x, yb - h, r + 1.2, r * 0.38, 0, 0, Math.PI); c.closePath();
+  c.fillStyle = lin(c, x - r, 0, x + r, 0, [[0, '#f6f8fa'], [1, '#7c8896']]); c.fill(); contorno(c, 1.3);
+}
+function tronco(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = rad(c, x - r * 0.3, y - r * 0.35, 1, r * 1.1, [[0, '#ffe6b8'], [0.7, '#e3aa66'], [1, '#b8742c']]); c.fill(); contorno(c, 1.4); c.strokeStyle = 'rgba(168,104,44,.75)'; c.lineWidth = 1.1; for (const k of [0.55, 0.2]) { c.beginPath(); c.arc(x, y, r * k, 0, 7); c.stroke(); } }
+// selo redondo na fachada da usina: reciclagem (materiais) ou coração (pedidos da comunidade)
+function seloUsina(c, x, y, coracao) {
+  c.beginPath(); c.arc(x, y, 8.5, 0, 7); c.fillStyle = rad(c, x - 3, y - 3, 1, 9, [[0, '#ffffff'], [1, '#e2eef6']]); c.fill(); contorno(c, 1.3);
+  if (coracao) { c.beginPath(); c.moveTo(x, y + 5); c.bezierCurveTo(x - 9, y - 1, x - 5, y - 8, x, y - 3.5); c.bezierCurveTo(x + 5, y - 8, x + 9, y - 1, x, y + 5); c.closePath(); c.fillStyle = lin(c, 0, y - 7, 0, y + 5, [[0, '#ff8a7a'], [1, '#e0352a']]); c.fill(); contorno(c, 1.1); return; }
+  c.save(); c.translate(x, y); c.strokeStyle = '#2fae3a'; c.lineWidth = 2.3; c.lineCap = 'round'; for (let i = 0; i < 3; i++) { c.rotate((Math.PI * 2) / 3); c.beginPath(); c.arc(0, 0, 5, 0.2, 1.6); c.stroke(); c.beginPath(); c.moveTo(5 * Math.cos(1.6) - 2, 5 * Math.sin(1.6)); c.lineTo(5 * Math.cos(1.6) + 0.8, 5 * Math.sin(1.6) + 2.6); c.stroke(); } c.restore();
+}
+// usina: galpão branco com telhado em dente de serra, silos (um, dois ou três: I, II e III), esteira e monte de brita
+function usinaIc(c, n, coracao) {
+  for (let i = n - 1; i >= 0; i--) silo(c, 72 + i * 8, 68 - i * 4, 7.5, 38 - i * 3);
+  galpao(c, 4, 46, 56, 28, 18, PAREDE.branca, 'serra', null);
+  c.strokeStyle = '#3a3f48'; c.lineWidth = 4.5; c.lineCap = 'round'; c.beginPath(); c.moveTo(58, 62); c.lineTo(78, 78); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(58, 60.5); c.lineTo(78, 76.5); c.stroke();
+  c.beginPath(); c.moveTo(66, 88); c.quadraticCurveTo(79, 64, 94, 88); c.closePath(); c.fillStyle = rad(c, 78, 76, 1, 18, [[0, '#dcd8d0'], [1, '#8a857c']]); c.fill(); contorno(c, 1.3);
+  c.fillStyle = 'rgba(80,76,70,.5)'; for (const [x, y] of [[76, 82], [82, 79], [86, 84], [80, 85], [72, 85]]) { c.beginPath(); c.arc(x, y, 1.3, 0, 7); c.fill(); }
+  seloUsina(c, 32, 62, coracao);
+}
+function betoneira(c, x, y) {
+  c.strokeStyle = '#6d7884'; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 8, y + 12); c.lineTo(x - 2, y + 1); c.lineTo(x + 8, y + 12); c.stroke();
+  c.save(); c.translate(x, y); c.rotate(-0.55);
+  c.beginPath(); c.moveTo(-14, -9); c.quadraticCurveTo(-4, -13, 8, -7); c.lineTo(14, -4); c.lineTo(14, 4); c.lineTo(8, 7); c.quadraticCurveTo(-4, 13, -14, 9); c.quadraticCurveTo(-18, 0, -14, -9); c.closePath();
+  c.fillStyle = lin(c, 0, -12, 0, 12, [[0, '#ffc07a'], [0.5, '#ff8a1c'], [1, '#c45408']]); c.fill(); contorno(c, 1.5);
+  c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 2.2; for (const xx of [-7, 1]) { c.beginPath(); c.moveTo(xx, -11); c.quadraticCurveTo(xx + 3, 0, xx, 11); c.stroke(); }
+  c.beginPath(); c.ellipse(14, 0, 2.5, 4.5, 0, 0, 7); c.fillStyle = '#3a3f48'; c.fill(); contorno(c, 1.1); c.restore();
+}
+// carretel de madeira com o cabo laranja enrolado
+function bobina(c, x, y) {
+  c.beginPath(); c.ellipse(x + 6, y, 6, 13, 0, 0, 7); c.fillStyle = '#a86e36'; c.fill(); contorno(c, 1.3);
+  c.beginPath(); c.rect(x - 6, y - 9, 12, 18); c.fillStyle = lin(c, 0, y - 9, 0, y + 9, [[0, '#ffb070'], [1, '#d0581a']]); c.fill(); contorno(c, 1.2);
+  c.strokeStyle = 'rgba(120,40,0,.45)'; c.lineWidth = 1; for (let yy = y - 6; yy <= y + 6; yy += 3) { c.beginPath(); c.moveTo(x - 6, yy); c.lineTo(x + 6, yy); c.stroke(); }
+  c.beginPath(); c.ellipse(x - 6, y, 6, 13, 0, 0, 7); c.fillStyle = rad(c, x - 8, y - 4, 1, 13, [[0, '#f6cf98'], [1, '#b8742c']]); c.fill(); contorno(c, 1.3);
+  c.beginPath(); c.ellipse(x - 6, y, 1.8, 4, 0, 0, 7); c.fillStyle = '#5a3418'; c.fill();
+}
+function painelSolar(c, P) {
+  c.beginPath(); P.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fillStyle = lin(c, P[0][0], P[0][1], P[2][0], P[2][1], [[0, '#7cc8ff'], [1, '#1c4f9c']]); c.fill(); contorno(c, 1.4);
+  const L = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; c.strokeStyle = 'rgba(220,240,255,.7)'; c.lineWidth = 1;
+  for (const t of [1 / 3, 2 / 3]) for (const [a, b, e, f] of [[P[0], P[1], P[3], P[2]], [P[0], P[3], P[1], P[2]]]) { c.beginPath(); c.moveTo(...L(a, b, t)); c.lineTo(...L(e, f, t)); c.stroke(); }
 }
 // sol (horas do dia no Apreciar): n raios, cor do disco
 function sol(c, x, y, r, cores, raios = 10) {
@@ -141,30 +255,62 @@ const D = {
   modulo(c) { sombra(c); for (let i = 0; i < 3; i++) { const y = 66 - i * 14, x0 = 12 + i * 8, x1 = 84 - i * 8; c.beginPath(); c.moveTo(x0, y); c.quadraticCurveTo(48, y + 10, x1, y); c.lineTo(x1, y - 10); c.quadraticCurveTo(48, y, x0, y - 10); c.closePath(); c.fillStyle = lin(c, 0, y - 10, 0, y + 6, [[0, '#ffd08a'], [1, '#c98a3e']]); c.fill(); contorno(c, 1.6); c.beginPath(); c.moveTo(x0, y - 10); c.quadraticCurveTo(48, y, x1, y - 10); c.lineTo(x1 - 2, y - 13); c.quadraticCurveTo(48, y - 4, x0 + 2, y - 13); c.closePath(); c.fillStyle = '#5f8f3e'; c.fill(); contorno(c, 1.2); c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x0, y - 1); c.quadraticCurveTo(48, y + 9, x1, y - 1); c.stroke(); } },
   // lixeira (descartar)
   // disposição da equipe: cafezinho fumegante
-  // ---- prédios do canteiro ----
-  'predio:escritorio'(c) { sombra(c); caixa(c, 12, 46, 56, 30, 16, '#f0ece2', '#d8d2c4', '#b4ac9c'); c.fillStyle = '#2e9cf0'; for (const x of [18, 34, 50]) c.fillRect(x, 52, 11, 9); contorno(c, 1); c.fillStyle = '#50667c'; c.fillRect(20, 66, 9, 10); rr(c, 60, 16, 26, 30, 3); c.fillStyle = '#d08a42'; c.fill(); contorno(c, 1.6); rr(c, 63, 21, 20, 22, 2); c.fillStyle = '#f5f0e6'; c.fill(); c.strokeStyle = '#6c8298'; c.lineWidth = 1.8; for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(66, 27 + i * 6); c.lineTo(80, 27 + i * 6); c.stroke(); } },
-  'predio:almox'(c) { sombra(c); c.beginPath(); c.moveTo(10, 44); c.lineTo(48, 22); c.lineTo(86, 44); c.lineTo(86, 80); c.lineTo(10, 80); c.closePath(); c.fillStyle = lin(c, 0, 22, 0, 80, [[0, '#dfe4ea'], [1, '#98a4b0']]); c.fill(); contorno(c); rr(c, 30, 48, 36, 32, 2); c.fillStyle = '#50667c'; c.fill(); c.strokeStyle = 'rgba(200,210,220,.7)'; c.lineWidth = 1.5; for (let i = 1; i < 6; i++) { c.beginPath(); c.moveTo(30, 48 + i * 5.3); c.lineTo(66, 48 + i * 5.3); c.stroke(); } caixa(c, 36, 68, 12, 12, 5, '#f8d08a', '#e2a052', '#b8742c'); caixa(c, 50, 70, 10, 10, 4, '#f8d08a', '#e2a052', '#b8742c'); },
-  'predio:carpintaria'(c) { sombra(c); c.save(); c.translate(48, 66); c.rotate(-0.12); rr(c, -38, -8, 76, 16, 3); c.fillStyle = lin(c, 0, -8, 0, 8, [[0, '#f8d08a'], [1, '#b8742c']]); c.fill(); contorno(c, 1.6); c.strokeStyle = 'rgba(120,80,40,.5)'; c.lineWidth = 1.2; for (const y of [-3, 3]) { c.beginPath(); c.moveTo(-36, y); c.lineTo(36, y); c.stroke(); } c.restore();
-    c.save(); c.translate(52, 40); c.rotate(-0.5); c.beginPath(); c.moveTo(-30, -8); c.lineTo(22, -8); c.lineTo(22, 6); c.lineTo(-30, 10); c.closePath(); c.fillStyle = lin(c, 0, -8, 0, 10, [[0, '#f4f7fa'], [1, '#98a4b0']]); c.fill(); contorno(c, 1.6); c.fillStyle = '#6d7884'; for (let x = -28; x < 22; x += 5) { c.beginPath(); c.moveTo(x, 10 - (x + 30) * 0.08); c.lineTo(x + 2.5, 14 - (x + 30) * 0.08); c.lineTo(x + 5, 10 - (x + 30) * 0.08); c.fill(); } rr(c, 20, -12, 18, 22, 6); c.fillStyle = '#f04a3a'; c.fill(); contorno(c, 1.6); rr(c, 25, -6, 8, 10, 3); c.fillStyle = '#7a2a1e'; c.fill(); c.restore(); },
-  'predio:concreto'(c) { sombra(c); c.save(); c.translate(46, 46); c.rotate(-0.35); c.beginPath(); c.ellipse(0, 0, 30, 20, 0, 0, 7); c.fillStyle = lin(c, 0, -20, 0, 20, [[0, '#f0a64a'], [1, '#b8622a']]); c.fill(); contorno(c); c.fillStyle = '#f5f0e6'; for (const x of [-18, -4, 10]) { c.beginPath(); c.moveTo(x, -19); c.lineTo(x + 7, -19); c.lineTo(x + 12, 19); c.lineTo(x + 5, 19); c.closePath(); c.fill(); } c.beginPath(); c.ellipse(30, 0, 5, 10, 0, 0, 7); c.fillStyle = '#50667c'; c.fill(); contorno(c, 1.4); c.restore(); rr(c, 18, 66, 58, 10, 3); c.fillStyle = '#50667c'; c.fill(); contorno(c, 1.6); for (const x of [26, 66]) { c.beginPath(); c.arc(x, 78, 6, 0, 7); c.fillStyle = '#2a2f38'; c.fill(); contorno(c, 1.4); } },
-  'predio:horto'(c) { sombra(c); c.beginPath(); c.moveTo(12, 80); c.lineTo(12, 50); c.quadraticCurveTo(48, 6, 84, 50); c.lineTo(84, 80); c.closePath(); c.fillStyle = 'rgba(190,232,245,.8)'; c.fill(); contorno(c); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 2; for (const x of [30, 48, 66]) { c.beginPath(); c.moveTo(x, 80); c.lineTo(x, x === 48 ? 28 : 36); c.stroke(); } c.beginPath(); c.moveTo(12, 56); c.quadraticCurveTo(48, 22, 84, 56); c.stroke(); for (const [x, s] of [[22, 12], [40, 14], [58, 12], [74, 10]]) { c.beginPath(); c.arc(x, 74 - s * 0.4, s * 0.55, 0, 7); c.fillStyle = rad(c, x - 2, 70 - s * 0.6, 1, s * 0.6, [[0, '#a6ee6a'], [1, '#2e8a22']]); c.fill(); } rr(c, 12, 74, 72, 6, 2); c.fillStyle = '#8a5a2e'; c.fill(); },
-  'predio:serralheria'(c) { sombra(c); c.save(); c.translate(44, 56); c.rotate(-0.3); const g = lin(c, 0, -16, 0, 16, [[0, '#eef2f6'], [1, '#6d7884']]); c.fillStyle = g; c.beginPath(); c.rect(-34, -16, 68, 7); c.rect(-5, -9, 10, 18); c.rect(-34, 9, 68, 7); c.fill(); c.strokeStyle = 'rgba(20,16,12,.55)'; c.lineWidth = 1.6; c.strokeRect(-34, -16, 68, 7); c.strokeRect(-34, 9, 68, 7); c.strokeRect(-5, -9, 10, 18); c.restore();
-    c.save(); c.translate(72, 30); c.fillStyle = '#ffd06a'; c.beginPath(); for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2, r = i % 2 ? 4 : 13; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill(); c.strokeStyle = 'rgba(200,110,20,.7)'; c.lineWidth = 1.2; c.stroke(); c.restore(); },
-  'predio:vidracaria'(c) { sombra(c); c.strokeStyle = '#6d7884'; c.lineWidth = 5; c.beginPath(); c.moveTo(22, 82); c.lineTo(34, 24); c.moveTo(74, 82); c.lineTo(62, 24); c.stroke(); c.beginPath(); c.moveTo(26, 70); c.lineTo(32, 20); c.lineTo(72, 26); c.lineTo(70, 76); c.closePath(); c.fillStyle = lin(c, 26, 20, 72, 76, [[0, 'rgba(215,245,255,.95)'], [0.55, 'rgba(120,196,230,.85)'], [1, 'rgba(70,150,200,.9)']]); c.fill(); contorno(c); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 3; c.beginPath(); c.moveTo(38, 30); c.lineTo(34, 52); c.moveTo(46, 32); c.lineTo(43, 44); c.stroke(); },
-  'predio:eletrica'(c) { sombra(c); c.beginPath(); c.ellipse(40, 58, 22, 24, 0, 0, 7); c.fillStyle = '#b06a2c'; c.fill(); contorno(c); c.strokeStyle = '#e0894a'; c.lineWidth = 3.2; for (let i = 0; i < 7; i++) { const y = 38 + i * 6; c.beginPath(); c.moveTo(20, y); c.quadraticCurveTo(40, y + 4, 60, y); c.stroke(); } c.beginPath(); c.moveTo(70, 14); c.lineTo(54, 40); c.lineTo(66, 40); c.lineTo(58, 64); c.lineTo(80, 32); c.lineTo(68, 32); c.closePath(); c.fillStyle = lin(c, 54, 14, 80, 64, [[0, '#fff3a0'], [1, '#f0a41a']]); c.fill(); contorno(c, 1.8); },
-  'predio:laboratorio'(c) { sombra(c); rr(c, 22, 74, 52, 8, 3); c.fillStyle = '#50667c'; c.fill(); contorno(c, 1.6); c.strokeStyle = '#50667c'; c.lineWidth = 7; c.lineCap = 'round'; c.beginPath(); c.moveTo(62, 74); c.quadraticCurveTo(72, 50, 56, 36); c.stroke(); c.save(); c.translate(46, 34); c.rotate(-0.5); rr(c, -7, -24, 14, 38, 4); c.fillStyle = lin(c, -7, 0, 7, 0, [[0, '#f4f7fa'], [1, '#98a4b0']]); c.fill(); contorno(c, 1.6); rr(c, -9, -28, 18, 7, 2); c.fillStyle = '#2a2f38'; c.fill(); c.restore(); rr(c, 30, 54, 30, 5, 2); c.fillStyle = '#98a4b0'; c.fill(); contorno(c, 1.2); c.beginPath(); c.arc(40, 50, 4, 0, 7); c.fillStyle = '#6fd39a'; c.fill(); },
+  // ---- prédios do canteiro: os galpões do mundo, cada um com o que o distingue (um desenho por prédio) ----
+  'predio:escritorio'(c) {
+    c.strokeStyle = '#8a96a4'; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.moveTo(78, 66); c.lineTo(78, 10); c.stroke();
+    c.beginPath(); c.moveTo(79, 11); c.quadraticCurveTo(86, 7, 94, 12); c.lineTo(94, 25); c.quadraticCurveTo(86, 20, 79, 24); c.closePath(); c.fillStyle = lin(c, 79, 0, 94, 0, [[0, '#6fe8d0'], [1, '#1f9c8a']]); c.fill(); contorno(c, 1.3);
+    conteiner(c, 4, 58, 56, 20, 16, true); conteiner(c, 16, 38, 50, 20, 16, false);
+  },
+  'predio:almox'(c) { galpao(c, 6, 46, 60, 32, 18, PAREDE.chapa, 'abobada', 'enrolar'); for (const [x, y, s] of [[8, 80, 1], [23, 82, 0.85], [11, 69, 0.8]]) caixa(c, x, y, 13 * s, 10 * s, 6 * s, '#ffe0a8', '#e8a85a', '#b8742c'); },
+  'predio:usina1'(c) { usinaIc(c, 1, false); },
+  'predio:usina2'(c) { usinaIc(c, 2, true); },
+  'predio:usina3'(c) { usinaIc(c, 3, false); },
+  'predio:carpintaria'(c) { galpao(c, 4, 46, 56, 28, 18, PAREDE.madeira, 'abobada'); for (const [x, y] of [[64, 84], [76, 84], [88, 84], [70, 74], [82, 74], [76, 64]]) tronco(c, x, y, 6.2); },
+  'predio:concreto'(c) { silo(c, 74, 62, 8.5, 42); galpao(c, 4, 48, 54, 26, 16, PAREDE.concreto, 'abobada'); betoneira(c, 76, 74); },
+  'predio:horto'(c) {
+    galpao(c, 6, 50, 62, 26, 18, ['rgba(222,247,253,.9)', 'rgba(176,226,242,.9)', 'rgba(150,206,230,.85)'], 'vidro', null, (c) => { for (const [x, y, s] of [[16, 70, 7], [28, 72, 8], [42, 70, 7], [55, 72, 8], [70, 64, 6], [80, 59, 6]]) { c.beginPath(); c.arc(x, y, s, 0, 7); c.fillStyle = rad(c, x - s * 0.3, y - s * 0.4, 1, s, [[0, '#b4f07a'], [1, '#2e8a22']]); c.fill(); contorno(c, 1.1); } });
+    rr(c, 6, 73, 62, 4, 1.5); c.fillStyle = '#8a5a2e'; c.fill();
+  },
+  'predio:serralheria'(c) {
+    galpao(c, 4, 44, 56, 28, 18, PAREDE.chapa, 'abobada');
+    for (let i = 0; i < 4; i++) { const y = 86 - i * 4.4, x0 = 32 + i * 2.5; rr(c, x0, y - 3.8, 56, 3.8, 1.8); c.fillStyle = lin(c, 0, y - 3.8, 0, y, [[0, '#eef3f8'], [1, '#65707c']]); c.fill(); contorno(c, 1.1); }
+    c.save(); c.translate(80, 40); c.fillStyle = '#ffe066'; c.beginPath(); for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2, r = i % 2 ? 4 : 12; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); c.fill(); c.strokeStyle = 'rgba(210,120,20,.8)'; c.lineWidth = 1.2; c.stroke(); c.beginPath(); c.arc(0, 0, 3.5, 0, 7); c.fillStyle = '#fff'; c.fill(); c.restore();
+  },
+  'predio:vidracaria'(c) {
+    galpao(c, 4, 46, 52, 28, 16, PAREDE.branca, 'abobada');
+    for (let i = 0; i < 3; i++) { const x = 58 + i * 10; c.beginPath(); c.moveTo(x, 88); c.lineTo(x + 7, 50); c.lineTo(x + 19, 52); c.lineTo(x + 12, 88); c.closePath(); c.fillStyle = lin(c, x, 50, x + 19, 88, [[0, 'rgba(225,248,255,.95)'], [0.6, 'rgba(130,200,236,.9)'], [1, 'rgba(80,150,205,.92)']]); c.fill(); contorno(c, 1.3); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.8; c.beginPath(); c.moveTo(x + 6, 76); c.lineTo(x + 10, 58); c.stroke(); }
+  },
+  'predio:eletrica'(c) {
+    galpao(c, 4, 48, 54, 26, 16, PAREDE.branca, 'abobada'); painelSolar(c, [[12, 31], [42, 20], [60, 27], [30, 39]]); bobina(c, 78, 76);
+    c.beginPath(); c.moveTo(72, 30); c.lineTo(63, 46); c.lineTo(69, 46); c.lineTo(65, 58); c.lineTo(78, 40); c.lineTo(72, 40); c.closePath(); c.fillStyle = lin(c, 63, 30, 78, 58, [[0, '#fff3a0'], [1, '#f0a41a']]); c.fill(); contorno(c, 1.4);
+  },
+  'predio:laboratorio'(c) {
+    galpao(c, 4, 48, 54, 26, 16, PAREDE.branca, 'abobada');
+    rr(c, 47, 34, 32, 5, 2); c.fillStyle = '#dfe5ec'; c.fill(); contorno(c, 1.2);
+    c.beginPath(); c.moveTo(49, 35); c.arc(63, 35, 14, Math.PI, 0); c.closePath(); c.fillStyle = rad(c, 57, 27, 2, 18, [[0, '#ffffff'], [1, '#c8d2dc']]); c.fill(); contorno(c, 1.5);
+    c.beginPath(); c.moveTo(61, 22); c.lineTo(67, 22.5); c.lineTo(66, 35); c.lineTo(60, 35); c.closePath(); c.fillStyle = '#2a2f38'; c.fill();
+    for (let i = 0; i < 3; i++) { const x = 66 + i * 9, yb = 88 - i * 2; c.beginPath(); c.moveTo(x - 4, yb - 14); c.lineTo(x - 4, yb); c.ellipse(x, yb, 4, 1.6, 0, Math.PI, 0, true); c.lineTo(x + 4, yb - 14); c.closePath(); c.fillStyle = lin(c, x - 4, 0, x + 4, 0, [[0, '#8ff0dc'], [1, '#1f8c7c']]); c.fill(); contorno(c, 1.2); c.beginPath(); c.ellipse(x, yb - 14, 4, 1.6, 0, 0, 7); c.fillStyle = '#c8fff2'; c.fill(); contorno(c, 1); }
+  },
   // ---- interface ----
-  // moeda de crédito da Holding: borda grossa, face dourada com anel e o H em relevo
+  // moeda de crédito da Holding em latão: borda grossa, face com a serrilha gravada e o H em relevo
   creditos(c) {
-    c.beginPath(); c.arc(48, 51, 36, 0, 7); c.fillStyle = lin(c, 0, 16, 0, 88, [[0, '#ffd84a'], [1, '#c87200']]); c.fill(); contorno(c, 2.4);
-    c.beginPath(); c.arc(48, 47, 33, 0, 7); c.fillStyle = rad(c, 38, 34, 3, 42, [[0, '#fff8c4'], [0.5, '#ffd23a'], [1, '#f2a00c']]); c.fill(); contorno(c, 1.6);
-    c.beginPath(); c.arc(48, 47, 25, 0, 7); c.strokeStyle = 'rgba(196,112,0,.6)'; c.lineWidth = 2.6; c.stroke();
+    c.beginPath(); c.arc(48, 51, 36, 0, 7); c.fillStyle = lin(c, 0, 16, 0, 88, [[0, '#f3dc98'], [0.5, '#c9a24a'], [1, '#7a5a1c']]); c.fill(); contorno(c, 2.4);
+    c.beginPath(); c.arc(48, 47, 33, 0, 7); c.fillStyle = rad(c, 38, 34, 3, 42, [[0, '#fff6d8'], [0.5, '#e6c878'], [1, '#b8903a']]); c.fill(); contorno(c, 1.6);
+    c.beginPath(); c.arc(48, 47, 25, 0, 7); c.strokeStyle = 'rgba(122,90,28,.6)'; c.lineWidth = 2.6; c.stroke();
+    c.fillStyle = 'rgba(122,90,28,.45)'; for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; c.beginPath(); c.arc(48 + Math.cos(a) * 29, 47 + Math.sin(a) * 29, 1.1, 0, 7); c.fill(); }
     const H = (dx, dy, cor) => { c.fillStyle = cor; rr(c, 36 + dx, 33 + dy, 8, 28, 2.5); c.fill(); rr(c, 52 + dx, 33 + dy, 8, 28, 2.5); c.fill(); c.fillRect(42 + dx, 44 + dy, 12, 6); };
-    H(-0.8, -0.9, 'rgba(255,250,210,.9)'); H(1.3, 1.5, 'rgba(120,52,0,.8)'); H(0, 0, lin(c, 0, 33, 0, 61, [[0, '#ffc62e'], [1, '#d87800']]));
+    H(-0.8, -0.9, 'rgba(255,250,225,.9)'); H(1.3, 1.5, 'rgba(96,66,14,.85)'); H(0, 0, lin(c, 0, 33, 0, 61, [[0, '#ecd490'], [1, '#a8822e']]));
     reflexo(c, 33, 30, 12, 6, 0.9, -0.7);
   },
-  // Mutirão: capacete laranja com a estrela da comunidade
-  mutirao(c) { capacete(c, ['#ffe0a8', '#ff9a24', '#cc5206'], () => { c.fillStyle = '#fff'; estrela(c, 49, 42, 5.5, 12.5); c.fill(); contorno(c, 1.6); }); },
+  // ficha de Mutirão em latão: borda recortada e o capacete da comunidade gravado, com a estrela
+  mutirao(c) {
+    c.beginPath(); for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2, r = 37 + 2.6 * Math.cos(a * 12); c.lineTo(48 + Math.cos(a) * r, 50 + Math.sin(a) * r); } c.closePath();
+    c.fillStyle = lin(c, 0, 12, 0, 90, [[0, '#f3dc98'], [0.5, '#c9a24a'], [1, '#7a5a1c']]); c.fill(); contorno(c, 2.4);
+    c.beginPath(); c.arc(48, 49, 29, 0, 7); c.fillStyle = rad(c, 40, 38, 3, 36, [[0, '#d9b765'], [0.6, '#b08a38'], [1, '#86661f']]); c.fill(); contorno(c, 1.5);
+    c.save(); c.translate(48, 51); c.scale(0.52, 0.52); c.translate(-49, -46);
+    capacete(c, ['#fffaf0', '#f0d890', '#b8903a'], () => { c.fillStyle = '#fffaf0'; estrela(c, 49, 42, 6, 13); c.fill(); contorno(c, 1.8); });
+    c.restore();
+  },
   xp(c) { c.lineJoin = 'round'; estrela(c, 48, 52, 17, 39); c.fillStyle = rad(c, 40, 38, 2, 46, [[0, '#fff9cc'], [0.5, '#ffd22a'], [1, '#ef8400']]); c.fill(); contorno(c, 2.4); estrela(c, 48, 52, 8, 19); c.fillStyle = 'rgba(255,255,255,.28)'; c.fill(); reflexo(c, 40, 36, 9, 5, 0.9); },
   // moradores: duas pessoas azuis, como no BuildIt
   pop(c) {
@@ -176,23 +322,16 @@ const D = {
     };
     pessoa(63, 44, 0.88, ['#78ceff', '#2a88dc', '#d4f0ff']); pessoa(38, 52, 1, ['#3aa2f7', '#1260c2', '#b4e2ff']);
   },
-  // bem-estar: carinha verde (70% ou mais), amarela e vermelha
-  bem(c) { carinha(c, ['#eaffa0', '#74d638', '#2c961a'], 1); },
-  'bem-medio'(c) { carinha(c, ['#fff6ae', '#ffcf2e', '#e39406'], 0); },
-  'bem-baixo'(c) { carinha(c, ['#ffc8ae', '#ff6a48', '#c42e1a'], -1); },
+  // bem-estar: folha verde de pé (70% ou mais), amarelada e inclinada, laranja e caída
+  bem(c) { folhaBem(c, ['#dcff9e', '#62c832', '#2a8a1a'], 1); },
+  'bem-medio'(c) { folhaBem(c, ['#fff6a8', '#d8c42c', '#8f8010'], 0); },
+  'bem-baixo'(c) { folhaBem(c, ['#ffd8a8', '#e8782a', '#9a3e10'], -1); },
   agua(c) { c.beginPath(); c.moveTo(48, 12); c.bezierCurveTo(60, 32, 76, 46, 76, 60); c.arc(48, 60, 28, 0, Math.PI); c.bezierCurveTo(20, 46, 36, 32, 48, 12); c.fillStyle = rad(c, 40, 50, 2, 38, [[0, '#e4f8ff'], [0.45, '#48b8f8'], [1, '#1464c4']]); c.fill(); contorno(c, 2.4); reflexo(c, 38, 54, 6, 10, 0.8, 0.3); },
   energia(c) { c.lineJoin = 'round'; c.beginPath(); c.moveTo(58, 8); c.lineTo(20, 54); c.lineTo(44, 54); c.lineTo(34, 88); c.lineTo(78, 36); c.lineTo(54, 36); c.closePath(); c.fillStyle = lin(c, 20, 8, 78, 88, [[0, '#fff7a0'], [0.5, '#ffd21a'], [1, '#f08a00']]); c.fill(); contorno(c, 2.4); reflexo(c, 46, 30, 6, 3, 0.8, -0.9); },
   saneamento(c) { folha(c, 48, 86, 66, 0, '#2f9a22'); c.beginPath(); c.moveTo(48, 34); c.bezierCurveTo(55, 45, 61, 51, 61, 58); c.arc(48, 58, 13, 0, Math.PI); c.bezierCurveTo(35, 51, 41, 45, 48, 34); c.fillStyle = rad(c, 45, 52, 1, 14, [[0, '#e4f8ff'], [1, '#2a90e0']]); c.fill(); contorno(c, 1.6); },
-  // composição concluída: a arcologia em miniatura (tambor com janelas acesas, teto verde e cúpula)
-  vida(c) {
-    c.beginPath(); c.ellipse(48, 72, 42, 13, 0, 0, 7); c.fillStyle = rad(c, 42, 68, 3, 44, [[0, '#aef07a'], [1, '#3a9a28']]); c.fill(); contorno(c, 2.2);
-    c.beginPath(); c.moveTo(20, 34); c.lineTo(20, 64); c.ellipse(48, 64, 28, 9, 0, Math.PI, 0, true); c.lineTo(76, 34); c.closePath();
-    c.fillStyle = lin(c, 20, 0, 76, 0, [[0, '#fff8ea'], [0.55, '#ffe8c0'], [1, '#d09a5c']]); c.fill(); contorno(c, 2);
-    c.fillStyle = '#ffae26'; for (const y of [42, 52]) for (let k = 0; k < 6; k++) { const a = Math.PI * (0.12 + k * 0.152); const x = 48 - Math.cos(a) * 26; const w = 5.2 * Math.sin(a) + 1.4; rr(c, x - w / 2, y + Math.sin(a) * 8.4, w, 6, 1); c.fill(); }
-    c.beginPath(); c.ellipse(48, 34, 28, 9, 0, 0, 7); c.fillStyle = rad(c, 42, 31, 2, 30, [[0, '#c4f58a'], [1, '#4aac30']]); c.fill(); contorno(c, 2);
-    c.beginPath(); c.arc(48, 31, 10, Math.PI, 0); c.closePath(); c.fillStyle = rad(c, 45, 27, 1, 11, [[0, '#f0fcff'], [1, '#48b4ec']]); c.fill(); contorno(c, 1.5);
-    for (const [x, y, r] of [[13, 64, 8], [83, 62, 9], [31, 32, 4.5], [65, 33, 4.5]]) { c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = rad(c, x - r * 0.3, y - r * 0.4, 1, r, [[0, '#b6f070'], [1, '#2a8a1e']]); c.fill(); contorno(c, 1.4); }
-  },
+  // composição concluída: a planta da maquete vista de cima ('vida' é o nome que o HUD e os brindes usam)
+  planta(c) { plantaSitio(c); },
+  vida(c) { plantaSitio(c); },
   // Obras: o capacete dourado do botão grande
   obras(c) { capacete(c, ['#fff5b0', '#ffc81c', '#d68400']); },
   // Produção: galpão azul com telhado em dente de serra e chaminé vermelha
@@ -284,11 +423,25 @@ const D = {
     c.beginPath(); c.rect(43, 57, 10, 11); c.fillStyle = lin(c, 0, 57, 0, 68, [[0, '#ffd23a'], [1, '#c87a00']]); c.fill(); contorno(c, 1.6);
     rr(c, 29, 67, 38, 14, 4); c.fillStyle = lin(c, 0, 67, 0, 81, [[0, '#ffd23a'], [1, '#c87400']]); c.fill(); contorno(c, 2); c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(35, 71, 26, 3);
   },
-  // selo do nível: roseta rosa (o número vai por cima, em HTML)
-  nivel(c) {
-    c.beginPath(); for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2; const r = i % 2 ? 39 : 45; c.lineTo(48 + Math.cos(a) * r, 48 + Math.sin(a) * r); } c.closePath();
-    c.fillStyle = rad(c, 40, 34, 4, 50, [[0, '#ffa2c0'], [0.6, '#f0426f'], [1, '#b0144a']]); c.fill(); contorno(c, 2.2);
-    c.beginPath(); c.arc(48, 48, 32, 0, 7); c.fillStyle = rad(c, 42, 38, 2, 36, [[0, '#ff8cad'], [1, '#d42658']]); c.fill(); c.strokeStyle = 'rgba(255,226,236,.75)'; c.lineWidth = 2.6; c.stroke();
+  // selo do nível no HUD: o Anel do Campus com os terraços vazados (o XP os enche por baixo, no sentido horário)
+  'anel-campus'(c) { anelCampus(c, false); },
+  // o mesmo anel com os terraços verdes: o selo do modal de subir de nível
+  nivel(c) { anelCampus(c, true); },
+  // placa de latão gravada (o capítulo): parafusos nos cantos, o anel do campus e o letreiro
+  'placa-latao'(c) {
+    rr(c, 6, 20, 84, 56, 8); c.fillStyle = lin(c, 0, 20, 0, 76, [[0, '#f6e2a4'], [0.5, '#d4b060'], [1, '#9a7428']]); c.fill(); contorno(c, 2.2);
+    rr(c, 11, 25, 74, 46, 5); c.strokeStyle = 'rgba(122,90,28,.6)'; c.lineWidth = 1.6; c.stroke(); rr(c, 12.5, 26.5, 71, 43, 4.5); c.strokeStyle = 'rgba(255,250,225,.55)'; c.lineWidth = 1; c.stroke();
+    for (const [x, y] of [[16, 30], [80, 30], [16, 66], [80, 66]]) { c.beginPath(); c.arc(x, y, 2.6, 0, 7); c.fillStyle = rad(c, x - 0.8, y - 0.8, 0.3, 3, [[0, '#fff6d8'], [1, '#8a6a24']]); c.fill(); c.strokeStyle = 'rgba(90,64,16,.7)'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(x - 1.6, y + 1.2); c.lineTo(x + 1.6, y - 1.2); c.stroke(); }
+    c.strokeStyle = '#6e4e14'; c.lineWidth = 3.2; c.beginPath(); c.arc(31, 48, 9, 0, 7); c.stroke(); c.beginPath(); c.arc(31, 48, 3.4, 0, 7); c.fillStyle = '#6e4e14'; c.fill();
+    c.fillStyle = '#6e4e14'; rr(c, 45, 40, 32, 5.5, 2.7); c.fill(); rr(c, 45, 51, 22, 4.5, 2.2); c.fill(); c.fillStyle = 'rgba(255,248,220,.6)'; rr(c, 45, 46, 32, 1.2, 0.6); c.fill();
+    reflexo(c, 32, 28, 18, 3.5, 0.75, 0);
+  },
+  // bichos do santuário: a pegada
+  bichos(c) {
+    const cor = (x, y, r) => rad(c, x - r * 0.3, y - r * 0.4, 1, r * 1.2, [[0, '#f8c690'], [0.6, '#c47a3a'], [1, '#7c4418']]);
+    c.beginPath(); c.moveTo(48, 46); c.bezierCurveTo(68, 44, 80, 70, 66, 79); c.bezierCurveTo(58, 84, 38, 84, 30, 79); c.bezierCurveTo(16, 70, 28, 44, 48, 46); c.closePath(); c.fillStyle = cor(48, 62, 24); c.fill(); contorno(c, 2.2);
+    for (const [x, y, rx, ry, a] of [[22, 42, 8, 10.5, -0.45], [37, 27, 8.5, 11, -0.12], [59, 27, 8.5, 11, 0.12], [74, 42, 8, 10.5, 0.45]]) { c.beginPath(); c.ellipse(x, y, rx, ry, a, 0, 7); c.fillStyle = cor(x, y, ry); c.fill(); contorno(c, 2); reflexo(c, x - 2, y - 4, 3, 2, 0.7, a - 0.5); }
+    reflexo(c, 42, 56, 9, 4, 0.7, -0.3);
   },
   lixo(c) { c.beginPath(); c.moveTo(26, 30); c.lineTo(70, 30); c.lineTo(65, 82); c.lineTo(31, 82); c.closePath(); c.fillStyle = lin(c, 26, 0, 70, 0, [[0, '#dce4ec'], [0.5, '#a2b0be'], [1, '#6a7888']]); c.fill(); contorno(c);
     c.strokeStyle = 'rgba(60,70,84,.55)'; c.lineWidth = 3; for (const x of [38, 48, 58]) { c.beginPath(); c.moveTo(x, 38); c.lineTo(x - (x - 48) * 0.1, 76); c.stroke(); }
@@ -346,13 +499,6 @@ const D = {
     c.beginPath(); c.moveTo(52, 36); c.lineTo(38, 58); c.lineTo(48, 58); c.lineTo(44, 74); c.lineTo(60, 50); c.lineTo(50, 50); c.closePath(); c.fillStyle = lin(c, 0, 36, 0, 74, [[0, '#fff2a0'], [0.5, '#ffd23a'], [1, '#f09000']]); c.fill(); contorno(c, 1.8);
   },
 };
-// usinas: prédio de reciclagem com chaminé; o número de chaminés distingue I, II e III
-function usina(c, n) {
-  caixa(c, 12, 44, 54, 34, 16, '#f2f8fc', '#c4d4e2', '#90a6ba');
-  c.fillStyle = '#48b0f0'; for (const x of [18, 32, 46]) { rr(c, x, 52, 10, 9, 1.5); c.fill(); }
-  for (let i = 0; i < n; i++) { const x = 20 + i * 14; c.beginPath(); c.rect(x, 18 + i * 3, 9, 28 - i * 3); c.fillStyle = lin(c, x, 0, x + 9, 0, [[0, '#ff6a50'], [1, '#b8301c']]); c.fill(); contorno(c, 1.4); c.fillStyle = '#fff'; c.fillRect(x, 22 + i * 3, 9, 3); c.fillStyle = 'rgba(240,246,250,.9)'; c.beginPath(); c.arc(x + 5, 12 + i * 3, 5, 0, 7); c.fill(); }
-  c.save(); c.translate(40, 68); c.strokeStyle = '#2fae3a'; c.lineWidth = 3.5; c.lineCap = 'round'; for (let i = 0; i < 3; i++) { c.rotate((Math.PI * 2) / 3); c.beginPath(); c.arc(0, 0, 8, 0.2, 1.6); c.stroke(); c.beginPath(); c.moveTo(8 * Math.cos(1.6) - 3, 8 * Math.sin(1.6)); c.lineTo(8 * Math.cos(1.6) + 1, 8 * Math.sin(1.6) + 4); c.stroke(); } c.restore();
-}
 // retratos redondos dos conselheiros: fundo na cor de cada um, busto, rosto e o que distingue cada um
 const RETRATO = {
   iris: { fundo: ['#fff6e0', '#f4c870', '#cc8a26'], pele: ['#ffdcbc', '#eab48a'], roupa: ['#34c8b8', '#10867c'], gola: '#ffffff', cabelo: ['#6a3a22', '#3a1e10'] },
@@ -400,7 +546,6 @@ function retrato(c, q) {
 function desenho(nome) {
   if (D[nome]) return D[nome];
   if (nome.startsWith('retrato:')) { const q = nome.slice(8); return (c) => retrato(c, q); }
-  if (nome.startsWith('predio:')) { const id = nome.slice(7), P = PREDIOS[id]; if (P?.tipo === 'usina') { const n = Math.max(1, Math.min(3, +id.replace(/\D/g, '') || 1)); return (c) => usina(c, n); } return P?.tipo === 'armazem' ? D['predio:almox'] : D.producao; }
   return D.placa;
 }
 const tela0 = () => { const cv = document.createElement('canvas'); cv.width = cv.height = S; return cv; };
@@ -411,24 +556,33 @@ function medir(nome) {
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (d[(y * S + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   return x1 < 0 ? null : [x0 / K, y0 / K, (x1 + 1) / K, (y1 + 1) / K];
 }
-// acabamento comum: o desenho ampliado até 80% do quadro (folga para o contorno e a sombra), brilho no alto e um pouco de sombra
-// embaixo só onde há tinta, a silhueta dilatada vira o contorno azul-noite e dá a sombra projetada; por fim a cor
-// fica mais viva. Retrato: o círculo inteiro, só com o brilho.
+// acabamento comum: o desenho ampliado até 80% do quadro (folga para o contorno e a sombra); luz do alto à esquerda (brilho
+// no canto de cima e sombra que desce para a direita, só onde há tinta); a silhueta dilatada 1,8 px vira o contorno
+// azul-noite; uma elipse de contato sob a base dá a sombra (desvio 0 e 6, desfoque 10); por fim a cor fica um pouco
+// mais viva (saturate 1,1). Retrato: o círculo inteiro, só com o brilho.
 function tela(nome) {
   const retr = nome.startsWith('retrato:');
-  const base = tela0(), c = base.getContext('2d'); c.lineJoin = 'round';
-  c.save(); if (retr) c.scale(K, K); else { const bx = medir(nome); const e = bx ? Math.min(1.5, 76.8 / Math.max(bx[2] - bx[0], bx[3] - bx[1])) : 0.9; c.translate(S / 2, S / 2 - 3); c.scale(K * e, K * e); if (bx) c.translate(-(bx[0] + bx[2]) / 2, -(bx[1] + bx[3]) / 2); else c.translate(-48, -48); } desenho(nome)(c); c.restore();
+  const base = tela0(), c = base.getContext('2d'); c.lineJoin = 'round'; let pe = null;
+  c.save();
+  if (retr) c.scale(K, K);
+  else {
+    const bx = medir(nome); const e = bx ? Math.min(1.5, 76.8 / Math.max(bx[2] - bx[0], bx[3] - bx[1])) : 0.9; c.translate(S / 2, S / 2 - 3); c.scale(K * e, K * e);
+    if (bx) { c.translate(-(bx[0] + bx[2]) / 2, -(bx[1] + bx[3]) / 2); pe = [S / 2, S / 2 - 3 + ((bx[3] - bx[1]) * K * e) / 2, ((bx[2] - bx[0]) * K * e) / 2]; } else c.translate(-48, -48);
+  }
+  desenho(nome)(c); c.restore();
   c.save(); c.globalCompositeOperation = 'source-atop';
-  let g = c.createRadialGradient(S * 0.36, S * 0.2, S * 0.02, S * 0.36, S * 0.2, S * 0.62); g.addColorStop(0, `rgba(255,255,255,${retr ? 0.22 : 0.36})`); g.addColorStop(0.5, 'rgba(255,255,255,.08)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, S, S);
-  g = c.createLinearGradient(0, S * 0.5, 0, S); g.addColorStop(0, 'rgba(8,20,52,0)'); g.addColorStop(1, 'rgba(8,20,52,.16)'); c.fillStyle = g; c.fillRect(0, 0, S, S); c.restore();
+  let g = c.createRadialGradient(S * 0.3, S * 0.16, S * 0.02, S * 0.3, S * 0.16, S * 0.64); g.addColorStop(0, `rgba(255,255,255,${retr ? 0.22 : 0.36})`); g.addColorStop(0.5, 'rgba(255,255,255,.08)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, S, S);
+  g = c.createLinearGradient(S * 0.3, S * 0.3, S * 0.95, S * 0.95); g.addColorStop(0, 'rgba(8,20,52,0)'); g.addColorStop(1, 'rgba(8,20,52,.2)'); c.fillStyle = g; c.fillRect(0, 0, S, S); c.restore();
   if (retr) return base;
-  const sil = tela0(), x = sil.getContext('2d'); const R = 2.7;
+  const sil = tela0(), x = sil.getContext('2d'); const R = 1.8;
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; x.drawImage(base, Math.cos(a) * R, Math.sin(a) * R); }
   x.globalCompositeOperation = 'source-in'; x.fillStyle = '#15213b'; x.fillRect(0, 0, S, S);
+  x.globalCompositeOperation = 'destination-out'; x.drawImage(base, 0, 0);
   const out = tela0(), o = out.getContext('2d');
-  o.save(); o.shadowColor = 'rgba(0,18,48,.42)'; o.shadowBlur = 8; o.shadowOffsetX = 4 * S; o.shadowOffsetY = 5; o.drawImage(sil, -4 * S, 0); o.restore();
-  x.globalCompositeOperation = 'destination-out'; x.drawImage(base, 0, 0); o.drawImage(sil, 0, 0);
-  o.filter = 'saturate(1.18)'; o.drawImage(base, 0, 0); o.filter = 'none';
+  // (a elipse fica fora da tela e só a sombra dela entra: shadowOffsetX devolve os 4 S)
+  if (pe) { const rx = Math.max(10, pe[2] * 0.78); o.save(); o.shadowColor = 'rgba(0,18,48,.34)'; o.shadowBlur = 10; o.shadowOffsetX = 4 * S; o.shadowOffsetY = 6; o.beginPath(); o.ellipse(pe[0] - 4 * S, pe[1] - 5, rx, Math.min(8, rx * 0.22), 0, 0, 7); o.fillStyle = '#000'; o.fill(); o.restore(); }
+  o.drawImage(sil, 0, 0);
+  o.filter = 'saturate(1.1)'; o.drawImage(base, 0, 0); o.filter = 'none';
   return out;
 }
 export const LISTA_ICONES = Object.keys(D);
