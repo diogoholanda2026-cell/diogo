@@ -5,16 +5,18 @@
 // foto) com mar turquesa → azul, ondas e espuma branca na areia, alguns barcos e nuvens de algodão.
 // Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
-import { MESA } from '../data/planta.js';
+import { MESA, A } from '../data/planta.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
 import { tex } from './textures.js';
 import { treeGroup } from './forest.js';
+import { suave, heightAt } from './ground.js';
 import { comTomDoCeu } from './hao.js';
 
 export const MAR_Y = -0.25;                  // nível do mar (a água dos lagos da obra fica em -0,1)
-// linha da costa (oeste): x da água em função de z; a baía se fecha longe da obra, atrás e à frente
-export const costaX = (z) => -43 + 0.0007 * z * z + 1.8 * Math.sin(z * 0.07 + 0.5) + 1.0 * Math.sin(z * 0.17 + 2.1);
-const GLSL_COSTA = 'float costaX( float z ) { return -43.0 + 0.0007 * z * z + 1.8 * sin( z * 0.07 + 0.5 ) + 1.0 * sin( z * 0.17 + 2.1 ); }';
+// linha da costa (oeste): x da água em função de z; a baía se fecha longe da obra, atrás e à frente (base -57: na
+// vista da foto o mar e a praia ficam fora do canto superior esquerdo, que na foto é mata)
+export const costaX = (z) => -57 + 0.0007 * z * z + 1.8 * Math.sin(z * 0.07 + 0.5) + 1.0 * Math.sin(z * 0.17 + 2.1);
+const GLSL_COSTA = 'float costaX( float z ) { return -57.0 + 0.0007 * z * z + 1.8 * sin( z * 0.07 + 0.5 ) + 1.0 * sin( z * 0.17 + 2.1 ); }';
 const CX = (MESA.x0 + MESA.x1) / 2, CZ = (MESA.z0 + MESA.z1) / 2, HX = (MESA.x1 - MESA.x0) / 2, HZ = (MESA.z1 - MESA.z0) / 2;
 const EXT = 640;                             // meia largura do terreno (além do plano distante da câmera: sem borda visível)
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -108,7 +110,7 @@ function materialTerreno() {
           diffuseColor.rgb = mix( diffuseColor.rgb, cor, vTipo.x );
         }
         float mataK = vTipo.y;
-        if ( mataK > 0.01 ) diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( tCopas, vTerW.xz / 16.0 ).rgb, mataK );
+        if ( mataK > 0.01 ) diffuseColor.rgb = mix( diffuseColor.rgb, texture2D( tCopas, vTerW.xz / 16.0 ).rgb * 0.72, mataK ); // copas mais fundas, casadas com o chão da mesa
         diffuseColor.rgb *= 0.95 + 0.1 * hT( floor( vTerW.xz * 3.0 ) );`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         if ( mataK > 0.01 ) { vec3 nc = texture2D( tCopasN, vTerW.xz / 16.0 ).xyz * 2.0 - 1.0; // relevo das copas: u → +x, v → +z
@@ -225,6 +227,30 @@ function juntar(lista) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(N, 3)); g.setAttribute('color', new THREE.BufferAttribute(C, 3)); g.computeBoundingSphere(); return g;
 }
 
+// ---------------------------------------------------------------- carros
+// 8 a 16 carros nas vias da planta (A.vias: 6 na leste, 4 na oeste, 6 na sul quando existir), numa InstancedMesh
+// com a carroceria colorida por instância e a cabine escura por vértice; andam a 0,9 unidade/s pelas polilinhas
+// suavizadas (as mesmas da pintura do chão), voltando nas pontas; atualizados a cada 2 quadros sem alocar.
+const CARROS = { leste: 6, oeste: 4, sul: 6 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
+function carros() {
+  const vias = (A.vias || []).filter((v) => CARROS[v.id]); if (!vias.length) return null;
+  const partes = [];
+  const corpo = new THREE.BoxGeometry(0.42, 0.16, 0.2); corpo.translate(0, 0.11, 0); pinta(corpo, [1, 1, 1]); partes.push(corpo);
+  const cabine = new THREE.BoxGeometry(0.22, 0.1, 0.18); cabine.translate(-0.02, 0.24, 0); pinta(cabine, [0.043, 0.057, 0.083]); partes.push(cabine);
+  const geo = juntar(partes);
+  // vias amostradas: pontos [x, y, z] a cada ~0,25 (y do terreno) e comprimento acumulado
+  const R = rng(4343); const rotas = vias.map((v) => {
+    const pts = suave(v.pts, 6); const P = [], L = [0]; let acc = 0;
+    for (let i = 0; i < pts.length; i++) { const [x, z] = pts[i]; if (i) acc += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]); P.push(x, heightAt(x, z) + 0.02, z); if (i) L.push(acc); }
+    return { P: new Float32Array(P), L: new Float32Array(L), total: acc, n: pts.length };
+  });
+  const lista = []; rotas.forEach((r, k) => { for (let i = 0; i < CARROS[vias[k].id]; i++) lista.push({ r, s: R() * r.total, dir: R() < 0.5 ? 1 : -1, i: 0, cor: (R() * COR_CARRO.length) | 0 }); });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.1 });
+  const im = new THREE.InstancedMesh(geo, mat, lista.length); im.castShadow = false; im.receiveShadow = true; im.name = 'carros'; im.userData.lista = lista; im.frustumCulled = false;
+  const c = new THREE.Color(); lista.forEach((car, i) => im.setColorAt(i, c.setHex(COR_CARRO[car.cor])));
+  return im;
+}
+
 // ---------------------------------------------------------------- árvores
 // Faixa de mata em volta da obra (um bloco por lado, para o descarte por visão, com nível de detalhe por
 // célula), coqueiros nas dunas e bosques soltos nos campos
@@ -236,8 +262,10 @@ function arvoresFaixa() {
     if (d < 0.15 || !naFaixa(jx, jz) || jx - costaX(jz) < 7.5) continue;
     const dens = fbm(jx, jz, 6, 21, 3); if (dens < 0.3 && R() < 0.5) continue;
     if (R() < sm(0.6, 1.25, borda(jx, jz))) continue; // a mata rareia na orla de fora
-    const s = (0.5 + dens * 0.3 + R() * 0.12) * (0.85 + 0.15 * sm(0, 3, d));
-    const t = { x: jx, z: jz, y: alturaArredor(jx, jz), s, kind: 'folha', pal: R() < 0.012 ? 'outono' : 'mata', h: 0.9 + R() * 0.35, orla: d > 4 ? 0.5 : 3 };
+    // as mesmas três classes da mata da planta (arbusto, média, emergente), em manchas
+    const f = fbm(jx, jz, 4, 22, 2); const [s0, h] = f < 0.41 ? [0.3 + R() * 0.1, 0.7] : f > 0.62 ? [0.85 + R() * 0.2, 1.25 + R() * 0.15] : [0.55 + R() * 0.2, 1.0];
+    const s = s0 * (0.85 + 0.15 * sm(0, 3, d));
+    const t = { x: jx, z: jz, y: alturaArredor(jx, jz), s, kind: 'folha', pal: R() < 0.02 ? 'outono' : 'mata', h, orla: d > 6 ? 2 : 4 }; // junto da planta, o mesmo miolo fundo da mata da mesa
     lados[jx < MESA.x0 ? 0 : jx > MESA.x1 ? 2 : jz < MESA.z0 ? 1 : 3].push(t);
   }
   return lados;
@@ -249,7 +277,7 @@ function coqueiros() {
 }
 function bosques() {
   const R = rng(8181); const l = [];
-  for (let i = 0; i < 1400 && l.length < 520; i++) {
+  for (let i = 0; i < 1400 && l.length < 360; i++) {
     const x = -150 + R() * 300, z = -120 + R() * 190; const d = distPlanta(x, z), c = x - costaX(z);
     if (d < 11 || c < 10 || naFaixa(x, z)) continue;
     const g = fbm(x * 0.05, z * 0.05, 1, 818, 2); if (g < 0.56) continue; // bosques em grupos
@@ -271,8 +299,23 @@ export class Arredores {
     forest.arredores(arvoresFaixa());
     this._m4 = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1);
     this._barcos(0);
+    this.carros = carros(); if (this.carros) { engine.scene.add(this.carros); this._tCar = 0; this._carros(0); } // (na cena: ficam mesmo sem os arredores)
   }
   mostrar(on) { this.group.visible = on; this.forest.mostrarArredores(on); }
+  _carros(dt) {
+    const im = this.carros, lista = im.userData.lista, P3 = this._p, Q = this._q, E = this._e, S = this._s, M = this._m4; S.set(1, 1, 1);
+    for (let k = 0; k < lista.length; k++) {
+      const c = lista[k], r = c.r; c.s += c.dir * 0.9 * dt;
+      if (c.s >= r.total) { c.s = r.total; c.dir = -1; } else if (c.s <= 0) { c.s = 0; c.dir = 1; }
+      while (c.i < r.n - 2 && r.L[c.i + 1] < c.s) c.i++; while (c.i > 0 && r.L[c.i] > c.s) c.i--;
+      const i = c.i, a = i * 3, b = a + 3, seg = Math.max(1e-6, r.L[i + 1] - r.L[i]), t = clamp((c.s - r.L[i]) / seg, 0, 1);
+      const dx = (r.P[b] - r.P[a]) / seg * c.dir, dz = (r.P[b + 2] - r.P[a + 2]) / seg * c.dir; // direção do movimento (unitária no plano)
+      const lane = 0.11; // mão direita
+      P3.set(r.P[a] + (r.P[b] - r.P[a]) * t - dz * lane, r.P[a + 1] + (r.P[b + 1] - r.P[a + 1]) * t, r.P[a + 2] + (r.P[b + 2] - r.P[a + 2]) * t + dx * lane);
+      E.set(0, Math.atan2(-dz, dx), 0); Q.setFromEuler(E); im.setMatrixAt(k, M.compose(P3, Q, S));
+    }
+    im.instanceMatrix.needsUpdate = true;
+  }
   _barcos(t) {
     const im = this.barcos, pos = im.userData.pos; // (laço simples: nada alocado por quadro)
     for (let i = 0; i < pos.length; i++) {
@@ -283,8 +326,10 @@ export class Arredores {
   }
   // tempo do mar, nuvens com a cor do céu da hora (env.cores) e barcos balançando (a cada 2 quadros)
   update(t, env) {
+    const s = t / 1000;
+    if (this.carros && (this._q3 = (this._q3 || 0) + 1) % 2 === 0) { const dt = this._tCar ? Math.min(0.2, s - this._tCar) : 0; this._tCar = s; this._carros(dt); }
     if (!this.group.visible) return;
-    const s = t / 1000; this.mar.userData.U.marT.value = s;
+    this.mar.userData.U.marT.value = s;
     const U = this.nuvens.material.uniforms; U.nuvT.value = s; const f = this.e.scene.fog;
     if (env?.cores) { U.corLuz.value.copy(env.cores.nuvem); U.corSombra.value.copy(env.cores.nuvemSombra); }
     if (f) { U.fogColor.value.copy(f.color); U.fogNear.value = f.near; U.fogFar.value = f.far; }
