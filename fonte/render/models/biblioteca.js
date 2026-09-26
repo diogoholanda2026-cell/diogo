@@ -1,164 +1,214 @@
-// Biblioteca Central (torre em vaso de madeira: lajes brancas onduladas e grossas com floreiras, fachada de
-// estantes de madeira atrás de uma treliça diagonal de ripas cruzadas, pilares-árvore inclinados que se abrem
-// em "V" e um dossel quadrado de grelha de madeira clara com painéis translúcidos leitosos) e Centro de
-// Recursos Digitais (casco longo e baixo de arcos grossos de madeira clara com vidro por cima, apoiado no
-// bloco branco de escritório com terraço de trabalho).
+// Biblioteca Central (torre em vaso: cinco lajes brancas onduladas e grossas com floreiras pendentes, fachada em
+// xadrez de células, hastes esbeltas pelo perímetro e um jardim denso de cobertura com passeio perimetral e
+// pavilhão-estufa) e Centro de Recursos Digitais (casco baixo em leque com bico arredondado, grelha de madeira
+// laminada clara, vidro ardósia com caixilhos claros e escritório aberto à mostra, encostado no bloco branco de
+// escritório com terraço de trabalho).
 import * as THREE from 'three';
 import { A } from '../../data/planta.js';
-import { M } from '../materials.js';
+import { M, dupla } from '../materials.js';
 import { tex } from '../textures.js';
-import { beams, merge } from '../geom.js';
+import { beams, beamGeo, beamMatrix, sweep, flat, slabPoly, disc } from '../geom.js';
 import { treeGroup } from '../forest.js';
-import { hash } from '../../core/util.js';
+import { hash, clamp, TAU } from '../../core/util.js';
 
-export const FHB = 0.83; // pé-direito da biblioteca (6 andares: a cobertura fica a ~5.1, logo abaixo do dossel)
-const raioAndar = (R, f) => R * (0.84 + 0.035 * f); // torre em vaso: mais estreita embaixo
+export const FHB = 0.83; // (legado: pé-direito médio da torre; as cotas reais estão em Y_ANDAR)
+const Y_ANDAR = [0.55, 1.25, 2.15, 3.05, 3.95]; const TOPO = 5.0; // base de cada laje e topo do último pavimento
+const yAndar = (f) => Y_ANDAR[f];
+const raioAndar = (R, f) => R * (0.62 + 0.09 * f); // torre em vaso: 1,70 embaixo a 2,70 em cima (R 2,75)
 // materiais próprios (uma instância por módulo); os de materials.js têm preferência quando existem
 const MAT = {};
 const madeira = () => M.madeiraClara || (MAT.madeira ||= new THREE.MeshStandardMaterial({ color: 0xd9b47a, map: tex.veio(), roughness: 0.7 }));
-const leitoso = () => M.vidroLeitoso || (MAT.leitoso ||= new THREE.MeshStandardMaterial({ color: 0xaebcc6, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide }));
-const vidroCasco = () => (MAT.casco ||= new THREE.MeshStandardMaterial({ color: 0xc8e8f6, roughness: 0.06, metalness: 0.2, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.4 }));
+const fachada = () => M.fac_colmeia || M.fac_madeira;
+const vidroCasco = () => { if (MAT.casco) return MAT.casco; const map = tex.vidroGrade?.() || null; return (MAT.casco = new THREE.MeshStandardMaterial({ color: map ? 0xffffff : 0x46586a, map, transparent: true, opacity: 0.55, roughness: 0.08, metalness: 0.35, envMapIntensity: 1.2, depthWrite: false, side: THREE.DoubleSide })); };
+const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
 function tubeCyl(r, h, mat, seg, uRep, vRep, y) {
   const g = new THREE.CylinderGeometry(r, r, h, seg, 1, true); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * uRep, uv.getY(i) * vRep);
-  g.translate(0, y + h / 2, 0); const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; return m;
+  g.translate(0, y + h / 2, 0); return mesh(g, mat);
 }
 function slab(rx, rz, h, mat, y, rot = 0, seg = 56) {
-  const g = new THREE.CylinderGeometry(1, 1, h, seg, 1, false); g.scale(rx, 1, rz); g.rotateY(rot); g.translate(0, y + h / 2, 0);
-  const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; return m;
+  const g = new THREE.CylinderGeometry(1, 1, h, seg, 1, false); g.scale(rx, 1, rz); g.rotateY(rot); g.translate(0, y + h / 2, 0); return mesh(g, mat);
 }
-// contorno ondulado de uma laje (raio r0 com duas ondas suaves, diferentes a cada andar)
-function ondaPts(r0, f, n = 72, k = 1) { const out = []; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const r = r0 * (1 + k * (0.075 * Math.sin(3 * a + f * 1.1) + 0.04 * Math.sin(5 * a - f * 0.7 + 1))); out.push([Math.cos(a) * r, Math.sin(a) * r]); } return out; }
-const raioOnda = (r0, a, f, k = 1) => r0 * (1 + k * (0.075 * Math.sin(3 * a + f * 1.1) + 0.04 * Math.sin(5 * a - f * 0.7 + 1)));
+// contorno ondulado de uma laje: lóbulos de 10% fixos nos eixos da cobertura (não rodam) e uma onda fraca de 3
+// que muda um pouco a cada andar
+const raioOnda = (r0, a, f, rot) => r0 * (1 + 0.1 * Math.cos(4 * (a - rot)) + 0.03 * Math.sin(3 * a + 1.1 * f));
+function ondaPts(r0, f, rot, n = 72) { const out = []; for (let i = 0; i < n; i++) { const a = (i / n) * TAU; const r = raioOnda(r0, a, f, rot); out.push([Math.cos(a) * r, Math.sin(a) * r]); } return out; }
 function caminho(pts, P = new THREE.Shape()) { pts.forEach(([x, z], i) => (i ? P.lineTo(x, -z) : P.moveTo(x, -z))); P.closePath(); return P; }
 // laje extrudada (com furo opcional: a floreira é um anel), y = base
 function lajeOnda(outer, inner, y, h, mat) {
   const s = caminho(outer); if (inner) s.holes.push(caminho(inner, new THREE.Path()));
   const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
-  const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; return m;
+  return mesh(g, mat);
 }
-// (a fusão do mundo junta as malhas de cada parte por material; as aletas, os pilares e os arbustos de todos os
-// andares da parte vão num só grupo de instâncias cada, para a obra não custar uma chamada por andar)
-function andares(f0, f1, R, cx, cz) {
-  const g = new THREE.Group(); const esq = new THREE.Group(); const arb = [], fins = [], cols = [];
+// (a fusão do mundo junta as malhas de cada parte por material; os arbustos de todos os andares da parte vão
+// num só grupo de instâncias, para a obra não custar uma chamada por andar)
+function andares(f0, f1, R, rot) {
+  const g = new THREE.Group(); const esq = new THREE.Group(); const arb = [], cols = [];
   for (let f = f0; f < f1; f++) {
-    const y = f * FHB; const Rf = raioAndar(R, f); const r0 = Rf + 0.14;
-    g.add(lajeOnda(ondaPts(r0, f), null, y, 0.15, M.whiteSmooth));                                       // laje branca ondulada e grossa
-    g.add(lajeOnda(ondaPts(r0 - 0.02, f), ondaPts(r0 - 0.24, f), y + 0.15, 0.08, M.planter));            // floreira contínua na borda
-    const ri = Rf - 0.3; // fachada de estantes (janelas com caixilhos de madeira) atrás de uma treliça fina de madeira
-    g.add(tubeCyl(ri, FHB - 0.15, M.fac_madeira, 48, (2 * Math.PI * ri) / (0.34 * 32), 0.5, y + 0.15));
-    g.add(tubeCyl(ri + 0.03, FHB - 0.15, M.lattice, 48, (2 * Math.PI * ri) / 0.6, (FHB - 0.15) / 0.6, y + 0.15));
-    for (const t of [0.36, 0.68]) g.add(tubeCyl(ri + 0.05, 0.045, madeira(), 40, 1, 1, y + 0.15 + (FHB - 0.15) * t)); // prateleiras (linhas horizontais de madeira)
-    // montantes verticais de madeira (brises)
-    const n = 44; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + f * 0.09; const r = ri + 0.07; fins.push([[Math.cos(a) * r, y + 0.15, Math.sin(a) * r], [Math.cos(a) * r, y + FHB, Math.sin(a) * r]]); }
-    // arbustos na floreira (seguem a onda da laje); parte deles pende para fora da borda
-    for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2 + hash(i, f, 311) * 0.2; const pende = hash(i, f, 313) < 0.4; const r = raioOnda(r0, a, f) - 0.13 + (pende ? 0.06 : 0); arb.push({ x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, y: y + 0.23 - (pende ? 0.05 : 0), s: 0.085 + hash(i, f, 312) * 0.05, pal: 'jardim', h: 0.8 }); }
-    esq.add(slab(Rf + 0.05, Rf + 0.05, 0.1, M.concreto, y, 0));
-    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; cols.push([[Math.cos(a) * (Rf - 0.4), y, Math.sin(a) * (Rf - 0.4)], [Math.cos(a) * (Rf - 0.4), y + FHB, Math.sin(a) * (Rf - 0.4)]]); }
+    const y = yAndar(f); const r0 = raioAndar(R, f);
+    g.add(lajeOnda(ondaPts(r0, f, rot), null, y, 0.22, M.whiteSmooth));                                        // laje branca ondulada e grossa
+    g.add(lajeOnda(ondaPts(r0 - 0.2, f, rot), ondaPts(r0 - 0.46, f, rot), y + 0.22, 0.1, M.planter));         // floreira (faixa branca de 0,2 livre por fora)
+    const hF = (f < 4 ? yAndar(f + 1) : TOPO) - y - 0.22; const ri = r0 - 0.3;                                 // fachada em xadrez de células
+    g.add(tubeCyl(ri, hF, fachada(), 48, (TAU * ri) / (16 * 0.14), hF / (14 * 0.12), y + 0.22));
+    // arbustos na floreira (seguem a onda da laje); metade pende para fora da borda
+    for (let i = 0; i < 24; i++) { const a = (i / 24) * TAU + hash(i, f, 311) * 0.2; const pende = hash(i, f, 313) < 0.5; const r = raioOnda(r0, a, f, rot) - 0.26 + (pende ? 0.08 : 0); arb.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: y + 0.32 - (pende ? 0.1 : 0), s: 0.12 + hash(i, f, 312) * 0.08, pal: 'jardim', h: 0.8 }); }
+    esq.add(slab(r0 + 0.05, r0 + 0.05, 0.1, M.concreto, y, 0));
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; cols.push([[Math.cos(a) * (r0 - 0.4), y, Math.sin(a) * (r0 - 0.4)], [Math.cos(a) * (r0 - 0.4), y + hF + 0.22, Math.sin(a) * (r0 - 0.4)]]); }
   }
-  g.add(beams(fins, 0.024, madeira(), 4)); esq.add(beams(cols, 0.06, M.concreto, 6));
-  const ag = treeGroup(arb, { cast: false }); ag.position.set(-cx, 0, -cz); g.add(ag);
+  esq.add(beams(cols, 0.06, M.concreto, 6)); g.add(treeGroup(arb, { cast: false }));
   esq.visible = false;
   return { g, esq };
 }
 
 export function biblioteca() {
-  const b = A.biblio; const [cx, cz] = b.c; const R = b.r;
+  const b = A.biblio; const [cx, cz] = b.c; const R = b.r; const rot = b.canopyRot; const half = b.canopy / 2, top = b.canopyY;
   const root = new THREE.Group(); root.name = 'biblioteca'; root.position.set(cx, 0, cz);
   const P = {}; const E = {};
-  // e1: fundações e núcleo de concreto (elevadores e escadas)
+  // e1: térreo recuado escuro, núcleo de concreto (elevadores e escadas) e a rampa branca curva da base
   P.e1 = new THREE.Group();
-  P.e1.add(slab(raioAndar(R, 0) + 0.35, raioAndar(R, 0) + 0.35, 0.14, M.concreto, -0.04));
-  const HT = 6 * FHB; const core = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, HT + 0.1, 20), M.concreto); core.position.y = (HT + 0.1) / 2; core.castShadow = true; P.e1.add(core);
-  // e2: andares 1 a 3 / e3: andares 4 a 6 (+ terraço-jardim)
-  const a1 = andares(0, 3, R, cx, cz); P.e2 = a1.g; E.e2 = a1.esq;
-  const a2 = andares(3, 6, R, cx, cz); P.e3 = a2.g; E.e3 = a2.esq;
-  const Rt = raioAndar(R, 6); P.e3.add(lajeOnda(ondaPts(Rt + 0.1, 6), null, HT, 0.15, M.whiteSmooth)); P.e3.add(lajeOnda(ondaPts(Rt - 0.1, 6), null, HT + 0.15, 0.04, M.roof));
-  // e4: pilares-árvore (10 troncos de madeira laminada que sobem inclinados e se abrem em três galhos em "V" sob o
-  // dossel) e a treliça diagonal: duas famílias de ripas helicoidais (24 para cada lado) do chão ao dossel, cruzadas em
-  // losangos na linha da fachada — uma só malha instanciada
+  const terreo = mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.5, 32), M.dark); terreo.position.y = 0.25; P.e1.add(terreo);
+  const core = mesh(new THREE.CylinderGeometry(0.75, 0.75, TOPO, 20), M.concreto); core.position.y = TOPO / 2; P.e1.add(core);
+  // rampa: sai da laje de baixo pela direita da vista (raio 2,0, y 0,77) e desce em arco até o chão (raio 2,8, y 0,05)
+  const NR = 30, A0 = 0.45, A1 = -0.55; const rp = []; for (let i = 0; i <= NR; i++) { const t = i / NR; const a = A0 + (A1 - A0) * t; const r = 2.0 + 0.8 * t; rp.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  const rg = sweep(rp, false, [{ a: [0.25, 0], b: [-0.25, 0], mat: 'p', uv: 'plan' }, { a: [-0.25, 0], b: [-0.25, -0.08], mat: 'p', uv: 'run' }, { a: [0.25, -0.08], b: [0.25, 0], mat: 'p', uv: 'run' }, { a: [-0.25, 0], b: [-0.25, 0.4], mat: 'p', uv: 'run' }], { caps: false });
+  for (const g of rg.values()) { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const t = clamp((A0 - Math.atan2(p.getZ(i), p.getX(i))) / (A0 - A1), 0, 1); p.setY(i, p.getY(i) + 0.77 - 0.72 * t); } g.computeVertexNormals(); g.computeBoundingSphere(); P.e1.add(mesh(g, dupla(M.whiteSmooth))); }
+  P.e1.add(disc(0.6, M.whiteSmooth, Math.cos(A1) * 2.8, 0.05, Math.sin(A1) * 2.8));
+  // e2: andares 1 a 3 / e3: andares 4 e 5
+  const a1 = andares(0, 3, R, rot); P.e2 = a1.g; E.e2 = a1.esq;
+  const a2 = andares(3, 5, R, rot); P.e3 = a2.g; E.e3 = a2.esq;
+  // e4: hastes esbeltas pelo perímetro da cobertura: 8 nas arestas (pé afastado das lajes) e 4 pares em V nos cantos;
+  // as que cairiam na pegada do CRD saem
   P.e4 = new THREE.Group();
-  const half = b.canopy / 2, rot = b.canopyRot, top = b.canopyY; const trunks = [], branches = [];
-  const borda = (a) => { const ar = a - rot; return half / Math.max(Math.abs(Math.cos(ar)), Math.abs(Math.sin(ar))); }; // distância até a borda do dossel
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 + 0.13; const k = 0.7; const rs = R + 1.0;
-    const base = [Math.cos(a) * (R + 0.45), 0.05, Math.sin(a) * (R + 0.45)]; const split = [Math.cos(a) * rs, top * k, Math.sin(a) * rs];
-    trunks.push([base, split]);
-    for (const da of [-0.14, 0, 0.14]) { const aa = a + da; const d2 = borda(aa) * (da ? 0.96 : 0.8); branches.push([split, [Math.cos(aa) * d2, top - 0.05, Math.sin(aa) * d2]]); }
+  const borda = (a) => { const ar = a - rot; return half / Math.max(Math.abs(Math.cos(ar)), Math.abs(Math.sin(ar))); }; // distância até a borda da cobertura
+  const noCRD = (a) => { const n = ((a % TAU) + TAU) % TAU; return n > 1.2 && n < 2.0; };
+  const pares = [];
+  for (let k = 0; k < 4; k++) for (const d of [-0.3, 0.3]) { const a = rot + (k * Math.PI) / 2 + d; if (noCRD(a)) continue; const rt = borda(a) - 0.08; pares.push([[Math.cos(a) * 3.1, 0.05, Math.sin(a) * 3.1], [Math.cos(a) * rt, top, Math.sin(a) * rt]]); }
+  for (let k = 0; k < 4; k++) { const a = rot + Math.PI / 4 + (k * Math.PI) / 2; if (noCRD(a)) continue; const pe = [Math.cos(a) * 3.55, 0.05, Math.sin(a) * 3.55]; for (const d of [-0.12, 0.12]) { const aa = a + d; const rt = borda(aa) - 0.08; pares.push([pe, [Math.cos(aa) * rt, top, Math.sin(aa) * rt]]); } }
+  P.e4.add(beams(pares, 0.045, madeira(), 6));
+  // e5: jardim de cobertura — laje quadrada de cantos boleados com moldura clara, gramado, passeio perimetral e três
+  // caminhos até o pavilhão-estufa no fundo (o jardim fica fora do mapa de alturas; o pavilhão não)
+  P.e5 = new THREE.Group(); const S = b.canopy, h2 = S / 2, rc = 0.3;
+  const jd = new THREE.Group(); jd.rotation.y = -rot; jd.userData.semHAO = true; P.e5.add(jd);
+  const pav = new THREE.Group(); pav.rotation.y = -rot; P.e5.add(pav);
+  const sh = new THREE.Shape(); sh.moveTo(-h2 + rc, -h2); sh.lineTo(h2 - rc, -h2); sh.absarc(h2 - rc, -h2 + rc, rc, -Math.PI / 2, 0, false); sh.lineTo(h2, h2 - rc); sh.absarc(h2 - rc, h2 - rc, rc, 0, Math.PI / 2, false); sh.lineTo(-h2 + rc, h2); sh.absarc(-h2 + rc, h2 - rc, rc, Math.PI / 2, Math.PI, false); sh.lineTo(-h2, -h2 + rc); sh.absarc(-h2 + rc, -h2 + rc, rc, Math.PI, Math.PI * 1.5, false);
+  const lg = new THREE.ExtrudeGeometry(sh, { depth: 0.2, bevelEnabled: false, curveSegments: 6 }); lg.rotateX(-Math.PI / 2); lg.translate(0, TOPO, 0); jd.add(mesh(lg, M.whiteSmooth));
+  for (const [w, d, x, z] of [[S, 0.14, 0, h2 - 0.07], [S, 0.14, 0, -h2 + 0.07], [0.14, S, h2 - 0.07, 0], [0.14, S, -h2 + 0.07, 0]]) { const e = mesh(new THREE.BoxGeometry(w, 0.14, d), M.whiteSmooth); e.position.set(x, top + 0.07, z); jd.add(e); }
+  const plano = (w, d, mat, x, y, z) => { const g = new THREE.PlaneGeometry(w, d); g.rotateX(-Math.PI / 2); const m = mesh(g, mat, false); m.position.set(x, y, z); return m; };
+  jd.add(plano(S - 0.3, S - 0.3, M.roof, 0, top + 0.025, 0));
+  for (const [w, d, x, z] of [[S - 0.8, 0.35, 0, h2 - 0.575], [S - 0.8, 0.35, 0, -h2 + 0.575], [0.35, S - 0.8, h2 - 0.575, 0], [0.35, S - 0.8, -h2 + 0.575, 0]]) jd.add(plano(w, d, M.caminhoTeto, x, top + 0.035, z));
+  const PX = 0.3, PZ = -1.5; // pavilhão no fundo (oposto à câmera), quase centrado
+  for (const x of [-1.4, 0.3, 2.0]) jd.add(plano(0.3, 2.7, M.caminhoTeto, x, top + 0.035, 1.15));
+  jd.add(plano(3.2, 2.6, M.caminhoTeto, PX, top + 0.035, PZ));
+  const copas = []; let ic = 0;
+  for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) {
+    const x = -2.4 + i * 0.8 + (hash(i, j, 501) - 0.5) * 0.5, z = -2.4 + j * 0.8 + (hash(i, j, 502) - 0.5) * 0.5;
+    if (Math.abs(x - PX) < 1.75 && Math.abs(z - PZ) < 1.45) continue; if (z > -0.2 && [-1.4, 0.3, 2.0].some((cxp) => Math.abs(x - cxp) < 0.28)) continue;
+    copas.push({ x, z, y: top + 0.03, s: 0.42 + hash(i, j, 503) * 0.14, kind: ic++ % 2 ? 'folha2' : 'folha', pal: 'jardim', h: 1.0 });
   }
-  P.e4.add(beams(trunks, 0.085, madeira(), 7)); P.e4.add(beams(branches, 0.055, madeira(), 6));
-  const ripas = []; const NS = 24, SEG = 16, yTop = top - 0.12;
-  for (let s = 0; s < NS; s++) for (const dir of [1, -1]) {
-    const a0 = (s / NS) * Math.PI * 2 + (dir > 0 ? 0 : 0.13); let prev = null;
-    for (let k = 0; k <= SEG; k++) { const y = 0.05 + ((yTop - 0.05) * k) / SEG; const a = a0 + (dir * y) / 2.4; const r = raioAndar(R, y / FHB) - 0.18; const p = [Math.cos(a) * r, y, Math.sin(a) * r]; if (prev) ripas.push([prev, p]); prev = p; }
-  }
-  P.e4.add(beams(ripas, 0.035, madeira(), 4));
-  // e5: dossel quadrado — painéis translúcidos leitosos (cinza-azulado) numa grelha de madeira clara com vigas
-  // principais e secundárias, beiral generoso e fascia de madeira; apoiado nos pilares-árvore, acima da torre
-  P.e5 = new THREE.Group(); const cano = new THREE.Group(); cano.rotation.y = -rot; cano.position.y = top; P.e5.add(cano);
-  const S = b.canopy; const glass = new THREE.Mesh(new THREE.BoxGeometry(S, 0.04, S), leitoso()); glass.position.y = 0.1; glass.renderOrder = 3; cano.add(glass);
-  const gridG = new THREE.PlaneGeometry(S, S); gridG.rotateX(-Math.PI / 2); const grid = new THREE.Mesh(gridG, M.canopyGrid); grid.position.y = 0.14; grid.castShadow = true; cano.add(grid);
-  const beamsC = []; const n = 12; for (let i = 0; i <= n; i++) { const t = -S / 2 + (S * i) / n; beamsC.push([[t, 0, -S / 2], [t, 0, S / 2]]); beamsC.push([[-S / 2, 0, t], [S / 2, 0, t]]); }
-  const beamsS = []; for (let i = 0; i < n; i++) { const t = -S / 2 + (S * (i + 0.5)) / n; beamsS.push([[t, 0.06, -S / 2], [t, 0.06, S / 2]]); beamsS.push([[-S / 2, 0.06, t], [S / 2, 0.06, t]]); }
-  cano.add(beams(beamsC, 0.045, madeira(), 4)); cano.add(beams(beamsS, 0.02, madeira(), 3));
-  for (const [w, d, x, z] of [[S + 0.14, 0.14, 0, S / 2], [S + 0.14, 0.14, 0, -S / 2], [0.14, S, S / 2, 0], [0.14, S, -S / 2, 0]]) { const e = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, d), madeira()); e.position.set(x, 0.07, z); e.castShadow = true; cano.add(e); }
-  P.e5.userData.semHAO = true; // o dossel fica fora do mapa de alturas (senão escurece a praça embaixo)
+  jd.add(treeGroup(copas, { cast: false, name: 'jardim' }));
+  // pavilhão-estufa: caixa de vidro turquesa em grelha, telhado em placa com a ponta direita erguida em curva e borda clara
+  const caixa = mesh(new THREE.BoxGeometry(2.4, 0.65, 1.8), M.glass, false); caixa.position.set(PX, top + 0.325, PZ); caixa.renderOrder = 3; pav.add(caixa);
+  const grG = new THREE.BoxGeometry(2.44, 0.67, 1.84); { const uv = grG.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 3, uv.getY(i)); } const grelha = mesh(grG, M.canopyGrid, false); grelha.position.set(PX, top + 0.325, PZ); pav.add(grelha);
+  const tg = new THREE.PlaneGeometry(2.7, 2.1, 3, 1); tg.rotateX(-Math.PI / 2); { const p = tg.attributes.position; const sobe = [0, 0.03, 0.14, 0.4]; for (let i = 0; i < p.count; i++) p.setY(i, sobe[Math.round((p.getX(i) + 1.35) / 0.9)]); tg.computeVertexNormals(); }
+  const telhado = mesh(tg, M.canopyGrid); telhado.position.set(PX, top + 0.69, PZ); pav.add(telhado);
+  const xs = [-1.35, -0.45, 0.45, 1.35], ys = [0, 0.03, 0.14, 0.4]; const bord = [];
+  for (const sz of [-1, 1]) for (let k = 0; k < 3; k++) bord.push([[PX + xs[k], top + 0.69 + ys[k], PZ + sz * 1.05], [PX + xs[k + 1], top + 0.69 + ys[k + 1], PZ + sz * 1.05]]);
+  for (const k of [0, 3]) bord.push([[PX + xs[k], top + 0.69 + ys[k], PZ - 1.05], [PX + xs[k], top + 0.69 + ys[k], PZ + 1.05]]);
+  pav.add(beams(bord, 0.02, M.whiteSmooth, 4));
+  const mont = []; for (const sx of [-1, 1]) for (const sz of [-1, 1]) mont.push([[PX + sx * 1.15, top, PZ + sz * 0.85], [PX + sx * 1.15, top + 0.66, PZ + sz * 0.85]]); pav.add(beams(mont, 0.03, madeira(), 5));
   for (const k of Object.keys(P)) root.add(P[k]); for (const k of Object.keys(E)) root.add(E[k]);
-  return { id: 'biblioteca', root, partes: P, esqueletos: E, grua: { e2: true, e3: true, e5: true }, foco: { x: cx, z: cz + 1, dist: 18 }, ancora: [cx, top + 0.6, cz] };
+  return { id: 'biblioteca', root, partes: P, esqueletos: E, grua: { e2: true, e3: true, e5: true }, foco: { x: cx, z: cz + 1, dist: 18 }, ancora: [cx, 6.5, cz] };
 }
 
-// Centro de Recursos Digitais: casco longo e baixo de arcos grossos de madeira clara à frente da torre (eixo
-// esquerda-direita), com vidro bem transparente por cima e um prédio de 3 pisos por dentro; os últimos arcos passam
-// por cima do bloco branco de 4 andares (faixas de janela escuras), cujo terraço de trabalho tem mesas e gente.
+// barras retas numa só malha instanciada: lista de [a, b, raio] (o cilindro unitário é escalado em cada eixo)
+function barrasR(lista, mat) {
+  const im = new THREE.InstancedMesh(beamGeo(1, 4), mat, lista.length); const m = new THREE.Matrix4();
+  lista.forEach(([a, b, r], i) => { beamMatrix(a, b, m); const e = m.elements; e[0] *= r; e[1] *= r; e[2] *= r; e[8] *= r; e[9] *= r; e[10] *= r; im.setMatrixAt(i, m); });
+  im.castShadow = true; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); return im;
+}
+function pedra(x, y, z, s, rot = 0) { const m = mesh(new THREE.DodecahedronGeometry(1, 0), M.rock); m.scale.set(s, s * 0.65, s * 0.85); m.position.set(x, y + s * 0.3, z); m.rotation.y = rot; return m; }
+
+// Centro de Recursos Digitais: cunha em leque (bico arredondado à esquerda, 1,6 de largura na ponta e 4,8 no
+// bloco) com cobertura em domo baixo de grelha de madeira laminada clara e vidro ardósia, fachada frontal
+// vertical de 4 níveis, escritório aberto no último piso, encostada ao bloco branco de escritório (4 pisos, teto
+// cinza-claro com platibanda, terraço de trabalho); base com talude de grama e pátio rebaixado de muro curvo.
 export function crd() {
   const cr = A.biblio.crd || { c: [A.biblio.c[0] - 0.2, A.biblio.c[1] + 4.9], rot: -0.32 }; const root = new THREE.Group(); root.name = 'crd';
   const o = cr.c; const ang = cr.rot; root.position.set(o[0], 0, o[1]); root.rotation.y = ang;
-  const P = {}; const X0 = -4.6, X1 = 4.2, Wd = 4.2;
-  // e1: bloco de apoio (4 andares) na ponta direita, avançando para a frente, e o piso do casco
-  P.e1 = new THREE.Group(); const bx = 4.5, bz = 1.4, bw = 2.6, bd = 2.8; const fl = 0.5; const topoB = 4 * fl + 0.04;
+  const w2 = (x, z) => { const c = Math.cos(ang), s = Math.sin(ang); return [+(o[0] + x * c + z * s).toFixed(2), +(o[1] - x * s + z * c).toFixed(2)]; };
+  const P = {}; const X0 = -4.6, X1 = 3.4;
+  // parametrização única do casco: u ao longo (ponta -> bloco), s da frente ao fundo
+  const US = [0, 0.012, 0.03, 0.055, 0.08, 0.1]; for (let k = 1; k <= 12; k++) US.push(0.1 + (0.9 * k) / 12);
+  const wu = (u) => (u < 0.1 ? 0.8 * Math.sqrt(Math.max(0, 1 - ((0.1 - u) / 0.1) ** 2)) : 0.8 + (1.6 * (u - 0.1)) / 0.9); // meia-largura (ponta em semicírculo)
+  const zc = (u) => 0.45 - 0.35 * u + 0.12 * Math.sin(Math.PI * u); // eixo (a frente bojuda, o fundo quase reto)
+  const xu = (u) => X0 + (X1 - X0) * u;
+  const frente = (u) => zc(u) + wu(u), fundo = (u) => zc(u) - wu(u);
+  const HB = 1.46; const yS = (s) => 1.68 + 0.25 * s + 0.12 * Math.sin(Math.PI * s); // beiral e altura da cobertura
+  const linhas = [{ d: 0, y: HB }, { d: 0.13, y: 1.63 }]; for (let j = 0; j <= 8; j++) linhas.push({ s: j / 8, y: yS(j / 8) }); // ombro arredondado (2 anéis) + 9 vigas
+  const ponto = (u, l) => { const f = frente(u), bk = fundo(u); const W = f - bk; const omb = Math.min(0.45, W * 0.3); const k = Math.min(1, Math.sqrt(W / 1.6)); const y = HB + (l.y - HB) * k; const z = l.s === undefined ? f - l.d * (omb / 0.45) : f - omb - (f - omb - bk) * l.s; return [xu(u), y, z]; };
+  const G = US.map((u) => linhas.map((l) => ponto(u, l))); const NC = US.length, NL = linhas.length;
+  // contorno da frente (do bloco à ponta, dando a volta no bico até o fundo) e do fundo
+  const fr = []; for (let c = NC - 1; c >= 5; c--) fr.push([xu(US[c]), frente(US[c])]);
+  const cxT = xu(0.1), czT = zc(0.1); for (let k = 1; k <= 12; k++) { const th = Math.PI / 2 + (Math.PI * k) / 12; fr.push([cxT + 0.8 * Math.cos(th), czT + 0.8 * Math.sin(th)]); }
+  const fd = []; for (let c = 5; c < NC; c++) fd.push([xu(US[c]), fundo(US[c])]);
+  const contorno = (ins) => { const out = []; const cs = US.filter((u) => wu(u) > ins + 0.03); for (const u of cs) out.push([xu(u), frente(u) - ins]); for (let i = cs.length - 1; i >= 0; i--) out.push([xu(cs[i]), fundo(cs[i]) + ins]); return out; };
+  // e1: bloco de apoio (4 pisos de 0,42, teto de concreto com platibanda, parede de junção), terraço com mesas longas e
+  // cadeiras, e a base: talude de grama, pátio rebaixado com muro curvo, pedras e árvores escuras no pé do bloco
+  P.e1 = new THREE.Group(); const bx = 4.4, bz = 1.1, bw = 2.4, bd = 2.8, fl = 0.42, topoB = 4 * fl;
   for (let f = 0; f < 4; f++) {
-    const y = f * fl; const sl = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.08, 0.07, bd + 0.08), M.fascia); sl.position.set(bx, y + 0.035, bz); sl.castShadow = true; sl.receiveShadow = true; P.e1.add(sl);
-    const wb = new THREE.Mesh(new THREE.BoxGeometry(bw - 0.1, fl - 0.07, bd - 0.1), M.whiteSmooth); wb.position.set(bx, y + 0.07 + (fl - 0.07) / 2, bz); wb.castShadow = true; P.e1.add(wb);
-    const jan = new THREE.Mesh(new THREE.BoxGeometry(bw - 0.08, 0.17, bd - 0.08), M.dark); jan.position.set(bx, y + 0.3, bz); P.e1.add(jan); // faixa de janela escura
+    const y = f * fl; const sl = mesh(new THREE.BoxGeometry(bw + 0.08, 0.06, bd + 0.08), M.whiteSmooth); sl.position.set(bx, y + 0.03, bz); P.e1.add(sl);
+    const wb = mesh(new THREE.BoxGeometry(bw - 0.1, fl - 0.06, bd - 0.1), M.whiteSmooth); wb.position.set(bx, y + 0.06 + (fl - 0.06) / 2, bz); P.e1.add(wb);
+    const jan = mesh(new THREE.BoxGeometry(bw - 0.06, 0.17, bd - 0.06), M.dark, false); jan.position.set(bx, y + 0.25, bz); P.e1.add(jan); // faixa de janela escura
   }
-  const roofS = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.1, 0.08, bd + 0.1), M.whiteSmooth); roofS.position.set(bx, topoB - 0.04, bz); roofS.castShadow = true; P.e1.add(roofS);
-  const desks = []; for (let i = 0; i < 4; i++) for (let j = 0; j < 6; j++) desks.push([bx - 0.95 + i * 0.63, bz - 1.1 + j * 0.44]);
-  const dim = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.05, 0.18), M.whiteSmooth, desks.length); const sim = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.09, 0.015), M.cyanGlow, desks.length); const m4 = new THREE.Matrix4();
-  desks.forEach(([x, z], i) => { dim.setMatrixAt(i, m4.makeTranslation(x, topoB + 0.12, z)); sim.setMatrixAt(i, m4.makeTranslation(x, topoB + 0.2, z - 0.07)); }); dim.castShadow = true; P.e1.add(dim);
-  // escada externa no canto do bloco (lances de degraus brancos)
-  const deg = []; for (let k = 0; k < 16; k++) deg.push([bx + bw / 2 + 0.16, 0.06 + k * (topoB / 16), bz - bd / 2 + 0.2 + k * 0.14]);
-  const dg = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.04, 0.16), M.whiteSmooth, deg.length); deg.forEach((p, i) => dg.setMatrixAt(i, m4.makeTranslation(...p))); dg.castShadow = true; P.e1.add(dg);
-  // gente no terraço (área em coordenadas do mundo; o mundo povoa se a parte estiver pronta)
-  const w = (x, z) => { const c = Math.cos(ang), s = Math.sin(ang); return [+(o[0] + x * c + z * s).toFixed(2), +(o[1] - x * s + z * c).toFixed(2)]; };
-  P.e1.userData.pessoas = { area: [w(bx - 1.2, bz - 1.2), w(bx + 1.2, bz - 1.2), w(bx + 1.2, bz + 1.2), w(bx - 1.2, bz + 1.2)], y: topoB + 0.02, n: 20 };
-  // e2: arcos grossos de madeira clara (transversais, achatados) com altura em onda suave ao longo do eixo, e terças
-  P.e2 = new THREE.Group(); const NR = 28, NK = 16; const arc = []; const ribs = [];
-  const noBloco = (x, z) => x > bx - bw / 2 - 0.05 && x < bx + bw / 2 + 0.05 && z > bz - bd / 2 - 0.05 && z < bz + bd / 2 + 0.05;
-  for (let i = 0; i < NR; i++) {
-    const t = i / (NR - 1); const x = X0 + (X1 - X0) * t; const h = 1.9 + 0.5 * Math.sin(Math.PI * Math.pow(t, 0.8)); const wd = Wd / 2 * (0.86 + 0.14 * Math.sin(Math.PI * t)); const pts = [];
-    for (let k = 0; k <= NK; k++) { const v = -1 + (2 * k) / NK; const z = v * wd; let y = h * Math.pow(Math.max(0, 1 - v ** 4), 0.25) + 0.05; if (noBloco(x + v * 0.25, z)) y = Math.max(y, topoB + 0.06); pts.push(new THREE.Vector3(x + v * 0.25, y, z)); }
-    arc.push(pts); ribs.push([new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.045, 5, false), new THREE.Matrix4()]);
-  }
-  const ribMesh = new THREE.Mesh(merge(ribs), madeira()); ribMesh.castShadow = true; P.e2.add(ribMesh);
-  const purl = []; for (let k = 1; k < NK; k++) for (let i = 1; i < NR; i++) { const a = arc[i - 1][k], c = arc[i][k]; purl.push([[a.x, a.y, a.z], [c.x, c.y, c.z]]); }
-  P.e2.add(beams(purl, 0.02, madeira(), 3));
+  const teto = mesh(new THREE.BoxGeometry(bw + 0.08, 0.06, bd + 0.08), M.concreto); teto.position.set(bx, topoB - 0.03, bz); P.e1.add(teto);
+  for (const [w, d, x, z] of [[bw + 0.08, 0.05, bx, bz + bd / 2 + 0.015], [bw + 0.08, 0.05, bx, bz - bd / 2 - 0.015], [0.05, bd + 0.08, bx + bw / 2 + 0.015, bz], [0.05, bd + 0.08, bx - bw / 2 - 0.015, bz]]) { const pl = mesh(new THREE.BoxGeometry(w, 0.06, d), M.whiteSmooth); pl.position.set(x, topoB + 0.03, z); P.e1.add(pl); }
+  const junta = mesh(new THREE.BoxGeometry(0.08, 1.9, 2.2), M.whiteSmooth); junta.position.set(3.2, 0.95, -1.25); P.e1.add(junta);
+  const mesasT = [], cadT = []; for (let k = 0; k < 5; k++) { const mz = bz - 0.9 + k * 0.45, mx = bx - 0.15 + (k >= 3 ? 0.3 : 0); mesasT.push([mx, mz]); for (let i = 0; i < 6; i++) for (const sz of [-1, 1]) cadT.push([mx - 0.5 + i * 0.2, mz + sz * 0.22]); }
+  const m4 = new THREE.Matrix4();
+  const mim = new THREE.InstancedMesh(new THREE.BoxGeometry(1.3, 0.03, 0.3), M.whiteSmooth, mesasT.length); mesasT.forEach(([x, z], i) => mim.setMatrixAt(i, m4.makeTranslation(x, topoB + 0.28, z))); mim.castShadow = true; P.e1.add(mim);
+  const cim = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), M.dark, cadT.length); cadT.forEach(([x, z], i) => cim.setMatrixAt(i, m4.makeTranslation(x, topoB + 0.04, z))); P.e1.add(cim);
+  P.e1.userData.pessoas = { area: [w2(bx - 1.15, bz - 1.25), w2(bx + 1.15, bz - 1.25), w2(bx + 1.15, bz + 1.25), w2(bx - 1.15, bz + 1.25)], y: topoB + 0.02, n: 12 };
+  // talude de grama em cunha (mais alto na ponta), cortado pelo pátio rebaixado no meio da frente
+  const hTal = (u) => (u < 0.5 ? 0.5 - 0.16 * u : 0.42 - 0.24 * (u - 0.5)); const pc = [xu(0.5), frente(0.5)];
+  const trechos = []; let atual = []; for (const p of fr) { if (Math.hypot(p[0] - pc[0], p[1] - pc[1]) < 0.95) { if (atual.length > 1) trechos.push(atual); atual = []; } else atual.push(p); } if (atual.length > 1) trechos.push(atual);
+  for (const t of trechos) for (const g of sweep(t, false, [{ a: [0.95, 0], b: [-0.02, 1], mat: 'g', uv: 'plan' }], { caps: false }).values()) { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) * hTal(clamp((p.getX(i) - X0) / (X1 - X0), 0, 1))); g.computeVertexNormals(); g.computeBoundingSphere(); P.e1.add(mesh(g, M.lawn, false)); }
+  const muro = mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.42, 24, 1, true, -Math.PI / 2, Math.PI), dupla(M.concretoClaro || M.concreto)); muro.position.set(pc[0], 0.21, pc[1]); P.e1.add(muro);
+  for (const [u, k, s] of [[0.28, 0, 0.14], [0.2, 1, 0.17], [0.12, 2, 0.13], [0.06, 3, 0.16], [0.03, 4, 0.12]]) P.e1.add(pedra(xu(u) - (u < 0.1 ? 0.35 : 0), hTal(u) * 0.5, frente(u) + 0.4, s, k * 1.3));
+  for (const [u, s] of [[0.45, 0.24], [0.6, 0.27]]) P.e1.add(pedra(xu(u), 0, frente(u) + 1.15, s, u * 9));
+  P.e1.add(treeGroup([{ x: 5.85, z: 0.3, y: 0, s: 0.3, pal: 'mata' }, { x: 5.95, z: 1.5, y: 0, s: 0.32, pal: 'mata' }, { x: 5.7, z: 2.8, y: 0, s: 0.28, pal: 'mata' }]));
+  const porta = mesh(new THREE.BoxGeometry(0.6, 0.08, 0.6), M.whiteSmooth); porta.position.set(-4.45, 0.56, 0.75); P.e1.add(porta); // patamar da Passarela do Bulevar na baía da ponta
+  // e2: grelha de madeira laminada clara — vigas principais (linhas da frente ao fundo, 9 mais os 2 anéis do ombro),
+  // terças (colunas u), montantes da fachada e viga de beiral em volta do bico; uma só malha instanciada
+  P.e2 = new THREE.Group(); const barras = []; const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (let r = 0; r < NL; r++) for (let c = 0; c < NC - 1; c++) { const a = G[c][r], b = G[c + 1][r]; if (d3(a, b) > 0.05) barras.push([a, b, r === 0 ? 0.05 : 0.04]); }
+  for (let c = 1; c < NC; c++) for (let r = 0; r < NL - 1; r++) { const a = G[c][r], b = G[c][r + 1]; if (d3(a, b) > 0.03) barras.push([a, b, 0.026]); }
+  for (let c = 6; c < NC; c += 2) { const x = xu(US[c]), z = frente(US[c]); barras.push([[x, 0, z], [x, HB, z], 0.035]); }
+  for (const k of [3, 6, 9]) { const p = fr[NC - 5 + k - 1]; barras.push([[p[0], 0, p[1]], [p[0], HB, p[1]], 0.035]); }
+  for (let i = NC - 6; i < fr.length - 1; i++) barras.push([[fr[i][0], HB, fr[i][1]], [fr[i + 1][0], HB, fr[i + 1][1]], 0.05]);
+  P.e2.add(barrasR(barras, madeira()));
   P.e2.userData.semHAO = true;
-  // e3: vidro do casco (bem transparente: vê-se o piso de trabalho), o prédio de 3 pisos por dentro (lajes brancas e
-  // faixas de vidro), mesas e telas
-  P.e3 = new THREE.Group(); const pos = [], idx = [];
-  for (let i = 0; i < NR; i++) for (let k = 0; k <= NK; k++) { const p = arc[i][k]; pos.push(p.x, p.y + 0.01, p.z); }
-  for (let i = 0; i < NR - 1; i++) for (let k = 0; k < NK; k++) { const a = i * (NK + 1) + k, b2 = a + 1, c = a + NK + 1, d = c + 1; idx.push(a, c, b2, b2, c, d); }
-  const vg = new THREE.BufferGeometry(); vg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); vg.setIndex(idx); vg.computeVertexNormals();
-  const vm = new THREE.Mesh(vg, vidroCasco()); vm.renderOrder = 3; P.e3.add(vm); P.e3.add(sim);
-  const xa = X0 + 0.3, xb = X1 - 1.8, lw = Wd * 0.7; // lajes a 0.6 e 1.2 e cobertura a 1.66, com faixas de vidro entre elas
-  for (const [y, hf] of [[0.05, 0.5], [0.6, 0.5], [1.2, 0.4]]) {
-    if (y > 0.1) { const l = new THREE.Mesh(new THREE.BoxGeometry(xb - xa, 0.06, lw), M.whiteSmooth); l.position.set((xa + xb) / 2, y, 0); l.castShadow = true; l.receiveShadow = true; P.e3.add(l); }
-    const fx = new THREE.Mesh(new THREE.BoxGeometry(xb - xa - 0.1, hf, lw - 0.1), M.fac_lab); fx.position.set((xa + xb) / 2, y + 0.03 + hf / 2, 0); const uv = fx.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.55, 0.25 + uv.getY(i) * 0.25); P.e3.add(fx);
-  }
-  const cob = new THREE.Mesh(new THREE.BoxGeometry(xb - xa, 0.05, lw), M.whiteSmooth); cob.position.set((xa + xb) / 2, 1.66, 0); cob.castShadow = true; cob.receiveShadow = true; P.e3.add(cob);
-  const inner = []; for (let i = 0; i < 18; i++) inner.push([xa + 0.5 + (i % 6) * ((xb - xa - 1) / 5), -1.0 + ((i / 6) | 0) * 1.0]);
-  const it = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.06, 0.3), M.woodLight, inner.length); inner.forEach(([x, z], i) => it.setMatrixAt(i, m4.makeTranslation(x, 1.72, z * 0.9))); P.e3.add(it);
-  const floorV = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Wd * 0.95), M.woodLight); floorV.rotation.x = -Math.PI / 2; floorV.position.set((X0 + X1) / 2, 0.05, 0); floorV.receiveShadow = true; P.e1.add(floorV);
+  // e3: vidro ardósia do casco (com 3 painéis opacos claros no terço esquerdo), fachada frontal com lajes claras finas,
+  // empena do fundo, lajes internas, piso e o escritório aberto do último piso (mesas, cadeiras, divisórias e uma sala)
+  P.e3 = new THREE.Group(); const pos = [], uv = [], idx = [], idxC = []; const claros = new Set(['6:3', '6:4', '7:4']);
+  for (let c = 0; c < NC; c++) for (let r = 0; r < NL; r++) { const p = G[c][r]; pos.push(p[0], p[1] + 0.01, p[2]); uv.push((US[c] * 7.8) / 2.4, ((r / (NL - 1)) * wu(US[c])) / 2.4); }
+  for (let c = 0; c < NC - 1; c++) for (let r = 0; r < NL - 1; r++) { const a = c * NL + r, b = a + 1, cc = a + NL, d = cc + 1; (claros.has(c + ':' + r) ? idxC : idx).push(a, cc, b, b, cc, d); }
+  const vg = new THREE.BufferGeometry(); vg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); vg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); vg.setIndex(idx); vg.computeVertexNormals();
+  const vm = new THREE.Mesh(vg, vidroCasco()); vm.renderOrder = 3; vm.receiveShadow = true; P.e3.add(vm);
+  const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); cg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); cg.setIndex(idxC); cg.computeVertexNormals(); P.e3.add(mesh(cg, M.bandaCinza || M.concreto));
+  const matF = (k) => (k === 'clara' ? M.whiteSmooth : vidroCasco());
+  const fach = sweep(fr, false, [{ a: [0, 0], b: [0, HB], mat: 'vidro', uv: 'facade' }, { a: [0.02, 0.42], b: [0.02, 0.48], mat: 'clara', uv: 'run' }, { a: [0.02, 0.84], b: [0.02, 0.9], mat: 'clara', uv: 'run' }, { a: [0.02, 1.26], b: [0.02, 1.32], mat: 'clara', uv: 'run' }], { caps: false });
+  for (const [k, g] of fach) { const m = mesh(g, matF(k), k === 'clara'); if (k !== 'clara') m.renderOrder = 3; P.e3.add(m); }
+  for (const g of sweep(fd, false, [{ a: [0, 0], b: [0, 1.93], mat: 'vidro', uv: 'facade' }], { caps: false }).values()) { const m = mesh(g, vidroCasco(), false); m.renderOrder = 3; P.e3.add(m); }
+  for (const y of [0.42, 0.84, 1.26]) P.e3.add(slabPoly(contorno(0.25), 0.06, M.whiteSmooth, y));
+  P.e3.add(flat(contorno(0), M.woodLight, 0.03));
+  const mesas = [], cad = []; const yE = 1.32;
+  for (let j = 0; j < 5; j++) { const sj = 0.14 + 0.18 * j; for (let i = 0; i < 7; i++) { const u = 0.36 + i * 0.095; const zz = (uu) => zc(uu) + (wu(uu) - 0.3) * (1 - 2 * sj); const x = xu(u), z = zz(u); const r = -Math.atan2(zz(u + 0.02) - z, xu(u + 0.02) - x); mesas.push([x, z, r]); cad.push([x, z - 0.14, r]); } }
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  const dim = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.03, 0.16), M.whiteSmooth, mesas.length); mesas.forEach(([x, z, r], i) => dim.setMatrixAt(i, m4.compose(v.set(x, yE + 0.07, z), q.setFromEuler(e.set(0, r, 0)), one))); dim.castShadow = true; P.e3.add(dim);
+  const chm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.09, 0.09), M.dark, cad.length); cad.forEach(([x, z, r], i) => chm.setMatrixAt(i, m4.compose(v.set(x, yE + 0.045, z), q.setFromEuler(e.set(0, r, 0)), one))); P.e3.add(chm);
+  for (const u of [0.45, 0.6, 0.75, 0.9]) { const dv = mesh(new THREE.BoxGeometry(0.03, 0.5, 0.8), M.whiteSmooth); dv.position.set(xu(u), yE + 0.25, zc(u) - wu(u) * 0.45); P.e3.add(dv); }
+  const sala = mesh(new THREE.BoxGeometry(0.6, 0.45, 0.8), M.whiteSmooth); sala.position.set(xu(0.94), yE + 0.225, zc(0.94) + wu(0.94) * 0.5); P.e3.add(sala);
+  P.e3.userData.pessoas = { area: contorno(0.4).map(([x, z]) => w2(x, z)), y: yE, n: 14 };
   for (const k of Object.keys(P)) root.add(P[k]);
   const c = new THREE.Vector3(0, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), ang).add(new THREE.Vector3(o[0], 0, o[1]));
-  return { id: 'crd', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: c.x, z: c.z, dist: 12 }, ancora: [c.x, 3.2, c.z] };
+  return { id: 'crd', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: c.x, z: c.z, dist: 12 }, ancora: [c.x, 2.7, c.z] };
 }
