@@ -592,20 +592,7 @@ img{-webkit-user-drag:none}
 .seg{display:inline-flex;flex:none;background:var(--papel2);border-radius:14px;padding:2px;gap:2px;box-shadow:inset 0 0 0 1px var(--hair)}
 .seg button{position:relative;min-height:44px;min-width:44px;padding:0 9px;border-radius:12px;font-size:13px;font-weight:800;color:#2a5a8a;white-space:nowrap}
 .seg button.on{background:linear-gradient(180deg,#66cc3c,#52b82c);color:#fff;box-shadow:0 2px 0 var(--verdeE)}
-/* ---------- apreciar: barra embaixo, rótulos claros e a comparação discreta com a referência ---------- */
-.apreciar{position:absolute;left:50%;bottom:calc(10px + var(--safeB));transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:6px 8px 9px;border-radius:26px;background:rgba(8,22,46,.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 4px 12px rgba(0,0,0,.3);z-index:7;transition:opacity .3s,transform .3s}
-.apreciar.oculta{opacity:0;pointer-events:none;transform:translate(-50%,12px)}
-.apreciar.oculta *{pointer-events:none}
-.apreciar .botao{height:44px;padding:0 12px;font-size:14px}
-.apreciar .botao img{width:28px;height:28px}
-.apreciar .alterna.on{background:linear-gradient(180deg,#a8ee64,#5cc234 52%,#43a524);border-color:#2c7c18;box-shadow:inset 0 2px 0 rgba(255,255,255,.5),0 4px 0 #2c7c18;--cc:#1f5a10;--borda:#2c7c18}
-.apreciar .luz span{min-width:70px;text-align:left}
-.apreciar .comparar{display:flex;align-items:center;gap:4px;height:44px;padding:0 8px 0 4px;border-radius:14px;background:rgba(255,255,255,.1);color:#e6f2fc}
-.apreciar .comparar img{width:26px;height:26px;opacity:.9}
-.apreciar .comparar span{max-width:70px;font-size:12px;line-height:1.1;font-weight:800;text-shadow:var(--t1)}
-#foto-ref{position:absolute;inset:0;background:center/contain no-repeat;pointer-events:none;opacity:0;transition:opacity .2s;z-index:3}
-.deslize{width:clamp(70px,9vw,120px);height:44px;accent-color:#5cc234;margin:0}
-.deslize::-webkit-slider-thumb{width:28px;height:28px}
+/* ---------- apreciar: ver o bloco "leva 2" no fim do arquivo ---------- */
 .rotulo3d{position:absolute;left:0;top:0;transform:translate(-50%,-100%);padding:3px 10px 4px;background:linear-gradient(180deg,#ffffff,#e4f1fc);border:2px solid #fff;border-radius:12px;box-shadow:0 2px 0 #9dbfdf,0 4px 8px rgba(0,20,50,.3);color:var(--tinta);font-size:12px;font-weight:800;line-height:1.15;text-align:center;white-space:pre;pointer-events:none}
 .rotulo3d::after{content:"";position:absolute;left:50%;bottom:-8px;margin-left:-7px;border-style:solid;border-width:8px 7px 0;border-color:#fff transparent transparent}
 /* ---------- economia nova: calendário, renda, aceleradores, lotes, finanças, pedidos ---------- */
@@ -728,7 +715,6 @@ img{-webkit-user-drag:none}
 #gire b{font-size:26px;text-shadow:var(--t2)}
 #gire div{font-size:54px;animation:gira 1.8s ease-in-out infinite}
 @keyframes gira{50%{transform:rotate(90deg)}}
-@media (max-width:940px){.apreciar [data-x="geral"] span,.apreciar [data-x="fotografar"] span,.apreciar .comparar span{display:none}.apreciar .botao{padding:0 10px}}
 /* ==== painéis, modais e rótulos (E2) ==== */
 /* Prancheta da maquete: a folha e os modais viram papel quente com cabeçalho azul-noite e fio de aurora; cartões brancos
    com fio fino e sem sombra; latão só para prêmio e ficha; os rótulos 3D viram legendas de maquete. Os tokens da seção 2
@@ -1013,3 +999,42 @@ img{-webkit-user-drag:none}
 .nivel .anel::after{content:none}
 .nivel .selo{left:-7px;top:-6px;width:76px;height:76px}
 .nivel .nv{top:19px}
+/* Apreciar: X fixo, barra de vidro monocromática (Fotografar em latão, Comparar, Mais; a linha Mais com Vista geral,
+   Enquadrar, Rótulos, Planta e a hora do dia em segmento), placa de legenda viva e o cabo do Comparar. */
+.apreciar{position:absolute;left:50%;bottom:calc(10px + var(--safeB));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;z-index:7;pointer-events:none;transition:opacity .3s,transform .3s}
+.apreciar.oculta{opacity:0;pointer-events:none;transform:translate(-50%,12px)}
+.apreciar.oculta *{pointer-events:none}
+/* (cada linha é um vidro próprio: a linha Mais, mais larga, fica acima da placa viva e não a cobre em 915) */
+.apreciar .linha1,.apreciar .linha2{display:flex;align-items:center;gap:4px;padding:4px;border-radius:22px;background:rgba(22,38,74,.75);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 4px 12px rgba(0,0,0,.3);pointer-events:auto}
+.apreciar .linha2{display:none}
+.apreciar.oculta .linha1,.apreciar.oculta .linha2{pointer-events:none}
+.apreciar.mais-on .linha2{display:flex}
+.ap-bt{position:relative;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:64px;height:44px;border-radius:14px;color:#fff;-webkit-touch-callout:none;transition:transform .22s cubic-bezier(.3,1.6,.5,1)}
+.ap-bt svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ap-bt span{font-size:12px;line-height:13px;font-weight:800;white-space:nowrap}
+.ap-bt.on{background:rgba(127,224,196,.2);color:var(--aurora)}
+.ap-bt:active{transform:scale(.965) translateY(2px);transition-duration:.09s}
+.ap-bt.latao{background:linear-gradient(180deg,#f0d890,#d4b060);color:#3d2a08;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 2px 0 var(--latao2)}
+.apreciar .seg.horas{background:rgba(255,255,255,.08);box-shadow:none;border-radius:14px;padding:0;gap:0}
+.apreciar .seg.horas button{min-width:44px;width:44px;height:44px;padding:0;display:grid;place-items:center;border-radius:12px;background:none;box-shadow:none}
+.apreciar .seg.horas button img{width:28px;height:28px}
+.apreciar .seg.horas button.on{background:rgba(127,224,196,.24);box-shadow:inset 0 0 0 1.5px var(--aurora)}
+.apreciar-x{position:absolute;top:calc(8px + var(--safeT));right:calc(8px + var(--safeR));z-index:8;background:rgba(22,38,74,.75);border:1.5px solid rgba(255,255,255,.3);box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.apreciar-x::before,.apreciar-x::after{width:18px;height:2.5px;margin:-1.25px 0 0 -9px;box-shadow:none}
+.apreciar-x:active{transform:scale(.94)}
+/* placa de legenda viva: latão com parafusos, texto gravado (escuro, 13 px em maiúsculas); fica com o X quando a barra some */
+.placa-viva{position:absolute;left:calc(8px + var(--safeL));bottom:calc(8px + var(--safeB));z-index:6;box-sizing:border-box;min-width:220px;max-width:min(320px,34vw);height:48px;padding:6px 16px 5px;border-radius:6px;background:linear-gradient(180deg,#f0d890,#c9a24a 55%,#b08a38);box-shadow:inset 0 1px 0 rgba(255,250,225,.7),inset 0 0 0 1px rgba(120,88,24,.45),0 3px 8px rgba(0,0,0,.35);color:#3d2a08;font-size:13px;line-height:18px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;text-shadow:0 1px 0 rgba(255,244,210,.55);pointer-events:none;display:flex;flex-direction:column;justify-content:center}
+.placa-viva b,.placa-viva span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.placa-viva span{font-weight:700;color:#4a3510}
+.placa-viva::before,.placa-viva::after{content:"";position:absolute;top:50%;left:6px;width:5px;height:5px;margin-top:-2.5px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff3c8,#8a6a24)}
+.placa-viva::after{left:auto;right:6px}
+/* Comparar: a referência à direita do cabo (clip-path escrito pelo pointermove), obra à esquerda */
+#foto-ref{position:absolute;inset:0;background:center/contain no-repeat;pointer-events:none;opacity:0;transition:opacity .2s;z-index:3}
+.cabo{position:absolute;top:0;bottom:0;left:0;width:44px;margin-left:-22px;z-index:5;touch-action:none;cursor:ew-resize}
+.cabo i{position:absolute;left:21px;top:0;bottom:0;width:2px;background:var(--aurora);box-shadow:0 0 0 1px rgba(10,23,49,.4)}
+.cabo b{position:absolute;left:50%;top:50%;width:30px;height:48px;margin:-24px 0 0 -15px;border-radius:15px;background:rgba(22,38,74,.85);border:2px solid var(--aurora);display:grid;place-items:center;color:var(--aurora)}
+.cabo b svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.comp-rot span{position:absolute;top:calc(14px + var(--safeT));z-index:5;padding:3px 10px;border-radius:10px;background:rgba(22,38,74,.78);color:#fff;font-size:12px;line-height:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+.comp-rot .obra{left:calc(12px + var(--safeL))}
+.comp-rot .ref{right:calc(64px + var(--safeR))}
+:root[data-menos-mov="1"] .ap-bt,:root[data-menos-mov="1"] .apreciar{transition:none}
