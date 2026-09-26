@@ -94,7 +94,7 @@ export function faixas() {
     humanidades: new Faixa({ id: 'humanidades', closed: false, path: ellipse(a.c[0] + 0.3, a.c[1] - 0.2, a.rx - 3.95, a.rz - 3.65, a.rot, 90, 0.02, 3, 3.9, 5.55), modulos: 1,
       prof: { o0: -0.95, o1: 0, setIn: 0.24, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 3, arbustos: true }),
     // Anel da Biblioteca: 3 pavimentos de 0,55 em degraus para fora, fachada interna em colmeia, passeio de deque cinza
-    anelBib: new Faixa({ id: 'anelBib', closed: false, path: ellipse(b.c[0], b.c[1], b.r1, b.r1 * 0.92, 0, 120, 0, 1, b.a0, b.a1), modulos: 3,
+    anelBib: new Faixa({ id: 'anelBib', closed: false, path: ellipse(b.c[0], b.c[1], b.r1, b.r1 * 0.92, 0, 120, 0, 1, b.a0, b.a1), modulos: 3, ponta: 0.6,
       prof: { o0: -2.8, o1: 0, setIn: 0, setOut: 0.5, fh: 0.55, fac: 'fac_fita', facIn: 'fac_colmeia', caminho: 'grey' }, niveis: 3 }),
     // fita aberta em "6" de 4 pavimentos: nasce na ponta livre da volta interna, dá a volta no U (onde as duas faixas
     // se estreitam e se fundem) e segue pela externa até a ponta reta onde encosta a rampa; fachada âmbar, teto verde

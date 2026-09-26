@@ -145,7 +145,7 @@ export const PASSARELAS = {
   frente: { nome: 'Caminho da Frente', pts: [[-20.45, 17.72, 0.12], [-17.0, 18.4, 0.12], [-14.0, 18.88, 0.12], [-10.0, 19.28, 0.12], [-7.6, 19.3, 0.12], [-4.0, 19.35, 0.12], [-0.8, 19.1, 0.12]], w: 0.9 },
   anel: { nome: 'Passeio do Anel', pts: [[-21.8, 10.6, 0.1], [-20.2, 13.4, 0.6], [-17.6, 15.9, 0.85], [-14.0, 17.68, 0.95], [-10.0, 18.08, 0.85], [-7.6, 17.75, 0.75], [-5.6, 17.1, 0.5], [-3.8, 16.3, 0.1]], w: 0.85 },
   // caminho no chão rente ao flanco leste da cúpula, da ponta do Santuário até o pasto
-  santuario: { nome: 'Passeio do Santuário', pts: [[23.5, -3.6, 0.1], [25.0, -1.6, 0.1], [26.6, 1.2, 0.1], [27.6, 5.2, 0.1]], w: 0.45 },
+  santuario: { nome: 'Passeio do Santuário', pts: [[22.75, -4.1, 0.1], [24.6, -1.7, 0.1], [26.6, 1.2, 0.1], [27.6, 5.2, 0.1]], w: 0.45 },
   // fita elevada da frente: sai do chão ao lado do canteiro, corre entre o Passeio do Anel e o Caminho da Frente
   // (as três fitas em camadas da foto) e desce até o piso da praça
   frente2: { nome: 'Fita da Frente', pts: [[-20.2, 15.9, 0.1], [-17.4, 17.5, 0.6], [-14.0, 18.66, 0.95], [-10.0, 19.05, 1.0], [-6.8, 18.95, 0.95], [-4.2, 18.0, 0.7], [-2.4, 16.6, 0.1]], w: 0.8 },
