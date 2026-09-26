@@ -88,6 +88,8 @@ export function escola() {
   const terracota = M.terracota || M.pavers; const aro = M.fasciaBeiral || M.fascia;
   const A1 = { x: -16.4, z: 6.2, rx: 2.0, rz: 1.25, rot: 0.9, h: 1.6, sd: 11 }, B1 = { x: -14.9, z: 8.9, rx: 1.5, rz: 1.0, rot: 0.4, h: 1.2, sd: 12 };
   for (const q of [A1, B1]) {
+    // a plataforma pousa num morro em três degraus de grama (como os terraços do talude do Anel na foto), não num pilar
+    for (const [dr, k] of [[0.62, 0.42], [0.32, 0.74]]) { P.e2.add(plate(blobPts(q.x, q.z, q.rx + dr, q.rz + dr, q.rot, q.sd), 0, q.h * k, M.roof)); P.e2.add(plate(blobPts(q.x, q.z, q.rx + dr + 0.03, q.rz + dr + 0.03, q.rot, q.sd), q.h * k, 0.03, aro)); }
     const pts = blobPts(q.x, q.z, q.rx, q.rz, q.rot, q.sd); P.e2.add(plate(pts, 0, q.h, M.roof)); P.e2.add(plate(blobPts(q.x, q.z, q.rx + 0.04, q.rz + 0.04, q.rot, q.sd), q.h, 0.04, aro)); P.e2.add(plate(blobPts(q.x, q.z, q.rx - 0.05, q.rz - 0.05, q.rot, q.sd), q.h + 0.04, 0.02, terracota));
   }
   { const co = Math.cos(A1.rot), si = Math.sin(A1.rot); P.e2.add(brinquedos(A1.x + 0.8 * co, A1.z + 0.8 * si, A1.h + 0.06, 11, 3, 0.03, 0.6)); }

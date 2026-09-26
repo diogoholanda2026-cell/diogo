@@ -204,7 +204,7 @@ export class Ground {
     const img = c.createImageData(bw, bh), d = img.data;
     for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
       const x = MESA.x0 + ((i + 0.5) / bw) * W, z = MESA.z0 + ((j + 0.5) / bh) * D; const cl = clearance(x, z); if (cl >= 0.05 || cl <= -0.95) continue;
-      const a = clamp((0.05 - cl) / 0.2, 0, 1) * clamp((cl + 0.95) / 0.35, 0, 1); const o = (j * bw + i) * 4; d[o] = 24; d[o + 1] = 40; d[o + 2] = 16; d[o + 3] = a * 0.38 * 255;
+      const a = clamp((0.05 - cl) / 0.2, 0, 1) * clamp((cl + 0.95) / 0.35, 0, 1); const o = (j * bw + i) * 4; d[o] = 24; d[o + 1] = 40; d[o + 2] = 16; d[o + 3] = a * 0.22 * 255;
     }
     c.putImageData(img, 0, 0); return (this._borda = f);
   }

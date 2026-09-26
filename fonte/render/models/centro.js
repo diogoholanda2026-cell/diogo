@@ -179,7 +179,7 @@ export function ciencias() {
   for (const r of rampas) { const cv = new THREE.CatmullRomCurve3(r.map(([u, v, y]) => { const [x, z] = T(u, v); return new THREE.Vector3(x, y, z); }), false, 'catmullrom', 0.5); const pts = cv.getSpacedPoints(44).map((p) => [p.x, p.y, p.z]); addMap(P.e3, sweep3(pts, bandaRedonda(0, 0.4, 0.6)), matBanda); }
   // e4: panos de vidro espelhado sobre as células (rentes ao tampo, um pouco abaixo da face superior, para a banda
   // ler como moldura), a boca espelhada na frente de D, luzes sob o beiral e o vale urbanizado: gota com repuxo e canal
-  cels.forEach((cel, k) => P.e4.add(panoEspelho(recuo(cel, 0.06), yT + 0.26, domes[k], espelho())));
+  cels.forEach((cel, k) => P.e4.add(panoEspelho(recuo(cel, 0.06), yT + 0.08, domes[k], espelho()))); // fundo da célula: a banda lê como moldura funda
   addMap(P.e4, sweepArco(boca, [{ a: [-0.3, y0 + 0.2], b: [-0.3, yT - 0.02], mat: 'espelho', uv: 'run' }]), espelho);
   const m4 = new THREE.Matrix4(); const glow = []; for (let i = 0; i < N; i += 8) glow.push([cont[i][0] - nor[i][0] * 0.3, yT - 0.03, cont[i][1] - nor[i][1] * 0.3]);
   const gl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), M.lampGlow, glow.length); glow.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); P.e4.add(gl);

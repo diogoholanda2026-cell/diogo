@@ -133,7 +133,7 @@ export function makeMaterials() {
   M.steel = std({ color: 0xd2d7de, roughness: 0.32, metalness: 0.75 });
   M.steelDark = std({ color: 0x75808e, roughness: 0.4, metalness: 0.7 });
   M.roofMetal = std({ color: 0x9aa2aa, roughness: 0.45, metalness: 0.6 });
-  M.bandaCinza = std({ color: 0xc9cfc0, roughness: 0.6 }); // tampo sálvia clara da Ciências
+  M.bandaCinza = std({ color: 0xa3b09f, roughness: 0.7 }); // tampo sálvia clara da Ciências
   M.concretoClaro = std({ color: 0xe3dccb, roughness: 0.9 }); // muros de pedra clara, muro do pátio do CRD, margens das lagoas
   M.terracota = std({ color: 0xe0906e, roughness: 0.9 }); // pátios da Escola (salmão da foto, na paleta do BuildIt)
   M.caminhoTeto = std({ color: 0xe0d8c6, roughness: 0.8 });
@@ -158,7 +158,7 @@ export function makeMaterials() {
   // vidro azul que reflete o céu
   M.glass = std({ color: 0x9ad6f6, roughness: 0.06, metalness: 0.25, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 });
   // vidraçaria espelhada (células da Ciências): opaca, refletindo o céu do envMap
-  M.vidroEspelhado = std({ color: 0xbfd9ec, metalness: 0.9, roughness: 0.05, envMapIntensity: 2.0 });
+  M.vidroEspelhado = std({ color: 0xa9c4d6, metalness: 0.9, roughness: 0.08, envMapIntensity: 1.7 });
   M.glassDome = std({ color: 0xd6eef8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.0 });
   M.glassRail = std({ color: 0xcfe9f5, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.2 });
   M.glassWarm = std({ color: 0xffe2b0, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.55, depthWrite: false, emissive: 0xffb45a, emissiveIntensity: 0.6, side: THREE.DoubleSide });
