@@ -337,7 +337,7 @@ export class Obras {
       sombra: new Lote(G.plano, MT.sombra, 160, { nome: 'obra-sombras', recebe: false, ordem: 1 }), chao: new Lote(G.plano, MT.chao, 320, { nome: 'obra-chao', ordem: 1 }),
     };
     this._lotes = Object.values(this.L); for (const l of this._lotes) this.group.add(l.mesh);
-    this.crowd = new Crowd('operario', 160, { lod: true }); this.crowd.mesh.frustumCulled = true; this.crowd.perto.frustumCulled = true; this.group.add(this.crowd.mesh);
+    this.crowd = new Crowd('operario', 480, { lod: true }); this.crowd.mesh.frustumCulled = true; this.crowd.perto.frustumCulled = true; this.group.add(this.crowd.mesh);
     this.pontos = new Pontos(); this.group.add(this.pontos.mesh);
     this._esfera = new THREE.Sphere(new THREE.Vector3(), 1); for (const l of Object.values(this.L)) l.mesh.boundingSphere = this._esfera; this.crowd.mesh.boundingSphere = this._esfera; this.crowd.perto.boundingSphere = this._esfera;
     this._andaimes = new THREE.Group(); this._andaimes.name = 'obra-andaimes'; this.group.add(this._andaimes);

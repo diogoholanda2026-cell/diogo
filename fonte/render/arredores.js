@@ -79,9 +79,11 @@ function terreno() {
     col = mix(col, COR.serra, sm(8, 22, h)); col = mix(col, COR.rocha, sm(34, 56, h) * 0.8);
     const v = 0.93 + 0.14 * hash(i, j, 757); C[k * 3] = col[0] * v; C[k * 3 + 1] = col[1] * v; C[k * 3 + 2] = col[2] * v;
     // máscaras: mata (faixa em volta da obra, manchas e encostas) e campos (planície longe da obra e da praia)
-    const faixa = d < 0.1 || naFaixa(x, z) ? 1 : 0; const zc = zonaCidade(x, z);
-    const mata = (c < 7 ? 0 : Math.max(faixa, mataLonge(x, z) * sm(8, 16, d), sm(6, 16, h) * 0.9)) * (1 - zc);
-    const campo = (1 - mata) * sm(14, 22, d) * sm(12, 18, c) * (1 - sm(4, 10, h)) * sm(0.35, 0.45, fbm(x * 0.012, z * 0.012, 1, 767, 2)) * (1 - zc);
+    // (nos bairros o terreno é plano, mas os campos e a mata pintada ficam: a terra à venda parece lavoura e mata, e o chão
+    // da cidade cobre tudo quando o bairro é comprado)
+    const faixa = d < 0.1 || naFaixa(x, z) ? 1 : 0;
+    const mata = c < 7 ? 0 : Math.max(faixa, mataLonge(x, z) * sm(8, 16, d), sm(6, 16, h) * 0.9);
+    const campo = (1 - mata) * sm(14, 22, d) * sm(12, 18, c) * (1 - sm(4, 10, h)) * sm(0.35, 0.45, fbm(x * 0.012, z * 0.012, 1, 767, 2));
     T[k * 2] = campo; T[k * 2 + 1] = mata;
   }
   const I = [];
@@ -237,7 +239,7 @@ function juntar(lista) {
 // 8 a 16 carros nas vias da planta (A.vias: 6 na leste, 4 na oeste, 6 na sul quando existir), numa InstancedMesh
 // com a carroceria colorida por instância e a cabine escura por vértice; andam a 0,9 unidade/s pelas polilinhas
 // suavizadas (as mesmas da pintura do chão), voltando nas pontas; atualizados a cada 2 quadros sem alocar.
-const CARROS = { leste: 6, oeste: 4, sul: 6 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
+const CARROS = { leste: 12, oeste: 8, sul: 12 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
 function carros() {
   const vias = (A.vias || []).filter((v) => CARROS[v.id]); if (!vias.length) return null;
   const partes = [];
@@ -283,7 +285,7 @@ function coqueiros() {
 }
 function bosques() {
   const R = rng(8181); const l = [];
-  for (let i = 0; i < 1400 && l.length < 360; i++) {
+  for (let i = 0; i < 4200 && l.length < 1080; i++) { // (o triplo dos bosques da primeira versão)
     const x = -150 + R() * 300, z = -120 + R() * 190; const d = distPlanta(x, z), c = x - costaX(z);
     if (d < 11 || c < 10 || naFaixa(x, z) || zonaCidade(x, z) > 0.05) continue;
     const g = fbm(x * 0.05, z * 0.05, 1, 818, 2); if (g < 0.56) continue; // bosques em grupos

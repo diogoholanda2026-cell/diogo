@@ -63,7 +63,7 @@ async function iniciar() {
   const arredores = new Arredores(engine, forest); await passo(45);
   // a câmera anda pela Arcologia e pelos bairros da cidade em volta (mundo aberto), com um zoom máximo maior
   const LIM = { ...MESA }; for (const b of ORDEM_BAIRROS) { const a = areaBairro(b); LIM.x0 = Math.min(LIM.x0, a.x0); LIM.x1 = Math.max(LIM.x1, a.x1); LIM.z0 = Math.min(LIM.z0, a.z0); LIM.z1 = Math.max(LIM.z1, a.z1); }
-  const rig = new CameraRig(engine, canvas, LIM); rig.maxDist = 96;
+  const rig = new CameraRig(engine, canvas, LIM); rig.maxDist = 150; rig.distPitch = 96; // a cidade inteira cabe no zoom máximo
   const mundo = new Mundo(engine, ground, forest); await passo(70);
   // epílogo (desmontar o canteiro e replantar): etapas sem peça própria; o modelo só dá foco e âncora,
   // e as obras (modos 'desmontar' e 'replantar') desmontam os prédios do canteiro e plantam a mata
@@ -92,7 +92,7 @@ async function iniciar() {
   C.vistaGeral = (anim) => {
     const o = { ...VISTA_GERAL }; rig.pitchFix = null; C._naFoto = false;
     // inclinação que o zoom daria nessa distância (a fórmula é a do próprio rig), e o ajuste até a da vista
-    const base = rig.pitch.call({ pitchFix: null, tilt: 0, zoomT: () => Math.min(1, Math.max(0, (o.dist - rig.minDist) / (rig.maxDist - rig.minDist))) }); o.tilt = o.pitch - base; delete o.pitch;
+    const base = rig.pitch.call({ pitchFix: null, tilt: 0, zoomT: () => Math.min(1, Math.max(0, (o.dist - rig.minDist) / ((rig.distPitch || rig.maxDist) - rig.minDist))) }); o.tilt = o.pitch - base; delete o.pitch;
     if (anim) rig.flyTo(o, 1400, { cine: true }); else { rig.anim = null; rig.target.set(o.x, 0, o.z); rig.dist = o.dist; rig.yaw = o.yaw; rig.tilt = o.tilt; rig.fov = o.fov; rig.roll = 0; rig.apply(); }
   };
   rig.onMove = () => { C._naFoto = false; };

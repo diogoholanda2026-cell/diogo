@@ -91,7 +91,8 @@ function raioGrade(G, ray) {
 }
 const filhos = (g) => g.children.map((c) => c.uuid).join();
 // gente por perfil de qualidade
-const GENTE = { ultra: 280, alta: 200, media: 130, leve: 70 };
+const GENTE = { ultra: 840, alta: 600, media: 390, leve: 210 }; // (o triplo da primeira versão, liberado pelo dono)
+const VIDA = 3; // gente por área e por caminho: o triplo
 
 export class Mundo {
   constructor(engine, ground, forest) {
@@ -113,8 +114,8 @@ export class Mundo {
     this.canteiro = new THREE.Group(); this.canteiro.name = 'canteiro'; this.root.add(this.canteiro); this.canteiro.add(ambienteCanteiro()); this.predios = {};
     for (const [id, l] of Object.entries(LOTES)) { const g = predioCanteiro(id.startsWith('usina') ? 'usina' : id); g.position.set(l.x, 0, l.z); g.rotation.y = l.r; g.visible = false; g.userData.pick = { tipo: 'predio', id }; this.canteiro.add(g); this.predios[id] = g; }
     // gente (praça, passarelas, terraços), aves e sombras de contato dos bichos
-    this.povo = new Crowd('pessoa', 280, { lod: true }); this.povo.mesh.visible = false; this.povo.mesh.userData.semHAO = true; this.root.add(this.povo.mesh); this.povoAreas = [];
-    this.bando = new Bando(14); this.root.add(this.bando.mesh);
+    this.povo = new Crowd('pessoa', 840, { lod: true }); this.povo.mesh.visible = false; this.povo.mesh.userData.semHAO = true; this.root.add(this.povo.mesh); this.povoAreas = [];
+    this.bando = new Bando(42); this.root.add(this.bando.mesh);
     this.blobs = sombrasContato(); this.root.add(this.blobs.mesh);
     this.animados = [];
     // fusão: fontes fundidas (com assinatura), soltas à espera da refusão e cache das contribuições
@@ -161,14 +162,14 @@ export class Mundo {
     const pedidos = [];
     for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) {
       const P = p.userData.pessoas; if (!P || !p.userData.feito || !P.area?.length) continue;
-      pedidos.push({ tipo: 'area', P, n: m.id === 'praca' ? Math.max(P.n || 0, 110) : P.n || 20 });
+      pedidos.push({ tipo: 'area', P, n: VIDA * (m.id === 'praca' ? Math.max(P.n || 0, 110) : P.n || 20) });
     }
-    for (const m of Object.values(this.modelos)) if (m.caminho && m.partes.e1?.userData.feito) pedidos.push({ tipo: 'linha', pts: m.caminho, n: 10 });
+    for (const m of Object.values(this.modelos)) if (m.caminho && m.partes.e1?.userData.feito) pedidos.push({ tipo: 'linha', pts: m.caminho, n: 10 * VIDA });
     for (const [k, f] of Object.entries(this.faixas)) {
       const nv = Math.max(0, ...f.mods.map((md) => md.nivel)); if (typeof f.caminhoTeto !== 'function' || (k !== 'anel' && nv < 3) || nv < 1) continue;
       let c = null; try { c = f.caminhoTeto(); } catch (_) { c = null; }
       const linhas = !c?.length ? [] : typeof c[0][0] === 'number' ? [c] : c;
-      const n = k === 'anel' ? 40 : 12; linhas.forEach((l) => l.length > 1 && pedidos.push({ tipo: 'linha', pts: l.map((q) => (q.length === 3 ? q : [q[0], f.alturaTopo(nv), q[1]])), n: Math.round(n / linhas.length) }));
+      const n = (k === 'anel' ? 40 : 12) * VIDA; linhas.forEach((l) => l.length > 1 && pedidos.push({ tipo: 'linha', pts: l.map((q) => (q.length === 3 ? q : [q[0], f.alturaTopo(nv), q[1]])), n: Math.round(n / linhas.length) }));
     }
     const total = pedidos.reduce((s, x) => s + x.n, 0), lim = Math.min(C.max, GENTE[this.e.q?.id] || 200), k = total > lim ? lim / total : 1;
     for (const q of pedidos) {
@@ -390,6 +391,7 @@ export class Mundo {
     // gente: figura inteira só quando passaria de ~12 px de altura na tela (0,27 de altura)
     if (this.povo.mesh.visible) { const c = this.e.camera; this.povo.update(dt, t, c.position, (0.27 * (this.e.H || 720)) / (2 * Math.tan((c.fov * Math.PI) / 360) * 12)); }
     const noite = this.e.modoLuz === 'noite'; this.bando.mesh.visible = !noite; if (!noite) this.bando.update(dt, t);
+    this.cidade.update(dt, t);
     this.blobs.mesh.material.uniforms.opac.value = noite ? 0.2 : 0.35;
   }
 }

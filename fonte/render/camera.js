@@ -25,7 +25,8 @@ export class CameraRig {
     this.deslocAlvo = 0; this.deslocX = 0; this._baque = { x: 0, v: 0 }; this._orb = null; this._pass = { on: false, k: 0, t: 0 }; this._toque = performance.now();
     this._bind();
   }
-  zoomT() { return clamp((this.dist - this.minDist) / (this.maxDist - this.minDist), 0, 1); }
+  // fração do zoom para a inclinação: até distPitch (se houver) a curva é a mesma; além dela a câmera só se afasta
+  zoomT() { return clamp((this.dist - this.minDist) / ((this.distPitch || this.maxDist) - this.minDist), 0, 1); }
   pitch() {
     if (this.pitchFix != null) return this.pitchFix;
     const t = Math.pow(this.zoomT(), 0.62);

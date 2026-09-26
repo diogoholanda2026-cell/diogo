@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import { M } from './materials.js';
 import { FH, bake } from './geom.js';
 import { treeGroup } from './forest.js';
+import { Crowd } from './figuras.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tex } from './textures.js';
 import { BAIRROS, ORDEM_BAIRROS, LOTE, PASSO, areaBairro, loteDe, CIDADE } from '../data/cidade.js';
 import { hash } from '../core/util.js';
@@ -163,11 +165,73 @@ function parque(seed) {
   for (let k = 0; k < 9; k++) { const x = -1.6 + sorte(seed, k) * 3.2, z = -1.6 + sorte(seed, k + 20) * 3.2; if (Math.hypot((x - 0.3) / 1.3, (z - 0.4) / 0.8) < 1.15 || Math.abs(x + 1.35) < 0.3 || Math.abs(z + 1.35) < 0.3) continue; N.arvore(x, 0.03, z, 0.26 + sorte(seed, k + 40) * 0.14, sorte(seed, k + 60) < 0.15 ? 'outono' : 'jardim'); }
   return N.fim();
 }
-const MODELOS = { cidCasas: casas, cidTerraco: terraco, cidTorre: torre, cidAgua: agua, cidEnergia: energia, cidSaneamento: saneamento, cidSaude: saude, cidEscola: escola, cidSeguranca: seguranca, cidPraca: praca, cidParque: parque };
+// Rua comercial: três lojas com toldo e vitrine acesa (nível 1); escritórios em cima (2) e cobertura verde com placas (3)
+function comercio(n, seed) {
+  const N = new Nivel(n); const TOLDO = [M.terracota, M.teal, M.orange];
+  if (n === 1) {
+    for (let k = 0; k < 3; k++) { const x = -1.2 + k * 1.2; N.add(caixa(1.1, FH_C * 0.95, 2.2, M.fasciaBeiral, x, 0, -0.1)); N.add(caixa(1.0, FH_C * 0.7, 0.04, M.glassWarm, x, 0.02, 1.02, false));
+      const t = caixa(1.12, 0.03, 0.42, TOLDO[(k + seed) % 3], x, FH_C * 0.78, 1.2, false); t.rotation.x = 0.28; N.add(t); }
+    N.add(caixa(3.6, 0.06, 2.4, M.fasciaBeiral, 0, FH_C * 0.95, -0.1)); N.arvore(-1.75, 0, 1.75, 0.26); N.arvore(1.75, 0, 1.75, 0.26);
+  } else { const y = (n - 1) * FH_C + 0.02; N.pav(3.3, 2.0, 0, y, -0.25); if (n === 3) { N.teto(3.2, 1.9, 0, y + FH_C, -0.25); N.canteiro(3.3, 2.0, 0, y + FH_C, -0.25, 'f'); for (let q = 0; q < 2; q++) N.add(caixa(0.9, 0.03, 0.7, M.solar, -0.7 + q * 1.4, y + FH_C + 0.06, -0.5, false)); } else N.canteiro(3.3, 0.3, 0, y, 0.75, 'f'); }
+  return N.fim();
+}
+// Centro de negócios: pódio com saguão de vidro (1) e três pavimentos de vidro espelhado por nível (2 a 5), com lajes
+// creme e um terraço verde a cada nível; coroa com jardim no 5
+function escritorio(n, seed) {
+  const N = new Nivel(n); const w = 2.3, d = 2.3;
+  if (n === 1) { N.add(caixa(3.4, FH_C, 3.4, M.glass, 0, 0, 0, false)); N.add(caixa(3.5, 0.07, 3.5, M.fasciaBeiral, 0, FH_C - 0.07, 0)); N.teto(3.3, 3.3, 0, FH_C, 0); N.canteiro(3.4, 3.4, 0, FH_C, 0); N.arvore(-1.4, FH_C, 1.4, 0.22); N.arvore(1.4, FH_C, -1.4, 0.2); return N.fim(); }
+  const f0 = 1 + (n - 2) * 3;
+  for (let f = f0; f < f0 + 3; f++) { const y = f * FH_C; N.add(caixa(w, FH_C - 0.06, d, M.vidroEspelhado, 0, y, 0)); N.add(caixa(w + 0.12, 0.06, d + 0.12, M.fasciaBeiral, 0, y + FH_C - 0.06, 0)); }
+  const yt = (f0 + 3) * FH_C; N.canteiro(w + 0.1, d + 0.1, 0, yt, 0, ['fe', 'td', 'fd', 'te'][n % 4]);
+  if (n === 5) { N.teto(w, d, 0, yt, 0); N.arvore(-0.6, yt, 0.6, 0.2); N.arvore(0.6, yt, -0.5, 0.18); N.add(caixa(0.9, 0.3, 0.6, M.fasciaBeiral, 0.3, yt, 0.2)); }
+  return N.fim();
+}
+// Mercado municipal: galpão creme com abóbada de vidro em arcos de aço e barracas coloridas em volta
+function mercado(seed) {
+  const N = new Nivel(1); N.add(caixa(3.4, 0.5, 2.2, M.fasciaBeiral, 0, 0, -0.3));
+  const ab = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 3.3, 16, 1, true, 0, Math.PI), M.glass); ab.position.set(0, 0.5, -0.3); ab.rotation.set(0, 0, Math.PI / 2); N.add(ab); // meia casca virada para cima, ao longo de x
+  for (let k = 0; k < 5; k++) { const arco = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.035, 5, 16, Math.PI), M.steelDark); arco.position.set(-1.6 + k * 0.8, 0.5, -0.3); arco.rotation.y = Math.PI / 2; N.add(arco); }
+  const COR = [M.terracota, M.teal, M.yellow, M.orange]; for (let k = 0; k < 5; k++) { N.add(caixa(0.5, 0.26, 0.4, M.fasciaBeiral, -1.6 + k * 0.8, 0, 1.35, false)); N.add(caixa(0.56, 0.04, 0.46, COR[(k + seed) % 4], -1.6 + k * 0.8, 0.3, 1.35, false)); }
+  N.arvore(-1.75, 0, 1.8, 0.24); N.arvore(1.75, 0, 1.8, 0.24); return N.fim();
+}
+// Estação de VLT: cobertura ondulada sobre a plataforma, trilhos cruzando o lote e o bonde parado
+function estacao(seed) {
+  const N = new Nivel(1); for (const x of [-0.35, 0.35]) N.add(caixa(4.0, 0.03, 0.06, M.steel, 0, 0.02, x, false));
+  N.add(caixa(3.4, 0.14, 0.9, M.concretoClaro, 0, 0, -1.1)); for (const x of [-1.4, -0.45, 0.45, 1.4]) N.add(caixa(0.06, 0.62, 0.06, M.steel, x, 0.14, -1.1));
+  const cob = caixa(3.8, 0.05, 1.4, M.fasciaBeiral, 0, 0.78, -0.9); cob.rotation.x = -0.08; N.add(cob);
+  N.add(caixa(2.6, 0.34, 0.5, M.white, -0.2, 0.06, 0)); N.add(caixa(2.5, 0.12, 0.52, M.fac_escuro || M.dark, -0.2, 0.22, 0, false)); N.add(caixa(2.64, 0.04, 0.54, M.teal, -0.2, 0.06, 0, false));
+  N.arvore(-1.7, 0, 1.6, 0.26); N.arvore(1.7, 0, 1.6, 0.26); return N.fim();
+}
+// Hospital: dois blocos brancos (3 e 4 pavimentos) ligados por passarela, heliponto na cobertura e jardim na frente
+function hospital(seed) {
+  const N = new Nivel(1); let y = 0; for (let f = 0; f < 4; f++) y = N.pav(1.5, 3.0, -0.9, f * FH_C, -0.2, { fac: M.fac_lab || M.fac_fita });
+  N.add(caixa(1.5, 0.05, 3.0, M.fasciaBeiral, -0.9, y, -0.2)); N.add(malha(new THREE.CircleGeometry(0.55, 24).rotateX(-Math.PI / 2), M.dark, -0.9, y + 0.06, -0.2, false)); N.add(caixa(0.08, 0.02, 0.5, M.white, -1.05, y + 0.07, -0.2, false)); N.add(caixa(0.08, 0.02, 0.5, M.white, -0.75, y + 0.07, -0.2, false)); N.add(caixa(0.3, 0.02, 0.08, M.white, -0.9, y + 0.07, -0.2, false));
+  y = 0; for (let f = 0; f < 3; f++) y = N.pav(1.4, 2.4, 1.0, f * FH_C, -0.5, { fac: M.fac_lab || M.fac_fita }); N.teto(1.3, 2.3, 1.0, y, -0.5);
+  N.add(caixa(0.5, 0.28, 0.4, M.glass, 0.05, 2 * FH_C, -0.5, false)); N.add(caixa(0.3, 0.09, 0.06, M.cruzVerde, 1.0, 2 * FH_C + 0.12, 0.72, false)); N.add(caixa(0.09, 0.3, 0.06, M.cruzVerde, 1.0, 2 * FH_C + 0.02, 0.72, false));
+  N.add(caixa(3.6, 0.03, 0.9, M.lawn, 0, 0, 1.45, false)); N.arvore(-1.4, 0, 1.5, 0.26); N.arvore(0.2, 0, 1.55, 0.24); N.arvore(1.6, 0, 1.45, 0.26); return N.fim();
+}
+// Centro cultural: tambor do teatro em madeira e vidro, museu branco com rasgos e praça com escultura
+function cultura(seed) {
+  const N = new Nivel(1); const tb = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.05, 1.1, 24), M.madeiraClara); tb.position.set(-0.8, 0.55, -0.6); tb.castShadow = tb.receiveShadow = true; N.add(tb);
+  N.add(caixa(2.2, 0.08, 2.2, M.fasciaBeiral, -0.8, 1.1, -0.6)); N.add(new THREE.Mesh(new THREE.CylinderGeometry(1.06, 1.06, 0.3, 24, 1, true), M.glassWarm)).position.set(-0.8, 0.2, -0.6);
+  let y = 0; for (let f = 0; f < 2; f++) y = N.pav(1.4, 1.8, 1.1, f * FH_C, -0.8, { fac: M.fac_escuro || M.fac_fita }); N.add(caixa(1.4, 0.06, 1.8, M.white, 1.1, y, -0.8));
+  N.add(caixa(3.8, 0.03, 1.5, M.pavers, 0, 0, 1.2, false)); N.add(caixa(0.2, 0.5, 0.2, M.steel, 0.3, 0.03, 1.2)); N.add(malha(new THREE.TorusKnotGeometry(0.16, 0.05, 32, 6), M.steel, 0.3, 0.72, 1.2));
+  N.arvore(-1.6, 0, 1.6, 0.24); N.arvore(1.6, 0, 1.6, 0.24); return N.fim();
+}
+// Arena esportiva: campo com pista, arquibancadas cobertas nos lados compridos e quatro torres de luz
+function estadio(seed) {
+  const N = new Nivel(1); N.add(malha(new THREE.PlaneGeometry(2.4, 1.5).rotateX(-Math.PI / 2), M.field, 0, 0.03, 0, false)); N.add(caixa(3.0, 0.02, 2.1, M.track, 0, 0, 0, false));
+  for (const z of [-1.4, 1.4]) { for (let k = 0; k < 3; k++) N.add(caixa(3.4, 0.14, 0.2, M.white, 0, k * 0.14, z + Math.sign(z) * k * 0.18)); const cob = caixa(3.6, 0.04, 0.8, M.fasciaBeiral, 0, 0.72, z + Math.sign(z) * 0.2); cob.rotation.x = Math.sign(z) * 0.12; N.add(cob); }
+  for (const [x, z] of [[-1.8, -1.8], [1.8, -1.8], [-1.8, 1.8], [1.8, 1.8]]) { N.add(caixa(0.06, 1.3, 0.06, M.steel, x, 0, z)); N.add(caixa(0.3, 0.12, 0.08, M.lampGlow, x, 1.3, z, false)); }
+  return N.fim();
+}
+const MODELOS = { cidCasas: casas, cidTerraco: terraco, cidTorre: torre, cidAgua: agua, cidEnergia: energia, cidSaneamento: saneamento, cidSaude: saude, cidEscola: escola, cidSeguranca: seguranca, cidPraca: praca, cidParque: parque,
+  cidComercio: comercio, cidEscritorio: escritorio, cidMercado: mercado, cidEstacao: estacao, cidHospital: hospital, cidCultura: cultura, cidEstadio: estadio };
 // altura do topo de um prédio no nível n (âncora de balão e placa da obra)
 function alturaDe(f, n) {
   if (f === 'cidCasas') return (n >= 3 ? 3 : 2) * FH_C + 0.1; if (f === 'cidTerraco') return (Math.max(2, n + 1)) * FH_C + 0.1;
-  if (f === 'cidTorre') return (n <= 1 ? 2 : 2 + (n - 1) * 4) * FH_C + 0.1; return 1.1;
+  if (f === 'cidTorre') return (n <= 1 ? 2 : 2 + (n - 1) * 4) * FH_C + 0.1; if (f === 'cidComercio') return n * FH_C + 0.1;
+  if (f === 'cidEscritorio') return (n <= 1 ? 1 : 1 + (n - 1) * 3) * FH_C + 0.1; if (f === 'cidHospital') return 4 * FH_C + 0.2; if (f === 'cidEstadio' || f === 'cidCultura') return 1.4; return 1.1;
 }
 
 // ---------------------------------------------------------------- grupo de um tipo (API de grupo de módulos)
@@ -244,6 +308,41 @@ function arvoresRua(abertos) {
 }
 const lotesDoBairroLocal = (b) => { const B = BAIRROS[b], out = []; for (let j = 0; j < B.nz; j++) for (let i = 0; i < B.nx; i++) out.push({ i, j, x: B.x0 + i * PASSO + LOTE.tam / 2, z: B.z0 + j * PASSO + LOTE.tam / 2 }); return out; };
 
+// ---------------------------------------------------------------- vida na cidade
+// gente nas calçadas (três por prédio pronto, dando a volta no lote) e carros nas ruas dos bairros abertos, pela
+// qualidade (o dono liberou o triplo do volume)
+const GENTE_CIDADE = { ultra: 420, alta: 320, media: 200, leve: 100 };
+const CARROS_CIDADE = { ultra: 120, alta: 90, media: 60, leve: 30 };
+const COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xd8d8d0, 0xe8c840, 0x2a2e36, 0x8a2e2e, 0x2e7a5a];
+function carrosCidade(max) {
+  const pinta = (g, c) => { g = g.toNonIndexed(); const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+  const corpo = pinta(new THREE.BoxGeometry(0.42, 0.15, 0.2).translate(0, 0.1, 0), [1, 1, 1]), cab = pinta(new THREE.BoxGeometry(0.22, 0.1, 0.18).translate(-0.03, 0.22, 0), [0.04, 0.05, 0.07]);
+  const farol = pinta(new THREE.BoxGeometry(0.02, 0.04, 0.16).translate(0.21, 0.12, 0), [2.2, 2.0, 1.6]);
+  const geo = mergeGeometries([corpo, cab, farol]); const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3 });
+  const mesh = new THREE.InstancedMesh(geo, mat, max); mesh.count = 0; mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.userData.semHAO = true; mesh.name = 'carros-cidade';
+  const lista = []; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s1 = new THREE.Vector3(1, 1, 1), c = new THREE.Color();
+  return {
+    mesh,
+    // ruas dos bairros abertos (linhas e colunas da grade) e n carros sorteados nelas
+    rotas(abertos, n) {
+      const ruas = []; for (const b of abertos) { const B = BAIRROS[b], x0 = B.x0 - LOTE.rua / 2, x1 = B.x0 + B.nx * PASSO - LOTE.rua / 2, z0 = B.z0 - LOTE.rua / 2, z1 = B.z0 + B.nz * PASSO - LOTE.rua / 2;
+        for (let j = 0; j <= B.nz; j++) ruas.push({ h: true, a: x0, b: x1, f: z0 + j * PASSO }); for (let i = 0; i <= B.nx; i++) ruas.push({ h: false, a: z0, b: z1, f: x0 + i * PASSO }); }
+      lista.length = 0; const N = ruas.length ? Math.min(max, n, abertos.length * 14) : 0;
+      for (let k = 0; k < N; k++) { const r = ruas[(hash(k, 3, 881) * ruas.length) | 0]; lista.push({ r, s: hash(k, 5, 881) * (r.b - r.a), dir: hash(k, 7, 881) < 0.5 ? 1 : -1, v: 0.8 + hash(k, 9, 881) * 0.6 }); mesh.setColorAt(k, c.setHex(COR_CARRO[(hash(k, 11, 881) * COR_CARRO.length) | 0])); }
+      mesh.count = lista.length; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; this.update(0);
+    },
+    update(dt) {
+      for (let k = 0; k < lista.length; k++) {
+        const o = lista[k], r = o.r, L = r.b - r.a; o.s += o.dir * o.v * dt; if (o.s > L) { o.s = L; o.dir = -1; } else if (o.s < 0) { o.s = 0; o.dir = 1; }
+        const lane = 0.24 * o.dir;
+        if (r.h) { p.set(r.a + o.s, 0.03, r.f + lane); e.set(0, o.dir > 0 ? 0 : Math.PI, 0); } else { p.set(r.f - lane, 0.03, r.a + o.s); e.set(0, o.dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0); }
+        q.setFromEuler(e); mesh.setMatrixAt(k, m4.compose(p, q, s1));
+      }
+      if (lista.length) mesh.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
 // ---------------------------------------------------------------- cidade
 export class Cidade {
   constructor(engine) {
@@ -256,6 +355,26 @@ export class Cidade {
     const mm = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5fd8ff).multiplyScalar(1.25), transparent: true, opacity: 0.45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12 });
     this.marcas = new THREE.InstancedMesh(q, mm, 400); this.marcas.count = 0; this.marcas.renderOrder = 5; this.marcas.userData.semHAO = true; this.marcas.frustumCulled = false; this.marcas.visible = false;
     this.group.add(this.marcas);
+    // vida: gente nas calçadas e carros nas ruas (refeitos quando a cidade muda, no máximo a cada 1,5 s)
+    this.povo = new Crowd('pessoa', 420, { lod: true }); this.povo.mesh.userData.semHAO = true; this.group.add(this.povo.mesh);
+    this.carros = carrosCidade(120); this.group.add(this.carros.mesh); this._tPovo = -1e9; this.sujo = true;
+  }
+  _povoar() {
+    const C = this.povo; C.clear(); const q = this.e.q?.id || 'alta', lim = GENTE_CIDADE[q] || 300;
+    for (const fx of Object.values(this.faixas)) for (const m of fx.mods) {
+      if (!m || m.nivel < 1) continue;
+      for (let k = 0; k < 3 && C.walkers.length < lim; k++) {
+        const o = LOTE.tam / 2 + 0.16 + (hash(m.seed, k, 3) - 0.5) * 0.14, x = m.x, z = m.z, y = 0.04;
+        const path = [[x - o, y, z + o], [x + o, y, z + o], [x + o, y, z - o], [x - o, y, z - o], [x - o, y, z + o]];
+        C.add(k % 2 ? path.slice().reverse() : path, { loop: 'loop', speed: 0.1 + hash(m.seed, k, 5) * 0.06, phase: hash(m.seed, k, 7), idle: hash(m.seed, k, 9) < 0.2 ? 1 : 0 });
+      }
+    }
+    this.carros.rotas(this.abertos, CARROS_CIDADE[q] || 90);
+  }
+  update(dt, t) {
+    if (this.sujo && t - this._tPovo > 1500) { this.sujo = false; this._tPovo = t; this._povoar(); }
+    const cam = this.e.camera; if (this.povo.walkers.length) this.povo.update(dt, t, cam.position, (0.27 * (this.e.H || 720)) / (2 * Math.tan((cam.fov * Math.PI) / 360) * 12));
+    this.carros.update(Math.min(dt, 0.1));
   }
   faixa(f) { return this.faixas[f]; }
   centroLote(id) { const l = loteDe(id); return l ? { x: l.x, z: l.z } : null; }
@@ -266,7 +385,7 @@ export class Cidade {
     for (const b of ORDEM_BAIRROS) if (abertos.includes(b)) this.chao.add(chaoBairro(b));
     if (this._postes) { this.group.remove(this._postes); this._postes = null; } this._postes = postes(abertos); if (this._postes) this.group.add(this._postes);
     if (this._arvRua) { this.group.remove(this._arvRua); this._arvRua = null; } this._arvRua = arvoresRua(abertos); if (this._arvRua) this.group.add(this._arvRua);
-    this.e.shadowDirty = true;
+    this.e.shadowDirty = true; this.sujo = true;
   }
   // os prédios de cada tipo seguem o estado (quantidade, lote e nível; o nível de quem está em obra é o de antes)
   sincronizar(modulos) {

@@ -192,7 +192,7 @@ const BLOB_V = /* glsl */`varying vec2 vUv; void main() { vUv = uv; vec4 p = vec
   gl_Position = projectionMatrix * modelViewMatrix * p; }`;
 const BLOB_F = /* glsl */`uniform float opac; varying vec2 vUv; void main() { float r = length(vUv - 0.5) * 2.0; gl_FragColor = vec4(0.0, 0.0, 0.0, (1.0 - smoothstep(0.25, 1.0, r)) * opac); }`;
 let BLOBS = null;
-export function sombrasContato(max = 64) {
+export function sombrasContato(max = 192) {
   if (BLOBS) return BLOBS;
   const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); g.userData.compartilhada = true;
   const mat = new THREE.ShaderMaterial({ vertexShader: BLOB_V, fragmentShader: BLOB_F, uniforms: { opac: { value: 0.35 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });

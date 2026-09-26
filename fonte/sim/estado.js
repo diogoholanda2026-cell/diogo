@@ -71,8 +71,10 @@
 //   J.precoBase(k) (3 × o valor), J.precoVenda(k) = 150% do preço base; J.vendasDeposito() → {feitas, max: 100};
 //   J.comprar(k) → 'ok'|'esgotado'|'creditos'|'almox'|'bloqueado'; J.vender(k, n) → 'ok'|'limite'|'nada'|'nao'.
 // J.servicoInfo(tipo) → {cap, uso} (tipo 'agua'|'energia'|'saneamento'); J.bemInfo() → {total, fontes[], pressao}.
+// Compra de tempo: J.comprarTempo(alvo, min) (REGRAS.compraTempo: 1 min 100, 5 min 500, 10 min 1.000, 30 min 2.500, 60 min 5.000).
 // Cidade: J.construirCidade(f, lote) (coloca e começa o nível 1), J.comprarBairro(b), J.lotesLivres(b?), J.ocupacaoCidade(),
-//   J.cidadeInfo(), J.podeConstruir(f), J.bairroAberto(b), J.popModulo(f, nivel); os prédios são módulos (S.modulos[f][i].lote).
+//   J.cidadeInfo(), J.podeConstruir(f), J.bairroAberto(b), J.popModulo(f, nivel), J.rendaCidade() (bônus do comércio); os prédios
+//   são módulos (S.modulos[f][i].lote).
 // Pedidos (S.pedidos[i]): {id, modelo, quem, onde, cor, fala, itens, recompensa, espera, auto} com
 //   recompensa = {creditos, xp, itens?:{id:n}, bem?:{n,h}, disposicao?}; (creditos, xp, especial: cópias antigas).
 // Escolhas do Conselho (CAPITULOS[n].escolha[]): {id, quem, txt, ganho, custo, porque, dica (as três juntas)}; valem nos capítulos seguintes.
@@ -91,7 +93,7 @@
 import { ITENS, PREDIOS, USINAS, OFICINAS, XP_NIVEL, NIVEIS_SELO } from '../data/itens.js';
 import { PROJETOS, PROJ, MODULOS, LIMITE_CAP, POP_NIVEL, POOL_NIVEL, CUSTO_NIVEL, TEMPO_NIVEL, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../data/obras.js';
 import { CAPITULOS, EFEITOS, MARCOS, FALAS_ETAPA, EPILOGO, PEDIDOS } from '../data/historia.js';
-import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO } from '../data/cidade.js';
+import { CIDADE, TIPOS_CIDADE, BAIRROS, ORDEM_BAIRROS, loteDe, MAX_POR_TIPO, RENDA_CIDADE_MAX } from '../data/cidade.js';
 
 export const VERSAO_SAVE = 3;
 const N_MODULOS = { anel: 8, uni: 4, anelBib: 3, casas: 6, santuario: 5 };
@@ -119,6 +121,8 @@ const EMP = { ano: 50000, max: 500000, taxa: 0.10, prazoAnos: 10, passo: 1000, m
 // economia (medida pelo robô em sessões): cada etapa ou pavimento aprovado devolve 150% do que custou (créditos pagos
 // + valor dos itens entregues) e cada etapa dá 1 acelerador de obra e 1 de produção (cada um adianta 1 h de um cronômetro)
 const RECOMPENSA = 1.5, ACELERA_MS = 3600e3;
+// compra de tempo com créditos (pedido do dono): [minutos, preço]; adianta na hora o cronômetro do alvo
+export const COMPRA_TEMPO = [[1, 100], [5, 500], [10, 1000], [30, 2500], [60, 5000]];
 // pedidos da comunidade: 5 × as quantidades de antes e 150% do valor dos itens em créditos; a Usina de Pedidos aceita até
 // 24 trabalhos na fila
 const PEDIDO_FATOR = 5, PEDIDO_VALOR = 1.5, FILA_PEDIDOS = 24;
@@ -133,7 +137,7 @@ const TARIFA = [[30, 5, '0-30'], [60, 8, '31-60'], [100, 11, '61-100']], OFFLINE
 // vende a 150% do preço base de compra (4,5 × o valor), até 100 vendas por janela
 const DEP = { janela: 4 * 3600e3, estoque: 10, sobe: 1.12, vendas: 100, compra: 3, venda: 1.5 };
 // números das regras para a interface mostrar (em vez de constantes soltas nos textos)
-export const REGRAS = { fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
+export const REGRAS = { compraTempo: COMPRA_TEMPO, fichasMax: FICHAS_MAX, mutiraoH: MUTIRAO_MS / 3600e3, cofreH: COFRE_H, capPedidos: CAP_PEDIDOS, bandeja: BANDEJA, filaMax: FILA_MAX, filaSelo: FILA_SELO, usinaMax: USINA_MAX, pendH: PEND_MS / 3600e3,
   pedidoFator: PEDIDO_FATOR, pedidoValor: PEDIDO_VALOR, filaPedidos: FILA_PEDIDOS, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR, tarifas: TARIFA.map((t) => t[1]), almoxBase: ALMOX_BASE, almoxNivel: ALMOX_NIVEL, depVendas: DEP.vendas, depEstoque: DEP.estoque, depJanelaH: DEP.janela / 3600e3, depVenda: DEP.venda, loteMax: LOTE_MAX, fLote: F_LOTE, recompensa: RECOMPENSA, aceleraH: ACELERA_MS / 3600e3, diaMs: DIA_MS, mesDias: MES_DIAS, anoDias: ANO_DIAS, empAno: EMP.ano, empMax: EMP.max, empTaxa: EMP.taxa, empPrazoAnos: EMP.prazoAnos, empPasso: EMP.passo, empMora: EMP.mora };
 export const TOPOGRAFO = { estaca: { itens: { madeira: 2 }, creditos: 300, min: 20 }, baliza: { itens: { aco: 2 }, creditos: 600, min: 30 }, trena: { itens: { cobre: 2 }, creditos: 900, min: 45 } };
 const LICENCAS = ['estaca', 'baliza', 'trena'], ALMOX = ['estrado', 'etiqueta', 'cadeado'];
@@ -384,7 +388,7 @@ export class Jogo {
     if (f === 'anel' && this.S.cap === 1 && i >= M.inicio) return false; return true;
   }
   pedidoModulo(f, i, nivel) { // itens pedidos para subir ao "nivel" (sorteio fixo por módulo e nível)
-    if (MODULOS[f].cidade && (nivel <= 1 || MODULOS[f].cat !== 'moradia')) return {}; // a construção na cidade só pede créditos
+    if (MODULOS[f].cidade && (nivel <= 1 || MODULOS[f].max <= 1)) return {}; // a construção na cidade só pede créditos (os níveis seguintes de moradia e comércio pedem materiais)
     const S = this.S; const pool = (POOL_NIVEL[nivel] || []).filter((k) => ITENS[k].nivel <= Math.max(S.nivel, 1) && (ITENS[k].cap || 1) <= S.cap && (!ITENS[k].oficina || S.predios[ITENS[k].oficina]?.ok || ITENS[k].tipo === 'bruto'));
     const base = pool.length ? pool : ['viga'];
     const n = Math.min(nivel === 1 ? 2 : 3, base.length); const out = {};
@@ -414,9 +418,11 @@ export class Jogo {
   }
   _faixaTarifa() { const b = this.bem; return TARIFA.find((t) => b <= t[0]) || TARIFA[TARIFA.length - 1]; }
   tarifaMorador() { return this._faixaTarifa()[1]; } // créditos por morador por hora (5, 8 ou 11 pelo bem-estar geral)
-  rendaHora() { return this.pop * this.tarifaMorador() * Math.max(0, 1 + this.ef.repasse); } // créditos por hora, online
+  // comércio da cidade: cada nível soma a sua renda (rua comercial 1%, centro de negócios 1,5%, mercado 3%), até +45%
+  rendaCidade() { let r = 0; for (const f of TIPOS_CIDADE) { const k = CIDADE[f].renda; if (k) for (const m of this.S.modulos[f] || []) r += k * m.nivel; } return Math.min(RENDA_CIDADE_MAX, r); }
+  rendaHora() { return this.pop * this.tarifaMorador() * Math.max(0, 1 + this.ef.repasse + this.rendaCidade()); } // créditos por hora, online
   taxaRepasse() { return this.rendaHora() / 60; } // créditos por minuto (nome antigo, usado pela interface)
-  rendaInfo() { const f = this._faixaTarifa(), por = this.rendaHora(); return { tarifa: f[1], faixa: f[2], porHora: por, cofre: Math.floor(this.S.repasse.acum), cofreMax: por * COFRE_H, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR }; }
+  rendaInfo() { const f = this._faixaTarifa(), por = this.rendaHora(); return { tarifa: f[1], faixa: f[2], porHora: por, comercio: this.rendaCidade(), cofre: Math.floor(this.S.repasse.acum), cofreMax: por * COFRE_H, offlineH: OFFLINE_H, offlineFator: OFFLINE_FATOR }; }
   vida() { // porcentagem da composição concluída
     let tot = 0, ok = 0;
     for (const p of PROJETOS) for (const e of p.etapas) { tot += 1; if (this.feita(p.id + '.' + e.id)) ok += 1; }
@@ -755,6 +761,21 @@ export class Jogo {
     } else return 'nada';
     A[tipo]--; S.stats.acelerados++; this.tick(a); this.emit('acelerou', { alvo, tipo, restante: A[tipo], aceleradores: { ...A } }); return 'ok';
   }
+  // cronômetros correndo de um alvo (obra de etapa ou módulo, espaços de usina, trabalho da vez na oficina)
+  _cronometros(alvo) {
+    const S = this.S, a = this.agora;
+    if (alvo?.etapa) { const st = S.etapas[alvo.etapa]; return st?.estado === 'obra' ? [st] : []; }
+    if (alvo?.modulo) { const m = S.modulos[alvo.modulo[0]]?.[alvo.modulo[1]]; return m?.obra?.estado === 'obra' ? [m.obra] : []; }
+    if (alvo?.predio) { const p = S.predios[alvo.predio]; if (!p?.ok) return []; if (p.slots) return p.slots.filter((s, i) => s && s.fim > a && (alvo.slot == null || alvo.slot === i)); const f = p.fila?.[0]; return f && f.fim && f.fim > a ? [f] : []; }
+    return [];
+  }
+  // compra de tempo: paga o pacote (1, 5, 10, 30 ou 60 min) e adianta o cronômetro do alvo na hora
+  comprarTempo(alvo, min) {
+    const p = COMPRA_TEMPO.find((x) => x[0] === +min); if (!p) return 'nada'; const S = this.S, a = this.agora;
+    if (S.creditos < p[1]) return 'creditos'; const cs = this._cronometros(alvo); if (!cs.length) return 'nada';
+    for (const x of cs) x.fim = Math.max(a, x.fim - p[0] * 60e3);
+    S.creditos -= p[1]; S.stats.tempoComprado = (S.stats.tempoComprado || 0) + p[0]; this.tick(a); this.emit('tempoComprado', { alvo, min: p[0], preco: p[1] }); return 'ok';
+  }
   // módulos (zonas residenciais)
   situacaoModulo(f, i) {
     const m = this.S.modulos[f][i]; if (m.obra) return m.obra.estado; if (!this.moduloAberto(f, i)) return 'bloqueado';
@@ -797,7 +818,7 @@ export class Jogo {
   podeConstruir(f) { if (!this.tipoCidadeLiberado(f)) return 'capitulo'; if ((this.S.modulos[f] || []).length >= MAX_POR_TIPO) return 'teto'; if (this.S.creditos < CIDADE[f].custo[1]) return 'creditos'; return null; }
   // coloca um prédio do tipo f no lote e começa a obra do nível 1 (só créditos)
   construirCidade(f, loteId) {
-    const l = loteDe(loteId); if (!l) return 'lote'; if (!this.bairroAberto(l.bairro)) return 'bairro'; if (this.ocupacaoCidade().has(loteId)) return 'ocupado';
+    const l = loteDe(loteId); if (!l) return 'lote'; if (!this.bairroAberto(l.bairro)) return 'bairro'; if (this.ocupacaoCidade().has(loteId)) return 'loteOcupado';
     const falta = this.podeConstruir(f); if (falta) return falta;
     const arr = this.S.modulos[f]; arr.push({ nivel: 0, obra: null, lote: loteId }); const i = arr.length - 1;
     const r = this.melhorarModulo(f, i); if (r !== 'ok') { arr.pop(); return r; }
@@ -809,9 +830,9 @@ export class Jogo {
   }
   // resumo da cidade: prédios por categoria, moradores da cidade, lotes livres
   cidadeInfo() {
-    const n = { moradia: 0, servico: 0, lazer: 0 }; let pop = 0;
+    const n = { moradia: 0, comercio: 0, servico: 0, lazer: 0 }; let pop = 0;
     for (const f of TIPOS_CIDADE) for (const m of this.S.modulos[f] || []) { n[CIDADE[f].cat]++; pop += this.popModulo(f, m.nivel); }
-    return { predios: n, pop, livres: this.lotesLivres().length, bairros: ORDEM_BAIRROS.filter((b) => this.bairroAberto(b)) };
+    return { predios: n, pop, renda: this.rendaCidade(), livres: this.lotesLivres().length, bairros: ORDEM_BAIRROS.filter((b) => this.bairroAberto(b)) };
   }
   // Mutirão: a comunidade adianta até 2 horas de um cronômetro
   mutirao(alvo) {

@@ -202,7 +202,7 @@ export function bioma() {
   P.e4.userData.update = inner.update;
   { // manada do pasto (coordenadas de mundo: o grupo desfaz a translação do root); a quarta é o filhote
     const pastoPoly = anelPts(pa.c[0], pa.c[1], pa.rx - 0.2, pa.rz - 0.15, 12);
-    const md = new Manada('elefante', 4, pastoPoly, { vel: 0.08, escala: 1.15 }); md.a[3].s = 0.6; md.update(0, 0);
+    const md = new Manada('elefante', 7, pastoPoly, { vel: 0.08, escala: 1.15 }); md.a[3].s = 0.6; md.a[6].s = 0.65; md.update(0, 0);
     const g = new THREE.Group(); g.position.set(-cx, 0, -cz); g.add(md.mesh); P.e4.add(g); P.e4.userData.manadas = [md];
   }
   for (const kk of Object.keys(P)) root.add(P[kk]);
@@ -510,8 +510,8 @@ export function savana() {
   // e3: elefantes / e4: girafas e rinocerontes (animam no mundo), cada espécie no seu piquete
   const pq = sv.piquetes || [poly, poly, poly];
   P.e3 = new THREE.Group(); P.e4 = new THREE.Group();
-  P.e3.userData.manadas = [new Manada('elefante', 2, pq[1], { vel: 0.1, escala: 1.25 })];
-  P.e4.userData.manadas = [new Manada('girafa', 3, pq[0], { vel: 0.12, escala: 1.1 }), new Manada('rinoceronte', 2, pq[2], { vel: 0.08, escala: 1.3 })];
+  P.e3.userData.manadas = [new Manada('elefante', 4, pq[1], { vel: 0.1, escala: 1.25 })];
+  P.e4.userData.manadas = [new Manada('girafa', 6, pq[0], { vel: 0.12, escala: 1.1 }), new Manada('rinoceronte', 4, pq[2], { vel: 0.08, escala: 1.3 })];
   for (const m of P.e3.userData.manadas) P.e3.add(m.mesh); for (const m of P.e4.userData.manadas) P.e4.add(m.mesh);
   for (const k of Object.keys(P)) root.add(P[k]);
   const c = poly.reduce((s, [x, z]) => [s[0] + x / poly.length, s[1] + z / poly.length], [0, 0]);
@@ -540,7 +540,7 @@ export function santuarioInterior() {
   }
   const [gc, grx, grz, grot] = SANTUARIO_GRAMADO.elipse; P.e1.userData.pessoas = { area: anelPts(gc[0], gc[1], grx * 0.85, grz * 0.85, 16, grot || 0), y: 0.03, n: 6 };
   P.e2 = new THREE.Group(); // fauna resgatada: elefantes e rinocerontes no piquete de terra
-  P.e2.userData.manadas = [new Manada('elefante', 2, piq, { vel: 0.08, escala: 1.2 }), new Manada('rinoceronte', 2, piq, { vel: 0.07, escala: 1.25 })];
+  P.e2.userData.manadas = [new Manada('elefante', 4, piq, { vel: 0.08, escala: 1.2 }), new Manada('rinoceronte', 3, piq, { vel: 0.07, escala: 1.25 })];
   for (const m of P.e2.userData.manadas) P.e2.add(m.mesh);
   for (const k of Object.keys(P)) root.add(P[k]);
   return { id: 'santuarioInt', root, partes: P, esqueletos: {}, grua: {}, foco: { x: s.c[0] - 1, z: s.c[1] - 2, dist: 18 }, ancora: [L.c[0], 2, L.c[1]] };

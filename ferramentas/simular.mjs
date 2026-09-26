@@ -16,6 +16,7 @@ import { novoEstado, prepararSave, Jogo, TOPOGRAFO, FICHAS_MAX, N_MODULOS, F_PRO
 import { ITENS, PREDIOS, USINAS, OFICINAS, receitas } from '../fonte/data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, LIMITE_CAP, SERVICO_NIVEL, BEM_NIVEL, PRESSAO_MORADIA } from '../fonte/data/obras.js';
 import { CAPITULOS, FALAS_ETAPA, EFEITOS, TUTORIAL } from '../fonte/data/historia.js';
+import { CIDADE, BAIRROS } from '../fonte/data/cidade.js';
 
 const DIA0 = Date.UTC(2026, 0, 1); const H = 3600e3;
 const SESSOES_PADRAO = '7:30-7:45,12:30-12:45,18:30-18:45,22:00-22:15';
@@ -460,6 +461,22 @@ function testes() {
     // cenário "juros e limites": sem crédito no começo, o robô toma empréstimo, paga os juros a cada visita e quita antes do fim
     { const S0 = novoEstado(T); S0.creditos = 0; const R = rodar({ estado: S0, sessoes: SESSOES_PADRAO, passo: 1, semente: 5, emprestimo: 1 }); const EI = R.J.emprestimoInfo();
       f(R.terminou && !R.travou, 'cenário de empréstimo: ' + (R.travou || 'não terminou')); f(R.S.stats.emprestado >= 1000 && R.S.stats.emprestado <= 100000 && R.S.stats.jurosPagos > 0 && EI.divida < 1, `cenário de empréstimo: tomado ${R.S.stats.emprestado}, juros pagos ${R.S.stats.jurosPagos}, dívida no fim ${EI.divida.toFixed(0)}`); }
+    // compra de tempo: o pacote custa o preço da tabela e adianta o cronômetro na hora; pacote inválido, sem obra ou sem
+    // créditos não cobra
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 10000; S.modulos.anel[0].pedido = null; J._pedidoModulos(); const r = J.requisitosModulo('anel', 0); for (const [k, n] of Object.entries(r.itens)) S.itens[k] = n;
+      f(J.melhorarModulo('anel', 0) === 'ok', 'módulo para a compra de tempo'); const o = S.modulos.anel[0].obra; o.fim = J.agora + 20 * 60e3; const fim0 = o.fim, c0 = S.creditos;
+      f(J.comprarTempo({ modulo: ['anel', 0] }, 5) === 'ok' && S.creditos === c0 - 500 && Math.abs(fim0 - o.fim - 5 * 60e3) < 2 && S.stats.tempoComprado === 5, `5 min por 500 (adiantou ${Math.round((fim0 - o.fim) / 1000)} s)`);
+      f(J.comprarTempo({ modulo: ['anel', 0] }, 7) === 'nada' && J.comprarTempo({ etapa: 'lago.e1' }, 1) === 'nada' && S.creditos === c0 - 500, 'pacote inválido ou sem obra não cobra');
+      S.creditos = 999; f(J.comprarTempo({ modulo: ['anel', 0] }, 10) === 'creditos' && S.creditos === 999, 'sem créditos não compra');
+      S.creditos = 1e5; f(J.comprarTempo({ modulo: ['anel', 0] }, 60) === 'ok' && o.estado === 'pronta' && S.creditos === 1e5 - 5000, 'uma hora conclui a obra curta');
+      f(REGRAS.compraTempo.map((x) => x.join(':')).join(' ') === '1:100 5:500 10:1000 30:2500 60:5000', 'tabela da compra de tempo'); }
+    // cidade: o Sul abre de graça; lote ocupado e bairro fechado recusam; o bairro se compra no capítulo; o comércio dá renda
+    { const S = novoEstado(T); const J = new Jogo(S); J.tick(T); S.creditos = 1e6; const l0 = J.lotesLivres('sul')[0];
+      f(J.construirCidade('cidCasas', l0) === 'ok' && S.modulos.cidCasas.length === 1 && S.modulos.cidCasas[0].obra?.estado === 'obra', 'casa colocada no Sul começa a obra do nível 1');
+      f(J.construirCidade('cidPraca', l0) === 'loteOcupado' && J.construirCidade('cidCasas', 'leste:0:0') === 'bairro' && J.comprarBairro('leste') === 'capitulo', 'lote ocupado e bairro fechado');
+      S.cap = 2; const c0 = S.creditos; f(J.comprarBairro('leste') === 'ok' && S.creditos === c0 - BAIRROS.leste.preco && J.comprarBairro('leste') === 'aberto', 'bairro comprado');
+      f(J.construirCidade('cidComercio', 'leste:0:0') === 'ok' && J.rendaCidade() === 0, 'comércio em obra ainda não rende');
+      J.tick(T + 2 * H); S.modulos.cidComercio.forEach((m, i) => m.obra?.estado === 'pronta' && J.aprovarModulo('cidComercio', i)); f(Math.abs(J.rendaCidade() - CIDADE.cidComercio.renda) < 1e-9, `comércio pronto rende (${J.rendaCidade()})`); }
     // tutorial: cada passo tem fala e teste
     f(TUTORIAL.every((p) => p.id && p.quem && p.fala && p.alvo && typeof p.feito === 'function'), 'tutorial incompleto');
   } catch (e) { falhas.push('teste: exceção ' + (e.stack || e.message)); }

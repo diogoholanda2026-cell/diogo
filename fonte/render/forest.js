@@ -259,7 +259,7 @@ export class Forest {
     this._cam = [NaN, 0, 0, 0, 0]; this._build();
   }
   _build() {
-    const step = 0.6; const R = rng(4242); const trees = []; const cant = [];
+    const step = 0.5; const R = rng(4242); const trees = []; const cant = []; // (mata 44% mais densa: o dono liberou o triplo do volume)
     const semMata = A.semMata || []; const aldeia = aldeiaCasas(); const ca = (A.aldeia || { c: [-27.5, 3.0] }).c; const ilha = A.santuario.lago?.ilha;
     // três classes em manchas de 3 a 6 unidades: arbusto (30%), média (50%) e emergente (20%); perto da aldeia só as duas primeiras
     const classe = (jx, jz, pertoAldeia) => { let f = fbm(jx, jz, 4, 22, 2); if (pertoAldeia && f > 0.62) f = 0.55; return f < 0.41 ? [0.3 + R() * 0.1, 0.7] : f > 0.62 ? [0.72 + R() * 0.23, 1.25 + R() * 0.15] : [0.48 + R() * 0.18, 1.0]; };
