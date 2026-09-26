@@ -57,7 +57,9 @@ class Buf {
 }
 
 // Varre um perfil ao longo de um caminho.
-// edges: [{a:[o,y], b:[o,y], mat, uv:'facade'|'plan'|'run', vBase}]
+// edges: [{a:[o,y], b:[o,y], mat, uv:'facade'|'plan'|'run', vBase, uRep, vRep}] (uRep/vRep = período do mapa da fachada em
+// unidades de mundo; por padrão 32 vãos de BAY por 4 andares de FH). opts.capMat = material das tampas (senão o da aresta
+// marcada com cap, ou a primeira)
 // opts.width (t, i) => fator de largura do perfil nesse ponto (pontas afinadas), aplicado em torno de
 // opts.widthCenter (o do eixo do perfil; 0 por padrão)
 export function sweep(path, closed, edges, opts = {}) {
@@ -83,7 +85,7 @@ export function sweep(path, closed, edges, opts = {}) {
       pa = [Ax, Az]; pb = [Bx, Bz];
       let wnx = nx * dno, wny = dny, wnz = nz * dno; const wl = Math.hypot(wnx, wny, wnz) || 1; wnx /= wl; wny /= wl; wnz /= wl;
       let ua, va, ub, vb;
-      if (e.uv === 'facade') { const s = (sa + sb) / 2 + (opts.u0 || 0); ua = ub = s / (BAY * 32); va = (ay - (e.vBase || 0)) / (FH * 4); vb = (by - (e.vBase || 0)) / (FH * 4); }
+      if (e.uv === 'facade') { const s = (sa + sb) / 2 + (opts.u0 || 0); const uR = e.uRep || BAY * 32, vR = e.vRep || FH * 4; ua = ub = s / uR; va = (ay - (e.vBase || 0)) / vR; vb = (by - (e.vBase || 0)) / vR; }
       else if (e.uv === 'run') { ua = ub = (sa + (opts.u0 || 0)) / 1.5; va = 0; vb = 1; }
       else { ua = Ax / planS; va = Az / planS; ub = Bx / planS; vb = Bz / planS; }
       B.vert(Ax, ay, Az, wnx, wny, wnz, ua, va);
@@ -100,15 +102,15 @@ export function sweep(path, closed, edges, opts = {}) {
     }
   }
   // tampas: true = as duas pontas, 'ini'/'fim' = só uma; capPoly = contorno [o, y] do perfil (anti-horário)
-  if (!closed && opts.caps !== false) capEnds(path, nor, edges, out, widthFn, oc, opts.caps === 'ini' ? [0] : opts.caps === 'fim' ? [N - 1] : [0, N - 1], opts.capPoly);
+  if (!closed && opts.caps !== false) capEnds(path, nor, edges, out, widthFn, oc, opts.caps === 'ini' ? [0] : opts.caps === 'fim' ? [N - 1] : [0, N - 1], opts.capPoly, opts.capMat);
   const res = new Map(); for (const [k, b] of out) res.set(k, b.geo());
   return res;
 }
 // tampa as pontas de caminhos abertos com o polígono do perfil
-function capEnds(path, nor, edges, out, widthFn, oc, ends, polyIn) {
+function capEnds(path, nor, edges, out, widthFn, oc, ends, polyIn, capMat) {
   const poly = polyIn || []; if (!polyIn) { for (const e of edges) { poly.push(e.a); } if (edges.length) poly.push(edges[edges.length - 1].b); }
   if (poly.length < 3) return;
-  const mat = edges.find((e) => e.cap)?.mat || edges[0].mat; const B = out.get(mat) || new Buf(); out.set(mat, B);
+  const mat = capMat || edges.find((e) => e.cap)?.mat || edges[0]?.mat || 'fasciaBeiral'; const B = out.get(mat) || new Buf(); out.set(mat, B);
   for (const end of ends) {
     const [px, pz] = path[end], [nx, nz] = nor[end]; const wf = widthFn ? widthFn(end ? 1 : 0, end) : 1;
     const q = path[end === 0 ? 1 : end - 1]; let tx = px - q[0], tz = pz - q[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
@@ -136,56 +138,100 @@ export function medidas({ o0, o1, setOut = 0, setIn = 0, slab = 0.09, beiral, li
 // Passeio claro na cobertura de um bloco com F andares: [o de fora, o de dentro] da faixa do meio (verde 35%,
 // passeio 30%, verde 35%), ou null se a cobertura (entre as floreiras) tem 0.5 ou menos de largura. A cobertura
 // (terraceFloor) e o caminho das pessoas (Faixa.caminhoTeto) usam o mesmo critério.
+// prof.passeioW = largura do passeio (padrão 30% da cobertura); prof.passeioAt = posição do eixo do passeio, como
+// fração da largura a partir do lado de fora (0.5 = meio; 0.25 = a um quarto do lado externo).
 export function passeioTeto(F, prof) {
   const m = medidas(prof); const outer = m.eO(F) - m.curbW, inner = m.eI(F) + m.curbW, w = outer - inner;
-  return w > 0.5 ? [outer - w * 0.35, outer - w * 0.65] : null;
+  if (w <= 0.5) return null; const wp = prof.passeioW ?? w * 0.3, c = outer - w * (prof.passeioAt ?? 0.5); return [c + wp / 2, c - wp / 2];
+}
+// Talude interno (prof.taludeAndares = T): com a fita mais alta que T, os T andares de baixo não têm fachada nem terraços
+// do lado de dentro: uma rampa de grama sobe do chão (0,12 para dentro do beiral do térreo) até o beiral do nível T.
+// Devolve { T, base, topo, oAt(y) } ou null.
+export function talude(prof, F) {
+  const T = prof.taludeAndares || 0; if (!T || F <= T) return null; const m = medidas(prof);
+  const base = m.eI(0) - 0.12, topo = m.eI(T), yB = m.y(0), yT = m.y(T);
+  return { T, base, topo, yB, yT, oAt: (y) => base + ((topo - base) * (y - yB)) / (yT - yB) };
 }
 // Um andar f de um bloco com F andares: o beiral com floreira na base (nos dois lados), o vidro recuado e, no
 // último, a cobertura verde com o beiral do topo (com o telhado 'roof' e largura suficiente, o passeio claro
 // no meio). Materiais: 'fasciaBeiral' (lajes), 'planter' (floreiras), roof, fac/facIn.
+// prof.curbMat = material das floreiras ('planter'; 'fasciaBeiral' = parapeito claro); prof.caminho = material do passeio
+// do teto ('caminhoTeto'; 'grey' = deque cinza); prof.taludeAndares = andares de baixo enterrados no talude interno.
 export function terraceFloor(f, F, prof) {
-  const { roof = 'roof', fac = 'fac_quente', facIn = null, vBase = 0, passeio = true, y0: base = 0 } = prof; const fi = facIn || fac;
-  const m = medidas(prof); const { slab, curb, curbW } = m; const E = [];
+  const { roof = 'roof', fac = 'fac_quente', facIn = null, vBase = 0, passeio = true, y0: base = 0, curbMat = 'planter', caminho = 'caminhoTeto' } = prof; const fi = facIn || fac;
+  const m = medidas(prof); const { slab, curb, curbW } = m; const E = []; const tl = talude(prof, F);
   const nivel = (lv, topo) => { // beiral + floreira no nível lv (a base do andar lv, ou o topo quando lv === F)
     const y = m.y(lv), yS = y + slab, yC = yS + curb; const eO = m.eO(lv), eI = m.eI(lv);
     E.push({ a: [eO, y], b: [eO, yC], mat: 'fasciaBeiral', uv: 'run', cap: lv === 0 });
     if (lv > 0) E.push({ a: [m.gO(lv - 1), y], b: [eO, y], mat: 'fasciaBeiral', uv: 'plan' });
-    E.push({ a: [eO, yC], b: [eO - curbW, yC], mat: 'planter', uv: 'plan' });
-    if (!topo && eO - curbW - m.gO(lv) < 0.08) E.push({ a: [eO - curbW, yC], b: [m.gO(lv), yS], mat: 'planter', uv: 'run' }); // laje estreita: a floreira desce em chanfro até o vidro
-    else E.push({ a: [eO - curbW, yC], b: [eO - curbW, yS], mat: 'planter', uv: 'run' });
+    E.push({ a: [eO, yC], b: [eO - curbW, yC], mat: curbMat, uv: 'plan' });
+    if (!topo && eO - curbW - m.gO(lv) < 0.08) E.push({ a: [eO - curbW, yC], b: [m.gO(lv), yS], mat: curbMat, uv: 'run' }); // laje estreita: a floreira desce em chanfro até o vidro
+    else E.push({ a: [eO - curbW, yC], b: [eO - curbW, yS], mat: curbMat, uv: 'run' });
     if (!topo) { const g = m.gO(lv), w = eO - curbW - g; if (w >= 0.08) E.push({ a: [eO - curbW, yS], b: [g, yS], mat: w > 0.2 ? roof : 'fasciaBeiral', uv: 'plan' }); } // bancada clara do beiral ou terraço verde
     else { // cobertura: das floreiras de fora até as de dentro, com o passeio claro no meio
       const pt = roof === 'roof' && passeio ? passeioTeto(F, prof) : null; const a = eO - curbW, b = eI + curbW;
-      if (pt) E.push({ a: [a, yS], b: [pt[0], yS], mat: roof, uv: 'plan' }, { a: [pt[0], yS], b: [pt[1], yS], mat: 'caminhoTeto', uv: 'plan' }, { a: [pt[1], yS], b: [b, yS], mat: roof, uv: 'plan' });
+      if (pt) E.push({ a: [a, yS], b: [pt[0], yS], mat: roof, uv: 'plan' }, { a: [pt[0], yS], b: [pt[1], yS], mat: caminho, uv: 'plan' }, { a: [pt[1], yS], b: [b, yS], mat: roof, uv: 'plan' });
       else E.push({ a: [a, yS], b: [b, yS], mat: roof, uv: 'plan' });
     }
+    if (tl && !topo && lv < tl.T) return; // dentro do talude: nem beiral, nem floreira, nem terraço do lado de dentro
     if (!topo) { const g = m.gI(lv), w = g - eI - curbW; if (w >= 0.08) E.push({ a: [g, yS], b: [eI + curbW, yS], mat: w > 0.2 ? roof : 'fasciaBeiral', uv: 'plan' }); }
-    if (!topo && m.gI(lv) - eI - curbW < 0.08) E.push({ a: [m.gI(lv), yS], b: [eI + curbW, yC], mat: 'planter', uv: 'run' });
-    else E.push({ a: [eI + curbW, yS], b: [eI + curbW, yC], mat: 'planter', uv: 'run' });
-    E.push({ a: [eI + curbW, yC], b: [eI, yC], mat: 'planter', uv: 'plan' });
-    if (lv > 0) E.push({ a: [eI, y], b: [m.gI(lv - 1), y], mat: 'fasciaBeiral', uv: 'plan' });
+    if (!topo && m.gI(lv) - eI - curbW < 0.08) E.push({ a: [m.gI(lv), yS], b: [eI + curbW, yC], mat: curbMat, uv: 'run' });
+    else E.push({ a: [eI + curbW, yS], b: [eI + curbW, yC], mat: curbMat, uv: 'run' });
+    E.push({ a: [eI + curbW, yC], b: [eI, yC], mat: curbMat, uv: 'plan' });
+    if (lv > 0 && !(tl && lv === tl.T)) E.push({ a: [eI, y], b: [m.gI(lv - 1), y], mat: 'fasciaBeiral', uv: 'plan' });
     E.push({ a: [eI, yC], b: [eI, y], mat: 'fasciaBeiral', uv: 'run' });
   };
   nivel(f, false);
   const y0 = m.y(f), y1 = y0 + m.fh;
   E.push({ a: [m.gO(f), y0 + slab], b: [m.gO(f), y1], mat: fac, uv: 'facade', vBase: base + vBase });
-  E.push({ a: [m.gI(f), y1], b: [m.gI(f), y0 + slab], mat: fi, uv: 'facade', vBase: base + vBase });
+  if (tl && f < tl.T) E.push({ a: [tl.oAt(y1), y1], b: [tl.oAt(y0), y0], mat: roof, uv: 'plan' }); // a faixa do talude deste andar (grama inclinada)
+  else E.push({ a: [m.gI(f), y1], b: [m.gI(f), y0 + slab], mat: fi, uv: 'facade', vBase: base + vBase });
   if (f === F - 1) nivel(F, true);
   return E;
 }
 // Contorno do perfil em terraços (para tampar as pontas de uma fita aberta sem estilhaços): sobe pela fachada
 // externa beiral a beiral, cruza a cobertura e desce pela interna. f0..f1 = andares incluídos.
 export function terraceOutline(F, prof, f0 = 0, f1 = F) {
-  const m = medidas(prof); const { slab, curb, curbW } = m; const P = [];
+  const m = medidas(prof); const { slab, curb, curbW } = m; const P = []; const tl = talude(prof, F);
   const fora = (lv) => { const y = m.y(lv), e = m.eO(lv); P.push([e, y], [e, y + slab + curb], [e - curbW, y + slab + curb], [e - curbW, y + slab]); };
   const dentro = (lv) => { const y = m.y(lv), e = m.eI(lv); P.push([e + curbW, y + slab], [e + curbW, y + slab + curb], [e, y + slab + curb], [e, y]); };
   if (f0 > 0) P.push([m.gO(f0 - 1), m.y(f0)]);
   for (let f = f0; f < f1; f++) { fora(f); P.push([m.gO(f), m.y(f) + slab], [m.gO(f), m.y(f + 1)]); }
-  if (f1 === F) { fora(F); dentro(F); } else P.push([m.gI(f1 - 1), m.y(f1)]);
-  for (let f = f1 - 1; f >= f0; f--) { P.push([m.gI(f), m.y(f + 1)], [m.gI(f), m.y(f) + slab]); dentro(f); if (f > 0) P.push([m.gI(f - 1), m.y(f)]); }
+  if (f1 === F) { fora(F); dentro(F); } else if (tl && f1 <= tl.T) P.push([m.gI(f1 - 1), m.y(f1)], [tl.oAt(m.y(f1)), m.y(f1)]); else P.push([m.gI(f1 - 1), m.y(f1)]);
+  for (let f = f1 - 1; f >= f0; f--) {
+    if (tl && f < tl.T) { P.push([tl.oAt(m.y(f)), m.y(f)]); continue; } // pela rampa do talude até o chão
+    P.push([m.gI(f), m.y(f + 1)], [m.gI(f), m.y(f) + slab]); dentro(f); if (f > 0 && !(tl && f === tl.T)) P.push([m.gI(f - 1), m.y(f)]);
+  }
   // tira pontos repetidos e colineares (a triangulação fica limpa)
   const Q = P.filter((p, i) => { const a = P[(i - 1 + P.length) % P.length]; return Math.hypot(p[0] - a[0], p[1] - a[1]) > 1e-4; });
   return Q.filter((p, i) => { const a = Q[(i - 1 + Q.length) % Q.length], b = Q[(i + 1) % Q.length]; return Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) > 1e-6; });
+}
+// Parede de células da arena do Campus (fachada 'celular' dos dois lados, vertical, sem terraços): rodapé de 0,06 em
+// fasciaBeiral (com tampa no térreo), platibanda de 0,10 sobre a cobertura em F*fh + 0.09, com o passeio claro
+// (passeioTeto; prof.curbW = aba da platibanda). Funciona com F = 1 (aquecimento da obra). prof.celRep = período do
+// mapa de células em unidades de mundo (32 x 10 células de 0,22).
+export function cellFloor(f, F, prof) {
+  const { o0, o1, fh = FH, y0: base = 0, fac = 'fac_celular', facIn = null, roof = 'roof', caminho = 'caminhoTeto', celRep = [7.04, 2.2], celTopo = 0.09, celPlat = 0.1 } = prof; const fi = facIn || fac; const aba = prof.curbW ?? 0.14;
+  const E = []; const y0 = base + f * fh, y1 = y0 + fh; const rod = 0.06;
+  if (f === 0) E.push({ a: [o1, base], b: [o1, base + rod], mat: 'fasciaBeiral', uv: 'run', cap: true }, { a: [o0, base + rod], b: [o0, base], mat: 'fasciaBeiral', uv: 'run' });
+  const yb = f === 0 ? base + rod : y0;
+  E.push({ a: [o1, yb], b: [o1, y1], mat: fac, uv: 'facade', vBase: base, uRep: celRep[0], vRep: celRep[1] }, { a: [o0, y1], b: [o0, yb], mat: fi, uv: 'facade', vBase: base, uRep: celRep[0], vRep: celRep[1] });
+  if (f === F - 1) { // platibanda e cobertura
+    const yt = base + F * fh, yS = yt + celTopo, yP = yS + celPlat; const pt = passeioTeto(F, prof);
+    E.push({ a: [o1, yt], b: [o1, yP], mat: 'fasciaBeiral', uv: 'run' }, { a: [o1, yP], b: [o1 - aba, yP], mat: 'fasciaBeiral', uv: 'plan' }, { a: [o1 - aba, yP], b: [o1 - aba, yS], mat: 'fasciaBeiral', uv: 'run' });
+    if (pt) E.push({ a: [o1 - aba, yS], b: [pt[0], yS], mat: roof, uv: 'plan' }, { a: [pt[0], yS], b: [pt[1], yS], mat: caminho, uv: 'plan' }, { a: [pt[1], yS], b: [o0 + aba, yS], mat: roof, uv: 'plan' });
+    else E.push({ a: [o1 - aba, yS], b: [o0 + aba, yS], mat: roof, uv: 'plan' });
+    E.push({ a: [o0 + aba, yS], b: [o0 + aba, yP], mat: 'fasciaBeiral', uv: 'run' }, { a: [o0 + aba, yP], b: [o0, yP], mat: 'fasciaBeiral', uv: 'plan' }, { a: [o0, yP], b: [o0, yt], mat: 'fasciaBeiral', uv: 'run' });
+  }
+  return E;
+}
+// Contorno do perfil da parede de células (tampas das pontas), andares f0..f1
+export function cellOutline(F, prof, f0 = 0, f1 = F) {
+  const { o0, o1, fh = FH, y0: base = 0, celTopo = 0.09, celPlat = 0.1 } = prof; const aba = prof.curbW ?? 0.14;
+  const P = [[o1, base + f0 * fh], [o1, base + f1 * fh]];
+  if (f1 === F) { const yS = base + F * fh + celTopo, yP = yS + celPlat; P.push([o1, yP], [o1 - aba, yP], [o1 - aba, yS], [o0 + aba, yS], [o0 + aba, yP], [o0, yP]); }
+  P.push([o0, base + f1 * fh], [o0, base + f0 * fh]);
+  return P;
 }
 // Fator de largura de uma ponta arredondada: d = distância até a ponta, Lt = comprimento do afinamento;
 // vai de wmin (na ponta) a 1 em quarto de elipse (a ponta fica fluida, sem corte reto)
