@@ -10,7 +10,7 @@ const litMats = []; // materiais com emissivo que variam com a noite
 export let nightLevel = 0, nightExtra = 0;
 // água dos lagos: mapa da altura do leito (o terreno preenche) e o tempo em segundos
 export const AGUA = { tProf: { value: null }, aguaOn: { value: 0 }, aguaT: { value: 0 }, aguaP: { value: new THREE.Vector4(MESA.x0, MESA.z0, 1 / (MESA.x1 - MESA.x0), 1 / (MESA.z1 - MESA.z0)) },
-  raso: { value: new THREE.Color(0x3cc4bf) }, fundo: { value: new THREE.Color(0x1a78b4) }, margem: { value: new THREE.Color(0xeae2c6) }, // turquesa na margem, azul no fundo
+  raso: { value: new THREE.Color(0x35aab0) }, fundo: { value: new THREE.Color(0x1f6f96) }, margem: { value: new THREE.Color(0xd6d2c4) }, // turquesa na margem, azul-ardósia no fundo, margem de pedra clara
   turvo: { value: 0 }, lodo: { value: new THREE.Color(0x7a7254) }, // lago assoreado (turvo 1): lodo pardo, mais escuro e fosco
   noite: { value: 0 } }; // à noite, as luzes da cidade tremulam refletidas perto das margens
 const MACRO = { tMacro: { value: null } };
@@ -85,13 +85,14 @@ function comAgua(mat) {
   return mat;
 }
 // Fachadas: cada vão acende num limiar próprio, com variação estável: 62% vem do "prédio" (célula de 3
-// unidades do mundo) e 38% da janela (vão e andar no mapa da fachada). Com setNight subindo ao entardecer, a
+// unidades do mundo) e 38% da janela (vão e andar no mapa da fachada; a grade de vãos vem de cada mapa). Com setNight subindo ao entardecer, a
 // cidade acende aos poucos, prédio a prédio, sempre na mesma ordem; de manhã apaga na ordem inversa.
-function comJanelas(mat) {
+function comJanelas(mat, grade = [32, 4]) {
+  const uGrade = { value: new THREE.Vector2(grade[0], grade[1]) };
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uAcende = JANELAS.uAcende; sh.uniforms.uVidroNoite = JANELAS.uVidroNoite;
+    sh.uniforms.uAcende = JANELAS.uAcende; sh.uniforms.uVidroNoite = JANELAS.uVidroNoite; sh.uniforms.uJanGrade = uGrade;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vJanW;').replace('#include <project_vertex>', '#include <project_vertex>\n' + VPOS('vJanW'));
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vJanW; uniform float uAcende; uniform float uVidroNoite;\nfloat hJan( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vJanW; uniform float uAcende; uniform float uVidroNoite; uniform vec2 uJanGrade;\nfloat hJan( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }')
       // à noite o vidro (onde o emissivo marca janela) escurece: a sala acesa aparece amarela, não lilás
       .replace('#include <map_fragment>', `#include <map_fragment>
         #ifdef USE_EMISSIVEMAP
@@ -99,7 +100,7 @@ function comJanelas(mat) {
         #endif`)
       // antes do mapa (e do que a obra soma depois dele): o limiar só escala a luz da janela
       .replace('#include <emissivemap_fragment>', `#ifdef USE_EMISSIVEMAP
-          { vec2 cel = floor( vJanW / 3.0 ); vec2 jan = floor( vEmissiveMapUv * vec2( 32.0, 4.0 ) );
+          { vec2 cel = floor( vJanW / 3.0 ); vec2 jan = floor( vEmissiveMapUv * uJanGrade );
             float lim = 0.62 * hJan( cel ) + 0.38 * hJan( jan + cel * 7.13 );
             totalEmissiveRadiance *= smoothstep( lim - 0.12, lim + 0.12, uAcende ); }
         #endif
@@ -132,12 +133,14 @@ export function makeMaterials() {
   M.steel = std({ color: 0xd2d7de, roughness: 0.32, metalness: 0.75 });
   M.steelDark = std({ color: 0x75808e, roughness: 0.4, metalness: 0.7 });
   M.roofMetal = std({ color: 0x9aa2aa, roughness: 0.45, metalness: 0.6 });
-  M.bandaCinza = std({ color: 0xdcd8d0, roughness: 0.55 });
+  M.bandaCinza = std({ color: 0xc9cfc0, roughness: 0.6 }); // tampo sálvia clara da Ciências
+  M.concretoClaro = std({ color: 0xe3dccb, roughness: 0.9 }); // muros de pedra clara, muro do pátio do CRD, margens das lagoas
+  M.terracota = std({ color: 0xe0906e, roughness: 0.9 }); // pátios da Escola (salmão da foto, na paleta do BuildIt)
   M.caminhoTeto = std({ color: 0xe0d8c6, roughness: 0.8 });
   M.roof = comMacro(std({ color: 0xffffff, map: tex.roof(), normalMap: tex.roofNormal(), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.95 }));
-  M.planter = comMacro(std({ color: 0x4f8a34, roughness: 0.95 }));
-  M.lawn = comMacro(std({ color: 0xc2d890, map: tex.grass(), roughness: 0.95 }));
-  M.grassBright = comMacro(std({ color: 0xd4e89a, map: tex.grass(), roughness: 0.95 }));
+  M.planter = comMacro(std({ color: 0x3f7430, roughness: 0.95 }));
+  M.lawn = comMacro(std({ color: 0xa6c47a, map: tex.grass(), roughness: 0.95 }));
+  M.grassBright = comMacro(std({ color: 0xbad684, map: tex.grass(), roughness: 0.95 }));
   // campo: vence a placa de terra da terraplenagem logo abaixo (que tem desvio de profundidade contra o terreno)
   M.field = std({ color: 0xffffff, map: tex.field(), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   M.track = std({ color: 0xffffff, map: tex.track(), roughness: 0.9 });
@@ -154,6 +157,8 @@ export function makeMaterials() {
   M.mesh = comGrade(std({ color: 0xffffff, map: tex.mesh(), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.4 }));
   // vidro azul que reflete o céu
   M.glass = std({ color: 0x9ad6f6, roughness: 0.06, metalness: 0.25, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 });
+  // vidraçaria espelhada (células da Ciências): opaca, refletindo o céu do envMap
+  M.vidroEspelhado = std({ color: 0xbfd9ec, metalness: 0.9, roughness: 0.05, envMapIntensity: 2.0 });
   M.glassDome = std({ color: 0xd6eef8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.0 });
   M.glassRail = std({ color: 0xcfe9f5, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.2 });
   M.glassWarm = std({ color: 0xffe2b0, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.55, depthWrite: false, emissive: 0xffb45a, emissiveIntensity: 0.6, side: THREE.DoubleSide });
@@ -164,7 +169,7 @@ export function makeMaterials() {
   M.water = comAgua(std({ color: 0x40605f, roughness: 0.16, metalness: 0.05, normalMap: wn.clone(), normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 0.6 }));
   // aquário do Bioma: continua translúcido (a fauna nada dentro do volume de água)
   M.waterDeep = std({ color: 0x2294c0, roughness: 0.05, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.25, 0.25), transparent: true, opacity: 0.82, emissive: 0x0d6788, emissiveIntensity: 0.08, envMapIntensity: 1.3 });
-  M.pool = std({ color: 0x27a2b8, roughness: 0.3, metalness: 0.05, normalMap: wn, normalScale: new THREE.Vector2(0.2, 0.2), envMapIntensity: 0.6 }); // espelhos d'água turquesa
+  M.pool = std({ color: 0x2699b2, roughness: 0.3, metalness: 0.05, normalMap: wn, normalScale: new THREE.Vector2(0.12, 0.12), envMapIntensity: 1.0 }); // espelhos d'água turquesa, mais escuros que o céu que refletem
   M.yellow = std({ color: 0xf8c83a, roughness: 0.5 });
   M.orange = std({ color: 0xf28a3a, roughness: 0.5 });
   M.red = std({ color: 0xe2543f, roughness: 0.55 });
@@ -189,10 +194,12 @@ export function makeMaterials() {
   M.shadowBlob = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false });
   // fachadas: de dia, vidro azul refletindo o céu com caixilhos brancos; à noite a luz âmbar vem do emissivo,
   // janela a janela
-  const baseFac = { quente: 0.9, lab: 0.8, escuro: 0.5, madeira: 0.95, fita: 0.9 };
-  for (const s of ['quente', 'lab', 'escuro', 'madeira', 'fita']) {
+  // ('celular' = parede de células da arena do Campus, 'ambar' = faixas creme e vidro âmbar do Santuário,
+  // 'colmeia' = xadrez creme e bronze com células turquesa da Biblioteca)
+  const baseFac = { quente: 0.9, lab: 0.8, escuro: 0.5, madeira: 0.95, fita: 0.9, celular: 0.9, ambar: 0.9, colmeia: 0.7 };
+  for (const s of ['quente', 'lab', 'escuro', 'madeira', 'fita', 'celular', 'ambar', 'colmeia']) {
     const f = facadeTextures(s);
-    M['fac_' + s] = acesa(comJanelas(std({ color: 0xffffff, map: f.map, emissive: 0xffffff, emissiveMap: f.emissive, roughness: 0.22, metalness: 0.15, envMapIntensity: 1.0 })), baseFac[s], 'janelas');
+    M['fac_' + s] = acesa(comJanelas(std({ color: 0xffffff, map: f.map, emissive: 0xffffff, emissiveMap: f.emissive, roughness: 0.22, metalness: 0.15, envMapIntensity: 1.0 }), f.grade || [f.bays, f.floors]), baseFac[s], 'janelas');
   }
   acesa(M.glassWarm, 0.6);
   acesa(M.waterDeep, 0.08, 'sempre');

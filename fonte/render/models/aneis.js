@@ -54,8 +54,8 @@ export function faixas() {
       cortes: [0, 0.11, 0.24, 0.37, 0.5, 0.62, 0.75, 0.88, 1].map((v) => v + 0.03), aberturas: a.aberturas || [2, 5], abertura: 1.2,
       prof: { o0: -2.3, o1: 0, setIn: 0.36, setOut: 0.02, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 5, arbustoPasso: 0.66, arbustoMax: 1200 }),
     // fita longa em "C" que desce do fundo à esquerda; terraços voltados para o campo, por dentro da curva
-    uni: new Faixa({ id: 'uni', closed: false, path: curve(u.path, false, 200), modulos: 4,
-      prof: { o0: -1.0, o1: 0, setIn: 0.12, setOut: 0.02, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 5 }),
+    uni: new Faixa({ id: 'uni', closed: false, path: ellipse(u.arena.c[0], u.arena.c[1], u.arena.rx, u.arena.rz, u.arena.rot, 200, 0, 1, u.arena.a0, u.arena.a1), modulos: 4, ponta: 0,
+      prof: { o0: -1.4, o1: 0, setIn: 0, setOut: 0, fh: 0.44, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 5 }),
     // Elo Norte: o trecho final da fita do Campus Universitário, que desce até encostar no Anel (pontas retas)
     uniElo: new Faixa({ id: 'uniElo', closed: false, path: curve(u.elo, false, 90), modulos: 2, ponta: 0,
       prof: { o0: -0.55, o1: 0.55, setIn: 0.12, setOut: 0.12, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 3 }),

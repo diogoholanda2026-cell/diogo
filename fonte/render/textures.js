@@ -71,24 +71,47 @@ function texDeCanvas(c, o = {}) {
 // noite: faixas contínuas de luz âmbar interna, luminária no topo de cada vão e brilho variando devagar de um vão
 // para o outro (as janelas acendem vão a vão no shader: materials.js). Os vãos coincidem nos dois mapas.
 // estilo: 'quente' (moradias), 'lab' (laboratórios frios), 'escuro' (sede), 'madeira' (biblioteca),
-// 'fita' (edifícios-fita em terraços: vidro recuado na sombra do beiral, com ripas de madeira escura a cada meio vão)
+// 'fita' (edifícios-fita em terraços: vidro recuado na sombra do beiral, com 3 ripas de madeira escura por vão),
+// 'ambar' (Santuário: faixas creme e vidro âmbar), 'celular' (arena do Campus: células quase quadradas com moldura
+// clara biselada e vidro azul, desenhadas célula a célula) e 'colmeia' (Biblioteca: xadrez creme e bronze em grade
+// desencontrada com células turquesa). Devolve { map, emissive, bays, floors, grade } (grade = vãos x andares do mapa,
+// para o acendimento vão a vão no shader).
 export function facadeTextures(style = 'quente') {
   const key = 'fac-' + style;
   if (cache.has(key)) return cache.get(key);
-  const W = 1024, H = 256, bays = 32, floors = 4, bw = W / bays, fh = H / floors;
+  if (style === 'colmeia') return colmeiaTextures(key);
   const pal = {
     quente: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[168, 214, 244], [74, 138, 204]], frame: '#F7F5EF', mull: 2 },
     lab: { lit: [[236, 244, 255], [224, 236, 250], [255, 250, 240], [214, 230, 246]], dark: 0.04, gain: 0.95, v: [[186, 226, 246], [104, 164, 214]], frame: '#F4F6F8', mull: 2 },
     escuro: { lit: [[255, 222, 176], [230, 238, 250], [255, 232, 196]], dark: 0.1, gain: 0.8, v: [[128, 180, 226], [44, 96, 160]], frame: '#DCE3EA', mull: 1 },
     madeira: { lit: [[255, 190, 104], [255, 206, 132], [255, 180, 92]], dark: 0.04, gain: 1.05, v: [[176, 214, 238], [88, 142, 194]], frame: '#C9965C', mull: 5 },
     // vidro azul mais fundo (fica na sombra do beiral), caixilho claro e ripas escuras (#6b5a48) a cada meio vão
-    fita: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[92, 150, 210], [40, 92, 156]], frame: '#EDE7DC', mull: 2, ripa: '#6b5a48', sombra: 0.42 },
+    fita: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[70, 112, 168], [26, 58, 104]], frame: '#EDE7DC', mull: 2, ripa: '#6b5a48', sombra: 0.6, ripas: 3 },
+    // Santuário: vidro âmbar (bronze) entre faixas creme, ripas marrons
+    ambar: { lit: [[255, 184, 92], [255, 200, 118], [250, 172, 84], [255, 214, 146]], dark: 0.03, gain: 1, v: [[226, 168, 96], [168, 104, 48]], frame: '#F4EFE4', mull: 2, ripa: '#7A5A3A', sombra: 0.42, ripas: 3 },
+    // arena do Campus: 32 x 10 células de 32 px (moldura de 6 px com bisel, abertura de 20 px de vidro azul)
+    celular: { celular: true, bays: 32, floors: 10, cell: 32, frame: '#F2EEE6', biselClaro: '#FBF8F2', biselEscuro: '#CFC6B6', v: [[111, 168, 220], [47, 107, 176]], lit: [[255, 190, 104], [255, 206, 132], [250, 176, 90]], dark: 0.08 },
   }[style];
-  const seed = { quente: 11, lab: 23, escuro: 37, madeira: 41, fita: 53 }[style];
+  const seed = { quente: 11, lab: 23, escuro: 37, madeira: 41, fita: 53, ambar: 61, celular: 67 }[style];
+  const bays = pal.bays || 32, floors = pal.floors || 4, W = 1024, H = floors * (pal.celular ? pal.cell : 64), bw = W / bays, fh = H / floors;
   const rgb = (c, k) => `rgb(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0})`;
   const dC = document.createElement('canvas'); dC.width = W; dC.height = H; const d = dC.getContext('2d');
   const emC = document.createElement('canvas'); emC.width = W; emC.height = H; const e = emC.getContext('2d');
   d.fillStyle = pal.frame; d.fillRect(0, 0, W, H); e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
+  if (pal.celular) { // célula a célula: moldura, bisel (luz em cima e à esquerda), abertura com o céu refletido
+    const c = pal.cell, m = 6, ab = c - 2 * m;
+    for (let f = 0; f < floors; f++) for (let b = 0; b < bays; b++) {
+      const x = b * c, y = (floors - 1 - f) * c; // andar 0 embaixo do mapa (v cresce para cima)
+      d.fillStyle = pal.biselClaro; d.fillRect(x + m - 2, y + m - 2, ab + 4, 2); d.fillRect(x + m - 2, y + m - 2, 2, ab + 4);
+      d.fillStyle = pal.biselEscuro; d.fillRect(x + m - 2, y + m + ab, ab + 4, 2); d.fillRect(x + m + ab, y + m - 2, 2, ab + 4);
+      const kv = 0.94 + vnoise(b, f * 7, 3, seed) * 0.1, a = pal.v[0], z = pal.v[1];
+      const g1 = d.createLinearGradient(0, y + m, 0, y + m + ab); g1.addColorStop(0, rgb(a, kv)); g1.addColorStop(1, rgb(z, kv)); d.fillStyle = g1; d.fillRect(x + m, y + m, ab, ab);
+      if (hash(b, f, seed + 30) < 0.25) { d.fillStyle = 'rgba(250,244,230,0.6)'; d.fillRect(x + m, y + m, ab, ab * 0.35); } // cortina clara
+      const dark = hash(b, f, seed) < pal.dark; const col = pal.lit[(hash(b, f, seed + 3) * pal.lit.length) | 0], k = 0.55 + vnoise(b, f * 5, 3, seed + 1) * 0.45;
+      e.fillStyle = rgb(col, dark ? 0.1 : k * 0.55); e.fillRect(x + m, y + m, ab, ab); if (!dark) { e.fillStyle = rgb(col, k); e.fillRect(x + m, y + m, ab, 3); }
+    }
+    const out = { map: mk(dC), emissive: mk(emC), bays, floors, grade: [bays, floors] }; cache.set(key, out); return out;
+  }
   for (let f = 0; f < floors; f++) {
     const y = f * fh, top = y + 7, bot = y + fh - 14;
     for (let b = 0; b < bays; b++) {
@@ -109,7 +132,7 @@ export function facadeTextures(style = 'quente') {
       // montantes
       d.fillStyle = pal.frame; d.fillRect(x, top, pal.mull, bot - top); e.fillStyle = '#000'; e.fillRect(x, top, pal.mull, bot - top);
       if (style === 'madeira') for (let q = 1; q < 3; q++) { d.fillRect(x + (bw * q) / 3, top, 3, bot - top); e.fillRect(x + (bw * q) / 3, top, 3, bot - top); }
-      if (pal.ripa) { d.fillStyle = pal.ripa; e.fillStyle = '#000'; for (let q = 0; q < 2; q++) { const rx = x + (bw * (q + 0.5)) / 2 - 1; d.fillRect(rx, top, 2, bot - top); e.fillRect(rx, top, 2, bot - top); } } // ripas (brises)
+      if (pal.ripa) { const nr = pal.ripas || 2; d.fillStyle = pal.ripa; e.fillStyle = '#000'; for (let q = 0; q < nr; q++) { const rx = x + (bw * (q + 0.5)) / nr - 1; d.fillRect(rx, top, 2, bot - top); e.fillRect(rx, top, 2, bot - top); } } // ripas (brises)
     }
     // travessa superior (fundo branco), peitoril claro e floreiras
     e.fillStyle = '#000'; e.fillRect(0, y, W, 7);
@@ -117,10 +140,29 @@ export function facadeTextures(style = 'quente') {
     d.fillStyle = pal.frame; d.fillRect(0, bot + 9, W, 5); e.fillStyle = '#000'; e.fillRect(0, bot + 9, W, 5);
     for (let b = 0; b < bays * 3; b++) if (hash(b, f, seed + 20) < 0.42) { d.fillStyle = ['#4f9a3c', '#62ac46', '#3f8a34', '#76b850'][(hash(b, f, seed + 21) * 4) | 0]; d.beginPath(); d.ellipse(b * (bw / 3) + 5, bot + 1, 6, 5, 0, 0, 7); d.fill(); e.fillStyle = '#000'; e.beginPath(); e.ellipse(b * (bw / 3) + 5, bot + 1, 6, 5, 0, 0, 7); e.fill(); }
   }
-  const mk = (c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
-  const out = { map: mk(dC), emissive: mk(emC), bays, floors };
+  const out = { map: mk(dC), emissive: mk(emC), bays, floors, grade: [bays, floors] };
   cache.set(key, out);
   return out;
+}
+const mk = (c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+// Fachada 'colmeia' da torre da Biblioteca: 16 colunas x 14 fileiras de células quase quadradas em grade desencontrada
+// (tipo tijolo), caixilho bronze de 2 px, miolo alternando creme e bronze em xadrez, 30% das células turquesa com
+// brilho no canto superior. Emissivo âmbar fraco nas células creme, acendendo em blocos de 2 x 4 (grade 8 x 3,5)
+function colmeiaTextures(key) {
+  const W = 512, H = 448, cols = 16, rows = 14, cw = W / cols, ch = H / rows, seed = 67;
+  const dC = document.createElement('canvas'); dC.width = W; dC.height = H; const d = dC.getContext('2d');
+  const emC = document.createElement('canvas'); emC.width = W; emC.height = H; const e = emC.getContext('2d');
+  d.fillStyle = '#4a3a28'; d.fillRect(0, 0, W, H); e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
+  for (let r = 0; r < rows; r++) {
+    const off = r % 2 ? cw / 2 : 0, y = r * ch;
+    for (let c = -1; c < cols; c++) {
+      const x = c * cw + off; const tq = hash(c + 1, r, seed) < 0.3, creme = (c + r) % 2 === 0;
+      d.fillStyle = tq ? '#46c2b8' : creme ? '#e9e2d2' : '#6b5238'; d.fillRect(x + 2, y + 2, cw - 4, ch - 4);
+      if (tq) { d.fillStyle = '#8ee3da'; d.fillRect(x + 2, y + 2, cw * 0.45, ch * 0.3); }
+      if (creme && !tq) { const k = 0.35 + hash(c + 1, r, seed + 2) * 0.35; e.fillStyle = `rgb(${255 * k | 0},${186 * k | 0},${96 * k | 0})`; e.fillRect(x + 2, y + 2, cw - 4, ch - 4); }
+    }
+  }
+  const out = { map: mk(dC), emissive: mk(emC), bays: cols, floors: rows, grade: [8, 3.5] }; cache.set(key, out); return out;
 }
 
 export const tex = {
@@ -159,7 +201,7 @@ export const tex = {
   }, { linear: true }),
   // grama limpa e viva (pouco ruído: sem manchas de longe)
   grass: () => canvasTex('grass', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [116, 138, 60], 12, 31, 2, 21);
+    noiseRectP(g, w, [98, 126, 56], 12, 31, 2, 21);
     for (let i = 0; i < 1600; i++) { const x = hash(i, 1, 33) * w, y = hash(i, 2, 33) * h; g.fillStyle = hash(i, 3, 33) < 0.5 ? 'rgba(60,96,30,.16)' : 'rgba(214,230,150,.14)'; g.fillRect(x, y, 1 + hash(i, 4, 33) * 2, 1 + hash(i, 5, 33) * 3); }
   }),
   // pasto degradado (antes da obra): capim seco amarelado, com manchas suaves
@@ -170,7 +212,7 @@ export const tex = {
   }),
   forestFloor: () => canvasTex('forest', 512, 512, (g, w, h) => noiseRectP(g, w, [66, 94, 40], 16, 35, 2, 13)),
   pavers: () => canvasTex('pavers', 512, 512, (g, w, h) => {
-    noiseRectP(g, w, [228, 222, 208], 8, 51, 2, 26);
+    noiseRectP(g, w, [204, 200, 190], 8, 51, 2, 26);
     g.strokeStyle = 'rgba(130,110,90,.14)'; g.lineWidth = 1.2;
     for (let y = 0; y < h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); const off = (y / 16) % 2 ? 16 : 0; for (let x = off; x < w; x += 32) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 16); g.stroke(); } }
     for (let i = 0; i < 220; i++) { g.fillStyle = `rgba(${hash(i, 1, 52) < 0.5 ? '255,250,238' : '150,130,110'},.07)`; g.fillRect(((hash(i, 2, 52) * 32) | 0) * 16, ((hash(i, 3, 52) * 32) | 0) * 16, 32, 16); }
@@ -227,7 +269,7 @@ export const tex = {
     for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo((i * w) / 8, 0); g.lineTo((i * w) / 8, h); g.stroke(); g.beginPath(); g.moveTo(0, (i * h) / 8); g.lineTo(w, (i * h) / 8); g.stroke(); }
   }),
   field: () => canvasTex('field', 512, 320, (g, w, h) => {
-    noiseRect(g, w, h, [86, 170, 70], 10, 95, 2, 30);
+    noiseRect(g, w, h, [78, 148, 62], 10, 95, 2, 30);
     g.fillStyle = 'rgba(255,255,255,.07)'; for (let i = 0; i < 10; i += 2) g.fillRect((i * w) / 10, 0, w / 10, h);
     g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 4; g.strokeRect(14, 14, w - 28, h - 28);
     g.beginPath(); g.moveTo(w / 2, 14); g.lineTo(w / 2, h - 14); g.stroke(); g.beginPath(); g.arc(w / 2, h / 2, 40, 0, 7); g.stroke();
@@ -235,6 +277,11 @@ export const tex = {
   }, { aniso: 8 }),
   track: () => canvasTex('track', 256, 64, (g, w, h) => { g.fillStyle = '#B55A3C'; g.fillRect(0, 0, w, h); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 2; for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, (i * h) / 4); g.lineTo(w, (i * h) / 4); g.stroke(); } }),
   stripes: () => canvasTex('stripes', 64, 64, (g, w, h) => { g.fillStyle = '#F4F1EA'; g.fillRect(0, 0, w, h); g.fillStyle = '#E8742F'; for (let i = -1; i < 5; i++) { g.beginPath(); g.moveTo(i * 24, h); g.lineTo(i * 24 + 12, h); g.lineTo(i * 24 + 12 + h, 0); g.lineTo(i * 24 + h, 0); g.closePath(); g.fill(); } }),
+  // vidro ardósia do casco do CRD com a grade clara dos caixilhos (12 x 12 por tela)
+  vidroGrade: () => canvasTex('vidroGrade', 512, 512, (g, w, h) => {
+    g.fillStyle = '#46586a'; g.fillRect(0, 0, w, h); g.strokeStyle = '#cbbfa9'; g.lineWidth = 4;
+    for (let i = 0; i <= 12; i++) { const p = (i * w) / 12; g.beginPath(); g.moveTo(p, 0); g.lineTo(p, h); g.stroke(); g.beginPath(); g.moveTo(0, p); g.lineTo(w, p); g.stroke(); }
+  }, { aniso: 8 }),
   waterNormal: () => canvasTex('wnorm', 256, 256, (g, w, h) => {
     const img = g.createImageData(w, h), d = img.data;
     const hgt = (x, y) => fbm(x, y, 22, 7, 4);
@@ -253,9 +300,9 @@ export const tex = {
 tex.copas = () => {
   if (cache.has('copas')) return cache.get('copas');
   const w = 512, c = document.createElement('canvas'); c.width = c.height = w; const g = c.getContext('2d');
-  g.fillStyle = '#2f6326'; g.fillRect(0, 0, w, w);
+  g.fillStyle = '#27552a'; g.fillRect(0, 0, w, w);
   const PAL = ['#3f7f2c', '#4a8c34', '#5a9a3a', '#356f28', '#6aa644', '#2f6a30', '#78aa3c', '#4f9444'];
-  const tom = (hex, k) => { const n = parseInt(hex.slice(1), 16); return `rgb(${clamp(((n >> 16) & 255) * k, 0, 255) | 0},${clamp(((n >> 8) & 255) * k, 0, 255) | 0},${clamp((n & 255) * k, 0, 255) | 0})`; };
+  const tom = (hex, k) => { k *= 0.88; const n = parseInt(hex.slice(1), 16); return `rgb(${clamp(((n >> 16) & 255) * k, 0, 255) | 0},${clamp(((n >> 8) & 255) * k, 0, 255) | 0},${clamp((n & 255) * k, 0, 255) | 0})`; }; // 12% mais escuro: a mata de longe no valor da foto
   for (let i = 0; i < 760; i++) {
     const x = hash(i, 1, 331) * w, y = hash(i, 2, 331) * w, r = 10 + hash(i, 3, 331) * 13, cor = PAL[(hash(i, 4, 331) * PAL.length) | 0];
     envolve(w, w, x, y, r + 4, (px, py) => {

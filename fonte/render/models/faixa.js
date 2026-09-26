@@ -11,7 +11,7 @@ import { leafMaterial } from '../forest.js';
 import { hash } from '../../core/util.js';
 
 // materiais novos do pacote de superfícies podem ainda não existir: cai num parecido
-const RESERVA = { roofMetal: 'grey', caminhoTeto: 'concreto', bandaCinza: 'concreto', vidroDossel: 'glass', fasciaBeiral: 'fascia', fac_fita: 'fac_quente', ripa: 'dark' };
+const RESERVA = { roofMetal: 'grey', caminhoTeto: 'concreto', bandaCinza: 'concreto', vidroDossel: 'glass', fasciaBeiral: 'fascia', fac_fita: 'fac_quente', fac_ambar: 'fac_fita', fac_colmeia: 'fac_fita', fac_celular: 'fac_fita', ripa: 'dark' };
 export const matDe = (k) => M[k] || M[RESERVA[k]] || M.white;
 let _viga = null; // pilar do esqueleto (compartilhado por todas as fitas)
 const vigaGeo = () => { if (!_viga) { _viga = beamGeo(0.035, 5); _viga.userData.compartilhada = true; } return _viga; };
