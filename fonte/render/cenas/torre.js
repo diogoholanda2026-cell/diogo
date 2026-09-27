@@ -162,6 +162,22 @@ export function registrar(registrarCena) {
         return folha;
       }
 
+      /** Uma vista só da prancha (para conferir sem montar as seis): devolve o JPEG como data URL. */
+      async function foto({ id = 'az35', hora = 17.5, w = 640, h = 1080 } = {}) {
+        const R = window.__held?.R;
+        if (!R) throw new Error('foto: o render ainda não está pronto');
+        await assentarHora(R, ctx, hora);
+        vista = VISTAS.find((v) => v.id === id) ?? VISTAS[0];
+        R.foto({ w, h });
+        const blob = await R.foto({ w, h });
+        vista = null;
+        return await new Promise((ok) => {
+          const leitor = new FileReader();
+          leitor.onload = () => ok(leitor.result);
+          leitor.readAsDataURL(blob);
+        });
+      }
+
       let img = null;
       function mostrar(folha) {
         img ??= Object.assign(document.createElement('img'), { alt: '' });
@@ -171,7 +187,7 @@ export function registrar(registrarCena) {
       }
 
       if (typeof window !== 'undefined') {
-        window.__cenaTorre = { vistas: VISTAS, prancha };
+        window.__cenaTorre = { vistas: VISTAS, prancha, foto };
         if (qs.get('prancha') === '1') {
           const esperar = () => (window.__pronto ? prancha({ hora: Number(qs.get('hora')) || 17.5 }) : setTimeout(esperar, 200));
           setTimeout(esperar, 200);
