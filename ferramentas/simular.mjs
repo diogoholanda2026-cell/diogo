@@ -599,7 +599,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       if (!f.length) console.log(`ok (${R.dias.toFixed(1)} dias no contínuo, as duas passarelas feitas)`); }
     if (f.length) console.log(f.join('; ')); process.exitCode = f.length ? 1 : 0;
   }
-  else if (process.argv.includes('--testes')) { const f = [...invariantes(), ...testes()]; console.log(f.length ? f.join('\n') : 'testes ok'); process.exitCode = f.length ? 1 : 0; }
+  else if (process.argv.includes('--testes')) { // regras e, em processos à parte, a geometria da planta e o motor da Faixa
+    const f = [...invariantes(), ...testes()];
+    for (const t of ['teste-planta.mjs', 'teste-faixa.mjs']) { const r = spawnSync(process.execPath, [fileURLToPath(new URL('./' + t, import.meta.url))], { encoding: 'utf8' }); if (r.status !== 0) f.push(t + ': ' + ((r.stdout || '') + (r.stderr || '')).trim().split('\n').slice(-6).join(' | ')); }
+    console.log(f.length ? f.join('\n') : 'testes ok'); process.exitCode = f.length ? 1 : 0;
+  }
   else {
     const E = process.env; const R = rodar({ passo: +(process.argv[2] || 3), ritmo: +(process.argv[3] || 1), sessoes: E.SESSOES === '1' ? SESSOES_PADRAO : E.SESSOES, escolha: E.ESCOLHA || 0, mutirao: !!+E.MUTIRAO, deposito: !!+E.DEPOSITO, robo: E.ROBO, cadeia: !!+E.CADEIA, semente: E.SEMENTE != null ? +E.SEMENTE : undefined, etapas: !!E.ETAPAS, emprestimo: !!+E.EMPRESTIMO, aceleradores: E.ACELERA === '0' ? 0 : 1, auto: E.AUTO === '0' ? 0 : 1 });
     console.log(relatorio(R, true)); if (R.travou || !R.terminou) process.exitCode = 1;

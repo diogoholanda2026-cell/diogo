@@ -31,7 +31,7 @@ function caixasMalha(o, L) {
   alto.min.y = b.min.y; L.push(alto, baixo);
 }
 
-const FAIXA_PROJ = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
+const FAIXA_PROJ = { sede: 'sede', escola: 'escola', engenharia: 'engenharia', instituto: 'instituto', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
 // eventos da simulação que mudam o painel aberto (o redesenho só acontece se o HTML mudar)
 const EV_PAINEL = new Set(['produto', 'coleta', 'enfileirar', 'produzir', 'pedido', 'troca', 'entregar', 'etapaIniciada', 'etapaPronta', 'etapaFeita', 'moduloIniciado', 'moduloPronto', 'moduloFeito', 'topografo', 'mutirao', 'ampliar', 'almox', 'repasse', 'predio', 'novoCapitulo', 'aviso', 'pintado']);
 // passarelas e a praça povoam as vias (a chave muda quando uma delas fica pronta)
@@ -140,7 +140,7 @@ export class Controle {
     W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b)), J.limposSet()); W.cidade.sincronizar(this.S.modulos); { const oc = J.ocupacaoCidade(); W.cidade.terrenos(Object.keys(this.S.cidade.terrenos || {}).filter((id) => !oc.has(id))); }
     for (const [f, arr] of Object.entries(this.S.modulos)) {
       if (MODULOS[f].cidade) continue; const F = W.grupoModulo(f); let muda = false;
-      arr.forEach((m, i) => { const mod = F.mods[i]; if (f === 'casas') { if (mod.nivel !== m.nivel) F.setNivel(i, m.nivel); return; } const lote = m.nivel === 0 && J.situacaoModulo(f, i) === 'disponivel' && !m.obra; if (mod.nivel !== m.nivel || !!mod.lote !== lote) { mod.nivel = m.nivel; mod.lote = lote; muda = true; } });
+      arr.forEach((m, i) => { const mod = F.mods[i]; const lote = m.nivel === 0 && J.situacaoModulo(f, i) === 'disponivel' && !m.obra; if (mod.nivel !== m.nivel || !!mod.lote !== lote) { mod.nivel = m.nivel; mod.lote = lote; muda = true; } });
       if (muda && F.refresh) F.refresh();
     }
     for (const id of Object.keys(PREDIOS)) { const g = W.predios[id]; if (!g) continue; const ok = !!this.S.predios[id].ok; if (!g.userData.animando) { g.userData.pronto = ok; if (!ok) g.visible = false; } }
@@ -194,13 +194,13 @@ export class Controle {
           const poly = A.praca.poly; const sh = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z))); const g = new THREE.ShapeGeometry(sh); g.rotateX(-Math.PI / 2);
           const terra = new THREE.Mesh(g, M.soil); terra.position.y = 0.02; terra.receiveShadow = true; alvo = new THREE.Group(); alvo.add(terra); W.root.add(alvo); site.extras.push(alvo); placa = true;
         }
-        const box = alvo ? new THREE.Box3().setFromObject(alvo) : null; if (box && box.isEmpty()) box.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
+        const box = alvo?.userData.caixaObra ? alvo.userData.caixaObra.clone() : alvo ? new THREE.Box3().setFromObject(alvo) : null; if (box && box.isEmpty()) box.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
         // passarelas e a ponte coberta avançam ao longo do trajeto; plantio e animais em caixas item a item
         const linear = a.modelo.startsWith('pas_') || a.modelo === 'ponteCoberta';
         let bichos = !!alvo?.userData.manadas; if (!bichos && modo0 === 'surgir') alvo?.traverse((o) => { if (o.isInstancedMesh) bichos = true; }); // bichos são sempre instanciados
         const modo = linear ? 'caminho' : modo0 === 'terra' ? (placa ? 'pavimento' : 'terra') : modo0 === 'crescer' ? 'plantio' : bichos ? 'caixas' : modo0 === 'surgir' ? 'plantio' : 'subir';
         opts = { ...base, alvo, esqueleto: mod?.esqueletos?.[a.parte], modo, grua: !!mod?.grua?.[a.parte], box, operarios: modo === 'caixas' ? 6 : modo === 'plantio' ? 8 : modo === 'caminho' ? 8 : 12,
-          caminho: linear && mod?.caminho ? { path3: mod.caminho } : undefined, poligono: modo === 'pavimento' ? A.praca.poly : undefined, centro: modo === 'pavimento' ? A.pracaCaminhos?.[0]?.[0] : undefined };
+          caminho: linear && mod?.caminho ? { path3: mod.caminho } : undefined, poligono: modo === 'pavimento' ? A.praca.poly : undefined, centro: modo === 'pavimento' ? A.praca.centro : undefined };
       }
     }
     opts.obstaculos = this._obstaculos(opts.box || (opts.alvo ? new THREE.Box3().setFromObject(opts.alvo) : null), opts.alvo);
@@ -223,12 +223,12 @@ export class Controle {
   }
   _siteModulo(f, i) {
     const W = this.mundo; const m = this.S.modulos[f][i]; if (MODULOS[f].cidade) W.cidade.sincronizar(this.S.modulos); const F = W.grupoModulo(f); const para = m.obra.para;
-    const a = F.andar(i, para - 1, para); const G = a.acabado; if (f === 'casas') { G.position.copy(F.group.position); G.rotation.copy(F.group.rotation); }
+    const a = F.andar(i, para - 1, para); const G = a.acabado;
     W.root.add(G); const site = { tipo: 'modulo', f, i, ini: m.obra.ini, fim: m.obra.fim, extras: [G] }; const c = a.caminho ? { ...a.caminho, o0: F.prof?.o0, o1: F.prof?.o1 } : undefined;
     if (a.esqueleto) { W.root.add(a.esqueleto); site.extras.push(a.esqueleto); }
     G.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(G);
     site.aoFim = () => { F.setNivel(i, para); if (F.mods[i]) F.mods[i].lote = false; };
-    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: MODULOS[f].cidade ? !['cidCasas', 'cidPraca', 'cidParque'].includes(f) : para >= 3 && f !== 'casas', caminho: c, operarios: 9, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
+    site.obra = this._iniciarObra(`m:${f}:${i}`, { alvo: G, esqueleto: a.esqueleto, box, grua: MODULOS[f].cidade ? !['cidCasas', 'cidPraca', 'cidParque'].includes(f) : para >= 3, caminho: c, operarios: 9, itens: Object.keys(m.pedido?.itens || {}), rig: this.rig, obstaculos: this._obstaculos(box, G), novo: (this.J.agora || Date.now()) - m.obra.ini < 4000, p: clamp(((this.J.agora || Date.now()) - m.obra.ini) / (m.obra.fim - m.obra.ini || 1), 0, 1) });
     this.sites.set(`m:${f}:${i}`, site); if (m.obra.estado === 'pronta') this.obras.pronta(`m:${f}:${i}`);
   }
   _removerSite(k) { const s = this.sites.get(k); if (!s) return; this.obras.remover(k); for (const x of s.extras) { x.parent?.remove(x); descartar(x); } this.sites.delete(k); s.aoRemover?.(); }

@@ -4,12 +4,12 @@
 import * as THREE from 'three';
 import { faixas } from './models/aneis.js';
 import { biblioteca, crd } from './models/biblioteca.js';
-import { anfiteatro, acelerador, CasasVila } from './models/leste.js';
+import { anfiteatro, acelerador } from './models/leste.js';
 import { bioma, gorilas, savana, santuarioInterior } from './models/cupula.js';
 import { plano } from './models/plano.js';
 import { HeliHolding } from './aereo.js';
-import { ciencias, alaOnda, lago, sedePatio } from './models/centro.js';
-import { escola, campo, engenharia, instituto, gramadoUni } from './models/campus.js';
+import { ciencias, lago, sedePatio } from './models/centro.js';
+import { escola, campo, gramadoUni } from './models/campus.js';
 import { praca, passarela, ponteCoberta } from './models/praca.js';
 import { LOTES, predioCanteiro, ambienteCanteiro } from './models/canteiro.js';
 import { PASSARELAS, A } from '../data/planta.js';
@@ -21,6 +21,8 @@ import { Cidade } from './cidade.js';
 import { tinta } from './materials.js';
 import { PALETA } from '../data/cidade.js';
 const PROJ_DE = { sedePatio: 'sede' };
+// fitas que são projeto (etapas por nível), e não módulos de moradia
+const FP = { sede: 'sede', escola: 'escola', engenharia: 'engenharia', instituto: 'instituto', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
 
 const _mi = new THREE.Matrix4(), _mw = new THREE.Matrix4(), _m3 = new THREE.Matrix3(), _cor = new THREE.Color(), _v = new THREE.Vector3();
 // Junta geometrias numa só. blocos: [[fonte, itens]], itens {g, m} (matriz de mundo) ou {g, o, i}
@@ -104,15 +106,13 @@ export class Mundo {
   constructor(engine, ground, forest) {
     this.e = engine; this.ground = ground; this.forest = forest; const scene = engine.scene;
     this.root = new THREE.Group(); this.root.name = 'mundo'; scene.add(this.root);
-    // edifícios-fita (módulos por nível)
-    this.faixas = faixas(); this.faixas.onda = alaOnda(); this.casas = new CasasVila();
-    const FP = { sede: 'sede', humanidades: 'humanidades', onda: 'onda', uniElo: 'uniElo' };
+    // edifícios-fita do Trevo (módulos por nível): moradia (anel, uni, anelBib, casas, santuario) e projetos-fita
+    this.faixas = faixas();
     for (const [k, f] of Object.entries(this.faixas)) { this.root.add(f.group); f.refresh(); f.group.userData.pick = FP[k] ? { tipo: 'proj', id: FP[k] } : { tipo: 'modulos', id: k }; }
-    this.root.add(this.casas.group); this.casas.group.userData.pick = { tipo: 'modulos', id: 'casas' };
     // cidade em volta da Arcologia (chão dos bairros abertos, prédios por tipo e marcas dos lotes livres)
     this.cidade = new Cidade(engine); this.root.add(this.cidade.group);
     // marcos com etapas
-    const list = [biblioteca(), crd(), bioma(), anfiteatro(), gorilas(), acelerador(), savana(), santuarioInterior(), ciencias(), lago(ground), sedePatio(), escola(), campo(), engenharia(), instituto(), gramadoUni(), praca(), ponteCoberta()];
+    const list = [biblioteca(), crd(), bioma(), anfiteatro(), gorilas(), acelerador(), savana(), santuarioInterior(), ciencias(), lago(ground), sedePatio(), escola(), campo(), gramadoUni(), praca(), ponteCoberta()];
     for (const id of Object.keys(PASSARELAS)) list.push(passarela(id));
     this.modelos = {}; for (const m of list) { this.modelos[m.id] = m; this.root.add(m.root); m.root.userData.pick = { tipo: 'proj', id: PROJ_DE[m.id] || m.id }; for (const p of Object.values(m.partes)) { bake(p); p.visible = false; p.userData.feito = false; } for (const s of Object.values(m.esqueletos || {})) { bake(s); s.visible = false; } }
     // plano diretor (postes, renques, saídas para a cidade e o eixo monumental) e o helicóptero da Holding
@@ -144,7 +144,6 @@ export class Mundo {
     const marca = (o, c) => { if (o && (o.userData.cor || 0) !== c) { if (c) o.userData.cor = c; else delete o.userData.cor; mudou = true; } };
     for (const m of Object.values(this.modelos)) { const c = hex(PROJ_DE[m.id] || m.id); for (const p of Object.values(m.partes)) marca(p, c); }
     for (const [k, f] of Object.entries(this.faixas)) { const c = hex(k); marca(f.merged, c); marca(f.extras, c); }
-    marca(this.casas.group, hex('casas'));
     return mudou; // (quem chama refunde)
   }
   parte(modelo, etapa) { return this.modelos[modelo]?.partes[etapa]; }
@@ -167,7 +166,7 @@ export class Mundo {
   }
   // tudo concluído (a composição da foto)
   tudoPronto() {
-    for (const f of Object.values(this.faixas)) f.setTodos(f.max); this.casas.setTodos(this.casas.max);
+    for (const f of Object.values(this.faixas)) f.setTodos(f.max);
     for (const [id, m] of Object.entries(this.modelos)) for (const k of Object.keys(m.partes)) this.setEtapa(id, k, true);
     this.plano.setEixo(3); this.refundirAgora();
     this.ground.flags.praca = true; this.ground.flags.verde = Object.fromEntries(['anel', 'uni', 'ciencias', 'sede', 'biblio', 'savana', 'bioma', 'vila', 'gorilas', 'acelerador', 'santuario'].map((k) => [k, true])); this.ground.paint(); this.ground.lake.position.y = -0.1; this.ground.tampa.visible = false;
@@ -213,7 +212,6 @@ export class Mundo {
     const F = new Map();
     for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) if (p.userData.feito && !p.userData.manadas && !p.userData.update && !this._vivo(p)) F.set(p, 'p' + p.children.length);
     for (const f of Object.values(this.faixas)) { F.set(f.merged, filhos(f.merged)); F.set(f.extras, filhos(f.extras)); }
-    F.set(this.casas.group, this.casas.mods.map((m) => (m.g ? m.g.uuid : '-')).join());
     F.set(this.plano.base, 'plano'); for (const [k, g] of Object.entries(this.plano.eixo)) if (g.userData.feito) F.set(g, 'eixo' + k);
     this.cidade.fontes(F);
     if (this.canteiro.visible) for (const g of Object.values(this.predios)) if (g.userData.pronto && !g.userData.animando) F.set(g, 'q');
@@ -244,8 +242,8 @@ export class Mundo {
     const bq = f.userData.bairro; const c = { ass, por, tris, quad: bq ? 'b:' + bq : (cx < 0 ? 0 : 1) + (cz < 2 ? 0 : 2) }; this._cache.set(f, c); return c; // (a cidade funde por bairro, longe das malhas da Arcologia)
   }
   _chave(k, quad) { const kq = k + ':' + quad; return typeof quad === 'string' || this._grandes.has(kq) ? kq : k; }
-  // grupo 3D dos módulos de uma faixa: as casas da Vila, um tipo da cidade ou um edifício-fita
-  grupoModulo(f) { return f === 'casas' ? this.casas : this.cidade.faixas[f] || this.faixas[f]; }
+  // grupo 3D dos módulos de uma faixa: um tipo da cidade ou um edifício-fita da Arcologia
+  grupoModulo(f) { return this.cidade.faixas[f] || this.faixas[f]; }
   _malha(fk, b, blocos) {
     const { geo, faixas } = fundirLista(blocos); const mesh = new THREE.Mesh(geo, b.mat); mesh.castShadow = b.cast; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.raycast = () => {};
     mesh.userData.chave = fk; mesh.userData.base = b.base; mesh.userData.faixas = faixas; mesh.userData.cullCaixa = geo.boundingBox; if (b.sem) mesh.userData.semHAO = true;
@@ -327,16 +325,12 @@ export class Mundo {
     this._picksSujo = false; this.root.updateMatrixWorld(true); const P = [], F = [];
     for (const m of Object.values(this.modelos)) { const pk = m.root.userData.pick; for (const p of Object.values(m.partes)) { if (!p.children.length) continue; (p.userData.feito ? P : F).push({ box: this._caixa(p), pick: pk, fonte: p }); } }
     for (const f of Object.values(this.faixas)) { const pk = f.group.userData.pick; f.mods.forEach((md, i) => { if (md.nivel > 0 || md.lote) P.push({ box: this._caixaModulo(f, i), pick: pk, faixa: f, i }); }); }
-    const cp = this.casas.group.userData.pick; for (const md of this.casas.mods) if (md.g) P.push({ box: this._caixa(md.g, true), pick: cp, fonte: md.g });
     this.cidade.picks(P, (o, n) => this._caixa(o, n));
     if (this.canteiro.visible) for (const g of Object.values(this.predios)) if (g.userData.pronto || g.visible) P.push({ box: this._caixa(g, true), pick: g.userData.pick, fonte: g });
     this.picks = P; this.picksFuturos = F; this._prepararGrades();
   }
-  _caixaModulo(f, i) {
-    const md = f.mods[i], p = f.prof, nor = normals(md.path, false), b = new THREE.Box3();
-    for (let k = 0; k < md.path.length; k++) for (const o of [p.o0, p.o1]) b.expandByPoint(_v.set(md.path[k][0] + nor[k][0] * o, 0, md.path[k][1] + nor[k][1] * o));
-    b.min.y = (p.y0 || 0) - 0.05; b.max.y = f.alturaTopo(Math.max(0, md.nivel)); return b;
-  }
+  // caixa do módulo no nível atual (com o tambor, a lanterna e os pilares); lote vazio: a placa no chão
+  _caixaModulo(f, i) { const md = f.mods[i]; const b = f.caixa(i, Math.max(1, md.nivel)); if (md.nivel <= 0) b.max.y = (f.prof.y0 || 0) + 0.1; return b; }
   _proxy(pick) { let o = this._proxies.get(pick); if (!o) { o = new THREE.Object3D(); o.userData.pick = pick; this._proxies.set(pick, o); } return o; }
   // acerto exato: fitas por marcha analítica no perfil em terraços (sem testar milhares de triângulos);
   // o resto pela geometria da fonte (mesmo escondida, já que o fundido não entra no raycast)
@@ -363,6 +357,7 @@ export class Mundo {
   _faixaHit(ray, c) {
     const f = c.faixa, md = f.mods[c.i], p = f.prof, fh = p.fh || FH, y0 = p.y0 || 0;
     if (md.nivel <= 0) return { distance: c.d, point: c.p }; // lote vazio: a placa no chão
+    if (md.nos?.length) { const Lb = c.box.getSize(_v).length(), pb = Math.min(0.06, Lb / 48), o = ray.origin, d = ray.direction; for (let t = c.d; t <= c.d + Lb; t += pb) { const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t; if (md.nos.some((no) => Math.hypot(x - no.c[0], z - no.c[1]) < no.r + 0.2) && f.dentro(c.i, x, z, y)) return { distance: t, point: new THREE.Vector3(x, y, z) }; if (y < 0) break; } } // o tambor do módulo
     let nor = this._nor.get(md); if (!nor) this._nor.set(md, (nor = normals(md.path, false)));
     const L = c.box.getSize(_v).length(), passo = Math.min(0.06, L / 48), o = ray.origin, d = ray.direction, P = md.path, n = P.length;
     for (let t = c.d; t <= c.d + L; t += passo) {
@@ -398,7 +393,6 @@ export class Mundo {
     const anda = (o) => { if (o.isInstancedMesh) { if (o.count > 400) return; for (let i = 0; i < o.count; i++) list.push({ g: o.geometry, o, i }); return; } if (o.isMesh && !o.material.transparent) list.push({ g: o.geometry, m: o.matrixWorld }); for (const c of o.children) anda(c); };
     for (const m of Object.values(this.modelos)) for (const p of Object.values(m.partes)) anda(p);
     for (const f of Object.values(this.faixas)) for (let i = 0; i < f.mods.length; i++) for (const g of f._geo(i, f.max).values()) list.push({ g, m: I });
-    const casas = new THREE.Group(); casas.position.copy(this.casas.group.position); casas.rotation.copy(this.casas.group.rotation); for (const m of this.casas.mods) casas.add(this.casas._casa(m, this.casas.max)); casas.updateMatrixWorld(true); anda(casas);
     const { geo } = fundirLista([[null, list]]); geo.deleteAttribute('uv'); if (geo.attributes.color) geo.deleteAttribute('color');
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x4fc8ff), transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 6; mesh.frustumCulled = false; mesh.visible = false; this.root.add(mesh); this._fantasma = mesh; return mesh;
