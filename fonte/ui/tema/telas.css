@@ -1,1 +1,273 @@
-/* Estilos das telas de gestão. Esqueleto da F0 (dona: U1a). */
+/* Telas de gestão (desenho da UI 7.3 e 8.13): cobrem de y 56 até embaixo, de borda a borda, com a barra de cima à
+   vista; cabeçalho de 48 px (glifo, título 20/650, abas e o X no polegar direito); corpo com rolagem e, acima de
+   880 px de largura, duas colunas. E a tela Economia. U1a. */
+
+.tela {
+  position: absolute;
+  top: calc(var(--mC) + 48px);
+  left: var(--mE);
+  right: var(--mD);
+  bottom: var(--mB);
+  z-index: var(--z-tela);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r3);
+  background: var(--s1);
+  box-shadow: var(--luz), var(--borda), var(--sombra2);
+  pointer-events: auto;
+  contain: layout paint style;
+  zoom: var(--zoom);
+  animation: entraTela var(--d3) var(--curva);
+}
+@keyframes entraTela {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.tela-cab {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  flex: none;
+  height: 48px;
+  padding: 0 2px 0 var(--e4);
+  border-bottom: 1px solid var(--fio);
+}
+.tela-glifo { color: var(--t2); }
+.tela-titulo {
+  font-size: var(--t20);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.tela-abas {
+  margin-left: var(--e4);
+  align-self: stretch;
+}
+.tela-abas .aba { height: 47px; }
+.tela-espaco { flex: 1; }
+.tela-corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--e3) var(--e4) var(--e4);
+}
+.secao + .secao { margin-top: var(--e4); }
+.secao-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e2);
+  min-height: 28px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--fio2);
+}
+
+/* ------------------------------------------------------------------ Economia */
+.eco-colunas {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--e4) var(--e5);
+}
+@media (min-width: 880px) {
+  .eco-colunas { grid-template-columns: minmax(300px, 356px) 1fr; }
+}
+.eco-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+  min-width: 0;
+}
+.eco-destaque {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.eco-saldo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: var(--t28);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.eco-saldo-conta {
+  font-size: var(--t13);
+  font-weight: 500;
+  color: var(--t2);
+}
+.eco-indicadores {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: var(--e3) var(--e4);
+  padding: var(--e3) 0;
+  border-top: 1px solid var(--fio);
+  border-bottom: 1px solid var(--fio);
+}
+.eco-indicadores .indicador-valor {
+  font-size: var(--t15);
+}
+.eco-indicadores .indicador-valor .glifo { color: currentColor; }
+.eco-total {
+  font-size: var(--t15);
+  font-weight: 650;
+}
+.eco-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  min-height: 44px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--fio);
+}
+.eco-linha-glifo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r1);
+  background: var(--s2);
+  color: var(--t2);
+}
+.eco-linha-textos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.eco-linha-rot {
+  font-size: var(--t15);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.eco-linha-sub {
+  font-size: var(--t13);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--t2);
+}
+.eco-linha-barra {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.eco-linha-barra i {
+  display: block;
+  height: 100%;
+  transform-origin: 0 50%;
+}
+.eco-linha-barra.rec i { background: var(--g3); }
+.eco-linha-barra.des i { background: var(--g2); }
+.eco-linha-valor {
+  flex: none;
+  min-width: 104px; /* a coluna do valor tem largura fixa: as barras das linhas terminam alinhadas */
+  font-size: var(--t15);
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+.eco-linha.zero .eco-linha-rot,
+.eco-linha.zero .eco-linha-valor {
+  color: var(--t2);
+  font-weight: 500;
+}
+.eco-tudo-pago {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 40px;
+  font-size: var(--t13);
+  font-weight: 500;
+  color: var(--t2);
+}
+.eco-nota {
+  margin-top: var(--e2);
+  font-size: var(--t12);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--t2);
+}
+.eco-fala {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e3);
+  padding: var(--e3);
+  border-radius: var(--r2);
+  background: var(--s2);
+}
+.eco-fala-textos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.eco-fala-quem {
+  font-size: var(--t13);
+  font-weight: 650;
+}
+.eco-fala-texto {
+  font-size: var(--t13);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--t2);
+}
+.eco-regra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--fio);
+  font-size: var(--t13);
+  font-weight: 500;
+  line-height: 1.3;
+}
+.eco-regra .glifo { flex: none; color: var(--t2); }
+.eco-medidores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--e4);
+}
+.eco-medidor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.eco-medidor .barra-texto {
+  font-size: var(--t13);
+  color: var(--t1);
+}
+.eco-tomar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2) var(--e3);
+  padding-top: var(--e2);
+}
+.eco-tomar .deslizante {
+  flex: 1;
+  min-width: 280px;
+}
+.eco-tomar .bt-pri { min-width: 150px; }
+.eco-bloqueio,
+.eco-retorno {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 40px;
+  font-size: var(--t13);
+  font-weight: 600;
+}
+.eco-bloqueio { color: var(--t2); font-weight: 500; }
+.eco-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: var(--e3);
+}
+.eco-acoes .bt-sec { font-size: var(--t13); }

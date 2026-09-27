@@ -1,2 +1,62 @@
-// Textos da parcela S1. Esqueleto da F0 (dona: S1a e S1b); registrar(registrarTextos) vem de ui/textos.js.
-export function registrar() {}
+// Textos da parcela S1 (dona: S1a e S1b): áreas, lugares do mapa, recursos, camada Recursos, áreas à venda e as
+// sugestões da primeira hora. Português do Brasil, sem travessão; registrar(registrarTextos) vem de ui/textos.js.
+export function registrar(registrarTextos) {
+  registrarTextos('s1', {
+    // áreas nomeadas (D55)
+    'area.vila': 'Vila de Santa Cida',
+    'area.gleba': 'Gleba da Arcologia',
+    'area.orla': 'Orla da Praia Grande',
+    'area.varzea': 'Várzea do Held',
+    'area.morros': 'Morros do Norte',
+    // lugares do mapa (rótulos)
+    'lugar.rioHeld': 'Rio Held',
+    'lugar.lagoa': 'Lagoa de Santa Cida',
+    'lugar.baia': 'Baía de Heldópolis',
+    'lugar.serraHeld': 'Serra do Held',
+    'lugar.serraPoente': 'Serra do Poente',
+    'lugar.pedreira': 'Morro da Pedreira',
+    'lugar.mirante': 'Morro do Mirante',
+    'lugar.farol': 'Pedra do Farol',
+    'lugar.enseada': 'Morro da Enseada',
+    'lugar.irmaos': 'Morros Irmãos',
+    'lugar.praiaVila': 'Praia de Santa Cida',
+    'lugar.praiaGrande': 'Praia Grande',
+    'lugar.ilhaGuaras': 'Ilha dos Guarás',
+    'lugar.ilhaRasa': 'Ilha Rasa',
+    'lugar.ilhaMeio': 'Ilha do Meio',
+    'lugar.ponte': 'Ponte da BR',
+    'lugar.rodovia': 'Rodovia BR-Held',
+    'lugar.entrada': 'Entrada da rodovia',
+    // recursos naturais e a camada
+    'recurso.rocha': 'Rocha',
+    'recurso.areia': 'Areia',
+    'recurso.argila': 'Argila',
+    'recurso.calcario': 'Calcário',
+    'recurso.fertil': 'Terra fértil',
+    'recurso.subterranea': 'Água subterrânea',
+    'camada.recursos': 'Recursos naturais',
+    'camada.recursos.resumo': 'Rocha nos morros, areia e argila na várzea do rio, calcário a noroeste, fora da área inicial.',
+    'camada.recursos.resta': 'Resta {pct}% do recurso',
+    // áreas à venda (ladrilhos, D3)
+    'ladrilho.titulo': 'Áreas',
+    'ladrilho.daHolding': 'Área da Holding',
+    'ladrilho.avenda': 'Área à venda',
+    'ladrilho.trancado': 'Precisa encostar numa área da Holding',
+    'ladrilho.preco': '{valor} créditos',
+    'ladrilho.licencas': 'Licenças de área: {n}',
+    'ladrilho.semLicenca': 'Os marcos dão licenças de área.',
+    'ladrilho.comprar': 'Comprar área',
+    'ladrilho.comprada': 'Área comprada',
+    'ladrilho.desconto': 'A Influência baixa o preço em até 20%.',
+    // sugestões da primeira hora (D36)
+    'sugestao.avenida': 'Avenida da entrada da rodovia até o portão norte da gleba',
+    'sugestao.quadra': 'Primeiras quadras',
+    'sugestao.entrada': 'Entrada da energia pela rodovia (até 5 MW)',
+    'sugestao.captacao': 'Captação no rio, acima da Vila',
+    'sugestao.usina': 'Usina solar perto da Vila',
+    'sugestao.escritorio': 'Escritório de Obra perto da entrada',
+    'sugestao.pedreira': 'Pedreira no pé do Morro da Pedreira',
+    'sugestao.areal': 'Areal na margem do rio',
+    'sugestao.olaria': 'Olaria na várzea',
+  });
+}

@@ -1,7 +1,8 @@
 // Registro dos ganchos GLSL comuns (D14, D43, D45): todo GLSL próprio que entra nos materiais do three passa por aqui,
-// com nomes estáveis, para o porte ao WebGPU no M4 custar pouco. Primeira versão funcional da F0: 'sombra' (lê o mapa
-// da sombra própria e multiplica a luz do sol) e 'neblina' (neblina exponencial de altura) funcionam; 'sombraLonge',
-// 'hao', 'camada', 'noite', 'selecao' e 'mascara' começam neutros. A R1a herda e completa (ganchos.definir).
+// com nomes estáveis, para o porte ao WebGPU no M4 custar pouco. A R1a publica 'sombra' (sombra própria em cascatas
+// com PCF estável e a sombra das nuvens) e 'neblina' (altura e perspectiva aérea com a cor do horizonte do céu), com
+// os uniformes abaixo (nomes estáveis). 'sombraLonge', 'hao' e 'noite' são da R1b; 'camada', 'selecao' e 'mascara'
+// das parcelas donas: começam neutros e entram por ganchos.definir.
 //
 // Um gancho: { uniformes: { nome: { value } }, vertice: { pars, main }, fragmento: { pars, sol, indireta, fim } }
 //   uniformes   globais (um objeto só, compartilhado por todos os materiais: mudar o valor vale para todos)
@@ -13,85 +14,53 @@
 // Tudo em highp (a precisão do renderer); nenhum shader próprio usa a precisão média (D44, guarda de texto).
 import * as THREE from 'three';
 import { GANCHOS } from '../../contratos/render.js';
+import { SOMBRA_PARS, SOMBRA_SOL } from '../materiais/shaders/sombra.glsl.js';
+import { NEBLINA_PARS, NEBLINA_FIM } from '../materiais/shaders/neblina.glsl.js';
 
 /** Ordem dos trechos 'fim' (a neblina cobre o que as outras pintaram; a máscara é a última). */
 const ORDEM_FIM = ['camada', 'selecao', 'noite', 'neblina', 'mascara'];
 
 const vazio = () => ({ uniformes: {}, vertice: { pars: '', main: '' }, fragmento: { pars: '', sol: '', indireta: '', fim: '' } });
 
-// ------------------------------------------------------------------------------------------------ padrões da F0
+// ------------------------------------------------------------------------------------------------ ganchos da R1a
 
+// 'sombra': mapa da sombra própria com cascatas e PCF estável, e a sombra das nuvens (materiais/shaders/sombra.glsl.js).
+// Os valores vêm de render/sombra/mapa.js e de ambiente/nuvens.js a cada quadro.
 const SOMBRA = {
   uniformes: {
-    gSombraMapa: { value: null }, // DepthTexture do alvo da sombra própria (compareFunction ligado: sampler2DShadow)
-    gSombraMatriz: { value: new THREE.Matrix4() }, // mundo para [0, 1]³ do mapa (viés * projeção * vista)
+    gSombraMapa: { value: null }, // DepthTexture do atlas (compareFunction ligado: sampler2DShadow)
+    gSombraMatriz: { value: new THREE.Matrix4() }, // mundo para [0, 1]³ da cascata de perto (ou da única)
+    gSombraMatriz1: { value: new THREE.Matrix4() }, // mundo para [0, 1]³ da cascata de longe
     gSombraLigada: { value: 0 },
-    gSombraTexel: { value: 1 / 1024 }, // 1 / tamanho do mapa
-    gSombraVies: { value: 0.0006 }, // em profundidade [0, 1]
+    gSombraCascatas: { value: 1 },
+    gSombraTexel: { value: 1 / 1024 }, // 1 / tamanho de uma cascata
+    gSombraVies: { value: 0.0006 }, // em profundidade [0, 1] (negativo com a profundidade invertida)
     gSombraNormal: { value: 0.8 }, // desloca o ponto pela normal, em metros (acne em superfície inclinada)
+    gSombraNormal1: { value: 1.6 },
+    gSombraRaioPcf: { value: 1.2 }, // raio do disco do PCF em texels
+    gSombraAmostras: { value: 5 },
+    gSombraForca: { value: 1 }, // cai com a luz direta (crepúsculo, noite sem lua)
+    gNuvemMapa: { value: null }, // ruído azulejável (R8) da sombra das nuvens
+    gNuvemParams: { value: new THREE.Vector4(1 / 5200, 0, 0.7, 0) }, // escala, força, limiar da cobertura, livre
+    gNuvemDesloc: { value: new THREE.Vector4() }, // deriva do vento (xy) e sol.xz / sol.y (zw)
   },
   vertice: { pars: '', main: '' },
-  fragmento: {
-    pars: /* glsl */ `
-uniform highp sampler2DShadow gSombraMapa;
-uniform mat4 gSombraMatriz;
-uniform float gSombraLigada;
-uniform float gSombraTexel;
-uniform float gSombraVies;
-uniform float gSombraNormal;
-float gSombraSol( vec3 nMundo ) {
-  if ( gSombraLigada < 0.5 ) return 1.0;
-  vec4 c = gSombraMatriz * vec4( vGPosMundo + nMundo * gSombraNormal, 1.0 );
-  vec3 s = c.xyz / c.w;
-  if ( s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0 ) return 1.0;
-  float z = s.z - gSombraVies;
-  float t = gSombraTexel;
-  float a = texture( gSombraMapa, vec3( s.xy, z ) );
-  a += texture( gSombraMapa, vec3( s.xy + vec2( t, 0.0 ), z ) );
-  a += texture( gSombraMapa, vec3( s.xy - vec2( t, 0.0 ), z ) );
-  a += texture( gSombraMapa, vec3( s.xy + vec2( 0.0, t ), z ) );
-  a += texture( gSombraMapa, vec3( s.xy - vec2( 0.0, t ), z ) );
-  a *= 0.2;
-  vec2 b = min( s.xy, 1.0 - s.xy );
-  return mix( 1.0, a, smoothstep( 0.0, 0.05, min( b.x, b.y ) ) );
-}
-`,
-    sol: 'directLight.color *= gSombraSol( inverseTransformDirection( geometryNormal, viewMatrix ) );',
-    indireta: '',
-    fim: '',
-  },
+  fragmento: { pars: SOMBRA_PARS, sol: SOMBRA_SOL, indireta: '', fim: '' },
 };
 
+// 'neblina': de altura com perspectiva aérea; a cor é o anel do horizonte do céu (materiais/shaders/neblina.glsl.js).
+// Os valores vêm de ambiente/neblina.js a cada quadro; o céu lê o mesmo anel.
 const NEBLINA = {
   uniformes: {
-    gNeblinaCor: { value: new THREE.Color(0.62, 0.7, 0.8) }, // linear
-    gNeblinaDens: { value: 0.00009 }, // extinção por metro no nível do mar
-    gNeblinaQueda: { value: 0.0012 }, // queda da densidade por metro de altura
+    gNeblinaBeta: { value: new THREE.Vector3(1.5e-4, 1.72e-4, 2.2e-4) }, // extinção por metro no nível do mar
+    gNeblinaQueda: { value: 1 / 1200 }, // 1 / altura de escala
     gNeblinaLigada: { value: 1 },
+    gNeblinaAnel: { value: Array.from({ length: 12 }, () => new THREE.Vector3(0.62, 0.7, 0.8)) }, // linear
+    gNeblinaZenite: { value: new THREE.Vector3(0.3, 0.45, 0.7) },
+    gNeblinaSolDir: { value: new THREE.Vector3(0, 1, 0) },
   },
   vertice: { pars: '', main: '' },
-  fragmento: {
-    pars: /* glsl */ `
-uniform vec3 gNeblinaCor;
-uniform float gNeblinaDens;
-uniform float gNeblinaQueda;
-uniform float gNeblinaLigada;
-vec3 gNeblina( vec3 cor ) {
-  if ( gNeblinaLigada < 0.5 ) return cor;
-  vec3 d = vGPosMundo - cameraPosition;
-  float dist = length( d );
-  float k = gNeblinaQueda;
-  float h0 = cameraPosition.y;
-  // densidade exponencial em altura integrada ao longo do raio (forma fechada)
-  float fator = abs( d.y ) > 0.5 ? ( exp( -k * h0 ) - exp( -k * ( h0 + d.y ) ) ) / ( k * d.y ) : exp( -k * h0 );
-  float f = 1.0 - exp( -gNeblinaDens * dist * fator );
-  return mix( cor, gNeblinaCor, clamp( f, 0.0, 1.0 ) );
-}
-`,
-    sol: '',
-    indireta: '',
-    fim: 'gl_FragColor.rgb = gNeblina( gl_FragColor.rgb );',
-  },
+  fragmento: { pars: NEBLINA_PARS, sol: '', indireta: '', fim: NEBLINA_FIM },
 };
 
 // ------------------------------------------------------------------------------------------------ registro

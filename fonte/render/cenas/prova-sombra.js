@@ -1,4 +1,5 @@
-// Cena 'prova-sombra' (D43), versão de prova da F0 que a R1a herda: prova que a sombra própria deixa o LOD0
+// Cena 'prova-sombra' (D43), da F0, herdada pela R1a (a sombra agora em render/sombra/mapa.js, com cascatas e a
+// profundidade invertida quando o aparelho tem EXT_clip_control): prova que a sombra própria deixa o LOD0
 // detalhado VISÍVEL SEM PROJETAR e a caixa LOD1 INVISÍVEL PROJETANDO, numa cena só de projetores desenhada com
 // renderer.render(cenaSombra, camOrto) num alvo com DepthTexture, com callsSombra contadas à parte.
 //
@@ -44,7 +45,10 @@ export function registrar(registrarCena) {
       const luz = new THREE.DirectionalLight(0xfff4e6, 3.2);
       const hemi = new THREE.HemisphereLight(0xc4d6ea, 0x6a6154, 0.9);
       cena.add(luz, luz.target, hemi);
-      ganchos.uniformes.gNeblinaCor.value.set('#b8c6d3');
+      // neblina da prova: uma cor só no anel do horizonte e no alto (sem o domínio do céu)
+      const corNeblina = new THREE.Color('#b8c6d3');
+      for (const v of ganchos.uniformes.gNeblinaAnel.value) v.set(corNeblina.r, corNeblina.g, corNeblina.b);
+      ganchos.uniformes.gNeblinaZenite.value.set(corNeblina.r, corNeblina.g, corNeblina.b);
 
       const matChao = ganchos.aplicar(new THREE.MeshStandardMaterial({ color: '#8d8a80', roughness: 0.92, metalness: 0 }), ['sombra', 'neblina']);
       const matConcreto = ganchos.aplicar(new THREE.MeshStandardMaterial({ color: '#cdc6b8', roughness: 0.8, metalness: 0 }), ['sombra', 'neblina']);
@@ -169,8 +173,9 @@ export function registrar(registrarCena) {
         const soProjetores = sombra.cena.children.length === 1 && sombra.cena.children[0] === gemeo && !sombra.cena.children.includes(lod0);
         if (!soProjetores) falhas.push('a cena de sombra tem algo além do gêmeo do LOD1');
         if (gemeo.instanceMatrix !== lod1.instanceMatrix || gemeo.geometry !== lod1.geometry) falhas.push('o gêmeo não compartilha geometria e instâncias do LOD1');
-        if (passe.sombra.calls !== 1) falhas.push(`passe de sombra com ${passe.sombra.calls} chamadas (esperado 1)`);
-        if (passe.sombra.tris !== 12 * PORTICOS.length) falhas.push(`passe de sombra com ${passe.sombra.tris} triângulos (esperado ${12 * PORTICOS.length})`);
+        const nc = sombra.cascatas ?? 1; // o gêmeo é desenhado uma vez por cascata
+        if (passe.sombra.calls !== nc) falhas.push(`passe de sombra com ${passe.sombra.calls} chamadas (esperado ${nc})`);
+        if (passe.sombra.tris !== 12 * PORTICOS.length * nc) falhas.push(`passe de sombra com ${passe.sombra.tris} triângulos (esperado ${12 * PORTICOS.length * nc})`);
         if (A === null || B === null || D === null) falhas.push('ponto de teste fora da tela');
         else {
           if (A / B > 0.6) falhas.push(`o chão na sombra do vão não escureceu (A/B ${(A / B).toFixed(2)}): a caixa LOD1 não projetou`);

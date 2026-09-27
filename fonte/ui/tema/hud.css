@@ -1,1 +1,307 @@
-/* Estilos do HUD (a barra de cima mínima da F0 está em base.css). Esqueleto da F0 (dona: U1a). */
+/* HUD: escala da interface e a barra de cima (desenho da UI 7.1, 8.1 e 8.2). Dois grupos de vidro de 40 px nos
+   cantos de cima, cada item com alvo de 44 px (o ::after passa 2 px acima e abaixo), divisórias de 1 px, valores em
+   15/650 e a linha de baixo em 12/600, tudo com números tabulares. U1a. */
+
+/* escala: 1 no celular, 1,1 e 1,25 em telas altas (tokens), vezes o ajuste do jogador; o mundo (rótulos) não escala */
+.lugar-cima,
+.lugar-centro,
+.lugar-direita,
+.lugar-baixo,
+.lugar-folha {
+  zoom: var(--zoom);
+}
+
+.hud-cima {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e2);
+}
+.hud-grupo {
+  display: flex;
+  align-items: stretch;
+  height: var(--barra);
+  border-radius: var(--r2);
+  pointer-events: auto;
+}
+.hud-grupo > * + * {
+  border-left: 1px solid var(--fio);
+}
+.hud-item {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  height: 100%;
+  min-width: var(--alvo);
+  padding: 0 10px;
+  color: var(--t1);
+  text-align: left;
+}
+.bt.hud-item::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+}
+/* item com popover aberto: fundo leve (o texto de 12 px segue acima de 4,5:1 sobre céu branco) e o traço azul */
+.bt.hud-item[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 -2px 0 var(--ac);
+}
+.hud-grupo > .ancora:first-child .hud-item,
+.hud-grupo > .hud-item:first-child {
+  border-radius: var(--r2) 0 0 var(--r2);
+}
+.hud-grupo > .hud-item:last-child {
+  border-radius: 0 var(--r2) var(--r2) 0;
+}
+.hud-item .glifo {
+  color: var(--t2);
+}
+.hud-item .glifo.tx-ch { color: var(--ch); }
+.hud-item .glifo.tx-ok { color: var(--ok); }
+.hud-item .glifo.tx-er { color: var(--er); }
+.pilha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.1;
+}
+.hud-valor {
+  font-size: var(--t15);
+  font-weight: 650;
+  white-space: nowrap;
+  transition: color var(--d4) var(--curva);
+}
+.hud-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--t12);
+  font-weight: 600;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.hud-sub.tx-al { color: var(--al); }
+.hud-sub .glifo { color: currentColor; }
+.salto-sobe .hud-valor { color: var(--ch); transition-duration: var(--d1); }
+.salto-desce .hud-valor { color: var(--er); transition-duration: var(--d1); }
+
+/* H da Holding */
+.hud-marca {
+  justify-content: center;
+  padding: 0 10px;
+}
+.hud-marca .glifo { color: var(--ch); }
+
+/* marco: anel de 28 px com o XP e o número */
+.hud-marco {
+  justify-content: center;
+  padding: 0 8px;
+}
+.marco-anel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+.marco-anel svg {
+  position: absolute;
+  inset: 0;
+}
+.marco-trilho,
+.marco-xp {
+  fill: none;
+  stroke-width: 2.5;
+}
+.marco-trilho { stroke: var(--fio2); }
+.marco-xp {
+  stroke: var(--ac);
+  stroke-linecap: round;
+}
+.marco-anel b {
+  position: relative;
+  font-size: var(--t15);
+  font-weight: 700;
+}
+
+/* demanda: barras de 8 x 18 px com a letra embaixo, cor da família (D23) */
+.hud-demanda {
+  padding: 0 11px;
+}
+.demanda-barras {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.demanda-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.demanda-trilho {
+  position: relative;
+  width: 8px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.demanda-trilho i {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+  transition: transform var(--d4) var(--curva);
+}
+.demanda-R i { background: var(--zR); }
+.demanda-C i { background: var(--zC); }
+.demanda-I i { background: var(--zI); }
+.demanda-E i { background: repeating-linear-gradient(45deg, var(--zC) 0 2px, rgba(57, 135, 229, 0.45) 2px 4px); }
+.demanda-letra {
+  font-size: var(--t12);
+  font-weight: 600;
+  line-height: 12px;
+  color: var(--t2);
+}
+
+/* grupo da direita */
+.hud-conselho {
+  justify-content: center;
+  padding: 0 10px;
+}
+.hud-conselho .glifo { color: var(--ch); }
+.selo {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--rp);
+  background: var(--ch);
+  color: var(--tinv);
+  font-size: var(--t12);
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+.hud-data {
+  padding: 0 12px 0 10px;
+}
+.hud-data .glifo { color: var(--t1); }
+.hud-data-mes {
+  font-size: var(--t13);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hud-data-curta { display: none; }
+.hud-vel {
+  display: flex;
+}
+.hud-seg {
+  width: var(--alvo);
+  padding: 0;
+  justify-content: center;
+}
+.hud-seg.ligado {
+  background: var(--s3);
+  box-shadow: inset 0 -2px 0 var(--ac);
+}
+.hud-seg.ligado .glifo { color: var(--t1); }
+.hud-seg.pausa.ligado { box-shadow: inset 0 -2px 0 var(--al); }
+.hud-seg.pausa.ligado .glifo { color: var(--al); }
+.hud-menu {
+  width: var(--alvo);
+  padding: 0;
+  justify-content: center;
+}
+
+/* chip "Pausado" sob a barra, no centro (o botão de pausa fica âmbar) */
+.chip-pausa {
+  position: absolute;
+  top: calc(var(--barra) + 6px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--rp);
+  transform: translateX(-50%);
+  font-size: var(--t12);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--al);
+  pointer-events: none;
+}
+
+/* popover do bem-estar: as três faixas da regra do dono */
+.faixas {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--e2) 0 0;
+}
+.faixa {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  height: 30px;
+  padding: 0 var(--e2);
+  border-radius: var(--r1);
+  font-size: var(--t13);
+  font-weight: 500;
+  color: var(--t2);
+}
+.faixa .glifo { color: var(--t3); }
+.faixa-de { width: 64px; }
+.faixa-tarifa { flex: 1; font-weight: 600; }
+.faixa.atual {
+  background: var(--s3);
+  color: var(--t1);
+}
+.faixa.atual .glifo { color: var(--t2); }
+.faixa.atual .glifo.tx-ok { color: var(--ok); }
+.popover-fase .glifo { color: var(--t1); }
+
+/* PC: as telas de gestão com rótulo na barra e, com espaço, o valor da Holding e a dívida (desenho da UI 7.4) */
+.hud-pc,
+.hud-pc2 { display: none; }
+.hud-gestao { margin-right: auto; }
+.hud-rotulo {
+  padding: 0 14px;
+  font-size: var(--t13);
+  font-weight: 600;
+  color: var(--t2);
+}
+.hud-rotulo:hover { color: var(--t1); }
+@media (min-width: 1200px) {
+  .hud-pc { display: flex; }
+}
+@media (min-width: 1600px) {
+  .hud-pc2 { display: flex; }
+}
+
+/* celular estreito (915 x 412): folgas menores para caber o Conselho e números de 7 dígitos sem cortar */
+@media (max-width: 940px) {
+  .hud-cima { gap: 6px; }
+  .hud-item { gap: 6px; padding: 0 8px; }
+  .hud-marco,
+  .hud-data,
+  .hud-demanda,
+  .hud-conselho,
+  .hud-marca { padding: 0 8px; }
+  .hud-seg,
+  .hud-menu { padding: 0; }
+  /* calendário em duas linhas ("Mês 3" e "Ano 2"); a fase fica no glifo e no popover */
+  .hud-data-longa { display: none; }
+  .hud-data-curta { display: inline-flex; }
+}
