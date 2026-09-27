@@ -1,31 +1,227 @@
-// Centro da composição: Faculdade de Ciências Avançadas (um platô contínuo de bandas boleadas de concreto
-// claro com quatro células cobertas por vidraçaria espelhada), a Ala em Onda, o Lago Central e o pátio da
-// Sede da Holding.
+// Coração do Trevo da Holding (plano mestre, revisão 6): a Torre da Holding na ilha (bolo de noiva em 4 camadas de 24
+// lados, creme e champanhe, terraços-jardim com friso de ouro, coroa de vidro âmbar e heliponto: o único pico, 14,0),
+// o pátio da Sede (fundações, pórtico sobre o portal, piscinas, ponte privada e o pavilhão guarda-chuva), o Lago
+// Central em 4 bacias (margens vivas, renque do jardim, bosquetes, diques-jardim, jardins flutuantes, repuxos,
+// calçada e os canais dos vales até os Repuxos) e a Faculdade de Ciências no miolo da folha da Universidade (rede de
+// bandas brancas sobre pilotis, laboratórios, casca e vidro espelhado). Medidas de A (planta.js), coordenadas do mundo.
 import * as THREE from 'three';
-import { A } from '../../data/planta.js';
+import { A, J, ANEL_MESTRE as AM, trechosDe, trecho } from '../../data/planta.js';
 import { M, dupla } from '../materials.js';
-import { sweep, beams, curve, normals } from '../geom.js';
+import { sweep, beams, curve, normals, merge, terraceFloor, terraceOutline, medidas, BAY } from '../geom.js';
 import { treeGroup } from '../forest.js';
 import { heightAt } from '../ground.js';
 import { rng, inPoly } from '../../core/util.js';
-import { Faixa } from './faixa.js';
 import { deck } from './praca.js';
 import { heliponto } from '../cidade.js';
 
+const PI2 = Math.PI * 2, rad = (g) => (g * Math.PI) / 180;
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
 function shapeOf(pts, s = new THREE.Shape()) { pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); return s; }
 function uvPlano(g) { const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); }
 function plate(pts, y, h, mat) { const g = new THREE.ExtrudeGeometry(shapeOf(pts), { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); uvPlano(g); return mesh(g, mat); }
+function flat(pts, y, mat) { const g = new THREE.ShapeGeometry(shapeOf(pts)); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); uvPlano(g); return mesh(g, mat, false); }
 // laje com furos (o tampo da rede da Ciências: um só polígono com as células vazadas)
 function plateHoles(outer, holes, y, h, mat) {
   const s = shapeOf(outer); for (const hp of holes) s.holes.push(shapeOf(hp, new THREE.Path()));
   const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); uvPlano(g); return mesh(g, mat);
 }
-const bordaD = (x, z, p) => { let d = 1e9; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [ax, az] = p[j], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; };
-const addMap = (grp, map, matFn) => { for (const [k, g] of map) grp.add(mesh(g, matFn(k))); };
-// materiais de reserva enquanto a área A não publica os seus (a fusão do mundo junta por material)
-const MAT = {};
-const espelho = () => M.vidroEspelhado || (MAT.espelho ||= new THREE.MeshStandardMaterial({ color: 0xbfd9ec, metalness: 0.9, roughness: 0.05, envMapIntensity: 1.8 }));
+const distSeg = (x, z, ax, az, bx, bz) => { const vx = bx - ax, vz = bz - az; const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); return Math.hypot(x - ax - vx * t, z - az - vz * t); };
+function distPoly(x, z, p, fechado = true) { let d = 1e9; for (let i = fechado ? 0 : 1, j = fechado ? p.length - 1 : 0; i < p.length; j = i++) d = Math.min(d, distSeg(x, z, p[j][0], p[j][1], p[i][0], p[i][1])); return d; }
+const noElipse = (x, z, e, m = 0) => ((x - e.c[0]) / (e.rx + m)) ** 2 + ((z - e.c[1]) / (e.rz + m)) ** 2 < 1;
+// mapa material -> geometria vira malhas (chave = nome em M, ou fn)
+const addMap = (grp, map, matFn = (k) => M[k]) => { for (const [k, g] of map) grp.add(mesh(g, matFn(k))); };
+const elipsePts = (c, rx, rz, n = 40, fase = 0) => Array.from({ length: n }, (_, i) => { const t = fase + (i / n) * PI2; return [c[0] + Math.cos(t) * rx, c[1] + Math.sin(t) * rz]; });
+// sólido de revolução em n lados em volta de c: varre as arestas [raio, y] num n-ágono de raio 1 (a normal do caminho é
+// radial: o deslocamento o = raio - 1 leva cada vértice ao raio pedido). Nas arestas 'facade' o período da textura
+// divide o perímetro (a fachada fecha a volta sem emenda)
+function torno(c, n, edges) {
+  const path = []; for (let i = 0; i < n; i++) { const t = (i / n) * PI2; path.push([c[0] + Math.cos(t), c[1] + Math.sin(t)]); }
+  const per = (r) => n * 2 * r * Math.sin(Math.PI / n);
+  return sweep(path, true, edges.map((e) => { const o = { ...e, a: [e.a[0] - 1, e.a[1]], b: [e.b[0] - 1, e.b[1]] }; if (e.uv === 'facade') { const p = per(e.a[0]); o.uRep = p / Math.max(1, Math.ceil(p / (BAY * 32))); } return o; }));
+}
+// peças repetidas numa geometria só: [geo, x, y, z, giro]
+function juntar(geo, itens) { const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1); return merge(itens.map(([x, y, z, a = 0]) => [geo, m4.clone().compose(v.set(x, y, z), q.setFromAxisAngle(up, a), s)])); }
+const arvores = (lista, o) => treeGroup(lista.map((t) => ({ ...t, y: t.y ?? Math.max(0, heightAt(t.x, t.z)) })), o);
+
+// ================================================================ Torre da Holding
+// Bolo de noiva na ilha: pódio claro (a base do bolo, na altura das duas pontes que chegam nele) e 4 camadas de
+// A.torre. Cada andar: faixa creme (laje e peitoril) com beiral e faixa de vidro âmbar aceso recuada (a textura de
+// fachada casa um andar por fileira); no topo de cada camada o terraço-jardim: borda da laje, friso de ouro,
+// floreira, jardim e passeio junto ao vidro da camada de cima, com arbustos (alguns floridos). Coroa de vidro âmbar
+// com aletas de ouro e a laje do heliponto (borda de metal champanhe com friso de ouro, tampo de laca preta com o H
+// e o aro do heliponto de cidade.js, luzes de balizamento). Uma varredura só no n-ágono de 24 lados (lajes e vidros
+// por material) e poucas peças à parte.
+function torreHolding() {
+  const T = A.torre, c = T.c, cam = T.camadas, g = new THREE.Group(); g.name = 'torre-holding';
+  const s = 0.07, hC = 0.18, b = 0.14, FL = 0.14, FH = 0.55; // laje, faixa creme de cada andar (laje e peitoril), beiral (recuo do vidro), floreira, pé-direito alvo
+  const pte = A.ponte.pts[A.ponte.pts.length - 1], rP = Math.hypot(pte[0] - c[0], pte[1] - c[1]), yP = A.sedePatio.pontePrivada.h; // pódio: até onde pousam as pontes
+  const [rC, yC0, yC1] = T.coroa, [rH, , yH] = T.heliponto, gC = rC - 0.09; // vidro da coroa (as aletas vão até rC)
+  const E = []; const vidro = (r, y0, y1, vBase, vRep) => E.push({ a: [r, y0], b: [r, y1], mat: 'fac_ambar', uv: 'facade', vBase, vRep });
+  E.push({ a: [rP, -0.12], b: [rP, yP - 0.03], mat: 'whiteSmooth', uv: 'run' }, { a: [rP, yP - 0.03], b: [rP, yP], mat: 'ouro', uv: 'run' }, { a: [rP, yP], b: [cam[0][0] - b, yP], mat: 'caminhoTeto', uv: 'plan' });
+  const terracos = [], lobby = []; // faixas de jardim [r0, r1, y] e altura do saguão
+  cam.forEach(([r, y0, y1], k) => {
+    const yb = k ? y0 : yP, n = Math.max(1, Math.round((y1 - yb) / FH)), fh = (y1 - yb) / n, gV = r - b;
+    for (let j = 0; j < n; j++) {
+      const yj = yb + j * fh;
+      if (k === 0 && j === 0) { vidro(gV, yb, yb + 2 * fh, yb, 8 * fh); lobby.push(yb + 2 * fh); continue; } // saguão de pé-direito duplo
+      if (k === 0 && j === 1) continue;
+      if (j === 0) { vidro(gV, yb + s + 0.12, yb + fh, yb, 4 * fh); E.push({ a: [gV, yb + s], b: [gV, yb + s + 0.12], mat: 'whiteSmooth', uv: 'run' }); continue; } // a laje de baixo é o terraço da camada de baixo (peitoril creme atrás do passeio)
+      E.push({ a: [r, yj], b: [r, yj + hC], mat: 'whiteSmooth', uv: 'run' }, { a: [r, yj + hC], b: [gV, yj + hC], mat: 'whiteSmooth', uv: 'plan' });
+      vidro(gV, yj + hC, yj + fh, yb, 4 * fh);
+    }
+    // terraço no topo da camada: até o vidro da camada de cima (ou da coroa)
+    const gN = k < cam.length - 1 ? cam[k + 1][0] - b : gC, yt = y1 + s, w = r - FL - gN, walk = w > 0.5 ? 0.2 : 0;
+    E.push({ a: [r, y1], b: [r, yt], mat: 'whiteSmooth', uv: 'run' }, { a: [r, yt], b: [r, yt + 0.03], mat: 'ouro', uv: 'run' }, { a: [r, yt + 0.03], b: [r, yt + 0.12], mat: 'whiteSmooth', uv: 'run' },
+      { a: [r, yt + 0.12], b: [r - FL, yt + 0.12], mat: 'planter', uv: 'plan' }, { a: [r - FL, yt + 0.12], b: [r - FL, yt], mat: 'whiteSmooth', uv: 'run' },
+      { a: [r - FL, yt], b: [gN + walk, yt], mat: 'roof', uv: 'plan' });
+    if (walk) E.push({ a: [gN + walk, yt], b: [gN, yt], mat: 'caminhoTeto', uv: 'plan' });
+    terracos.push([r - FL, gN + walk, yt]);
+  });
+  vidro(gC, yC0 + s, yC1, yC0 + s, 4 * (yC1 - yC0 - s));
+  E.push({ a: [gC, yC1], b: [rH, yC1], mat: 'roofMetal', uv: 'plan' }, { a: [rH, yC1], b: [rH, yH - 0.04], mat: 'roofMetal', uv: 'run' }, { a: [rH, yH - 0.04], b: [rH, yH], mat: 'ouro', uv: 'run' }, { a: [rH, yH], b: [0.001, yH], mat: 'laca', uv: 'plan' });
+  addMap(g, torno(c, 24, E));
+  // aletas de ouro da coroa (16) e marquises das duas entradas (a ponte do pavilhão ao sul, a ponte privada ao norte)
+  const nA = 16, hA = yC1 - yC0 - s; g.add(mesh(juntar(new THREE.BoxGeometry(rC - gC + 0.01, hA, 0.035), Array.from({ length: nA }, (_, i) => { const a = (i / nA) * PI2 + Math.PI / nA; const rm = (rC + gC) / 2; return [c[0] + Math.cos(a) * rm, yC0 + s + hA / 2, c[1] + Math.sin(a) * rm, -a]; })), M.ouro));
+  const dM = rP - 0.08 - (cam[0][0] - b); g.add(mesh(juntar(new THREE.BoxGeometry(1.5, 0.06, dM), [1, -1].map((sz) => [c[0], lobby[0] - 0.09, c[1] + sz * (cam[0][0] - b + dM / 2)])), M.whiteSmooth));
+  // heliponto (o de cidade.js, em escala, com o aro em ouro) e 8 luzes de balizamento na borda
+  const hp = heliponto(0, 0.55); const kH = (rH - 0.1) / 0.55; hp.scale.set(kH, 1, kH); hp.position.set(c[0], yH, c[1]); const troca = new Map([[M.yellow, M.ouro], [M.dark, M.laca], [M.white, M.whiteSmooth]]); hp.traverse((o) => { if (troca.has(o.material)) o.material = troca.get(o.material); }); g.add(hp); // (materiais que a Torre já usa)
+  g.add(mesh(juntar(new THREE.OctahedronGeometry(0.035), Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * PI2; return [c[0] + Math.cos(a) * (rH - 0.05), yH - 0.012, c[1] + Math.sin(a) * (rH - 0.05)]; })), M.redGlow, false));
+  // arbustos dos terraços (1 em 5 florido) e do pódio (fora das duas pontes)
+  const R = rng(4417), arb = [];
+  terracos.forEach(([r0, r1, y], k) => { const rm = (r0 + r1) / 2, n = Math.floor((PI2 * rm) / 0.55); for (let i = 0; i < n; i++) { const a = ((i + 0.5 * (k & 1)) / n) * PI2; arb.push({ x: c[0] + Math.cos(a) * rm, z: c[1] + Math.sin(a) * rm, y, s: 0.1 + R() * 0.04, kind: 'folhaLow', pal: R() < 0.2 ? 'flores' : 'jardim', h: 0.8 }); } });
+  const rA = (rP + cam[0][0]) / 2 + 0.05; for (let i = 0; i < 20; i++) { const a = (i / 20) * PI2 + 0.08; if (Math.abs(Math.sin(a)) > 0.9) continue; arb.push({ x: c[0] + Math.cos(a) * rA, z: c[1] + Math.sin(a) * rA, y: yP, s: 0.16 + R() * 0.04, kind: 'folhaLow', pal: 'jardim', h: 1.1 }); }
+  g.add(treeGroup(arb, { cast: false, name: 'terracos-torre' }));
+  g.userData.heliponto = T.pouso.slice();
+  return g;
+}
+
+// ================================================================ Pátio da Sede
+// Perfil da Sede do plano (seção 8: varandas brancas, teto roofMetal, terraços que descem para o lago): o pórtico
+// repete os dois últimos andares dele sobre o portal. (Se a fita da Sede mudar de perfil em aneis.js, mudar aqui.)
+const PROF_SEDE = { setIn: 0.18, setOut: 0, beiral: 0.22, slab: 0.07, curb: 0.14, curbW: 0.03, curbMat: 'fasciaBeiral', fac: 'fac_fita', facIn: 'fac_fita', roof: 'roofMetal', passeio: false };
+function portico() {
+  const p = A.sedePatio.portico, sd = A.sede, F = Math.round(sd.hMax / sd.fh), f0 = Math.round(p.y0 / sd.fh); const prof = { ...PROF_SEDE, o0: sd.o0, o1: sd.o1, fh: sd.fh }; const m = medidas(prof);
+  const E = []; for (let f = f0; f < F; f++) E.push(...terraceFloor(f, F, prof));
+  E.push({ a: [m.gI(f0 - 1), p.y0], b: [m.gO(f0 - 1), p.y0], mat: 'whiteSmooth', uv: 'plan' }); // forro sobre o portal
+  E.push({ a: [m.eO(f0) + 0.005, p.y0], b: [m.eO(f0) + 0.005, p.y0 + 0.045], mat: 'ouro', uv: 'run' }, { a: [m.eI(f0) - 0.005, p.y0 + 0.045], b: [m.eI(f0) - 0.005, p.y0], mat: 'ouro', uv: 'run' }); // friso de ouro que emoldura o eixo
+  return sweep(p.caminho, false, E, { caps: true, capPoly: terraceOutline(F, prof, f0, F), capMat: 'fasciaBeiral' });
+}
+// piscina do jardim norte: deque de madeira, borda clara e a água turquesa
+function piscina(pc, grp) {
+  grp.add(plate(elipsePts(pc.c, pc.rx + pc.deck, pc.rz + pc.deck, 40), 0, 0.05, M.madeiraClara));
+  grp.add(plate(elipsePts(pc.c, pc.rx + 0.06, pc.rz + 0.06, 40), 0.05, 0.025, M.whiteSmooth));
+  grp.add(flat(elipsePts(pc.c, pc.rx, pc.rz, 40), 0.08, M.pool));
+  const R = rng(pc.c[0] > 0 ? 31 : 37); for (const sx of [-0.45, 0, 0.45]) { const x = pc.c[0] + sx, z = pc.c[1] + pc.rz + pc.deck * 0.5; grp.add(mesh(juntar(new THREE.BoxGeometry(0.1, 0.03, 0.2), [[x + (R() - 0.5) * 0.05, 0.065, z]]), M.whiteSmooth, false)); } // espreguiçadeiras no deque do lado do lago
+}
+// Pavilhão guarda-chuva (a marca da Holding, na margem sul, no eixo): plataforma redonda de pedra clara com deque de
+// madeira (avança sobre a água como píer), salão de vidro com montantes, coluna central e o dossel em guarda-chuva de
+// 16 panos com o aro de ouro
+function pavilhao() {
+  const pv = A.sedePatio.pavilhao, c = pv.c, g = new THREE.Group(); g.name = 'pavilhao'; const [piso, vid, dos] = pv.niveis; const [rp, , yp] = piso, [rv, yv0, yv1] = vid, [rd, yd0, yd1] = dos;
+  addMap(g, torno(c, 40, [{ a: [rp, -0.12], b: [rp, yp], mat: 'whiteSmooth', uv: 'run' }, { a: [rp, yp], b: [rp - 0.1, yp], mat: 'whiteSmooth', uv: 'plan' }, { a: [rp - 0.1, yp], b: [0.001, yp], mat: 'madeiraClara', uv: 'plan' }]));
+  const sal = torno(c, 24, [{ a: [rv, yv0], b: [rv, yv1], mat: 'glass', uv: 'run' }, { a: [rv + 0.05, yv1], b: [rv + 0.05, yd0 + 0.02], mat: 'whiteSmooth', uv: 'run' }]);
+  for (const [k, geo] of sal) { const o = mesh(geo, M[k], k !== 'glass'); if (k === 'glass') o.renderOrder = 3; g.add(o); }
+  g.add(beams(Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * PI2; const x = c[0] + Math.cos(a) * rv, z = c[1] + Math.sin(a) * rv; return [[x, yv0, z], [x, yv1, z]]; }), 0.012, M.whiteSmooth, 4));
+  g.add(beams([[[c[0], yp, c[1]], [c[0], yd0 + 0.05, c[1]]]], 0.06, M.whiteSmooth, 10));
+  addMap(g, torno(c, 16, [{ a: [rd, yd0], b: [rd, yd0 + 0.025], mat: 'ouro', uv: 'run' }, { a: [rd, yd0 + 0.025], b: [rd * 0.55, yd1 - 0.035], mat: 'whiteSmooth', uv: 'plan' }, { a: [rd * 0.55, yd1 - 0.035], b: [0.001, yd1], mat: 'whiteSmooth', uv: 'plan' },
+    { a: [0.07, yd0 + 0.05], b: [rd, yd0], mat: 'whiteSmooth', uv: 'plan' }]));
+  return g;
+}
+// e1: fundações (faixa de concreto ao longo de cada trecho da Sede, discos dos tambores NO e NE e o radier da Torre);
+// e4: a Torre (a obra usa a caixa dela: grua e andaime na ilha), o pórtico, as piscinas, a ponte privada e o pavilhão
+export function sedePatio() {
+  const sd = A.sede, T = A.torre, root = new THREE.Group(); root.name = 'sedePatio'; const P = { e1: new THREE.Group(), e4: new THREE.Group() };
+  const fund = (o0, o1) => [{ a: [o1, -0.06], b: [o1, 0.03], mat: 'concreto', uv: 'run' }, { a: [o1, 0.03], b: [o0, 0.03], mat: 'concreto', uv: 'plan' }, { a: [o0, 0.03], b: [o0, -0.06], mat: 'concreto', uv: 'run' }];
+  for (const [f0, f1] of trechosDe(sd)) addMap(P.e1, sweep(trecho(sd.caminho, f0, f1), false, fund(sd.o0 - 0.15, sd.o1 + 0.15), { caps: true, capMat: 'concreto' }));
+  for (const fd of A.sedePatio.fundacoes) addMap(P.e1, torno(fd.c, 40, [{ a: [fd.r, -0.06], b: [fd.r, 0.03], mat: 'concreto', uv: 'run' }, { a: [fd.r, 0.03], b: [0.001, 0.03], mat: 'concreto', uv: 'plan' }]));
+  const torre = torreHolding(); P.e4.add(torre); P.e4.userData.heliponto = torre.userData.heliponto;
+  torre.updateMatrixWorld(true); P.e4.userData.caixaObra = new THREE.Box3().setFromObject(torre);
+  addMap(P.e4, portico());
+  for (const pc of A.sedePatio.piscinas) piscina(pc, P.e4);
+  const pp = A.sedePatio.pontePrivada, [pa, pb] = pp, dz = pb[1] - pa[1]; // ponte privada: 0,5 sobre a água; desce ao piso do eixo norte já em terra
+  const zM = A.lago.c[1] - A.lago.rz - 0.15; P.e4.add(deck([[pa[0], pa[1], pp.h], [pa[0], pa[1] + dz * 0.45, pp.h], [pa[0], zM, pp.h], [pb[0], pb[1], 0.05]], pp.w, { jardim: false, topo: 'branco' }));
+  P.e4.add(pavilhao());
+  for (const k of Object.keys(P)) root.add(P[k]);
+  return { id: 'sedePatio', root, partes: P, esqueletos: {}, grua: { e4: true }, foco: { x: T.c[0], z: T.c[1] + 2, dist: 30 }, ancora: [T.c[0], T.topo + 0.6, T.c[1]] };
+}
+
+// ================================================================ Lago Central
+// Oval de A.lago em 4 bacias (a ilha no meio, os diques leste-oeste e as pontes do eixo). e1: desassoreamento (o
+// nível da água sobe; a água é do ground.js e a draga da obra.js); e2: margens vivas (juncos e pedras claras na borda
+// e em volta da ilha, o renque de árvores no jardim junto à face interna do Anel e os 4 bosquetes nas diagonais);
+// e3: estação natural (diques-jardim, jardins flutuantes, repuxos ao lado das pontes do eixo, calçada clara da margem
+// e, fora do Anel, os canais dos vales até os Repuxos oeste e leste com os bosquetes em massa)
+export function lago() {
+  const L = A.lago, C = L.c, ilha = A.ilha, jd = A.jardim, pv = A.sedePatio.pavilhao, root = new THREE.Group(); root.name = 'lago'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
+  P.e1.userData.nivel = true;
+  const R = rng(77), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), s3 = new THREE.Vector3();
+  const margem = curve(L, true, 144), nor = normals(margem, true); const zD = A.lagoDiques[0].z, wD = A.lagoDiques[0].w;
+  const noEixo = (x, m = 1.7) => Math.abs(x - C[0]) < m, noDique = (z, m = 0.7) => Math.abs(z - zD) < wD / 2 + m;
+  // e2: juncos e pedras na borda da água (pedras claras meio submersas); juncos também em volta do pódio da ilha
+  const reeds = [], pedras = [];
+  margem.forEach(([x, z], i) => { if (noEixo(x) || noDique(z)) return; const [nx, nz] = nor[i]; for (let k = 0; k < 1 + (R() < 0.5); k++) { const o = -0.12 - R() * 0.3; reeds.push([x + nx * o + (R() - 0.5) * 0.12, z + nz * o + (R() - 0.5) * 0.12, 0.15 + R() * 0.2]); } if (R() < 0.28) { const o = -0.14 - R() * 0.2; pedras.push([x + nx * o, z + nz * o, 0.12 + R() * 0.1, R() * 6]); } });
+  for (let i = 0; i < 56; i++) { const a = (i / 56) * PI2, r = ilha.r + 0.1 + R() * 0.25, x = C[0] + Math.cos(a) * r, z = C[1] + Math.sin(a) * r; if (noEixo(x, 1.1) || noDique(z, 0.35)) continue; reeds.push([x, z, 0.12 + R() * 0.16]); }
+  const rg = new THREE.ConeGeometry(0.03, 1, 4, 1, true); rg.translate(0, 0.5, 0); const rim = new THREE.InstancedMesh(rg, M.planter, reeds.length); // (cone sem a base: o pé fica na água)
+  reeds.forEach(([x, z, h], i) => rim.setMatrixAt(i, m4.compose(v.set(x, -0.12, z), q.identity(), s3.set(1, h * 1.5, 1)))); rim.castShadow = false; rim.receiveShadow = true; P.e2.add(rim);
+  const pim = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), M.concretoClaro, pedras.length);
+  pedras.forEach(([x, z, s, r], i) => pim.setMatrixAt(i, m4.compose(v.set(x, Math.max(heightAt(x, z), -0.14) + s * 0.15, z), q.setFromEuler(e.set(0, r, 0)), s3.set(s, s * 0.6, s * 0.8)))); pim.castShadow = true; pim.receiveShadow = true; P.e2.add(pim);
+  // renque no anel de jardim, a 0,85 da face interna do Anel Mestre: fora dos tambores, do eixo (portais, pavilhão,
+  // ponte privada; ao norte também os renques baixos e os bancos que o plano.js põe nos bordos do eixo norte, x 2,45),
+  // das piscinas, dos diques, dos bosquetes e da calçada da margem
+  const tb = Object.values(A.tambores), bq = A.bosquetes, pisc = A.sedePatio.piscinas; const tr = [];
+  const livre = (x, z) => tb.every((t) => Math.hypot(x - t.c[0], z - t.c[1]) > t.r + 0.75) && !noEixo(x, z > C[1] ? 2.0 : 3.1) && !noDique(z, 0.45) && pisc.every((p) => !noElipse(x, z, p, p.deck + 0.45)) && bq.every((b) => !noElipse(x, z, b, 0.35)) && !noElipse(x, z, L, 0.95);
+  for (const [d, n, s0] of [[0.85, 96, 0.28], [1.5, 72, 0.23]]) { const rx = jd.rx - d, rz = jd.rz - d; for (let i = 0; i < n; i++) { const a = ((i + (d > 1 ? 0.5 : 0)) / n) * PI2, x = C[0] + Math.cos(a) * rx, z = C[1] + Math.sin(a) * rz; if (livre(x, z)) tr.push({ x, z, s: s0 + R() * 0.07, pal: R() < 0.15 ? 'mata' : 'jardim', h: 1.05 }); } } // duas fileiras desencontradas
+  // bosquetes das diagonais: 7 copas em massa dentro de cada elipse
+  for (const b of bq) { tr.push({ x: b.c[0], z: b.c[1], s: 0.4, pal: 'jardim', h: 1.1 }); for (let k = 0; k < 6; k++) { const a = (k / 6) * PI2 + 0.3; tr.push({ x: b.c[0] + Math.cos(a) * (b.rx - 0.42), z: b.c[1] + Math.sin(a) * (b.rz - 0.36), s: 0.3 + R() * 0.06, pal: R() < 0.3 ? 'mata' : 'jardim', h: 1.0 }); } }
+  P.e2.add(arvores(tr));
+  // e3: diques-jardim (da ilha, a uma junta do pódio da Torre, até a face interna do Anel): muretas claras, jardim e
+  // arbustos com árvores pequenas a cada 2,1
+  const rPod = Math.hypot(A.ponte.pts[A.ponte.pts.length - 1][0] - C[0], A.ponte.pts[A.ponte.pts.length - 1][1] - C[1]) + J; const arb = [];
+  for (const d of A.lagoDiques) {
+    const sx = Math.sign(d.x1), hw = d.w / 2, x0 = C[0] + sx * Math.max(Math.abs(d.x0 - C[0]), rPod), x1 = C[0] + sx * Math.min(Math.abs(d.x1 - C[0]), AM.rxIn * Math.sqrt(1 - (hw / AM.rzIn) ** 2) - J); // nas quinas a face do Anel já curva: a junta vale nelas
+    addMap(P.e3, sweep([[x0, d.z], [x1, d.z]], false, [{ a: [hw, -0.45], b: [hw, d.h], mat: 'whiteSmooth', uv: 'run' }, { a: [hw, d.h], b: [hw - 0.1, d.h], mat: 'whiteSmooth', uv: 'plan' }, { a: [hw - 0.1, d.h], b: [-hw + 0.1, d.h], mat: 'roof', uv: 'plan' },
+      { a: [-hw + 0.1, d.h], b: [-hw, d.h], mat: 'whiteSmooth', uv: 'plan' }, { a: [-hw, d.h], b: [-hw, -0.45], mat: 'whiteSmooth', uv: 'run' }], { caps: true, capMat: 'whiteSmooth' }));
+    const Ld = Math.abs(x1 - x0); for (let t = 0.25, k = 0; t < Ld - 0.2; t += 0.42, k++) { const x = x0 + sx * t; if (k % 5 === 2) arb.push({ x, z: d.z, y: d.h, s: 0.22, pal: 'jardim', h: 1 }); else arb.push({ x, z: d.z + (k & 1 ? 0.14 : -0.14), y: d.h, s: 0.11 + R() * 0.03, kind: 'folhaLow', pal: k % 7 === 3 ? 'flores' : 'jardim', h: 0.8 }); }
+  }
+  // jardins flutuantes (um em cada bacia, a meio caminho entre a ilha e a margem) e repuxos ao lado das pontes do eixo
+  const bacia = (sx, sz) => { const x = C[0] + sx * (ilha.r + L.rx) / 2 * 0.9, zm = C[1] + sz * (wD / 2 + L.rz * Math.sqrt(1 - ((x - C[0]) / L.rx) ** 2)) / 2; return [x, zm]; };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const [x, z] = bacia(sx, sz); const fg = new THREE.CylinderGeometry(1, 1, 0.05, 20); fg.scale(1.1, 1, 0.55); fg.translate(x, -0.07, z); P.e3.add(mesh(fg, M.planter, false));
+    arb.push({ x, z, y: -0.05, s: 0.2, pal: 'jardim', h: 1 }); for (let i = 0; i < 6; i++) { const a = (i / 6) * PI2 + 0.3; arb.push({ x: x + Math.cos(a) * 0.72, z: z + Math.sin(a) * 0.3, y: -0.05, s: 0.1 + R() * 0.04, kind: 'folhaLow', pal: i === 2 ? 'flores' : 'jardim', h: 0.8 }); }
+  }
+  const jato = dupla(M.glassRail), jatos = [], bases = [];
+  const zS = (C[1] + ilha.r + L.c[1] + L.rz) / 2, zN = (C[1] - ilha.r + L.c[1] - L.rz) / 2, xJ = A.ponte.w / 2 + 1.0;
+  for (const z of [zS, zN]) for (const sx of [-1, 1]) { bases.push([C[0] + sx * xJ, -0.07, z]); jatos.push([C[0] + sx * xJ, z, 0.85, 0.07, -0.05]); }
+  P.e3.add(mesh(juntar(new THREE.CylinderGeometry(0.2, 0.22, 0.06, 14), bases), M.whiteSmooth));
+  // calçada clara da margem (sem passar sob o pavilhão nem sob a ponte privada)
+  const corta = (x, z) => (z > C[1] ? Math.abs(x - pv.c[0]) < pv.r + 0.25 : Math.abs(x - C[0]) < A.sedePatio.pontePrivada.w / 2 + 0.3);
+  const cal = curve(L, true, 160); let k0 = cal.findIndex(([x, z]) => corta(x, z)); const trechos = []; let cur = [];
+  for (let i = 0; i <= cal.length; i++) { const p = cal[(k0 + i) % cal.length]; if (corta(p[0], p[1])) { if (cur.length > 1) trechos.push(cur); cur = []; } else cur.push(p); } if (cur.length > 1) trechos.push(cur);
+  for (const t of trechos) { const nn = normals(t, false), mid = t[t.length >> 1], ni = nn[t.length >> 1], fora = inPoly(mid[0] + ni[0] * 0.3, mid[1] + ni[1] * 0.3, L) ? -1 : 1; const Ec = [{ a: [-0.05, 0.03], b: [-0.05, -0.12], mat: 'whiteSmooth', uv: 'run' }, { a: [0.45, 0.03], b: [-0.05, 0.03], mat: 'caminhoTeto', uv: 'plan' }]; // (o > 0 = terra)
+    addMap(P.e3, sweep(t, false, fora > 0 ? Ec : Ec.map((x) => ({ ...x, a: [-x.b[0], x.b[1]], b: [-x.a[0], x.a[1]] })), { caps: false })); }
+  // canais dos vales (da face externa do Anel até o Repuxo), repuxos (bacia de pedra, água, pedestal, jato de A e 8
+  // jatinhos) e os bosquetes em massa, duas fileiras desencontradas em cada elipse
+  for (const [nome, vl] of Object.entries(A.vales)) {
+    const cn = vl.canal, rp = vl.repuxo, sx = Math.sign(cn.x1), hw = cn.w / 2, yA = 0.07, fo = A[nome]; const rB = fo?.F ? Math.min(rp.r, Math.hypot(rp.c[0] - fo.F[0], rp.c[1] - fo.F[1]) - fo.R - fo.w / 2 - J) : rp.r; // a junta vale no ponto da bacia mais perto da fita
+    addMap(P.e3, sweep([[cn.x0, cn.z], [cn.x1 + sx * 0.08, cn.z]], false, [{ a: [hw, -0.05], b: [hw, 0.12], mat: 'whiteSmooth', uv: 'run' }, { a: [hw, 0.12], b: [hw - 0.12, 0.12], mat: 'whiteSmooth', uv: 'plan' }, { a: [hw - 0.12, 0.12], b: [hw - 0.12, yA], mat: 'whiteSmooth', uv: 'run' },
+      { a: [hw - 0.12, yA], b: [-hw + 0.12, yA], mat: 'water', uv: 'plan' }, { a: [-hw + 0.12, yA], b: [-hw + 0.12, 0.12], mat: 'whiteSmooth', uv: 'run' }, { a: [-hw + 0.12, 0.12], b: [-hw, 0.12], mat: 'whiteSmooth', uv: 'plan' }, { a: [-hw, 0.12], b: [-hw, -0.05], mat: 'whiteSmooth', uv: 'run' }], { caps: 'ini', capMat: 'whiteSmooth' }));
+    addMap(P.e3, torno(rp.c, 40, [{ a: [rB, -0.05], b: [rB, 0.16], mat: 'whiteSmooth', uv: 'run' }, { a: [rB, 0.16], b: [rB - 0.14, 0.16], mat: 'whiteSmooth', uv: 'plan' }, { a: [rB - 0.14, 0.16], b: [rB - 0.14, 0.09], mat: 'whiteSmooth', uv: 'run' }, { a: [rB - 0.14, 0.09], b: [0.001, 0.09], mat: 'water', uv: 'plan' }]));
+    P.e3.add(mesh(juntar(new THREE.CylinderGeometry(0.3, 0.34, 0.1, 16), [[rp.c[0], 0.12, rp.c[1]]]), M.whiteSmooth));
+    jatos.push([rp.c[0], rp.c[1], rp.jato.h, rp.jato.r, 0.17]); for (let i = 0; i < 8; i++) { const a = (i / 8) * PI2; jatos.push([rp.c[0] + Math.cos(a) * 0.9, rp.c[1] + Math.sin(a) * 0.9, 0.4, 0.04, 0.09]); }
+    for (const b of vl.bosquetes) for (const fila of [-1, 1]) for (let x = -b.rx + 0.4 + (fila > 0 ? 0.3 : 0); x < b.rx - 0.35; x += 0.62) { const k = Math.sqrt(Math.max(0, 1 - (x / b.rx) ** 2)); arb.push({ x: b.c[0] + x, z: b.c[1] + fila * 0.26 * k, s: 0.3 + R() * 0.08, pal: R() < 0.25 ? 'jardim' : 'mata', h: 1.05 }); }
+  }
+  // jatos (cones de vidro claro, sem sombra): no eixo sobem da água, nos Repuxos do pedestal
+  const jg = []; for (const [x, z, h, r, y0] of jatos) { const cg = new THREE.ConeGeometry(r, h, 10, 1, true); cg.translate(x, y0 + h / 2, z); jg.push([cg, new THREE.Matrix4()]); } // [x, z, altura, raio, base]
+  const jm = new THREE.Mesh(merge(jg), jato); jm.castShadow = false; jm.renderOrder = 3; P.e3.add(jm);
+  P.e3.add(arvores(arb, { name: 'lago-arvores' }));
+  for (const k of Object.keys(P)) root.add(P[k]);
+  const [ax, az] = bacia(-1, 1);
+  // e2 e e3 são paisagem espalhada (a e3 vai de um Repuxo ao outro, 60 de largura): obra de plantio, peça a peça, sem o
+  // andaime em volta do casco que o modo 'subir' poria em volta do lago, do Anel e dos vales
+  return { id: 'lago', root, partes: P, esqueletos: {}, grua: {}, modos: { e2: 'crescer', e3: 'crescer' }, foco: { x: C[0], z: C[1] + 1.5, dist: 26 }, ancora: [ax, 1.4, az] };
+}
+
+// ================================================================ Faculdade de Ciências
 // banda transversal (dos dois lados arredondada), centrada no caminho: o lábio inferior da rede
 function bandaDupla(y, t, w) {
   const h = w / 2; // perfil no sentido anti-horário (base, lado +, tampo, lado -): normais para fora
@@ -36,26 +232,21 @@ function bandaDupla(y, t, w) {
     { a: [-h, y + t], b: [-h - 0.05, y + t * 0.5], mat: 'borda', uv: 'run' }, { a: [-h - 0.05, y + t * 0.5], b: [-h, y], mat: 'borda', uv: 'run' },
   ];
 }
-// banda grossa e arredondada (as rampas da rede, como um tubo achatado): w = largura, t = espessura;
-// os lados são arcos de três segmentos e o tampo tem os cantos boleados
+// banda grossa e arredondada (as rampas da rede, como um tubo achatado): w = largura, t = espessura
 function bandaRedonda(y, t, w) {
   const h = w / 2;
   return [
     { a: [-h + 0.06, y], b: [h - 0.06, y], mat: 'borda', uv: 'plan' },
-    { a: [h - 0.06, y], b: [h + 0.02, y + t * 0.22], mat: 'borda', uv: 'run' },
-    { a: [h + 0.02, y + t * 0.22], b: [h + 0.03, y + t * 0.55], mat: 'borda', uv: 'run' },
-    { a: [h + 0.03, y + t * 0.55], b: [h - 0.04, y + t * 0.86], mat: 'borda', uv: 'run' },
-    { a: [h - 0.04, y + t * 0.86], b: [h - 0.16, y + t], mat: 'bandaTopo', uv: 'run' },
-    { a: [h - 0.16, y + t], b: [-h + 0.16, y + t], mat: 'bandaTopo', uv: 'plan' },
-    { a: [-h + 0.16, y + t], b: [-h + 0.04, y + t * 0.86], mat: 'bandaTopo', uv: 'run' },
-    { a: [-h + 0.04, y + t * 0.86], b: [-h - 0.03, y + t * 0.55], mat: 'borda', uv: 'run' },
-    { a: [-h - 0.03, y + t * 0.55], b: [-h - 0.02, y + t * 0.22], mat: 'borda', uv: 'run' },
+    { a: [h - 0.06, y], b: [h + 0.02, y + t * 0.22], mat: 'borda', uv: 'run' }, { a: [h + 0.02, y + t * 0.22], b: [h + 0.03, y + t * 0.55], mat: 'borda', uv: 'run' },
+    { a: [h + 0.03, y + t * 0.55], b: [h - 0.04, y + t * 0.86], mat: 'borda', uv: 'run' }, { a: [h - 0.04, y + t * 0.86], b: [h - 0.14, y + t], mat: 'bandaTopo', uv: 'run' },
+    { a: [h - 0.14, y + t], b: [-h + 0.14, y + t], mat: 'bandaTopo', uv: 'plan' }, { a: [-h + 0.14, y + t], b: [-h + 0.04, y + t * 0.86], mat: 'bandaTopo', uv: 'run' },
+    { a: [-h + 0.04, y + t * 0.86], b: [-h - 0.03, y + t * 0.55], mat: 'borda', uv: 'run' }, { a: [-h - 0.03, y + t * 0.55], b: [-h - 0.02, y + t * 0.22], mat: 'borda', uv: 'run' },
     { a: [-h - 0.02, y + t * 0.22], b: [-h + 0.06, y], mat: 'borda', uv: 'run' },
   ];
 }
-const matBanda = (k) => (k === 'bandaTopo' ? M.bandaCinza || M.concreto : M.whiteSmooth);
-// varredura de um perfil [o, dy] ao longo de um caminho 3D aberto [[x, y, z], ...] (as rampas da rede,
-// que descem até o chão): a altura do perfil acompanha a do caminho; o resto é igual a sweep() de geom.js
+const matBanda = (k) => (k === 'bandaTopo' ? M.caminhoTeto : k === 'labs' ? M.fac_fita : M.whiteSmooth);
+// varredura de um perfil [o, dy] ao longo de um caminho 3D aberto [[x, y, z], ...] (as rampas da rede, que descem até
+// o chão): a altura do perfil acompanha a do caminho; o resto é igual a sweep() de geom.js
 function sweep3(path, edges) {
   const N = path.length; const nor = normals(path.map((p) => [p[0], p[2]]), false); const bufs = new Map();
   for (const e of edges) {
@@ -81,212 +272,80 @@ function sweep3(path, edges) {
   for (const [k, B] of bufs) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(B.p, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(B.n, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(B.uv, 2)); g.setIndex(B.i); g.computeBoundingSphere(); g.computeBoundingBox(); res.set(k, g); }
   return res;
 }
-// contorno recuado de d para dentro (os cantos apertados caem fora)
-function recuo(poly, d) { const nor = normals(poly, true); const out = []; poly.forEach(([x, z], i) => { const px = x - nor[i][0] * d, pz = z - nor[i][1] * d; if (inPoly(px, pz, poly) && bordaD(px, pz, poly) > d * 0.8) out.push([px, pz]); }); return out; }
-// contorno deslocado de d para fora (sem filtro: o furo do tampo em volta de cada célula)
+// contorno recuado de d para dentro (os cantos apertados caem fora) e deslocado de d para fora (o furo do tampo)
+function recuo(poly, d) { const nor = normals(poly, true); const out = []; poly.forEach(([x, z], i) => { const px = x - nor[i][0] * d, pz = z - nor[i][1] * d; if (inPoly(px, pz, poly) && distPoly(px, pz, poly) > d * 0.8) out.push([px, pz]); }); return out; }
 function desloca(poly, d) { const nor = normals(poly, true); return poly.map(([x, z], i) => [x + nor[i][0] * d, z + nor[i][1] * d]); }
-// elipse em coordenadas locais (u, v) da Ciências, já levada ao mundo por T
-function elipseLocal(T, cu, cv, ru, rv, r, n) { const out = []; const c = Math.cos(r), s = Math.sin(r); for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const x = Math.cos(a) * ru, z = Math.sin(a) * rv; out.push(T(cu + x * c - z * s, cv + x * s + z * c)); } return out; }
-// pano de vidro espelhado levemente abaulado sobre uma célula: leque a partir do centroide com um anel a 60%
-// (calota), normais suavizadas; não projeta sombra (o interior fica em sombra pela própria moldura)
+// pano de vidro espelhado abaulado sobre uma célula: leque a partir do centroide com um anel a 60% (calota), normais
+// suavizadas; não projeta sombra
 function panoEspelho(poly, y, dome, mat) {
   const n = poly.length; let cx = 0, cz = 0; for (const [x, z] of poly) { cx += x; cz += z; } cx /= n; cz /= n;
   const P = [cx, y + dome, cz], U = [cx / 2.2, cz / 2.2], I = [];
   for (const [x, z] of poly) { const px = cx + (x - cx) * 0.6, pz = cz + (z - cz) * 0.6; P.push(px, y + dome * 0.64, pz); U.push(px / 2.2, pz / 2.2); }
   for (const [x, z] of poly) { P.push(x, y, z); U.push(x / 2.2, z / 2.2); }
-  // orientação: o primeiro triângulo do leque decide (normal para cima)
-  const e1x = P[3] - cx, e1z = P[5] - cz, e2x = P[6] - cx, e2z = P[8] - cz; const cima = e1z * e2x - e1x * e2z > 0;
+  const e1x = P[3] - cx, e1z = P[5] - cz, e2x = P[6] - cx, e2z = P[8] - cz; const cima = e1z * e2x - e1x * e2z > 0; // o primeiro triângulo do leque decide (normal para cima)
   for (let i = 0; i < n; i++) { const j = (i + 1) % n; const a = 1 + i, b = 1 + j, c = 1 + n + i, d = 1 + n + j; if (cima) I.push(0, a, b, a, c, d, a, d, b); else I.push(0, b, a, a, d, c, a, b, d); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I); g.computeVertexNormals(); g.computeBoundingSphere();
-  const m = new THREE.Mesh(g, mat); m.castShadow = false; m.receiveShadow = true; return m;
+  return mesh(g, mat, false);
 }
-// espelho d'água em gota (pontas afinadas) com borda, para o vale urbanizado
-function gotaPts(cx, cz, rx, rz, rot, n = 48) {
-  const out = []; const c = Math.cos(rot), s = Math.sin(rot);
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const k = 1 - 0.28 * Math.max(0, Math.cos(a)) ** 3; const x = Math.cos(a) * rx * (1 + 0.15 * Math.cos(a)), z = Math.sin(a) * rz * k; out.push([cx + x * c - z * s, cz + x * s + z * c]); }
-  return out;
-}
-
-// Faculdade de Ciências: UM platô contínuo de concreto (tampo sálvia com lábio boleado claro) elevado sobre
-// pilotis, com quatro células de tamanhos diferentes (a maior à direita) cobertas por vidraçaria espelhada que
-// reflete o céu; abaixo do tampo, um vão único de vidro escuro recuado entre o lábio de cima e o lábio inferior;
-// a proa direita é maciça; nas duas pontas a banda desce em rampas até o chão.
-// Etapas: e1 pilotis, forro e árvores; e2 lábio inferior e vidro; e3 platô, lábios e rampas; e4 panos espelhados,
-// boca, luzes e o vale (gota e canal).
+// Faculdade de Ciências: UM platô de bandas boleadas de concreto claro sobre pilotis na elipse de A.ciencias (eixo
+// longo apontando a proa para o tambor SE), com 4 células de tamanhos diferentes cobertas por vidro espelhado (a maior,
+// uma lente que chega à altura de A); sob o tampo, os laboratórios em 2 andares de vidro escuro recuado entre o lábio de
+// cima e o de baixo; na frente (o lado sul, que a câmera vê) a boca espelhada da célula grande; a proa é maciça, com a
+// porta da Ponte Coberta no piso dos laboratórios; do lado da popa, duas bandas descem em rampas até o gramado.
+// Etapas: e1 pilotis e laje; e2 laboratórios (lábio inferior, vidro e laje do meio); e3 casca de bandas (tampo, lábios,
+// proa e rampas); e4 vidro espelhado (células e boca) e luzes.
 export function ciencias() {
-  const c = A.ciencias; const rot = c.rot; const cr = Math.cos(rot), sr = Math.sin(rot);
-  const T = (u, v) => [c.c[0] + u * cr - v * sr, c.c[1] + u * sr + v * cr]; // planta local (u ao longo, v atravessado) -> mundo
+  const c = A.ciencias, pc = A.ponteCoberta, a = rad(c.rot); const U = [Math.cos(a), Math.sin(a)], V = [Math.sin(a), -Math.cos(a)]; // U: rumo à proa (tambor SE); V: a frente (sul)
+  const T = (u, w) => [c.c[0] + u * U[0] + w * V[0], c.c[1] + u * U[1] + w * V[1]], loc = ([x, z]) => { const dx = x - c.c[0], dz = z - c.c[1]; return [dx * U[0] + dz * U[1], dx * V[0] + dz * V[1]]; };
   const root = new THREE.Group(); root.name = 'ciencias'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group(), e4: new THREE.Group() };
-  const y0 = 0.9, lh = 0.5, yT = y0 + 2 * lh - 0.1; // forro do térreo elevado, pé-direito do vão e base do tampo (topo em yT + 0.4 = 2.2)
-  // contorno externo: estreito à esquerda (entre o Anel e a Ala em Onda), bojudo à direita (o lóbulo grande, sobre a margem do lago)
-  const ctrl = [[-6.6, -1.6], [-5.6, -0.6], [-3.8, -0.35], [-1.6, -0.25], [0.8, 0.9], [3.0, 2.1], [5.2, 2.0], [6.6, 0.9], [6.9, -0.6], [6.0, -2.4], [3.8, -3.0], [1.4, -3.1], [-1.0, -3.5], [-3.4, -4.0], [-5.8, -3.7]];
-  const cont = curve(ctrl.map(([u, v]) => T(u, v)), true, 200, 0.5); const N = cont.length; const nor = normals(cont, true);
-  const perto = (u, v) => { const [x, z] = T(u, v); let bi = 0, bd = 1e9; cont.forEach(([px, pz], i) => { const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; bi = i; } }); return bi; };
-  const arco = (i0, i1) => { const out = []; for (let i = i0; ; i = (i + 1) % N) { out.push(cont[i]); if (i === i1) break; } return out; };
-  // varredura de um trecho aberto do contorno com o "o" positivo sempre para fora (a orientação do trecho pode
-  // inverter a normal de um caminho aberto)
-  const sweepArco = (pts, edges, o = {}) => { const nn = normals(pts, false); const k = (pts.length >> 1); let bi = 0, bd = 1e9; cont.forEach(([px, pz], i) => { const d = Math.hypot(px - pts[k][0], pz - pts[k][1]); if (d < bd) { bd = d; bi = i; } }); const s = nn[k][0] * nor[bi][0] + nn[k][1] * nor[bi][1] < 0 ? -1 : 1; return sweep(pts, false, s > 0 ? edges : edges.map((e) => ({ ...e, a: [-e.b[0], e.b[1]], b: [-e.a[0], e.a[1]] })), { caps: false, ...o }); }; // (com a normal invertida, espelha o "o" e inverte a aresta: a face continua virada para fora)
-  // as quatro células (A oval no fundo à esquerda, B triângulo boleado à frente de A, C oval pequena no fundo, D grande à direita)
-  const cels = [
-    elipseLocal(T, -4.5, -2.85, 1.15, 0.62, 0.15, 48),
-    curve([[-3.6, -1.0], [-1.3, -0.95], [-0.9, -1.6], [-1.7, -2.2], [-3.0, -2.05]].map(([u, v]) => T(u, v)), true, 48, 0.6),
-    elipseLocal(T, -1.5, -2.7, 0.85, 0.38, -0.1, 40),
-    elipseLocal(T, 3.2, -0.35, 2.85, 1.55, 0.08, 96),
-  ];
-  const domes = [0.05, 0.06, 0.03, 0.12];
-  const iBoca0 = perto(0.9, 1.0), iBoca1 = perto(5.4, 2.0), iProa1 = perto(6.0, -2.4);
-  // e1: forro de concreto sob o térreo, pilotis finos (contorno a cada 1,4 e seis sob D) e as árvores da mata sob a
-  // parte esquerda, atrás de D, no canto frente-esquerda de D e à direita da proa
-  P.e1.add(plate(recuo(cont, 0.12), y0 - 0.02, 0.06, M.concreto));
-  const cols = []; let acc = 0.9; for (let i = 0; i < N; i++) { const a = cont[i], b = cont[(i + 1) % N]; acc += Math.hypot(b[0] - a[0], b[1] - a[1]); if (acc >= 1.4) { acc = 0; const [x, z] = [a[0] - nor[i][0] * 0.2, a[1] - nor[i][1] * 0.2]; cols.push([[x, heightAt(x, z) - 0.05, z], [x, y0, z]]); } }
-  for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2 + 0.4; const [x, z] = T(3.2 + Math.cos(a) * 1.7, -0.35 + Math.sin(a) * 0.9); cols.push([[x, heightAt(x, z) - 0.05, z], [x, y0, z]]); }
-  P.e1.add(beams(cols, 0.05, M.whiteSmooth, 6));
-  const R = rng(7 * 31 + 5); const lagoP = A.lago; const foraAgua = (x, z) => !inPoly(x, z, lagoP) && distPoly(x, z, lagoP) > 0.3;
-  const tr = [];
-  for (let i = 0, t = 0; i < 10 && t < 60; t++) { const [x, z] = T(-6.0 + R() * 4.8, -1.0 - R() * 2.4); if (!inPoly(x, z, cont) || !foraAgua(x, z)) continue; tr.push({ x, z, s: 0.26 + R() * 0.06, pal: 'mata', h: 1.0 }); i++; }
-  for (const [u, v] of [[1.6, -3.7], [2.8, -4.1], [4.2, -3.9], [5.4, -3.5]]) { const [x, z] = T(u, v); if (foraAgua(x, z)) tr.push({ x, z, s: 0.3, pal: 'mata', h: 1.05 }); }
-  for (const [u, v] of [[0.9, 1.5], [1.5, 1.9], [0.4, 1.2]]) { const [x, z] = T(u, v); tr.push({ x, z, s: 0.3, pal: 'jardim', h: 1.0 }); }
-  for (const [u, v] of [[7.5, -0.8], [8.0, -1.0]]) { const [x, z] = T(u, v); if (foraAgua(x, z)) tr.push({ x, z, s: 0.34, pal: 'mata', h: 1.1 }); }
-  P.e1.add(treeGroup(tr.map((t) => ({ ...t, y: Math.max(0, heightAt(t.x, t.z)) }))));
-  // e2: lábio inferior boleado em todo o contorno e o vão de vidro escuro recuado entre os dois lábios (menos a boca e a proa)
-  addMap(P.e2, sweep(cont, true, bandaDupla(y0 - 0.12, 0.3, 0.45)), () => M.whiteSmooth);
-  const vao = arco(iProa1, iBoca0);
-  addMap(P.e2, sweepArco(vao, [{ a: [-0.26, y0 + 0.2], b: [-0.26, yT - 0.02], mat: 'vidro', uv: 'facade', vBase: y0 }]), () => M.glass);
-  P.e2.traverse((o) => { if (o.isMesh && o.material === M.glass) { o.renderOrder = 3; o.castShadow = false; } });
-  // e3: o platô — tampo sálvia com as células vazadas, lábio externo boleado (claro por fora, sálvia no dorso), lábio
-  // de cada célula, a proa maciça (com o vão da Ponte Coberta), o visor da frente de D e as duas rampas
-  P.e3.add(plateHoles(recuo(cont, 0.12), cels.map((p) => desloca(p, 0.1)), yT, 0.4, M.bandaCinza || M.concreto));
-  const labioExt = [
-    { a: [0, yT], b: [0.10, yT + 0.09], mat: 'borda', uv: 'run' }, { a: [0.10, yT + 0.09], b: [0.12, yT + 0.22], mat: 'borda', uv: 'run' },
-    { a: [0.12, yT + 0.22], b: [0.06, yT + 0.34], mat: 'borda', uv: 'run' }, { a: [0.06, yT + 0.34], b: [-0.08, yT + 0.4], mat: 'borda', uv: 'run' },
-    { a: [-0.08, yT + 0.4], b: [-0.16, yT + 0.4], mat: 'bandaTopo', uv: 'plan' },
-  ];
-  addMap(P.e3, sweep(cont, true, labioExt), matBanda);
-  const labioCel = [
-    { a: [0.16, yT + 0.4], b: [0.10, yT + 0.4], mat: 'bandaTopo', uv: 'plan' }, { a: [0.10, yT + 0.4], b: [0, yT + 0.37], mat: 'borda', uv: 'run' },
-    { a: [0, yT + 0.37], b: [-0.09, yT + 0.29], mat: 'borda', uv: 'run' }, { a: [-0.09, yT + 0.29], b: [-0.13, yT + 0.16], mat: 'borda', uv: 'run' },
-    { a: [-0.13, yT + 0.16], b: [-0.11, yT + 0.04], mat: 'borda', uv: 'run' },
-  ];
+  const y0 = pc.y0, tT = 0.6, yS = c.h - 0.15, yT = yS - tT, lh = (yT - y0) / 2; // piso dos laboratórios = piso da Ponte Coberta; tampo de yT a yS; a lente da célula grande chega a c.h
+  const N = 96, cont = Array.from({ length: N }, (_, i) => { const f = (i / N) * PI2; return T(c.rx * Math.cos(f), c.rz * Math.sin(f)); }); const nor = normals(cont, true);
+  const idx = (f) => ((Math.round((f / 360) * N) % N) + N) % N, arco = (f0, f1) => { const out = []; for (let i = idx(f0); ; i = (i + 1) % N) { out.push(cont[i]); if (i === idx(f1)) break; } return out; };
+  // varredura de um trecho aberto do contorno com o "o" positivo sempre para fora
+  const sweepArco = (pts, edges, o = {}) => { const nn = normals(pts, false), k = pts.length >> 1; let bi = 0, bd = 1e9; cont.forEach(([px, pz], i) => { const d = Math.hypot(px - pts[k][0], pz - pts[k][1]); if (d < bd) { bd = d; bi = i; } });
+    const ok = nn[k][0] * nor[bi][0] + nn[k][1] * nor[bi][1] >= 0; return sweep(pts, false, ok ? edges : edges.map((e) => ({ ...e, a: [-e.b[0], e.b[1]], b: [-e.a[0], e.a[1]] })), { caps: false, ...o }); };
+  const elipse = (cu, cw, ru, rw, r, n) => Array.from({ length: n }, (_, i) => { const t = (i / n) * PI2, x = Math.cos(t) * ru, z = Math.sin(t) * rw; return T(cu + x * Math.cos(r) - z * Math.sin(r), cw + x * Math.sin(r) + z * Math.cos(r)); });
+  // células: D grande (centro, rumo à proa), A oval ao fundo da popa, C pequena ao fundo, B triângulo boleado à frente da popa
+  const cels = [elipse(0.85, 0.05, 1.6, 1.3, 0.08, 64), elipse(-2.2, -0.8, 0.72, 0.48, 0.2, 36), elipse(-0.95, -1.62, 0.42, 0.26, -0.1, 28),
+    curve([[-2.55, 0.55], [-1.05, 0.4], [-0.95, 1.05], [-1.65, 1.5], [-2.45, 1.15]].map(([u, w]) => T(u, w)), true, 36, 0.6)];
+  const domes = [c.h - yT - 0.1, 0.28, 0.16, 0.24]; // a lente de D chega a c.h; as outras ficam fundas no tampo
+  const BOCA = [44, 96], PROA = [-36, 36], porta = pc.w / 2 + 0.08; // arcos (graus da elipse) da boca (frente de D) e da proa; meia largura da porta
+  const naPorta = ([x, z]) => { const [u, w] = loc([x, z]); return u > 0 && Math.abs(w) < porta; };
+  // e1: laje sob os laboratórios (forro dos pilotis) e pilotis finos (no contorno a cada ~1,2 e 5 sob a célula grande)
+  P.e1.add(plate(recuo(cont, 0.12), y0 - 0.1, 0.08, M.concreto));
+  const cols = []; for (let i = 0; i < N; i += 6) { const x = cont[i][0] - nor[i][0] * 0.25, z = cont[i][1] - nor[i][1] * 0.25; cols.push([[x, heightAt(x, z) - 0.05, z], [x, y0 - 0.1, z]]); }
+  for (let k = 0; k < 5; k++) { const t = (k / 5) * PI2 + 0.4; const [x, z] = T(0.85 + Math.cos(t) * 0.9, 0.05 + Math.sin(t) * 0.7); cols.push([[x, heightAt(x, z) - 0.05, z], [x, y0 - 0.1, z]]); }
+  P.e1.add(beams(cols, 0.045, M.whiteSmooth, 6));
+  // e2: lábio inferior boleado (aberto na porta da Ponte Coberta), vidro escuro dos laboratórios recuado (menos a boca) e
+  // a laje do meio
+  const semPorta = []; { let cur = []; for (let i = 0; i <= N; i++) { const p = cont[(idx(PROA[1]) + i) % N]; if (naPorta(p)) { if (cur.length > 1) semPorta.push(cur); cur = []; } else cur.push(p); } if (cur.length > 1) semPorta.push(cur); }
+  for (const t of semPorta) addMap(P.e2, sweepArco(t, bandaDupla(y0 - 0.12, 0.26, 0.38)), matBanda);
+  const vao = arco(BOCA[1], BOCA[0] + 360);
+  addMap(P.e2, sweepArco(vao, [{ a: [-0.22, y0 + 0.14], b: [-0.22, yT - 0.02], mat: 'labs', uv: 'facade', vBase: y0, vRep: 4 * lh }, { a: [-0.18, y0 + lh - 0.03], b: [-0.18, y0 + lh + 0.03], mat: 'borda', uv: 'run' }]), matBanda);
+  // e3: o platô (tampo com as células vazadas), lábio externo boleado, lábio de cada célula, a proa maciça com a porta,
+  // a banda fina sobre a boca e as duas rampas da popa
+  P.e3.add(plateHoles(recuo(cont, 0.12), cels.map((p) => desloca(p, 0.1)), yT, tT, M.caminhoTeto));
+  const k = tT / 0.4; // perfis do modelo antigo (tampo de 0,4) esticados para o tampo de agora
+  addMap(P.e3, sweep(cont, true, [
+    { a: [0, yT], b: [0.10, yT + 0.09 * k], mat: 'borda', uv: 'run' }, { a: [0.10, yT + 0.09 * k], b: [0.12, yT + 0.22 * k], mat: 'borda', uv: 'run' },
+    { a: [0.12, yT + 0.22 * k], b: [0.06, yT + 0.34 * k], mat: 'borda', uv: 'run' }, { a: [0.06, yT + 0.34 * k], b: [-0.08, yS], mat: 'borda', uv: 'run' }, { a: [-0.08, yS], b: [-0.16, yS], mat: 'bandaTopo', uv: 'plan' }]), matBanda);
+  const labioCel = [{ a: [0.16, yS], b: [0.10, yS], mat: 'bandaTopo', uv: 'plan' }, { a: [0.10, yS], b: [0, yS - 0.03 * k], mat: 'borda', uv: 'run' }, { a: [0, yS - 0.03 * k], b: [-0.09, yS - 0.11 * k], mat: 'borda', uv: 'run' },
+    { a: [-0.09, yS - 0.11 * k], b: [-0.13, yS - 0.24 * k], mat: 'borda', uv: 'run' }, { a: [-0.13, yS - 0.24 * k], b: [-0.11, yT + 0.04], mat: 'borda', uv: 'run' }];
   for (const cel of cels) addMap(P.e3, sweep(cel, true, labioCel), matBanda);
-  const [gx, gz] = T(6.76, -0.09); const proa = arco(iBoca1, iProa1); const trechos = []; let atual = [];
-  for (const p of proa) { if (Math.hypot(p[0] - gx, p[1] - gz) < 0.4) { if (atual.length > 1) trechos.push(atual); atual = []; } else atual.push(p); } if (atual.length > 1) trechos.push(atual);
-  for (const t of trechos) addMap(P.e3, sweepArco(t, [{ a: [-0.02, y0 - 0.12], b: [-0.02, yT + 0.02], mat: 'borda', uv: 'run' }]), () => M.whiteSmooth);
-  const boca = arco(iBoca0, iBoca1);
-  addMap(P.e3, sweepArco(boca, [{ a: [0.0, yT - 0.15], b: [0.0, yT + 0.01], mat: 'borda', uv: 'run' }]), () => M.whiteSmooth);
-  const rampas = [
-    [[-6.4, -1.5, yT - 0.02], [-7.1, -1.35, yT - 0.12], [-7.7, -1.7, yT * 0.72], [-7.5, -2.5, yT * 0.48], [-6.6, -2.9, yT * 0.27], [-5.6, -2.8, yT * 0.1], [-4.6, -2.4, -0.5]],
-    [[6.3, 0.9, yT - 0.02], [6.9, 1.6, yT - 0.1], [7.2, 2.6, yT * 0.68], [6.9, 3.6, yT * 0.4], [6.3, 4.3, yT * 0.16], [5.6, 4.8, -0.5]], // à direita: desce rumo à avenida
-  ];
-  for (const r of rampas) { const cv = new THREE.CatmullRomCurve3(r.map(([u, v, y]) => { const [x, z] = T(u, v); return new THREE.Vector3(x, y, z); }), false, 'catmullrom', 0.5); const pts = cv.getSpacedPoints(44).map((p) => [p.x, p.y, p.z]); addMap(P.e3, sweep3(pts, bandaRedonda(0, 0.4, 0.6)), matBanda); }
-  // e4: panos de vidro espelhado sobre as células (rentes ao tampo, um pouco abaixo da face superior, para a banda
-  // ler como moldura), a boca espelhada na frente de D, luzes sob o beiral e o vale urbanizado: gota com repuxo e canal
-  cels.forEach((cel, k) => P.e4.add(panoEspelho(recuo(cel, 0.06), yT + 0.08, domes[k], espelho()))); // fundo da célula: a banda lê como moldura funda
-  addMap(P.e4, sweepArco(boca, [{ a: [-0.3, y0 + 0.2], b: [-0.3, yT - 0.02], mat: 'espelho', uv: 'run' }]), espelho);
-  const m4 = new THREE.Matrix4(); const glow = []; for (let i = 0; i < N; i += 8) glow.push([cont[i][0] - nor[i][0] * 0.3, yT - 0.03, cont[i][1] - nor[i][1] * 0.3]);
-  const gl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), M.lampGlow, glow.length); glow.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); P.e4.add(gl);
-  const g = A.ciencias.gota; if (g) {
-  P.e4.add(plate(gotaPts(g.c[0], g.c[1], g.rx + 0.14, g.rz + 0.14, g.rot), 0.0, 0.07, M.whiteSmooth));
-  P.e4.add(plate(gotaPts(g.c[0], g.c[1], g.rx, g.rz, g.rot), 0.0, 0.075, M.pool));
-  const rep = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 8, 1, true), dupla(M.glassRail)); rep.position.set(g.c[0], 0.3, g.c[1]); rep.castShadow = false; P.e4.add(rep);
-  const can = [[g.c[0] + 0.1, g.c[1] + g.rz * 0.9], ...g.canal];
-  const cp = curve(can, false, 40, 0.5);
-  addMap(P.e4, sweep(cp, false, [{ a: [0.22, 0.0], b: [0.22, 0.07], mat: 'borda', uv: 'run' }, { a: [0.22, 0.07], b: [0.15, 0.07], mat: 'borda', uv: 'plan' }, { a: [0.15, 0.065], b: [-0.15, 0.065], mat: 'agua', uv: 'plan' }, { a: [-0.15, 0.07], b: [-0.22, 0.07], mat: 'borda', uv: 'plan' }, { a: [-0.22, 0.07], b: [-0.22, 0.0], mat: 'borda', uv: 'run' }], { caps: false }), (k) => (k === 'agua' ? M.pool : M.whiteSmooth));
-  }
-  for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'ciencias', root, partes: P, esqueletos: {}, grua: { e1: true, e3: true }, foco: { x: c.c[0], z: c.c[1] + 1, dist: 15 }, ancora: [c.c[0] + 1.5, 3.6, c.c[1]] };
+  const proa = arco(PROA[0], PROA[1]), pp = []; { let cur = []; for (const p of proa) { if (naPorta(p)) { if (cur.length > 1) pp.push(cur); cur = []; } else cur.push(p); } if (cur.length > 1) pp.push(cur); }
+  for (const t of pp) addMap(P.e3, sweepArco(t, [{ a: [-0.02, y0 - 0.12], b: [-0.02, yT + 0.02], mat: 'borda', uv: 'run' }]), matBanda);
+  const pv = proa.filter(naPorta); if (pv.length > 1) addMap(P.e3, sweepArco(pv, [{ a: [-0.02, y0 - 0.12], b: [-0.02, y0], mat: 'borda', uv: 'run' }, { a: [-0.02, pc.topo], b: [-0.02, yT + 0.02], mat: 'borda', uv: 'run' }]), matBanda);
+  const boca = arco(BOCA[0], BOCA[1]);
+  addMap(P.e3, sweepArco(boca, [{ a: [0.0, yT - 0.15], b: [0.0, yT + 0.01], mat: 'borda', uv: 'run' }]), matBanda);
+  const tb = 0.34; for (const [f0, f1] of [[176, 96], [184, 262]]) { // rampas: saem do tampo na popa e descem pelos flancos (dentro da pista do gramado)
+    const n = 44, pts = []; for (let i = 0; i <= n; i++) { const t = i / n, f = rad(f0 + (f1 - f0) * t), d = 0.08 + 0.34 * t; const u = Math.cos(f) * c.rx, w = Math.sin(f) * c.rz; const gl = Math.hypot(Math.cos(f) / c.rx, Math.sin(f) / c.rz), nu = Math.cos(f) / c.rx / gl, nw = Math.sin(f) / c.rz / gl;
+      const [x, z] = T(u + nu * d, w + nw * d); const e = t * t * (3 - 2 * t); pts.push([x, yS - tb + (-0.35 - (yS - tb)) * (t * 0.35 + e * 0.65), z]); }
+    addMap(P.e3, sweep3(pts, bandaRedonda(0, tb, 0.5)), matBanda); }
+  // e4: vidro espelhado nas células (no fundo do tampo; a de D vira lente), a boca espelhada e as luzes sob o beiral
+  cels.forEach((cel, i) => P.e4.add(panoEspelho(recuo(cel, 0.06), yT + 0.1, domes[i], M.vidroEspelhado)));
+  addMap(P.e4, sweepArco(boca, [{ a: [-0.3, y0 + 0.16], b: [-0.3, yT - 0.02], mat: 'espelho', uv: 'run' }]), () => M.vidroEspelhado);
+  const m4 = new THREE.Matrix4(), glow = []; for (let i = 0; i < N; i += 5) glow.push([cont[i][0] - nor[i][0] * 0.3, yT - 0.03, cont[i][1] - nor[i][1] * 0.3]);
+  const gl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 0.02, 0.05), M.lampGlow, glow.length); glow.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); gl.castShadow = false; P.e4.add(gl);
+  for (const kk of Object.keys(P)) root.add(P[kk]);
+  return { id: 'ciencias', root, partes: P, esqueletos: {}, grua: { e1: true, e3: true }, foco: { x: c.c[0], z: c.c[1] + 1, dist: 14 }, ancora: [c.c[0], c.h + 0.5, c.c[1]] };
 }
-// Ala em Onda: fita em "S" com terraços entre o Campus Universitário e a Faculdade de Ciências (caminho da planta)
-export function alaOnda() {
-  return new Faixa({ id: 'onda', closed: false, path: curve(A.onda, false, 120), modulos: 1,
-    prof: { o0: -0.5, o1: 0.7, setIn: 0, setOut: 0.28, fac: 'fac_lab', facIn: 'fac_quente' }, niveis: 3 });
-}
-
-// ---------------- Lago da Sede ----------------
-// Oval no eixo, dentro do U da Sede. e1: desassoreamento (o nível da água sobe; animação no mundo); e2: margens vivas
-// (juncos, pedras claras e árvores soltas, fora da fita, do eixo e da torre); e3: estação de água (dois jardins
-// flutuantes simétricos, três repuxos no eixo e a calçada clara da margem)
-const MPedra = new THREE.MeshStandardMaterial({ color: 0xe2dccd, roughness: 0.92 }); // pedras claras da margem
-export function lago() {
-  const root = new THREE.Group(); root.name = 'lago'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
-  P.e1.userData.nivel = true;
-  const sd = A.sede; const arcoSede = curve(sd.path, false, 60); const naSede = (x, z) => distPoly(x, z, arcoSede, false) < 2.5;
-  const poly = A.lago; const R = rng(77); let cx = 0, cz = 0; for (const [x, z] of poly) { cx += x / poly.length; cz += z / poly.length; }
-  const noEixo = (x, z) => Math.abs(x) < 1.7 && z > cz; // o pavilhão e o Passeio da Holding chegam pelo sul
-  const perto = (x, z) => naSede(x, z) || noEixo(x, z) || Math.hypot(x - sd.torre.c[0], z - sd.torre.c[1]) < sd.torre.lado;
-  const reeds = [], pedras = [];
-  for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; for (let k = 0; k < 7; k++) { const t = R(); const x = a[0] + (b[0] - a[0]) * t + (R() - 0.5) * 0.4, z = a[1] + (b[1] - a[1]) * t + (R() - 0.5) * 0.4; if (noEixo(x, z)) continue; reeds.push([x, z, 0.15 + R() * 0.2]); } for (let k = 0; k < 2; k++) { const t = R(); const x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t; if (noEixo(x, z)) continue; pedras.push([x, z, 0.12 + R() * 0.1, R() * 6]); } }
-  const rg = new THREE.ConeGeometry(0.03, 1, 4); rg.translate(0, 0.5, 0); const rim = new THREE.InstancedMesh(rg, M.planter, reeds.length); const m4 = new THREE.Matrix4();
-  reeds.forEach(([x, z, h], i) => rim.setMatrixAt(i, m4.compose(new THREE.Vector3(x, -0.12, z), new THREE.Quaternion(), new THREE.Vector3(1, h * 1.5, 1)))); P.e2.add(rim);
-  const pim = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), MPedra, pedras.length); const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), s3 = new THREE.Vector3();
-  pedras.forEach(([x, z, s, r], i) => pim.setMatrixAt(i, m4.compose(v.set(x, Math.max(heightAt(x, z), -0.14) + s * 0.15, z), q.setFromEuler(e.set(0, r, 0)), s3.set(s, s * 0.6, s * 0.8)))); pim.castShadow = true; pim.receiveShadow = true; P.e2.add(pim);
-  const tr = []; const foraAgua = (x, z, m = 0.35) => !inPoly(x, z, poly) && distPoly(x, z, poly) > m;
-  for (let i = 0, t = 0; i < 18 && t < 300; t++) { const k = (R() * poly.length) | 0; const a = poly[k], b = poly[(k + 1) % poly.length]; const u = R(); const x = a[0] + (b[0] - a[0]) * u + (R() - 0.5) * 1.4, z = a[1] + (b[1] - a[1]) * u + (R() - 0.5) * 1.4; if (!foraAgua(x, z) || perto(x, z) || tr.some((o) => Math.hypot(o.x - x, o.z - z) < 0.5)) continue; tr.push({ x, z, s: 0.26 + R() * 0.1, pal: 'mata', h: 1.0 }); i++; }
-  P.e2.add(treeGroup(tr.map((t) => ({ ...t, y: Math.max(0, heightAt(t.x, t.z)) }))));
-  // e3: jardins flutuantes (um de cada lado do eixo), repuxos e a calçada clara
-  for (const sx of [-1, 1]) { const x = cx + sx * 3.1, z = cz - 0.2; const g = new THREE.CylinderGeometry(1, 1, 0.05, 20); g.scale(0.62, 1, 0.34); const m = mesh(g, M.planter, false); m.position.set(x, -0.07, z); P.e3.add(m);
-    const sh = []; for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.3; sh.push({ x: x + Math.cos(a) * 0.36, z: z + Math.sin(a) * 0.18, y: -0.05, s: 0.1 + R() * 0.04, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); } P.e3.add(treeGroup(sh, { cast: false, name: 'jardim-flutuante' })); }
-  const jato = dupla(M.glassRail); [[cz + 1.7, 0.8], [cz, 1.25], [cz - 1.7, 0.8]].forEach(([z, h]) => { const b = mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.06, 16), M.whiteSmooth); b.position.set(cx, -0.07, z); P.e3.add(b); const j = new THREE.Mesh(new THREE.ConeGeometry(0.07, h, 8, 1, true), jato); j.position.set(cx, h / 2 - 0.05, z); j.castShadow = false; P.e3.add(j); });
-  addMap(P.e3, sweep(curve(poly, true, 120), true, [{ a: [0.02, 0.03], b: [-0.3, 0.03], mat: 'c', uv: 'plan' }], { caps: false }), () => M.caminhoTeto);
-  for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'lago', root, partes: P, esqueletos: {}, grua: {}, foco: { x: cx, z: cz, dist: 17 }, ancora: [cx, 1.4, cz] };
-}
-
-// ---------------- Pátio da Sede e Torre da Holding ----------------
-// A Sede é a fita em U (aneis.js). O pátio acompanha a fita: as fundações (e1) da fita e da torre e, no fim da obra
-// (e4), o terraço claro ao fundo do lago, as duas piscinas elevadas, o pavilhão "guarda-chuva" (a marca da Holding:
-// um guarda-chuva branco sobre o salão de vidro, na margem sul, no eixo), renques de árvores por dentro das pernas do
-// U e a Torre da Holding: fuste de vidro escuro com aletas douradas e cintas brancas a cada dois andares, coroa
-// recuada e o heliponto no topo (userData.heliponto = [x, y, z], onde pousa o helicóptero da Holding)
-function quadrado([cx, cz], l, ch = 0.35) { const h = l / 2, c = Math.min(ch, h * 0.4); return [[cx - h + c, cz - h], [cx + h - c, cz - h], [cx + h, cz - h + c], [cx + h, cz + h - c], [cx + h - c, cz + h], [cx - h + c, cz + h], [cx - h, cz + h - c], [cx - h, cz - h + c]]; }
-function torreHolding(T) {
-  const g = new THREE.Group(); g.name = 'torre-holding'; const [cx, cz] = T.c; const L = T.lado, fh = T.fh, n = T.andares; const vidro = M.fac_escuro || M.glass, ouro = M.ouro || M.yellow;
-  // saguão de vidro de pé-direito duplo, um pouco mais largo, com marquise para o lago
-  const base = quadrado(T.c, L + 0.5, 0.5); g.add(plate(base, 0, 0.06, M.whiteSmooth));
-  { const f = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), vidro); f.scale.set((L + 0.3) / 2 / Math.cos(Math.PI / 8), fh * 2 - 0.1, (L + 0.3) / 2 / Math.cos(Math.PI / 8)); f.rotation.y = Math.PI / 8; f.position.set(cx, 0.06 + (fh * 2 - 0.1) / 2, cz); f.castShadow = true; f.receiveShadow = true; g.add(f); }
-  g.add(plate(quadrado([cx, cz + L / 2 + 0.55], 1.6, 0.2).map(([x, z]) => [x, z]), fh * 1.7, 0.06, M.whiteSmooth));
-  // fuste: prisma octogonal de vidro escuro, cinta branca a cada dois andares, aletas douradas nas quinas
-  const y0 = fh * 2, H = (n - 2) * fh; const fuste = quadrado(T.c, L, 0.45);
-  { const f = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), vidro); f.scale.set(L / 2 / Math.cos(Math.PI / 8) * 0.98, H, L / 2 / Math.cos(Math.PI / 8) * 0.98); f.rotation.y = Math.PI / 8; f.position.set(cx, y0 + H / 2, cz); f.castShadow = true; f.receiveShadow = true; g.add(f); }
-  for (let k = 0; k <= n - 2; k += 2) g.add(plate(quadrado(T.c, L + 0.14, 0.5), y0 + k * fh - 0.03, 0.06, M.fasciaBeiral || M.whiteSmooth));
-  const aletas = []; for (const [x, z] of fuste) aletas.push([[x + (x - cx) * 0.04, y0, z + (z - cz) * 0.04], [x + (x - cx) * 0.04, y0 + H + 0.5, z + (z - cz) * 0.04]]); g.add(beams(aletas, 0.045, ouro, 4));
-  // coroa: último pavimento recuado com terraço, laje do heliponto em balanço e o para-raios
-  const yC = y0 + H; g.add(plate(quadrado(T.c, L + 0.2, 0.5), yC, 0.08, M.whiteSmooth));
-  { const f = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), M.glassWarm); const r = (L - 0.9) / 2 / Math.cos(Math.PI / 8); f.scale.set(r, fh, r); f.rotation.y = Math.PI / 8; f.position.set(cx, yC + 0.08 + fh / 2, cz); g.add(f); }
-  const yH = yC + 0.08 + fh; g.add(plate(quadrado(T.c, L + 0.3, 0.6), yH, 0.1, M.laca || M.dark)); g.add(plate(quadrado(T.c, L + 0.36, 0.62), yH + 0.1, 0.03, ouro));
-  const hp = heliponto(yH + 0.13, L * 0.36); hp.position.set(cx, 0, cz); g.add(hp);
-  const luzes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 6, 4), M.redGlow, 8); const q = new THREE.Matrix4(); quadrado(T.c, L + 0.2, 0.6).forEach(([x, z], i) => luzes.setMatrixAt(i, q.makeTranslation(x, yH + 0.2, z))); g.add(luzes);
-  g.userData.heliponto = [cx, yH + 0.13, cz]; g.userData.altura = yH + 0.2;
-  return g;
-}
-export function sedePatio() {
-  const s = A.sede; const root = new THREE.Group(); root.name = 'sedePatio'; const P = { e1: new THREE.Group(), e4: new THREE.Group() };
-  const arco = curve(s.path, false, 200); const nor = normals(arco, false); const o0 = s.o0; const T = s.torre;
-  // e1: fundações (faixa de concreto um pouco mais larga que a fita) e o radier da torre
-  const fund = (path, oi) => sweep(path, false, [{ a: [0.15, -0.06], b: [0.15, 0.03], mat: 'c', uv: 'run' }, { a: [0.15, 0.03], b: [oi - 0.15, 0.03], mat: 'c', uv: 'plan' }, { a: [oi - 0.15, 0.03], b: [oi - 0.15, -0.06], mat: 'c', uv: 'run' }]);
-  addMap(P.e1, fund(arco, o0), () => M.concreto);
-  P.e1.add(plate(quadrado(T.c, T.lado + 0.9, 0.5), -0.02, 0.06, M.concreto));
-  // e4: terraço claro ao fundo do lago (meio disco até a fita), piscinas elevadas e a torre
-  const [sx, sz] = s.c; const rT = s.r + o0 - 0.4; const terraco = arcoPts(sx, sz, rT, Math.PI + 0.13, Math.PI * 2 - 0.13, 24);
-  P.e4.add(plate(terraco, 0, 0.04, M.pavers));
-  for (const pc of s.piscinas || []) { const rim = mesh(new THREE.CylinderGeometry(pc.r + 0.14, pc.r + 0.16, 0.16, 40), M.whiteSmooth); rim.position.set(pc.c[0], 0.08, pc.c[1]); P.e4.add(rim); const w = new THREE.Mesh(new THREE.CircleGeometry(pc.r, 40), M.pool); w.rotation.x = -Math.PI / 2; w.position.set(pc.c[0], 0.165, pc.c[1]); w.receiveShadow = true; P.e4.add(w); }
-  const torre = torreHolding(T); P.e4.add(torre); P.e4.userData.heliponto = torre.userData.heliponto;
-  // pavilhão guarda-chuva: plataforma redonda meio sobre a água, salão de vidro, coluna e a cobertura em guarda-chuva
-  const pv = s.pavilhao; if (pv) {
-    const gpv = new THREE.Group(); gpv.position.set(pv.c[0], 0, pv.c[1]); P.e4.add(gpv); const r = pv.w / 2;
-    const pl = mesh(new THREE.CylinderGeometry(r * 0.95, r, 0.14, 32), M.whiteSmooth); pl.position.y = -0.03; gpv.add(pl);
-    const sal = mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.5, pv.h - 0.12, 20, 1, true), M.glass, false); sal.position.y = 0.04 + (pv.h - 0.12) / 2; sal.renderOrder = 3; gpv.add(sal);
-    const col = mesh(new THREE.CylinderGeometry(0.06, 0.08, pv.h + 0.1, 10), M.whiteSmooth); col.position.y = (pv.h + 0.1) / 2; gpv.add(col);
-    const teto = mesh(new THREE.ConeGeometry(r * 1.05, 0.34, 8), M.whiteSmooth); teto.position.y = pv.h + 0.2; teto.rotation.y = Math.PI / 8; gpv.add(teto);
-    const aro = new THREE.Mesh(new THREE.TorusGeometry(r * 0.97, 0.022, 4, 8), M.ouro || M.yellow); aro.rotation.set(Math.PI / 2, 0, Math.PI / 8); aro.position.y = pv.h + 0.05; gpv.add(aro);
-    const pto = mesh(new THREE.SphereGeometry(0.05, 8, 6), M.ouro || M.yellow); pto.position.y = pv.h + 0.4; gpv.add(pto);
-  }
-  // renques de árvores por dentro das pernas do U (entre a fita e o lago) e em volta do terraço
-  const tr = []; const R = rng(41); const lago = A.lago; const ok = (x, z) => !inPoly(x, z, lago) && distPoly(x, z, lago) > 0.45 && Math.hypot(x - T.c[0], z - T.c[1]) > T.lado * 0.8 + 0.5 && (s.piscinas || []).every((pc) => Math.hypot(x - pc.c[0], z - pc.c[1]) > pc.r + 0.5);
-  for (const lado of [-1, 1]) for (let z = -6.9; z > sz + 0.6; z -= 0.95) { const x = lado * (Math.abs(s.path[0][0]) + o0 + 0.75); if (ok(x, z)) tr.push({ x, z, s: 0.3 + R() * 0.06, pal: 'jardim', h: 1.05 }); }
-  for (let k = 0; k < 13; k++) { const a = Math.PI + 0.35 + (k / 12) * (Math.PI - 0.7); const x = sx + Math.cos(a) * (rT - 0.55), z = sz + Math.sin(a) * (rT - 0.55); if (ok(x, z)) tr.push({ x, z, s: 0.26 + R() * 0.06, pal: 'jardim', h: 1.0 }); }
-  P.e4.add(treeGroup(tr.map((t) => ({ ...t, y: 0.04 }))));
-  for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'sedePatio', root, partes: P, esqueletos: {}, grua: { e4: true }, foco: { x: sx, z: sz + 1.5, dist: 22 }, ancora: [sx, 3.0, sz + 4] };
-}
-function arcoPts(cx, cz, r, a0, a1, n) { const out = []; for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; out.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]); } return out; }
-function distPoly(x, z, p, fechado = true) { let d = 1e9; for (let i = fechado ? 0 : 1, j = fechado ? p.length - 1 : 0; i < p.length; j = i++) { const [ax, az] = p[j], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; }
