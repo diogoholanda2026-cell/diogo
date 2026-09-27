@@ -14,6 +14,26 @@ export function raioDaTela(camera, largura, altura, x, y) {
   return { origem: [o.x, o.y, o.z], dir: [d.x, d.y, d.z] };
 }
 
+const _p = new THREE.Vector3();
+const _q = new THREE.Vector3();
+
+/**
+ * Ponto do mundo na tela (R.projetar): { x, y, visivel, dist }, em px CSS. "Na frente" sai do espaço da câmera, não do
+ * z da tela: com a profundidade invertida um ponto logo atrás da câmera cai com z entre -1 e 0 e passaria por visível
+ * (marcadores e âncoras espelhados no meio da tela).
+ * @param {THREE.Camera} camera  com matrixWorld e matrixWorldInverse em dia
+ * @param {number[]} p  [x, y, z]
+ */
+export function projetarNaTela(camera, largura, altura, p) {
+  const v = _p.set(p[0], p[1], p[2]);
+  const dist = v.distanceTo(camera.position);
+  const frente = _q.copy(v).applyMatrix4(camera.matrixWorldInverse).z < -(camera.near || 0);
+  v.project(camera);
+  const x = ((v.x + 1) / 2) * largura;
+  const y = ((1 - v.y) / 2) * altura;
+  return { x, y, visivel: frente && Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= largura && y >= 0 && y <= altura, dist };
+}
+
 /**
  * Primeiro ponto do raio abaixo do chão (terreno pela grade de alturas), ou null.
  * @param {{ n, passo, origem, altura }} T  espelho.terreno (null: chão plano na cota 0)

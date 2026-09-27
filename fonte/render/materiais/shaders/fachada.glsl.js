@@ -165,6 +165,9 @@ float gRet( vec2 p, vec4 r, vec2 d ) { return gPulso( p.x, r.x, r.y, d.x ) * gPu
 float gLinha( float x, float l, float dx ) { return gPulso( x + 0.5 * l, 0.0, l, dx ); }
 // mistura pelo tamanho do pixel na célula: 0 de perto, 1 quando a célula some
 float gLonge( vec2 d ) { return smoothstep( 0.1, 0.45, max( d.x, d.y ) ); }
+// a luz das janelas fica em pontos até a célula ter ~1 pixel (a cidade à noite é pontilhada, não um pano aceso);
+// o vidro já sai filtrado pela área, então o ponto aceso não cintila
+float gLongeLuz( vec2 d ) { return smoothstep( 0.45, 1.1, max( d.x, d.y ) ); }
 // disco filtrado de raio r (mesma unidade de q)
 float gDisco( vec2 q, float r, float w ) { return 1.0 - smoothstep( r - w, r + w, length( q ) ); }
 
@@ -196,17 +199,19 @@ vec3 gLuz( float h ) {
 }
 
 // luz de uma janela (célula de hash h): a hora de acender de cada uma anda com a semente, a cidade acende janela a
-// janela; brilho e temperatura variam; filtro é o que deixa passar (persiana, cortina)
-vec3 gAcesa( vec2 h, float uso, float lonje ) {
+// janela; brilho e temperatura variam. lonje: a janela virou média (gLongeLuz); queda: a célula já é pequena na tela
+// (gLonge), e o ponto aceso perde força para a torre não virar um tabuleiro branco
+vec3 gAcesa( vec2 h, float uso, float lonje, float queda ) {
   float hora = mod( gHora + ( h.y - 0.5 ) * 1.6 + ( vIdent.z - 0.5 ) * 1.2 + 24.0, 24.0 );
   float fr = gAgenda( uso, hora );
   float acesa = mix( step( h.x, fr ), fr, lonje );
   if ( mod( vIdent.y, 2.0 ) > 0.5 ) acesa = 0.0; // abandonado
   vec3 luz = mix( gLuz( fract( h.x * 7.13 + h.y ) ), vec3( 1.0, 0.76, 0.52 ), lonje );
-  float brilho = mix( 0.4 + 0.6 * fract( h.y * 13.7 + h.x ), 0.7, lonje );
+  float brilho = mix( 0.3 + 0.7 * fract( h.y * 13.7 + h.x ), 0.6, lonje );
   // de longe a janela acesa vira a média da fachada: sem esta queda a torre inteira brilharia (a curva de tons clareia
   // a média muito mais do que clareia os pontos de luz separados)
-  return luz * acesa * brilho * ( 0.012 + 0.42 * gNoite ) * mix( 1.0, 0.45, lonje );
+  // a janela acesa fica em meio-tom depois da curva de tons: âmbar e não branca (a noite de metrópole das fotos)
+  return luz * acesa * brilho * ( 0.01 + 0.26 * gNoite ) * mix( 1.0, 0.45, max( lonje, 0.8 * queda ) );
 }
 
 // vidro comum de janela: interior escuro atrás do reflexo (F0 0,04), cortina clara em parte
@@ -324,7 +329,7 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
   float cort = ( tv > 0.5 && tv < 1.5 ) ? step( 0.55, h.y ) : step( 0.86, h.y );
   cort = mix( cort, 0.25, lonje );
   float vis = max( pano - pers, 0.0 );
-  vec3 luz = gAcesa( h, uso, lonje );
+  vec3 luz = gAcesa( h, uso, gLongeLuz( d ), lonje );
   if ( tv > 1.5 && tv < 2.5 ) {
     // vidro canelado (banheiro, cozinha): claro e fosco
     s.alb = mix( s.alb, vec3( 0.26, 0.27, 0.26 ), vis );
@@ -400,11 +405,14 @@ void gPele( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari,
   s.rug = 0.35;
   s.met = gLum( c2 ) > 0.45 ? 0.1 : 0.7;
   float vg = 1.0 - max( mont, trav );
-  // (o fundo do vidro serigrafado é claro: é ele que tira o preto das torres de vidro vistas do alto)
-  vec3 opaco = mix( c1 * 0.5, tinta * 1.8, 0.45 );
-  s.alb = mix( s.alb, opaco, vg * esp );
-  s.rug = mix( s.rug, 0.18, vg * esp );
-  s.met = mix( s.met, 0.4, vg * esp );
+  // faixa da laje: o mesmo vidro refletivo diante de um painel opaco (shadow box). O reflexo é o do vidro de visão e
+  // só o painel de trás muda o tom; metade das torres tem o painel quase igual ao vidro (a pele lê contínua, sem
+  // listras), a outra metade um painel mais claro, ainda sutil
+  float contraste = mod( vari, 4.0 ) < 1.5 ? 0.0 : 1.0;
+  vec3 painel = mix( tinta * 1.22, mix( c1 * 0.42, tinta * 1.6, 0.5 ), 0.35 + 0.35 * contraste );
+  s.alb = mix( s.alb, painel, vg * esp );
+  s.rug = mix( s.rug, 0.07, vg * esp );
+  s.met = mix( s.met, 0.82 - 0.12 * contraste, vg * esp );
   float visao = vg * ( 1.0 - esp );
   // persiana interna (rolô): cada inquilino (andar e grupo de 6 painéis) baixa a sua mais ou menos igual, com
   // variação pequena de painel a painel e um ou outro fora do padrão; de longe, faixas por andar e não um tabuleiro
@@ -417,10 +425,11 @@ void gPele( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari,
   float rolo = visao * gPulso( p.y, yb, 1.0, d.y );
   float vis = max( visao - rolo, 0.0 );
   gVidroEspelho( s, vis, h, tinta, lonje );
-  s.alb = mix( s.alb, vec3( 0.26, 0.26, 0.25 ) * ( 0.9 + 0.2 * h.y ) + tinta * 0.3, rolo );
-  s.rug = mix( s.rug, 0.1, rolo );
-  s.met = mix( s.met, 0.35, rolo );
-  vec3 luz = gAcesa( h, uso, lonje );
+  // a persiana fica atrás do vidro refletivo: o reflexo continua e ela só aparece pela transmissão (~40%)
+  s.alb = mix( s.alb, vec3( 0.2, 0.2, 0.19 ) * ( 0.9 + 0.2 * h.y ) + tinta * 0.25, rolo );
+  s.rug = mix( s.rug, 0.07, rolo );
+  s.met = mix( s.met, 0.62, rolo );
+  vec3 luz = gAcesa( h, uso, gLongeLuz( d ), lonje );
   // de dia, a luminária do teto aparece no alto do vão nos escritórios acesos
   float teto = gPulso( p.y, 0.86, 0.94, d.y ) * vis * ( abs( uso - 2.0 ) < 0.5 ? 1.0 : 0.0 );
   s.emi += luz * ( vis + 0.4 * rolo ) * 0.7 + vec3( 0.9, 0.95, 1.0 ) * teto * step( h.x, 0.7 ) * 0.05 * ( 1.0 - gNoite ) * ( 1.0 - lonje );
@@ -437,7 +446,7 @@ void gBrise( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari
   // atrás do brise: vidro em faixa com a laje aparente
   float laje = gPulso( fv, 0.0, 0.07, d.y );
   gVidroEspelho( s, 1.0 - laje, h, tinta * 0.9, lonje );
-  s.emi += gAcesa( h, uso, lonje ) * ( 1.0 - laje );
+  s.emi += gAcesa( h, uso, gLongeLuz( d ), lonje ) * ( 1.0 - laje );
   float lam;
   float lado = 1.0;
   if ( tipo == F_BRISE_V ) {
@@ -481,7 +490,7 @@ void gVarandas( inout GSup s, vec2 uv, vec2 duv, float andar, float vari, vec3 c
   float fundo = gPulso( fv, 0.43, 1.0, d.y ) * ( 1.0 - div );
   // fechamento de sacada com vidro (um quarto das varandas): o vão vira espelho rente ao guarda-corpo
   float fecha = mix( step( 0.76, h.x ), 0.2, lonje );
-  vec3 luz = gAcesa( h, uso, lonje );
+  vec3 luz = gAcesa( h, uso, gLongeLuz( d ), lonje );
   gVidroClaro( s, fundo * gPulso( uv.x, 0.1, 0.9, d.x ), h, step( 0.6, h.y ), lonje );
   s.alb *= 1.0 - 0.3 * fundo * ( 1.0 - fecha );
   s.ao *= 1.0 - 0.4 * fundo * ( 1.0 - fecha );
@@ -550,7 +559,7 @@ void gTerreo( inout GSup s, vec2 uv, vec2 duv, float tH, float terreo, float vao
     s.rug = mix( s.rug, mix( 0.5, 0.06, aberta ), vg );
     s.met = mix( s.met, mix( 0.5, 0.0, aberta ), vg );
     // loja aberta: a luz de dentro aparece mesmo de dia, atrás do reflexo
-    s.emi += vec3( 1.0, 0.9, 0.76 ) * vg * aberta * ( ( 0.04 + 0.28 * gNoite ) * ( 0.6 + 0.6 * prat + 0.5 * gond + 0.3 * h.y ) + forro * ( 0.2 + 0.45 * gNoite ) );
+    s.emi += vec3( 1.0, 0.9, 0.76 ) * vg * aberta * ( ( 0.035 + 0.16 * gNoite ) * ( 0.6 + 0.6 * prat + 0.5 * gond + 0.3 * h.y ) + forro * ( 0.16 + 0.3 * gNoite ) );
     s.emi += mix( corL, vec3( 1.0, 0.9, 0.75 ), txt ) * 1.2 * letr * step( 0.5, fract( hl * 5.3 ) ) * step( gHora, 23.0 ) * gNoite;
   } else if ( tt < 2.5 ) {
     // portaria: vidro alto com montantes finos, luz de hall
@@ -712,7 +721,8 @@ GSup gFachada( vec3 vista ) {
       s.alb = c1 * 0.9;
       s.rug = 0.5;
       float aberto = step( 7.5, gHora ) * step( gHora, 23.0 );
-      s.emi = mix( c1, vec3( 1.0 ), 0.3 ) * ( 0.2 + 0.9 * gNoite ) * aberto * gNoite;
+      // letreiro e coroamento: luz de néon ou de LED atrás de acrílico, forte na placa escura e contida no pano claro
+      s.emi = mix( c1, vec3( 1.0, 0.86, 0.66 ), 0.3 ) * ( 0.12 + 0.4 * gNoite ) * aberto * gNoite * mix( 1.0, 0.25, smoothstep( 0.15, 0.5, gLum( c1 ) ) );
     } else if ( tipo == F_SOLAR ) {
       vec2 p = vec2( uv.x / 1.0, uv.y / 1.65 );
       vec2 dd = duv / vec2( 1.0, 1.65 );
@@ -790,7 +800,7 @@ GSup gFachada( vec3 vista ) {
     vec2 h = gH2( vec3( floor( uv.x ), floor( fv ), id ) );
     gVidroClaro( s, jan, h, 0.4, gLonge( d ) );
     s.alb = mix( s.alb, vec3( 0.3, 0.31, 0.3 ), jan * 0.5 );
-    s.emi += gAcesa( h, uso, gLonge( d ) ) * jan;
+    s.emi += gAcesa( h, uso, gLongeLuz( d ), gLonge( d ) ) * jan;
     // embasamento: bloco de concreto aparente até 1,8 m
     float base = 1.0 - smoothstep( 1.75, 1.85, uv.y );
     vec2 pb = vec2( um / 0.4, uv.y / 0.2 );

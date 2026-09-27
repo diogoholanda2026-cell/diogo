@@ -9,7 +9,7 @@
 // Changi, Gardens by the Bay), Escola (CEU), Universidade (Rolex Learning Center), Física (CERN Science Gateway,
 // MAX IV), pódio (Hudson Yards), barragem (Marina Barrage).
 import {
-  Malha, acab, vid, VIDRO, PADRAO, LUZ, prisma, tampa, caixa, cilindro, torno, arvore, hashF, orientar, barra, parede,
+  Malha, acab, vid, VIDRO, PADRAO, LUZ, prisma, tampa, caixa, cilindro, torno, arvore, hashF, orientar, barra,
 } from './torre.js';
 import { rotParaOlhar } from '../../data/arcologia-plano.js';
 
@@ -21,7 +21,7 @@ const K = {
   champanhe: acab('#b8a684', { rugo: 0.32, metal: 1, padrao: PADRAO.metal }),
   metalClaro: acab('#b9b8b3', { rugo: 0.35, metal: 1, padrao: PADRAO.metal }),
   metalEscuro: acab('#3a3c40', { rugo: 0.5, metal: 0.6 }),
-  solar: acab('#252c38', { rugo: 0.25, metal: 0.4, padrao: PADRAO.solar }),
+  solar: acab('#1d2129', { rugo: 0.38, metal: 0.25, padrao: PADRAO.solar }), // painel fosco: de cima não vira faixa azul
   telhadoVerde: acab('#435031', { rugo: 0.95, padrao: PADRAO.grama }),
   jardim: acab('#3d4a2c', { rugo: 0.9, padrao: PADRAO.folha }),
   grama: acab('#4f5c36', { rugo: 0.95, padrao: PADRAO.grama }),
@@ -180,7 +180,8 @@ function sede(g, p) {
   for (let v = 0; v < vaos; v++) {
     const a0 = de + ((ate - de) * v) / vaos;
     const a1 = de + ((ate - de) * (v + 1)) / vaos;
-    const hc = H + (v % 2 ? 3.2 : 5);
+    // alturas alternadas por pouco: a fresta de vidro entre as escamas é fina (de cima, sem listras de céu refletido)
+    const hc = H + (v % 2 ? 3.8 : 4.6);
     const q = 6;
     for (let s = 0; s < q; s++) {
       const b0 = a0 + ((a1 - a0) * s) / q;
@@ -203,7 +204,7 @@ function sede(g, p) {
     const [xa, za] = noArco(cx, cz, r0 - 3, a1);
     const [xb, zb] = noArco(cx, cz, r, a1);
     const [xc, zc] = noArco(cx, cz, r1 + 3, a1);
-    const h2 = H + (v % 2 ? 5 : 3.2);
+    const h2 = H + (v % 2 ? 4.6 : 3.8);
     const hMin = Math.min(hc, h2);
     const nn = [Math.cos((a1 * Math.PI) / 180 + Math.PI / 2), 0, Math.sin((a1 * Math.PI) / 180 + Math.PI / 2)];
     if (v < vaos - 1) {
@@ -447,17 +448,25 @@ function vida(g, p) {
   g.caixa([p.x, y, p.z], R, H);
 }
 
-/** Supertree de Gardens by the Bay: tronco de jardim vertical e a copa de aço em funil, acesa à noite. */
+/**
+ * Supertree de Gardens by the Bay: o tronco de jardim vertical nasce largo, afina e se abre num hiperboloide até a
+ * copa de aço (nunca a haste fina com um prato em cima, que lia como taça ou guarda-chuva), acesa à noite.
+ */
 function supertree(g, p) {
   const y = g.chao(p.x, p.z);
   const h = p.altura;
   const alvo = g.arvores ?? g.opaco;
-  cilindro(alvo, p.x, p.z, y, y + h * 0.72, 2.4, 1.1, 8, K.tronco, { topo: false });
-  // funil: do tronco a um raio de 0,28 h no topo, com aro
-  const perfil = [[1.1, y + h * 0.72], [h * 0.12, y + h * 0.86], [h * 0.26, y + h * 0.97], [h * 0.28, y + h]];
-  torno(alvo, p.x, p.z, perfil, 12, K.copaSuper);
-  torno(alvo, p.x, p.z, [[h * 0.27, y + h - 0.2], [h * 0.27, y + h + 0.4]], 12, K.copaSuper);
-  g.caixa([p.x, y, p.z], h * 0.28, h);
+  const rb = Math.max(2.6, h * 0.075); // raio da base
+  const rm = rb * 0.55; // cintura
+  const tronco = [[rb, 0], [rb * 0.8, 0.12], [rm, 0.38], [rm * 1.05, 0.52], [rm * 1.5, 0.64]].map(([r, t]) => [r, y + h * t]);
+  torno(alvo, p.x, p.z, tronco, 10, K.tronco);
+  // copa: a treliça abre em curva do fim do tronco até 0,3 h de raio, com o aro no topo
+  const copa = [[rm * 1.5, 0.64], [h * 0.09, 0.74], [h * 0.17, 0.84], [h * 0.25, 0.93], [h * 0.3, 1.0]].map(([r, t]) => [r, y + h * t]);
+  torno(alvo, p.x, p.z, copa, 14, K.copaSuper);
+  // aro do topo, fechado por cima: a copa é uma treliça cheia de plantas vista do alto, não um funil oco (a face de
+  // dentro do funil não é desenhada e, de cima, via-se o chão através da copa)
+  torno(alvo, p.x, p.z, [[h * 0.3, y + h - 0.2], [h * 0.3, y + h + 0.5]], 14, K.copaSuper, { fecharTopo: true });
+  g.caixa([p.x, y, p.z], h * 0.3, h);
 }
 
 /** Escola (CEU): prédio baixo em anel oval em volta do campo, com a cobertura em anel que avança 3 m. */
@@ -732,4 +741,3 @@ export function malhasNovas() {
   return { vidro: new Malha('vidro'), opaco: new Malha('opaco'), arvores: new Malha('opaco') };
 }
 
-export { parede };

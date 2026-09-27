@@ -7,7 +7,7 @@
 // A cava entra no chão pelo aplainar (sim.formas, D5): a X1b registra cavaDoPlano() quando lago.e1 começa. As cenas da
 // X1a cavam o relevo da própria simulação de prova com cavarTerreno(), do mesmo jeito que o aplainar faria.
 import * as THREE from 'three';
-import { acab, PADRAO, orientar, tampa, hashF, geometriaDe, Malha } from './torre.js';
+import { acab, PADRAO, orientar, tampa, hashF } from './torre.js';
 import { deslocar, faixaEntre } from './partes.js';
 import { pontoNoPoligono, distPoligono } from '../../comum/vetor.js';
 
@@ -41,7 +41,7 @@ function muro(m, poly, y0, y1, k, paraAgua = true) {
 
 /**
  * Monta o reservatório de uma peça { contorno, nivel, fundo, borda } com a gleba na cota dada.
- * @param {{ opaco: Malha, agua: Malha, cota: number }} d
+ * @param {{ opaco: import('./torre.js').Malha, agua: import('./torre.js').Malha, cota: number }} d
  * @returns {{ caixa: number[], nivel: number }}
  */
 export function montarReservatorio(peca, { opaco, agua, cota }) {
@@ -199,11 +199,10 @@ export function materialAgua(ganchos) {
   return ganchos.aplicar(mat, ['sombra', 'neblina']);
 }
 
-/** Atualiza o tempo da ondulação. */
+/** Atualiza o tempo da ondulação (a volta de 2 h mantém a precisão do float sem o salto da onda a cada 16 min). */
 export function quadroAgua(tMs) {
-  U_AGUA.uTempoAgua.value = (tMs / 1000) % 1000;
+  U_AGUA.uTempoAgua.value = (tMs / 1000) % 7200;
 }
 
-export { geometriaDe, Malha };
 
 export function registrar() {}

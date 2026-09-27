@@ -3,7 +3,11 @@
 // cabe nos 24 bits. Então o quadro desenha primeiro a faixa de LONGE (o que tem userData.faixa = 'longe' ou é da
 // família 'terreno': céu à parte, mundo de fora, terreno e LOD2) com o plano próximo em 90% do limite e o distante em
 // 60 km, limpa a profundidade e desenha o PERTO (tudo) do plano próximo dinâmico até o limite (3 km ou 1,6 vez a
-// distância da câmera, o que for maior). As luzes entram nas duas faixas.
+// distância da câmera, o que for maior). As luzes entram nas duas faixas. Uma malha opaca que passa do corte da
+// faixa de perto (pela esfera no mundo; sem esfera conhecida, como as listas da cidade inteira e o mar, conta como
+// passando) entra também na de longe: sem isso o mar e a cidade além do corte sumiam num risco reto. Só ela paga a
+// chamada a mais; o que fica todo além do corte sai da faixa de perto pelo descarte do three. userData.faixa =
+// 'perto' deixa uma malha só na faixa de perto.
 import * as THREE from 'three';
 
 export const CAMADA_LONGE = 2;
@@ -11,6 +15,32 @@ const LONGE_FAR = 60000;
 
 /** O objeto vai também na faixa de longe? */
 export const ehDeLonge = (o) => o.userData?.faixa === 'longe' || o.userData?.familia === 'terreno' || o.isLight;
+
+const _c = new THREE.Vector3();
+
+/** Esfera do objeto no espaço dele (null: extensão desconhecida). A instanciada vale pela esfera das instâncias. */
+function esfera(o) {
+  if (o.isInstancedMesh || o.isBatchedMesh) return o.boundingSphere;
+  const g = o.geometry;
+  if (!g) return null;
+  if (!g.boundingSphere && g.attributes?.position) g.computeBoundingSphere();
+  return g.boundingSphere;
+}
+
+const transparente = (m) => (Array.isArray(m) ? m.some((x) => x?.transparent) : !!m?.transparent);
+
+/**
+ * A malha passa do corte da faixa de perto (distância da câmera ao ponto mais longe da esfera)? Sem esfera finita,
+ * sim. As transparentes ficam de fora (duas faixas somariam a cor delas na sobreposição).
+ */
+export function passaDoCorte(o, posCamera, corte) {
+  if (!o.geometry || o.userData?.faixa === 'perto' || transparente(o.material)) return false;
+  const s = esfera(o);
+  if (!s || !Number.isFinite(s.radius) || s.radius < 0) return true;
+  const r = s.radius * o.matrixWorld.getMaxScaleOnAxis();
+  if (!Number.isFinite(r)) return true;
+  return _c.copy(s.center).applyMatrix4(o.matrixWorld).distanceTo(posCamera) + r > corte;
+}
 
 export class Faixas {
   constructor(ctx) {
@@ -22,12 +52,16 @@ export class Faixas {
 
   /**
    * Liga a camada da faixa de longe em toda a árvore da cena: o que é de longe e tudo o que está dentro dele (um grupo
-   * marcado com faixa 'longe' leva as malhas filhas; o three testa a camada de cada objeto, não a do pai). Quem deixa
-   * de ser de longe perde a camada.
+   * marcado com faixa 'longe' leva as malhas filhas; o three testa a camada de cada objeto, não a do pai). Com a câmera,
+   * também a malha visível que passa do corte da faixa de perto. Quem deixa de ser de longe perde a camada.
+   * @param {THREE.Object3D} cena
+   * @param {THREE.Camera} [cam]  câmera da vista (sem ela, só as marcas)
+   * @param {number} [corte]  plano distante da faixa de perto (m)
    */
-  marcar(cena) {
+  marcar(cena, cam = null, corte = Infinity) {
+    const pos = cam?.position ?? null;
     const ver = (o, herdado) => {
-      const longe = herdado || ehDeLonge(o);
+      const longe = herdado || ehDeLonge(o) || (pos !== null && o.visible && passaDoCorte(o, pos, corte));
       if (longe) {
         o.layers.enable(CAMADA_LONGE);
         this._marcados.add(o);
@@ -52,11 +86,11 @@ export class Faixas {
       faz(() => renderer.render(cena, cam));
       return 1;
     }
-    this.marcar(cena);
     const near0 = cam.near;
     const far0 = cam.far;
     const dist = this.ctx.cameraApi?.estado?.().dist ?? 1000;
     this.limite = Math.max(3000, dist * 1.6);
+    this.marcar(cena, cam, this.limite * 1.02);
     const camadas = cam.layers.mask;
     const autoLimpa = renderer.autoClear;
     faz(() => {

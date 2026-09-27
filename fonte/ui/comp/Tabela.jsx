@@ -27,7 +27,8 @@ export function Tabela({ colunas, linhas, chave = (l, i) => i, ordenavel = true,
   const [ordem, setOrdem] = useState(null); // { id, sentido }
   const [todas, setTodas] = useState(false);
   if (!linhas?.length && vazio) return vazio;
-  const lista = ordem ? ordenar(linhas, ordem.id, ordem.sentido) : linhas;
+  const base = linhas ?? [];
+  const lista = ordem ? ordenar(base, ordem.id, ordem.sentido) : base;
   const vistas = todas ? lista : lista.slice(0, LIMITE_LINHAS);
   const clicar = (id) => setOrdem(ordem?.id === id ? (ordem.sentido > 0 ? { id, sentido: -1 } : null) : { id, sentido: 1 });
   return (

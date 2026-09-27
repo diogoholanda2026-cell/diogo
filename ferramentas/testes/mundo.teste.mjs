@@ -1,6 +1,8 @@
-// Testes do mundo (S1a): mapa autoral, grade de alturas no tempo, área inicial num componente de terra (D53), água,
-// aplainar puro e comutativo igual ao de referência bit a bit (D5), chão do espelho em dia e depois de carregar, Vila e
-// rodovia, ladrilhos (D3), mata e desmate, recursos e camada, áreas e sugestões (D36, D55), save de ida e volta.
+// Testes do mundo (S1a): mapa autoral, grade de alturas no tempo, relevo assado (controles, codec, emenda do detalhe,
+// declives de serra de verdade, sai igual do assador), rio com meandros até a costa e sempre abaixo das margens, área
+// inicial num componente de terra (D53), água, aplainar puro e comutativo igual ao de referência bit a bit (D5), chão
+// do espelho em dia e depois de carregar, Vila e rodovia, ladrilhos (D3), mata e desmate, recursos e camada, áreas e
+// sugestões (D36, D55), save de ida e volta.
 // Roda sozinho: node ferramentas/testes/mundo.teste.mjs (o simular --testes descobre e roda).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,13 +19,17 @@ import { normalizarForma } from '../../fonte/sim/formas.js';
 import { montarSave, lerSave, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { VIAS_ORDEM } from '../../fonte/data/vias.js';
 import { MAPA_HELDOPOLIS } from '../../fonte/data/mapa-heldopolis.js';
-import { gerarTerreno, esquecerTerreno, terrenoBase, rioEm, aguaEm } from '../../fonte/sim/mundo/terreno.js';
+import { gerarTerreno, esquecerTerreno, terrenoBase, rioEm, aguaEm, costaEm } from '../../fonte/sim/mundo/terreno.js';
 import { aplainar, aplainarTudo, formaDaAresta } from '../../fonte/sim/mundo/aplainar.js';
 import { concederLicencas, preco, ladrilhoDe } from '../../fonte/sim/mundo/ladrilhos.js';
 import { extrair, RECURSOS, recursoNoPoligono } from '../../fonte/sim/mundo/recursos.js';
 import { densidadeEm } from '../../fonte/sim/mundo/floresta.js';
 import { nivelAguaEm, contarAgua } from '../../fonte/sim/mundo/agua.js';
-import { conferirMapa } from '../mapa.mjs';
+import { readFileSync } from 'node:fs';
+import { conferirMapa, assar, ARQUIVO_ASSADO } from '../mapa.mjs';
+import { RELEVO_ASSADO } from '../../fonte/sim/mundo/relevo-assado.js';
+import { hashControles, decodificar, ESCALA_RELEVO, VERSAO_ASSADO } from '../../fonte/sim/mundo/relevo.js';
+import { codificar } from '../../fonte/sim/mundo/erosao.js';
 
 const agora = () => performance.now();
 
@@ -41,6 +47,7 @@ function sorteio(semente = 1) {
 }
 
 const hashGrade = (g) => fnv1aTipado(new Uint8Array(g.buffer, g.byteOffset, g.byteLength));
+const hexDe = (g) => (fnv1aTipado(g) >>> 0).toString(16).padStart(8, '0');
 const simDoMapa = (semente = 'mundo') => criarSimulacao({ semente });
 
 // ------------------------------------------------------------------------------------------------ grade
@@ -89,6 +96,127 @@ test('mapa: grade 1025² a 8 m gerada em até 150 ms (motor aquecido), determin�
   for (const k of ['terra', 'mar', 'rio', 'lagoa']) assert.ok(c[k] > 200, `${k}: ${c[k]} amostras`);
 });
 
+test('relevo assado: é deste mapa e dos controles atuais; o codec volta igual; a emenda do detalhe não tem degrau', () => {
+  // quem muda serras, morros, costa, rio ou rodovia sem rodar `node ferramentas/mapa.mjs --assar` cai aqui
+  assert.ok(RELEVO_ASSADO, 'sem relevo assado');
+  assert.equal(RELEVO_ASSADO.versao, VERSAO_ASSADO, 'assado de outra versão do assador: rode node ferramentas/mapa.mjs --assar');
+  assert.equal(RELEVO_ASSADO.controles, hashControles(MAPA_HELDOPOLIS), 'assado velho: rode node ferramentas/mapa.mjs --assar');
+  const T = gerarTerreno();
+  assert.equal(T.assado, true);
+  assert.equal(hexDe(decodificar(RELEVO_ASSADO)), RELEVO_ASSADO.hash);
+  assert.equal(hexDe(decodificar(RELEVO_ASSADO.detalhe)), RELEVO_ASSADO.detalhe.hash);
+  // codec: ida e volta dentro de meia unidade da escala, com zeros, degraus e rampas
+  const r = sorteio(3);
+  const n = 33;
+  const rel = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) rel[j * n + i] = i < 6 ? 0 : j > 20 ? 400 * r() : 3 * i + 2 * j + r();
+  const volta = decodificar(codificar(rel, n));
+  for (let k = 0; k < n * n; k++) assert.ok(Math.abs(volta[k] - rel[k]) <= ESCALA_RELEVO / 2 + 1e-6, `célula ${k}`);
+  // emenda: ao longo da borda da janela do detalhe, o salto entre amostras vizinhas de 8 m não passa do que se vê no
+  // resto da encosta (a mesma estatística dentro e na borda)
+  const D = RELEVO_ASSADO.detalhe;
+  const lado = (D.n - 1) * D.passo;
+  let maxBorda = 0;
+  for (let t = 0; t <= lado; t += 8) {
+    for (const [x, z, dx, dz] of [[D.x0 + t, D.z0, 0, 8], [D.x0 + t, D.z0 + lado, 0, 8], [D.x0, D.z0 + t, 8, 0], [D.x0 + lado, D.z0 + t, 8, 0]]) {
+      const a = alturaEm(T, x - dx, z - dz);
+      const b = alturaEm(T, x + dx, z + dz);
+      const f = (alturaEm(T, x + dx, z + dz) - alturaEm(T, x, z)) - (alturaEm(T, x, z) - alturaEm(T, x - dx, z - dz));
+      if (Math.abs(b - a) < 40) maxBorda = Math.max(maxBorda, Math.abs(f));
+    }
+  }
+  assert.ok(maxBorda < 6, `quebra de declive de ${maxBorda.toFixed(1)} m na emenda do detalhe`);
+});
+
+test('relevo: serras com declive de Mata Atlântica (sem paredão contínuo) e vales que entalham a encosta', () => {
+  const T = gerarTerreno();
+  // a frente do Maciço do Held sobre a cidade: declive médio de 40% a 70%, pouca parede acima de 100%
+  let n = 0;
+  let soma = 0;
+  let parede = 0;
+  for (let z = -2400; z < -1300; z += 16) {
+    for (let x = -2000; x < 2000; x += 16) {
+      if (alturaEm(T, x, z) < 60) continue;
+      const hx = (alturaEm(T, x + 8, z) - alturaEm(T, x - 8, z)) / 16;
+      const hz = (alturaEm(T, x, z + 8) - alturaEm(T, x, z - 8)) / 16;
+      const d = Math.sqrt(hx * hx + hz * hz);
+      n++;
+      soma += d;
+      if (d > 1) parede++;
+    }
+  }
+  const medio = soma / n;
+  assert.ok(medio > 0.38 && medio < 0.72, `declive médio da serra ${(medio * 100).toFixed(0)}%`);
+  assert.ok(parede / n < 0.12, `${((parede / n) * 100).toFixed(1)}% da serra acima de 100%`);
+  // vales: ao longo de uma curva de nível a meia encosta a altura sobe e desce (espigões e grotas), não é uma rampa lisa
+  let trocas = 0;
+  let antes = null;
+  let sinal = 0;
+  for (let x = -1800; x <= 1800; x += 16) {
+    let z = -2400;
+    while (z < -1300 && alturaEm(T, x, z) > 180) z += 8;
+    if (antes !== null && z !== antes) {
+      const s = z > antes ? 1 : -1;
+      if (sinal && s !== sinal) trocas++;
+      sinal = s;
+    }
+    antes = z;
+  }
+  assert.ok(trocas > 20, `a curva de 180 m só serpenteia ${trocas} vezes (encosta lisa)`);
+});
+
+test('relevo assado: sai igual do assador (a erosão é determinística e o código não mudou sem assar de novo)', () => {
+  // o hash dos controles só vê o mapa; quem muda a planície, o rio ou a erosão no código cai aqui (uns 3 s)
+  assert.equal(readFileSync(ARQUIVO_ASSADO, 'utf8'), assar().texto, 'o relevo assado não confere: rode node ferramentas/mapa.mjs --assar');
+});
+
+test('rio: a água corre no leito, abaixo das duas margens, da borda do mapa à foz (nada de lâmina no ar)', () => {
+  const T = gerarTerreno();
+  const R = T.rios[0].pontos;
+  const lim = ((T.n - 1) * T.passo) / 2 - 16;
+  let margens = 0;
+  let pior = Infinity;
+  let onde = '';
+  for (let q = 4; q + 4 < R.length; q += 4) {
+    const [x, z, nivel, larg] = [R[q], R[q + 1], R[q + 2], R[q + 3]];
+    if (Math.abs(x) > lim || Math.abs(z) > lim) continue;
+    assert.ok(alturaEm(T, x, z) < nivel, `leito acima da água em (${x.toFixed(0)}, ${z.toFixed(0)})`);
+    let tx = R[q + 4] - R[q - 4];
+    let tz = R[q + 5] - R[q - 3];
+    const t = Math.hypot(tx, tz);
+    tx /= t;
+    tz /= t;
+    for (const lado of [1, -1]) {
+      const mx = x - tz * lado * (larg / 2 + 16);
+      const mz = z + tx * lado * (larg / 2 + 16);
+      const h = alturaEm(T, mx, mz);
+      if (h < 0.5) continue; // a foz, no mar
+      margens++;
+      if (h - nivel < pior) {
+        pior = h - nivel;
+        onde = `(${mx.toFixed(0)}, ${mz.toFixed(0)}): margem ${h.toFixed(1)} m, água ${nivel.toFixed(1)} m`;
+      }
+    }
+  }
+  assert.ok(margens > 300, `${margens} margens conferidas`);
+  assert.ok(pior > 0, `margem abaixo da água em ${onde}`);
+});
+
+test('rio: meandros na várzea (sinuosidade acima de 1,25) e a foz na linha da costa', () => {
+  const T = gerarTerreno();
+  const R = T.rios[0].pontos;
+  // da ponte da BR até a foz: comprimento pelo rio sobre a distância em linha reta
+  let ini = -1;
+  for (let q = 0; q < R.length; q += 4) if (ini < 0 && R[q + 1] > -1200) ini = q;
+  let comp = 0;
+  for (let q = ini + 4; q < R.length; q += 4) comp += Math.hypot(R[q] - R[q - 4], R[q + 1] - R[q - 3]);
+  const reta = Math.hypot(R[R.length - 4] - R[ini], R[R.length - 3] - R[ini + 1]);
+  assert.ok(comp / reta > 1.25, `sinuosidade ${(comp / reta).toFixed(2)}`);
+  // a foz fica na costa: o último ponto a menos de 40 m da linha d'água do mar
+  const sd = costaEm(T, R[R.length - 4], R[R.length - 3]);
+  assert.ok(Math.abs(sd) < 40, `foz a ${sd.toFixed(0)} m da costa`);
+});
+
 test('mapa: morros de 150 a 400 m, Pedra do Farol perto de 396 m, platô da gleba na cota do envelope', () => {
   const T = gerarTerreno();
   const topo = (m) => {
@@ -106,7 +234,7 @@ test('mapa: morros de 150 a 400 m, Pedra do Farol perto de 396 m, platô da gleb
   }
 });
 
-test('água: fundo abaixo do nível em toda amostra de água; rio da nascente à foz descendo; lagoa fechada', () => {
+test('água: fundo abaixo do nível em toda amostra de água; mar ligado ao aberto; rio descendo até a foz; lagoas', () => {
   const sim = simDoMapa();
   const T = sim.espelho.terreno;
   const tb = terrenoBase(sim);
@@ -120,15 +248,57 @@ test('água: fundo abaixo do nível em toda amostra de água; rio da nascente à
       const h = tb.base.altura[k];
       const x = T.origem[0] + i * T.passo;
       const z = T.origem[1] + j * T.passo;
-      const nivel = a === AGUA.MAR ? 0 : a === AGUA.LAGOA ? lagoa : rioEm(tb.base, x, z).nivel;
+      const nivel = a === AGUA.MAR ? 0 : a === AGUA.LAGOA ? nivelAguaEm(sim, x, z) : rioEm(tb.base, x, z).nivel;
       if (!(h < nivel)) ruins++;
     }
   }
   assert.equal(ruins, 0, `${ruins} amostras de água com o fundo acima do nível`);
+  // todo mar liga ao mar aberto (a borda sul), por água; nada de poça de mar solta em terra
+  const ag = tb.base.agua;
+  const n = T.n;
+  const visto = new Uint8Array(n * n);
+  const fila = new Int32Array(n * n);
+  let fim = 0;
+  for (let i = 0; i < n; i++) {
+    const k = (n - 1) * n + i;
+    if (ag[k] === AGUA.MAR) {
+      visto[k] = 1;
+      fila[fim++] = k;
+    }
+  }
+  for (let ini = 0; ini < fim; ini++) {
+    const q = fila[ini];
+    const i = q % n;
+    for (const v of [i > 0 ? q - 1 : -1, i < n - 1 ? q + 1 : -1, q - n, q + n]) {
+      if (v < 0 || v >= n * n || visto[v] || ag[v] === AGUA.TERRA) continue;
+      visto[v] = 1;
+      fila[fim++] = v;
+    }
+  }
+  let solto = 0;
+  for (let k = 0; k < n * n; k++) if (ag[k] === AGUA.MAR && !visto[k]) solto++;
+  assert.equal(solto, 0, `${solto} amostras de mar sem ligação com o mar aberto`);
   const R = T.rios[0].pontos;
   assert.ok(R.length / 4 > 50);
   for (let q = 4; q < R.length; q += 4) assert.ok(R[q + 2] <= R[q - 2] + 1e-9, 'o nível do rio só desce');
   assert.equal(T.lagoas[0].nivel, lagoa);
+  // as lagoas marginais (meandros abandonados) ficam na várzea, fora da área inicial, com água de verdade na grade
+  assert.ok(T.lagoas.length >= 3, `${T.lagoas.length} lagoas`);
+  for (const l of T.lagoas.slice(1)) {
+    const xs = l.contorno.filter((_, q) => q % 2 === 0);
+    const zs = l.contorno.filter((_, q) => q % 2 === 1);
+    assert.ok(Math.max(...xs) < -1024, `${l.id} dentro da área inicial`);
+    let agua = 0;
+    for (let z = Math.min(...zs); z <= Math.max(...zs); z += 8) {
+      for (let x = Math.min(...xs); x <= Math.max(...xs); x += 8) {
+        if (aguaEm(T, x, z) === AGUA.LAGOA) {
+          agua++;
+          assert.equal(nivelAguaEm(sim, x, z), l.nivel, `nível da ${l.id}`);
+        }
+      }
+    }
+    assert.ok(agua > 50, `${l.id}: ${agua} amostras de água`);
+  }
   assert.equal(nivelAguaEm(sim, 600, 2000), 0);
   assert.equal(nivelAguaEm(sim, -600, 820), lagoa);
   assert.equal(nivelAguaEm(sim, 0, 0), null);

@@ -7,6 +7,14 @@
 import * as THREE from 'three';
 import { TELA_VERTICE, PREFILTRO, REDUZ, AMPLIA, COMPOSICAO } from '../materiais/shaders/pos.glsl.js';
 
+/**
+ * O "look" do AgX (contraste pela curva e saturação em volta da luma; 1 e 1 é o AgX puro): o AgX puro tem o pé longo
+ * e deixa a cidade cinza e lavada; a potência de 1,45 devolve o preto da sombra e do asfalto (como o Punchy do
+ * Blender), com a saturação quase neutra (1,05). Vale na composição e, no Leve (sem pós), no AgX do próprio three
+ * (motor/renderizador.js): os perfis mostram a mesma curva.
+ */
+export const LOOK = Object.freeze({ potencia: 1.45, saturacao: 1.05 });
+
 function materialTela(nome, frag, uniforms, blending = THREE.NoBlending) {
   return new THREE.ShaderMaterial({
     name: nome,
@@ -57,7 +65,7 @@ export class Pos {
     this.mAmplia = materialTela('pos-amplia', AMPLIA, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uPeso: { value: 1 } }, THREE.AdditiveBlending);
     this.mComp = materialTela('pos-composicao', COMPOSICAO, {
       tCena: { value: null }, tBloom: { value: null }, uTexel: { value: new THREE.Vector2() }, uBloom: { value: 0.05 },
-      uExposicao: { value: 1 }, uPotencia: { value: 1.45 }, uSaturacao: { value: 1.05 }, uCas: { value: 0 }, uVinheta: { value: 0.12 }, uAspecto: { value: 1.7 }, uTempo: { value: 0 },
+      uExposicao: { value: 1 }, uPotencia: { value: LOOK.potencia }, uSaturacao: { value: LOOK.saturacao }, uCas: { value: 0 }, uVinheta: { value: 0.12 }, uAspecto: { value: 1.7 }, uTempo: { value: 0 },
       uEsmaecer: { value: 0 }, uCorEsmaecer: { value: new THREE.Vector3(0.02, 0.03, 0.05) },
     });
     this.alvo = null;
@@ -66,10 +74,7 @@ export class Pos {
     this.h = 0;
     this.amostras = 0;
     this.forcaBloom = 0.05;
-    // o "look" do AgX (contraste pela curva e saturação em volta da luma; 1 e 1 é o AgX puro): o AgX puro tem o pé
-    // longo e deixa a cidade cinza; a potência de 1,45 devolve o preto da sombra e do asfalto (como o Punchy do
-    // Blender), com a saturação quase neutra (1,05)
-    this.look = { potencia: 1.45, saturacao: 1.05 };
+    this.look = { ...LOOK }; // o modo foto pode trocar
     this.esmaecer = 0;
     this.passes = 0;
   }

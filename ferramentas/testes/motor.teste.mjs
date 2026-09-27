@@ -14,14 +14,16 @@ import { posicaoSol, posicaoLua, nascerEPor, faseDaLua, astros } from '../../fon
 import * as C from '../../fonte/render/ambiente/ceu.js';
 import { exposicaoAlvo, Exposicao, EXPOSICAO } from '../../fonte/render/ambiente/exposicao.js';
 import { umidadeManha, luzDoAr, luzNoCaminho, henyeyGreenstein } from '../../fonte/render/ambiente/neblina.js';
-import { ruidoNuvem } from '../../fonte/render/ambiente/nuvens.js';
+import { ruidoNuvem, Nuvens } from '../../fonte/render/ambiente/nuvens.js';
 import { horasChave, trecho } from '../../fonte/render/ambiente/ibl.js';
 import { criarCamera, LIMITES_CAMERA } from '../../fonte/render/camera/camera.js';
-import { raioNoTerreno, raioDaTela } from '../../fonte/render/camera/raio.js';
+import { raioNoTerreno, raioDaTela, projetarNaTela } from '../../fonte/render/camera/raio.js';
 import { SombraPropria, COMPACTAR_ACIMA } from '../../fonte/render/sombra/mapa.js';
 import { contarPrograma, preprocessar } from '../../fonte/render/motor/capacidades.js';
 import { PERFIS, degrausDoPerfil } from '../../fonte/render/motor/perfis.js';
 import { Resolucao } from '../../fonte/render/motor/resolucao.js';
+import { lookNoAgxDoThree } from '../../fonte/render/motor/renderizador.js';
+import { LOOK } from '../../fonte/render/motor/pos.js';
 import { ehDeLonge, Faixas, CAMADA_LONGE } from '../../fonte/render/motor/faixas.js';
 import { Sol } from '../../fonte/render/ambiente/sol.js';
 import { registrar as registrarBancada } from '../../fonte/render/motor/bancada.js';
@@ -229,6 +231,30 @@ test('câmera: sobre o mar o alvo fica na água e a câmera não mergulha', () =
   assert.ok(ctx.camera.near >= 0.2 - 1e-9, `plano próximo ${ctx.camera.near}`);
 });
 
+test('câmera: fator de zoom ou impulso torto não trava a vista; o alvo fica no mapa pela origem', () => {
+  const ctx = ctxCamera();
+  const cam = criarCamera(ctx, { dist: 1800 });
+  cam.atualizar(1000);
+  cam.zoom(NaN);
+  cam.zoom(0);
+  cam.zoom(Infinity);
+  cam.atualizar(1016);
+  assert.equal(cam.estado().dist, 1800, 'o fator torto é ignorado');
+  cam.zoom(0.5);
+  for (let t = 1032; t < 4000; t += 16) cam.atualizar(t);
+  assert.ok(Math.abs(cam.estado().dist - 900) < 1, `o zoom seguinte ainda funciona: ${cam.estado().dist}`);
+  cam.impulso({ vx: NaN, vz: 5 });
+  cam.mover(NaN, 3);
+  cam.girar(Infinity);
+  cam.atualizar(4016);
+  const e = cam.estado();
+  assert.ok(Number.isFinite(e.x) && Number.isFinite(e.z) && Number.isFinite(e.guinada) && e.x === 0, JSON.stringify(e));
+  // mapa fora do centro: o alvo fica entre a origem e a origem mais o lado
+  ctx.sim.espelho.mapa = { tam: 4096, origem: [0, -1000] };
+  cam.definir({ x: -50, z: 5000 });
+  assert.deepEqual([cam.estado().x, cam.estado().z], [0, 3096]);
+});
+
 test('raio: acerta o chão plano, a encosta e não acerta subindo', () => {
   const T = terrenoPlano({ cota: 5 });
   const p = raioNoTerreno(T, { origem: [0, 105, 0], dir: [0.6, -0.8, 0] });
@@ -246,6 +272,20 @@ test('raio: acerta o chão plano, a encosta e não acerta subindo', () => {
   cam.updateMatrixWorld();
   const r = raioDaTela(cam, 1000, 500, 500, 250);
   assert.ok(Math.abs(Math.hypot(...r.dir) - 1) < 1e-9 && r.dir[1] < 0 && r.dir[2] < 0);
+});
+
+test('projetar: com a profundidade invertida um ponto atrás da câmera não passa por visível', () => {
+  const cam = new THREE.PerspectiveCamera(40, 2, 0.1, 100000);
+  cam.position.set(0, 100, 0);
+  cam.lookAt(0, 100, -100);
+  cam.updateMatrixWorld();
+  cam._reversedDepth = true; // o three liga isto no primeiro desenho com EXT_clip_control
+  cam.updateProjectionMatrix();
+  const atras = new THREE.Vector3(0, 100, 50).project(cam);
+  assert.ok(atras.z > -1 && atras.z < 1, 'o z da tela sozinho não separa frente e trás (o erro do teste antigo)');
+  assert.equal(projetarNaTela(cam, 1000, 500, [0, 100, 50]).visivel, false);
+  const frente = projetarNaTela(cam, 1000, 500, [0, 100, -50]);
+  assert.ok(frente.visivel && Math.abs(frente.x - 500) < 1e-6 && Math.abs(frente.y - 250) < 1e-6 && Math.abs(frente.dist - 50) < 1e-9);
 });
 
 // ------------------------------------------------------------------------------------------------ sombra própria
@@ -345,6 +385,32 @@ test('sombra: nas vistas rasantes o foco anda para baixo da câmera sem tirar o 
   assert.ok(s.foco(alvo, raio, new THREE.Vector3()).distanceTo(alvo) < 1, 'de cima o foco é o alvo');
   s.vista = null;
   assert.ok(s.foco(alvo, raio, new THREE.Vector3()).equals(alvo), 'sem a câmera da vista, o alvo');
+  // a região publicada aos domínios (projetores) é o foco e o raio do mapa, e só existe depois do primeiro acompanhar
+  assert.equal(s.regiao, null, 'sem mapa, sem região');
+  s.vista = { position: new THREE.Vector3(100, 10 + 1800 * Math.sin(3 * RAD), 200 + 1800 * Math.cos(3 * RAD)) };
+  s.acompanhar(alvo, raio, new THREE.Vector3(-0.9, 0.3, 0.3));
+  const r = s.regiao;
+  assert.ok(r && r.raio === raio && r.z - alvo.z > 500 && Math.abs(r.x - alvo.x) < 1e-9, `região ${JSON.stringify(r)}`);
+  s.descartar();
+});
+
+test('sombra: a instanciada pequena (buffer compartilhado) refaz o mapa quando as instâncias mudam, sem marcar()', () => {
+  const s = new SombraPropria({ tam: 256, cascatas: 1 });
+  const lista = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial(), 8);
+  s.projetor(lista);
+  let passes = 0;
+  const falso = { state: { buffers: { depth: { getReversed: () => false } } }, autoClear: true, getRenderTarget: () => null, setRenderTarget() {}, render: () => passes++, clear() {} };
+  s.acompanhar(new THREE.Vector3(), 300, new THREE.Vector3(0.3, 0.8, 0.2));
+  s.desenhar(falso, null, null);
+  const p0 = passes;
+  s.desenhar(falso, null, null);
+  assert.equal(passes, p0, 'parado: nenhum passe novo');
+  lista.setMatrixAt(3, new THREE.Matrix4().makeTranslation(40, 0, 0));
+  lista.instanceMatrix.needsUpdate = true; // a versão do buffer sobe
+  s.desenhar(falso, null, null);
+  assert.equal(passes, p0 + 1, 'instância mexida: um passe novo');
+  s.desenhar(falso, null, null);
+  assert.equal(passes, p0 + 1);
   s.descartar();
 });
 
@@ -407,6 +473,21 @@ test('perfis: Média com cubo do céu, 1 cascata e degrau de 1,5 grau; PC com c�
   assert.deepEqual(degrausDoPerfil(PERFIS.media, 1), [0.85, 1]);
 });
 
+test('look: o AgX do three (Leve, sem pós) ganha a mesma curva da composição, uma vez, antes da matriz de saída', () => {
+  const puro = THREE.ShaderChunk.tonemapping_pars_fragment.replace(/\n\t\/\/ look da Holding\n[^\n]*\n[^\n]*/, '');
+  const copia = { tonemapping_pars_fragment: puro };
+  assert.ok(!puro.includes('look da Holding') && puro.includes('agxDefaultContrastApprox( color )'), 'o AgX puro do three');
+  assert.equal(lookNoAgxDoThree(copia), true);
+  const src = copia.tonemapping_pars_fragment;
+  assert.ok(src.includes(`vec3( ${LOOK.potencia} )`) && src.includes(`color, ${LOOK.saturacao} )`), 'potência e saturação do LOOK');
+  const agx = src.slice(src.indexOf('vec3 AgXToneMapping'));
+  assert.ok(agx.indexOf('look da Holding') > agx.indexOf('color = agxDefaultContrastApprox( color )'), 'depois da sigmoide');
+  assert.ok(agx.indexOf('look da Holding') < agx.indexOf('color = AgXOutsetMatrix * color'), 'antes da saída');
+  assert.equal(lookNoAgxDoThree(copia), true);
+  assert.equal(copia.tonemapping_pars_fragment, src, 'idempotente');
+  assert.equal(lookNoAgxDoThree({ tonemapping_pars_fragment: 'vec3 AgXToneMapping( vec3 c ) { return c; }' }), false, 'sem o lugar, fica o AgX puro');
+});
+
 test('resolução dinâmica: desce depois de 2 janelas lentas e sobe depois de 5 boas e 10 s', () => {
   const ctx = { perfil: PERFIS.media, pr: 1.3 };
   const r = new Resolucao(ctx, { fixa: false });
@@ -443,6 +524,27 @@ test('nuvens: ruído azulejável e na faixa inteira', () => {
   let borda = 0;
   for (let y = 0; y < n; y++) borda = Math.max(borda, Math.abs(r[y * n] - r[y * n + n - 1]));
   assert.ok(borda < 40, `emenda na borda: ${borda}`);
+});
+
+test('nuvens: a deriva soma o vento de cada quadro (trocar o vento não teleporta as nuvens) e fica na fração da textura', () => {
+  let hora = 10;
+  const u = { gNuvemMapa: { value: null }, gNuvemParams: { value: new THREE.Vector4() }, gNuvemDesloc: { value: new THREE.Vector4() } };
+  const n = new Nuvens({ ganchos: { uniformes: u }, horaDoCeu: () => hora });
+  const ceu = { nuvem: new THREE.Vector4(), nuvemPasso: new THREE.Vector2() };
+  const est = { P: { sol: [0.3, 0.9, 0.1] } };
+  n.atualizar(0, { nuvens: 0.4, vento: [1, 0] }, est, ceu);
+  for (let k = 0; k < 400; k++) {
+    hora = (hora + 0.25) % 24;
+    n.atualizar(0, { nuvens: 0.4, vento: [1, 0] }, est, ceu);
+  }
+  const antes = [u.gNuvemDesloc.value.x, u.gNuvemDesloc.value.y, ceu.nuvemPasso.x, ceu.nuvemPasso.y];
+  hora = (hora + 0.25) % 24;
+  n.atualizar(0, { nuvens: 0.4, vento: [0, 1] }, est, ceu);
+  const depois = [u.gNuvemDesloc.value.x, u.gNuvemDesloc.value.y, ceu.nuvemPasso.x, ceu.nuvemPasso.y];
+  assert.ok(Math.abs(depois[0] - antes[0]) < 1e-9 && Math.abs(depois[1] - antes[1]) < 0.05, `sombra no chão: ${antes} para ${depois}`);
+  assert.ok(Math.abs(depois[2] - antes[2]) < 1e-9 && Math.abs(depois[3] - antes[3]) < 0.01, `céu: ${antes} para ${depois}`);
+  assert.ok(Math.abs(antes[0]) < 1 && Math.abs(depois[1]) < 1, 'deriva do chão dentro da fração da textura');
+  n.descartar();
 });
 
 // ------------------------------------------------------------------------------------------------ ganchos e materiais
@@ -483,6 +585,37 @@ test('faixas: a camada de longe desce pela árvore inteira e sai de quem deixa d
   grupo.userData.faixa = null;
   f.marcar(cena);
   assert.ok(!longe(malha) && !longe(grupo), 'saiu da faixa de longe');
+});
+
+test('faixas: sem EXT_clip_control, o que passa do corte da faixa de perto entra também na de longe (o mar e a cidade não somem num risco)', () => {
+  const cena = new THREE.Scene();
+  const caixa = new THREE.BoxGeometry(10, 10, 10);
+  const perto = new THREE.Mesh(caixa, new THREE.MeshBasicMaterial());
+  perto.position.set(0, 0, -500);
+  const alem = new THREE.Mesh(caixa, new THREE.MeshBasicMaterial());
+  alem.position.set(0, 0, -5000);
+  const mar = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+  mar.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e7); // extensão desconhecida, como o mar
+  const cidade = new THREE.InstancedMesh(caixa, new THREE.MeshBasicMaterial(), 4); // sem esfera das instâncias
+  const vidro = new THREE.Mesh(caixa, new THREE.MeshBasicMaterial({ transparent: true }));
+  vidro.position.set(0, 0, -5000);
+  const fixo = new THREE.Mesh(caixa, new THREE.MeshBasicMaterial());
+  fixo.position.set(0, 0, -5000);
+  fixo.userData.faixa = 'perto';
+  cena.add(perto, alem, mar, cidade, vidro, fixo);
+  cena.updateMatrixWorld(true);
+  const cam = new THREE.PerspectiveCamera();
+  const f = new Faixas({ semClip: true });
+  f.marcar(cena, cam, 3060);
+  const longe = (o) => o.layers.isEnabled(CAMADA_LONGE);
+  assert.ok(!longe(perto), 'a malha perto fica só na de perto');
+  assert.ok(longe(alem) && longe(mar) && longe(cidade), 'além do corte, o mar e a lista da cidade inteira vão também para a de longe');
+  assert.ok(!longe(vidro), 'a transparente não entra duas vezes (a cor somaria na sobreposição)');
+  assert.ok(!longe(fixo), "userData.faixa = 'perto' fica só na de perto");
+  alem.position.set(0, 0, -100);
+  alem.updateMatrixWorld();
+  f.marcar(cena, cam, 3060);
+  assert.ok(!longe(alem), 'voltou para perto: sai da de longe');
 });
 
 test('sol: a luz direcional nunca some (o número de luzes não muda entre o dia e a noite sem lua)', () => {

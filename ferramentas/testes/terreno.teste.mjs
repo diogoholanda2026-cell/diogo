@@ -10,7 +10,7 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
-import { hash2, hashF, valor, gradiente, fbm, worley, copas, texturaOndas } from '../../fonte/render/geracao/ruido.js';
+import { hash2, hashF, valor, gradiente, fbm, worley, copas, texturaOndas, espectroOndas } from '../../fonte/render/geracao/ruido.js';
 import { alturaEm } from '../../fonte/comum/altura.js';
 import { AGUA, TIPO_PREDIO, CELULA } from '../../fonte/contratos/flags.js';
 import {
@@ -78,6 +78,21 @@ test('ruído: determinístico e periódico', () => {
     soma += o[i];
   }
   assert.ok(Math.abs(soma / (32 * 32) - 127.5) < 8, 'ondas sem inclinação média');
+});
+
+test('ondas: espectro de muitas componentes em todas as escalas, sem uma que desenhe o azulejo', () => {
+  const c = espectroOndas(7, { kMax: 42 });
+  assert.ok(c.length >= 100, `${c.length} componentes (com poucas aparece a rede regular)`);
+  const k = c.map((w) => Math.hypot(w.kx, w.kz));
+  assert.ok(Math.min(...k) <= 3 && Math.max(...k) >= 30, 'do marulho à ondulação curta');
+  for (const w of c) assert.ok(Number.isInteger(w.kx) && Number.isInteger(w.kz), 'vetor de onda inteiro (emenda)');
+  // nenhuma componente com mais de 12% da energia de inclinação (a que sobressai vira a rede repetida no mar)
+  const e = c.map((w) => (w.amp * Math.hypot(w.kx, w.kz)) ** 2);
+  const total = e.reduce((a, b) => a + b, 0);
+  assert.ok(Math.max(...e) / total < 0.12, `componente com ${((100 * Math.max(...e)) / total).toFixed(1)}% da energia`);
+  // sem a mesma onda duas vezes (nem com o sinal trocado)
+  const chaves = new Set(c.map((w) => (w.kx < 0 || (w.kx === 0 && w.kz < 0) ? `${-w.kx},${-w.kz}` : `${w.kx},${w.kz}`)));
+  assert.equal(chaves.size, c.length);
 });
 
 // ------------------------------------------------------------------------------------------------ alturas
@@ -373,6 +388,19 @@ test('shaders: nenhuma precisão média, amostradores do terreno dentro da guard
   assert.ok(amostradores(GLSL_TER_FRAGMENTO.pars) <= 8, `fragmento do terreno com ${amostradores(GLSL_TER_FRAGMENTO.pars)}`);
   assert.ok(amostradores(GLSL_TER_VERTICE.pars) <= 4);
   assert.ok(amostradores(GLSL_AGUA_FRAGMENTO.pars) <= 6);
+});
+
+test('relevo fino do fragmento: cada termo some pelo pixel em 3D (na encosta a projeção em x e z subestima o pixel)', () => {
+  const cor = GLSL_TER_FRAGMENTO.cor;
+  assert.match(cor, /float tPix = max\( length\( tPx \), length\( tPy \) \);/);
+  // os termos que entram em terRelevo por derivada de tela: sem o corte pelo pixel viram quadradinhos de 2 x 2 pixels
+  for (const termo of ['tRelVeg', 'tRelRocha', 'tCopaRel']) {
+    const atribs = [...cor.matchAll(new RegExp(`(?:float )?${termo} = ([^;]+);`, 'g'))].filter((m) => m[1].trim() !== '0.0');
+    assert.ok(atribs.length > 0, `${termo} atribuído no fragmento`);
+    for (const a of atribs) assert.ok(a[1].includes('tPix'), `${termo} sem o corte pelo tamanho do pixel`);
+  }
+  assert.ok(!/length\( abs\( tDx \) \+ abs\( tDy \) \)/.test(cor), 'corte pelo pixel só em x e z (falha na encosta)');
+  assert.match(cor, /terRelevo\( tN, \( tRel \+ tCopaRel \* 0\.65 \+ tRelRocha \+ tRelVeg \)/);
 });
 
 test('estação: capim seco no inverno (julho), verde no verão (janeiro)', () => {

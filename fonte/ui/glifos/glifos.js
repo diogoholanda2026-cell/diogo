@@ -1,8 +1,9 @@
 // Registro dos glifos (desenho da UI 6): traço de 1,75 numa grade de 24, pontas e juntas redondas, currentColor, sem
 // preenchimento (detalhes pequenos a 35%). Um glifo é uma lista de caminhos SVG ('d'): string = traço; { d, cheio:
 // true } = detalhe preenchido. Só caminhos (círculo vira arco), para o mesmo registro servir ao DOM (<Glifo>) e ao
-// atlas dos marcadores no canvas (new Path2D(d), X3a). F0 criou; a U1a desenha o conjunto do M1 (primeiro corte com
-// cerca de 90). Estilo único: formas dentro de 3 a 21, cantos com raio de 1 a 2, pontos como anéis de 0,55.
+// atlas dos marcadores no canvas (new Path2D(d), X3a). F0 criou; a U1a desenha o conjunto do M1 (cerca de 145, da
+// seção 6.2 do desenho). Estilo único: formas dentro de 3 a 21, cantos com raio de 1 a 2, pontos como anéis de 0,55.
+// Outra parcela que precisar de um glifo novo pede aqui (ou registra no dela com o mesmo traço, ui.registrarGlifos).
 
 const glifos = new Map();
 
@@ -181,6 +182,109 @@ registrarGlifos({
   salvar: ['M12 3.5v11', 'M7.5 10 12 14.5l4.5-4.5', 'M4.5 16.5v2A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-2'],
   som: ['M4 9.5v5h3.5l4.5 4V5.5l-4.5 4z', 'M15.5 9.25a3.9 3.9 0 0 1 0 5.5', 'M18 6.75a7.4 7.4 0 0 1 0 10.5'],
   olho: ['M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z', circulo(12, 12, 3)],
+});
+
+// O resto do conjunto do M1 (desenho da UI 6.2), no mesmo traço, para as parcelas que vêm depois não desenharem os
+// seus: ferramentas de via e zona (X2), serviços e divisões da Holding (U1b), avisos do atlas dos marcadores (X3a) e
+// o sistema (U2a). Vias vistas de cima, na ordem da largura (rua 16 m, avenida 24, avenida grande 32).
+// densidade: as colunas até a escolhida, cheias; as de cima ficam só no chão (o lugar delas)
+const COLUNAS = [ret(4, 14.5, 4, 6, 1), ret(10, 10, 4, 10.5, 1), ret(16, 5.5, 4, 15, 1)];
+const CHAO_COLUNA = ['M4 20.5h4', 'M10 20.5h4', 'M16 20.5h4'];
+const densidade = (k) => [...COLUNAS.slice(0, k).flatMap((d) => [d, { d, cheio: true }]), ...CHAO_COLUNA.slice(k)];
+const PESSOA = [circulo(9, 8, 3.25), 'M3.5 20c.6-3.4 3.1-5.25 6.5-5.25 1.2 0 2.3.2 3.2.7'];
+
+registrarGlifos({
+  // ------------------------------------------------------------ tipos de via (data/vias.js) e modos de traçado
+  rua: ['M7 3.5v17', 'M17 3.5v17', 'M12 4v3M12 10.5v3M12 17v3'],
+  ruaMao: ['M7 3.5v17', 'M17 3.5v17', 'M12 19V6.5', 'M9.25 9.25 12 6.5l2.75 2.75'],
+  avenida: ['M5 3.5v17', 'M19 3.5v17', 'M11 3.5v17M13 3.5v17'],
+  avenidaG: ['M3.5 3.5v17', 'M20.5 3.5v17', { d: 'M10.5 3.5h3v17h-3z', cheio: true }, 'M10.5 3.5v17M13.5 3.5v17', 'M7 4v3M7 10.5v3M7 17v3', 'M17 4v3M17 10.5v3M17 17v3'],
+  // rua de terra: bordas irregulares e cascalho
+  terra: ['M7 3.5c-.9 3-.9 6 0 8.5s.9 5.5 0 8.5', 'M17 3.5c.9 3 .9 6 0 8.5s-.9 5.5 0 8.5', ponto(11, 7), ponto(13.25, 11.75), ponto(10.75, 16.5)],
+  // traçado: nós como anéis, o trecho entre eles
+  reta: ['M7 17 17 7', circulo(5.5, 18.5, 2), circulo(18.5, 5.5, 2)],
+  curva: ['M5.5 16.5C5.5 10 10 5.5 16.5 5.5', circulo(5.5, 18.5, 2), circulo(18.5, 5.5, 2)],
+  continua: ['M4 18l3.26-3.26', circulo(8.5, 13.5, 1.75), 'M9.74 14.74l2.02 2.02', circulo(13, 18, 1.75), 'M14.24 16.76 20 11', 'M16.5 11H20v3.5'],
+  grade: ['M3.5 8.5h17M3.5 15.5h17', 'M8.5 3.5v17M15.5 3.5v17'],
+  // encaixe: ímã
+  encaixe: ['M5.5 5v7.5a6.5 6.5 0 0 0 13 0V5', 'M10 5v7.5a2 2 0 0 0 4 0V5', 'M5.5 5H10M14 5h4.5', 'M5.5 9H10M14 9h4.5'],
+  desfazer: ['M9 4.5 4.5 9 9 13.5', 'M4.5 9H14a5.5 5.5 0 0 1 0 11h-3.5'],
+  refazer: ['M15 4.5 19.5 9 15 13.5', 'M19.5 9H10a5.5 5.5 0 0 0 0 11h3.5'],
+  // construir: o muro de tijolos (o botão principal da barra da ferramenta)
+  construir: [ret(3.5, 5, 17, 14, 1.5), 'M3.5 9.67h17M3.5 14.33h17', 'M9 5v4.67M15 5v4.67M6.25 9.67v4.66M12 9.67v4.66M17.75 9.67v4.66M9 14.33V19M15 14.33V19'],
+  cancelar: [circulo(12, 12, 8.75), 'M9 9l6 6M15 9l-6 6'],
+  // alça do traçado: arrastar em qualquer direção
+  alca: ['M12 3.5v17M3.5 12h17', 'M9.5 6 12 3.5 14.5 6', 'M9.5 18 12 20.5 14.5 18', 'M6 9.5 3.5 12 6 14.5', 'M18 9.5 20.5 12 18 14.5'],
+  ponte: ['M2.5 9h19', 'M4 9v11.5M20 9v11.5', 'M4 20.5a8 8 0 0 1 16 0', 'M8 9v4.5M12 9v3.5M16 9v4.5'],
+
+  // ------------------------------------------------------------ pincel de zona e densidade
+  // preencher a quadra: o balde de tinta (o "preencher" de todo editor; a quadra entre ruas lia igual à grade)
+  preencher: [
+    'M18 11.5 10.5 4 4.56 9.94a1.5 1.5 0 0 0 0 2.12l5.38 5.38a1.5 1.5 0 0 0 2.12 0z',
+    { d: 'M5.5 13h11l-4.44 4.44a1.5 1.5 0 0 1-2.12 0z', cheio: true },
+    'M5.5 13h11',
+    'M5.5 3.5 9 7',
+    'M21 18.75a1.75 1.75 0 1 1-3.5 0c0-1.4 1.45-2.1 1.75-3.5.3 1.4 1.75 2.1 1.75 3.5z',
+  ],
+  pincel: ['M20 4l-7.5 7.5', 'M10.75 10.25l3 3', 'M11.25 12.75c-2-.9-4.6 0-5.1 2.3-.3 1.5-.6 3-2.15 4.4 2.7.8 5.6.3 7-1.5.9-1.2 1.05-2.4.25-3.7'],
+  retangulo: ['M4 7V5.5A1.5 1.5 0 0 1 5.5 4H7', 'M11 4h2', 'M17 4h1.5A1.5 1.5 0 0 1 20 5.5V7', 'M20 11v2', 'M20 17v1.5a1.5 1.5 0 0 1-1.5 1.5H17', 'M13 20h-2', 'M7 20H5.5A1.5 1.5 0 0 1 4 18.5V17', 'M4 13v-2'],
+  // borracha
+  apagar: ['M13.8 4.9a1.5 1.5 0 0 1 2.1 0l3.2 3.2a1.5 1.5 0 0 1 0 2.1L10.5 18.8H7.2l-2.3-2.3a1.5 1.5 0 0 1 0-2.1z', 'M8.5 10.2l5.3 5.3', 'M10.5 18.8h9'],
+  // uso misto: moradia em cima, loja com toldo no térreo
+  mista: ['M6 12.5V5A1.5 1.5 0 0 1 7.5 3.5h9A1.5 1.5 0 0 1 18 5v7.5', 'M6 15.5v5h12v-5', 'M4.5 12.5h15v.75a1.875 1.875 0 0 1-3.75 0 1.875 1.875 0 0 1-3.75 0 1.875 1.875 0 0 1-3.75 0 1.875 1.875 0 0 1-3.75 0z', 'M9.5 6.5H11M13 6.5h1.5M9.5 9.5H11M13 9.5h1.5', 'M10 20.5V17.5h4v3', 'M3.5 20.5h17'],
+  densidade1: densidade(1),
+  densidade2: densidade(2),
+  densidade3: densidade(3),
+
+  // ------------------------------------------------------------ serviços e divisões da Holding
+  lixo: ['M4.5 6.5h15', 'M9.5 6.5V5A1.5 1.5 0 0 1 11 3.5h2A1.5 1.5 0 0 1 14.5 5v1.5', 'M6.5 6.5l1 13A1.5 1.5 0 0 0 9 21h6a1.5 1.5 0 0 0 1.5-1.4l1-13.1', 'M10 10.5V17M14 10.5V17'],
+  // prefeitura: prédio com a bandeira
+  administracao: ['M3.5 20.5h17', 'M5 20.5V11h14v9.5', 'M12 11V3.5', 'M12 4h5l-1.25 2L17 8h-5', 'M8.5 14v3.5M12 14v3.5M15.5 14v3.5'],
+  comunicacao: ['M12 11.5v9', 'M8.5 20.5 12 11.5l3.5 9', 'M9.6 17h4.8', ponto(12, 8.5), 'M9.5 6a3.5 3.5 0 0 0 0 5M14.5 6a3.5 3.5 0 0 1 0 5', 'M7 3.5a7 7 0 0 0 0 10M17 3.5a7 7 0 0 1 0 10'],
+  // transporte coletivo (M2): ônibus de frente
+  transporte: [ret(5, 3.5, 14, 15.5, 2.5), 'M5 12h14', 'M9.5 6.5h5', 'M7.5 19v1.5M16.5 19v1.5', ponto(8.5, 15.5), ponto(15.5, 15.5)],
+  imobiliario: [circulo(8, 16, 4), 'M10.9 13.1 19.5 4.5', 'M16.5 7.5l2.5 2.5', 'M14 10l2 2'],
+  tecnologia: [ret(7, 7, 10, 10, 1.5), ret(10, 10, 4, 4, 0.5), 'M10 3.5V7M14 3.5V7M10 17v3.5M14 17v3.5M3.5 10H7M3.5 14H7M17 10h3.5M17 14h3.5'],
+  // mídia e imprensa: o jornal
+  midia: ['M17.5 9h2.25a.75.75 0 0 1 .75.75v8.75a2 2 0 0 1-4 0V5A1.5 1.5 0 0 0 15 3.5H5A1.5 1.5 0 0 0 3.5 5v13.5a2 2 0 0 0 2 2h13', ret(6.5, 7, 7, 4.5, 0.5), 'M6.5 14.5h7M6.5 17.5h7'],
+  hotelaria: ['M3.5 6.5v13', 'M3.5 15.5h17v4', 'M20.5 15.5v-3a2.5 2.5 0 0 0-2.5-2.5h-7.5v5.5', circulo(7, 12.25, 1.75)],
+  aviacao: ['M12 3.5c.9 0 1.5.9 1.5 2V10l7 4v2l-7-2v4l2 1.5V21L12 20l-3.5 1v-1.5l2-1.5v-4l-7 2v-2l7-4V5.5c0-1.1.6-2 1.5-2z'],
+  mapa: ['M3.5 6.5 9 4l6 2.5L20.5 4v13.5L15 20l-6-2.5-5.5 2.5z', 'M9 4v13.5M15 6.5V20'],
+  // recursos do subsolo: a picareta
+  recursos: ['M9.5 4.9Q18.2 5.8 19.1 14.5', 'M4.5 19.5 16.25 7.75'],
+
+  // ------------------------------------------------------------ avisos (forma e cor vêm da gravidade, 6.3)
+  poucosClientes: [...PESSOA, 'M18 12.5V20', 'M15.5 17.5 18 20l2.5-2.5'],
+  semMercadoria: ['M5.5 8h13l-1 11.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5z', 'M9 8V6.5a3 3 0 0 1 6 0V8', RISCO],
+  semCreditos: [circulo(12, 12, 8.5), 'M10 9v6M14 9v6M10 12h4', RISCO],
+  estoqueCheio: ['M3.5 20.5V9L12 4.5 20.5 9v11.5', 'M7 20.5v-4h10v4M12 16.5v4', 'M9.5 16.5v-4h5v4'],
+  doenca: [circulo(12, 12, 5), 'M12 3.5V7M12 17v3.5M3.5 12H7M17 12h3.5', 'M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6', ponto(10.25, 11), ponto(13.5, 13.25)],
+  // crime: a máscara
+  crime: ['M3.5 9.5c2.6-1.4 5.5-2 8.5-2s5.9.6 8.5 2c0 3.6-1.5 6-4 6-1.9 0-2.9-1.8-4.5-1.8s-2.6 1.8-4.5 1.8c-2.5 0-4-2.4-4-6z', 'M7 11.25l2.5.75M17 11.25l-2.5.75'],
+  incendio: [...CASA, 'M12 19.5a2.75 2.75 0 0 0 2.75-2.75c0-1.8-1.5-2.7-2.75-4.5-1.25 1.8-2.75 2.7-2.75 4.5A2.75 2.75 0 0 0 12 19.5z'],
+  // trânsito parado: o carro de frente
+  transito: ['M4.5 17.5v-5l2-5h11l2 5v5z', 'M4.5 12.5h15', 'M6.5 17.5v2H9v-2M15 17.5v2h2.5v-2', ponto(7.5, 15), ponto(16.5, 15)],
+
+  // ------------------------------------------------------------ sistema
+  objetivo: [circulo(12, 12, 8.75), circulo(12, 12, 5), ponto(12, 12)],
+  filtro: ['M4 5h16l-6 7.5v5.5l-4 2.5v-8z'],
+  vibracao: [ret(8, 4, 8, 16, 1.5), 'M5 9v6M19 9v6', 'M3 10.75v2.5M21 10.75v2.5'],
+  telaCheia: ['M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9', 'M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9', 'M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15', 'M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15'],
+  // carregar partida: a pasta
+  carregar: ['M3.5 7A1.5 1.5 0 0 1 5 5.5h4.25l2 2H19A1.5 1.5 0 0 1 20.5 9v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z'],
+  exportar: ['M12 14.5V3.5', 'M7.5 8 12 3.5 16.5 8', 'M4.5 16.5v2A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-2'],
+  compartilhar: ['M12 3.5v11', 'M8 7.5l4-4 4 4', 'M8.5 10.5H7A1.5 1.5 0 0 0 5.5 12v7A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1.5'],
+  copiar: [ret(8.5, 8.5, 12, 12, 2), 'M15.5 8.5v-3a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3'],
+  teclado: [ret(2.5, 6, 19, 12, 2), 'M6 10h.5M9.5 10h.5M13.5 10h.5M17.5 10h.5M6 14h.5M17.5 14h.5', 'M9.5 14h5'],
+  // girar o prédio ao colocar
+  girar: ['M19.5 12a7.5 7.5 0 1 1-2.2-5.3l2.2 1.8', 'M19.5 4v4.5H15'],
+  // o jogo é em paisagem
+  girarCelular: [ret(3.5, 11, 17, 9, 1.5), 'M7 7.5a6.5 6.5 0 0 1 10 0', 'M17.25 4.25V7.5H14', ponto(17.5, 15.5)],
+  editar: ['M15.5 4.5l4 4L9 19H5v-4z', 'M13 7l4 4'],
+  // cor do prédio e da marca: a paleta
+  cor: ['M12 3.5a8.5 8.5 0 0 0 0 17c1.5 0 2.2-1.1 1.7-2.4-.5-1.4.4-2.6 1.9-2.6h2.4a3 3 0 0 0 3-3C21 7.4 17 3.5 12 3.5z', circulo(7.75, 11.5, 1.1), circulo(9.75, 7.5, 1.1), circulo(14.5, 7.5, 1.1)],
+  ajuda: [circulo(12, 12, 8.75), 'M9.5 9.5a2.5 2.5 0 0 1 4.9.6c0 1.7-2.4 2.1-2.4 3.9', ponto(12, 16.75)],
+  sair: ['M9.5 20.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5h3.5', 'M15.5 16.5 20 12l-4.5-4.5', 'M20 12H9.5'],
 });
 
 /** Glifo do rosto do bem-estar pela faixa da tarifa (as faixas do dono: até 30, 31 a 60, 61 a 100). */

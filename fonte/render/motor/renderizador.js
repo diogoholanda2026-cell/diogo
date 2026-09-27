@@ -3,9 +3,34 @@
 // invertida (reversedDepthBuffer) quando o aparelho tem EXT_clip_control: plano próximo de 10 cm e distante de 100 km
 // num alvo de 32 bits em ponto flutuante; sem ela (ou com ?semClip=1, que o quadro desliga) valem as duas faixas de
 // profundidade (motor/faixas.js). O vigia dos programas entra antes do primeiro programa (tempo de compilação e, na
-// página de teste, as fontes para a guarda do Mali, D44).
+// página de teste, as fontes para a guarda do Mali, D44). O AgX do three (só no Leve, que desenha sem pós) ganha o
+// mesmo look da composição (lookNoAgxDoThree).
 import * as THREE from 'three';
 import { sondar, vigiarProgramas } from './capacidades.js';
+import { LOOK } from './pos.js';
+
+const MARCA_LOOK = '// look da Holding';
+
+/**
+ * Põe o "look" da composição (motor/pos.js) no AgX do próprio three, que só desenha no Leve (sem pós): o AgX puro tem
+ * o pé longo e lá a cidade saía lavada, bem mais clara e cinza que nos outros perfis. Troca o trecho uma vez por
+ * página, antes do primeiro programa, no lugar que o three reserva para o look: logo depois da sigmoide, antes da
+ * matriz de saída.
+ * @returns {boolean} false se o three mudou o trecho (fica o AgX puro)
+ */
+export function lookNoAgxDoThree(chunk = THREE.ShaderChunk) {
+  const src = chunk.tonemapping_pars_fragment;
+  if (src.includes(MARCA_LOOK)) return true;
+  const sigmoide = /(color\s*=\s*agxDefaultContrastApprox\(\s*color\s*\);)/;
+  if (!sigmoide.test(src)) return false;
+  const f = (x) => (Number.isInteger(x) ? `${x}.0` : String(x));
+  chunk.tonemapping_pars_fragment = src.replace(
+    sigmoide,
+    `$1\n\t${MARCA_LOOK}\n\tcolor = pow( max( color, vec3( 0.0 ) ), vec3( ${f(LOOK.potencia)} ) );\n` +
+      `\tcolor = mix( vec3( dot( color, vec3( 0.2126, 0.7152, 0.0722 ) ) ), color, ${f(LOOK.saturacao)} );`,
+  );
+  return true;
+}
 
 /** Limites lidos do WebGL2 (a guarda do Mali compara com os mínimos, D44). */
 function lerLimites(gl) {
@@ -35,6 +60,7 @@ function lerLimites(gl) {
  * @returns {{ renderer: THREE.WebGLRenderer, gl: WebGL2RenderingContext, capac: object, gpu: string, movel: boolean }}
  */
 export function criarRenderizador(canvas, { msaa = 2, pr = 1 } = {}) {
+  lookNoAgxDoThree();
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: false,

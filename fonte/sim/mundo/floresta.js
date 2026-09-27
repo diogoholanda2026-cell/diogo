@@ -16,7 +16,7 @@ import { distanciaForma, ALCANCE } from './aplainar.js';
 const N = 1024;
 const PASSO = 8;
 const CACHE = new Map();
-const RIO = { a: 0, hw: 0, nivel: 0, varzea: 0, lado: 1 };
+const RIO = { a: 0, hw: 0, nivel: 0, varzea: 0, lado: 1, v: 0 };
 
 /**
  * Densidade da mata do mapa (guardada por id; o espelho recebe uma cópia). Célula [j * 1024 + i] com centro em
@@ -43,6 +43,8 @@ export function gerarFloresta(base, mapa) {
     vz1 = Math.max(vz1, vila[q + 1]);
   }
   const nc = G.nc;
+  const rioSL = base.campos.rio.sl;
+  const valeSL = base.campos.vale.sl;
   // ruídos de escala grande numa grade de 32 m (a mata varia em centenas de metros): variação e capões
   const rMata = new Float32Array(nc * nc);
   const rCapao = new Float32Array(nc * nc);
@@ -54,7 +56,6 @@ export function gerarFloresta(base, mapa) {
       rCapao[jc * nc + ic] = fbm(x / 420, z / 420, s0 + 7, 3);
     }
   }
-  const rioSL = base.campos.rio.sl;
   for (let j = 0; j < N; j++) {
     const z = oz + (j + 0.5) * PASSO;
     const jc = Math.min(nc - 1, (j + 2) >> 2);
@@ -106,13 +107,27 @@ export function gerarFloresta(base, mapa) {
         if (r > 3) d = Math.max(d, 0.35 + 0.35 * smoothstep(3, 12, r));
       }
       // rio: mata ciliar na margem, várzea aberta, mangue na foz
+      // (só perto do rio ou da faixa de meandros: a leitura custa quatro bilineares)
       const slc = rioSL[kc];
-      const rio = slc < 1000 && slc > -1000 ? rioEm(base, x, z, RIO) : null;
-      if (rio && rio.a < rio.hw + rio.varzea + 30) {
+      const vlc = valeSL[kc];
+      const rio = (slc < 1000 && slc > -1000) || (vlc < 1000 && vlc > -1000) ? rioEm(base, x, z, RIO) : null;
+      if (rio && (rio.a < rio.hw + 80 || rio.v < rio.varzea + 30)) {
         const margem = rio.a - rio.hw;
-        if (margem < 40) d = Math.max(d, 0.8 + 0.1 * ruidoMata);
-        else if (margem < rio.varzea) d = Math.min(d, 0.12 + 0.12 * ruidoMata + 0.5 * smoothstep(0.55, 0.8, ruido(x / 180, z / 180, s0 + 3)));
+        // mata ciliar de largura que varia (10 a 60 m), mais rala aqui e ali e com o pasto chegando na margem em alguns
+        // trechos (não uma faixa de largura igual)
+        const lim = 30 + 18 * ruido(x / 150, z / 150, s0 + 23) + 7 * ruido(x / 46, z / 46, s0 + 29);
+        const cheio = 0.62 + 0.28 * smoothstep(-0.5, 0.4, ruidoMata) - 0.5 * smoothstep(0.35, 0.6, ruido(x / 260, z / 260, s0 + 31));
+        const ciliar = cheio * (1 - smoothstep(lim - 8, lim + 6, margem));
+        if (ciliar > d) d = ciliar;
+        else if (margem > lim && rio.v < rio.varzea) d = Math.min(d, 0.12 + 0.12 * ruidoMata + 0.5 * smoothstep(0.55, 0.8, ruido(x / 180, z / 180, s0 + 3)));
         if (rio.nivel < 1 && margem < 160) d = Math.max(d, 0.74);
+      }
+      // lagoas: brejo e mata na beira das marginais; taboa e restinga baixa na de Santa Cida
+      const lsd = amostrar(base.campos.lagoa.sd, nc, G.pc, ox, oz, x, z);
+      if (lsd > -45 && lsd < 0) {
+        const marginal = base.campos.lagoa.qual[kc] > 0;
+        const anel = (marginal ? 0.62 + 0.2 * ruidoMata : 0.3 + 0.15 * ruidoMata) * (1 - smoothstep(12, 45, -lsd));
+        if (anel > d) d = anel;
       }
       // gleba e Vila: gramado e quintais
       if (x > gx0 - 10 && x < gx1 + 10 && z > gz0 - 10 && z < gz1 + 10) d = Math.min(d, 0.05);

@@ -250,6 +250,21 @@ test('tipologias brasileiras: autoconstrução, telhado de quatro águas, galpã
   assert.ok(tor.varanda >= 20, `torre: varandas em ${tor.varanda ?? 0} de 60`);
   const esc = formas('torreEscritorios', 3, 1);
   assert.ok(esc.chanfro >= 8, `escritório: chanfro em ${esc.chanfro ?? 0} de 60`);
+  // loja térrea funda: a platibanda da frente esconde a água que cai para os fundos
+  const m = PREDIOS.loja;
+  let escondidas = 0;
+  for (let k = 0; k < 60; k++) {
+    const pl = planoPredio({ w: m.planta[0] * 8, d: m.planta[1] * 8, modelo: 'loja', nivel: 1, estilo: k % 4, semente: semente(k + 900) });
+    const agua = pl.pecas.find((p) => p.forma === 'meiaAgua');
+    if (!agua) continue;
+    escondidas++;
+    const frente = Math.max(...pl.pecas.filter((p) => p.lod1 && p.forma === 'caixa').map((p) => p.z + p.d / 2));
+    const plat = pl.pecas.find((p) => p.forma === 'caixa' && p.d <= 0.31 && Math.abs(p.z + p.d / 2 - frente) < 0.01);
+    assert.ok(plat, `loja ${k}: água sem platibanda na frente`);
+    assert.ok(plat.y0 + plat.h >= agua.y0 + agua.h + 0.2, `loja ${k}: a água aparece acima da platibanda`);
+    assert.equal(agua.giro, Math.PI, `loja ${k}: a água cai para os fundos`);
+  }
+  assert.ok(escondidas >= 20, `loja térrea: água escondida em ${escondidas} de 60`);
 });
 
 test('paletas: albedo real (nada acima de 0,80 linear) e nada saturado', () => {

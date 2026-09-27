@@ -13,7 +13,7 @@ import * as fmt from '../formato.js';
 import { t, temTexto } from '../textos.js';
 import { Botao } from '../comp/Botao.jsx';
 import { Glifo } from '../glifos/Glifo.jsx';
-import { glifoBemEstar } from '../glifos/glifos.js';
+import { glifoBemEstar, glifo } from '../glifos/glifos.js';
 import { Aviso } from '../comp/Aviso.jsx';
 import { Barra } from '../comp/Barra.jsx';
 import { zona as dadosZona, FAMILIAS_ZONA } from '../../data/zonas.js';
@@ -42,21 +42,27 @@ const GLIFO_SERVICO = {
   agua: 'agua', esgoto: 'esgoto', energia: 'energia', saude: 'saude', educacao: 'educacao', seguranca: 'policia',
   policia: 'policia', bombeiros: 'bombeiros', lazer: 'praca', praca: 'praca', parque: 'parque',
 };
+// código do aviso para o glifo; o código que já é nome de glifo (transito, lixo, incendio...) usa o próprio
 const GLIFO_AVISO = {
-  semAgua: 'semAgua', semEsgoto: 'esgoto', semEnergia: 'semEnergia', semAcesso: 'semVia', abandonado: 'abandonado',
-  semMaterial: 'semMaterial', semTrabalhadores: 'semTrabalhadores', racionado: 'semEnergia', caixaZerado: 'caixa',
+  semEsgoto: 'esgoto', semAcesso: 'semVia', racionado: 'semEnergia', caixaZerado: 'semCreditos',
 };
+const glifoDoAviso = (codigo) => GLIFO_AVISO[codigo] ?? (glifo(codigo) ? codigo : 'alerta');
 const ORDEM_GRAVIDADE = { grave: 0, atencao: 1, info: 2, holding: 3 };
 // fases da obra no vértice (seção 2.4): canteiro até 0,1, fundação até 0,25, estrutura até 0,6, fechamento até 1
 const FASES_OBRA = [[0.1, 'canteiro'], [0.25, 'fundacao'], [0.6, 'estrutura'], [1.01, 'fechamento']];
 
 // ------------------------------------------------------------------------------------------ leitura (puras)
 
+// o tipo pelo contrato ('servico', 'holding') ou pelo bloco que só aquele tipo tem (o q.predio não fixa a forma do
+// tipo; um serviço com tipo numérico não pode cair na zona 0 e ganhar o glifo residencial)
+const ehServico = (p) => p?.tipo === 'servico' || (!!p?.servico && p?.tipo !== 'holding');
+const ehHolding = (p) => p?.tipo === 'holding' || (!!p?.holding && !p?.servico);
+
 /** Família e glifo do prédio: zona pela família (D23), serviço pela categoria, Holding pelo monograma. */
 export function aparencia(p) {
   if (!p) return { glifo: 'info', cor: null, familia: null };
-  if (p.tipo === 'servico') return { glifo: GLIFO_SERVICO[p.servico?.categoria ?? p.categoria] ?? 'servicos', cor: null, familia: 'servico' };
-  if (p.tipo === 'holding') return { glifo: 'holding', cor: 'var(--ch)', familia: 'holding' };
+  if (ehServico(p)) return { glifo: GLIFO_SERVICO[p.servico?.categoria ?? p.categoria] ?? 'servicos', cor: null, familia: 'servico' };
+  if (ehHolding(p)) return { glifo: 'holding', cor: 'var(--ch)', familia: 'holding' };
   const z = dadosZona(p.zona);
   const fam = z?.familia ?? null;
   return { glifo: GLIFO_FAMILIA[fam] ?? 'zonas', cor: fam ? FAMILIAS_ZONA[fam].cor : null, familia: fam };
@@ -65,14 +71,14 @@ export function aparencia(p) {
 /** Subtítulo: "Residencial média · nível 3 de 5", "Saúde · alcance de 600 m". */
 export function subtitulo(p) {
   if (!p) return '';
-  if (p.tipo === 'servico') {
+  if (ehServico(p)) {
     const cat = p.servico?.categoria ?? p.categoria;
     const nome = cat && temTexto(`cartao.servico.${cat}`) ? t(`cartao.servico.${cat}`) : t('cartao.servico');
-    return p.servico?.alcance ? t('cartao.sub.alcance', { tipo: nome, m: fmt.numero(p.servico.alcance) }) : nome;
+    return p.servico?.alcance > 0 ? t('cartao.sub.alcance', { tipo: nome, m: fmt.numero(p.servico.alcance) }) : nome;
   }
-  const z = dadosZona(p.zona);
-  const tipo = p.tipo === 'holding' ? t('cartao.holding') : z?.nome ?? t('cartao.predio');
-  return p.nivel ? t('cartao.sub.nivel', { tipo, nivel: p.nivel }) : tipo;
+  const z = ehHolding(p) ? null : dadosZona(p.zona);
+  const tipo = ehHolding(p) ? t('cartao.holding') : z?.nome ?? t('cartao.predio');
+  return p.nivel > 0 ? t('cartao.sub.nivel', { tipo, nivel: p.nivel }) : tipo;
 }
 
 /** Os três números do cartão, pelo tipo: [{ id, rotulo, valor, glifo?, estado?, frac?, dica? }]. */
@@ -106,7 +112,7 @@ export function numerosDoCartao(p) {
     return [
       { id: 'trabalhadores', rotulo: t('cartao.trabalhadores'), valor: t('cartao.deN', { a: fmt.numero(soma(w.ocupadas)), b: fmt.numero(soma(w.vagas)) }), frac: soma(w.vagas) ? soma(w.ocupadas) / soma(w.vagas) : 0 },
       { id: 'produtividade', rotulo: t('cartao.produtividade'), valor: fmt.pct(prod), estado: prod < 0.5 ? 'er' : prod < 0.8 ? 'al' : null, glifo: prod < 0.8 ? 'alerta' : null },
-      { id: 'nivel', rotulo: t('cartao.nivel'), valor: t('cartao.deN', { a: p.nivel ?? 1, b: 5 }) },
+      { id: 'nivel', rotulo: t('cartao.nivel'), valor: t('cartao.deN', { a: p.nivel > 0 ? p.nivel : 1, b: 5 }) },
     ];
   }
   return [];
@@ -123,13 +129,19 @@ export function avisoPrincipal(p, agora = null) {
   const texto = temTexto(`aviso.${a.codigo}`) ? t(`aviso.${a.codigo}`, a.params) : temTexto(`cartao.aviso.${a.codigo}`) ? t(`cartao.aviso.${a.codigo}`) : t(`cartao.aviso.${g}`);
   const desde = Number.isFinite(a.desde) && Number.isFinite(agora) && agora > a.desde ? t('cartao.desde', { n: fmt.numero(Math.max(1, Math.floor((agora - a.desde) / MINUTO))) }) : null;
   const acao = a.acao && acoesAviso.has(a.acao) && temTexto(`acao.${a.acao}`) ? t(`acao.${a.acao}`) : null;
-  return { codigo: a.codigo, gravidade: g, glifo: GLIFO_AVISO[a.codigo] ?? 'alerta', texto, sub: desde, acao, alvo: a.acao ?? null, mais: l.length - 1 };
+  return { codigo: a.codigo, gravidade: g, glifo: glifoDoAviso(a.codigo), texto, sub: desde, acao, alvo: a.acao ?? null, mais: l.length - 1 };
 }
 
-/** Obra: nome da fase e o progresso (0 a 1). */
+/**
+ * Obra: nome da fase e o progresso (0 a 1). O progresso manda; sem ele, a fase em número (0 a 1) ou pelo nome
+ * ('estrutura'). Sem número nenhum (NaN, campo que falta), o canteiro: o cartão nunca quebra por um dado torto.
+ */
 export function faseDaObra(obra) {
-  const f = Math.min(1, Math.max(0, obra?.progresso ?? obra?.fase ?? 0));
-  return { nome: t(`cartao.obra.${FASES_OBRA.find(([ate]) => f < ate)[1]}`), frac: f };
+  const nomeFase = FASES_OBRA.find(([, nome]) => nome === obra?.fase)?.[1] ?? null;
+  const bruto = Number.isFinite(obra?.progresso) ? obra.progresso : Number.isFinite(obra?.fase) ? obra.fase : 0;
+  const f = Math.min(1, Math.max(0, bruto));
+  const nome = Number.isFinite(obra?.progresso) || !nomeFase ? FASES_OBRA.find(([ate]) => f < ate)[1] : nomeFase;
+  return { nome: t(`cartao.obra.${nome}`), frac: f };
 }
 
 // ------------------------------------------------------------------------------------------ componente

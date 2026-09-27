@@ -12,10 +12,12 @@ import * as THREE from 'three';
 import { alturaEm } from '../../comum/altura.js';
 import { pontoNoPoligono } from '../../comum/vetor.js';
 import { ETAPA } from '../../contratos/flags.js';
-import { PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, GLEBA_ENVELOPE } from '../../data/arcologia-plano.js';
 import {
-  criarTorre, atualizarArcologia, estadoDoCeu, materiais, geometriaDe, Malha, acab, PADRAO, tampa, arvore, hashF,
-  orientar, triangular, caixa, bloco, cilindro, NIVEL, malhasTorreLod1, contornoPodio,
+  PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, GLEBA_ENVELOPE, TORRE_LAMINA, suavizar,
+} from '../../data/arcologia-plano.js';
+import {
+  criarTorre, atualizarArcologia, estadoDoCeu, materiais, descartarMateriais, geometriaDe, Malha, acab, PADRAO, tampa, arvore, hashF,
+  orientar, triangular, caixa, NIVEL, malhasTorreLod1, PONTOS_TORRE,
 } from './torre.js';
 import { montarParte, deslocar } from './partes.js';
 import { montarReservatorio, materialAgua, quadroAgua, PASSEIO } from './lago.js';
@@ -161,12 +163,10 @@ export function montarPaisagem(plano, { chao, opaco, arvores, nivel = 1, fora = 
     nArv++;
     arvore(arvores, x, chao(x, z) + 0.15, z, { detalhe: 0, ...op });
   };
-  P.parques.forEach((poly, i) => {
-    deitar(opaco, poly, chao, 0.14, i % 2 ? KP.gramaEscura : KP.grama);
-    // caminho de 3 m em volta: a borda do parque lê como paisagismo (Burle Marx), não como um tapete colado no chão
-    const C = orientar(poly);
-    fita(opaco, [...C, C[0], C[1]], 3, chao, 0.18, orla ? KP.portuguesa : KP.calcada);
-  });
+  // parques com a borda macia (Chaikin): de cima, curvas de paisagismo (Burle Marx), não polígonos de maquete. Sem
+  // contorno pintado: quem marca o parque são os maciços de árvores e as clareiras
+  const parques = P.parques.map((poly) => orientar(suavizar(poly, { voltas: 2 })));
+  parques.forEach((poly, i) => deitar(opaco, poly, chao, 0.14, i % 2 ? KP.gramaEscura : KP.grama));
   for (const poly of P.pracas) deitar(opaco, poly, chao, 0.2, orla ? KP.portuguesa : KP.piso);
   for (const ps of P.passeios) {
     fita(opaco, ps.caminho, ps.largura, chao, 0.24, orla ? KP.portuguesa : KP.piso);
@@ -200,8 +200,7 @@ export function montarPaisagem(plano, { chao, opaco, arvores, nivel = 1, fora = 
     deitar(opaco, C, chao, 0.1, KP.gramaEscura);
   }
   // maciços de árvores dentro dos parques (grade larga e mexida; clareiras onde o hash não planta)
-  P.parques.forEach((poly, ip) => {
-    const C = orientar(poly);
+  parques.forEach((C, ip) => {
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (let i = 0; i < C.length; i += 2) {
       x0 = Math.min(x0, C[i]);
@@ -222,8 +221,7 @@ export function montarPaisagem(plano, { chao, opaco, arvores, nivel = 1, fora = 
     }
   });
   // árvores soltas nos parques (poucas, nas bordas: o miolo fica aberto)
-  P.parques.forEach((poly, ip) => {
-    const C = orientar(poly);
+  parques.forEach((C, ip) => {
     for (let i = 0; i < C.length; i += 2) {
       const j = (i + 2) % C.length;
       const l = Math.hypot(C[j] - C[i], C[j + 1] - C[i + 1]);
@@ -320,6 +318,25 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
   return { real, fantasma: fant, sombra, caixas, nivelAgua, cota, arvores: nArvores };
 }
 
+/** Caixa de seleção da Torre no espaço local dela: o pódio com a marquise, do chão ao mastro. */
+const CAIXA_TORRE = Object.freeze([
+  -PONTOS_TORRE.podio.x - 1, -3, PONTOS_TORRE.podio.z0 - TORRE_LAMINA.podio.marquise, PONTOS_TORRE.podio.x + 1, PONTOS_TORRE.topo,
+  PONTOS_TORRE.podio.z1 + 1,
+]);
+
+/** Folga em volta do envelope da gleba (passeio do reservatório, esplanada e a transição do aplainar), em metros. */
+const FOLGA_GLEBA = 60;
+
+/**
+ * true se algum retângulo sujo do terreno ([x0, z0, x1, z1]) toca o envelope da gleba com a folga: o resto da cidade
+ * mexe no chão o tempo todo (vias, lotes) e não pede refazer a Arcologia.
+ */
+export function tocaGleba(rets) {
+  if (!rets?.length) return false;
+  const [gx0, gz0, gx1, gz1] = GLEBA_ENVELOPE.caixa;
+  return rets.some(([x0, z0, x1, z1]) => x1 >= gx0 - FOLGA_GLEBA && x0 <= gx1 + FOLGA_GLEBA && z1 >= gz0 - FOLGA_GLEBA && z0 <= gz1 + FOLGA_GLEBA);
+}
+
 /** Um ponto certamente dentro de um polígono (o centro do maior triângulo da triangulação). */
 export function pontoDentro(poly) {
   const { pontos, indices } = triangular(poly);
@@ -348,12 +365,19 @@ function criarDominio(ctx) {
   mats.lista.add(matAgua);
   const matFantasma = materialFantasma(ctx.ganchos);
   let torre = null;
+  let torrePerfil = null; // perfil do LOD0 montado (a troca de qualidade refaz a Torre)
   let torreFantasma = null;
-  let partes = null; // { grupo, caixas, gemeo, volume }
+  let partes = null; // { grupo, caixas, volume, plano, arvores }
   let vitrine = null; // { modo, plano }
   let chave = '';
   let sujo = true;
   const estadoCeu = {};
+  // ponto dentro de cada reservatório (a triangulação não roda a cada montagem)
+  const dentroDe = new Map();
+  const pontoDoLago = (id, contorno) => {
+    if (!dentroDe.has(id)) dentroDe.set(id, pontoDentro(contorno));
+    return dentroDe.get(id);
+  };
 
   const limparPartes = () => {
     if (!partes) return;
@@ -373,7 +397,7 @@ function criarDominio(ctx) {
     const res = P.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
     // o reservatório só aparece de verdade quando o chão já foi cavado (o aplainar do jogo ou a cena)
     const cota = chao(P.torre.x, P.torre.z);
-    const [cx, cz] = pontoDentro(res.contorno);
+    const [cx, cz] = pontoDoLago(plano, res.contorno);
     const cavado = chao(cx, cz) < cota + res.nivel - 0.5;
     const lagoPronto = modo === 'plano' || estadoEtapa(esp, 'lago.e1') === ETAPA.PRONTA;
     const nova = `${modo}|${plano}|${torrePronta}|${lagoPronto}|${cavado}|${ctx.perfil?.id}|${T?.altura?.length ?? 0}`;
@@ -381,14 +405,19 @@ function criarDominio(ctx) {
     chave = nova;
     sujo = false;
 
-    // Torre: pronta (LOD0/LOD1) ou fantasma
+    // Torre: pronta (LOD0/LOD1) ou fantasma; o LOD0 é do perfil, então a troca de qualidade a refaz
+    if (torre && torrePerfil !== ctx.perfil?.id) {
+      torre.descartar();
+      torre = null;
+    }
     if (!torre) {
       torre = criarTorre(ctx);
+      torrePerfil = ctx.perfil?.id;
       raiz.add(torre.grupo);
     }
     const yT = chao(P.torre.x, P.torre.z);
     torre.posicionar(P.torre.x, yT, P.torre.z, P.torre.rot);
-    torre.grupo.visible = torrePronta;
+    torre.mostrar(torrePronta);
     if (torreFantasma) {
       raiz.remove(torreFantasma);
       torreFantasma.geometry.dispose();
@@ -440,12 +469,13 @@ function criarDominio(ctx) {
     partes = { grupo, caixas: m.caixas, volume, plano, arvores: m.arvores };
   }
 
-  const tmpC = new THREE.Vector3();
   const dom = {
     nome: 'arcologia',
     aplicar(d, esp) {
-      if (d.arcologia || d.tudo?.terreno || d.terreno?.length || !chave) sujo = true;
-      if (sujo) montar(esp);
+      // o chão refaz tudo só quando mexe na gleba; o sinal 'arcologia' (progresso das etapas a cada tique) só remonta
+      // quando a chave muda (etapa pronta, plano escolhido); a troca de qualidade refaz a Torre e as partes
+      if (d.tudo?.terreno || tocaGleba(d.terreno) || ctx.perfil?.id !== torrePerfil) sujo = true;
+      if (sujo || d.arcologia || d.tudo?.predios || !chave) montar(esp);
     },
     quadro(tMs, c) {
       estadoDoCeu(c, estadoCeu);
@@ -476,18 +506,20 @@ function criarDominio(ctx) {
       const o = raio.origem;
       const dv = raio.dir;
       let melhor = null;
-      const testar = (b, idx) => {
+      // raio contra uma caixa [x0, y0, z0, x1, y1, z1]; oo e dd são o raio no espaço da caixa (o mundo, ou o local da
+      // Torre, que só gira e desloca: a distância t é a mesma nos dois)
+      const testar = (b, idx, oo = o, dd = dv) => {
         let t0 = 0;
         let t1 = Infinity;
         for (let e = 0; e < 3; e++) {
           const lo = b[e];
           const hi = b[e + 3];
-          if (Math.abs(dv[e]) < 1e-9) {
-            if (o[e] < lo || o[e] > hi) return;
+          if (Math.abs(dd[e]) < 1e-9) {
+            if (oo[e] < lo || oo[e] > hi) return;
             continue;
           }
-          let a = (lo - o[e]) / dv[e];
-          let bb = (hi - o[e]) / dv[e];
+          let a = (lo - oo[e]) / dd[e];
+          let bb = (hi - oo[e]) / dd[e];
           if (a > bb) [a, bb] = [bb, a];
           t0 = Math.max(t0, a);
           t1 = Math.min(t1, bb);
@@ -496,10 +528,13 @@ function criarDominio(ctx) {
         if (!melhor || t0 < melhor.dist) melhor = { tipo: 'arcologia', ref: null, idx, dist: t0, ponto: [o[0] + dv[0] * t0, o[1] + dv[1] * t0, o[2] + dv[2] * t0] };
       };
       if (torre?.grupo) {
-        // a Torre: caixa local levada ao mundo (aproximada pela esfera de 30 m do eixo)
+        // a Torre: o raio levado ao espaço local dela (girada pelo plano) contra a caixa do pódio ao mastro
         const g = torre.grupo;
-        tmpC.set(0, 0, 0).applyMatrix4(g.matrixWorld);
-        testar([tmpC.x - 28, tmpC.y, tmpC.z - 28, tmpC.x + 28, tmpC.y + 350, tmpC.z + 28], PARTES_ORDEM.indexOf('torre'));
+        const c = Math.cos(g.rotation.y);
+        const sn = Math.sin(g.rotation.y);
+        const ox = o[0] - g.position.x;
+        const oz = o[2] - g.position.z;
+        testar(CAIXA_TORRE, PARTES_ORDEM.indexOf('torre'), [c * ox - sn * oz, o[1] - g.position.y, sn * ox + c * oz], [c * dv[0] - sn * dv[2], dv[1], sn * dv[0] + c * dv[2]]);
       }
       for (const c of partes?.caixas ?? []) testar(c.caixa, c.idx);
       return melhor;
@@ -508,8 +543,11 @@ function criarDominio(ctx) {
       torre?.descartar();
       limparPartes();
       if (torreFantasma) torreFantasma.geometry.dispose();
+      mats.lista.delete(matAgua);
       matAgua.dispose();
       matFantasma.dispose();
+      // os materiais compartilhados da Arcologia e o reflexo de reserva (PMREM) são deste render
+      descartarMateriais(ctx);
       ctx.cena.remove(raiz);
     },
   };
@@ -520,5 +558,3 @@ export function registrar(api) {
   api.registrarDominio('arcologia', criarDominio);
   api.registrarSelecionavel('arcologia', (raio, ctx) => ctx.dominio('arcologia')?.selecionar?.(raio) ?? null);
 }
-
-export { contornoPodio, bloco, cilindro };

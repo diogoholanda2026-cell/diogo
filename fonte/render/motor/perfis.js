@@ -44,7 +44,8 @@ export function sugerirPerfil({ gpu = '', movel = false } = {}) {
   const g = String(gpu);
   if (/SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Render/i.test(g)) return 'leve';
   if (/Mali-G6\d{1,2}\b.*\bMC2\b/i.test(g)) return 'media';
-  if (/Adreno \(TM\) 6\d\d|Adreno 6\d\d/i.test(g)) return 'media';
+  // Adreno 6xx e os 7xx de entrada (710, 720, 725 dos Snapdragon 7 Gen): a mesma faixa do Poco X7
+  if (/Adreno (\(TM\) )?(6\d\d|7[0-2]\d)\b/i.test(g)) return 'media';
   if (!movel) return 'ultra';
   if (/Mali-G(7[1-9]|[89]\d|\d{3,})|Immortalis|Adreno \(TM\) (7[3-9]\d|[89]\d\d)|Adreno (7[3-9]\d|[89]\d\d)|Apple/i.test(g)) return 'alta';
   return 'leve';

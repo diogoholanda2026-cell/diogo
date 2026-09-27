@@ -291,7 +291,9 @@
   font-weight: 600;
   color: var(--t2);
 }
-.hud-rotulo:hover { color: var(--t1); }
+@media (hover: hover) {
+  .hud-rotulo:hover { color: var(--t1); }
+}
 @media (min-width: 1200px) {
   .hud-pc { display: flex; }
 }

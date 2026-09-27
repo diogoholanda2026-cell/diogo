@@ -1,5 +1,6 @@
 // Cenas da vitrine da U1a (pele da interface): barra de cima em repouso e com popover, partida nova (saldo negativo,
-// pausado), cartão de prédio residencial e de serviço, tela Economia (orçamento e empréstimo) e a folha de glifos.
+// pausado), cartão de prédio residencial, de serviço e em obra, tela Economia (orçamento e empréstimo) e a folha de
+// glifos.
 //   node ferramentas/vitrine-ui.mjs <pasta> u1-barra,u1-cartao-res,u1-cartao-servico,u1-economia
 // A simulação falsa dá os números de uma cidade de 12 mil; o serviço é montado aqui sobre q.predio (a falsa só tem
 // zonas), com a categoria que o cartão usa para o glifo.
@@ -45,6 +46,23 @@ function servicoFalso(sim) {
       holding: null, cor: 0, via: { ref: 2, nome: 'Rua da Matriz' },
       avisos: [{ codigo: 'semTrabalhadores', gravidade: 'atencao', desde: tique - 240, acao: null }],
       faz: 'atende a saúde de quem mora a até 600 m',
+    };
+  };
+}
+
+// prédio em obra parado por falta de material: o ramo da obra do cartão (fase e barra no lugar dos números)
+const IDX_OBRA = 41;
+function obraFalsa(sim) {
+  const original = sim.q.predio;
+  sim.q.predio = (ref) => {
+    const p = original(ref);
+    if (ref !== REF(IDX_OBRA) || !p) return p;
+    const tique = sim.estado.tique;
+    return {
+      ...p, nome: 'Galeria Jardim da Baía', estado: 'obra', moradia: null, trabalho: null,
+      obra: { fase: 'estrutura', progresso: 0.42, fimTique: tique + 900, semMaterial: true },
+      avisos: [{ codigo: 'semMaterial', gravidade: 'atencao', desde: tique - 150, acao: null }],
+      faz: 'vai abrir lojas e empregos no bairro',
     };
   };
 }
@@ -121,7 +139,7 @@ function Primitivas() {
     h('div', { class: 'eco-colunas' },
       col(
         h(Secao, { titulo: 'Botões' },
-          h('div', { class: 'eco-acoes' },
+          h('div', { class: 'fileira' },
             h(Botao, { a: 'p.pri', rotulo: 'Construir', class: 'bt-pri' }, 'Construir'),
             h(Botao, { a: 'p.sec', rotulo: 'Detalhes', class: 'bt-sec' }, 'Detalhes'),
             h(Botao, { a: 'p.fan', rotulo: 'Ver camada', class: 'bt-fan' }, 'Ver camada'),
@@ -130,13 +148,13 @@ function Primitivas() {
             h(DoisToques, { a: 'p.dois', rotulo: 'Quitar tudo' }),
             h(Botao, { a: 'p.fraco', rotulo: 'Sem créditos', desligado: true, dica: 'Faltam 1.200', class: 'bt-sec' }, 'Sem créditos'))),
         h(Secao, { titulo: 'Escolhas' },
-          h('div', { class: 'eco-acoes' },
+          h('div', { class: 'fileira' },
             h(Segmentado, { a: 'p.seg', rotulo: 'Densidade', valor: seg, aoTrocar: setSeg, opcoes: [{ v: 'baixa', rotulo: 'Baixa' }, { v: 'media', rotulo: 'Média' }, { v: 'alta', rotulo: 'Alta', glifo: 'cadeado' }] }),
             h(Interruptor, { a: 'p.auto', rotulo: 'Auto', ligado: auto, aoTrocar: setAuto }),
             h(Quantidade, { a: 'p.lote', rotulo: 'Lote', valor: lote, aoMudar: setLote })),
           h(Deslizante, { a: 'p.desl', rotulo: 'Valor', valor, aoMudar: setValor, min: 1000, max: 50000, passo: 1000, botoes: true })),
         h(Secao, { titulo: 'Chips' },
-          h('div', { class: 'eco-acoes' },
+          h('div', { class: 'fileira' },
             h(Chip, { glifo: 'check', texto: 'Água', estado: 'ok' }),
             h(Chip, { glifo: 'alerta', texto: 'Esgoto', estado: 'al' }),
             h(Chip, { glifo: 'semEnergia', texto: 'Energia', estado: 'er' }),
@@ -293,6 +311,21 @@ export function registrar(registrarCenaVitrine) {
       ...conferirTexto('.cartao', /Faltam trabalhadores/, 'aviso do cartão')(),
     ],
   });
+  // cartão de prédio em obra: a fase e a barra no lugar dos números, o aviso de material em cima
+  registrarCenaVitrine('u1-cartao-obra', {
+    cenario: 'meio',
+    async preparar(ctx) {
+      contaFechada(ctx.sim);
+      obraFalsa(ctx.sim);
+      ctx.acionar('velocidade', 1);
+      selecionar(ctx, IDX_OBRA);
+      await ctx.esperar(60);
+    },
+    conferir: () => [
+      ...conferirTexto('.cartao-obra', /Em obra: estrutura/, 'fase da obra')(),
+      ...conferirTexto('.cartao', /falta material/, 'aviso da obra')(),
+    ],
+  });
   // tela Economia: orçamento com a linha da regra
   registrarCenaVitrine('u1-economia', {
     cenario: 'meio',
@@ -324,10 +357,10 @@ export function registrar(registrarCenaVitrine) {
       ...conferirTexto('.eco-medidores', /10\.000 de 50\.000/, 'disponível no ano')(),
     ],
   });
-  // folha de todos os glifos (conferência do estilo único), só no PC
+  // folha de todos os glifos (conferência do estilo único), só no PC grande (cabem os ~150 com o nome)
   registrarCenaVitrine('u1-glifos', {
     semUI: true,
-    tamanhos: ['1376x768'],
+    tamanhos: ['1920x1080'],
     preparar() {
       const nomes = nomesGlifos();
       const svg = (n) => {
@@ -337,7 +370,7 @@ export function registrar(registrarCenaVitrine) {
         return `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${cheios}${tracos}</svg>`;
       };
       const folha = document.createElement('div');
-      folha.style.cssText = 'position:fixed;inset:0;z-index:99;background:#10151c;color:#eef2f6;font:600 12px Inter,sans-serif;display:grid;grid-template-columns:repeat(12,1fr);gap:6px;padding:16px;align-content:start;overflow:hidden';
+      folha.style.cssText = 'position:fixed;inset:0;z-index:99;background:#10151c;color:#eef2f6;font:600 12px Inter,sans-serif;display:grid;grid-template-columns:repeat(16,1fr);gap:6px;padding:16px;align-content:start;overflow:hidden';
       folha.innerHTML = nomes.map((n) => `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:8px;background:rgba(255,255,255,.04)">${svg(n)}<span style="color:#a7b1bd;font-size:12px">${n}</span></div>`).join('') + `<div style="grid-column:span 2;align-self:center;color:#a7b1bd">${nomes.length} glifos</div>`;
       document.body.appendChild(folha);
     },

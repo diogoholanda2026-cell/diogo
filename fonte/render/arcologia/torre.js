@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { TORRE_LAMINA as TL, HELIPONTO_LOCAL } from '../../data/arcologia-plano.js';
 import { direcaoDoSol } from '../depuracao.js';
+import { GANCHOS_COMUNS } from '../materiais/biblioteca.js';
 
 // ================================================================================================ kit de malhas
 
@@ -30,7 +31,7 @@ export function corLinear(hex) {
 /** Padrões do material opaco (desenhados no shader pelas coordenadas em metros). */
 export const PADRAO = Object.freeze({ nenhum: 0, pedra: 1, piso: 2, grama: 3, agua: 4, portuguesa: 5, solar: 6, folha: 7, metal: 8 });
 /** Classes de luz do material opaco. */
-export const LUZ = Object.freeze({ nenhuma: 0, aro: 1, obstaculo: 2, forro: 3, piscina: 4, coroa: 5, janela: 6, esfera: 7, arvoreLuz: 8 });
+export const LUZ = Object.freeze({ nenhuma: 0, aro: 1, obstaculo: 2, forro: 3, piscina: 4, coroa: 5, janela: 6, esfera: 7, arvoreLuz: 8, reflexo: 9 });
 
 /**
  * Acabamento do material opaco: [r, g, b, pacote] com rugosidade e metal em 4 bits, a classe de luz e o padrão.
@@ -285,15 +286,21 @@ export function cilindro(m, cx, cz, y0, y1, r0, r1, seg, k, { topo = true, base 
     poly0.push(Math.cos(a), Math.sin(a));
   }
   const inclina = (r0 - r1) / Math.max(1e-6, y1 - y0);
+  const li = Math.hypot(1, inclina);
   for (let s = 0; s < seg; s++) {
     const c0 = poly0[2 * s], s0 = poly0[2 * s + 1];
     const c1 = poly0[2 * ((s + 1) % seg)], s1 = poly0[2 * ((s + 1) % seg) + 1];
-    const cm = (c0 + c1) / 2, sm = (s0 + s1) / 2;
-    const l = Math.hypot(cm, sm, inclina) || 1;
-    const nrm = [cm / l, inclina / l, sm / l];
     const u0 = (s / seg) * Math.PI * 2 * r0;
     const u1 = ((s + 1) / seg) * Math.PI * 2 * r0;
-    m.quad([cx + c0 * r0, y0, cz + s0 * r0], [cx + c1 * r0, y0, cz + s1 * r0], [cx + c1 * r1, y1, cz + s1 * r1], [cx + c0 * r1, y1, cz + s0 * r1], nrm, [u0, y0], [u1, y0], [u1, y1], [u0, y1], k);
+    // normal radial por vértice: o sombreado é de peça redonda, não de prisma facetado
+    const n0 = [c0 / li, inclina / li, s0 / li];
+    const n1 = [c1 / li, inclina / li, s1 / li];
+    const a = m.v(cx + c0 * r0, y0, cz + s0 * r0, ...n0, u0, y0, k);
+    const b = m.v(cx + c1 * r0, y0, cz + s1 * r0, ...n1, u1, y0, k);
+    const c = m.v(cx + c1 * r1, y1, cz + s1 * r1, ...n1, u1, y1, k);
+    const d = m.v(cx + c0 * r1, y1, cz + s0 * r1, ...n0, u0, y1, k);
+    m.tri(a, b, c);
+    m.tri(a, c, d);
   }
   const circ = (r) => poly0.map((v, i) => (i % 2 ? cz : cx) + v * r);
   if (topo && r1 > 0) tampa(m, circ(r1), y1, k, true);
@@ -324,27 +331,41 @@ export function torno(m, cx, cz, perfil, seg, k, { ex = 1, ez = 1, rot = 0, fech
     const lz = Math.sin(a) * r * ez;
     return [cx + cr * lx + sr * lz, y, cz - sr * lx + cr * lz];
   };
+  // inclinação do perfil em cada ponto (média das duas arestas vizinhas): [peso radial, y] da normal
+  const incl = perfil.map((_, j) => {
+    const [ra, ya] = perfil[Math.max(0, j - 1)];
+    const [rb, yb] = perfil[Math.min(perfil.length - 1, j + 1)];
+    const l = Math.hypot(rb - ra, yb - ya) || 1;
+    return [(yb - ya) / l, -(rb - ra) / l];
+  });
+  // normal macia por vértice (radial da planta esticada no ângulo do vértice, inclinada pelo perfil): a casca da Vida,
+  // a esfera da Biblioteca e as Supertrees leem curvas, não como poliedros de maquete
+  const normal = (j, a) => {
+    let nx = Math.cos(a) / ex;
+    let nz = Math.sin(a) / ez;
+    const nl = Math.hypot(nx, nz) || 1;
+    nx = (nx / nl) * incl[j][0];
+    nz = (nz / nl) * incl[j][0];
+    return [cr * nx + sr * nz, incl[j][1], -sr * nx + cr * nz];
+  };
   for (let j = 0; j + 1 < perfil.length; j++) {
     const [r0, y0] = perfil[j];
     const [r1, y1] = perfil[j + 1];
-    const dr = r1 - r0;
-    const dy = y1 - y0;
-    const l = Math.hypot(dr, dy) || 1;
     for (let s = 0; s < seg; s++) {
       const a = (s / seg) * Math.PI * 2;
       const b = ((s + 1) / seg) * Math.PI * 2;
-      const am = (a + b) / 2;
-      // normal radial da planta esticada, inclinada pelo perfil
-      let nx = Math.cos(am) / ex;
-      let nz = Math.sin(am) / ez;
-      const nl = Math.hypot(nx, nz) || 1;
-      nx = (nx / nl) * (dy / l);
-      nz = (nz / nl) * (dy / l);
-      const ny = -dr / l;
-      const n = [cr * nx + sr * nz, ny, -sr * nx + cr * nz];
       const u0 = a * Math.max(r0, r1);
       const u1 = b * Math.max(r0, r1);
-      m.quad(pt(r0, y0, a), pt(r0, y0, b), pt(r1, y1, b), pt(r1, y1, a), n, [u0, y0], [u1, y0], [u1, y1], [u0, y1], k);
+      const v = (r, y, t, jj, u) => {
+        const p = pt(r, y, t);
+        return m.v(p[0], p[1], p[2], ...normal(jj, t), u, y, k);
+      };
+      const i0 = v(r0, y0, a, j, u0);
+      const i1 = v(r0, y0, b, j, u1);
+      const i2 = v(r1, y1, b, j + 1, u1);
+      const i3 = v(r1, y1, a, j + 1, u0);
+      m.tri(i0, i1, i2);
+      m.tri(i0, i2, i3);
     }
   }
   if (fecharTopo) {
@@ -465,7 +486,8 @@ const K = {
   forro: acab('#d6cdbd', { rugo: 0.7, luz: LUZ.forro }),
   forroMarquise: acab('#cfc5b4', { rugo: 0.7, luz: LUZ.forro }),
   aro: acab('#e8dcc4', { rugo: 0.3, metal: 0.4, luz: LUZ.aro }),
-  forroHeli: acab('#3a3936', { rugo: 0.4, metal: 0.7, padrao: PADRAO.metal }),
+  // a face de baixo do heliponto em alumínio champanhe, acesa à noite pela luz da lanterna (o Edge visto da rua)
+  forroHeli: acab('#a39a8a', { rugo: 0.4, metal: 0.7, luz: LUZ.reflexo, padrao: PADRAO.metal }),
   obstaculo: acab('#7a1a14', { rugo: 0.4, luz: LUZ.obstaculo }),
   piscina: acab('#1f3d45', { rugo: 0.05, metal: 0.2, luz: LUZ.piscina, padrao: PADRAO.agua }),
   jardim: acab('#3d4a2c', { rugo: 0.9, padrao: PADRAO.folha }),
@@ -1150,27 +1172,36 @@ export function malhasTorreLod1({ comEsplanada = false } = {}) {
   prisma(opaco, contornoPodio(0.25), PD.altura - 0.4, PD.altura, { paredes: K.bronze, topo: K.piso });
   bloco(opaco, -PD.marquiseLargura / 2, PD.marquiseCota - PD.marquiseEspessura, PODIO_Z0 - PD.marquise, PD.marquiseLargura / 2, PD.marquiseCota, PODIO_Z0, K.bronze, { base: true });
   bloco(opaco, -15, PD.altura - 0.3, ZF + 3, 15, PD.altura + 0.02, PODIO_Z1 - 1.5, K.piscina, { lados: K.travertino });
-  // terraços: faixa verde e poucas copas
+  // terraços: só a faixa verde baixa atrás do parapeito. De longe, copas soltas no alto de cada lâmina liam como
+  // enfeite de bolo; o jardim aparece inteiro de perto, no LOD0
   for (const t of [{ y: TOPO[2], z1: ZF }, { y: TOPO[1], z1: Z2 }, { y: TOPO[0], z1: Z1 }]) {
-    bloco(opaco, -X + ENT + 0.5, t.y, t.z1 - 1.9, X - ENT - 0.5, t.y + 1.7, t.z1 - 0.5, K.jardim);
-    for (let a = 0; a < 4; a++) arvore(opaco, -12 + a * 8, t.y + 1.2, t.z1 - 1.2, { altura: 4.5, raio: 2.2, semente: 90 + a, detalhe: 0 });
+    bloco(opaco, -X + ENT + 0.5, t.y, t.z1 - 1.9, X - ENT - 0.5, t.y + 1.1, t.z1 - 0.5, K.jardim);
   }
-  // colunas de travertino no recuo dos andares de vento (de longe, o ritmo vertical atravessa a faixa clara)
+  // colunas redondas de travertino no recuo dos andares de vento (de longe, o ritmo vertical atravessa a faixa clara)
   for (const vv of [VENTO1, VENTO2]) {
     const y0 = vv.base;
     const y1 = vv.base + vv.altura - LAJE;
     const meio = X - vv.recuo / 2;
-    for (const sx of [-1, 1]) for (const z of [-19.5, -10.5, -1.5, 7.5]) bloco(opaco, sx * meio - 0.5, y0, z - 0.5, sx * meio + 0.5, y1, z + 0.5, K.travertino, { topo: false });
-    for (const x of [-12, -6, 6, 12]) bloco(opaco, x - 0.5, y0, Z0 + vv.recuo / 2 - 0.5, x + 0.5, y1, Z0 + vv.recuo / 2 + 0.5, K.travertino, { topo: false });
-    for (const x of [-12, -6, 0, 6, 12]) bloco(opaco, x - 0.5, y0, Z2 - vv.recuo / 2 - 0.5, x + 0.5, y1, Z2 - vv.recuo / 2 + 0.5, K.travertino, { topo: false });
+    const col = (x, z) => cilindro(opaco, x, z, y0, y1, 0.55, 0.55, 8, K.travertino, { topo: false });
+    for (const sx of [-1, 1]) for (const z of [-19.5, -10.5, -1.5, 7.5]) col(sx * meio, z);
+    for (const x of [-12, -6, 6, 12]) col(x, Z0 + vv.recuo / 2);
+    for (const x of [-12, -6, 0, 6, 12]) col(x, Z2 - vv.recuo / 2);
   }
-  // heliponto em proa e mastro
-  prisma(opaco, contornoHeliponto(0, 8), HELI.y0, HELI.y1 - 0.35, { paredes: K.metalEscuro, base: K.metalEscuro });
-  prisma(opaco, contornoHeliponto(0.05, 8), HELI.y1 - 0.35, HELI.y1, { paredes: K.champanhe, topo: K.laca });
-  faixaContorno(opaco, contornoHeliponto(0, 8), HELI.y1 + 0.02, 0.5, 0.4, K.aro);
-  anelPlano(opaco, HELI.x, HELI.y1 + 0.02, HELI.z, HELI.r * 0.62, HELI.r * 0.62 + 0.5, 20, K.ouro);
-  cilindro(opaco, MASTRO.x, MASTRO.z, COROA.yVidro, MASTRO.topo - 1, MASTRO.r, MASTRO.r * 0.45, 4, K.champanhe);
-  cilindro(opaco, MASTRO.x, MASTRO.z, MASTRO.topo - 1, MASTRO.topo, 0.5, 0.35, 4, K.obstaculo);
+  // parapeitos de vidro dos terraços (a linha fina que fecha cada lâmina contra o céu)
+  for (const t of [{ y: TOPO[2], z0: Z2, z1: ZF }, { y: TOPO[1], z0: Z1, z1: Z2 }, { y: TOPO[0], z0: COROA.z1, z1: Z1 }]) {
+    const xp = X - ENT - 0.3;
+    bloco(vidro, -xp, t.y, t.z1 - 0.35, xp, t.y + TL.parapeito, t.z1 - 0.3, V.parapeito, { topo: false });
+    for (const sx of [-1, 1]) bloco(vidro, sx * (X - 0.35) - 0.03, t.y, t.z0 + 0.3, sx * (X - 0.35) + 0.03, t.y + TL.parapeito, t.z1 - 1.8, V.parapeito, { topo: false });
+  }
+  // heliponto em proa (a curva é silhueta contra o céu: segmentos como no LOD0 da Média) e mastro
+  const segH = 20;
+  prisma(opaco, contornoHeliponto(0, segH), HELI.y0, HELI.y1 - 0.35, { paredes: K.metalEscuro });
+  prisma(opaco, contornoHeliponto(0.05, segH), HELI.y1 - 0.35, HELI.y1, { paredes: K.coroa, topo: K.laca });
+  cunha(opaco, contornoHeliponto(0, segH), HELI.y0, COROA.z1, COROA.z1 + TL.heliponto.balanco, 3.2, K.forroHeli);
+  faixaContorno(opaco, contornoHeliponto(0, segH), HELI.y1 + 0.02, 0.5, 0.4, K.aro);
+  anelPlano(opaco, HELI.x, HELI.y1 + 0.02, HELI.z, HELI.r * 0.62, HELI.r * 0.62 + 0.5, 24, K.ouro);
+  cilindro(opaco, MASTRO.x, MASTRO.z, COROA.yVidro, MASTRO.topo - 1, MASTRO.r, MASTRO.r * 0.45, 6, K.champanhe);
+  cilindro(opaco, MASTRO.x, MASTRO.z, MASTRO.topo - 1, MASTRO.topo, 0.5, 0.35, 6, K.obstaculo);
   if (comEsplanada) esplanada(opaco, 0);
   return { vidro, opaco };
 }
@@ -1229,10 +1260,10 @@ export const UNIFORMES = {
 
 /**
  * Luz artificial da Arcologia à noite, em unidades do céu. A exposição da R1a chega a 8 à noite (e a ~2,3 às 17h30):
- * uma janela de 0,15 vira ~1,2 na tela, quente e sem estourar no AgX; a lanterna e o aro do heliponto passam de 1 e
+ * uma janela de 0,2 vira ~1,6 na tela, quente e sem estourar no AgX; a lanterna e o aro do heliponto passam de 1 e
  * acendem o bloom.
  */
-export const LUZ_NOITE = Object.freeze({ janela: 0.15, forro: 0.3, lanterna: 0.5, aro: 1.2, exposicaoNoite: 8 });
+export const LUZ_NOITE = Object.freeze({ janela: 0.2, forro: 0.3, lanterna: 0.38, aro: 1.2, exposicaoNoite: 8 });
 
 const GLSL_COMUM = /* glsl */ `
 uniform float uNoite;
@@ -1249,6 +1280,22 @@ float gH1( vec2 p ) {
   vec3 p3 = fract( vec3( p.xyx ) * 0.1031 );
   p3 += dot( p3, p3.yzx + 33.33 );
   return fract( ( p3.x + p3.y ) * p3.z );
+}
+// ruído de valor interpolado: manchas macias (grama, folhagem), nunca a grade de quadrados do hash por célula
+float gRuido( vec2 p ) {
+  vec2 i = floor( p );
+  vec2 f = fract( p );
+  f = f * f * ( 3.0 - 2.0 * f );
+  float a = gH1( i );
+  float b = gH1( i + vec2( 1.0, 0.0 ) );
+  float c = gH1( i + vec2( 0.0, 1.0 ) );
+  float d = gH1( i + vec2( 1.0, 1.0 ) );
+  return mix( mix( a, b, f.x ), mix( c, d, f.x ), f.y );
+}
+// o mesmo, filtrado: vira a média quando a célula cabe em poucos pixels (sem cintilar de longe)
+float gRuidoF( vec2 p ) {
+  float fw = max( fwidth( p.x ), fwidth( p.y ) );
+  return mix( gRuido( p ), 0.5, smoothstep( 0.3, 0.8, fw ) );
 }
 // 1 perto da linha da grade (largura w em fração da célula), filtrado pela derivada: sem serrilhado de longe
 float gLinha( float x, float w ) {
@@ -1281,12 +1328,17 @@ const FRAG_VIDRO = /* glsl */ `
 vec3 fAlb; vec3 fTint; float fMet; float fRug; vec3 fEmi; vec2 fInc;
 float fCosV = 1.0; // |cos| entre a normal e a vista (o main escreve antes de gFachada)
 uniform float uLinhas;
-// fração de janelas acesas pela hora (escritório: cheio de dia, cai depois das 18h)
+// fração de janelas acesas pela hora (escritório: cheio de dia, cai depois das 18h; às 21h, uma em cinco)
 float gAcesas( float h ) {
   float f = 0.82;
-  if ( h >= 18.0 ) f = 0.82 - 0.67 * pow( clamp( ( h - 18.0 ) / 5.0, 0.0, 1.0 ), 0.7 );
+  if ( h >= 18.0 ) f = 0.82 - 0.72 * pow( clamp( ( h - 18.0 ) / 4.0, 0.0, 1.0 ), 0.6 );
   else if ( h < 6.5 ) f = mix( 0.12, 0.82, smoothstep( 5.0, 6.5, h ) );
   return f;
+}
+// fração acesa da moradia pela hora: sobe ao anoitecer, cheia das 20h às 22h, cai até a madrugada
+float gAcesasCasa( float h ) {
+  float f = 0.06 + 0.28 * smoothstep( 17.5, 20.0, h ) * ( 1.0 - smoothstep( 22.0, 24.0, h ) );
+  return f + 0.12 * smoothstep( 4.5, 6.0, h ) * ( 1.0 - smoothstep( 6.5, 7.5, h ) );
 }
 // base do andar da Torre (16, 169 e 238) e pé-direito
 float gBaseTorre( float y ) { return y < 163.0 ? 16.0 : ( y < 232.0 ? 169.0 : 238.0 ); }
@@ -1296,13 +1348,13 @@ void gAletasLod1( float u ) {
   float tg = sqrt( max( 0.0, 1.0 - fCosV * fCosV ) ) / max( fCosV, 0.05 );
   float w = vC.z > 0.5 ? min( 0.95, ( ${AL_GLSL.esp} + ${AL_GLSL.fundo} * tg ) / 1.5 ) : min( 0.9, ( ${AL_GLSL.mEsp} + ${AL_GLSL.mFundo} * tg ) / 1.5 ) * uLinhas;
   float al = gLinha( u / 1.5, w );
-  fTint = mix( fTint, ${AL_GLSL.cor} * mix( 1.0, 0.2, uNoite ), al );
+  fTint = mix( fTint, ${AL_GLSL.cor} * mix( 1.0, 0.12, uNoite ), al );
   fMet = mix( fMet, 0.8, al );
   fRug = mix( fRug, 0.45, al );
   fAlb = mix( fAlb, vec3( 0.08, 0.07, 0.055 ) * mix( 1.0, 0.3, uNoite ), al );
   fEmi *= 1.0 - al;
 }
-void gVidroPainel( float col, float fl, float fv, float sem, float esp ) {
+void gVidroPainel( float col, float fl, float fv, float sem, float esp, float casa ) {
   // de longe (um pixel cobre mais de meio painel) a variação por painel vira a média: nem ruído, nem moiré, nem o ar
   // de tijolo que a grade de andares dava a 1 km
   float longe = smoothstep( 0.35, 1.1, fwidth( vUvM.x ) );
@@ -1323,20 +1375,32 @@ void gVidroPainel( float col, float fl, float fv, float sem, float esp ) {
   fRug = mix( fRug, 0.14, esp );
   fAlb = mix( fAlb, vec3( 0.045, 0.045, 0.045 ), esp );
   fInc = ( vec2( gH1( vec2( col, fl ) * 3.1 + 1.3 ), gH1( vec2( fl, col ) * 2.3 + 7.1 ) ) - 0.5 ) * 0.012 * ( 1.0 - longe );
-  // noite: o apartamento (6 painéis, 9 m) está ocupado ou não; nos ocupados, cada cômodo (2 painéis, 3 m) acende pela
-  // agenda, com a sua força e o seu tom (2.700 a 3.500 K), luz mais forte perto do forro. De perto lê janela a janela,
-  // não em blocos; de longe, o brilho médio da fachada
+  // noite: a unidade (6 painéis, 9 m) está ocupada ou não; nas ocupadas, cada cômodo (2 painéis, 3 m) acende pela
+  // agenda, com força e tom próprios (2.700 a 4.000 K, um em dez com luz fria de tela), mais forte perto do forro; os
+  // cômodos apagados das unidades ocupadas guardam o brilho fraco do fundo (corredor). Força muito variada e o vidro
+  // apagado escuro: lê janela a janela, nunca como tijolo. De longe, o brilho médio da fachada
   float ap = floor( col / 6.0 );
   float un = floor( col / 2.0 );
-  float fr = gAcesas( uHora );
-  float ocupado = step( gH1( vec2( ap, fl ) + sem * 31.0 ), 0.65 );
-  float comodo = step( gH1( vec2( un * 1.7, fl * 0.3 ) + sem * 13.0 ), fr / 0.65 );
-  float acesa = ocupado * comodo * step( 0.06, hp ) * ( 0.45 + 0.55 * gH1( vec2( un * 1.3, fl * 0.7 ) + 9.1 ) );
-  acesa = mix( acesa, fr * 0.7, longe ) * ( 1.0 - esp );
-  float hu = mix( gH1( vec2( fl, ap ) + 3.7 ), 0.5, longe );
-  vec3 corLuz = mix( vec3( 1.0, 0.5, 0.2 ), vec3( 1.0, 0.7, 0.44 ), hu );
+  float fr = casa > 0.5 ? gAcesasCasa( uHora ) : gAcesas( uHora );
+  float ocupado = step( gH1( vec2( ap, fl ) + sem * 31.0 ), 0.6 );
+  float comodo = step( gH1( vec2( un * 1.7, fl * 0.3 ) + sem * 13.0 ), fr / 0.6 );
+  float forca = gH1( vec2( un * 1.3, fl * 0.7 ) + 9.1 );
+  // três em quatro cômodos acesos com a luz cheia, um com abajur; a média de longe fica abaixo da média linear (pontos
+  // claros sobre o escuro leem mais escuros que a mesma luz espalhada)
+  float acesa = ocupado * comodo * step( 0.06, hp ) * ( forca < 0.25 ? 0.14 : 0.55 + 0.45 * forca );
+  // o fundo aceso das unidades ocupadas fica no limite do visível: com 0,03 o vidro apagado saía marrom (mediana da
+  // prancha das 21h em 41, 27, 14 de sRGB) e a fachada lia como parede de tijolo com janelas
+  acesa = max( acesa, ocupado * 0.008 * gH1( vec2( un, fl ) * 1.9 + 4.3 ) );
+  acesa = mix( acesa, fr * 0.2, longe ) * ( 1.0 - esp );
+  // de longe, a média de luz quente com vidro escuro: menos saturada que a lâmpada (o laranja chapado lia como tijolo)
+  float hu = mix( gH1( vec2( fl, ap ) + 3.7 ), 0.85, longe );
+  // cor saturada na entrada: o AgX dessatura o que é claro, e a janela ainda sai âmbar na tela, não bege
+  vec3 corLuz = mix( vec3( 1.0, 0.4, 0.1 ), vec3( 1.0, 0.64, 0.32 ), hu );
+  corLuz = mix( corLuz, vec3( 0.72, 0.84, 1.0 ), step( 0.9, gH1( vec2( un * 2.3, fl * 1.1 ) + 1.7 ) ) * ( 1.0 - longe ) );
   float teto = mix( 0.45 + 0.55 * smoothstep( 0.15, 0.78, fv ), 0.8, longe );
   fEmi = corLuz * acesa * uNoite * G_LUZ_JANELA * teto * ( 1.0 - emPers * 0.45 );
+  // à noite o vidro apagado quase não reflete: o interior escuro vence o reflexo do céu da cidade
+  fTint *= mix( 1.0, 0.4, uNoite );
 }
 void gFachada() {
   float tipo = floor( vC.x + 0.5 );
@@ -1353,14 +1417,14 @@ void gFachada() {
     float fv = fract( yy );
     float col = floor( u / 1.5 );
     float esp = step( 0.8, fv );
-    gVidroPainel( col, fl, fv, sem, esp );
+    gVidroPainel( col, fl, fv, sem, esp, 0.0 );
     if ( tipo > 11.5 ) gAletasLod1( u );
   } else if ( tipo < 1.5 ) {
     // costura: vidro mais escuro, painéis de 0,75
     float yy = ( y - gBaseTorre( y ) ) / 4.2;
     float col = floor( u / 0.75 );
     float fv = fract( yy );
-    gVidroPainel( col, floor( yy ), fv, sem, step( 0.82, fv ) );
+    gVidroPainel( col, floor( yy ), fv, sem, step( 0.82, fv ), 0.0 );
     fTint *= 0.72;
     fMet = min( 1.0, fMet + 0.12 );
     // à noite a costura é a espinha acesa da face lisa, do pódio à coroa (Lotte World Tower): uma linha vertical
@@ -1401,6 +1465,8 @@ void gFachada() {
     fRug = 0.08;
     fAlb = vec3( 0.15, 0.13, 0.1 );
     fEmi = mix( vec3( 1.0, 0.52, 0.18 ), vec3( 1.0, 0.86, 0.62 ), t ) * mix( 0.012, G_LUZ_LANTERNA, uNoite ) * ( 0.65 + 0.35 * t );
+    // fora da coroa (a esfera da Biblioteca) o mesmo vidro brilha baixo: um globo morno, não um sol
+    fEmi *= mix( 0.22, 1.0, step( 290.0, y ) );
     float m = gLinha( u / 0.75, 0.12 );
     fTint = mix( fTint, vec3( 0.26, 0.17, 0.09 ), m );
     fMet = mix( fMet, 1.0, m );
@@ -1425,7 +1491,7 @@ void gFachada() {
     float fv = fract( yy );
     float col = floor( u / larg );
     float esp = step( 0.8, fv );
-    gVidroPainel( col, fl, fv, sem, esp );
+    gVidroPainel( col, fl, fv, sem, esp, step( 6.5, tipo ) * step( tipo, 7.5 ) );
     if ( tipo < 6.5 ) {
       // escritório com moldura de pedra de dois pavimentos (Bloomberg): pilares a cada 3 m, faixa a cada 2 andares
       float pedra = max( gLinha( u / 3.0, 0.16 ), gLinha( y / ( 2.0 * pe ), 0.1 ) );
@@ -1443,8 +1509,8 @@ void gFachada() {
       fRug = mix( fRug, 0.75, max( laje, parede ) );
       fAlb = mix( fAlb, vec3( 0.52, 0.49, 0.44 ), laje );
       fAlb = mix( fAlb, vec3( 0.40, 0.37, 0.33 ), parede * 0.8 * ( 1.0 - laje ) );
-      float acesa = step( gH1( vec2( col, fl ) + 5.3 ), 0.55 ) * ( 1.0 - laje ) * ( 1.0 - parede );
-      fEmi = vec3( 1.0, 0.7, 0.4 ) * acesa * uNoite * G_LUZ_JANELA;
+      // à noite as janelas da moradia seguem a agenda da casa (gVidroPainel); laje e parede cega apagam
+      fEmi *= ( 1.0 - laje ) * ( 1.0 - parede );
     } else if ( tipo < 8.5 ) {
       // casca de vidro em malha de losangos (Jewel, Gardens by the Bay)
       float m = max( gLinha( ( u + y ) / 4.2, 0.06 ), gLinha( ( u - y ) / 4.2, 0.06 ) );
@@ -1503,37 +1569,42 @@ void gOpaco() {
     float j = max( gLinha( p.x / 1.2, 0.03 ), gLinha( p.y / 1.2, 0.03 ) );
     oCor *= ( 0.92 + 0.14 * gH1( floor( p / 1.2 ) ) ) * ( 1.0 - 0.15 * j );
   } else if ( oPad > 2.5 && oPad < 3.5 ) {
-    float n = gH1( floor( p / 6.0 ) ) * 0.5 + gH1( floor( p / 1.7 ) + 3.1 ) * 0.3 + gH1( floor( p / 23.0 ) + 9.7 ) * 0.2;
-    oCor *= 0.8 + 0.4 * n;
+    // gramado: manchas macias em três escalas (23, 6 e 1,7 m); o hash por célula dava quadrados de 6 m (maquete)
+    float n = gRuidoF( p / 6.0 ) * 0.5 + gRuidoF( p / 1.7 + 3.1 ) * 0.3 + gRuidoF( p / 23.0 + 9.7 ) * 0.2;
+    oCor *= 0.74 + 0.52 * n;
   } else if ( oPad > 3.5 && oPad < 4.5 ) {
     oCor *= 1.0;
   } else if ( oPad > 4.5 && oPad < 5.5 ) {
     // ondas da pedra portuguesa (Copacabana, Aterro do Flamengo): preto e branco em faixas onduladas
-    float o = sin( ( p.y + 3.2 * sin( p.x / 4.6 ) ) * 0.62 );
+    // de longe (a fase anda mais de meia onda por pixel) o desenho vira o cinza médio: sem ziguezague de serrilhado
+    float fase = ( p.y + 3.2 * sin( p.x / 4.6 ) ) * 0.62;
+    float o = sin( fase );
     float fw = fwidth( o ) + 1e-3;
-    float b = smoothstep( -fw, fw, o );
-    oCor = mix( vec3( 0.045, 0.043, 0.04 ), vec3( 0.56, 0.53, 0.48 ), b );
+    float b = mix( smoothstep( -fw, fw, o ), 0.5, smoothstep( 0.7, 1.8, fwidth( fase ) ) );
+    oCor = mix( vec3( 0.07, 0.066, 0.06 ), vec3( 0.5, 0.47, 0.42 ), b );
   } else if ( oPad > 5.5 && oPad < 6.5 ) {
     float j = max( gLinha( p.x / 2.0, 0.05 ), gLinha( p.y / 1.0, 0.05 ) );
-    oCor = mix( oCor, vec3( 0.45, 0.45, 0.46 ), j );
-    oMet = mix( oMet, 1.0, j );
+    oCor = mix( oCor, vec3( 0.2, 0.2, 0.21 ), j );
+    oMet = mix( oMet, 0.8, j );
   } else if ( oPad > 6.5 && oPad < 7.5 ) {
-    oCor *= 0.85 + 0.3 * gH1( floor( p * 1.3 ) );
+    oCor *= 0.8 + 0.4 * gRuidoF( p * 1.3 );
   } else if ( oPad > 7.5 ) {
     oRug = clamp( oRug + ( gH1( floor( p * vec2( 0.5, 3.0 ) ) ) - 0.5 ) * 0.12, 0.05, 1.0 );
     // à noite (exposição de 8) o bronze claro pegava o luar como espelho e a torre inteira lia bege: o metal escurece,
     // e ficam as janelas, a costura, os andares de vento e a lanterna
-    oCor *= mix( 1.0, 0.2, uNoite );
+    oCor *= mix( 1.0, 0.14, uNoite );
   }
   oEmi = vec3( 0.0 );
   if ( cls > 0.5 && cls < 1.5 ) oEmi = vec3( 1.0, 0.93, 0.8 ) * mix( 0.04, G_LUZ_ARO, uNoite );
   else if ( cls > 1.5 && cls < 2.5 ) oEmi = vec3( 1.0, 0.06, 0.03 ) * ( 0.4 + 2.5 * uNoite ) * step( 0.5, fract( uTempo * 0.66 ) );
   else if ( cls > 2.5 && cls < 3.5 ) oEmi = vec3( 1.0, 0.87, 0.68 ) * mix( 0.02, G_LUZ_FORRO, uNoite );
   else if ( cls > 3.5 && cls < 4.5 ) oEmi = vec3( 0.25, 0.62, 0.72 ) * uNoite * 0.2;
-  else if ( cls > 4.5 && cls < 5.5 ) oEmi = vec3( 1.0, 0.8, 0.55 ) * uNoite * 0.35 * smoothstep( 300.0, 330.0, vUvM.y );
+  else if ( cls > 4.5 && cls < 5.5 ) oEmi = vec3( 1.0, 0.74, 0.45 ) * uNoite * 0.2 * smoothstep( 300.0, 330.0, vUvM.y );
   else if ( cls > 5.5 && cls < 6.5 ) oEmi = vec3( 1.0, 0.76, 0.48 ) * uNoite * G_LUZ_JANELA * step( 0.45, gH1( floor( p / vec2( 1.5, 3.2 ) ) ) );
   else if ( cls > 6.5 && cls < 7.5 ) oEmi = vec3( 1.0, 0.88, 0.7 ) * mix( 0.01, 0.45, uNoite );
   else if ( cls > 7.5 && cls < 8.5 ) oEmi = mix( vec3( 1.0, 0.72, 0.4 ), vec3( 0.55, 0.62, 1.0 ), gH1( floor( p / 9.0 ) ) ) * uNoite * 0.3;
+  // reflexo: metal que recebe a luz da lanterna logo abaixo (a face de baixo do heliponto), um brilho morno e fraco
+  else if ( cls > 8.5 && cls < 9.5 ) oEmi = vec3( 1.0, 0.72, 0.42 ) * uNoite * 0.014;
 }
 `;
 
@@ -1566,7 +1637,7 @@ export function materialVidro(ganchos, { linhas = 0, corte = 1e6 } = {}) {
   };
   mat.customProgramCacheKey = () => 'arcologia-vidro-1';
   mat.name = 'arcologia:vidro';
-  return ganchos.aplicar(mat, ['sombra', 'neblina', 'sombraLonge', 'hao']);
+  return ganchos.aplicar(mat, GANCHOS_COMUNS);
 }
 
 /** Material opaco da Arcologia: cor, rugosidade, metal, luz e padrão por vértice. */
@@ -1586,7 +1657,7 @@ export function materialOpaco(ganchos, { corte = 1e6 } = {}) {
   };
   mat.customProgramCacheKey = () => 'arcologia-opaco-1';
   mat.name = 'arcologia:opaco';
-  return ganchos.aplicar(mat, ['sombra', 'neblina', 'sombraLonge', 'hao']);
+  return ganchos.aplicar(mat, GANCHOS_COMUNS);
 }
 
 /**
@@ -1620,6 +1691,15 @@ export function materiais(ctx) {
     materiaisPorCtx.set(ctx, m);
   }
   return m;
+}
+
+/** Solta os materiais compartilhados e o reflexo de reserva de um render (o domínio chama ao descartar). */
+export function descartarMateriais(ctx) {
+  const m = materiaisPorCtx.get(ctx);
+  if (!m) return;
+  for (const x of [m.vidro, m.vidroLod1, m.opaco]) x.dispose();
+  m.ambiente.descartar();
+  materiaisPorCtx.delete(ctx);
 }
 
 // ------------------------------------------------------------------------------------------------ céu e reflexo
@@ -1752,6 +1832,8 @@ export class AmbienteReserva {
     this._rt?.dispose();
     this._pmrem?.dispose();
     this._mat?.dispose();
+    this._cena?.traverse((o) => o.geometry?.dispose());
+    this._rt = this._pmrem = this._mat = this._cena = this.textura = null;
   }
 }
 
@@ -1809,8 +1891,9 @@ const malhaThree = (ctx, m, mat, familia = 'arcologia', nome = '') => {
 /**
  * A Torre num render: grupo com o LOD0 do perfil, o LOD1 e o gêmeo de sombra. Posicione com posicionar(x, y, z, rot)
  * e chame quadro() a cada quadro (escolhe o LOD pela distância da câmera).
- * @returns {{ grupo: THREE.Group, posicionar(x, y, z, rot): void, quadro(): void, lod: number, corte(h): void,
- *   fantasma(b): void, triangulos: { lod0: number, lod1: number, sombra: number }, descartar(): void }}
+ * @returns {{ grupo: THREE.Group, posicionar(x, y, z, rot): void, quadro(): void, lod: number, forcarLod: number | null,
+ *   mostrar(b): void, corte(h): void, caixa: number[], triangulos: { lod0: number, lod1: number, sombra: number },
+ *   descartar(): void }}
  */
 export function criarTorre(ctx, { perfil = ctx.perfil, comEsplanada = true } = {}) {
   const mats = materiais(ctx);
@@ -1831,7 +1914,14 @@ export function criarTorre(ctx, { perfil = ctx.perfil, comEsplanada = true } = {
   volSombra.visible = false;
   volSombra.name = 'torre:sombra';
   grupo.add(lod0, lod1, volSombra);
-  const gemeo = ctx.medidas.familia(ctx.sombra.projetor(volSombra), 'sombra');
+  // o gêmeo da sombra projeta mesmo com a fonte escondida: quem esconde a Torre (fantasma, obra) solta o projetor
+  let projetando = false;
+  const projetar = (b) => {
+    if (b && !projetando) ctx.medidas.familia(ctx.sombra.projetor(volSombra), 'sombra');
+    else if (!b && projetando) ctx.sombra.soltar(volSombra);
+    projetando = b;
+  };
+  projetar(true);
   let lod = 0;
   const centro = new THREE.Vector3();
   const api = {
@@ -1856,23 +1946,36 @@ export function criarTorre(ctx, { perfil = ctx.perfil, comEsplanada = true } = {
     quadro() {
       centro.set(0, PONTOS_TORRE.centro[1], 0).applyMatrix4(grupo.matrixWorld);
       const d = ctx.camera.position.distanceTo(centro);
-      lod = api.forcarLod ?? (d < (DIST_LOD0[ctx.perfil?.id] ?? 1700) ? 0 : 1);
+      // histerese de 5%: a câmera parada perto do limite (o zoom com inércia, o tremor do toque) não pisca de LOD
+      const limite = (DIST_LOD0[ctx.perfil?.id] ?? 1700) * (lod === 0 ? 1.05 : 0.95);
+      lod = api.forcarLod ?? (d < limite ? 0 : 1);
       lod0.visible = lod === 0 && grupo.visible;
       lod1.visible = lod === 1 && grupo.visible;
     },
-    /** Corte por altura (obra da X1b): esconde o que passa de h metros acima da plataforma. */
+    /** Mostra a Torre pronta ou a esconde (antes da torre.e4 quem aparece é o fantasma, que não faz sombra). */
+    mostrar(b) {
+      grupo.visible = !!b;
+      projetar(!!b);
+      ctx.sombra.marcar();
+    },
+    /**
+     * Corte por altura (obra da X1b): esconde o que passa de h metros acima da plataforma. O volume da sombra encolhe
+     * junto (achatado até h: a sombra da obra tem a altura dela, não a dos 350 m).
+     */
     corte(h = 1e6) {
       for (const m of [matVidro0, matVidro1, matOpaco]) m.userData.uniformes.uCorte.value = grupo.position.y + h;
+      volSombra.scale.y = Math.min(1, Math.max(1e-3, h / TL.mastro.topo));
+      volSombra.updateMatrixWorld(true);
+      ctx.sombra.marcar();
     },
     descartar() {
-      ctx.sombra.soltar(volSombra);
+      projetar(false);
       grupo.parent?.remove(grupo);
       for (const g of [lod0, lod1]) for (const o of g.children) o.geometry.dispose();
       volSombra.geometry.dispose();
       for (const m of [matVidro0, matVidro1, matOpaco]) m.dispose();
     },
   };
-  void gemeo;
   return api;
 }
 
@@ -1883,9 +1986,9 @@ export function atualizarArcologia(ctx, tMs, estado = estadoDoCeu(ctx)) {
   UNIFORMES.uHora.value = estado.hora;
   UNIFORMES.uTempo.value = tMs / 1000;
   const env = m.ambiente.quadro(estado);
-  // à noite o reflexo do céu no vidro e no bronze cai a um terço: a fachada fica escura e as janelas acesas contam
+  // à noite o reflexo do céu no vidro e no bronze cai a 15%: a fachada fica escura e as janelas acesas contam
   // (sem isso o bronze claro refletia o céu noturno na exposição de 8 e a torre inteira lia cinza)
-  const intens = 1 - 0.65 * estado.noite;
+  const intens = 1 - 0.85 * estado.noite;
   for (const mat of m.lista) {
     if (mat.envMap !== env) {
       mat.envMap = env;

@@ -86,8 +86,10 @@ export function faixaPelaTarifa(tarifa) {
  */
 export function limitesEmprestimo(emp, regras = REGRAS_DONO.emprestimo) {
   const passo = regras.passo;
-  const disponivel = Math.max(0, emp?.disponivelAno ?? 0);
-  const folga = Math.max(0, (emp?.dividaMax ?? regras.dividaMax) - (emp?.divida ?? 0) - (emp?.jurosDevidos ?? 0));
+  // campo que falta vale o padrão; campo sem número (NaN) vale o lado seguro: nada disponível, dívida no teto
+  const n = (v, falta, torto = falta) => (v === null || v === undefined ? falta : Number.isFinite(v) ? v : torto);
+  const disponivel = Math.max(0, n(emp?.disponivelAno, 0));
+  const folga = Math.max(0, n(emp?.dividaMax, regras.dividaMax) - n(emp?.divida, 0, regras.dividaMax) - n(emp?.jurosDevidos, 0, regras.dividaMax));
   const max = Math.floor(Math.min(disponivel, folga) / passo) * passo;
   const motivo = max >= passo ? null : disponivel < passo ? 'ano' : 'divida';
   return { min: passo, max, passo, motivo };

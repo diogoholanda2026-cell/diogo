@@ -8,6 +8,8 @@
   --zoom: calc(var(--escala) * var(--ajuste, 1));
   /* borda fina do vidro: um fio claro em cima e um escuro embaixo dão espessura sem sombra de cor */
   --borda: inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+  /* grão do vidro: ruído fractal branco com alfa de até uns 3% */
+  --grao: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='64' height='64' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 /* ------------------------------------------------------------------ texto */
@@ -40,6 +42,27 @@
 .vidro {
   box-shadow: var(--luz), var(--borda), var(--sombra1);
 }
+/* vidro fosco sem desfoque (desenho da UI 4): um grão de 64 x 64 a uns 3% sobre toda superfície de vidro, que tira o
+   ar de plástico liso e esconde o degradê em faixas. O #ui dá a especificidade para passar das regras de fundo das
+   peças (background: var(--s1) em hud, folha e telas). Rasterizado uma vez e repetido. */
+#ui :is(.vidro, .popover, .dica-balao, .modal, .tela, .folha, .cartao) {
+  background-image: var(--grao);
+  background-size: 64px 64px;
+}
+/* PC em Alta e Ultra (o app marca data-vidro): desfoque só nos grupos da barra de cima, no máximo 3 elementos; a
+   opacidade de 0,80 segura o texto secundário acima de 4,5:1 mesmo com céu branco atrás (desenho da UI, seção 1) */
+:root[data-vidro='1'] #ui .hud-grupo.vidro {
+  background-color: rgba(12, 16, 22, 0.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+/* fileira de peças que quebra linha (ações, chips, escolhas) */
+.fileira {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2);
+}
 
 /* ------------------------------------------------------------------ botões */
 .bt-pri,
@@ -64,13 +87,11 @@
   color: var(--tinv);
   font-weight: 650;
 }
-.bt-pri:hover { background: var(--ac2); }
 .bt-sec {
   background: var(--s3);
   box-shadow: inset 0 0 0 1px var(--fio2);
   color: var(--t1);
 }
-.bt-sec:hover { background: rgba(255, 255, 255, 0.12); }
 .bt-fan {
   color: var(--ac);
   padding: 0 var(--e2);
@@ -108,7 +129,6 @@
   border-radius: var(--r2);
   color: var(--t2);
 }
-.bt-glifo:hover,
 .bt-glifo[aria-pressed='true'] {
   color: var(--t1);
   background: var(--s3);
@@ -203,7 +223,6 @@
   color: var(--t2);
   white-space: nowrap;
 }
-.aba:hover { color: var(--t1); }
 .aba.ativa {
   color: var(--t1);
   box-shadow: inset 0 -2px 0 var(--ac);
@@ -471,7 +490,6 @@
   text-align: left;
 }
 .popover-item .glifo { color: var(--t2); }
-.popover-item:hover { background: var(--s3); }
 .par {
   display: flex;
   align-items: baseline;
@@ -539,7 +557,6 @@
   border-bottom: 1px solid var(--fio);
   text-align: left;
 }
-.linha-bt:hover { background: var(--s2); }
 .linha-glifo {
   display: inline-flex;
   align-items: center;
@@ -932,6 +949,20 @@
   font-size: var(--t13);
   font-weight: 650;
   color: var(--t1);
+}
+
+/* ------------------------------------------------------------------ passar o mouse
+   Só onde há mouse: no toque o :hover gruda depois do toque e o botão parecia ligado (Localizar do cartão, abas). */
+@media (hover: hover) {
+  .bt-pri:hover { background: var(--ac2); }
+  .bt-sec:hover { background: rgba(255, 255, 255, 0.12); }
+  .bt-glifo:hover {
+    color: var(--t1);
+    background: var(--s3);
+  }
+  .aba:hover { color: var(--t1); }
+  .popover-item:hover { background: var(--s3); }
+  .linha-bt:hover { background: var(--s2); }
 }
 
 /* ------------------------------------------------------------------ PC: densidade de mouse (alvos de 32) */

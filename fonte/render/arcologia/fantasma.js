@@ -58,7 +58,7 @@ export function materialFantasma(ganchos, { cor = '#e6c996', forca = 1 } = {}) {
   const mat = new THREE.ShaderMaterial({
     uniforms: { ...ganchos.uniformes, uCor: { value: new THREE.Color(cor) }, uForca: { value: forca }, uNoiteF: { value: 0 } },
     defines: t.defines,
-    vertexShader: VERT.replace('#include <common>', `#include <common>\n${t.verticePars.replace('varying vec3 vGPosMundo;', 'varying vec3 vGPosMundo;')}`),
+    vertexShader: VERT.replace('#include <common>', `#include <common>\n${t.verticePars}`),
     fragmentShader: FRAG.replace('#include <common>', `#include <common>\n${t.fragmentoPars}`).replace('G_FIM', t.fim),
     transparent: true,
     depthWrite: false,

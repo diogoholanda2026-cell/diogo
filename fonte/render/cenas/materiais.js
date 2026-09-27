@@ -1,14 +1,15 @@
 // Cena 'materiais' (D46, Prévia 0): A/B do chão lado a lado na mesma vista. À esquerda da divisa, o detalhe
 // procedural; à direita, o fotográfico CC0 (arte/materiais/chao-camadas.ktx2) quando a montagem traz o arquivo e o
-// transcodificador Basis. Sem CC0, os dois lados ficam procedurais e o resultado avisa. A câmera fica sobre o mar,
-// olhando para o norte, com a linha da costa atravessando a tela: os dois lados mostram as mesmas faixas (mar com a
-// arrebentação, areia molhada e seca, restinga, capim e a encosta com granito), perto o bastante (15 a 80 m) para a
-// textura de cada material aparecer (mais longe, o que manda é a mistura das camadas, igual nos dois lados).
+// transcodificador Basis. Sem CC0, os dois lados ficam procedurais e o resultado avisa. A câmera fica sobre a praia
+// aberta ao sul da cidade, olhando para o norte, com a linha em que a areia acaba atravessando a tela: os dois lados
+// mostram as mesmas faixas (areia seca, o jundu, as clareiras de capim e grama entre as moitas e a rua ao fundo),
+// perto o bastante (20 a 90 m) para a textura de cada material aparecer (mais longe, o que manda é a mistura das
+// camadas, igual nos dois lados).
 // window.__resultado = { ok, falhas, avisos, cc0, ganhos, ganhosB }.
 import { PALETA_CHAO } from '../materiais/shaders/terreno.glsl.js';
 import { carregarCC0 } from '../materiais/texturas-chao.js';
 
-export const CAMERA_MATERIAIS = Object.freeze({ x: -2112, z: 1727, dist: 36, guinada: 345, inclinacao: 27 });
+export const CAMERA_MATERIAIS = Object.freeze({ x: 100, z: 1855, dist: 42, guinada: 335, inclinacao: 30 });
 
 const lerGanhos = (vs) => vs.map((v) => [+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)]);
 

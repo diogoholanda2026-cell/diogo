@@ -12,7 +12,7 @@ import { GLSL_GERAR_CAMADAS, GLSL_GERAR_RUIDO, GLSL_MEDIA_FATIA, N_CAMADAS } fro
 /** Lado do detalhe por perfil (desenho do render 9.3: 512 no Leve, 1024 no Média e 2048 no PC; aqui 512 no Média). */
 export const LADO_DETALHE = Object.freeze({ ultra: 1024, alta: 1024, media: 512, leve: 0 });
 export const LADO_RUIDO = 256;
-export const LADO_ONDAS = 128;
+export const LADO_ONDAS = 256;
 export const SEMENTE_CHAO = 7101;
 
 /** Materiais pedidos na página (?materiais=proc|cc0); fora do navegador, procedural. */

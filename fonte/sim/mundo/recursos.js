@@ -29,6 +29,8 @@ export function gerarRecursos(base, mapa) {
   const R = { rocha: g(), areia: g(), argila: g(), calcario: g(), fertil: g(), subterranea: g() };
   const [ox, oz] = base.origem;
   const s0 = sementeDe(mapa.semente) + 1777;
+  // borda oeste da área inicial (o rio corre por ela): a argila da várzea é mais rica do lado de fora
+  const xInicio = mapa.origem[0] + mapa.inicio[0][0] * mapa.ladrilho;
   const calc = mapa.calcario.flat();
   const lagoa = base.campos.lagoa;
   const { relevo, tipoDomo } = base.campos;
@@ -55,13 +57,13 @@ export function gerarRecursos(base, mapa) {
       const sd = costaEm(base, x, z);
       let areia = 0;
       let argila = 0;
-      if (rio.a < rio.hw + rio.varzea + 40) {
+      if (rio.a < rio.hw + 120 || rio.v < rio.varzea + 40) {
         const margem = rio.a - rio.hw;
         if (rio.nivel < 20) {
-          // bancos de areia e terraços arenosos da margem
+          // bancos de areia e terraços arenosos da margem; argila na várzea (a faixa de meandros), mais rica a oeste
           areia = (1 - smoothstep(30, 120, margem)) * (0.78 + 0.22 * ruido(x / 300, z / 300, s0 + 5));
-          const oeste = rio.lado > 0 ? 1 : 0.82;
-          argila = smoothstep(15, 60, margem) * (1 - smoothstep(rio.varzea - 40, rio.varzea + 30, margem)) * oeste * (0.8 + 0.2 * v);
+          const oeste = x < xInicio - 6 ? 1 : 0.82;
+          argila = smoothstep(15, 60, margem) * (1 - smoothstep(rio.varzea - 40, rio.varzea + 30, rio.v)) * oeste * (0.8 + 0.2 * v);
         }
       }
       // praias e restinga
@@ -86,23 +88,24 @@ export function gerarRecursos(base, mapa) {
 }
 
 /**
- * Tálus e matacões: o granito também aparece até duas células (64 m) além do pé da encosta, mais fraco (é por ali
- * que a pedreira abre a frente). Só em terra.
+ * Tálus e matacões: o granito também aparece até três células (96 m) além do pé da encosta, mais fraco a cada uma (é
+ * ali, no plano ao pé da face, que a pedreira abre a frente). Só em terra.
  */
 function peDaEncosta(g, terra) {
   const src = g.slice();
+  const FATOR = [1, 0.8, 0.6, 0.44];
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
       const k = j * N + i;
       if (!terra[k]) continue;
       let m = src[k];
-      for (let dj = -2; dj <= 2; dj++) {
+      for (let dj = -3; dj <= 3; dj++) {
         const jj = j + dj;
         if (jj < 0 || jj >= N) continue;
-        for (let di = -2; di <= 2; di++) {
+        for (let di = -3; di <= 3; di++) {
           const ii = i + di;
           if (ii < 0 || ii >= N || (di === 0 && dj === 0)) continue;
-          const f = Math.max(di < 0 ? -di : di, dj < 0 ? -dj : dj) === 1 ? 0.8 : 0.55;
+          const f = FATOR[Math.max(di < 0 ? -di : di, dj < 0 ? -dj : dj)];
           const v = src[jj * N + ii] * f;
           if (v > m) m = v;
         }

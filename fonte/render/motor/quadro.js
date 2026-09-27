@@ -38,6 +38,8 @@ export class Quadro {
     // sem EXT_clip_control, ou com ?semClip=1, a profundidade invertida sai e entram as duas faixas
     const prof = ctx.renderer.state?.buffers?.depth;
     if (ctx.semClip && prof?.getReversed?.()) prof.setReversed(false);
+    // a sonda e a bancada relatam a profundidade que o quadro usa de fato, não a que o aparelho aceita
+    if (ctx.capac) ctx.capac.invertida = !!prof?.getReversed?.();
     this.pos = new Pos(ctx);
     this.resolucao = new Resolucao(ctx);
     this.faixas = new Faixas(ctx);

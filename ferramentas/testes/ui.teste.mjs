@@ -103,10 +103,25 @@ function caixaDoCaminho(d) {
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), pts };
 }
 
-test('glifos: primeiro corte do M1 (60 ou mais), só caminhos, dentro da grade de 24 com folga para o traço', async () => {
+// o conjunto do M1 (desenho da UI 6.2) que as outras parcelas de interface usam sem desenhar o seu
+const CONJUNTO_M1 = {
+  estado: ['holding', 'creditos', 'renda', 'populacao', 'bemEstarBom', 'bemEstarMedio', 'bemEstarRuim', 'demanda', 'marco', 'calendario', 'sol', 'solNascente', 'solBaixo', 'lua', 'nuvem'],
+  tempo: ['pausa', 'vel1', 'vel2', 'vel3', 'relogio', 'prazo'],
+  construcao: ['vias', 'zonas', 'servicos', 'transporte', 'lazer', 'empresas', 'arcologia', 'demolir', 'obra'],
+  vias: ['rua', 'ruaMao', 'avenida', 'avenidaG', 'terra', 'reta', 'curva', 'continua', 'grade', 'encaixe', 'desfazer', 'refazer', 'construir', 'cancelar', 'alca', 'ponte'],
+  zonas: ['preencher', 'pincel', 'retangulo', 'apagar', 'residencial', 'comercial', 'industrial', 'escritorio', 'mista', 'densidade1', 'densidade2', 'densidade3'],
+  servicos: ['agua', 'esgoto', 'energia', 'lixo', 'saude', 'educacao', 'policia', 'bombeiros', 'administracao', 'comunicacao', 'parque', 'praca'],
+  holding: ['imobiliario', 'tecnologia', 'midia', 'hotelaria', 'aviacao', 'caminhao', 'dinheiro', 'influencia', 'legado', 'valuation', 'deposito', 'lote', 'material', 'mapa', 'recursos'],
+  avisos: ['alerta', 'semVia', 'semEnergia', 'semAgua', 'semTrabalhadores', 'poucosClientes', 'semMercadoria', 'abandonado', 'semMaterial', 'semCreditos', 'estoqueCheio', 'doenca', 'crime', 'incendio', 'transito'],
+  sistema: ['camadas', 'mural', 'foto', 'menu', 'ajustes', 'conselho', 'localizar', 'info', 'fechar', 'voltar', 'setaDir', 'setaCima', 'setaBaixo', 'mais', 'menos', 'cadeado', 'check', 'filtro', 'tabela', 'grafico', 'som', 'vibracao', 'telaCheia', 'salvar', 'carregar', 'exportar', 'importar', 'compartilhar', 'copiar', 'teclado', 'olho', 'girar', 'girarCelular', 'editar', 'cor', 'ajuda', 'sair', 'objetivo'],
+};
+
+test('glifos: o conjunto do M1 (130 ou mais, desenho da UI 6.2), só caminhos, dentro da grade de 24 com folga para o traço', async () => {
   const { glifos } = await ui();
   const nomes = glifos.nomesGlifos();
-  assert.ok(nomes.length >= 60, `${nomes.length} glifos`);
+  assert.ok(nomes.length >= 130, `${nomes.length} glifos`);
+  const faltam = Object.values(CONJUNTO_M1).flat().filter((n) => !glifos.glifo(n));
+  assert.deepEqual(faltam, [], 'glifos do conjunto do M1');
   for (const n of nomes) {
     const g = glifos.glifo(n);
     assert.ok(g.tracos.length || g.cheios.length, `glifo vazio: ${n}`);
@@ -269,6 +284,18 @@ test('cartão: números por tipo (Contribuição em /h, nunca Aluguel), aviso ma
   // prédio vazio: bem-estar sem número vira 0 (e o rosto da faixa de baixo), nunca "NaN"
   const vazio = cartao.numerosDoCartao({ ...res, moradia: { moradores: 0, capacidade: 8, bemEstar: NaN, contribuicaoHora: 0 } });
   assert.deepEqual(vazio.map((x) => x.valor), ['0 de 8', '0', '0/h']);
+  // glifo do aviso: o código que já é nome de glifo usa o próprio; os outros pela tabela; desconhecido, o alerta
+  const glifoDe = (codigo) => cartao.avisoPrincipal({ avisos: [{ codigo, gravidade: 'atencao' }] }).glifo;
+  assert.deepEqual(['transito', 'semEsgoto', 'caixaZerado', 'semAgua', 'outraCoisa'].map(glifoDe), ['transito', 'esgoto', 'semCreditos', 'semAgua', 'alerta']);
+  // obra com dado torto não derruba o cartão (o find sem fase lançava e levava a interface junto)
+  assert.deepEqual(cartao.faseDaObra({ progresso: NaN }), { nome: 'canteiro', frac: 0 });
+  assert.equal(cartao.faseDaObra({ fase: 'estrutura' }).nome, 'estrutura');
+  assert.equal(cartao.faseDaObra({ fase: 0.3 }).nome, 'estrutura');
+  assert.equal(cartao.faseDaObra({ fase: 'estrutura', progresso: 0.8 }).nome, 'fechamento', 'o progresso manda');
+  // o tipo do q.predio não tem forma fixa no contrato: o bloco servico decide (nunca o glifo residencial da zona 0)
+  assert.equal(cartao.aparencia({ tipo: 1, zona: 0, servico: { capacidade: 10 } }).familia, 'servico');
+  assert.equal(cartao.aparencia({ tipo: 2, zona: 0, holding: { nivel: 1 } }).glifo, 'holding');
+  assert.equal(cartao.numerosDoCartao({ ...ind, nivel: NaN }).at(-1).valor, '1 de 5');
 });
 
 // ------------------------------------------------------------------------------------------------ Economia
@@ -309,6 +336,10 @@ test('Economia: limites do empréstimo pela regra do dono (passo, ano, dívida c
   assert.equal(economia.limitesEmprestimo({ ...base, divida: 495000, jurosDevidos: 1500 }).max, 3000);
   assert.equal(economia.limitesEmprestimo({ ...base, disponivelAno: 500 }).motivo, 'ano');
   assert.equal(economia.limitesEmprestimo({ ...base, divida: 499500 }).motivo, 'divida');
+  // número torto fecha o empréstimo (nunca um deslizante com teto NaN); campo que falta vale o padrão
+  assert.deepEqual(economia.limitesEmprestimo({ ...base, disponivelAno: NaN }), { min: 1000, max: 0, passo: 1000, motivo: 'ano' });
+  assert.equal(economia.limitesEmprestimo({ ...base, divida: NaN }).motivo, 'divida');
+  assert.equal(economia.limitesEmprestimo({ disponivelAno: 50000 }).max, 50000);
   assert.equal(economia.curto(150000), '150 mil');
   assert.equal(economia.curto(2500), '2,5 mil');
   assert.equal(economia.curto(1.26e6), '1,3 mi');
@@ -356,8 +387,11 @@ test('cartão: só seleção de prédio consulta q.predio (via e Arcologia têm 
 test('CSS da U1a: sem desfoque no celular, animação só com transform e opacity, a barra escala com a tela', () => {
   const pasta = fonte('ui/tema');
   for (const f of ['componentes.css', 'hud.css', 'folha.css', 'telas.css']) {
-    const css = readFileSync(join(pasta, f), 'utf8');
-    assert.doesNotMatch(css, /backdrop-filter/, `${f}: desfoque só no PC, pelo data-vidro`);
+    const css = readFileSync(join(pasta, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''); // sem os comentários
+    // desfoque só no PC, pelo data-vidro, e só nos grupos da barra (até 3 elementos)
+    for (const m of css.matchAll(/([^{}]*)\{[^{}]*backdrop-filter[^{}]*\}/g)) {
+      assert.match(m[1].trim(), /^:root\[data-vidro='1'\] #ui \.hud-grupo\.vidro$/, `${f}: desfoque fora do data-vidro: ${m[1].trim()}`);
+    }
     for (const m of css.matchAll(/@keyframes\s+[\w-]+\s*\{([\s\S]*?)\}\s*\}/g)) {
       for (const p of m[1].matchAll(/([\w-]+)\s*:/g)) assert.ok(['transform', 'opacity'].includes(p[1]), `${f}: animação de ${p[1]}`);
     }

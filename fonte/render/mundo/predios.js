@@ -13,7 +13,7 @@ import { GradeSetores, pedidoDoSetor, assinatura, distCaixa, LADO_SETOR } from '
 import { ListaCompactada } from './instancias.js';
 import { oficinaDe } from './oficina.js';
 import { formaUnitaria, FORMAS, BITS_TABELA } from '../geracao/malhaPredio.js';
-import { CAIXA } from '../geracao/fundir.js';
+import { CAIXA, gerarSetor } from '../geracao/fundir.js';
 import * as SH from '../materiais/shaders/fachada.glsl.js';
 import { PREDIO, TIPO_PREDIO } from '../../contratos/flags.js';
 import { refDe, idxDaRef } from '../../contratos/espelho.js';
@@ -25,6 +25,12 @@ import { modoMateriais } from '../materiais/texturas-chao.js';
 
 /** Lado das tabelas de prédios na GPU (262.144 vagas, D19). */
 export const LADO_TABELA = 512;
+/**
+ * Na primeira leitura do espelho e quando o diário pede tudo de novo (carga, cena fixa, save aberto) o LOD1 da cidade
+ * inteira sai na thread principal, na hora: a cidade aparece completa no primeiro quadro, sem esperar a fila da
+ * oficina (12 mil prédios em 0,15 a 0,3 s no PC). Acima deste número de prédios a carga segue pela oficina.
+ */
+const LOD1_NA_CARGA = 40000;
 const BYTES_INST = ['aFac', 'aCorA', 'aCorB', 'aTopo'];
 
 // ------------------------------------------------------------------------------------------------ material
@@ -165,6 +171,7 @@ function criarPredios(ctx) {
   let setorDe = new Int32Array(0);
   let sig = new Uint32Array(0);
   let iniciado = false;
+  let carga = false; // o próximo passo gera o LOD1 que falta na thread principal
   let quadros = 0;
   const recebidos = [];
   let pendentes1 = 0;
@@ -233,6 +240,8 @@ function criarPredios(ctx) {
     if (!P) return;
     crescer(P.cap);
     const tudo = !iniciado || pedeTudo(d, 'predios');
+    // primeira leitura ou tudo de novo (um save aberto): o LOD1 sai na hora no próximo passo
+    if (tudo) carga = true;
     iniciado = true;
     if (tudo) {
       const novas = new Map();
@@ -414,9 +423,8 @@ function criarPredios(ctx) {
 
   /**
    * Escolhe o LOD de cada setor, faz os pedidos e monta as listas visíveis e de sombra. O LOD1 é leve (só o plano e as
-   * instâncias: a cidade sintética inteira, 12 mil prédios, sai em ~0,2 s no worker): com o worker, todos os setores
-   * que faltam vão para a fila de uma vez e a cidade aparece no segundo quadro da carga; o LOD0 segue com 2 na fila e
-   * 1 envio à GPU por quadro.
+   * instâncias): na carga sai inteiro aqui (LOD1_NA_CARGA); depois, com o worker, os setores que mudaram vão para a
+   * fila de uma vez. O LOD0 segue com 2 na fila e 1 envio à GPU por quadro.
    */
   function passo({ envio = 1, pedidos1 = oficina.worker ? 1024 : 6, pedidos0 = 2 } = {}) {
     quadros++;
@@ -433,6 +441,18 @@ function criarPredios(ctx) {
     const vis = [];
     let quer0 = 0;
     let lod0Vis = 0;
+    // carga: o LOD1 que falta sai aqui mesmo, sem a oficina
+    if (carga) {
+      carga = false;
+      const faltam = [...setores.values()].filter((st) => st.lista.length && (!st.lod1 || st.v1 < st.versao));
+      if (faltam.reduce((a, st) => a + st.lista.length, 0) <= LOD1_NA_CARGA) {
+        const P = ctx.sim.espelho.predios;
+        for (const st of faltam) {
+          const lista = st.lista.slice();
+          receberLod1(st, gerarSetor(pedidoDoSetor(P, lista, grade, st.s, false).dados), lista, st.versao);
+        }
+      }
+    }
     for (const st of setores.values()) {
       if (!st.lista.length) {
         // setor que esvaziou: nada a desenhar

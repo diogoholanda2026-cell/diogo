@@ -4,12 +4,20 @@
 //  - rocha, areia e argila dentro da área inicial; calcário só fora dela (D3); a orla nobre fora dela;
 //  - a Vila com uns 60 prédios e 350 moradores, inteira na área inicial; a rodovia ligada ao nó de entrada; sem erro.
 //
-// Uso: node ferramentas/mapa.mjs [--saida pasta] [--semente s] [--so-conferir]
-//      (padrão: pasta mapa/ no scratchpad do sistema, ou ./mapa-saida). Sai com código 1 se uma conferência falhar.
-// Importável: conferirMapa(sim) devolve { ok, falhas, medidas }; desenharMapa(sim, pasta) grava os PNG.
+// Uso: node ferramentas/mapa.mjs [--saida pasta] [--semente s] [--so-conferir] [--vista]
+//      (padrão: a pasta heldopolis-mapa no temporário do sistema). Sai com código 1 se uma conferência falhar.
+//      --vista acrescenta três vistas oblíquas de helicóptero em software (baía, cidade, praia; uns 20 s cada).
+//      --conferir-assado assa de novo na memória e confere com o módulo gravado.
+//      node ferramentas/mapa.mjs --assar: roda a erosão dos maciços (mundo/erosao.js, alguns segundos) e grava
+//      fonte/sim/mundo/relevo-assado.js. Rode sempre que mudar serras, morros, planaltos, costa, rio, lagoas, córregos,
+//      planície ou rodovia em data/mapa-heldopolis.js, ou a conta da planície, do rio ou da erosão no código (com a
+//      VERSAO_ASSADO de mundo/relevo.js); o teste do mundo acusa pelo hash dos controles e assando de novo.
+// Importável: conferirMapa(sim) devolve { ok, falhas, medidas }; desenharMapa(sim, pasta) grava os PNG;
+// assar() devolve o texto do módulo do relevo assado e as medidas.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { criarSimulacao } from '../fonte/sim/estado.js';
@@ -19,7 +27,9 @@ import { ponto, tabelaArco, tDoArco } from '../fonte/comum/bezier.js';
 import { cantosRetangulo, pontoNoPoligono } from '../fonte/comum/vetor.js';
 import { fnv1aTipado, hexHash } from '../fonte/comum/hash.js';
 import { VIAS, VIAS_ORDEM } from '../fonte/data/vias.js';
-import { terrenoBase } from '../fonte/sim/mundo/terreno.js';
+import { terrenoBase, camposDoMapa, FERRAMENTAS, rioEm } from '../fonte/sim/mundo/terreno.js';
+import { assarRelevo, PARAMETROS } from '../fonte/sim/mundo/erosao.js';
+import { MAPA_HELDOPOLIS } from '../fonte/data/mapa-heldopolis.js';
 import { RECURSOS } from '../fonte/sim/mundo/recursos.js';
 import { GLEBA_ENVELOPE } from '../fonte/data/arcologia-plano.js';
 
@@ -375,6 +385,171 @@ export function desenharMapa(sim, pasta) {
   return arquivos;
 }
 
+// ------------------------------------------------------------------------------------------------ vista oblíqua
+
+/** Câmeras da vista de helicóptero: [nome, x, z, altura, guinada (0 = norte, 90 = leste), inclinação, abertura]. */
+export const VISTAS = Object.freeze([
+  ['vista-baia', 200, 3300, 420, 0, 11, 55],
+  ['vista-cidade', 0, 600, 300, 352, 9, 60],
+  ['vista-praia', -300, 1900, 160, 340, 8, 60],
+]);
+
+/**
+ * Vista oblíqua em software (sem navegador), para julgar o relevo como de um helicóptero: um raio por pixel sobre a
+ * grade (passos largos onde o raio passa alto sobre o máximo de cada bloco de 64 m), sol da tarde a noroeste com
+ * sombra projetada, mata pela densidade, pedra pelo declive, água pela profundidade e perspectiva aérea. Não é o
+ * render do jogo: é a régua do mapa.
+ */
+export function desenharVista(sim, arquivo, [, cx, cz, ch, guin, incl, abertura], w = 960) {
+  const T = sim.espelho.terreno;
+  const F = sim.espelho.floresta;
+  const tb = terrenoBase(sim);
+  const { n, passo } = T;
+  const [ox, oz] = T.origem;
+  const lado = (n - 1) * passo;
+  const h = Math.round((w * 9) / 16);
+  // máximo por bloco de 64 m, já com os vizinhos (andar até 64 m na horizontal não sai do máximo)
+  const nb = Math.ceil(lado / 64) + 1;
+  const bloco = new Float32Array(nb * nb).fill(-50);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const k = ((j * passo) >> 6) * nb + ((i * passo) >> 6);
+    const v = T.altura[j * n + i];
+    if (v > bloco[k]) bloco[k] = v;
+  }
+  const maxi = new Float32Array(nb * nb).fill(-50);
+  for (let j = 0; j < nb; j++) for (let i = 0; i < nb; i++) {
+    let m = -50;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const a = i + di;
+      const b = j + dj;
+      if (a >= 0 && b >= 0 && a < nb && b < nb && bloco[b * nb + a] > m) m = bloco[b * nb + a];
+    }
+    maxi[j * nb + i] = m;
+  }
+  const dentro = (x, z) => x >= ox && z >= oz && x <= ox + lado && z <= oz + lado;
+  const aguaAt = (x, z) => T.agua[Math.round((z - oz) / passo) * n + Math.round((x - ox) / passo)];
+  const nivelAt = (x, z, a) => (a === AGUA.MAR ? 0 : a === AGUA.LAGOA ? tb.mapa.lagoa.nivel : rioEm(tb.base, x, z).nivel);
+  const chao = (x, z) => {
+    const a = aguaAt(x, z);
+    const g = alturaEm(T, x, z);
+    return a ? Math.max(g, nivelAt(x, z, a)) : g;
+  };
+  const densAt = (x, z) => {
+    const i = Math.floor((x - F.origem[0]) / F.passo);
+    const j = Math.floor((z - F.origem[1]) / F.passo);
+    return i < 0 || j < 0 || i >= F.n || j >= F.n ? 0 : F.dens[j * F.n + i] / 255;
+  };
+  const rad = Math.PI / 180;
+  const sol = [Math.sin(305 * rad) * Math.cos(28 * rad), Math.sin(28 * rad), -Math.cos(305 * rad) * Math.cos(28 * rad)];
+  const g = guin * rad;
+  const p = incl * rad;
+  const fw = [Math.sin(g) * Math.cos(p), -Math.sin(p), -Math.cos(g) * Math.cos(p)];
+  const rt = [Math.cos(g), 0, Math.sin(g)];
+  const up = [rt[1] * fw[2] - rt[2] * fw[1], rt[2] * fw[0] - rt[0] * fw[2], rt[0] * fw[1] - rt[1] * fw[0]];
+  const tanF = Math.tan((abertura / 2) * rad);
+  const ruidoCor = (x, z) => {
+    let q = Math.imul(Math.floor(x) * 374761393 + Math.floor(z) * 668265263, 1274126177);
+    q = Math.imul(q ^ (q >>> 13), 1274126177);
+    return ((q ^ (q >>> 16)) >>> 0) / 4294967296;
+  };
+  const C = {
+    ceuZ: [118, 160, 214], ceuH: [206, 220, 232], neb: [186, 204, 222], mata: [34, 58, 30], mata2: [52, 78, 38],
+    pasto: [128, 138, 78], capim: [168, 158, 104], areia: [222, 208, 172], pedra: [122, 118, 108], pedra2: [168, 160, 146],
+    mar: [22, 78, 104], marRaso: [60, 150, 150], lagoa: [44, 88, 84], rio: [104, 100, 74],
+  };
+  const img = { w, h, rgb: new Uint8Array(w * h * 3) };
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const sx = (((px + 0.5) / w) * 2 - 1) * tanF;
+      const sy = (1 - ((py + 0.5) / h) * 2) * tanF * (h / w);
+      const rd = [fw[0] + rt[0] * sx + up[0] * sy, fw[1] + rt[1] * sx + up[1] * sy, fw[2] + rt[2] * sx + up[2] * sy];
+      const l = Math.hypot(rd[0], rd[1], rd[2]);
+      rd[0] /= l;
+      rd[1] /= l;
+      rd[2] /= l;
+      let t = 5;
+      let t0 = 0;
+      let bateu = false;
+      let x = cx;
+      let z = cz;
+      while (t < 40000) {
+        x = cx + rd[0] * t;
+        z = cz + rd[2] * t;
+        const y = ch + rd[1] * t;
+        if (!dentro(x, z)) {
+          if (y <= 0) {
+            bateu = true;
+            break;
+          }
+          t0 = t;
+          t += Math.max(4, t * 0.01);
+          continue;
+        }
+        const m = maxi[Math.floor((z - oz) / 64) * nb + Math.floor((x - ox) / 64)];
+        if (y > m + 2) {
+          t0 = t;
+          t += Math.max(2, Math.min(64, rd[1] < -0.01 ? (y - m) / -rd[1] : 64));
+          continue;
+        }
+        if (y <= chao(x, z)) {
+          let a = t0;
+          let b = t;
+          for (let k = 0; k < 10; k++) {
+            const mt = (a + b) / 2;
+            if (ch + rd[1] * mt <= chao(cx + rd[0] * mt, cz + rd[2] * mt)) b = mt;
+            else a = mt;
+          }
+          t = b;
+          x = cx + rd[0] * t;
+          z = cz + rd[2] * t;
+          bateu = true;
+          break;
+        }
+        t0 = t;
+        t += Math.max(2, t * 0.004);
+      }
+      let c;
+      if (!bateu) c = mistura(C.ceuH, C.ceuZ, cl(rd[1] * 3));
+      else {
+        const a = dentro(x, z) ? aguaAt(x, z) : AGUA.MAR;
+        if (a) {
+          const prof = dentro(x, z) ? nivelAt(x, z, a) - alturaEm(T, x, z) : 20;
+          c = a === AGUA.MAR ? mistura(C.marRaso, C.mar, cl(prof / 10)) : a === AGUA.LAGOA ? mistura(C.marRaso, C.lagoa, cl(prof / 3)) : C.rio;
+          c = mistura(c, C.ceuH, 0.15 + 0.6 * (1 - Math.max(0, -rd[1])) ** 5);
+        } else {
+          const e = 4;
+          const hx = (alturaEm(T, x + e, z) - alturaEm(T, x - e, z)) / (2 * e);
+          const hz = (alturaEm(T, x, z + e) - alturaEm(T, x, z - e)) / (2 * e);
+          const nl = Math.hypot(hx, 1, hz);
+          const decl = Math.hypot(hx, hz);
+          const hh = alturaEm(T, x, z);
+          let lam = (-hx * sol[0] + sol[1] - hz * sol[2]) / nl;
+          if (lam > 0) {
+            for (let q = 12; q < 900; q *= 1.25) {
+              if (alturaEm(T, x + sol[0] * q, z + sol[2] * q) > hh + 0.5 + sol[1] * q) {
+                lam *= 0.25;
+                break;
+              }
+            }
+          }
+          const d = densAt(x, z);
+          c = mistura(C.pasto, C.capim, cl((hh - 6) / 40) * 0.6 + ruidoCor(x / 37, z / 37) * 0.15);
+          if (hh < 3.2 && decl < 0.1) c = mistura(C.areia, c, cl((hh - 1.8) / 1.4));
+          c = mistura(c, mistura(C.mata, C.mata2, ruidoCor(x / 11, z / 11)), cl(d * 1.15));
+          c = mistura(c, mistura(C.pedra, C.pedra2, ruidoCor(x / 9, z / 9)), cl((decl - 0.75) / 0.45) * (1 - d * 0.7));
+          const luz = 0.34 + 0.12 / nl + 0.95 * Math.max(0, lam);
+          c = [c[0] * luz, c[1] * luz * 0.93, c[2] * luz * 0.8];
+        }
+        c = mistura(c, C.neb, cl((1 - Math.exp(-t / 9000)) * 0.95));
+      }
+      const k = (py * w + px) * 3;
+      for (let q = 0; q < 3; q++) img.rgb[k + q] = c[q] > 255 ? 255 : c[q] < 0 ? 0 : c[q];
+    }
+  }
+  gravarPng(arquivo, img);
+  return arquivo;
+}
+
 // ------------------------------------------------------------------------------------------------ conferências
 
 /** Confere o mapa autoral. Devolve { ok, falhas: [texto], medidas }. */
@@ -430,6 +605,7 @@ export function conferirMapa(sim) {
     }
   }
   if (componentes !== 1) falhas.push(`área inicial com ${componentes} componentes de terra (${tamanhos.join(', ')} amostras)`);
+  if (!tb.base.assado) falhas.push('relevo assado velho ou ausente: rode node ferramentas/mapa.mjs --assar');
   // recursos dentro e fora
   const E = sim.espelho.recursos;
   const dentro = (i, j) => {
@@ -497,17 +673,69 @@ export function conferirMapa(sim) {
 // ------------------------------------------------------------------------------------------------ linha de comando
 
 function args(argv) {
-  const o = { saida: null, semente: 'heldopolis-1', soConferir: false };
+  const o = { saida: null, semente: 'heldopolis-1', soConferir: false, assar: false, conferirAssado: false, vista: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--saida') o.saida = argv[++i];
     else if (argv[i] === '--semente') o.semente = argv[++i];
     else if (argv[i] === '--so-conferir') o.soConferir = true;
+    else if (argv[i] === '--assar') o.assar = true;
+    else if (argv[i] === '--conferir-assado') o.conferirAssado = true;
+    else if (argv[i] === '--vista') o.vista = true;
   }
   return o;
 }
 
+/** Caminho do módulo gerado com o relevo assado. */
+export const ARQUIVO_ASSADO = resolve(dirname(fileURLToPath(import.meta.url)), '../fonte/sim/mundo/relevo-assado.js');
+
+/** Assa o relevo dos maciços do mapa: { texto (o módulo), medidas, rel, E }. */
+export function assar(mapa = MAPA_HELDOPOLIS, par = PARAMETROS) {
+  const C = camposDoMapa(mapa);
+  const r = assarRelevo(mapa, C, FERRAMENTAS, par);
+  const m = r.modulo;
+  const linhas = [
+    '// Gerado por `node ferramentas/mapa.mjs --assar` (dona: S1a). Não edite à mão: mude os controles em',
+    '// data/mapa-heldopolis.js e asse de novo. Relevo dos maciços acima da planície na grade de 32 m, com a erosão fluvial',
+    `// (mundo/erosao.js, ${par.iteracoes} iterações), quantizado a ${m.escala} m e comprimido (previsão MED, corridas de`,
+    '// resíduos nulos e Exp-Golomb); mundo/relevo.js decodifica.',
+    'export const RELEVO_ASSADO = Object.freeze({',
+    `  mapa: '${m.mapa}',`,
+    `  versao: ${m.versao},`,
+    `  controles: '${m.controles}',`,
+    `  n: ${m.n},`,
+    `  passo: ${m.passo},`,
+    `  k: ${m.k},`,
+    `  escala: ${m.escala},`,
+    `  hash: '${m.hash}',`,
+    `  dados: '${m.dados}',`,
+    m.detalhe
+      ? `  detalhe: Object.freeze({ x0: ${m.detalhe.x0}, z0: ${m.detalhe.z0}, n: ${m.detalhe.n}, passo: ${m.detalhe.passo}, k: ${m.detalhe.k}, escala: ${m.detalhe.escala}, hash: '${m.detalhe.hash}',\n    dados: '${m.detalhe.dados}' }),`
+      : '  detalhe: null,',
+    '});',
+    '',
+  ];
+  return { texto: linhas.join('\n'), medidas: r.medidas, rel: r.rel, E: r.E };
+}
+
 async function principal() {
   const o = args(process.argv.slice(2));
+  if (o.assar) {
+    const t0 = performance.now();
+    const r = assar();
+    writeFileSync(ARQUIVO_ASSADO, r.texto);
+    const kb = (r.medidas.bytes / 1024).toFixed(1);
+    console.log(`mapa: relevo assado em ${((performance.now() - t0) / 1000).toFixed(1)} s, ${kb} KB, erro máximo ${r.medidas.erroMax.toFixed(3)} m`);
+    console.log(`  ${ARQUIVO_ASSADO}`);
+    return;
+  }
+  if (o.conferirAssado) {
+    // assa de novo na memória e compara com o módulo gravado (a erosão é determinística)
+    const { readFileSync } = await import('node:fs');
+    const igual = readFileSync(ARQUIVO_ASSADO, 'utf8') === assar().texto;
+    console.log(igual ? 'mapa: o relevo assado confere com os controles e o assador' : 'mapa: o relevo assado NÃO confere: rode --assar');
+    if (!igual) process.exit(1);
+    return;
+  }
   const t0 = performance.now();
   const sim = criarSimulacao({ semente: o.semente, cronometro: () => performance.now() });
   const t1 = performance.now();
@@ -518,6 +746,7 @@ async function principal() {
   if (!o.soConferir) {
     const pasta = resolve(o.saida ?? join(tmpdir(), 'heldopolis-mapa'));
     const arquivos = desenharMapa(sim, pasta);
+    if (o.vista) for (const v of VISTAS) arquivos.push(desenharVista(sim, join(pasta, `${v[0]}.png`), v));
     console.log(`mapa: ${arquivos.length} imagens em ${pasta}`);
     for (const a of arquivos) console.log(`  ${a}`);
   }

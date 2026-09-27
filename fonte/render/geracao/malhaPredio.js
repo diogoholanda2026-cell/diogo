@@ -391,14 +391,16 @@ function meiaAgua(K, P) {
     const nn = pn(P, lado > 0 ? N_PX : N_NX);
     K.quad(pp(P, lado * hw, y0 - esp, hd), pp(P, lado * hw, y0, hd), pp(P, lado * hw, y1, -hd), pp(P, lado * hw, y1 - esp, -hd), nn, [0, 0, 1, 1], SEM_TOPO, 1, pkF, 0.9);
   }
-  // oitões e o pano dos fundos acima da parede (a caixa de baixo para no topo da parede da frente)
+  // oitões e o pano dos fundos acima da parede (a caixa de baixo para no topo da parede da frente); beiralAlto é o
+  // beiral do lado alto (0 quando a água encosta numa platibanda, como na loja de rua)
   const b = P.beiral ?? 0.4;
+  const bA = P.beiralAlto ?? b;
   const bo = P.beiralOitao ?? b;
   const k = P.h / P.d;
   const zF = hd - b;
-  const zB = -hd + b;
+  const zB = -hd + bA;
   const yF = y0 + b * k;
-  const yB = y0 + (P.d - b) * k;
+  const yB = y0 + (P.d - bA) * k;
   const mo = P.mat;
   const liso = mo._liso ?? (mo._liso = { ...mo, t: FACHADA.LISO, tr: 0, _p: null });
   const pk = empacotar(liso);

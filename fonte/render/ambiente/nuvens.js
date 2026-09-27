@@ -67,8 +67,11 @@ export class Nuvens {
     this.textura.magFilter = THREE.LinearFilter;
     this.textura.generateMipmaps = true;
     this.textura.needsUpdate = true;
-    this.horas = 0; // horas de céu andadas (deriva)
+    this.horas = 0; // horas de céu andadas
     this.horaAnt = null;
+    // a deriva soma o vento de cada quadro: uma troca de vento muda o rumo sem teleportar as nuvens
+    this.derivaCeu = [0, 0]; // passo das nuvens do céu
+    this.derivaChao = [0, 0]; // deslocamento da sombra no chão, na fração da textura que se repete
     this.noCeu = true;
     this.noChao = true;
   }
@@ -86,24 +89,31 @@ export class Nuvens {
    */
   atualizar(dt, clima, est, ceu) {
     const hora = this.ctx.horaDoCeu();
-    if (this.horaAnt !== null) this.horas += ((((hora - this.horaAnt + 36) % 24) + 24) % 24) - 12;
+    const dh = this.horaAnt === null ? 0 : ((((hora - this.horaAnt + 36) % 24) + 24) % 24) - 12;
     this.horaAnt = hora;
+    this.horas += dh;
     const cob = Math.min(1, Math.max(0, clima?.nuvens ?? 0.3));
     const v = clima?.vento ?? [3, 1];
     const vn = Math.hypot(v[0], v[1]) || 1;
     const vx = v[0] / vn;
     const vz = v[1] / vn;
     ceu.nuvem.set(this.noCeu ? cob : 0, 0.45, 0.00018, 0.5);
-    ceu.nuvemPasso.set(this.horas * 0.0009 * vx, this.horas * 0.0009 * vz);
+    this.derivaCeu[0] += dh * 0.0009 * vx;
+    this.derivaCeu[1] += dh * 0.0009 * vz;
+    ceu.nuvemPasso.set(this.derivaCeu[0], this.derivaCeu[1]);
     // sombra no chão: some de noite e com o sol rente; a nuvem a ~1.500 m anda uns 20 km por ciclo
     const s = est.P.sol;
     const forca = this.noChao ? 0.42 * suave(0.03, 0.2, s[1]) * suave(0.02, 0.12, cob) : 0;
     const escala = 1 / 5200;
-    const desl = this.horas * 900 * escala;
+    // a textura se repete (RepeatWrapping): só a fração da deriva importa, e o float32 do shader não perde precisão
+    // depois de anos de jogo
+    const k = dh * 900 * escala;
+    this.derivaChao[0] = (this.derivaChao[0] + k * vx) % 1;
+    this.derivaChao[1] = (this.derivaChao[1] + k * vz) % 1;
     const sy = Math.max(s[1], 0.12);
     this.u.gNuvemMapa.value = this.textura;
     this.u.gNuvemParams.value.set(escala, forca, 1 - 0.92 * cob, 0);
-    this.u.gNuvemDesloc.value.set(desl * vx, desl * vz, s[0] / sy, s[2] / sy);
+    this.u.gNuvemDesloc.value.set(this.derivaChao[0], this.derivaChao[1], s[0] / sy, s[2] / sy);
   }
 
   descartar() {

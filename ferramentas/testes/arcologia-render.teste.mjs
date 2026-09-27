@@ -6,10 +6,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   malhasTorre, malhasTorreLod1, malhaSombraTorre, trechosCorpo, contornoTrecho, NIVEL, Malha, triangular, areaPoli,
-  DIST_LOD0, LUZ_NOITE,
+  DIST_LOD0, LUZ_NOITE, torno, cilindro,
 } from '../../fonte/render/arcologia/torre.js';
 import { assentarHora } from '../../fonte/render/cenas/torre.js';
-import { malhasDoPlano, pontoDentro } from '../../fonte/render/arcologia/planos.js';
+import { malhasDoPlano, pontoDentro, tocaGleba } from '../../fonte/render/arcologia/planos.js';
+import { ORCAMENTO } from '../../fonte/contratos/render.js';
 import { montarParte, deslocar } from '../../fonte/render/arcologia/partes.js';
 import { cavarTerreno, descavar } from '../../fonte/render/arcologia/lago.js';
 import {
@@ -276,7 +277,7 @@ test('planos: malhas de cada plano sem NaN e dentro da gleba (com a folga do pas
   }
 });
 
-test('planos: a Arcologia inteira em LOD1 perto de 25 mil triângulos e até 45 chamadas no Média', () => {
+test('planos: a Arcologia inteira em LOD1 perto de 25 mil triângulos', () => {
   const torre1 = malhasTorreLod1({ comEsplanada: true });
   const tTorre = tris(torre1.vidro, torre1.opaco);
   for (const id of Object.keys(PLANOS)) {
@@ -289,9 +290,50 @@ test('planos: a Arcologia inteira em LOD1 perto de 25 mil triângulos e até 45 
     const volumes = tTorre + tris(c.real.vidro, c.real.opaco, c.real.agua);
     assert.ok(volumes <= 32000, `${id}: plano construído com ${volumes} triângulos de volume`);
   }
-  // chamadas: Torre 2 (LOD0 ou LOD1), partes 3 (vidro, opaco, árvores), água 1, fantasma 1, sombra 2
-  const chamadas = 2 + 3 + 1 + 1 + 2;
-  assert.ok(chamadas <= 45);
+});
+
+test('planos: chamadas da Arcologia dentro da família do Média (malhas não vazias de cada vista)', () => {
+  // cada malha não vazia vira uma chamada: a Torre 2 (um LOD por vez), as partes (vidro, opaco, árvores, água), o
+  // fantasma 1 e a sombra (Torre 1 e partes prontas 1)
+  const cheia = (m) => (m.triangulos ? 1 : 0);
+  const teto = ORCAMENTO.media.familias.arcologia.calls[1];
+  for (const id of Object.keys(PLANOS)) {
+    for (const [nome, op] of [['jogo', { prontas: new Set(['lago']), paisagem: false }], ['plano', { prontas: 'todas', paisagem: true }]]) {
+      const r = malhasDoPlano(id, { chao: chaoPlano, nivel: 1, ...op });
+      const fant = cheia(r.fantasma.vidro) || cheia(r.fantasma.opaco) || cheia(r.fantasma.arvores);
+      const sombra = 1 + (cheia(r.sombra.vidro) || cheia(r.sombra.opaco));
+      const n = 2 + cheia(r.real.vidro) + cheia(r.real.opaco) + cheia(r.real.arvores) + cheia(r.real.agua) + fant + sombra;
+      assert.ok(n <= teto, `${id} ${nome}: ${n} chamadas (teto da família: ${teto})`);
+    }
+  }
+});
+
+test('domínio: só o chão da gleba refaz a Arcologia (vias e lotes no resto da cidade não)', () => {
+  const [x0, z0, x1, z1] = GLEBA_ENVELOPE.caixa;
+  assert.equal(tocaGleba([]), false);
+  assert.equal(tocaGleba(undefined), false);
+  assert.equal(tocaGleba([[x0 + 10, z0 + 10, x0 + 30, z0 + 30]]), true, 'dentro da gleba');
+  assert.equal(tocaGleba([[x1 + 20, z1 + 20, x1 + 40, z1 + 40]]), true, 'na folga do passeio e da transição');
+  assert.equal(tocaGleba([[-3000, -3000, -2900, -2900]]), false, 'longe, do outro lado do mapa');
+  assert.equal(tocaGleba([[-3000, -3000, -2900, -2900], [x0, z0, x0 + 1, z0 + 1]]), true, 'um basta');
+});
+
+test('kit: peças redondas com normal por vértice (cilindro e torno sem facetas)', () => {
+  const m = new Malha('opaco');
+  torno(m, 0, 0, [[0, -10], [7.07, -7.07], [10, 0], [7.07, 7.07], [0, 10]], 16, [0, 0, 0, 0]);
+  cilindro(m, 50, 0, 0, 10, 2, 2, 8, [0, 0, 0, 0], { topo: false });
+  // na esfera a normal de cada vértice aponta para fora a partir do centro (quase igual à direção do ponto)
+  let pior = 1;
+  for (let i = 0; i < m.p.length; i += 3) {
+    const [x, y, z] = [m.p[i], m.p[i + 1], m.p[i + 2]];
+    const [cx, cy, cz] = x > 25 ? [50, y, 0] : [0, 0, 0];
+    const l = Math.hypot(x - cx, y - cy, z - cz);
+    if (l < 1) continue;
+    const nl = Math.hypot(m.n[i], m.n[i + 1], m.n[i + 2]);
+    pior = Math.min(pior, ((x - cx) * m.n[i] + (y - cy) * m.n[i + 1] + (z - cz) * m.n[i + 2]) / (l * nl));
+  }
+  assert.ok(pior > 0.9, `normal longe da radial (cos ${pior.toFixed(3)})`);
+  conferirMalha(m, 'kit redondo');
 });
 
 test('partes: cada tipo de peça monta sem NaN e dá caixa de seleção', () => {

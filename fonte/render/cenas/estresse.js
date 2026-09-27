@@ -41,7 +41,10 @@ function materialFachada(corPele) {
     // de longe (célula menor que 2 px) vale a média: nada cintila
     float longe = smoothstep( 0.25, 0.5, max( fw.x, fw.y ) );
     janela = mix( janela, 0.43, longe ) * parede;
-    float hs = fract( sin( dot( floor( g ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+    // tom de cada vão por hash sem seno (o seno de argumento grande muda de GPU para GPU no Mali)
+    vec3 hq = fract( floor( g ).xyx * vec3( 0.1031, 0.1030, 0.0973 ) );
+    hq += dot( hq, hq.yzx + 33.33 );
+    float hs = fract( ( hq.x + hq.y ) * hq.z );
     diffuseColor.rgb = mix( diffuseColor.rgb * ( 0.92 + 0.16 * hs * parede ), vec3( 0.035, 0.042, 0.05 ), janela );
     roughnessFactor = mix( roughnessFactor, 0.1, janela );
   }`,
@@ -125,6 +128,10 @@ export function registrar(registrarCena) {
         descartar() {
           ctx.sombra.soltar(caixas);
           cena.remove(grupo);
+          // geometrias e materiais da cena (as formas e as peles são compartilhadas pelas torres)
+          for (const g of [...formas, chao.geometry, caixas.geometry]) g.dispose();
+          for (const m of [...peles, chao.material, caixas.material]) m.dispose();
+          caixas.dispose();
         },
       };
     },

@@ -58,9 +58,13 @@ export function criarCamera(ctx, inicial = {}) {
     e.dist = Math.min(L.distMax, Math.max(L.distMin, e.dist));
     e.inclinacao = Math.min(L.incMax, Math.max(L.incMin, e.inclinacao));
     e.guinada = ((e.guinada % 360) + 360) % 360;
-    const m = (ctx.sim?.espelho?.mapa?.tam ?? 8192) / 2;
-    e.x = Math.min(m, Math.max(-m, e.x));
-    e.z = Math.min(m, Math.max(-m, e.z));
+    // o alvo fica dentro do mapa (origem e lado do espelho; sem mapa, 8.192 m centrados)
+    const mapa = ctx.sim?.espelho?.mapa;
+    const lado = Number.isFinite(mapa?.tam) ? mapa.tam : 8192;
+    const ox = Number.isFinite(mapa?.origem?.[0]) ? mapa.origem[0] : -lado / 2;
+    const oz = Number.isFinite(mapa?.origem?.[1]) ? mapa.origem[1] : -lado / 2;
+    e.x = Math.min(ox + lado, Math.max(ox, e.x));
+    e.z = Math.min(oz + lado, Math.max(oz, e.z));
   };
   const pararInercia = () => {
     vel.x = vel.z = vel.guinada = vel.inclinacao = 0;
@@ -106,12 +110,14 @@ export function criarCamera(ctx, inicial = {}) {
     },
     /** Desloca o alvo no mundo (arrasto: direto, sem inércia). */
     mover(dx, dz) {
+      if (!Number.isFinite(dx) || !Number.isFinite(dz)) return;
       encerrarVoo();
       e.x += dx;
       e.z += dz;
       limitar();
     },
     girar(dg, di = 0) {
+      if (!Number.isFinite(dg) || !Number.isFinite(di)) return;
       encerrarVoo();
       e.guinada += dg;
       e.inclinacao += di;
@@ -122,16 +128,20 @@ export function criarCamera(ctx, inicial = {}) {
      * Fatores seguidos se acumulam no alvo do zoom.
      */
     zoom(fator, ancora = null) {
+      // um fator torto (NaN, infinito, zero) travaria o zoom para sempre: o alvo NaN não volta sozinho
+      if (!(fator > 0) || !Number.isFinite(fator)) return;
       encerrarVoo();
+      if (!Number.isFinite(zoom.alvo)) zoom.alvo = e.dist;
       zoom.alvo = Math.min(L.distMax, Math.max(L.distMin, zoom.alvo * fator));
-      zoom.ancora = ancora ? [ancora[0], ancora[2]] : null;
+      zoom.ancora = ancora && Number.isFinite(ancora[0]) && Number.isFinite(ancora[2]) ? [ancora[0], ancora[2]] : null;
     },
-    /** Velocidades de soltura (arrasto e giro): a vista desliza e para. */
+    /** Velocidades de soltura (arrasto e giro): a vista desliza e para. Um valor torto vale zero. */
     impulso({ vx = 0, vz = 0, vg = 0, vi = 0 } = {}) {
-      vel.x = vx;
-      vel.z = vz;
-      vel.guinada = vg;
-      vel.inclinacao = vi;
+      const f = (v) => (Number.isFinite(v) ? v : 0);
+      vel.x = f(vx);
+      vel.z = f(vz);
+      vel.guinada = f(vg);
+      vel.inclinacao = f(vi);
     },
     parar: pararInercia,
     /** Alvo no chão (y pelo terreno; sobre o mar, a superfície da água). */

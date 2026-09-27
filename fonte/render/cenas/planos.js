@@ -73,7 +73,11 @@ export function registrar(registrarCena) {
         descartar() {
           ceu.descartar();
           const T = ctx.sim?.espelho?.terreno;
-          if (T && cava.guarda.size) descavar(T, cava.guarda);
+          // desfaz a cava e marca o chão no diário (o terreno refaz a malha da região)
+          if (T && cava.guarda.size) {
+            descavar(T, cava.guarda);
+            if (cava.ret) ctx.sim.mudancas.marcarRet('terreno', ...cava.ret);
+          }
           dom?.vitrine(null);
         },
       };

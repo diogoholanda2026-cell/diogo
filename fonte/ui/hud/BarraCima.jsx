@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { barra, tela } from '../loja.js';
 import * as fmt from '../formato.js';
-import { t } from '../textos.js';
+import { t, temTexto } from '../textos.js';
 import { velocidade } from '../acoes.js';
 import { consultar } from '../consultas.js';
 import { Botao } from '../comp/Botao.jsx';
@@ -385,7 +385,8 @@ function PopMarco({ marco }) {
     <>
       <Barra valor={fracaoMarco(marco)} rotulo={t('barra.marco.xp')} texto={ultimo ? fmt.numero(marco.xp) : t('barra.marco.deXp', { xp: fmt.numero(marco.xp), prox: fmt.numero(marco.xpProx) })} />
       <p class="popover-texto">{ultimo ? t('barra.marco.ultimo') : t('barra.marco.faltam', { n: fmt.numero(Math.max(0, marco.xpProx - marco.xp)), prox: (marco.n ?? 0) + 1 })}</p>
-      {marco.requisito ? (
+      {/* requisito sem frase (um marco novo da simulação) fica fora em vez de aparecer como '??chave' */}
+      {marco.requisito && temTexto(`barra.marco.requisito.${marco.requisito}`) ? (
         <p class="popover-texto tx-ch">
           <Glifo n="arcologia" tam={14} /> {t(`barra.marco.requisito.${marco.requisito}`)}
         </p>

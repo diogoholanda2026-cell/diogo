@@ -224,6 +224,18 @@ export class SombraPropria {
   }
 
   /**
+   * Chão coberto pelas cascatas: o foco (o alvo da câmera, puxado para baixo dela nas vistas rasantes) e o raio da
+   * cascata maior, ou null antes do primeiro passe. É por aqui que os domínios escolhem os projetores (os setores do
+   * LOD1, as árvores de perto): em volta do alvo, a vista rasante perde a sombra do primeiro plano. Só muda quando o
+   * mapa é refeito por andar ou por zoom, então serve de chave estável para recompactar as listas.
+   * @returns {{ x: number, z: number, raio: number } | null}
+   */
+  get regiao() {
+    if (!this._raio || !Number.isFinite(this._centro.x)) return null;
+    return { x: this._centro.x, z: this._centro.z, raio: this._raio };
+  }
+
+  /**
    * Foco da cascata: o alvo da câmera e, nas vistas rasantes, um ponto entre ele e o chão sob a câmera (o que se vê
    * de perto fica embaixo da tela, não no alvo). Sem deslocamento de cima (88 graus); até 45% da distância no chão a
    * 3 graus, sem tirar o alvo da cascata.
@@ -348,9 +360,15 @@ export class SombraPropria {
           this.sujo = true;
         }
       } else {
-        if (g.instanceMatrix !== f.instanceMatrix) g.instanceMatrix = f.instanceMatrix;
-        if (g.count !== f.count) {
+        // buffer compartilhado: instâncias mexidas (versão), outra contagem ou outro buffer pedem um passe novo, sem
+        // depender de a dona lembrar de marcar()
+        if (g.instanceMatrix !== f.instanceMatrix) {
+          g.instanceMatrix = f.instanceMatrix;
+          this.sujo = true;
+        }
+        if (g.count !== f.count || f.instanceMatrix.version !== par.versao) {
           g.count = f.count;
+          par.versao = f.instanceMatrix.version;
           this.sujo = true;
         }
       }

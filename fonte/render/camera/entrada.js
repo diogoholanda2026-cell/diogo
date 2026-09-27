@@ -1,7 +1,8 @@
 // Entrada básica (R1a; a R1b completa com o árbitro de gestos em 80 ms, a mira deslocada e a rolagem pela borda):
 // toque, mouse e teclado sobre a câmera à CS2 (camera.js). Um dedo ou o botão esquerdo (ou o do meio) arrasta e o
-// ponto do chão fica sob o dedo; ao soltar, a vista desliza com a velocidade do gesto e para. Pinça aproxima em volta
-// do meio dos dedos, dois dedos giram e, arrastados na vertical, inclinam. Botão direito (ou Ctrl) gira e inclina.
+// ponto do chão fica sob o dedo (no céu da vista rasante, a vista anda pela escala da tela); ao soltar, a vista
+// desliza com a velocidade do gesto e para. Pinça aproxima em volta do meio dos dedos, dois dedos giram e, arrastados
+// na vertical, inclinam. Botão direito (ou Ctrl) gira e inclina.
 // A roda aproxima na direção do cursor, suave. Teclado: WASD move, Q e E giram, R e F inclinam, + e - aproximam.
 // Toque curto chama aoToque({ x, y, longo }) (a UI seleciona com R.selecionar). No modo 'ferramenta', um dedo vai para
 // a ferramenta ({ fase, x, y, ponto, dedos }) e dois dedos movem a câmera sem inclinar.
@@ -46,9 +47,24 @@ export function criarEntrada(ctx, camera) {
   // arrasto: o ponto do chão fica sob o dedo. A câmera do three é posta em dia na hora: vários pointermove chegam entre
   // dois quadros, e o raio de cada um precisa sair da câmera já movida
   const arrastarPara = (ancora, x, y) => {
-    const p = chao(x, y);
-    if (!ancora || !p) return;
+    const p = ancora ? chao(x, y) : null;
+    if (!p) return false;
     camera.mover(ancora[0] - p[0], ancora[2] - p[2]);
+    camera.atualizar(agora());
+    marcar();
+    return true;
+  };
+  // sem chão sob o dedo (o céu da vista rasante, a 3 graus): o mundo anda com o dedo pela escala da tela na distância
+  // do alvo, e na vertical esticado pela inclinação; assim o arrasto que começa no céu também move a vista
+  const arrastarTela = (dx, dy) => {
+    if (!dx && !dy) return;
+    const e = camera.estado();
+    const h = ctx.tela?.h || canvas.clientHeight || 1;
+    const s = (2 * e.dist * Math.tan(((ctx.camera?.fov ?? 40) * Math.PI) / 360)) / h;
+    const g = (e.guinada * Math.PI) / 180;
+    const k = s / Math.max(0.25, Math.sin((e.inclinacao * Math.PI) / 180));
+    // direita no chão (cos g, sin g) e frente (sin g, -cos g)
+    camera.mover(-dx * s * Math.cos(g) + dy * k * Math.sin(g), -dx * s * Math.sin(g) - dy * k * Math.cos(g));
     camera.atualizar(agora());
     marcar();
   };
@@ -71,7 +87,7 @@ export function criarEntrada(ctx, camera) {
         return;
       }
       const girar = ev.button === 2 || ev.ctrlKey;
-      gesto = { tipo: girar ? 'girar' : 'arrastar', t0: agora(), ancora: chao(p.x, p.y), px: p.x, py: p.y, moveu: false, e0: camera.estado() };
+      gesto = { tipo: girar ? 'girar' : 'arrastar', t0: agora(), ancora: girar ? null : chao(p.x, p.y), ux: p.x, uy: p.y, moveu: false, e0: camera.estado() };
       marcar();
     } else if (n === 2) {
       if (gesto?.tipo === 'ferramenta') ferramenta('fim', p, 1, ev.pointerType);
@@ -102,7 +118,12 @@ export function criarEntrada(ctx, camera) {
         marcar();
         return;
       }
-      arrastarPara(gesto.ancora, p.x, p.y);
+      if (!arrastarPara(gesto.ancora, p.x, p.y)) {
+        arrastarTela(p.x - gesto.ux, p.y - gesto.uy);
+        gesto.ancora = chao(p.x, p.y); // o chão que aparecer sob o dedo vira a âncora (sem salto na volta)
+      }
+      gesto.ux = p.x;
+      gesto.uy = p.y;
       return;
     }
     if (gesto.tipo === 'dois' && dedos.size >= 2) {
@@ -142,7 +163,7 @@ export function criarEntrada(ctx, camera) {
     if (dedos.size === 1 && gesto.tipo === 'dois') {
       // sobrou um dedo: continua arrastando a partir dele
       const [r] = [...dedos.values()];
-      gesto = { tipo: 'arrastar', t0: agora(), ancora: chao(r.x, r.y), moveu: true, e0: camera.estado() };
+      gesto = { tipo: 'arrastar', t0: agora(), ancora: chao(r.x, r.y), ux: r.x, uy: r.y, moveu: true, e0: camera.estado() };
       r.x0 = r.x;
       r.y0 = r.y;
       rastro.length = 0;

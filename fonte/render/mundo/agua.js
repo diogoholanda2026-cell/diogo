@@ -1,7 +1,7 @@
 // Mar, rio e lagoa (desenho do render 3.4): uma malha só (1 chamada), com o tipo por vértice.
 //   mar    blocos de 64 m que têm alguma amostra de mar na grade (juntos em faixas por linha) e a moldura até 40 km
 //          quando a borda do mapa é mar; nível do mar do espelho
-//   lagoa  o contorno do espelho, aberto 14 m para fora (a margem de verdade é o chão cortando o plano), no nível dela
+//   lagoa  o contorno do espelho, aberto 24 m para fora (a margem de verdade é o chão cortando o plano), no nível dela
 //   rio    faixa ao longo da poligonal dos pontos do espelho, com o nível por ponto e a direção da correnteza por vértice
 //          (a R2b herda e acrescenta a correnteza e a espuma do rio)
 // O material lê as mesmas texturas e uniformes do terreno (ctx.chao.uniformes).
@@ -12,7 +12,8 @@ import { pedeTudo } from '../ponte.js';
 
 export const BLOCO_MAR = 8; // amostras (64 m)
 export const MOLDURA_MAR = 40000;
-export const FOLGA_MARGEM = 14;
+export const FOLGA_MARGEM = 14; // rio: além da meia largura
+export const FOLGA_LAGOA = 24; // lagoa: além do contorno (a margem rasa sobe devagar; o chão corta o plano)
 
 // ------------------------------------------------------------------------------------------------ geometria (pura)
 
@@ -138,7 +139,7 @@ export function geometriaAgua(T, nivelMar = 0) {
     }
   }
   for (const lg of T.lagoas ?? []) {
-    const c = abrirContorno(lg.contorno, FOLGA_MARGEM);
+    const c = abrirContorno(lg.contorno, FOLGA_LAGOA);
     const pts = [];
     for (let i = 0; i < c.length / 2; i++) pts.push(new THREE.Vector2(c[2 * i], c[2 * i + 1]));
     const tri = THREE.ShapeUtils.triangulateShape(pts, []);

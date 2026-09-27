@@ -142,43 +142,91 @@ export function copas(u, v, s = 0) {
 }
 
 /**
- * Mapa de normais das ondas, RGBA8 n x n, periódico: soma de trens de onda com número de onda inteiro (emenda) e um
- * pouco de fbm de gradiente. RG = inclinação em x e z (0,5 = plano), B = 1, A = altura (espuma nas cristas).
+ * Componentes de um espectro direcional de ondas de vento, com vetor de onda inteiro (o mapa emenda nas bordas): o
+ * módulo sorteado em escala logarítmica entre kMin e kMax (ciclos por lado), 80% em torno do vento (+x, abertura de
+ * ±60°) e 20% cruzadas (o marulho de outra direção), amplitude caindo com o número de onda (e cortada nas mais longas)
+ * e fase sorteada. Com dezenas de componentes em todas as escalas não aparece a rede regular que poucos trens de onda
+ * desenham.
+ * @returns {{ kx: number, kz: number, amp: number, fase: number }[]}
+ */
+export function espectroOndas(s = 7, { componentes = 128, kMin = 2, kMax = 40 } = {}) {
+  const comps = [];
+  const vistos = new Set();
+  const l0 = Math.log(kMin);
+  const l1 = Math.log(Math.max(kMin + 1, kMax));
+  for (let t = 0; comps.length < componentes && t < componentes * 12; t++) {
+    const k = Math.exp(l0 + hashF(t, 1, s) * (l1 - l0));
+    const cruzada = hashF(t, 4, s) < 0.2;
+    const th = cruzada ? 1.9 + (hashF(t, 2, s) - 0.5) * 0.9 : (hashF(t, 2, s) - 0.5) * 2.1;
+    const kx = Math.round(k * Math.cos(th));
+    const kz = Math.round(k * Math.sin(th));
+    if (!kx && !kz) continue;
+    // (kx, kz) e (−kx, −kz) são a mesma onda: fica uma só
+    if (vistos.has(`${kx},${kz}`) || vistos.has(`${-kx},${-kz}`)) continue;
+    vistos.add(`${kx},${kz}`);
+    const kk = Math.hypot(kx, kz);
+    // corte suave das ondas mais longas (como o de Phillips): nenhuma componente sozinha desenha o azulejo
+    const corte = 1 - Math.exp(-((kk / 6) ** 2));
+    comps.push({ kx, kz, amp: kk ** -1.35 * corte * (cruzada ? 0.6 : 1), fase: hashF(t, 3, s) * Math.PI * 2 });
+  }
+  return comps;
+}
+
+/**
+ * Mapa de normais das ondas, RGBA8 n x n, periódico: a soma das componentes de espectroOndas (em tabelas separáveis
+ * de seno e cosseno por linha e coluna, ~25 ms a 256²). RG = inclinação em x e z (0,5 = plano), B = 1, A = altura
+ * (espuma nas cristas, média 0,5 e desvio de ~0,09). A inclinação é escalada para um valor médio fixo (a força das
+ * ondas fica no shader da água).
  * @returns {Uint8Array} n * n * 4
  */
 export function texturaOndas(n = 256, s = 7) {
+  const comps = espectroOndas(s, { kMin: 2, kMax: Math.max(3, Math.floor(n / 6)) });
   const alt = new Float32Array(n * n);
-  const trens = [];
-  for (let t = 0; t < 7; t++) {
-    const kx = 1 + (hash2(t, 1, s) % 5);
-    const kz = (hash2(t, 2, s) % 7) - 3;
-    const amp = 1 / Math.hypot(kx, kz);
-    trens.push({ kx, kz, amp, fase: hashF(t, 3, s) * Math.PI * 2 });
-  }
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const u = x / n;
-      const v = y / n;
-      let h = 0;
-      for (const w of trens) h += w.amp * Math.sin(2 * Math.PI * (w.kx * u + w.kz * v) + w.fase);
-      h = h * 0.35 + 0.45 * fbm(u * 8, v * 8, { s: s + 5, oitavas: 4, periodo: 8, tipo: 'gradiente' });
-      alt[y * n + x] = h;
+  const sx = new Float32Array(n);
+  const cx = new Float32Array(n);
+  const sy = new Float32Array(n);
+  const cy = new Float32Array(n);
+  const w = (2 * Math.PI) / n;
+  for (const c of comps) {
+    for (let i = 0; i < n; i++) {
+      sx[i] = Math.sin(w * c.kx * i) * c.amp;
+      cx[i] = Math.cos(w * c.kx * i) * c.amp;
+      sy[i] = Math.sin(w * c.kz * i + c.fase);
+      cy[i] = Math.cos(w * c.kz * i + c.fase);
+    }
+    // sen(a + b) = sen a cos b + cos a sen b
+    for (let y = 0; y < n; y++) {
+      const o = y * n;
+      const a = cy[y];
+      const b = sy[y];
+      for (let x = 0; x < n; x++) alt[o + x] += sx[x] * a + cx[x] * b;
     }
   }
+  // inclinação por diferença central (com a volta nas bordas) e a escala que dá a inclinação média desejada
+  const gx = new Float32Array(n * n);
+  const gz = new Float32Array(n * n);
+  let g2 = 0;
+  let h2 = 0;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const k = y * n + x;
+      gx[k] = (alt[y * n + mod(x + 1, n)] - alt[y * n + mod(x - 1, n)]) / 2;
+      gz[k] = (alt[mod(y + 1, n) * n + x] - alt[mod(y - 1, n) * n + x]) / 2;
+      g2 += gx[k] * gx[k] + gz[k] * gz[k];
+      h2 += alt[k] * alt[k];
+    }
+  }
+  const esc = 0.5 / Math.max(1e-9, Math.sqrt(g2 / (n * n)));
+  const escH = 0.092 / Math.max(1e-9, Math.sqrt(h2 / (n * n)));
   const out = new Uint8Array(n * n * 4);
-  const esc = n / 18; // inclinação: diferença de altura por texel vezes a escala
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const a = (xx, yy) => alt[mod(yy, n) * n + mod(xx, n)];
-      const dx = (a(x + 1, y) - a(x - 1, y)) * esc;
-      const dz = (a(x, y + 1) - a(x, y - 1)) * esc;
-      const l = Math.hypot(dx, 1, dz);
-      const k = 4 * (y * n + x);
-      out[k] = byte(0.5 - (0.5 * dx) / l);
-      out[k + 1] = byte(0.5 - (0.5 * dz) / l);
-      out[k + 2] = 255;
-      out[k + 3] = byte(0.5 + 0.5 * a(x, y));
-    }
+  for (let k = 0; k < n * n; k++) {
+    const dx = gx[k] * esc;
+    const dz = gz[k] * esc;
+    const l = Math.hypot(dx, 1, dz);
+    out[4 * k] = byte(0.5 - (0.5 * dx) / l);
+    out[4 * k + 1] = byte(0.5 - (0.5 * dz) / l);
+    out[4 * k + 2] = 255;
+    out[4 * k + 3] = byte(0.5 + alt[k] * escH);
   }
   return out;
 }

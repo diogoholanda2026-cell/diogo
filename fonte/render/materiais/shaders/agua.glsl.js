@@ -11,12 +11,14 @@ import { vec3Linear } from './folha.glsl.js';
  * margem, onde a água tem menos de um metro. */
 export const LODO = [0.045, 0.04, 0.03];
 export const LODO_RASO = [0.13, 0.115, 0.08];
+/** Tapete de algas e folhas no fundo do rio e da lagoa (linear). */
+export const ALGA = [0.014, 0.022, 0.011];
 
 /** Óptica de cada água: absorção por metro (rgb), cor do espalhamento no fundo (linear), rugosidade e força das ondas. */
 export const AGUAS = Object.freeze({
   mar: { tipo: 0, absorcao: [0.42, 0.11, 0.075], espalha: [0.017, 0.066, 0.072], rug: 0.09, ondas: 0.16 },
   rio: { tipo: 1, absorcao: [1.3, 1.05, 0.95], espalha: [0.085, 0.078, 0.048], rug: 0.1, ondas: 0.12 },
-  lagoa: { tipo: 2, absorcao: [0.95, 0.8, 0.72], espalha: [0.018, 0.026, 0.017], rug: 0.04, ondas: 0.06 },
+  lagoa: { tipo: 2, absorcao: [1.5, 1.2, 1.05], espalha: [0.02, 0.031, 0.025], rug: 0.04, ondas: 0.06 },
 });
 
 const v3 = (a) => `vec3( ${a.map((x) => x.toFixed(4)).join(', ')} )`;
@@ -64,7 +66,13 @@ vec4 aDados = texture( uTerDados, terUVDados( aW ) );
 float aTerra = aDentro ? terAgua( aDados.a ).x : 255.0;
 vec3 aLeito = texture( uTerCor, aUV ).rgb;
 aLeito = aDentro ? aLeito * aLeito : ${vec3Linear(PALETA_CHAO[5].cor)} * 0.8;
-if ( vAgua > 0.5 ) aLeito = mix( ${v3(LODO_RASO)}, ${v3(LODO)}, smoothstep( 0.15, 1.1, aProf ) );
+// rio e lagoa: fundo de lodo com manchas paradas (tapetes de alga e folhas, escuros; lodo e areia, claros), que
+// aparecem onde a água é rasa; a leitura fica fora do "if" (derivada implícita)
+vec4 aFundoR = texture( uTerRuido, aW * ( 1.0 / 57.0 ) + vec2( 0.61, 0.23 ) );
+if ( vAgua > 0.5 ) {
+  aLeito = mix( ${v3(LODO_RASO)}, ${v3(LODO)}, smoothstep( 0.15, 1.1, aProf ) ) * ( 0.8 + 0.4 * aFundoR.x );
+  aLeito = mix( aLeito, ${v3(ALGA)}, smoothstep( 0.55, 0.8, aFundoR.y * 0.7 + aFundoR.z * 0.3 ) * 0.5 );
+}
 // ondas: três escalas rolando em direções diferentes, rajadas de vento (manchas de 180 m) e, de longe, as faixas de
 // água lisa que o vento deixa (manchas de 1,9 km). A escala menor some quando o pixel cobre mais do que ela resolve:
 // senão o azulejo de 19 m vira uma cintilação repetida de longe.
@@ -91,8 +99,8 @@ if ( vAgua < 0.5 ) {
 } else {
   aSigma = ${v3(AGUAS.lagoa.absorcao)}; aEspalha = ${v3(AGUAS.lagoa.espalha)}; aRugBase = ${AGUAS.lagoa.rug.toFixed(3)}; aForca = ${AGUAS.lagoa.ondas.toFixed(3)};
 }
-// rio e lagoa: manchas de sedimento e alga (tom de 150 a 400 m), sem mexer no mar
-if ( vAgua > 0.5 ) aEspalha *= 0.75 + 0.5 * smoothstep( 0.25, 0.75, aVento.x * 0.6 + aLiso.y * 0.4 );
+// rio e lagoa: manchas de sedimento e alga na água (tom de 150 a 400 m), sem mexer no mar
+if ( vAgua > 0.5 ) aEspalha *= 0.65 + 0.7 * smoothstep( 0.25, 0.75, aVento.x * 0.6 + aLiso.y * 0.4 );
 // absorção na ida e na volta: o fundo some com a profundidade, fica a cor do espalhamento
 vec3 aTrans = exp( -aSigma * aProf * 1.6 );
 vec3 aCor = aLeito * aTrans + aEspalha * ( 1.0 - aTrans );
@@ -112,6 +120,10 @@ aguaEspuma = clamp( aEsp, 0.0, 1.0 );
 // água lisa: faixas onde o vento cai (mais espelhada e mais escura de perto do zênite)
 float aCalma = smoothstep( 0.55, 0.75, aLiso.x ) * ( vAgua < 0.5 ? 1.0 : 0.4 );
 float aF = aForca * ( 0.6 + 0.7 * aVento.y ) * ( 1.0 - 0.65 * aCalma );
+// lagoa: sem vento a água vira espelho; as rajadas riscam manchas foscas e crespas (as "patas de gato" de uns 50 a
+// 150 m), que é o que mostra de cima que a água é água e não um disco liso
+float aPata = smoothstep( 0.45, 0.8, aVento.y * 0.7 + aQuebra.x * 0.3 );
+if ( vAgua > 1.5 ) aF = aForca * mix( 0.3, 1.7, aPata ) * ( 1.0 - 0.5 * aCalma );
 // ondas longas têm inclinação pequena (a maior parte da inclinação vem das curtas): pesos 0,12, 0,24, 0,6 e 0,4
 float aK3 = 1.0 - smoothstep( 0.06, 0.3, aPe );
 vec2 aInc = ( aN0.xy * 2.0 - 1.0 ) * 0.12 + ( aN1.xy * 2.0 - 1.0 ) * 0.24 * aK1 + ( aN2.xy * 2.0 - 1.0 ) * 0.6 * ( 0.5 + 0.5 * aVento.z ) * aK2
@@ -121,8 +133,7 @@ aguaNormal = normalize( mix( aguaNormal, vec3( 0.0, 1.0, 0.0 ), aguaEspuma * 0.7
 // as ondas que o pixel não resolve viram rugosidade (o brilho do sol se espalha em vez de cintilar)
 float aNaoResolve = ( 1.0 - aK3 ) * 0.03 + ( 1.0 - aK2 ) * 0.05 + ( 1.0 - aK1 ) * 0.05;
 aguaRug = mix( aRugBase * ( 0.7 + 0.8 * aVento.y ) * ( 1.0 - 0.5 * aCalma ) + aNaoResolve, 0.75, aguaEspuma );
-// lagoa: sem vento a água vira espelho; as rajadas riscam manchas foscas (as "patas de gato" de uns 50 a 150 m)
-if ( vAgua > 1.5 ) aguaRug = mix( 0.02, 0.14, smoothstep( 0.45, 0.8, aVento.y * 0.7 + aQuebra.x * 0.3 ) ) + aNaoResolve;
+if ( vAgua > 1.5 ) aguaRug = mix( 0.02, 0.16, aPata ) + aNaoResolve;
 diffuseColor.rgb = mix( aCor, vec3( 0.74, 0.76, 0.75 ), aguaEspuma * 0.9 );
 `,
   rugosidade: /* glsl */ `
@@ -135,8 +146,12 @@ normal = normalize( ( viewMatrix * vec4( aguaNormal, 0.0 ) ).xyz );
   // centímetros reflete menos (a linha d'água some na areia molhada em vez de riscar a praia)
   indireta: /* glsl */ `
 reflectedLight.indirectSpecular *= mix( 0.3, 1.0, smoothstep( 0.0, 0.35, aProf ) );
-// rio e lagoa: junto da margem a água reflete a mata e o barranco, mais escuros que o céu
-if ( vAgua > 0.5 ) reflectedLight.indirectSpecular *= mix( 0.4, 1.0, smoothstep( 6.0, 50.0, aTerra ) );
+// rio e lagoa: junto da margem, o reflexo rasante é o da mata e do barranco, mais escuros que o céu; olhando de
+// cima o reflexo é o do céu até a beira (senão um anel escuro contorna a lagoa inteira, como uma vinheta)
+if ( vAgua > 0.5 ) {
+  float aRasante = 1.0 - smoothstep( 0.12, 0.42, reflect( -normalize( cameraPosition - vGPosMundo ), aguaNormal ).y );
+  reflectedLight.indirectSpecular *= mix( 1.0, mix( 0.4, 1.0, smoothstep( 6.0, 45.0, aTerra ) ), aRasante );
+}
 #ifndef USE_ENVMAP
 {
   vec3 aV = normalize( cameraPosition - vGPosMundo );

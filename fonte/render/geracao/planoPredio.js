@@ -735,7 +735,7 @@ function torreVidro(c) {
   const { W, D, r } = c;
   const recuo = r.entre(...c.par.recuo);
   const pe = c.par.pe;
-  const pod = podio(c, { andares: 2, tr: TERREO.PORTARIA_ALTA, recuo, mat: c.m(F.PEDRA, c.cor('pedra'), c.cor('caixilho'), { tr: TERREO.PORTARIA_ALTA, v: 4, a: 3.4 }) });
+  const pod = podio(c, { andares: 2, tr: TERREO.PORTARIA_ALTA, recuo, mat: c.m(F.PAINEL, c.cor('pedra'), c.cor('caixilho'), { tr: TERREO.PORTARIA_ALTA, v: 4, a: 3.4, vr: c.r.int(0, 7) }) });
   const tw = clamp(W - r.entre(10, 14), 18, 26);
   const td = clamp(D - recuo - r.entre(14, 18), 16, 24);
   const tz = pod.z - pod.d / 2 + td / 2 + r.entre(4, 6);
@@ -782,8 +782,16 @@ function lojaToldo(c) {
   // empena cega nas divisas; nos fundos, janelas pequenas com grade (depósito, banheiro, a casa de quem mora em cima)
   const lado = c.m(F.LISO, corP);
   const traseira = c.m(F.CASA, corP, c.cor('caixilho'), { v: r.entre(3.2, 4.4), vr: r.int(4, 7), a: pe });
-  c.add({ forma: 'caixa', x: 0, z: bz, w: W - 2 * FOLGA, d: bd, y0: 0, h: h + par, chao: true, mat: frente, lado, fundo: traseira, topo: laje(c), parapeito: par, lod1: true, principal: true });
   const zf = bz + bd / 2;
+  // loja térrea funda: a platibanda alta da frente (a "fachada falsa") esconde a água de fibrocimento ou de telha
+  // metálica que cai para os fundos; dos lados, a empena sobe acompanhando a água
+  const escondida = n === 1 && bd >= 9 && r.chance(0.7);
+  if (escondida) {
+    const hp = lojaEscondida(c, { bz, bd, h, corP, frente, lado, traseira });
+    c.add({ forma: 'placa', umLado: true, x: r.entre(-0.1, 0.1) * W, z: zf + 0.03, w: (W - 2 * FOLGA) * r.entre(0.55, 0.85), d: 0, y0: h + 0.3, h: clamp(hp - 0.6, 0.6, 1.3), mat: c.m(F.LETREIRO, c.cor('letreiro')), sobra: true });
+  } else {
+    c.add({ forma: 'caixa', x: 0, z: bz, w: W - 2 * FOLGA, d: bd, y0: 0, h: h + par, chao: true, mat: frente, lado, fundo: traseira, topo: laje(c), parapeito: par, lod1: true, principal: true });
+  }
   // toldo de lona ou marquise de concreto sobre a calçada
   const t = r.f();
   if (t < 0.55) c.add({ forma: 'inclinado', x: 0, z: zf + 0.8, w: (W - 0.6) * r.entre(0.7, 1), d: 1.6, y0: 2.9, h: 0.5, pontas: true, mat: c.m(F.TOLDO, c.cor('toldo')), sobra: true });
@@ -796,10 +804,40 @@ function lojaToldo(c) {
   // depósito baixo nos fundos
   const topo = h;
   if (fundo > 3 && r.chance(0.5)) c.add({ forma: 'caixa', x: 0, z: -D / 2 + fundo / 2 + 0.2, w: W * 0.6, d: fundo - 0.6, y0: 0, h: 3.2, chao: true, mat: lado, topo: c.m(F.TELHA_METAL, c.cor('telhaMetal')), lod1: true });
-  const tw = r.entre(1.8, 2.4);
-  c.add({ forma: 'caixa', x: r.entre(-0.3, 0.3) * (W - tw - 1), z: bz - bd * 0.3, w: tw, d: tw, y0: topo, h: r.entre(1.5, 2.6), mat: c.m(F.LISO, corP), topo: c.m(F.LAJE, '#8e9aa0'), lod1: true });
-  equipar(c, -W / 2 + 0.8, bz - bd / 2 + 0.6, W / 2 - 0.8, bz + bd / 2 - 0.6, topo, { max: 2 });
+  if (!escondida) {
+    // caixa d'água de alvenaria e as máquinas na laje
+    const tw = r.entre(1.8, 2.4);
+    c.add({ forma: 'caixa', x: r.entre(-0.3, 0.3) * (W - tw - 1), z: bz - bd * 0.3, w: tw, d: tw, y0: topo, h: r.entre(1.5, 2.6), mat: c.m(F.LISO, corP), topo: c.m(F.LAJE, '#8e9aa0'), lod1: true });
+    equipar(c, -W / 2 + 0.8, bz - bd / 2 + 0.6, W / 2 - 0.8, bz + bd / 2 - 0.6, topo, { max: 2 });
+  }
   if (recuo > 0.2) pisoLote(c, zf, D / 2 - 0.05, c.m(F.PISO, c.cor('piso')));
+}
+
+/**
+ * Loja térrea com a água escondida: paredes até o forro, água única (fibrocimento ou telha metálica, 8% a 13%) do fundo
+ * até a platibanda, sem beiral do lado alto, e a platibanda da frente alta o bastante para esconder a cumeeira.
+ * Devolve a altura da platibanda.
+ */
+function lojaEscondida(c, { bz, bd, h, corP, frente, lado, traseira }) {
+  const { W, r } = c;
+  const w = W - 2 * FOLGA;
+  const ep = 0.3; // espessura da platibanda
+  const b = r.entre(0.3, 0.5); // beiral dos fundos
+  const t = r.entre(0.08, 0.13);
+  const metal = r.chance(0.4);
+  const topoT = metal ? c.m(F.TELHA_METAL, c.cor('telhaMetal')) : c.m(F.FIBRO, c.cor('fibro'));
+  // paredes: a frente é a vitrine; o topo fica sob a água (no LOD2, a própria água)
+  c.add({ forma: 'caixa', x: 0, z: bz, w, d: bd, y0: 0, h, chao: true, mat: frente, lado, fundo: traseira, topo: topoT, sem: 16, lod1: true, principal: true });
+  // a água: do beiral dos fundos (baixo) até a face de trás da platibanda (alto); giro de meia volta põe o lado alto na frente
+  const z0 = bz - bd / 2 - b;
+  const z1 = bz + bd / 2 - ep;
+  const d = z1 - z0;
+  const bo = Math.min(0.15, FOLGA - 0.05);
+  c.add({ forma: 'meiaAgua', x: 0, z: (z0 + z1) / 2, w: w + 2 * bo, d, y0: h - b * t, h: d * t, giro: Math.PI, beiral: b, beiralAlto: 0, beiralOitao: bo, mat: lado, topo: topoT, lod1: true });
+  // platibanda: pano liso da cor da loja, capa de concreto, alta o bastante para esconder a água
+  const hp = (bd - ep) * t + r.entre(0.35, 0.7);
+  c.add({ forma: 'caixa', x: 0, z: bz + bd / 2 - ep / 2, w, d: ep, y0: h, h: hp, mat: c.m(F.LISO, corP), topo: c.m(F.CONCRETO, '#bdb8ae'), lod1: true });
+  return hp;
 }
 
 function mercado(c) {
@@ -832,11 +870,17 @@ function galeriaVitrine(c) {
   const h = tH + (n - 1) * pe;
   const par = r.entre(1.0, 1.6);
   const corP = c.parede(['rebocoClaro', 'concreto', 'pastilha']);
-  const frente = c.m(r.chance(0.6) ? F.CORTINA : F.FITA, corP, c.cor('caixilho'), { tr, v: clamp(W / Math.max(1, Math.round(W / 3.6)), 2.8, 5), vr: r.int(0, 3), a: pe });
+  // os andares de cima: vidro da galeria dos anos 70, janela em fita, pastilha, aleta vertical ou painel, pelo bairro
+  const f = c.fachada(['cortina', 'fita', 'janela', 'pastilha', 'briseV', 'painel']);
+  const tf = MAT_FACHADA[f] ?? F.CORTINA;
+  const frente = c.m(tf, tf === F.PASTILHA ? c.cor('pastilha') : corP, tf === F.BRISE_V ? r.item(['#c9c3b6', '#b9b4aa', '#8f9294']) : c.cor('caixilho'), { tr, v: clamp(W / Math.max(1, Math.round(W / 3.6)), 2.8, 5), vr: r.int(0, 7), a: pe });
   const lado = c.m(F.PAINEL, corP, c.cor('caixilho'), { v: 4, a: pe });
   c.add({ forma: 'caixa', x: 0, z: bz, w: W - 2 * FOLGA, d: bd, y0: 0, h: h + par, chao: true, mat: frente, lado, fundo: lado, topo: laje(c), parapeito: par, lod1: true, principal: true });
   const zf = bz + bd / 2;
-  c.add({ forma: 'caixa', x: 0, z: zf + 1.1, w: W - 0.8, d: 2.2, y0: tH - 0.4, h: 0.3, mat: c.m(F.CONCRETO, '#d2ccc0'), topo: laje(c), base: c.m(F.LISO, '#dcd7cc'), sobra: true });
+  // marquise de concreto sobre a calçada (a maioria), toldo de lona ou nada
+  const q = r.f();
+  if (q < 0.6) c.add({ forma: 'caixa', x: 0, z: zf + 1.1, w: W - 0.8, d: 2.2, y0: tH - 0.4, h: 0.3, mat: c.m(F.CONCRETO, '#d2ccc0'), topo: laje(c), base: c.m(F.LISO, '#dcd7cc'), sobra: true });
+  else if (q < 0.85) c.add({ forma: 'inclinado', x: 0, z: zf + 0.8, w: (W - 0.6) * r.entre(0.6, 0.95), d: 1.6, y0: tH - 1.4, h: 0.5, pontas: true, mat: c.m(F.TOLDO, c.cor('toldo')), sobra: true });
   const cm = n >= 3 && W >= 16;
   if (cm) casaDeMaquinas(c, 0, bz - bd * 0.2, Math.min(8, W * 0.4), 5, h, { agua: r.chance(0.5) });
   equipar(c, -W / 2 + 1, bz - bd / 2 + 1, W / 2 - 1, bz + bd / 2 - 1, h, { max: 5, hMax: cm ? 1.25 : par - 0.05 });
@@ -939,7 +983,9 @@ function peleVidro(c) {
   const h = TERREO_ALTURA[tr] + (n - 1) * pe;
   const coroaA = r.int(1, 2);
   const forma = r.chance(0.35) ? 'chanfro' : 'caixa';
-  const pele = c.m(F.CORTINA, r.item(MONTANTE), c.cor('caixilho'), { tr, v: r.entre(2.6, 3.4), vr: r.int(0, 3), a: pe, uso: USO.ESC });
+  // pele de vidro com montante (a maioria) ou com aletas verticais de alumínio a cada quarto de vão (Faria Lima)
+  const aletas = r.chance(0.3);
+  const pele = c.m(aletas ? F.BRISE_V : F.CORTINA, r.item(MONTANTE), aletas ? r.item(['#c9c3b6', '#b9b4aa', '#8f9294', '#d2cdc2']) : c.cor('caixilho'), { tr, v: r.entre(2.6, 3.4), vr: r.int(0, 3), a: pe, uso: USO.ESC });
   const hCorpo = h - coroaA * pe + par;
   let cw = tw;
   let cd = td;
@@ -970,7 +1016,7 @@ function torreControleSolar(c) {
   const recuo = r.entre(...c.par.recuo);
   const pe = c.par.pe;
   const tr = TERREO.PORTARIA_ALTA;
-  const pod = podio(c, { andares: 2, tr, recuo, mat: c.m(F.PEDRA, c.cor('pedra'), c.cor('caixilho'), { tr, v: 4, a: 4, uso: USO.ESC }), lazer: false, lado: c.m(F.PAINEL, c.cor('pedra'), c.cor('caixilho'), { v: 4, a: 4, uso: USO.ESC }) });
+  const pod = podio(c, { andares: 2, tr, recuo, mat: c.m(F.PAINEL, c.cor('pedra'), c.cor('caixilho'), { tr, v: 4, a: 4, uso: USO.ESC }), lazer: false, lado: c.m(F.PAINEL, c.cor('pedra'), c.cor('caixilho'), { v: 4, a: 4, uso: USO.ESC }) });
   const q = r.f();
   const forma = q < 0.45 ? 'chanfro' : q < 0.7 ? 'cilindro' : 'caixa';
   const tw = clamp(W - r.entre(8, 14), 20, 30);

@@ -11,8 +11,10 @@ export function registrar(registrarTextos) {
     // lugares do mapa (rótulos)
     'lugar.rioHeld': 'Rio Held',
     'lugar.lagoa': 'Lagoa de Santa Cida',
+    'lugar.lagoasMeandro': 'Lagoas do Meandro',
     'lugar.baia': 'Baía de Heldópolis',
     'lugar.serraHeld': 'Serra do Held',
+    'lugar.pedraHeld': 'Pedra do Held',
     'lugar.serraPoente': 'Serra do Poente',
     'lugar.pedreira': 'Morro da Pedreira',
     'lugar.mirante': 'Morro do Mirante',

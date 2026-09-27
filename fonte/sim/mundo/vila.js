@@ -64,7 +64,7 @@ export function greide(base, L, { declive, sobreVarzea = 0, vaoLivre = 0, vao = 
   for (let i = 0; i < n; i++) {
     let v = (yA[i] + yC[i]) / 2;
     const r = rioEm(base, L.x[i], L.z[i]);
-    if (r.a < r.hw + r.varzea + 60 && v < r.nivel + sobreVarzea) v = r.nivel + sobreVarzea;
+    if ((r.a < r.hw + 60 || r.v < r.varzea + 60) && v < r.nivel + sobreVarzea) v = r.nivel + sobreVarzea;
     if (vao && vao[i] && v < r.nivel + vaoLivre) v = r.nivel + vaoLivre;
     if (costaEm(base, L.x[i], L.z[i]) < 60 && v < 3) v = 3;
     y[i] = v;
