@@ -10,6 +10,7 @@ import { ITENS, PREDIOS, USINAS, OFICINAS } from './data/itens.js';
 import { PROJETOS, PROJ, MODULOS, POP_NIVEL, alvoEtapa } from './data/obras.js';
 import { CAPITULOS, DICAS, ABERTURA, CONSELHO, TUTORIAL, EFEITOS } from './data/historia.js';
 import { LOTES } from './render/models/canteiro.js';
+import { ETAPAS_CHAO } from './render/ground.js';
 import { A } from './data/planta.js';
 import { ORDEM_BAIRROS, CIDADE, BAIRROS, loteDe, loteEm, COBERTURAS } from './data/cidade.js';
 import { M } from './render/materials.js';
@@ -126,15 +127,14 @@ export class Controle {
     const J = this.J, W = this.mundo; this.obras.rig = this.rig;
     for (const p of PROJETOS) {
       if (p.faixa) { const f = W.faixas[p.faixa]; const n = this.nivelFaixaProj(p); if (f.mods.some((m) => m.nivel !== n)) f.setTodos(n); }
-      for (const e of p.etapas) { const key = p.id + '.' + e.id; const feita = J.feita(key); const emObra = this.sites.has('e:' + key); if (!(p.faixa && e.nivel) && !emObra) { const a = alvoEtapa(p, e); const pt = W.parte(a.modelo, a.parte); if (pt && !!pt.userData.feito !== feita) W.setEtapa(a.modelo, a.parte, feita); } if (e.extra) { const pt = W.parte(e.extra.modelo, e.extra.parte); if (pt && !!pt.userData.feito !== feita) W.setEtapa(e.extra.modelo, e.extra.parte, feita); } if (e.modo === 'reflorestar') this._reflorestado(feita); }
+      for (const e of p.etapas) { const key = p.id + '.' + e.id; const feita = J.feita(key); const emObra = this.sites.has('e:' + key); if (!(p.faixa && e.nivel) && !emObra) { const a = alvoEtapa(p, e); const pt = W.parte(a.modelo, a.parte); if (pt && !!pt.userData.feito !== feita) W.setEtapa(a.modelo, a.parte, feita); } if (e.extra && !(emObra && this._obraNoExtra(p, e))) { const pt = W.parte(e.extra.modelo, e.extra.parte); if (pt && !!pt.userData.feito !== feita) W.setEtapa(e.extra.modelo, e.extra.parte, feita); } if (e.modo === 'reflorestar') this._reflorestado(feita); }
     }
     if (!this.sites.has('e:lago.e1')) this.ground.lake.position.y = J.feita('lago.e1') ? -0.1 : -0.32;
     // canteiro: desmontado na etapa 'Desmontar o canteiro' (some quando ela é aprovada) e replantado depois
     const desmontado = J.feita('reflorestar.e0') || J.feita('reflorestar.e1'); if (!this.sites.get('e:reflorestar.e0')?.concluindo) W.canteiro.visible = !desmontado;
-    // chão: pasto degradado vira gramado quando a obra da área começa
-    const verde = { anel: J.feita('anel.1'), uni: J.feita('uni.1'), ciencias: J.feita('ciencias.e1'), sede: J.feita('sede.e1'), biblio: J.feita('biblioteca.e1'), savana: J.feita('savana.e1'), bioma: J.feita('bioma.e1'), vila: J.feita('anfiteatro.e1'), gorilas: J.feita('gorilas.e1'), acelerador: J.feita('acelerador.e1'), santuario: J.feita('santuario.1') };
-    const praca = J.feita('praca.e1'); const ck = JSON.stringify(verde) + praca;
-    if (ck !== this._chaoKey) { this._chaoKey = ck; this.ground.flags.verde = verde; this.ground.flags.praca = praca; this.ground.paint(); }
+    // chão: o gabarito da figura fica sempre à vista; praça, pátios e acelerador mudam quando a etapa deles é feita
+    const feitas = Object.fromEntries(ETAPAS_CHAO.map((k) => [k, J.feita(k)])); const ck = JSON.stringify(feitas); // zonas do chão que mudam com uma etapa (praça, pátios, acelerador)
+    if (ck !== this._chaoKey) { this._chaoKey = ck; this.ground.flags.feitas = feitas; this.ground.paint(); }
     this.ground.tampa.visible = !['obra', 'pronta', 'feita'].includes(J.etapa('acelerador.e1').estado);
     // cidade: chão dos bairros abertos e os prédios de cada tipo (no nível aprovado)
     W.cidade.bairros(ORDEM_BAIRROS.filter((b) => J.bairroAberto(b)), J.limposSet()); W.cidade.sincronizar(this.S.modulos); { const oc = J.ocupacaoCidade(); W.cidade.terrenos(Object.keys(this.S.cidade.terrenos || {}).filter((id) => !oc.has(id))); }
@@ -166,14 +166,14 @@ export class Controle {
     const [pid, eid] = key.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const W = this.mundo; const st = this.S.etapas[key];
     const site = { tipo: 'etapa', key, ini: st.ini, fim: st.fim, extras: [] };
     const ag = this.J.agora || Date.now(); const base = { itens: Object.keys(e.itens || {}), rig: this.rig, novo: ag - st.ini < 4000, p: clamp((ag - st.ini) / (st.fim - st.ini || 1), 0, 1) }; // novo: acabou de começar (monta o canteiro)
-    let opts;
-    if (p.faixa && e.nivel) {
+    let opts; const noExtra = this._obraNoExtra(p, e);
+    if (p.faixa && e.nivel && !noExtra) {
       const F = W.faixas[p.faixa]; const cur = this.nivelFaixaProj(p); const G = new THREE.Group(), SK = new THREE.Group();
       F.mods.forEach((m, i) => { for (let f = cur; f < e.nivel; f++) { const a = F.andar(i, f, e.nivel); G.add(a.acabado); if (a.esqueleto) SK.add(a.esqueleto); } });
       W.root.add(G, SK); SK.visible = false; site.extras.push(G, SK); site.aoFim = () => F.setTodos(e.nivel);
       opts = { ...base, alvo: G, esqueleto: SK, grua: true, caminho: { path: F.def.path, closed: F.def.closed, o: F.prof.o1 + 0.2, o0: F.prof.o0, o1: F.prof.o1 }, operarios: 18 }; // (turmas 50% maiores: o dono liberou o triplo do volume)
     } else {
-      const a = alvoEtapa(p, e); const mod = W.modelos[a.modelo]; let alvo = W.parte(a.modelo, a.parte); const modo0 = e.modo || mod?.modos?.[a.parte] || 'subir';
+      const a = noExtra ? e.extra : alvoEtapa(p, e); const mod = W.modelos[a.modelo]; let alvo = W.parte(a.modelo, a.parte); const modo0 = (noExtra ? null : e.modo) || mod?.modos?.[a.parte] || 'subir';
       if (modo0 === 'nivel') { // desassoreamento: draga no lago, o nível sobe e a água clareia (AGUA.turvo segue o nível)
         alvo = new THREE.Group(); W.root.add(alvo); site.extras.push(alvo); const b = new THREE.Box3(); for (const [x, z] of A.lago) b.expandByPoint(new THREE.Vector3(x, -0.3, z)); b.max.y = 0.3;
         opts = { ...base, alvo, modo: 'draga', box: b, operarios: 8, nivelAgua: () => this.ground.lake.position.y, anim: (k) => { this.ground.lake.position.y = lerp(-0.32, -0.1, k); } };
@@ -207,6 +207,9 @@ export class Controle {
     site.obra = this._iniciarObra('e:' + key, opts); this.sites.set('e:' + key, site); this.e_shadow();
     if (st.estado === 'pronta') this.obras.pronta('e:' + key);
   }
+  // etapa de nível cuja obra acontece na peça extra (sede.e4: a Torre sobe na ilha com a grua, na caixa dela; os
+  // andares novos da fita aparecem na festa do fim)
+  _obraNoExtra(p, e) { return !!(p.faixa && e.nivel && e.extra && this.mundo.parte(e.extra.modelo, e.extra.parte)?.userData.caixaObra); }
   // uma falha no desenho da obra não pode travar a sincronia do jogo: o erro sai no próximo tique (aparece nos testes)
   _iniciarObra(k, opts) { try { return this.obras.iniciar(k, opts); } catch (e) { setTimeout(() => { throw e; }); try { this.obras.remover(k); } catch (_) {} return null; } }
   // caixas das peças prontas perto da obra (a grua e o pátio ficam no lado mais livre). Uma por malha; malha alta
@@ -427,8 +430,9 @@ export class Controle {
     if (this.J.feita('sede.e2')) { const F = this.mundo.faixas?.sede; if (F?.centro && F.alturaTopo) { const [x, z] = F.centro(Math.min(1, F.mods.length - 1)); return [x, F.alturaTopo(this.nivelFaixaProj(PROJ.sede)) + 0.6, z]; } if (A.sede.repasse) return A.sede.repasse.slice(); const s = A.sede; return [s.c[0], 2.6, s.c[1] + s.rz]; }
     const l = LOTES.escritorio; return [l.x, 1.6, l.z];
   }
+  // balão da etapa: na fita (etapa de nível ou com alvo ao longo dela) ou no modelo (o Pátio da Escola, por exemplo)
   ancoraEtapa(p, e) {
-    const W = this.mundo; if (p.faixa) { const F = W.faixas[p.faixa]; const n = Math.max(e.nivel || 0, this.nivelFaixaProj(p)); const i = (F.mods.length / 2) | 0; const [x, z] = F.centro(Math.min(i, F.mods.length - 1)); return [x, F.alturaTopo(n) + 0.8, z]; }
+    const W = this.mundo; if (p.faixa && (e.nivel || e.alvo)) { const F = W.faixas[p.faixa]; const n = Math.max(e.nivel || 0, this.nivelFaixaProj(p)); const i = (F.mods.length / 2) | 0; const [x, z] = F.centro(Math.min(i, F.mods.length - 1)); return [x, F.alturaTopo(n) + 0.8, z]; }
     const a = alvoEtapa(p, e); const m = W.modelos[a.modelo]; return m?.ancora || [0, 2, 0];
   }
   ancoraModulo(f, i) { const W = this.mundo; const F = W.grupoModulo(f); const [x, z] = F.centro(i); const m = this.S.modulos[f][i]; return [x, F.alturaTopo(Math.max(1, m.obra ? m.obra.para : m.nivel)) + 0.5, z]; }
@@ -568,7 +572,7 @@ export class Controle {
   // ------------------------------------------------------------ câmera e seleção
   irPara(alvo, abrir = true, destaque = null) {
     let foco = null; const o = destaque ? { destaque } : {};
-    if (alvo.etapa) { const [pid, eid] = alvo.etapa.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e); const m = this.mundo.modelos[a.modelo]; const an = this.ancoraEtapa(p, e); foco = m?.foco && !p.faixa ? m.foco : { x: an[0], z: an[2] + 1.5, dist: 16 }; if (abrir) this.paineis.abrir('etapa', alvo.etapa, o); }
+    if (alvo.etapa) { const [pid, eid] = alvo.etapa.split('.'); const p = PROJ[pid], e = p.etapas.find((x) => x.id === eid); const a = alvoEtapa(p, e); const m = this.mundo.modelos[a.modelo]; const an = this.ancoraEtapa(p, e); foco = m?.foco && !(p.faixa && (e.nivel || e.alvo)) ? m.foco : { x: an[0], z: an[2] + 1.5, dist: 16 }; if (abrir) this.paineis.abrir('etapa', alvo.etapa, o); }
     else if (alvo.modulo) { const [f, i] = alvo.modulo; const an = this.ancoraModulo(f, i); foco = { x: an[0], z: an[2] + 1, dist: 11 }; if (abrir) this.paineis.abrir('modulo', alvo.modulo, o); }
     else if (alvo.predio) { const l = LOTES[alvo.predio]; if (l) foco = { x: l.x + 0.8, z: l.z, dist: 13 }; if (abrir) this.paineis.abrir(PREDIOS[alvo.predio].tipo === 'usina' ? 'usina' : PREDIOS[alvo.predio].tipo === 'oficina' ? 'oficina' : alvo.predio === 'almox' ? 'almox' : 'escritorio', alvo.predio, o); }
     else if (alvo.repasse) return this._irAlvo(alvo, destaque);
@@ -668,7 +672,7 @@ export class Controle {
   _maisProximo(g) {
     let best = null, bd = 1e9; const cand = (d, a, r) => { if (d < r && d < bd) { bd = d; best = a; } };
     for (const [id, l] of Object.entries(LOTES)) if (this.mundo.canteiro.visible) cand(Math.hypot(l.x - g.x, l.z - g.z), { predio: id }, 1.4);
-    for (const p of PROJETOS) { if (p.cap > this.S.cap || p.faixa) continue; const nx = this.J.proximaEtapa(p); const e = nx ? nx.e : p.etapas[p.etapas.length - 1]; const an = this.ancoraEtapa(p, e); cand(Math.hypot(an[0] - g.x, an[2] - g.z), { etapa: p.id + '.' + e.id }, 2.6); }
+    for (const p of PROJETOS) { if (p.cap > this.S.cap) continue; const nx = this.J.proximaEtapa(p); const e = nx ? nx.e : p.etapas[p.etapas.length - 1]; if (p.faixa && (e.nivel || e.alvo)) continue; const an = this.ancoraEtapa(p, e); cand(Math.hypot(an[0] - g.x, an[2] - g.z), { etapa: p.id + '.' + e.id }, 2.6); }
     for (const [f, arr] of Object.entries(this.S.modulos)) { if (MODULOS[f].cap > this.S.cap) continue; arr.forEach((m, i) => { const [x, z] = this.mundo.grupoModulo(f).centro(i); cand(Math.hypot(x - g.x, z - g.z), { modulo: [f, i] }, 1.8); }); }
     for (const [pid, fid] of Object.entries(FAIXA_PROJ)) { const p = PROJ[pid]; if (p.cap > this.S.cap) continue; const F = this.mundo.faixas[fid]; const nx = this.J.proximaEtapa(p); const e = nx ? nx.e : p.etapas[p.etapas.length - 1]; F.mods.forEach((m, i) => { const [x, z] = F.centro(i); cand(Math.hypot(x - g.x, z - g.z), { etapa: p.id + '.' + e.id }, 2.2); }); }
     return best;

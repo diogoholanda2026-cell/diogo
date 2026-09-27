@@ -71,20 +71,39 @@ Cinco capítulos e um epílogo, com conselheiros (Íris, arquiteta-chefe; Tomé,
 No fim de cada capítulo o Conselho apresenta um **dilema** sobre o que vem pela frente: a primeira opção cuida das pessoas (bem-estar), a segunda acelera a obra, e cada uma tem um custo. Canteiro compacto × amplo; Biblioteca aberta dia e noite × Laboratórios primeiro; Telhados solares × Geotermia profunda; Elefantes × Cúpula primeiro; e, para o replantio do epílogo, Tarifa social da água (+6% de bem-estar, replantio 30% mais caro) × Água para a obra (Horto 20% mais rápido e replantio 40% mais curto, −3% de bem-estar). O epílogo lembra as escolhas.
 
 1. **Fundação:** canteiro, Caminho da Frente, desassoreamento do Lago da Sede, Sede da Holding e os primeiros módulos do Anel. Um tutorial curto (4 a 6 minutos) leva da primeira brita ao primeiro módulo: um anel dourado pulsa sobre o que tocar (o balão, o botão ou o controle dentro do painel) e o conselheiro explica cada passo.
-2. **Água que corre:** margens vivas e estação natural de água, Escola e Campus para Jovens, campo, Praça da Entrada e o eixo monumental com jardins filtrantes e o Marco da Holding, Bulevar Verde, anel de vidro solar e a Torre da Holding.
-3. **Saber de madeira:** Biblioteca Central (núcleo, andares, pilares-árvore, dossel), Centro de Recursos Digitais, Faculdades de Humanidades, Engenharia e Ciências, Instituto de Estudos Urbanos, Campus Universitário, Ala em Onda, pontes.
-4. **Energia escondida:** Acelerador de Partículas (poço, anel, detectores, Centro de Física), anfiteatro e casas da Vila Estudantil.
+2. **Água que corre:** o Anel fecha em volta do lago com os tambores e o portal, as 4 bacias com diques e canais, a folha da Escola com o campo, a Praça da Entrada com a colunata, as fontes e o Marco, o Bulevar Verde e o vidro solar da Sede.
+3. **Saber de madeira:** a Torre da Holding na ilha, a Biblioteca Central e o CRD, a folha da Universidade (Engenharia, Campus Universitário, Instituto, Ciências), Humanidades, Ala em Onda, Elo Norte e as pontes.
+4. **Energia escondida:** Acelerador de Partículas (poço, linha de luz, detectores, Centro de Física em crescente), anfiteatro e as casas da Vila, que espelham a Humanidades.
 5. **Casa dos gigantes:** a **Cúpula da Vida**, uma cúpula de vidro fechada com mata tropical, lago, riacho, rochedo com cascata e névoa por dentro (a fauna resgatada vive escondida na mata), a estufa anexa ligada por um tubo de vidro, a galeria de entrada com a passarela nas copas e o Santuário, fita residencial de 4 pavimentos em arco que abraça a cúpula. Os materiais da cúpula (nós, painéis, acrílico, ração, kits veterinários) só aparecem aqui.
 6. **Composição total:** desmontar o canteiro (as oficinas descem para galpões sob o acelerador) e replantar a mata. As duas pranchas aceitam materiais já no capítulo 5 e as obras do epílogo são curtas de propósito (fator de obra 0,15), então o final acontece em uma ou duas visitas, como uma festa.
 
-### O plano diretor da Arcologia
+### O plano diretor da Arcologia: o Trevo da Holding
 
-A Arcologia ocupa 80 x 56 unidades entre a praia, o porto e os bairros, organizada como uma capital planejada:
+A Arcologia é **uma construção só**: um trevo de quatro folhas em volta de um anel, feito das fitas de terraços da
+foto de referência e das imagens originais do dono (a arcologia circular com a torre escalonada no lago, a Sede ao pôr
+do sol e os anéis ligados por fitas). Ocupa 80 x 62 unidades entre a praia, o porto e os bairros; a mata fica só como
+moldura escura em volta.
 
-- **Eixo monumental** norte-sul: do portão sul, a **Praça da Entrada** (simétrica, com dois espelhos d'água e laços de passeio por cima do anel viário), o **Bulevar Verde** até a **rotatória** com o **Marco da Holding** (agulha branca com o guarda-chuva dourado e chafariz) e o **Passeio da Holding** até o lago. Espelhos d'água com repuxos, renques de árvores, bancos e postes dos dois lados.
-- **Sede da Holding** no fim do eixo: fita em U de varandas brancas aberta para o sul, com o **Lago da Sede** no meio (jardins flutuantes e três repuxos), o pavilhão **guarda-chuva** na margem, duas piscinas e, ao fundo, a **Torre da Holding** (12 andares de vidro escuro com aletas douradas e o **heliponto** no topo). O **helicóptero da Holding**, preto laqueado com faixas douradas, mora ali: espera no heliponto, decola, dá uma volta larga sobre a Arcologia e a cidade e pousa de novo.
-- **Avenida transversal** leste-oeste e **anel viário** em volta de tudo, com faixa tracejada, postes e carros circulando; quatro **saídas** asfaltadas levam ao Bairro Sul, ao Bairro Norte, ao Bairro Leste e ao porto.
-- **Quadras por função:** o Saber a oeste (Campus Universitário, Ala em Onda, Faculdade de Ciências com a Ponte Coberta até a Sede, o Elo descendo até a avenida e o Anel com a Escola, o campo e as faculdades); a Vida a leste (a **Cúpula da Vida**, abraçada pela fita do Santuário, e a estufa anexa); perto da entrada a Biblioteca com o CRD e a Vila com o anfiteatro; ao fundo o Acelerador e o pátio de obras. Todas as passarelas são retas e ligam as quadras ao eixo, à rotatória e umas às outras.
+- **Anel Mestre:** a **Sede da Holding** (8 pavimentos de varandas brancas, com pórtico dourado sobre o portal norte) e
+  o **Anel** de moradia (7 pavimentos de terraços verdes descendo para o lago) abraçam o **Lago da Sede**, dividido em 4
+  bacias por diques-jardim. No centro, na ilha, a **Torre da Holding**, um bolo de noiva de 4 camadas creme e âmbar com
+  terraços-jardim, coroa de vidro e **heliponto** a 14 de altura, o único pico. O **helicóptero da Holding** mora ali.
+- **Quatro tambores** (rotundas de vidro âmbar e lanterna no átrio) nos nós diagonais sobem junto com o módulo da fita
+  a que pertencem. De cada um sai uma **folha em gota** que abraça um miolo: **Escola** a sudoeste (campo com
+  arquibancada e torres de luz), **Universidade** a sudeste (Engenharia, Campus Universitário com 5 torres, Instituto e
+  a Faculdade de Ciências no miolo, com pista e Ponte Coberta), **Biblioteca** a noroeste (torre-vaso sobre espelho
+  d'água e o CRD em leque) e **Vida** a nordeste (a **Cúpula da Vida** fechada, a Estufa encostada e a Galeria em fila).
+- **Contorno fechado:** a Ala em Onda e o Elo Norte nos vales (com canais e repuxos), Humanidades e Vila como braços que
+  abraçam a praça, e o Elo do Santuário, que continua no crescente do **Centro de Física** ao norte. Uma **linha de luz**
+  azul (o acelerador) corre rente ao pé do contorno e acende à noite.
+- **Eixo x = 0:** portão, Caminho da Frente, **Praça da Entrada** redonda com a colunata, o espelho e o **Marco da
+  Holding**, a esplanada com duas fontes, o Bulevar Verde sob o portal do Anel, o pavilhão guarda-chuva, a ponte, a ilha
+  e a Torre, a ponte privada, o portal da Sede e o poço do acelerador.
+- **Carro só por fora:** o anel viário contorna tudo, com quatro **saídas** para o Bairro Sul, o Bairro Norte, o Bairro
+  Leste e o porto. O pátio de obras fica no canto noroeste, fora da figura.
+- **Desde o capítulo 1** a figura inteira aparece no chão como grama aparada (o gabarito), e cada capítulo fecha partes
+  do trevo. `ferramentas/teste-planta.mjs` confere a regra das juntas na planta e `ferramentas/conexoes.mjs` na
+  geometria de verdade.
 
 ### A cidade em volta da Arcologia
 
@@ -153,10 +172,10 @@ A interface é a **prancheta da maquete**: o HUD fica nas bordas, em vidro escur
 
 ## Gráficos
 
-No padrão visual da foto de referência, num mundo aberto, feito para o Mali-G615 MC2 do Poco X7. A Arcologia inteira, na vista padrão do eixo (qualidade Alta, 1376 x 768), fica em 166 chamadas de desenho e 404 mil triângulos, contando a sombra, as vias do plano e os arredores.
+No padrão visual da foto de referência, num mundo aberto, feito para o Mali-G615 MC2 do Poco X7. A Arcologia inteira, na vista padrão do eixo (qualidade Alta, 1376 x 768), fica em 152 chamadas de desenho e 435 mil triângulos, contando a sombra, as vias do plano e os arredores.
 
-- **Estruturas no tipo da foto, em plano novo:** cada componente nasceu da foto de referência ampliada região por região e agora ocupa a sua quadra no plano diretor. O **Campus Universitário** é uma arena oval de parede em grelha de células, com cinco torres na platibanda e o campo com pista dentro. O **Anel do Campus** é uma colina de terraços verdes em volta do campo, com os pátios da escola em morros de terraços e a cidade de blocos brancos das faculdades. A **Sede** é um U de varandas brancas em volta do lago, fechado ao fundo pela **Torre da Holding** com heliponto e o helicóptero preto e dourado. A **Faculdade de Ciências** é uma rede de bandas boleadas com as células cobertas por vidraçaria espelhada. A **Biblioteca** é uma torre em vaso de lajes onduladas com fachada em colmeia, pilares inclinados e um jardim de cobertura com estufa; o **CRD** é um casco em leque de madeira e vidro. A **Cúpula da Vida** é uma cúpula geodésica de vidro de 16 de diâmetro sobre plinto claro, com nervuras, lanterna no topo e a mata, o lago e a cascata visíveis por dentro, ligada por um tubo de vidro à estufa anexa; o **Santuário** é uma fita em arco que a abraça pelo norte. A **Vila** tem casas empilhadas junto ao anfiteatro escavado e o **acelerador** é uma bacia em degraus. Em volta, a mata em três tipos de árvore com ciprestes em grupos, uma aldeia a oeste e as vias do plano. As referências de arquitetura: Stefano Boeri, BIG, Zaha Hadid, MAD Architects, Kengo Kuma, Shigeru Ban, Moshe Safdie, o Eden Project e as capitais planejadas (eixo monumental e quadras).
-- **Cidade:** prédios no mesmo padrão da foto (lajes creme, faixas de vidro escuro com as salas acesas à noite, canteiros verdes na borda dos terraços, coberturas verdes), fundidos por bairro e material depois de prontos. Pedestres andam em volta de cada lote construído e carros circulam pelas ruas dos bairros abertos. O zoom máximo vai até 230 unidades, para ver a cidade inteira. Com a Arcologia completa, 150 prédios da cidade no nível máximo, 250 lotes desmatados em 11 bairros com a mata dos outros lotes, o porto e o aeroporto no nível máximo, a vista mais aberta (zoom de 230, qualidade Ultra) fica em 426 chamadas de desenho e 789 mil triângulos: dentro do orçamento do PC; no Poco X7, com o zoom todo aberto, passa da meta, e os níveis de detalhe da fase 4 (ver `docs/VISAO.md`) resolvem isso. Barcos e aeronaves são fundidos por material (poucas malhas cada).
+- **Estruturas no tipo da foto, numa construção só:** as fitas de terraços (Anel, folhas e contorno) são uma família só, com pontas acabadas, tambores nos nós e vãos com portal. A **Sede** tem varandas brancas contínuas; o **Anel**, terraços verdes para o lago com passeio no teto; a **Escola**, guarda-corpos coloridos; o **Campus Universitário**, parede de células com cinco torres; a **Engenharia**, um dossel solar em guarda-chuva; o **Instituto**, um dossel verde; a **Humanidades**, um terraço de esculturas; a **Vila**, casas brancas com telhado. A **Torre da Holding** é um bolo de noiva com terraços-jardim e ouro só nos frisos. A **Faculdade de Ciências** é uma rede de bandas boleadas com vidro espelhado. A **Biblioteca** é uma torre em vaso com dossel solar; o **CRD**, um leque de madeira e vidro. A **Cúpula da Vida** é uma cúpula geodésica de vidro fechada com a mata, o lago e a cascata por dentro, e a Estufa encostada nela como as bolhas do Eden Project. As referências de arquitetura: Stefano Boeri, BIG, Zaha Hadid, MAD Architects, Kengo Kuma, Moshe Safdie, Apple Park, Arcosanti, o Eden Project e as capitais planejadas (eixo monumental).
+- **Cidade:** prédios no mesmo padrão da foto (lajes creme, faixas de vidro escuro com as salas acesas à noite, canteiros verdes na borda dos terraços, coberturas verdes), fundidos por bairro e material depois de prontos. Pedestres andam em volta de cada lote construído e carros circulam pelas ruas dos bairros abertos. O zoom máximo vai até 230 unidades, para ver a cidade inteira. Com a Arcologia completa, 150 prédios da cidade no nível máximo, 250 lotes desmatados em 11 bairros com a mata dos outros lotes, o porto e o aeroporto no nível máximo, a vista mais aberta (zoom de 230, qualidade Ultra) fica em 416 chamadas de desenho e 820 mil triângulos: dentro do orçamento do PC. No Poco X7 (qualidade Média) a vista padrão com a mesma cidade fica em 254 chamadas e 664 mil triângulos; com o zoom todo aberto (394 chamadas) passa da meta, e os níveis de detalhe da fase 4 (ver `docs/VISAO.md`) resolvem isso. Barcos e aeronaves são fundidos por material (poucas malhas cada).
 - **Luz da foto (padrão):** a luz quente de exposição vindo de cima e da esquerda, o céu azul-marinho com estrelas e aurora em fitas, as janelas acesas em amarelo quente, piscinas e a Cúpula da Vida acesas por dentro, prédios creme com vidro escuro, lagos azul-acinzentados e a mata verde-oliva escura de copinhas miúdas, com os vãos quase pretos, medida região por região contra a foto. Gradação em espaço linear com tonemapping Khronos PBR Neutral, sombras frias e luzes quentes.
 - **Dia de BuildIt (opção Sempre dia):** sol quente vindo da esquerda da tela, sombras nítidas caindo para a direita e azuladas pelo céu, verde vivo, água turquesa e prédios claros.
 - **Ciclo de dia e noite (opção Acelerado ou Hora do celular):** amanhecer rosa e laranja, hora dourada com sombras longas, dia claro, pôr do sol dourado e lilás, crepúsculo violeta e a noite da foto, com aurora e a lua, janelas que acendem prédio a prédio, postes, fitas de luz nas passarelas, reflexos quentes nos lagos e estrelas. Tudo interpolado sem degraus; a sombra acompanha o sol e só é refeita quando ele anda meio grau.
@@ -180,13 +199,13 @@ fonte/
   main.js                    carregamento, motor, mundo, save, primeiro toque
   jogo.js                    liga simulação, mundo 3D e interface
   core/                      utilidades, som procedural, vibração, salvamento (IndexedDB)
-  data/                      plano diretor (planta.js: vias, quadras, passarelas, zonas), itens, obras e etapas, história, rótulos, cidade
+  data/                      plano diretor (planta.js: o Trevo gerado por medidas, fitas, tambores, passarelas, zonas), itens, obras, história, rótulos, cidade
   sim/estado.js              simulação: produção, filas, prancha, módulos, serviços, capítulos
   render/                    motor (pós-processamento), oclusão por campo de alturas (hao.js), câmera,
                              ciclo de dia e noite (ciclo.js), céu, arredores (arredores.js), terreno,
                              floresta, cidade em volta da Arcologia (cidade.js), obra animada (obra.js), figuras, animais,
                              descarte de memória (descartar.js) e o mundo
-  render/models/             cada estrutura, por etapas (cupula.js: a Cúpula da Vida; plano.js: vias, renques, eixo e o Marco)
+  render/models/             cada estrutura, por etapas (faixa.js: a fita com tambores e pilares; aneis.js: as 12 fitas; centro.js: a Torre e o lago)
   ui/                        HUD, painéis (folha lateral), balões, ícones desenhados em código,
                              configurações e modo Apreciar
   web/                       HTML, manifesto, service worker, ícones, a fonte Baloo 2 (OFL) e a foto em WebP
@@ -197,7 +216,9 @@ ferramentas/
   testar.mjs                 capturas de tela no Chromium (WebGL por software)
   vitrine.mjs                conjunto padrão de capturas (composição, closes, obra, celular) para comparar versões
   cap-obra.mjs               capturas de aceite de cada modo de obra, montagem e aprovação
-  conexoes.mjs               confere na planta se fitas, passarelas e vias se cruzam
+  teste-planta.mjs           regra das juntas e âncoras da planta (entra no simular --testes)
+  teste-faixa.mjs            motor da fita: ordem, vãos, tambores, pilares, tampas (entra no simular --testes)
+  conexoes.mjs               juntas na geometria de verdade e onde cada passarela pousa
   vitrine-ui.mjs             capturas e medidas da interface no celular, sem WebGL
 ```
 

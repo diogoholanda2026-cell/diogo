@@ -87,7 +87,7 @@ const modelos = new Proxy({}, { get: (o, k) => (o[k] ||= { ancora: [...(A[k]?.c 
 const cidFaixa = () => ({ mods: [], centro(i) { const l = loteDe(this.mods[i]?.lote); return l ? [l.x, l.z] : [0, 0]; }, alturaTopo: (nv) => 0.6 + nv * 0.4, setTodos: nop, setNivel: nop, refresh: nop, andar: () => ({ acabado: new THREE.Group() }) });
 const cidade = { faixas: Object.fromEntries(Object.keys(CIDADE).map((f) => [f, cidFaixa()])), bairros: nop, mostrarLotes: nop, fontes: nop, picks: nop, centroLote: (id) => { const l = loteDe(id); return l ? { x: l.x, z: l.z } : null; },
   sincronizar(mods) { for (const [f, F] of Object.entries(this.faixas)) F.mods = (mods[f] || []).map((m) => ({ nivel: m.nivel, lote: m.lote })); } };
-const mundo = { faixas, casas: faixa('vila', 6), modelos, cidade, grupoModulo: (f) => (f === 'casas' ? mundo.casas : cidade.faixas[f] || faixas[f]), canteiro: { visible: true, children: [] }, predios: {}, root: new THREE.Group(), parte: () => null, setEtapa: nop, refundir: nop, povoar: nop, pick: () => null, mostrarFantasma: nop };
+const mundo = { faixas, modelos, cidade, grupoModulo: (f) => cidade.faixas[f] || faixas[f], canteiro: { visible: true, children: [] }, predios: {}, root: new THREE.Group(), parte: () => null, setEtapa: nop, refundir: nop, povoar: nop, pick: () => null, mostrarFantasma: nop };
 const obras = { iniciar: () => ({ box: null }), progresso: nop, pronta: nop, remover: nop, producao: nop, ancora: () => null, concluir: (k, cb, o = {}) => { setTimeout(() => o.aoImpacto && o.aoImpacto(), 380); setTimeout(() => cb && cb(), 1200); } };
 const ground = { lake: { position: { y: 0 } }, flags: {}, paint: nop, tampa: {} };
 const env = { mode: 'exposicao', setMode(m) { this.mode = m; } };

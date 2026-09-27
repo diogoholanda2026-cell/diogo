@@ -445,10 +445,6 @@ export function distAnelViario(x, z) {
   const qx = Math.abs(x - cx) - hx, qz = Math.abs(z - cz) - hz; const fora = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0);
   return Math.abs(fora - r);
 }
-// legado: sai na integração (o plano novo não tem avenida nem rotatória; o eixo é A.praca, A.bulevar e A.eixoN)
-export const EIXO = { x: 0, meia: 3.2, z0: -8.4, z1: 24.6 };
-export const AVENIDA = { z: 1, w: 2.0 };
-export const ROTATORIA = { c: [0.0001, 1.0001], r: 3.6, ilha: 2.6 };
 
 // ---------------------------------------------------------------- acelerador (seção 7: ACELERADOR)
 export const ACELERADOR = {

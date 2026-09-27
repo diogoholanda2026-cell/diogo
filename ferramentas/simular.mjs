@@ -582,9 +582,6 @@ function todos() {
   }
   const pesam = difs.filter(([d, dr]) => Math.max(d, dr) >= 0.08).length; if (pesam < 3) falhas.push(`dilemas: só ${pesam} com diferença ≥ 8% (mín. 3)`); linhas.push(`dilemas que pesam (≥ 8%): ${pesam} de ${difs.length}`);
   if (difs.some(([d, dr, epilogo]) => !epilogo && Math.max(d, dr) > 0.2)) falhas.push('dilemas: alguma opção muda o tempo em mais de 20% (armadilha)'); // no epílogo curto a armadilha é passar de 3 h (acima)
-  // projetos condicionais (pas_frente2, pas_caracol): com passarelas de mentira na planta, entram no jogo e o robô termina
-  const pr = spawnSync(process.execPath, ['--import', new URL('./passarelas-teste.mjs', import.meta.url).href, fileURLToPath(import.meta.url), '--passarelas'], { encoding: 'utf8' });
-  linhas.push('passarelas condicionais: ' + (pr.stdout || pr.stderr || '').trim().split('\n').join(' | ')); if (pr.status !== 0) falhas.push('passarelas condicionais: ' + (pr.stdout || pr.stderr || '').trim());
   console.log(linhas.join('\n'));
   console.log(falhas.length ? `\nFALHAS (${falhas.length}):\n- ` + falhas.join('\n- ') : '\nTudo nas faixas.');
   process.exitCode = falhas.length ? 1 : 0;
@@ -593,12 +590,6 @@ function todos() {
 // ------------------------------------------------------------------ linha de comando
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes('--todos')) todos();
-  else if (process.argv.includes('--passarelas')) { // com a pré-carga passarelas-teste.mjs
-    const f = []; if (!PROJ.pas_frente2 || !PROJ.pas_caracol) f.push('pas_frente2/pas_caracol não entraram (rode com --import ./ferramentas/passarelas-teste.mjs)');
-    else { f.push(...invariantes()); const R = rodar({ passo: 3, semente: 1 }); if (R.travou || !R.terminou) f.push(R.travou || 'não terminou'); for (const k of ['pas_frente2.e1', 'pas_caracol.e1']) if (!R.J.feita(k)) f.push(k + ' não foi feita');
-      if (!f.length) console.log(`ok (${R.dias.toFixed(1)} dias no contínuo, as duas passarelas feitas)`); }
-    if (f.length) console.log(f.join('; ')); process.exitCode = f.length ? 1 : 0;
-  }
   else if (process.argv.includes('--testes')) { // regras e, em processos à parte, a geometria da planta e o motor da Faixa
     const f = [...invariantes(), ...testes()];
     for (const t of ['teste-planta.mjs', 'teste-faixa.mjs']) { const r = spawnSync(process.execPath, [fileURLToPath(new URL('./' + t, import.meta.url))], { encoding: 'utf8' }); if (r.status !== 0) f.push(t + ': ' + ((r.stdout || '') + (r.stderr || '')).trim().split('\n').slice(-6).join(' | ')); }

@@ -2,7 +2,7 @@
 // replantar), a montagem do canteiro (0/400/800/1600 ms), o filme de uma etapa (5 a 98% e pronta), a aprovação
 // (0/200/400/800/1200/2000 ms, de dia e à noite), 3 obras ao mesmo tempo e o canteiro de produção vivo.
 // Uso: node ferramentas/cap-obra.mjs <pasta_saida> [grupos] [largura] [altura]
-//   grupos: montagem, filme, aprovacao, modos, lineares, simultaneas, canteiro (padrão: todos)
+//   grupos: montagem, filme, aprovacao, modos, trevo, lineares, simultaneas, canteiro (padrão: todos)
 // Serve app/ (rode antes `node ferramentas/montar.mjs`). O relógio das obras (obras.relogio) fica preso em
 // instantes exatos, então as fotos saem no ponto certo mesmo com o WebGL por software (1 a 5 s por quadro).
 import { createServer } from 'node:http';
@@ -13,7 +13,7 @@ import { chromium } from 'playwright';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(raiz, 'app');
-const [saida = '/tmp/cap-obra', gruposArg = 'montagem,filme,aprovacao,modos,lineares,simultaneas,canteiro', LW = '1000', LH = '450'] = process.argv.slice(2);
+const [saida = '/tmp/cap-obra', gruposArg = 'montagem,filme,aprovacao,modos,trevo,lineares,simultaneas,canteiro', LW = '1000', LH = '450'] = process.argv.slice(2);
 const grupos = new Set(gruposArg.split(','));
 mkdirSync(saida, { recursive: true });
 const tipos = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.webp': 'image/webp', '.webmanifest': 'application/manifest+json', '.css': 'text/css' };
@@ -122,6 +122,19 @@ try {
     for (const [nome, desc, f] of cenas) { await run(pg, f); await pg.evaluate(() => new Promise((r) => setTimeout(r, 1800))); await foto(pg, nome, desc, 3); if (nome === 'd-caixas-gorilas') { await run(pg, () => { window.__cap.zera(); window.__cap.pronta('gorilas.e4'); }); await pg.evaluate(() => window.__cap.quadros(2)); await run(pg, () => { window.__cap.relogio(9000); window.__held.C.aprovarEtapa('gorilas.e4'); }); await pg.evaluate(() => window.__cap.quadros(1)); for (const ms of [1400, 1700, 2100, 2800]) { await run(pg, (ms) => window.__cap.relogio(9000 + ms), ms); await foto(pg, `d-caixas-abrindo-${ms}`, `Gorilas saindo das caixas aos ${ms} ms da aprovação`); } await run(pg, () => window.__cap.solta()); } }
     await run(pg, () => window.__cap.limpa());
   } catch (e) { erros.push('modos: ' + e.message.split('\n').slice(0, 4).join(' | ')); }
+  if (grupos.has('trevo')) try { // obras do Trevo: tambor com o módulo dono, Torre na ilha, fitas novas, portal e Elo
+    const cenas = [
+      ['t-tambor-so', 'Módulo 4 do Anel subindo ao nível 3 com o tambor SO (grua e turma no trecho e no nó)', () => { window.__cap.modulo('anel', 4, 0.45, 3); const c = window.__held.mundo.faixas.anel.mods[4].nos[0].c; window.__cap.cam(c[0], c[1] + 1, 13, 0.5, 0.62); }],
+      ['t-torre', 'Torre da Holding (sede.e4, 50%): grua no pódio, pátio na margem norte', () => { for (const k of ['sede.e1', 'sede.e2', 'sede.e3', 'lago.e1']) window.__held.J.S.etapas[k] = { estado: 'feita', entregue: {} }; window.__cap.obra('sede.e4', 0.5); window.__cap.cam(0, -2.5, 26, 0.5, 0.5); }],
+      ['t-humanidades', 'Humanidades (e1, 50%): a fita do braço oeste da praça', () => { window.__cap.obra('humanidades.e1', 0.5); const c = window.__held.mundo.faixas.humanidades.centro(0); window.__cap.cam(c[0], c[1], 13, 0.4, 0.62); }],
+      ['t-engenharia', 'Engenharia (e1, 50%): o rabo norte da folha da Universidade', () => { window.__cap.obra('engenharia.e1', 0.5); const c = window.__held.mundo.faixas.engenharia.centro(0); window.__cap.cam(c[0], c[1], 12, -0.4, 0.62); }],
+      ['t-portal', 'Portal do Anel (pas_anel, 50%): a ponte de 2 pavimentos sobre a boca', () => { window.__cap.obra('pas_anel.e1', 0.5); window.__cap.cam(0, 9.5, 11, 0.45, 0.55); }],
+      ['t-elo', 'Elo do Santuário (pas_elo, 50%): braço sobre pilares até o Centro de Física', () => { window.__cap.obra('pas_elo.e1', 0.5); window.__cap.cam(-12, -22, 16, 3.3, 0.6); }],
+    ];
+    await run(pg, () => { window.__cap.limpa(); window.__cap.solta(); });
+    for (const [nome, desc, f] of cenas) { await run(pg, () => window.__cap.limpa()); await run(pg, f); await pg.evaluate(() => new Promise((r) => setTimeout(r, 1800))); await foto(pg, nome, desc, 3); }
+    await run(pg, () => window.__cap.limpa());
+  } catch (e) { erros.push('trevo: ' + e.message.split('\n').slice(0, 4).join(' | ')); }
   if (grupos.has('lineares')) try { // caminhos e passarelas avançam do começo ao fim
     await run(pg, () => { delete window.__held.J.S.etapas['pas_frente.e1']; window.__held.J._derivar(); window.__held.C.sincronizar(); });
     for (const p of [0.1, 0.5, 0.9]) { await run(pg, (p) => { if (p === 0.1) { window.__cap.obra('pas_frente.e1', p); const o = window.__held.obras.sites.get('e:pas_frente.e1'); const c = o.box.getCenter(new window.__held.THREE.Vector3()); window.__cap.cam(c.x, c.z, 10, 0.45, 1.1); } else window.__cap.progresso('pas_frente.e1', p); }, p); await foto(pg, `e-caminho-frente-${Math.round(p * 100)}`, `Caminho da Frente com ${Math.round(p * 100)}% (frente de obra andando, rolo e fôrma)`, 3); }

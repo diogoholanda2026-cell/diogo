@@ -7,10 +7,11 @@ Atualizado em 26/09/2026, depois da fase 1 (desmate, porto, jatinhos, esportivos
 ## 1. Onde estamos
 
 - **Arcologia de Held:** a obra central, em 6 capítulos, com a mecânica do SimCity BuildIt: usinas, oficinas, pranchas,
-  pavimentos, pedidos e obras animadas. Desde a fase 1.1 ela segue um plano diretor próprio (eixo e quadras) em vez da
-  disposição da foto: eixo monumental até a Sede com a Torre da Holding (heliponto e helicóptero exclusivo), avenida,
-  rotatória, anel viário ligado aos bairros e ao porto, quadras por função e a Cúpula da Vida (vidro fechado, sem
-  bichos à vista). Prédios da cidade e obras da Arcologia aceitam cor escolhida pelo jogador.
+  pavimentos, pedidos e obras animadas. Desde a fase 1.2 ela é uma construção só, o **Trevo da Holding**: o Anel
+  Mestre (Sede e Anel) em volta do lago com a Torre escalonada e o heliponto, quatro tambores, quatro folhas em gota
+  (Escola, Universidade, Biblioteca, Vida com a Cúpula fechada), contorno fechado com a linha de luz do acelerador e o
+  eixo com a praça e a colunata; anel viário por fora, ligado aos bairros e ao porto. Prédios da cidade e obras da
+  Arcologia aceitam cor escolhida pelo jogador.
 - **Cidade em volta, em mundo aberto:**
   - 20 bairros e 1.651 lotes que começam cobertos de mata. Tocar nas árvores desmata o lote e abre a rua.
   - Moradias que sobem de nível e serviços com área de atendimento (polícia, saúde, escola, faculdade), mais a
@@ -250,6 +251,7 @@ financeira, o advogado, a chefe de relações públicas, os fundadores rivais e 
 |---|---|---|
 | 1 (feita) | desmate, porto, jatinhos, esportivos, limites maiores, esta visão e a equipe de IA | publicada em 26/09/2026 |
 | 1.1 (feita) | plano diretor da Arcologia (eixo, quadras, anel viário, saídas para a cidade), Torre da Holding com heliponto e helicóptero, Cúpula da Vida, cores dos prédios | publicada em 26/09/2026 |
+| 1.2 (feita) | Trevo da Holding: a Arcologia como uma construção só (Anel Mestre, tambores, folhas, contorno, eixo), gabarito desde o capítulo 1, Torre em bolo de noiva, linha de luz | publicada em 27/09/2026 |
 | 2 | Holding com divisões, influência, rivais e aliados na primeira metrópole, eventos de decisão com memória, bombeiros, lixo, telecom e marcos | robô vence um rival e completa 10 eventos |
 | 3 | estradas livres (reta, curva, rotatória), zonas com demanda, linhas de ônibus e metrô, trânsito com rotas | uma cidade crescida só por zonas e estradas |
 | 4 | motor em escala: WebGPU, simulação em worker, mapa em blocos, níveis de detalhe, estações e chuva, agentes estatísticos | 50 mil lotes a 60 quadros no PC e 30 no Poco X7 |

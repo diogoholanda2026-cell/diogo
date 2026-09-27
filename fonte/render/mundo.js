@@ -169,7 +169,7 @@ export class Mundo {
     for (const f of Object.values(this.faixas)) f.setTodos(f.max);
     for (const [id, m] of Object.entries(this.modelos)) for (const k of Object.keys(m.partes)) this.setEtapa(id, k, true);
     this.plano.setEixo(3); this.refundirAgora();
-    this.ground.flags.praca = true; this.ground.flags.verde = Object.fromEntries(['anel', 'uni', 'ciencias', 'sede', 'biblio', 'savana', 'bioma', 'vila', 'gorilas', 'acelerador', 'santuario'].map((k) => [k, true])); this.ground.paint(); this.ground.lake.position.y = -0.1; this.ground.tampa.visible = false;
+    this.ground.flags.tudo = true; this.ground.flags.praca = true; this.ground.paint(); this.ground.lake.position.y = -0.1; this.ground.tampa.visible = false;
     this.povoar();
   }
   // ------------------------------------------------------------ gente
@@ -184,7 +184,7 @@ export class Mundo {
       const P = p.userData.pessoas; if (!P || !p.userData.feito || !P.area?.length) continue;
       pedidos.push({ tipo: 'area', P, n: VIDA * (m.id === 'praca' ? Math.max(P.n || 0, 110) : P.n || 20) });
     }
-    for (const m of Object.values(this.modelos)) if (m.caminho && m.partes.e1?.userData.feito) pedidos.push({ tipo: 'linha', pts: m.caminho, n: 10 * VIDA });
+    for (const m of Object.values(this.modelos)) if (m.caminho && m.partes.e1?.userData.feito) { const ls = m.caminhos || [m.caminho]; for (const l of ls) pedidos.push({ tipo: 'linha', pts: l, n: Math.round((10 * VIDA) / ls.length) }); } // (colunata e Elo: uma linha por braço, sem cruzar o vão)
     for (const [k, f] of Object.entries(this.faixas)) {
       const nv = Math.max(0, ...f.mods.map((md) => md.nivel)); if (typeof f.caminhoTeto !== 'function' || (k !== 'anel' && nv < 3) || nv < 1) continue;
       let c = null; try { c = f.caminhoTeto(); } catch (_) { c = null; }
