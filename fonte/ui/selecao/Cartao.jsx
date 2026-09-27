@@ -7,7 +7,7 @@
 // A consulta q.predio(ref) é relida 2 vezes por segundo enquanto há seleção de prédio e fica em loja.detalhe (a folha
 // usa). Via e Arcologia não são prédios: o ref delas não vai para q.predio (daria o prédio de mesmo índice).
 import { signal, effect } from '@preact/signals';
-import { selecao, detalhe, avisar } from '../loja.js';
+import { selecao, detalhe } from '../loja.js';
 import { consultar } from '../consultas.js';
 import * as fmt from '../formato.js';
 import { t, temTexto } from '../textos.js';
@@ -18,7 +18,7 @@ import { Aviso } from '../comp/Aviso.jsx';
 import { Barra } from '../comp/Barra.jsx';
 import { zona as dadosZona, FAMILIAS_ZONA } from '../../data/zonas.js';
 import { MINUTO } from '../../comum/relogio.js';
-import { tarifaDoBemEstar } from '../../data/economia.js';
+import { tarifaDoBemEstar, bemEstarArredondado } from '../../data/economia.js';
 
 /** A folha completa (U1b) abre por aqui; o cartão some enquanto ela está aberta. */
 export const folhaAberta = signal(false);
@@ -81,7 +81,7 @@ export function numerosDoCartao(p) {
   const hora = fmt.dicaHora();
   if (p.moradia) {
     const m = p.moradia;
-    const bem = Math.round(m.bemEstar ?? 0);
+    const bem = bemEstarArredondado(m.bemEstar); // sem número (prédio vazio) vale 0, nunca "NaN" no cartão
     const tar = tarifaDoBemEstar(m.bemEstar); // as faixas do dono (uma fonte só: data/economia.js)
     return [
       { id: 'moradores', rotulo: t('cartao.moradores'), valor: t('cartao.deN', { a: fmt.numero(m.moradores), b: fmt.numero(m.capacidade) }), frac: m.capacidade ? m.moradores / m.capacidade : 0 },
@@ -206,28 +206,26 @@ export function Cartao({ ui }) {
           {via ? <span class="cartao-via">{via}</span> : null}
           {p.faz ? <span class="cartao-faz">{p.faz}</span> : null}
         </div>
-        {/* fraco sem a folha da U1b, mas tocável: o toque diz o porquê (nada fica desligado sem motivo) */}
-        <Botao
-          a="cartao.detalhes"
-          rotulo={t('cartao.detalhes')}
-          aria-disabled={temFolha ? undefined : 'true'}
-          dica={temFolha ? undefined : t('app.emBreve')}
-          class="bt-sec bt-curto"
-          onClick={() => {
-            if (temFolha) folhaAberta.value = true;
-            else avisar({ texto: t('app.emBreve'), gravidade: 'info' });
-          }}
-        >
-          <span>{t('cartao.detalhes')}</span>
-          <Glifo n="setaDir" tam={16} />
-        </Botao>
+        {/* sem a folha (U1b) o botão fica fora, como a categoria sem item fica fora da barra (D24): um "Detalhes" que
+            não abre nada seria um toque mudo */}
+        {temFolha ? (
+          <Botao a="cartao.detalhes" rotulo={t('cartao.detalhes')} class="bt-sec bt-curto" onClick={() => (folhaAberta.value = true)}>
+            <span>{t('cartao.detalhes')}</span>
+            <Glifo n="setaDir" tam={16} />
+          </Botao>
+        ) : null}
       </footer>
     </section>
   );
 }
 
+// uma interface por página (loja.js): registrar de novo (a interface refeita) solta a leitura da anterior, que
+// seguiria viva presa à loja e ao render antigo
+let soltarLeitura = null;
+
 /** Entra no lugar 'folha'; relê o selecionado ao trocar e 2 vezes por segundo. */
 export function registrar(ui) {
+  soltarLeitura?.();
   let refLida = null; // ref cujo detalhe já veio (para saber quando o prédio some)
   const reler = () => {
     const s = selecao.value;
@@ -248,15 +246,19 @@ export function registrar(ui) {
     detalhe.value = p;
   };
   let ultima = -Infinity;
-  effect(() => {
+  const semEfeito = effect(() => {
     selecao.value; // a troca de seleção relê na hora e fecha a folha do anterior
     folhaAberta.value = false;
     reler();
   });
-  ui.aoQuadro((tMs) => {
+  const semQuadro = ui.aoQuadro((tMs) => {
     if (!selecao.value || tMs - ultima < RELER_MS) return;
     ultima = tMs;
     reler();
   });
+  soltarLeitura = () => {
+    semEfeito();
+    semQuadro?.();
+  };
   ui.registrarHud('folha', Cartao, { ordem: 10, nome: 'cartao' });
 }

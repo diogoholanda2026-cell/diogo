@@ -1,12 +1,13 @@
 // Testes do gerador de prédios (R4a; A2 "Render em Node", desenho do render 15.5): plano e malha para todos os
 // modelos, níveis e estilos; determinismo; nada de NaN; prédio dentro do lote e da altura do nível; triângulos por LOD
 // no teto; LOD1 com a mesma caixa do LOD0 (1 cm); atributos quantizados com erro abaixo de 5 mm; setor de ~150 prédios
-// no tempo do worker; variedade pela semente; paletas com albedo real; o material `edificio` monta com o three.
+// no tempo do worker; variedade pela semente; tipologias brasileiras presentes; paletas com albedo real; o material
+// `edificio` monta com o three (e o shader conhece todos os tipos de superfície).
 // Roda sozinho: node ferramentas/testes/geracao-predios.teste.mjs (o simular --testes descobre).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { planoPredio, caixaDasPecas, SOBRA_MAX, ENTERRA } from '../../fonte/render/geracao/planoPredio.js';
-import { Construtor, malhaDoPlano, instanciasDoPlano, formaUnitaria, FORMA, deOctaedro, octaedro } from '../../fonte/render/geracao/malhaPredio.js';
+import { Construtor, malhaDoPlano, instanciasDoPlano, formaUnitaria, FORMA, FACHADA, deOctaedro, octaedro } from '../../fonte/render/geracao/malhaPredio.js';
 import { quantizarMalha, paraHalf, deHalf } from '../../fonte/render/geracao/quantizar.js';
 import { gerarSetor, CAIXA } from '../../fonte/render/geracao/fundir.js';
 import { GradeSetores, pedidoDoSetor } from '../../fonte/render/mundo/setores.js';
@@ -222,6 +223,35 @@ test('variedade pela semente: o mesmo modelo e nível não repete o prédio', ()
   }
 });
 
+test('tipologias brasileiras: autoconstrução, telhado de quatro águas, galpão com lanternim, torre com varandas e escalonada', () => {
+  const formas = (id, nivel, estilo, n = 60) => {
+    const m = PREDIOS[id];
+    const conta = {};
+    for (let k = 0; k < n; k++) {
+      const pl = planoPredio({ w: m.planta[0] * 8, d: m.planta[1] * 8, modelo: id, nivel, estilo, semente: semente(k + 500) });
+      const vistas = new Set(pl.pecas.map((p) => p.forma + (p.mat?.t === FACHADA.FIBRO || p.topo?.t === FACHADA.FIBRO ? ':fibro' : '')));
+      for (const f of vistas) conta[f] = (conta[f] ?? 0) + 1;
+    }
+    return conta;
+  };
+  // bairro popular (estilo 2): caixa d'água redonda na laje, esperas nos cantos e fibrocimento em meia-água
+  const pop = formas('casa', 1, 2);
+  assert.ok(pop.cilindro >= 8, `casa popular: caixa d'água em ${pop.cilindro ?? 0} de 60`);
+  assert.ok(pop.coluna >= 5, `casa popular: esperas em ${pop.coluna ?? 0} de 60`);
+  assert.ok((pop['meiaAgua:fibro'] ?? 0) >= 8, `casa popular: fibrocimento em ${pop['meiaAgua:fibro'] ?? 0} de 60`);
+  // bairro contemporâneo (estilo 1): telha cerâmica em quatro águas numa parte das casas
+  const med = formas('casa', 2, 1);
+  assert.ok(med.quatroAguas >= 6, `casa de padrão médio: quatro águas em ${med.quatroAguas ?? 0} de 60`);
+  // galpão: duas águas com lanternim (dois telhados de duas águas) numa parte
+  const gal = formas('galpao', 1, 0);
+  assert.ok(gal.duasAguas >= 15 && (gal.shed ?? 0) + (gal.arco ?? 0) >= 8, `galpão: ${JSON.stringify(gal)}`);
+  // torre residencial de pódio: varandas de canto em boa parte; escritório: pele de vidro com chanfro em parte
+  const tor = formas('torreRes', 1, 0);
+  assert.ok(tor.varanda >= 20, `torre: varandas em ${tor.varanda ?? 0} de 60`);
+  const esc = formas('torreEscritorios', 3, 1);
+  assert.ok(esc.chanfro >= 8, `escritório: chanfro em ${esc.chanfro ?? 0} de 60`);
+});
+
 test('paletas: albedo real (nada acima de 0,80 linear) e nada saturado', () => {
   const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   for (const [nome, lista] of Object.entries(PALETAS)) {
@@ -257,8 +287,9 @@ test('material edificio: o shader monta sobre o MeshStandardMaterial do three co
   m.onBeforeCompile(shader, null);
   for (const u of ['gPredTab', 'gDetalhe', 'gHora', 'gNoite', 'gSelecionado', ...Object.keys(ganchos.uniformes).slice(0, 3)]) assert.ok(u in shader.uniforms, `uniforme ${u}`);
   assert.ok(shader.vertexShader.includes('gOct(') && shader.vertexShader.includes('attribute uint aId'));
-  assert.ok(shader.fragmentShader.includes('gFachada()') && shader.fragmentShader.includes('gMascaraTelhado'));
+  assert.ok(shader.fragmentShader.includes('gFachada( gVista )') && shader.fragmentShader.includes('gMascaraTelhado'));
   assert.ok(!/\bmediump\b/.test(shader.vertexShader + shader.fragmentShader), 'mediump no shader do edifício');
+  for (const nome of Object.keys(FACHADA)) assert.ok(shader.fragmentShader.includes(`#define F_${nome} `), `F_${nome} no shader`);
   // varyings próprios: 4
   const nv = (shader.vertexShader.match(/^\s*(flat\s+)?varying\s+vec4\s+v(PF|Fac|Cor|Ident)\b/gm) ?? []).length;
   assert.equal(nv, 4);

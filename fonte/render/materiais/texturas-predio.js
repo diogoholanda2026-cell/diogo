@@ -1,7 +1,8 @@
 // Texturas dos prédios (D45): o mapa de detalhe da fachada, feito uma vez na carga. Ruído de valor periódico (o mosaico
 // fecha nas bordas) em quatro canais: R manchas grandes (umidade, tom do pano), G sujeira média e escorrido, B grão fino
 // do reboco e do concreto, A livre. O shader lê em metros da fachada (escala 0,11 e 0,53), de modo que o detalhe não
-// estica com o tamanho do prédio. O A/B com o material fotográfico CC0 (D46) entra quando a R2a publicar os KTX2.
+// estica com o tamanho do prédio. Lado B do A/B (D46, ?materiais=cc0): carregarDetalheCC0() troca o mapa pela foto
+// CC0 de reboco ou concreto em KTX2 ('fachada-detalhe' na lista de texturas da montagem), quando ela existir.
 
 const LADO = 256;
 
@@ -64,6 +65,38 @@ export function bytesDetalhe(lado = LADO) {
     }
   }
   return d;
+}
+
+let promessaCC0 = null;
+
+/**
+ * Detalhe fotográfico CC0 da fachada (KTX2 2D listado em window.__HELD_MONTAGEM__.texturas['fachada-detalhe'], com o
+ * transcodificador Basis de montagem.basis). A foto entra nos três canais que o shader lê (manchas, escorrido, grão)
+ * pela luminância dela. Sem arquivo ou sem transcodificador, resolve null e a fachada fica procedural.
+ * @returns {Promise<object | null>}
+ */
+export function carregarDetalheCC0({ renderer, THREE, montagem = null }) {
+  if (promessaCC0) return promessaCC0;
+  const m = montagem ?? globalThis.__HELD_MONTAGEM__ ?? null;
+  const arquivo = m?.texturas?.['fachada-detalhe'];
+  if (!arquivo || !m?.basis) return (promessaCC0 = Promise.resolve(null));
+  promessaCC0 = (async () => {
+    try {
+      const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
+      const l = new KTX2Loader().setTranscoderPath(m.basis.endsWith('/') ? m.basis : `${m.basis}/`).detectSupport(renderer);
+      const tex = await l.loadAsync(arquivo);
+      l.dispose();
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 4;
+      tex.colorSpace = THREE.NoColorSpace;
+      tex.userData.fonte = 'cc0';
+      return tex;
+    } catch (e) {
+      console.warn('fachada: detalhe CC0 não carregou; fica o procedural', e);
+      return null;
+    }
+  })();
+  return promessaCC0;
 }
 
 /** Registra o mapa de detalhe da fachada ('fachadaDetalhe'). */

@@ -22,6 +22,7 @@ export class Sol {
     this.dir = new THREE.Vector3(0.3, 0.8, 0.5).normalize();
     this.chave = 'sol';
     this.intensidade = 0;
+    if (ctx.sombra) ctx.sombra.vista = ctx.camera; // o foco da sombra de perto segue o que a vista mostra
   }
 
   /** Sombra pelo perfil: cascatas, degrau do sol (1,5 grau no Média, 1 no PC) e amostras do PCF. */
@@ -29,12 +30,14 @@ export class Sol {
     const s = this.ctx.sombra;
     if (!s) return;
     const p = perfil.sombra;
+    const ligada = p.tam > 0 && p.ligada !== false;
     if (s.definirCascatas) s.definirCascatas(p.cascatas ?? 1);
-    s.redimensionar(p.tam);
+    // sem sombra (Leve) fica um alvo mínimo: o gSombraMapa precisa de uma textura de profundidade válida
+    s.redimensionar(ligada ? p.tam : 16);
     s.degrau = (p.degrau ?? 1.5) * RAD;
     s.amostras = p.pcf ?? 5;
     s.raioPcf = p.raioPcf ?? 1.2;
-    s.ligada = p.tam > 0 && p.ligada !== false;
+    s.ligada = ligada;
   }
 
   /**
@@ -52,8 +55,9 @@ export class Sol {
     this.intensidade = i;
     const L = this.luz;
     if (i > 1e-6) L.color.setRGB(irr[0] / i, irr[1] / i, irr[2] / i, THREE.LinearSRGBColorSpace);
+    // a luz fica sempre visível, com intensidade 0 quando não há sol nem lua: esconder mudaria o número de luzes
+    // direcionais e o three trocaria o programa de todo material no crepúsculo (compilação no Mali, travada)
     L.intensity = i;
-    L.visible = i > 1e-5;
     // a direção só muda com luz: no fundo do crepúsculo a sombra não gira à toa
     if (i > 2e-4) this.dir.set(d[0], Math.max(d[1], 0.02), d[2]).normalize();
     const cam = this.ctx.camera;

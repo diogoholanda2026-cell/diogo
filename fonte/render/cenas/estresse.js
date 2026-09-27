@@ -2,8 +2,10 @@
 // ?painel=1 a página de teste abre por cima): alvo HDR com MSAA, céu, neblina, sombra própria e uma fachada
 // aproximada (janelas procedurais em metros, filtradas por fwidth, vidro que reflete o céu) cobrindo a tela inteira,
 // com 900 mil triângulos e perto de 270 chamadas em regime (o pior quadro, com um quadro-chave novo da luz do
-// ambiente, fica abaixo de 300). As torres são malhas separadas (uma chamada cada, como os setores
-// do jogo) e a sombra sai de um só gêmeo instanciado com as caixas. window.__resultado confere o orçamento da cena.
+// ambiente, fica abaixo de 300). As torres são malhas separadas (uma chamada cada, como os setores do jogo), todas
+// desenhadas mesmo fora da vista (o pior caso), e a sombra sai de um só gêmeo instanciado com as caixas. A câmera
+// fica fixa na calçada da avenida, olhando para cima, para as torres do lado leste: a fachada ocupa a tela toda
+// (a órbita não chega lá, porque o alvo dela fica no chão). window.__resultado confere o orçamento da cena.
 import * as THREE from 'three';
 import { criarMaterial } from '../materiais/biblioteca.js';
 import { projetar } from '../sombra/projetores.js';
@@ -56,7 +58,7 @@ export function registrar(registrarCena) {
     hora: 15.5,
     perfil: 'media',
     dominios: ['ceu', 'bancada', 'entrada'],
-    camera: { x: 0, z: 150, dist: 330, guinada: 0, inclinacao: 10 },
+    camera: { x: 40, z: 20, dist: 330, guinada: 0, inclinacao: 10 }, // só o foco da sombra (a vista é fixa)
     async montar(ctx) {
       const { cena, medidas } = ctx;
       const grupo = new THREE.Group();
@@ -86,6 +88,7 @@ export function registrar(registrarCena) {
             const x = lado * (34 + c * 42);
             const z = 60 - j * 46;
             const torre = new THREE.Mesh(formas[f], peles[(j + c) % peles.length]);
+            torre.frustumCulled = false; // o pior caso: tudo vai para a GPU
             torre.position.set(x, 0, z);
             torre.scale.set(1, alt, 1);
             torre.name = `estresse:torre${k}`;
@@ -101,7 +104,16 @@ export function registrar(registrarCena) {
       grupo.add(caixas);
       cena.add(grupo);
       projetar(ctx, caixas);
+      const olho = new THREE.Vector3(-26, 24, 96);
+      const mira = new THREE.Vector3(80, 78, -20);
       return {
+        /** Câmera fixa (depois da órbita, antes do desenho): a fachada na tela inteira. */
+        quadro() {
+          const c = ctx.camera;
+          c.position.copy(olho);
+          c.lookAt(mira);
+          c.updateMatrixWorld();
+        },
         resultado() {
           const s = ctx.medidas.stats;
           const falhas = [];

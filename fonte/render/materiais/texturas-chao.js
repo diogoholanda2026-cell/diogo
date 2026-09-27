@@ -173,21 +173,25 @@ function neutra(THREE) {
 
 let promessaCC0 = null;
 
+/** Pasta do transcodificador Basis (basis_transcoder.js e .wasm do three) quando a montagem não diz outra. */
+export const PASTA_BASIS = 'basis/';
+
 /**
  * Carrega o detalhe fotográfico CC0 (KTX2 com 8 fatias, na ordem de PALETA_CHAO) listado pela montagem em
- * window.__HELD_MONTAGEM__.texturas['chao-camadas']. O transcodificador Basis vem de montagem.basis (pasta com
- * basis_transcoder.js e .wasm). Sem arquivo ou sem transcodificador, resolve null e o chão fica procedural.
+ * window.__HELD_MONTAGEM__.texturas['chao-camadas']. O transcodificador Basis vem de montagem.basis ou, sem ela, da
+ * pasta PASTA_BASIS ao lado do index. Sem arquivo ou sem transcodificador, resolve null e o chão fica procedural.
  * @returns {Promise<object | null>} a textura (userData.ganhos e userData.fonte = 'cc0') ou null
  */
 export function carregarCC0({ renderer, THREE, montagem = null }) {
   if (promessaCC0) return promessaCC0;
   const m = montagem ?? globalThis.__HELD_MONTAGEM__ ?? null;
   const arquivo = m?.texturas?.['chao-camadas'];
-  if (!arquivo || !m?.basis) return (promessaCC0 = Promise.resolve(null));
+  if (!arquivo) return (promessaCC0 = Promise.resolve(null));
+  const basis = m.basis ?? PASTA_BASIS;
   promessaCC0 = (async () => {
     try {
       const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
-      const l = new KTX2Loader().setTranscoderPath(m.basis.endsWith('/') ? m.basis : `${m.basis}/`).detectSupport(renderer);
+      const l = new KTX2Loader().setTranscoderPath(basis.endsWith('/') ? basis : `${basis}/`).detectSupport(renderer);
       const tex = await l.loadAsync(arquivo);
       l.dispose();
       if (!tex.isCompressedArrayTexture && !tex.isDataArrayTexture) throw new Error('chao-camadas.ktx2 sem fatias');

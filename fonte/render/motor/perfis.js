@@ -11,17 +11,17 @@ import { congelar } from '../../comum/util.js';
 export const PERFIS = congelar({
   ultra: {
     id: 'ultra', nome: 'Ultra', prMin: 1.5, prMax: 2, msaa: 4, lod0: 900, bloom: 5, ibl: 256, pos: true, vinheta: 0.1, qps: 60,
-    sombra: { tam: 2048, cascatas: 2, raioMax: 1500, degrau: 1, pcf: 8, raioPcf: 1.5 },
+    sombra: { tam: 2048, cascatas: 2, raioMax: 2000, degrau: 1, pcf: 8, raioPcf: 1.5 },
     ceu: { modo: 'direto', cubo: 0, nuvens: true },
   },
   alta: {
     id: 'alta', nome: 'Alta', prMin: 1, prMax: 1.5, msaa: 4, lod0: 600, bloom: 5, ibl: 128, pos: true, vinheta: 0.1, qps: 60,
-    sombra: { tam: 1024, cascatas: 2, raioMax: 900, degrau: 1, pcf: 8, raioPcf: 1.3 },
+    sombra: { tam: 1024, cascatas: 2, raioMax: 1400, degrau: 1, pcf: 8, raioPcf: 1.3 },
     ceu: { modo: 'direto', cubo: 0, nuvens: true },
   },
   media: {
     id: 'media', nome: 'Média', prMin: 0.85, prMax: 1.3, msaa: 2, lod0: 350, bloom: 4, ibl: 64, pos: true, vinheta: 0.1, qps: 30,
-    sombra: { tam: 1024, cascatas: 1, raioMax: 700, degrau: 1.5, pcf: 5, raioPcf: 1.2 },
+    sombra: { tam: 1024, cascatas: 1, raioMax: 1000, degrau: 1.5, pcf: 5, raioPcf: 1.2 },
     ceu: { modo: 'cubo', cubo: 256, nuvens: true },
   },
   leve: {

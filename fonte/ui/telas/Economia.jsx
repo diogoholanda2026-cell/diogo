@@ -22,7 +22,7 @@ import { Tabela } from '../comp/Tabela.jsx';
 import { Grafico } from '../comp/Grafico.jsx';
 import { Dica } from '../comp/Dica.jsx';
 import { Vazio } from '../comp/Vazio.jsx';
-import { REGRAS_DONO } from '../../data/economia.js';
+import { REGRAS_DONO, bemEstarArredondado } from '../../data/economia.js';
 import { anoDoTique } from '../../comum/relogio.js';
 
 const RECEITAS = [
@@ -190,7 +190,7 @@ function Orcamento({ orc, b }) {
         <Secao titulo={t('eco.receitas')} acao={<span class="eco-total num tx-ok">{fmt.porHora(receitas.total)}</span>} class="eco-secao">
           {receitas.linhas.map((l) =>
             l.id === 'moradores' ? (
-              <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} sub={regraContribuicao(b.populacao, b.tarifa, l.valor)} sub2={t('eco.regraFaixa', { bem: Math.round(b.bemEstarTarifa ?? b.bemEstar ?? 0), de: faixa.de, ate: faixa.ate, tarifa: faixa.tarifa })} />
+              <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} sub={regraContribuicao(b.populacao, b.tarifa, l.valor)} sub2={t('eco.regraFaixa', { bem: bemEstarArredondado(b.bemEstarTarifa ?? b.bemEstar), de: faixa.de, ate: faixa.ate, tarifa: faixa.tarifa })} />
             ) : (
               <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} />
             ),
@@ -243,10 +243,19 @@ function Emprestimo({ emp, b }) {
   if (!emp) return <Vazio glifo="contrato" texto={t('eco.semDados')} />;
   const v = Math.min(Math.max(valor, lim.min), Math.max(lim.min, lim.max));
   const ano = b.data?.ano ?? 1;
-  const agir = async (nome, args, ok) => {
+  // o retorno aparece na seção do botão tocado (tomar ou contratos): no celular a outra pode estar fora da vista
+  const agir = async (nome, args, ok, onde = 'contratos') => {
     const res = await comando(nome, args, { silencioso: true });
-    setRetorno(res.ok ? { ok: true, texto: ok } : { ok: false, texto: frase(res) });
+    setRetorno(res.ok ? { ok: true, texto: ok, onde } : { ok: false, texto: frase(res), onde });
   };
+  const recusar = (texto) => setRetorno({ ok: false, texto, onde: 'contratos' });
+  const linhaRetorno = (onde) =>
+    retorno?.onde === onde ? (
+      <p class={`eco-retorno ${retorno.ok ? 'tx-ok' : 'tx-al'}`} role="status">
+        <Glifo n={retorno.ok ? 'check' : 'alerta'} tam={16} />
+        {retorno.texto}
+      </p>
+    ) : null;
   const contratos = (emp.contratos ?? []).map((c) => ({
     id: c.id,
     ano: c.ano,
@@ -257,6 +266,8 @@ function Emprestimo({ emp, b }) {
     mora: !!c.mora,
   }));
   const quitar = (emp.divida ?? 0) + (emp.jurosDevidos ?? 0);
+  const semJuros = !(emp.jurosDevidos > 0);
+  const semCaixa = !(b.creditos >= quitar);
   return (
     <div class="eco-colunas">
       <div class="eco-col">
@@ -312,17 +323,12 @@ function Emprestimo({ emp, b }) {
           ) : (
             <div class="eco-tomar">
               <Deslizante valor={v} aoMudar={setValor} min={lim.min} max={lim.max} passo={lim.passo} rotulo={t('eco.valorTomar')} formato={fmt.creditos} botoes a="eco.valor" />
-              <Botao a="eco.tomar" rotulo={t('eco.tomarN', { n: fmt.creditos(v) })} principal class="bt-pri" onClick={() => agir('emprestimo.tomar', { valor: v }, t('eco.tomado', { n: fmt.creditos(v) }))}>
+              <Botao a="eco.tomar" rotulo={t('eco.tomarN', { n: fmt.creditos(v) })} principal class="bt-pri" onClick={() => agir('emprestimo.tomar', { valor: v }, t('eco.tomado', { n: fmt.creditos(v) }), 'tomar')}>
                 {t('eco.tomarN', { n: fmt.creditos(v) })}
               </Botao>
             </div>
           )}
-          {retorno ? (
-            <p class={`eco-retorno ${retorno.ok ? 'tx-ok' : 'tx-al'}`} role="status">
-              <Glifo n={retorno.ok ? 'check' : 'alerta'} tam={16} />
-              {retorno.texto}
-            </p>
-          ) : null}
+          {linhaRetorno('tomar')}
         </Secao>
         <Secao titulo={t('eco.contratos')} class="eco-secao">
           {contratos.length ? (
@@ -341,18 +347,35 @@ function Emprestimo({ emp, b }) {
                 linhas={contratos}
               />
               <div class="eco-acoes">
-                <Botao a="eco.pagarJuros" rotulo={t('eco.pagarJuros', { n: fmt.creditos(emp.jurosDevidos) })} desligado={!(emp.jurosDevidos > 0)} class="bt-sec" onClick={() => agir('emprestimo.pagarJuros', {}, t('eco.pago'))}>
+                {/* fracos mas tocáveis: o toque diz o motivo aqui mesmo, na linha de retorno da seção */}
+                <Botao
+                  a="eco.pagarJuros"
+                  rotulo={t('eco.pagarJuros', { n: fmt.creditos(emp.jurosDevidos) })}
+                  aria-disabled={semJuros ? 'true' : undefined}
+                  dica={semJuros ? t('eco.semJuros') : undefined}
+                  class="bt-sec"
+                  onClick={() => (semJuros ? recusar(t('eco.semJuros')) : agir('emprestimo.pagarJuros', {}, t('eco.pago')))}
+                >
                   {t('eco.pagarJuros', { n: fmt.creditos(emp.jurosDevidos) })}
                 </Botao>
                 <Botao a="eco.pagarParcela" rotulo={t('eco.pagarParcela')} dica={t('eco.parcelaDica')} class="bt-sec" onClick={() => agir('emprestimo.pagarParcela', {}, t('eco.pago'))}>
                   {t('eco.pagarParcela')}
                 </Botao>
-                <DoisToques a="eco.quitar" rotulo={t('eco.quitar', { n: fmt.creditos(quitar) })} aoConfirmar={() => agir('emprestimo.quitar', {}, t('eco.quitado'))} desligado={b.creditos < quitar} dica={b.creditos < quitar ? t('codigo.creditos') : undefined} />
+                <DoisToques
+                  a="eco.quitar"
+                  rotulo={t('eco.quitar', { n: fmt.creditos(quitar) })}
+                  aoConfirmar={() => agir('emprestimo.quitar', {}, t('eco.quitado'))}
+                  desligado={semCaixa}
+                  dica={semCaixa ? t('codigo.creditos') : undefined}
+                  aoRecusar={() => recusar(t('codigo.creditos'))}
+                />
               </div>
             </>
           ) : (
             <Vazio glifo="check" texto={t('eco.semDivida')} />
           )}
+          {/* fora da tabela: "Dívida quitada." fica à vista depois que o último contrato some */}
+          {linhaRetorno('contratos')}
         </Secao>
       </div>
     </div>

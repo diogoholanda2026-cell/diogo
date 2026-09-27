@@ -10,14 +10,17 @@ export function Ancora({ children, class: classe = '' }) {
 
 export function Popover({ aberto, aoFechar, titulo = null, lado = 'esquerda', largura = 288, a = 'popover', children }) {
   const ref = useRef(null);
+  // os ouvintes vivem enquanto o popover está aberto: chamam o aoFechar mais novo, não o da renderização que abriu
+  const fecharRef = useRef(aoFechar);
+  fecharRef.current = aoFechar;
   useEffect(() => {
     if (!aberto) return undefined;
     const fora = (ev) => {
       const ancora = ref.current?.parentElement;
-      if (ancora && !ancora.contains(ev.target)) aoFechar?.();
+      if (ancora && !ancora.contains(ev.target)) fecharRef.current?.();
     };
     const tecla = (ev) => {
-      if (ev.key === 'Escape') aoFechar?.();
+      if (ev.key === 'Escape') fecharRef.current?.();
     };
     document.addEventListener('pointerdown', fora, true);
     document.addEventListener('keydown', tecla);

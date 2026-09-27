@@ -103,8 +103,11 @@ registrarGlifos({
   servicos: ['M3.5 9.5 12 4.5l8.5 5', 'M4.5 9.5h15', 'M6.5 12v6M10 12v6M14 12v6M17.5 12v6', 'M3.5 20.5h17'],
   lazer: [circulo(12, 9.25, 5.75), 'M12 15v5.5', 'M8.5 20.5h7', 'M12 17.5l2.5-2.5'],
   empresas: ['M4 20.5V9h6v11.5', 'M10 20.5V4h10v16.5', 'M2.5 20.5h19', 'M13 7.5h4M13 11h4M13 14.5h4', 'M6.5 12.5h1M6.5 16h1'],
-  // a Torre Lâmina de lado (D27): três lâminas inteiras coladas, em degraus, e o heliponto em balanço; nada de blocos
-  arcologia: ['M3.5 20.5h17', 'M5.5 20.5v-8h3v-4h3.5v-5h5v17', 'M8.5 20.5v-8M12 20.5v-12', 'M17 5.5h2.5'],
+  // a Torre Lâmina de lado (D27): pódio baixo e largo e três lâminas coladas com as alturas na proporção real (163,
+  // 238 e 301 m: a mais baixa passa da metade), recuos só do lado das penas, a face lisa inteira e o heliponto em
+  // balanço no topo. Com degraus de alturas iguais ela lia como escada ou pódio de prêmio; com recuos de menos de 2,5
+  // o degrau vira serrilhado nos 22 px da barra
+  arcologia: ['M3.5 20.5h17', 'M5.5 20.5V18h13v2.5', 'M7.5 18v-7.5H10v-3h2.5V4H16v14', 'M16 4h2.5'],
   // marreta
   demolir: ['M13.5 4.25 19.75 10.5l-3 3-6.25-6.25z', 'M12 9 4.25 16.75a1.77 1.77 0 0 0 2.5 2.5L14.5 11.5'],
   obra: ['M7 21V3.5', 'M3.5 6.5h17', 'M7 3.5 3.5 6.5M7 3.5l13.5 3', 'M17 6.5v4', ret(15.25, 10.5, 3.5, 3, 0.5), 'M4.5 21h5'],
@@ -141,7 +144,8 @@ registrarGlifos({
   nivel: ['M6 12.5 12 7l6 5.5', 'M6 18 12 12.5l6 5.5'],
 
   // ------------------------------------------------------------ avisos (o atlas dos marcadores sai daqui, X3a)
-  alerta: ['M12 4.2l8.6 15H3.4z', 'M12 10v4.2', { d: circulo(12, 16.9, 0.9), cheio: true }],
+  // o ponto da exclamação é traço cheio, como o do info: preenchido a 35% ele sumia nos 12 px do saldo negativo
+  alerta: ['M12 4.2l8.6 15H3.4z', 'M12 9.5v4', ponto(12, 16.4)],
   semVia: [ESTRADA, 'M9.5 9.5l5 5M14.5 9.5l-5 5'],
   semEnergia: [RAIO, RISCO],
   semAgua: [GOTA, RISCO],

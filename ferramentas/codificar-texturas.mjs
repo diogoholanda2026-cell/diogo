@@ -1,19 +1,22 @@
 // Codifica o detalhe fotográfico CC0 do chão (D46) num KTX2 com 8 fatias, na ordem de PALETA_CHAO, com o codificador
 // Basis Universal em wasm (versão fixa: ktx2-encoder 0.6.0, que traz o basis_encoder.wasm).
 //
-//   node ferramentas/codificar-texturas.mjs [--fonte arte/materiais/fonte] [--saida arte/materiais/chao-camadas.ktx2]
+//   node ferramentas/codificar-texturas.mjs [--baixar] [--fonte arte/materiais/fonte] [--saida arte/materiais/chao-camadas.ktx2]
 //        [--lado 1024] [--codificador <caminho do basis_encoder.js>] [--uastc] [--sem-licenca]
 //
 // Entrada: uma foto por camada em --fonte, com o nome do id da camada (grama.jpg, capim.png, terraRoxa.jpg, ...) e,
-// se houver, a altura (deslocamento) em <id>-altura.<ext>. Cada arquivo tem de estar listado em arte/LICENCAS.md
-// (fonte e licença CC0); sem isso a ferramenta recusa (--sem-licenca pula a conferência, só para teste).
+// se houver, a altura (deslocamento) em <id>-altura.<ext>. As fotos não vão para o git: arte/materiais/fontes.json diz
+// de onde cada uma vem (material da ambientCG, espelhos e sha256) e --baixar refaz a pasta, conferindo o sha256 (atrás
+// de proxy, rode com NODE_USE_ENV_PROXY=1). A licença é conferida: cada camada precisa do material listado em
+// arte/LICENCAS.md e, se fontes.json a descreve, o arquivo tem de ter o sha256 de lá (--sem-licenca pula, só para teste).
 // O que sai por fatia: rgb = a foto dividida pela própria média e posta em 0,5 (o chão multiplica pela cor da paleta:
 // o longe e o perto ficam com a mesma cor média), a = altura (a do arquivo ou a luminância da foto). Mipmaps no KTX2.
 // A foto é lida e recortada em quadrado no Chromium de teste (sem dependência de imagem no Node).
 // Falha acima do teto de 8 MB das texturas (A1). O montar.mjs leva o .ktx2 de arte/materiais/ para a montagem; o jogo
-// só usa se a montagem também trouxer o transcodificador (basis_transcoder.js e .wasm do three) em
-// window.__HELD_MONTAGEM__.basis (ver texturas-chao.js).
+// só usa se a montagem também trouxer o transcodificador (basis_transcoder.js e .wasm do three) na pasta de
+// window.__HELD_MONTAGEM__.basis ou, sem ela, em basis/ ao lado do index (ver carregarCC0 em texturas-chao.js).
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve, dirname, extname, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETA_CHAO } from '../fonte/render/materiais/shaders/terreno.glsl.js';
@@ -24,7 +27,7 @@ export const TETO_BYTES = 8 * 1024 * 1024;
 const EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
 
 function lerArgs(argv) {
-  const o = { fonte: 'arte/materiais/fonte', saida: 'arte/materiais/chao-camadas.ktx2', lado: 1024, codificador: null, uastc: false, licenca: true };
+  const o = { fonte: 'arte/materiais/fonte', saida: 'arte/materiais/chao-camadas.ktx2', lado: 1024, codificador: null, uastc: false, licenca: true, baixar: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--fonte') o.fonte = argv[++i];
@@ -33,6 +36,7 @@ function lerArgs(argv) {
     else if (k === '--codificador') o.codificador = argv[++i];
     else if (k === '--uastc') o.uastc = true;
     else if (k === '--sem-licenca') o.licenca = false;
+    else if (k === '--baixar') o.baixar = true;
     else throw new Error(`opção desconhecida: ${k}`);
   }
   return o;
@@ -72,6 +76,73 @@ export function normalizarFatia(rgba, altura = null) {
     out[4 * i + 3] = Math.min(255, Math.round((lum[i] / mediaL) * 127.5));
   }
   return out;
+}
+
+export const MANIFESTO = 'arte/materiais/fontes.json';
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/** O manifesto das fotos (arte/materiais/fontes.json) ou null. */
+export function lerManifesto(raiz = RAIZ) {
+  const c = join(raiz, MANIFESTO);
+  return existsSync(c) ? JSON.parse(readFileSync(c, 'utf8')) : null;
+}
+
+/**
+ * Baixa as fotos do manifesto para a pasta (grama.jpg, grama-altura.jpg, ...), tentando cada espelho até um dar o
+ * sha256 certo. Arquivo que já está lá com o sha256 certo fica. Devolve a lista do que baixou.
+ */
+export async function baixarFontes(manifesto, pasta, { buscar = globalThis.fetch } = {}) {
+  mkdirSync(pasta, { recursive: true });
+  const feitos = [];
+  for (const [id, c] of Object.entries(manifesto.camadas)) {
+    for (const [papel, sufixo] of [['cor', ''], ['altura', '-altura']]) {
+      const f = c[papel];
+      if (!f) continue;
+      const destino = join(pasta, `${id}${sufixo}.jpg`);
+      if (existsSync(destino) && sha256(readFileSync(destino)) === f.sha256) continue;
+      let ok = false;
+      const erros = [];
+      for (const e of f.espelhos) {
+        const [dono, repo, ...cam] = e.split('/');
+        const url = `https://raw.githubusercontent.com/${dono}/${repo}/HEAD/${cam.map(encodeURIComponent).join('/')}`;
+        try {
+          const r = await buscar(url);
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const buf = Buffer.from(await r.arrayBuffer());
+          if (sha256(buf) !== f.sha256) throw new Error('sha256 diferente do manifesto');
+          writeFileSync(destino, buf);
+          feitos.push(`${id}${sufixo}.jpg (${c.ambientcg}, de ${dono}/${repo})`);
+          ok = true;
+          break;
+        } catch (err) {
+          erros.push(`${dono}/${repo}: ${err.message}`);
+        }
+      }
+      if (!ok) throw new Error(`não consegui ${id}${sufixo}.jpg (${c.ambientcg}): ${erros.join('; ')}. Atrás de proxy, rode com NODE_USE_ENV_PROXY=1`);
+    }
+  }
+  return feitos;
+}
+
+/**
+ * Confere a licença dos arquivos de cada camada: o material (ou o nome do arquivo) tem de estar em LICENCAS.md e, se o
+ * manifesto descreve o arquivo, o sha256 tem de bater. Devolve a lista de problemas (vazia = ok).
+ */
+export function conferirLicencas(arquivos, licencas, manifesto = null) {
+  const problemas = [];
+  for (const a of arquivos) {
+    const c = manifesto?.camadas?.[a.id];
+    for (const [papel, f] of [['cor', a.foto], ['altura', a.altura]]) {
+      if (!f) continue;
+      const nome = basename(f);
+      const esperado = c?.[papel]?.sha256;
+      if (c && esperado) {
+        if (!licencas.includes(c.ambientcg)) problemas.push(`${nome}: ${c.ambientcg} fora de arte/LICENCAS.md`);
+        else if (sha256(readFileSync(f)) !== esperado) problemas.push(`${nome}: sha256 diferente do de ${MANIFESTO}`);
+      } else if (!licencas.includes(nome)) problemas.push(`${nome}: sem licença em arte/LICENCAS.md`);
+    }
+  }
+  return problemas;
 }
 
 /** Lê e recorta as imagens no Chromium: devolve RGBA lado x lado de cada arquivo. */
@@ -145,12 +216,17 @@ export async function codificarKTX2(fatias, lado, { codificador = null, uastc = 
 export async function codificar(o) {
   const pasta = resolve(RAIZ, o.fonte);
   const licencas = existsSync(join(RAIZ, 'arte/LICENCAS.md')) ? readFileSync(join(RAIZ, 'arte/LICENCAS.md'), 'utf8') : '';
+  const manifesto = lerManifesto();
+  if (o.baixar) {
+    if (!manifesto) throw new Error(`--baixar sem ${MANIFESTO}`);
+    for (const f of await baixarFontes(manifesto, pasta)) console.log(`baixado: ${f}`);
+  }
   const arquivos = PALETA_CHAO.map((c) => ({ id: c.id, ...(arquivosDaCamada(pasta, c.id) ?? {}) }));
   const faltam = arquivos.filter((a) => !a.foto).map((a) => a.id);
-  if (faltam.length) throw new Error(`faltam fotos em ${o.fonte}: ${faltam.join(', ')} (uma por camada, com o id no nome)`);
+  if (faltam.length) throw new Error(`faltam fotos em ${o.fonte}: ${faltam.join(', ')} (uma por camada, com o id no nome; --baixar as traz do manifesto)`);
   if (o.licenca) {
-    const sem = arquivos.flatMap((a) => [a.foto, a.altura].filter(Boolean)).filter((f) => !licencas.includes(basename(f)));
-    if (sem.length) throw new Error(`sem licença em arte/LICENCAS.md: ${sem.map((f) => basename(f)).join(', ')}`);
+    const problemas = conferirLicencas(arquivos, licencas, manifesto);
+    if (problemas.length) throw new Error(`licença: ${problemas.join('; ')}`);
   }
   const lista = arquivos.flatMap((a) => [a.foto, a.altura ?? a.foto]);
   const px = await lerImagens(lista, o.lado);

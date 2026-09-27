@@ -452,6 +452,26 @@
   font-size: var(--t13);
 }
 .popover .barra-prog { margin: var(--e1) 0 var(--e2); }
+/* lista de destinos num popover (o menu enquanto a tela dele não existe): linhas de 44 px, glifo e rótulo */
+.popover-lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--e2));
+}
+.popover-item {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  height: var(--alvo);
+  padding: 0 var(--e2);
+  border-radius: var(--r1);
+  font-size: var(--t15);
+  font-weight: 600;
+  color: var(--t1);
+  text-align: left;
+}
+.popover-item .glifo { color: var(--t2); }
+.popover-item:hover { background: var(--s3); }
 .par {
   display: flex;
   align-items: baseline;
@@ -809,6 +829,8 @@
   grid-template-columns: 52px 1fr;
   grid-template-rows: auto auto;
   column-gap: var(--e2);
+  /* o rótulo do topo do eixo fica centrado na linha de cima: a folga não deixa ele encostar na legenda */
+  padding-top: 10px;
 }
 .grafico-eixo {
   position: relative;

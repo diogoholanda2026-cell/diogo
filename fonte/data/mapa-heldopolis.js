@@ -1,10 +1,12 @@
 // Mapa autoral de Heldópolis (seção 4.6 do desenho da simulação, D2, D3, D36, D52, D53 e D55): um trecho do litoral
-// brasileiro visto de helicóptero. Baía ao sul e a leste com ilhas e uma ponta de granito (a Pedra do Farol e o Morro
-// da Enseada, à moda do Pão de Açúcar e da Urca); a Serra do Held ao norte e a Serra do Poente a oeste, com morros de
-// 150 a 400 m; o Rio Held desce da serra a noroeste, corre na várzea e é a borda oeste da área inicial até a foz, onde
-// fica a Vila de Santa Cida; a lagoa costeira atrás da restinga; o platô da gleba entre a lagoa e a baía; a rodovia
-// entra pelo oeste, cruza o rio na ponte pronta, passa ao norte da área inicial (com o acesso até o nó de entrada) e
-// desce para a orla até sair a leste.
+// brasileiro visto de helicóptero, à moda do Rio de Janeiro e de Florianópolis. A baía fica ao sul, com ilhas de
+// granito, e a leste, na Enseada da Praia Grande: uma meia-lua de praia (a orla nobre, fora da área inicial) fechada
+// pelo espinhaço do Vigia e da Sentinela, com o Morro da Enseada e a Pedra do Farol na boca, como a Urca e o Pão de
+// Açúcar. A Serra do Held ao norte e a Serra do Poente a oeste, com morros de 150 a 400 m; o Rio Held desce da serra a
+// noroeste, faz curvas na várzea e é a borda oeste da área inicial até a foz, onde fica a Vila de Santa Cida; a lagoa
+// costeira atrás da restinga; o platô da gleba entre a lagoa e a baía; a rodovia entra pelo oeste, cruza o rio na
+// ponte pronta, passa ao norte da área inicial (com o acesso até o nó de entrada), contorna a enseada por trás da orla
+// e sai a leste pela planície.
 //
 // Metros; x leste, z sul (norte em -z), origem no centro. Tudo aqui é dado: fonte/sim/mundo/* gera a grade de alturas,
 // a água, os recursos, a mata, a Vila e a rodovia a partir deste arquivo, sempre igual (semente fixa do mapa).
@@ -26,9 +28,16 @@ const COSTA = [
   [-1210, 1100, 1, 0], [-1060, 1082, 1, 0.3], [-910, 1064, 1, 0.8], [-760, 1050, 1, 1], [-610, 1040, 1, 1],
   [-470, 1030, 1, 0.8], [-340, 1012, 1, 0.2], [-160, 1004, 1, 0], [40, 1000, 1, 0], [240, 998, 1, 0], [420, 996, 1, 0],
   // costão do canto sudeste da gleba: o platô inteiro fica em terra, com uns 60 m de barranco até a água
-  [540, 1000, 0.5, 0], [640, 1002, 0, 0], [725, 990, 0, 0], [780, 950, 0, 0], [808, 890, 0, 0], [835, 820, 0.6, 0],
-  [885, 762, 1, 0], [965, 712, 1, 0.2], [1060, 678, 1, 0.5], [1250, 652, 1, 0.6], [1500, 630, 1, 0.6], [1750, 624, 1, 0.6],
-  [2000, 640, 1, 0.5], [2200, 670, 1, 0.3], [2330, 716, 0, 0], [2395, 792, 0, 0], [2415, 880, 0, 0],
+  [540, 1000, 0.5, 0], [640, 1002, 0, 0], [725, 990, 0, 0], [780, 950, 0, 0], [808, 890, 0, 0], [835, 820, 0.3, 0],
+  [872, 768, 0, 0], [935, 738, 0, 0], [1010, 722, 0.3, 0],
+  // Enseada da Praia Grande (a baía a leste da cidade, fora da área inicial): praia em meia-lua do costão da gleba até
+  // o pé do Morro do Vigia, como a enseada de Botafogo
+  [1082, 676, 1, 0.2], [1128, 590, 1, 0.4], [1152, 480, 1, 0.5], [1170, 360, 1, 0.6], [1196, 236, 1, 0.6],
+  [1244, 118, 1, 0.6], [1320, 16, 1, 0.6], [1430, -62, 1, 0.6], [1570, -112, 1, 0.6], [1720, -128, 1, 0.6],
+  [1870, -112, 1, 0.5], [2000, -66, 1, 0.4], [2110, 6, 1, 0.2], [2190, 96, 0.4, 0],
+  // o lado leste da enseada: costão do Vigia e da Sentinela até o Morro da Enseada e a Pedra do Farol, na boca da baía
+  [2240, 200, 0, 0], [2268, 320, 0, 0], [2282, 440, 0, 0], [2300, 550, 0.3, 0], [2322, 640, 1, 0.2], [2352, 716, 0.3, 0],
+  [2395, 792, 0, 0], [2415, 880, 0, 0],
   [2440, 985, 0, 0], [2490, 1075, 0, 0], [2570, 1150, 0, 0], [2660, 1195, 0, 0], [2750, 1165, 0, 0],
   [2795, 1080, 0, 0], [2785, 980, 0, 0], [2825, 880, 0, 0], [2905, 805, 1, 0.3], [3060, 765, 1, 0.5],
   [3310, 738, 1, 0.5], [3560, 742, 1, 0.3], [3800, 705, 0, 0], [4060, 655, 0, 0], [4600, 640, 0, 0],
@@ -55,7 +64,8 @@ const SERRAS = [
     ],
   },
   {
-    id: 'norte',
+    // a serra do fundo, a 3,5 km da cidade: sem a oitava fina dos espigões (não aparece daqui e custa caro)
+    id: 'norte', fino: false,
     pontos: [
       [-4700, -3700, 190, 900], [-3300, -3500, 230, 950], [-1900, -3650, 200, 900], [-600, -3450, 220, 950],
       [800, -3600, 190, 900], [2200, -3400, 170, 900], [3500, -3550, 210, 950], [4700, -3400, 190, 900],
@@ -69,6 +79,11 @@ const SERRAS = [
   { id: 'esporao2', pontos: [[-150, -1960, 320, 420], [-120, -1620, 190, 380], [-80, -1420, 80, 300]] },
   { id: 'esporao3', pontos: [[900, -1900, 300, 420], [950, -1600, 180, 360], [1000, -1420, 75, 280]] },
   {
+    // espinhaço baixo da península do leste: liga o Vigia, a Sentinela, a Enseada e o Farol por selas de mata
+    id: 'peninsula',
+    pontos: [[2280, -460, 60, 260], [2350, -60, 125, 300], [2395, 360, 95, 280], [2440, 760, 120, 280], [2600, 1090, 105, 240]],
+  },
+  {
     id: 'poente',
     pontos: [
       [-2750, -2050, 300, 800], [-2600, -1650, 250, 700], [-2600, -1270, 62, 560], [-2640, -880, 260, 700],
@@ -78,8 +93,9 @@ const SERRAS = [
   {
     id: 'leste',
     pontos: [
-      [1680, -1000, 190, 520], [1780, -420, 250, 540], [2150, -20, 200, 480], [2650, 150, 185, 470],
-      [3250, 90, 235, 580], [3950, -10, 255, 680], [4700, -60, 260, 700],
+      // a frente de serra atrás da enseada e da planície do leste (a rodovia passa ao pé dela)
+      [1650, -1250, 200, 480], [2150, -1120, 240, 520], [2750, -1020, 215, 520], [3350, -980, 245, 580],
+      [3950, -960, 255, 650], [4700, -1000, 260, 700],
     ],
   },
 ];
@@ -99,11 +115,14 @@ const MORROS = [
   { id: 'farol', forma: 'pao', x: 2680, z: 1125, rx: 310, rz: 195, ang: 0.62, h: 396, face: 1.2, forte: 1.3 },
   { id: 'irmaoMaior', forma: 'pao', x: -2420, z: 930, rx: 270, rz: 215, ang: 0.3, h: 262, face: 1.6, forte: 1.2 },
   { id: 'irmaoMenor', forma: 'pao', x: -2140, z: 1010, rx: 180, rz: 150, ang: 0.3, h: 186, face: 1.5, forte: 1.1 },
-  { id: 'orla', forma: 'morro', x: 1790, z: 110, rx: 300, rz: 240, ang: 0.1, h: 150 },
-  { id: 'urca', forma: 'morro', x: 2180, z: 250, rx: 210, rz: 165, ang: 0.4, h: 112 },
-  { id: 'ilhaGuaras', forma: 'morro', x: -480, z: 2520, rx: 440, rz: 240, ang: 0.3, h: 138 },
+  // o lado leste da enseada: Vigia e Sentinela, em pé para a água, até a Enseada e o Farol na boca da baía
+  { id: 'vigia', forma: 'morro', x: 2360, z: -10, rx: 250, rz: 190, ang: 1.35, h: 168, face: 3.3, forte: 1.6 },
+  { id: 'sentinela', forma: 'pao', x: 2400, z: 390, rx: 185, rz: 150, ang: 1.45, h: 124, face: 3.1, forte: 1.2 },
+  { id: 'sossego', forma: 'morro', x: 3350, z: 320, rx: 280, rz: 210, ang: 0.3, h: 92 },
+  // ilhas: domos de granito com a pedra nua nos flancos (as Cagarras e as Tijucas)
+  { id: 'ilhaGuaras', forma: 'pao', x: -480, z: 2520, rx: 400, rz: 220, ang: 0.3, h: 128, face: 1.6, forte: 1.1 },
   { id: 'ilhaMeio', forma: 'pao', x: 900, z: 2060, rx: 175, rz: 145, ang: -0.2, h: 64 },
-  { id: 'ilhaRasa', forma: 'morro', x: 2950, z: 2620, rx: 560, rz: 280, ang: -0.4, h: 172 },
+  { id: 'ilhaRasa', forma: 'pao', x: 2950, z: 2620, rx: 520, rz: 260, ang: -0.4, h: 160, face: 1.3, forte: 0.9 },
   { id: 'ilhaPoente', forma: 'morro', x: -2520, z: 2320, rx: 260, rz: 200, ang: 0.8, h: 88 },
   { id: 'lajePescador', forma: 'pao', x: 1880, z: 1720, rx: 75, rz: 60, ang: 0.2, h: 22 },
   { id: 'ilhaCabras', forma: 'morro', x: 3620, z: 1520, rx: 170, rz: 130, ang: -0.6, h: 70 },
@@ -128,7 +147,7 @@ const PLANALTOS = [
   },
   {
     id: 'nordeste', cota: 120, borda: 600, ondulacao: 45,
-    contorno: [[2050, -1800], [4800, -1850], [4800, -650], [3300, -560], [2300, -700]],
+    contorno: [[2100, -1850], [4800, -1900], [4800, -1250], [3300, -1200], [2300, -1350]],
   },
 ];
 
@@ -147,15 +166,22 @@ const RIO = [
   [-2160, -1960, 36, 30, 60, 120],
   [-1860, -1610, 44, 15, 150, 300],
   [-1560, -1390, 52, 7.5, 240, 450],
-  [-1300, -1195, 60, 4.5, 200, 560],
-  [-1150, -905, 66, 3.6, 150, 650],
-  [-1062, -555, 72, 3.0, 130, 700],
-  [-1044, -150, 78, 2.5, 125, 700],
-  [-1050, 250, 86, 2.0, 120, 650],
-  [-1112, 600, 96, 1.4, 105, 550],
-  [-1162, 880, 116, 0.8, 70, 450],
-  [-1222, 1060, 140, 0.3, 35, 300],
-  [-1252, 1200, 170, 0, 10, 10],
+  [-1300, -1195, 58, 4.5, 200, 560],
+  // na várzea o rio faz curvas largas para oeste, encostando na área inicial só na margem leste (captação e Areal)
+  [-1150, -905, 60, 3.6, 150, 650],
+  [-1098, -700, 62, 3.3, 140, 680],
+  [-1068, -540, 64, 3.0, 130, 700],
+  [-1112, -360, 66, 2.8, 125, 700],
+  [-1070, -160, 68, 2.5, 125, 700],
+  [-1052, 60, 70, 2.2, 120, 680],
+  [-1056, 260, 74, 2.0, 120, 650],
+  // o trecho da foz corre colado na borda da área inicial: a Vila fica inteira nela, na margem leste
+  [-1070, 430, 78, 1.7, 110, 600],
+  [-1102, 620, 84, 1.4, 105, 550],
+  [-1092, 800, 96, 0.9, 80, 470],
+  [-1114, 960, 112, 0.5, 50, 360],
+  [-1150, 1080, 130, 0.2, 30, 260],
+  [-1182, 1210, 150, 0, 10, 10],
 ];
 
 /**
@@ -163,8 +189,8 @@ const RIO = [
  * demais para 8 m; a mata ciliar marca o traçado). [x, z]; profundidade e meia largura do vale em metros.
  */
 const CORREGOS = [
-  { id: 'pedreira', profundidade: 2.6, largura: 55, pontos: [[-470, -560], [-520, -300], [-548, -40], [-520, 180], [-520, 420], [-560, 600], [-600, 690]] },
-  { id: 'mirante', profundidade: 2.4, largura: 55, pontos: [[470, -610], [560, -330], [700, -60], [790, 240], [850, 520], [905, 700]] },
+  { id: 'pedreira', profundidade: 2.6, largura: 55, pontos: [[-470, -560], [-520, -300], [-548, -40], [-520, 180], [-520, 420], [-566, 540], [-604, 650]] },
+  { id: 'mirante', profundidade: 2.4, largura: 55, pontos: [[470, -610], [560, -330], [690, -70], [850, 160], [1010, 330], [1150, 420]] },
   { id: 'vale', profundidade: 2, largura: 45, pontos: [[-160, -1150], [-260, -1060], [-520, -1080], [-760, -1120], [-980, -1150]] },
 ];
 
@@ -173,10 +199,12 @@ const LAGOA = {
   id: 'lagoa',
   nivel: 1.1,
   profundidade: 4.2,
-  // alongada ao longo da costa, atrás da restinga, como as lagoas do litoral fluminense
+  // alongada ao longo da costa, atrás da restinga, com a margem norte recortada e um saco onde chega o córrego da
+  // Pedreira, como as lagoas do litoral fluminense
   contorno: [
-    [-730, 700], [-640, 688], [-560, 712], [-492, 704], [-446, 738], [-422, 802], [-446, 864], [-502, 912],
-    [-570, 944], [-660, 948], [-740, 922], [-788, 868], [-792, 790], [-772, 736],
+    [-808, 820], [-790, 760], [-748, 728], [-690, 722], [-650, 700], [-618, 668], [-590, 676], [-584, 716],
+    [-548, 742], [-490, 740], [-440, 764], [-404, 806], [-398, 856], [-428, 894], [-486, 910], [-540, 930],
+    [-610, 944], [-680, 948], [-742, 934], [-790, 900],
   ],
 };
 
@@ -211,8 +239,8 @@ const RODOVIA = {
   pontos: [
     [-4096, -1318], [-3600, -1292], [-3100, -1272], [-2600, -1262], [-2150, -1230], [-1800, -1200], [-1500, -1193],
     [-1375, -1190, 'ponte'], [-1225, -1190], [-1010, -1190, 'vila'], [-600, -1200], [-220, -1205], [40, -1203, 'juncao'],
-    [420, -1196], [790, -1176], [1060, -1108], [1225, -905], [1305, -610], [1345, -270], [1400, 90], [1485, 330],
-    [1660, 450], [1960, 472], [2260, 500], [2560, 536], [2860, 552], [3220, 538], [3720, 520], [4096, 518],
+    [420, -1196], [790, -1176], [1060, -1108], [1300, -960], [1520, -780], [1760, -640], [2040, -580], [2360, -520],
+    [2700, -430], [3050, -310], [3450, -170], [3800, -60], [4096, 10],
   ],
   // acesso de 4 faixas da junção até o nó de entrada, pela sela entre o Morro da Pedreira e o do Mirante
   acesso: [[40, -1203], [32, -1060], [8, -890], [18, -710], [46, -560], [72, -430]],
@@ -226,25 +254,26 @@ const ENTRADA = { x: 72, z: -430, energiaMW: 5 };
 
 /**
  * Vila de Santa Cida (uns 60 prédios de nível 1 e 2, 350 moradores): rua principal ('rua') e ruas de terra na foz,
- * entre o rio e a lagoa, e a estrada de terra que sobe pela beira da várzea até a rodovia.
+ * entre o rio e a lagoa, e a estrada de terra que sobe pela beira da várzea até a rodovia. A Vila fica inteira na área
+ * inicial (D3): as plantas param 4 m antes da borda oeste (x = -1024, que corre pela margem do rio) e da sul
+ * (z = 1024, na praia); mapa.mjs confere.
  */
 const VILA = {
   moradores: 350,
   predios: 60,
   ruas: [
-    { id: 'principal', tipo: 'rua', pontos: [[-986, 560], [-991, 732], [-997, 862], [-1008, 1010]] },
-    { id: 'praia', tipo: 'terra', pontos: [[-1092, 1016], [-1008, 1010], [-880, 1000], [-780, 994], [-680, 992]] },
-    { id: 'beiraRio', tipo: 'terra', pontos: [[-986, 560], [-1046, 640], [-1061, 734], [-1074, 864], [-1092, 1016]] },
-    { id: 'deCima', tipo: 'terra', pontos: [[-986, 560], [-900, 598], [-872, 724], [-868, 856], [-880, 1000]] },
-    { id: 'travessaNorte', tipo: 'terra', pontos: [[-1061, 734], [-991, 732], [-872, 724]] },
-    { id: 'travessaSul', tipo: 'terra', pontos: [[-1074, 864], [-997, 862], [-868, 856]] },
+    { id: 'principal', tipo: 'rua', pontos: [[-972, 560], [-976, 732], [-980, 862], [-986, 990]] },
+    { id: 'praia', tipo: 'terra', pontos: [[-986, 990], [-880, 992], [-780, 992], [-680, 990]] },
+    { id: 'deCima', tipo: 'terra', pontos: [[-972, 560], [-900, 598], [-872, 724], [-868, 856], [-880, 992]] },
+    { id: 'travessaNorte', tipo: 'terra', pontos: [[-976, 732], [-872, 724]] },
+    { id: 'travessaSul', tipo: 'terra', pontos: [[-980, 862], [-868, 856]] },
     {
       id: 'estrada', tipo: 'terra',
-      pontos: [[-986, 560], [-944, 400], [-926, 200], [-918, -60], [-916, -380], [-928, -700], [-962, -990], [-1010, -1190]],
+      pontos: [[-972, 560], [-944, 400], [-926, 200], [-918, -60], [-916, -380], [-928, -700], [-962, -990], [-1010, -1190]],
     },
   ],
-  // área onde nascem os prédios (fora dela, só as ruas)
-  area: [[-1100, 400], [-905, 380], [-880, 500], [-820, 600], [-812, 950], [-660, 955], [-660, 1034], [-1120, 1062], [-1098, 800]],
+  // área onde nascem os prédios, com a planta inteira dentro dela (fora, só as ruas)
+  area: [[-1020, 400], [-905, 380], [-880, 500], [-820, 600], [-812, 950], [-660, 955], [-660, 1020], [-1020, 1020]],
 };
 
 // ------------------------------------------------------------------------------------------------ áreas e sugestões
@@ -253,18 +282,23 @@ const VILA = {
 const AREAS = [
   {
     id: 'vila', nome: 'Vila de Santa Cida',
-    contorno: [[-1115, 380], [-895, 365], [-870, 495], [-805, 590], [-800, 950], [-650, 955], [-650, 1040], [-1135, 1075], [-1112, 800]],
+    contorno: [[-1036, 380], [-895, 365], [-870, 495], [-805, 590], [-800, 950], [-650, 955], [-650, 1040], [-1060, 1060], [-1044, 800]],
   },
   { id: 'gleba', nome: 'Gleba da Arcologia', contorno: GLEBA_ENVELOPE.contorno },
   {
     id: 'orla', nome: 'Orla da Praia Grande',
-    contorno: [[1040, 470], [1600, 400], [2330, 440], [2380, 700], [2200, 672], [1750, 626], [1250, 654], [1040, 690]],
+    // a meia-lua da Enseada da Praia Grande, da linha d'água até uns 280 m para dentro (ladrilhos vizinhos, D3)
+    contorno: [
+      [1060, 700], [1112, 596], [1140, 480], [1158, 360], [1182, 232], [1232, 108], [1310, 2], [1424, -78],
+      [1568, -128], [1720, -144], [1874, -128], [2008, -80], [2124, -6], [2210, 90], [2140, -250], [1900, -400],
+      [1600, -420], [1330, -320], [1120, -130], [1040, 80], [1030, 400], [1030, 680],
+    ],
   },
   {
     id: 'varzea', nome: 'Várzea do Held',
     contorno: [
-      [-1980, -1330], [-1030, -1330], [-930, -1000], [-900, -500], [-905, 100], [-915, 520], [-1040, 560],
-      [-1100, 900], [-1230, 1120], [-1560, 1150], [-2010, 1190], [-2080, 400], [-2050, -400],
+      [-1980, -1330], [-1030, -1330], [-930, -1000], [-900, -500], [-905, 100], [-915, 520], [-1036, 560],
+      [-1044, 800], [-1060, 1060], [-1150, 1120], [-1560, 1150], [-2010, 1190], [-2080, 400], [-2050, -400],
     ],
   },
   {
@@ -304,9 +338,12 @@ const LUGARES = [
   { id: 'mirante', x: 485, z: -845, tipo: 'morro' },
   { id: 'farol', x: 2680, z: 1125, tipo: 'morro' },
   { id: 'enseada', x: 2440, z: 865, tipo: 'morro' },
+  { id: 'vigia', x: 2360, z: -10, tipo: 'morro' },
+  { id: 'sentinela', x: 2400, z: 390, tipo: 'morro' },
+  { id: 'enseadaAgua', x: 1720, z: 360, tipo: 'agua' },
   { id: 'irmaos', x: -2300, z: 960, tipo: 'morro' },
   { id: 'praiaVila', x: -900, z: 1060, tipo: 'praia' },
-  { id: 'praiaGrande', x: 1650, z: 640, tipo: 'praia' },
+  { id: 'praiaGrande', x: 1440, z: -80, tipo: 'praia' },
   { id: 'ilhaGuaras', x: -480, z: 2520, tipo: 'ilha' },
   { id: 'ilhaRasa', x: 2950, z: 2620, tipo: 'ilha' },
   { id: 'ilhaMeio', x: 900, z: 2060, tipo: 'ilha' },

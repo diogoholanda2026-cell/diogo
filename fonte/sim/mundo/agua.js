@@ -35,6 +35,7 @@ export function registrar(sim) {
   const tb = terrenoBase(sim);
   const T = sim.espelho.terreno;
   if (!tb || !T) return;
-  T.rios = tb.base.rios;
-  T.lagoas = tb.base.lagoas;
+  // cópias: a base é de todas as simulações do mesmo mapa
+  T.rios = tb.base.rios.map((r) => ({ id: r.id, pontos: r.pontos.slice() }));
+  T.lagoas = tb.base.lagoas.map((l) => ({ id: l.id, nivel: l.nivel, contorno: l.contorno.slice() }));
 }

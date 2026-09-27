@@ -175,7 +175,8 @@ const U_AGUA = { uTempoAgua: { value: 0 } };
 
 /** Material da água do reservatório: escura, reflexo do céu (Fresnel) e ondulação fina pelo mundo. */
 export function materialAgua(ganchos) {
-  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.012, 0.028, 0.03), roughness: 0.05, metalness: 0, envMapIntensity: 0.8 });
+  // corpo verde-azulado de água limpa com 6 a 8 m de fundo (o reservatório de Marina Bay), e o céu pelo Fresnel
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.02, 0.052, 0.05), roughness: 0.06, metalness: 0, envMapIntensity: 1.0 });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U_AGUA);
     shader.fragmentShader = shader.fragmentShader

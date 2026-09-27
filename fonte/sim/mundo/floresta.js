@@ -7,7 +7,6 @@
 //
 // Desmate: toda forma registrada (via, plataforma, cava) limpa a mata sob o núcleo e 3 m em volta, na hora; a grade vai
 // no save (a mata cortada não volta sozinha).
-import { AGUA } from '../../contratos/flags.js';
 import { smoothstep, clamp } from '../../comum/util.js';
 import { pontoNoPoligono } from '../../comum/vetor.js';
 import { amostrar } from '../../comum/altura.js';
@@ -17,6 +16,7 @@ import { distanciaForma, ALCANCE } from './aplainar.js';
 const N = 1024;
 const PASSO = 8;
 const CACHE = new Map();
+const RIO = { a: 0, hw: 0, nivel: 0, varzea: 0, lado: 1 };
 
 /**
  * Densidade da mata do mapa (guardada por id; o espelho recebe uma cópia). Célula [j * 1024 + i] com centro em
@@ -32,6 +32,16 @@ export function gerarFloresta(base, mapa) {
   const s0 = sementeDe(mapa.semente) + 911;
   const [gx0, gz0, gx1, gz1] = mapa.plato.caixa;
   const vila = mapa.vila.area.flat();
+  let vx0 = Infinity;
+  let vz0 = Infinity;
+  let vx1 = -Infinity;
+  let vz1 = -Infinity;
+  for (let q = 0; q < vila.length; q += 2) {
+    vx0 = Math.min(vx0, vila[q]);
+    vx1 = Math.max(vx1, vila[q]);
+    vz0 = Math.min(vz0, vila[q + 1]);
+    vz1 = Math.max(vz1, vila[q + 1]);
+  }
   const nc = G.nc;
   // ruídos de escala grande numa grade de 32 m (a mata varia em centenas de metros): variação e capões
   const rMata = new Float32Array(nc * nc);
@@ -82,9 +92,14 @@ export function gerarFloresta(base, mapa) {
         const capao = smoothstep(limiar, limiar + 0.2, amostrar(rCapao, nc, G.pc, ox, oz, x, z));
         // pasto com árvores soltas e capões de mata
         d = 0.1 + 0.12 * ruidoMata + capao * 0.78;
-        // córrego: mata ciliar na beira do vale raso
-        const cr = amostrar(base.campos.corrego, nc, G.pc, ox, oz, x, z);
-        if (cr > 0.8) d = Math.max(d, (0.45 + 0.45 * smoothstep(0.8, 2, cr)) * smoothstep(-0.35, 0.15, ruidoMata + 0.3 * ruido(x / 90, z / 90, s0 + 13)));
+        // córrego: mata ciliar na beira do leito, de uns 12 a 45 m de cada lado, com a borda recortada (a oitava de
+        // 38 m) e o dossel mais ralo aqui e ali, como as matas de galeria no pasto (não uma faixa de largura igual)
+        const cd = amostrar(base.campos.corregoDist, nc, G.pc, ox, oz, x, z);
+        if (cd < 70) {
+          const lim = 28 + 10 * ruido(x / 110, z / 110, s0 + 13) + 8 * ruido(x / 38, z / 38, s0 + 17);
+          const cheio = 0.56 + 0.28 * smoothstep(-0.4, 0.4, ruidoMata) + 0.12 * ruido(x / 45, z / 45, s0 + 19);
+          d = Math.max(d, cheio * (1 - smoothstep(lim - 8, lim + 6, cd)));
+        }
         // restinga baixa atrás da praia
         if (sd < 190) d = Math.max(d * 0.5, 0.42 + 0.1 * ruidoMata) * smoothstep(55, 90, sd);
         // encosta do vale e pé dos morros: capoeira
@@ -92,7 +107,7 @@ export function gerarFloresta(base, mapa) {
       }
       // rio: mata ciliar na margem, várzea aberta, mangue na foz
       const slc = rioSL[kc];
-      const rio = slc < 1000 && slc > -1000 ? rioEm(base, x, z) : null;
+      const rio = slc < 1000 && slc > -1000 ? rioEm(base, x, z, RIO) : null;
       if (rio && rio.a < rio.hw + rio.varzea + 30) {
         const margem = rio.a - rio.hw;
         if (margem < 40) d = Math.max(d, 0.8 + 0.1 * ruidoMata);
@@ -101,7 +116,7 @@ export function gerarFloresta(base, mapa) {
       }
       // gleba e Vila: gramado e quintais
       if (x > gx0 - 10 && x < gx1 + 10 && z > gz0 - 10 && z < gz1 + 10) d = Math.min(d, 0.05);
-      else if (x > -1140 && x < -740 && z > 540 && z < 1080 && pontoNoPoligono(x, z, vila)) d = Math.min(d, 0.22);
+      else if (x > vx0 && x < vx1 && z > vz0 && z < vz1 && pontoNoPoligono(x, z, vila)) d = Math.min(d, 0.22);
       dens[j * N + i] = Math.round(clamp(d, 0, 1) * 255);
     }
   }

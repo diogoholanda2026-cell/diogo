@@ -257,15 +257,15 @@ function anel(g, p) {
     pts.push([C[u - 2], C[u - 1], pts[pts.length - 1][2], pts[pts.length - 1][3]]);
     for (const [x, z, tx, tz] of pts) eixo.push({ x, z, dx: -tz * lado, dz: tx * lado });
   }
-  // comprimento acumulado e módulos de ~46 m com fendas de 9 m
+  // comprimento acumulado e vãos de 24 a 36 m separados por juntas de vidro de 3 m: de longe o anel é uma faixa
+  // contínua (Marina One, Tietgen), de perto cada vão tem a sua altura
   const acum = [0];
   for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1] + Math.hypot(eixo[i].x - eixo[i - 1].x, eixo[i].z - eixo[i - 1].z));
   const total = acum[acum.length - 1];
-  const nMod = Math.max(2, Math.round(total / 55));
-  const fenda = 9;
-  // comprimentos desiguais (40 a 64 m), normalizados para fechar o comprimento da peça
+  const nMod = Math.max(2, Math.round(total / 31));
+  const fenda = 3;
   const pesos = [];
-  for (let i = 0; i < nMod; i++) pesos.push(0.75 + 0.5 * hashF(i, Math.round(total), 41));
+  for (let i = 0; i < nMod; i++) pesos.push(0.8 + 0.4 * hashF(i, Math.round(total), 41));
   const somaP = pesos.reduce((a, b) => a + b, 0);
   const lMods = pesos.map((w) => ((total - fenda * (nMod - 1)) * w) / somaP);
   const inicio = [];
@@ -289,20 +289,23 @@ function anel(g, p) {
     const l = Math.hypot(dx, dz) || 1;
     return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, dx: dx / l, dz: dz / l };
   };
+  // portais: vãos abertos de ~40 m (p.portais, frações do comprimento) por onde o parque atravessa o anel
+  const portais = (p.portais ?? []).map((f) => f * total);
   const topos = [];
   for (let mIdx = 0; mIdx < nMod; mIdx++) {
     const s0 = inicio[mIdx];
     const s1 = s0 + lMods[mIdx];
+    if (portais.some((c) => Math.abs((s0 + s1) / 2 - c) < 20)) continue;
     const t = nMod > 1 ? mIdx / (nMod - 1) : 0;
-    const alvo = p.alturas[0] + (p.alturas[1] - p.alturas[0]) * t;
-    // alturas desencontradas (±25%), fundo e recuo radial de cada módulo mexidos: o anel não vira uma fila de caixas
-    const pav = Math.max(6, Math.round((alvo * (0.78 + 0.44 * hashF(mIdx, Math.round(sem * 997)))) / PE));
+    // o perfil sobe de alturas[0] a alturas[1] numa curva macia (a plateia do anfiteatro) com uma onda larga por cima
+    // (uma serra, não uma escada): vãos vizinhos diferem de 0 a 2 andares
+    const suave = t * t * (3 - 2 * t);
+    const alvo = (p.alturas[0] + (p.alturas[1] - p.alturas[0]) * suave) * (1 + 0.1 * Math.sin(t * Math.PI * 3 + sem * 6.28));
+    const pav = Math.max(6, Math.round(alvo / PE));
     const H = pav * PE;
-    const fundo = fundoBase + (hashF(mIdx, 3, Math.round(sem * 91)) - 0.5) * 8;
-    const recuoModulo = (hashF(mIdx, 9, Math.round(sem * 53)) - 0.5) * 7;
+    const fundo = fundoBase;
     topos.push({ s0, s1, H });
-    const meio0 = at((s0 + s1) / 2);
-    const meio = { ...meio0, x: meio0.x + meio0.dx * recuoModulo, z: meio0.z + meio0.dz * recuoModulo };
+    const meio = at((s0 + s1) / 2);
     const y = g.chao(meio.x, meio.z);
     // degraus: a cada 4 andares o lado de dentro recua 3,5 m (terraço verde), até sobrar 10 m de fundo
     const degraus = [];
@@ -313,10 +316,7 @@ function anel(g, p) {
     }
     const q = Math.max(2, Math.ceil((s1 - s0) / 6));
     const seg = [];
-    for (let s = 0; s <= q; s++) {
-      const e = at(s0 + ((s1 - s0) * s) / q);
-      seg.push({ ...e, x: e.x + e.dx * recuoModulo, z: e.z + e.dz * recuoModulo });
-    }
+    for (let s = 0; s <= q; s++) seg.push(at(s0 + ((s1 - s0) * s) / q));
     // cada degrau é um prisma curvo: de fora (-fundo/2 do eixo, para longe de dentro) até fora + d
     degraus.forEach((dg, i) => {
       const fora = (e) => [e.x - (e.dx * fundo) / 2, e.z - (e.dz * fundo) / 2];
@@ -349,7 +349,8 @@ function anel(g, p) {
     })(), y - 2.5, y + 0.4, { paredes: K.granito, topo: K.piso });
     g.caixa([meio.x, y, meio.z], (s1 - s0) / 2 + fundo / 2, H);
   }
-  for (let i = 0; i + 1 < topos.length; i += 2) {
+  for (let i = 1; i + 1 < topos.length; i += 4) {
+    if (topos[i + 1].s0 - topos[i].s1 > fenda + 1) continue; // um portal no meio
     const a = at(topos[i].s1 - 2);
     const b = at(topos[i + 1].s0 + 2);
     const h = Math.min(topos[i].H, topos[i + 1].H) * 0.7;

@@ -76,6 +76,18 @@ export function sondar(gl, extras = {}) {
 
 // ------------------------------------------------------------------------------------------------ vigia dos programas
 
+/**
+ * Programas internos do three que declaram a precisão média (o PMREM): a D44 vale para os shaders próprios, então a
+ * precisão média deles fica anotada (precisaoMedia) sem contar como falha.
+ */
+export const INTERNOS_DO_THREE = Object.freeze(['CubemapToCubeUV', 'EquirectangularToCubeUV', 'PMREMGGXConvolution', 'SphericalGaussianBlur']);
+
+/** Nome do programa: o SHADER_NAME do material (o name do ShaderMaterial) ou, sem ele, o tipo do material do three. */
+export function nomeDoPrograma(vs, fs) {
+  const achar = (re) => (fs.match(re) || vs.match(re) || [])[1];
+  return achar(/#define SHADER_NAME[ \t]+(\S+)/) || achar(/#define SHADER_TYPE[ \t]+(\S+)/) || '(sem nome)';
+}
+
 /** A página guarda as fontes dos programas? (páginas de teste) */
 export const paginaDeTeste = () => typeof location !== 'undefined' && /[?&](painel|bancada|sonda|teste)=/.test(location.search || '');
 
@@ -115,7 +127,7 @@ export function vigiarProgramas(gl, { fontes = paginaDeTeste() } = {}) {
     const sh = anexos.get(p) ?? [];
     const vs = src.get(sh.find((s) => tipos.get(s) === gl.VERTEX_SHADER)) ?? '';
     const fs = src.get(sh.find((s) => tipos.get(s) === gl.FRAGMENT_SHADER)) ?? '';
-    const nome = (fs.match(/#define SHADER_NAME[ \t]+(\S+)/) || vs.match(/#define SHADER_NAME[ \t]+(\S+)/) || [])[1] || '(sem nome)';
+    const nome = nomeDoPrograma(vs, fs);
     const reg = { nome, msCompilar: null, link: null, t0: agora() };
     if (vigia.fontes) {
       reg.vs = vs;
@@ -301,7 +313,7 @@ export function contarPrograma(vs, fs, guarda = GUARDA_MALI) {
   const soma = (l, k) => l.reduce((s, d) => s + d[k], 0);
   const uni = (l) => l.filter((d) => d.q.has('uniform'));
   const r = {
-    nome: (fs.match(/#define SHADER_NAME[ \t]+(\S+)/) || vs.match(/#define SHADER_NAME[ \t]+(\S+)/) || [])[1] || '(sem nome)',
+    nome: nomeDoPrograma(vs, fs),
     amostradores: { v: soma(uni(dv), 'a'), f: soma(uni(df), 'a') },
     varyings: Math.max(soma(dv.filter((d) => d.q.has('out')), 'v'), soma(df.filter((d) => d.q.has('in')), 'v')),
     uniformesV: soma(uni(dv), 'v'),
@@ -315,7 +327,7 @@ export function contarPrograma(vs, fs, guarda = GUARDA_MALI) {
   if (r.varyings > guarda.varyings) r.falhas.push(`${r.varyings} varyings`);
   if (r.uniformesF > guarda.uniformesF) r.falhas.push(`${r.uniformesF} vetores de uniforme no fragmento`);
   if (r.atributos > guarda.atributos) r.falhas.push(`${r.atributos} atributos`);
-  if (r.precisaoMedia) r.falhas.push('precisão média num float (D44 pede highp)');
+  if (r.precisaoMedia && !INTERNOS_DO_THREE.includes(r.nome)) r.falhas.push('precisão média num float (D44 pede highp)');
   return r;
 }
 

@@ -6,11 +6,13 @@
 import * as THREE from 'three';
 
 /**
- * Gêmeo projetor de uma malha (Mesh ou InstancedMesh). A família 'sombra' de R.stats conta os triângulos dele.
+ * Gêmeo projetor de uma malha (Mesh ou InstancedMesh). A família 'sombra' de R.stats conta os triângulos dele. Uma
+ * instanciada grande (a cidade em LOD1) ganha buffer próprio só com as instâncias da cascata, refeito quando o mapa é
+ * refeito (compactar: true ou false força; sem ele, acima de 4.096 vagas).
  * @example const g = projetar(ctx, lod1Caixas)  // o LOD1 pode estar invisível na vista e projeta mesmo assim
  */
-export function projetar(ctx, fonte, { material = null } = {}) {
-  const g = ctx.sombra.projetor(fonte, { material });
+export function projetar(ctx, fonte, { material = null, compactar = null } = {}) {
+  const g = ctx.sombra.projetor(fonte, { material, compactar });
   return ctx.medidas?.familia ? ctx.medidas.familia(g, 'sombra') : g;
 }
 

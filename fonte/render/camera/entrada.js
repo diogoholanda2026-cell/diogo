@@ -197,16 +197,19 @@ export function criarEntrada(ctx, camera) {
     if (teclas.has('-')) camera.zoom(Math.exp(1.6 * dt));
   }
 
+  const semMenu = (ev) => ev.preventDefault();
+  const perdeuFoco = () => teclas.clear();
   canvas.addEventListener('pointerdown', inicio);
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', fim);
   canvas.addEventListener('pointercancel', fim);
-  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
+  canvas.addEventListener('contextmenu', semMenu);
   canvas.addEventListener('wheel', roda, { passive: false });
-  if (typeof addEventListener !== 'undefined') {
+  const janela = typeof addEventListener !== 'undefined';
+  if (janela) {
     addEventListener('keydown', teclaDesce);
     addEventListener('keyup', teclaSobe);
-    addEventListener('blur', () => teclas.clear());
+    addEventListener('blur', perdeuFoco);
   }
 
   const api = {
@@ -229,6 +232,24 @@ export function criarEntrada(ctx, camera) {
     get estado() {
       return st.modo;
     },
+    /** Solta os ouvintes do canvas e da janela (R.descartar: um render novo não herda as teclas do velho). */
+    descartar() {
+      canvas.removeEventListener('pointerdown', inicio);
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', fim);
+      canvas.removeEventListener('pointercancel', fim);
+      canvas.removeEventListener('contextmenu', semMenu);
+      canvas.removeEventListener('wheel', roda);
+      if (janela) {
+        removeEventListener('keydown', teclaDesce);
+        removeEventListener('keyup', teclaSobe);
+        removeEventListener('blur', perdeuFoco);
+      }
+      teclas.clear();
+      dedos.clear();
+      gesto = null;
+      if (ctx.entrada === api) ctx.entrada = null;
+    },
   };
   ctx.entrada = api;
   return api;
@@ -237,5 +258,9 @@ export function criarEntrada(ctx, camera) {
 export function registrar(api) {
   api.definirEntrada(criarEntrada);
   // as teclas seguradas andam a cada quadro
-  api.registrarDominio('entrada', (ctx) => ({ nome: 'entrada', quadro: (tMs) => ctx.entrada?.quadro?.(tMs) }));
+  api.registrarDominio('entrada', (ctx) => ({
+    nome: 'entrada',
+    quadro: (tMs) => ctx.entrada?.quadro?.(tMs),
+    descartar: () => ctx.entrada?.descartar?.(),
+  }));
 }

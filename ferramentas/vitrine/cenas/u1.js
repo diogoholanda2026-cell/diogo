@@ -91,6 +91,15 @@ function somaDoSaldo() {
   return f;
 }
 
+// o popover está por cima de tudo no próprio centro e nos cantos de baixo (nem a tela nem o cartão o cobrem)
+function popoverPorCima(seletor) {
+  const p = document.querySelector(seletor);
+  if (!p) return [`${seletor} não abriu`];
+  const r = p.getBoundingClientRect();
+  const pontos = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 12, r.bottom - 12], [r.right - 12, r.bottom - 12]];
+  return pontos.some(([x, y]) => !p.contains(document.elementFromPoint(x, y))) ? [`${seletor} ficou por baixo de outra camada`] : [];
+}
+
 // nenhum grupo da barra sai da tela nem encosta no outro (a vitrine só mede o texto)
 function barraCabe() {
   const f = [];
@@ -222,8 +231,38 @@ export function registrar(registrarCenaVitrine) {
     },
     conferir: conferirTexto('[data-popover="barra.bem"]', /61 a 100.*11\/h/, 'faixas'),
   });
-  // partida nova: pausado, saldo negativo com o glifo de alerta, população zero
-  registrarCenaVitrine('u1-inicio', { cenario: 'inicio', repouso: true, conferir: conferirTexto('[data-hud="pausado"]', /pausado/i, 'chip de pausa') });
+  // o "de onde vem" com a Economia aberta: a barra fica à vista e o popover abre por cima da tela
+  registrarCenaVitrine('u1-bem-tela', {
+    cenario: 'meio',
+    async preparar({ sim, ui, acionar, esperar }) {
+      contaFechada(sim);
+      acionar('velocidade', 1);
+      ui.ui.abrirTela('economia');
+      await esperar(30);
+      acionar('bemEstar');
+    },
+    conferir: () => popoverPorCima('[data-popover="barra.bem"]'),
+  });
+  // o menu do canto enquanto a tela 'menu' (U1b) não existe: as telas registradas e o aviso do resto
+  registrarCenaVitrine('u1-menu', {
+    cenario: 'meio',
+    async preparar({ sim, acionar, esperar }) {
+      contaFechada(sim);
+      acionar('velocidade', 1);
+      await esperar(30);
+      acionar('menu');
+    },
+    conferir: () => [...popoverPorCima('[data-popover="barra.menu"]'), ...conferirTexto('[data-popover="barra.menu"]', /Economia/, 'menu')()],
+  });
+  // partida nova: pausado, saldo negativo com o glifo de alerta, população zero e o bem-estar "sem moradores"
+  registrarCenaVitrine('u1-inicio', {
+    cenario: 'inicio',
+    repouso: true,
+    conferir: () => [
+      ...conferirTexto('[data-hud="pausado"]', /pausado/i, 'chip de pausa')(),
+      ...conferirTexto('[data-a="bemEstar"]', /sem moradores/, 'bem-estar da cidade vazia')(),
+    ],
+  });
   // cartão de prédio residencial
   registrarCenaVitrine('u1-cartao-res', {
     cenario: 'meio',

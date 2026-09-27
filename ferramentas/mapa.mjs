@@ -2,7 +2,7 @@
 // conferências do mapa autoral:
 //  - a área inicial de 4 x 4 ladrilhos é um componente só de terra firme (D53: o rio fica na borda, não a corta);
 //  - rocha, areia e argila dentro da área inicial; calcário só fora dela (D3); a orla nobre fora dela;
-//  - a Vila com uns 60 prédios e 350 moradores; a rodovia ligada ao nó de entrada; sem erro na simulação.
+//  - a Vila com uns 60 prédios e 350 moradores, inteira na área inicial; a rodovia ligada ao nó de entrada; sem erro.
 //
 // Uso: node ferramentas/mapa.mjs [--saida pasta] [--semente s] [--so-conferir]
 //      (padrão: pasta mapa/ no scratchpad do sistema, ou ./mapa-saida). Sai com código 1 se uma conferência falhar.
@@ -78,7 +78,10 @@ class Imagem {
   pintar(i, j, c, a = 1) {
     if (i < 0 || j < 0 || i >= this.w || j >= this.h) return;
     const k = (j * this.w + i) * 3;
-    for (let q = 0; q < 3; q++) this.rgb[k + q] = Math.round(this.rgb[k + q] * (1 - a) + c[q] * a);
+    for (let q = 0; q < 3; q++) {
+      const v = Math.round(this.rgb[k + q] * (1 - a) + c[q] * a);
+      this.rgb[k + q] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
   }
   /** Disco no ponto do mundo, raio em metros (mínimo meio pixel). */
   disco(x, z, r, c, a = 1) {
@@ -290,7 +293,7 @@ export function desenharMapa(sim, pasta) {
   desenharLadrilhos(sim, geral);
   desenharInicio(sim, geral, 16);
   salvar('mapa.png', geral);
-  // 2. área inicial ampliada (2 m por pixel), com as sugestões
+  // 2. área inicial ampliada (uns 2 m por pixel, com 128 m de margem), com as sugestões
   const tb = terrenoBase(sim);
   const { mapa } = tb;
   const ix0 = mapa.origem[0] + mapa.inicio[0][0] * mapa.ladrilho;
@@ -463,6 +466,21 @@ export function conferirMapa(sim) {
   const nPredios = M.predios.length;
   if (nPredios < 50 || nPredios > 75) falhas.push(`Vila com ${nPredios} prédios (esperado ~60)`);
   if (M.moradores < 330 || M.moradores > 380) falhas.push(`Vila com ${M.moradores} moradores (esperado ~350)`);
+  // a Vila inteira na área inicial (D3: os 4 x 4 ficam em volta da gleba, da Vila e da entrada): plantas e ruas
+  const P = sim.tabelas.predios;
+  const A = sim.tabelas.arestas;
+  const dentroInicio = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+  let vilaFora = 0;
+  for (const ref of M.predios) {
+    const i = ref % 1048576;
+    const c = cantosRetangulo(P.x[i], P.z[i], P.rot[i], P.w[i], P.d[i]);
+    for (let k = 0; k < 8; k += 2) if (!dentroInicio(c[k], c[k + 1])) vilaFora++;
+  }
+  for (const [id, refs] of Object.entries(M.ruas)) {
+    if (id === 'estrada') continue; // a estrada de terra sobe até a rodovia, fora da área inicial
+    for (const ref of refs) for (const [x, z] of amostrasAresta(A, ref % 1048576, 8)) if (!dentroInicio(x, z)) vilaFora++;
+  }
+  if (vilaFora) falhas.push(`Vila fora da área inicial (${vilaFora} pontos de plantas e ruas)`);
   if (M.entrada < 0) falhas.push('sem nó de entrada');
   if (M.ponte < 0) falhas.push('sem a ponte da rodovia');
   if (sim.erros.length) falhas.push(`erros na simulação: ${sim.erros[0].mensagem}`);
@@ -472,7 +490,7 @@ export function conferirMapa(sim) {
   return {
     ok: !falhas.length,
     falhas,
-    medidas: { componentes, terraInicio: terra, maxDentro, maxFora, predios: nPredios, moradores: M.moradores, hashBase: hash, msTerreno: tb.base.ms },
+    medidas: { componentes, terraInicio: terra, maxDentro, maxFora, predios: nPredios, moradores: M.moradores, vilaFora, hashBase: hash, msTerreno: tb.base.ms },
   };
 }
 

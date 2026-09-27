@@ -5,7 +5,7 @@
 //         buffer só com a peça principal de cada prédio; os buffers são montados com os setores visíveis
 //   sombra própria (D43): listas de projetores com o LOD1 inteiro dos setores em volta do alvo da câmera, cujos
 //         buffers de instância o gêmeo da cena de sombra compartilha (o LOD0 nunca projeta)
-//   tabela de prédios na GPU: RGBA8 512² (R camada, G bits, B agenda) e RGBA32F 512² (início e fim da obra, R4b)
+//   tabela de prédios na GPU: RGBA8 512² (R camada, G bits, B agenda) e RG32F 512² (início e fim da obra, R4b)
 // Publica para as outras parcelas: criarMaterialEdificio(ctx) (X1a, R5), uniformesEdificio, e no domínio
 // ctx.dominio('predios'): { tabela, obra, material, preparar(), pronto(), caixaDoPredio(idx), medidas() }.
 import * as THREE from 'three';
@@ -20,6 +20,8 @@ import { refDe, idxDaRef } from '../../contratos/espelho.js';
 import { LOD_PREDIOS } from '../../data/estilos.js';
 import { PRIORIDADE } from '../camera/selecao.js';
 import { pedeTudo } from '../ponte.js';
+import { carregarDetalheCC0 } from '../materiais/texturas-predio.js';
+import { modoMateriais } from '../materiais/texturas-chao.js';
 
 /** Lado das tabelas de prédios na GPU (262.144 vagas, D19). */
 export const LADO_TABELA = 512;
@@ -111,8 +113,9 @@ function criarPredios(ctx) {
   tabela.magFilter = tabela.minFilter = THREE.NearestFilter;
   tabela.generateMipmaps = false;
   tabela.name = 'predios:tabela';
-  const dadosObra = new Float32Array(LADO_TABELA * LADO_TABELA * 4);
-  const obra = new THREE.DataTexture(dadosObra, LADO_TABELA, LADO_TABELA, THREE.RGBAFormat, THREE.FloatType);
+  // RG32F (2.4): início e fim da obra em tiques; o progresso sai no vértice, nenhum envio por quadro
+  const dadosObra = new Float32Array(LADO_TABELA * LADO_TABELA * 2);
+  const obra = new THREE.DataTexture(dadosObra, LADO_TABELA, LADO_TABELA, THREE.RGFormat, THREE.FloatType);
   obra.magFilter = obra.minFilter = THREE.NearestFilter;
   obra.generateMipmaps = false;
   obra.name = 'predios:obra';
@@ -127,6 +130,12 @@ function criarPredios(ctx) {
   };
   uniformesEdificio.gPredTab.value = tabela;
   uniformesEdificio.gDetalhe.value = ctx.textura('fachadaDetalhe');
+  // A/B dos materiais (D46): com ?materiais=cc0 a fachada usa o detalhe fotográfico quando a montagem o traz
+  if (modoMateriais() === 'cc0') {
+    carregarDetalheCC0({ renderer: ctx.renderer, THREE }).then((t) => {
+      if (t) uniformesEdificio.gDetalhe.value = t;
+    });
+  }
   const mascara = typeof location !== 'undefined' && new URLSearchParams(location.search).get('passe') === 'mascara';
   uniformesEdificio.gPrediosMascara.value = mascara ? 1 : 0;
 
@@ -204,10 +213,10 @@ function criarPredios(ctx) {
     if (viva && (f & PREDIO.HOLDING || P.tipo[i] === TIPO_PREDIO.HOLDING)) g |= BITS_TABELA.HOLDING;
     dadosTab[k + 1] = g;
     dadosTab[k + 2] = viva ? (Math.imul(P.semente[i] ^ 0x5bd1e995, 0x9e3779b1) >>> 24) & 255 : 0;
-    dadosObra[k] = viva ? P.obraIni[i] : 0;
-    dadosObra[k + 1] = viva ? P.obraFim[i] : 0;
+    dadosObra[2 * i] = viva ? P.obraIni[i] : 0;
+    dadosObra[2 * i + 1] = viva ? P.obraFim[i] : 0;
     if (!tabelaInteira) tabela.addUpdateRange(k, 4);
-    if (!obraInteira) obra.addUpdateRange(k, 4);
+    if (!obraInteira) obra.addUpdateRange(2 * i, 2);
   }
 
   function tirar(st, i) {
@@ -403,8 +412,13 @@ function criarPredios(ctx) {
 
   const perfilLod = () => ({ lod0: ctx.perfil.lod0, ...(LOD_PREDIOS[ctx.perfil.id] ?? LOD_PREDIOS.media) });
 
-  /** Escolhe o LOD de cada setor, faz os pedidos e monta as listas visíveis e de sombra. */
-  function passo({ envio = 1, pedidos1 = 6, pedidos0 = 2 } = {}) {
+  /**
+   * Escolhe o LOD de cada setor, faz os pedidos e monta as listas visíveis e de sombra. O LOD1 é leve (só o plano e as
+   * instâncias: a cidade sintética inteira, 12 mil prédios, sai em ~0,2 s no worker): com o worker, todos os setores
+   * que faltam vão para a fila de uma vez e a cidade aparece no segundo quadro da carga; o LOD0 segue com 2 na fila e
+   * 1 envio à GPU por quadro.
+   */
+  function passo({ envio = 1, pedidos1 = oficina.worker ? 1024 : 6, pedidos0 = 2 } = {}) {
     quadros++;
     receber(envio);
     const cam = ctx.camera;
@@ -610,7 +624,7 @@ function criarPredios(ctx) {
       if (!iniciado) aplicar(ctx.sim.mudancas.desde(-1), ctx.sim.espelho);
       uniformes(ctx);
       while (agora() - t0 < teto) {
-        passo({ envio: 64, pedidos1: 8, pedidos0: 4 });
+        passo({ envio: 64, pedidos1: 1024, pedidos0: 4 });
         if (prontoAgora()) break;
         if (oficina.worker) await new Promise((ok) => setTimeout(ok, 30));
         else {

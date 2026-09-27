@@ -74,7 +74,7 @@ float gNuvemSombra() {
   if ( gNuvemParams.y <= 0.0 ) return 1.0;
   vec2 xz = vGPosMundo.xz + ( 1500.0 - vGPosMundo.y ) * gNuvemDesloc.zw;
   float n = texture( gNuvemMapa, xz * gNuvemParams.x + gNuvemDesloc.xy ).r;
-  return 1.0 - gNuvemParams.y * smoothstep( gNuvemParams.z, gNuvemParams.z + 0.22, n );
+  return 1.0 - gNuvemParams.y * smoothstep( gNuvemParams.z, gNuvemParams.z + 0.12, n );
 }
 `;
 

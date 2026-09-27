@@ -4,7 +4,8 @@
 // GPU, famílias, programas contados contra a guarda do Mali com o tempo de compilação, capacidades e a sonda).
 // Com ?painel=1 abre a página de teste mínima da prévia sobre a cena: a sonda (limites, extensões, precisão), a
 // bancada da cena, os programas acima da guarda e "Copiar resultado", que junta as cenas medidas nesta aba (aberta e
-// estresse) num texto para o dono mandar. Os textos da página ficam aqui até a ui/textos/r1.js entrar no índice.
+// estresse) num texto para o dono mandar. Os textos da página ficam aqui (português do Brasil, sem travessão) até o
+// integrador pôr ui/textos/r1.js no índice fixo de ui/textos.js (o teste de índices recusa arquivo fora dele).
 import { programasContados } from './capacidades.js';
 import { sugerirPerfil } from './perfis.js';
 
@@ -43,8 +44,8 @@ const t = (k, p = {}) => TXT[k].replace(/\{(\w+)\}/g, (_, x) => String(p[x] ?? '
 const CHAVE_SESSAO = 'heldopolis.bancada';
 
 /** Mede n quadros a partir do próximo (o laço do app desenha; o domínio lê R.stats a cada quadro). */
-function criarMedicao(ctx, quadros) {
-  return { n: quadros, amostras: [], tAnt: 0, ok: null, promessa: null };
+function criarMedicao(quadros) {
+  return { n: quadros, amostras: [], tAnt: 0, ok: null, promessa: null, fixaAntes: null };
 }
 
 function resumir(ctx, m, sugerido) {
@@ -185,15 +186,21 @@ export function registrar(api) {
     const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
     ctx.nomeCena = qs.get('cena');
     let painel = null;
+    let espera = 0;
     /**
      * Mede n quadros da vista atual (resolução travada, ms de GPU ligado) e devolve o relatório.
      * @returns {Promise<object>}
      */
     ctx.bancada = ({ quadros = 120 } = {}) => {
       if (med?.promessa) return med.promessa;
-      med = criarMedicao(ctx, quadros);
+      med = criarMedicao(quadros);
       ctx.medirGpu = true;
-      if (ctx.quadro?.resolucao) ctx.quadro.resolucao.fixa = true;
+      // a resolução fica travada só durante a medida (depois volta a dinâmica, ou a fixa do ?pr=)
+      const res = ctx.quadro?.resolucao;
+      if (res) {
+        med.fixaAntes = res.fixa;
+        res.fixa = true;
+      }
       painel?.mostrar(null, t('medindo', { n: quadros }));
       med.promessa = new Promise((ok) => (med.ok = ok));
       return med.promessa;
@@ -201,7 +208,7 @@ export function registrar(api) {
     if (qs.get('painel') === '1') {
       painel = criarPainel(ctx, sugerido, () => ctx.bancada().then((rel) => (painel.guardar(rel), painel.mostrar(rel))));
       // espera a compilação e o primeiro cubo do céu antes de medir
-      setTimeout(() => ctx.bancada().then((rel) => (painel.guardar(rel), painel.mostrar(rel))), 1500);
+      espera = setTimeout(() => ctx.bancada().then((rel) => (painel.guardar(rel), painel.mostrar(rel))), 1500);
     }
     return {
       nome: 'bancada',
@@ -214,13 +221,18 @@ export function registrar(api) {
         med.tAnt = tMs;
         if (med.amostras.length >= med.n) {
           const rel = resumir(ctx, med, sugerido);
-          const ok = med.ok;
+          const { ok, fixaAntes } = med;
           med = null;
           ctx.medirGpu = false;
+          if (ctx.quadro?.resolucao && fixaAntes !== null) ctx.quadro.resolucao.fixa = fixaAntes;
           ok(rel);
         }
       },
       descartar() {
+        clearTimeout(espera);
+        if (med && ctx.quadro?.resolucao && med.fixaAntes !== null) ctx.quadro.resolucao.fixa = med.fixaAntes;
+        ctx.medirGpu = false;
+        med = null;
         painel?.el.remove();
         if (ctx.bancada) delete ctx.bancada;
       },

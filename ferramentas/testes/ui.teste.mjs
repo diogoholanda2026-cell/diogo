@@ -100,7 +100,7 @@ function caixaDoCaminho(d) {
     else throw new Error(`comando ${cmd} em ${d}`);
   }
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), pts };
 }
 
 test('glifos: primeiro corte do M1 (60 ou mais), só caminhos, dentro da grade de 24 com folga para o traço', async () => {
@@ -216,6 +216,12 @@ test('barra: margem do bem-estar até o degrau (D11), âmbar abaixo de 63; faixa
   assert.equal(barra.textoMargem({ bemEstarTarifa: 80, margem: { degrau: null, delta: null } }).texto, 'faixa mais alta');
   const f = barra.faixasTarifa(8);
   assert.deepEqual(f.map((x) => [x.de, x.ate, x.tarifa, x.atual]), [[0, 30, 5, false], [31, 60, 8, true], [61, 100, 11, false]]);
+  // cidade vazia (partida nova): sem rosto triste nem "faltam 31"; bem-estar sem número vale 0, nunca "NaN"
+  assert.deepEqual(barra.textoMargem({ populacao: 0, bemEstarTarifa: 0, margem: { degrau: null, delta: null } }), { texto: 'sem moradores', estado: null });
+  assert.equal(barra.bemDaBarra({ bemEstarTarifa: NaN }), 0);
+  assert.equal(barra.bemDaBarra({ bemEstar: 63.6 }), 64);
+  assert.equal(barra.textoMargem({ populacao: 10, bemEstarTarifa: NaN, margem: { degrau: null, delta: null } }).texto, 'faltam 31 para 31');
+  assert.equal(barra.textoMargem({ populacao: 10, bemEstarTarifa: 62, margem: { degrau: 61, delta: NaN } }).texto, '+1 acima de 61');
 });
 
 test('barra: anel do marco, ano novo em tiques, zonas da demanda (E só no M1b), um glifo por fase do céu', async () => {
@@ -260,6 +266,9 @@ test('cartão: números por tipo (Contribuição em /h, nunca Aluguel), aviso ma
   assert.equal(cartao.faseDaObra({ progresso: 0.3 }).nome, 'estrutura');
   assert.equal(cartao.faseDaObra({ progresso: 1 }).nome, 'fechamento');
   for (const p of [res, serv, ind]) for (const x of cartao.numerosDoCartao(p)) assert.doesNotMatch(`${x.rotulo} ${x.valor}`, /aluguel|\/dia/i);
+  // prédio vazio: bem-estar sem número vira 0 (e o rosto da faixa de baixo), nunca "NaN"
+  const vazio = cartao.numerosDoCartao({ ...res, moradia: { moradores: 0, capacidade: 8, bemEstar: NaN, contribuicaoHora: 0 } });
+  assert.deepEqual(vazio.map((x) => x.valor), ['0 de 8', '0', '0/h']);
 });
 
 // ------------------------------------------------------------------------------------------------ Economia
@@ -355,4 +364,20 @@ test('CSS da U1a: sem desfoque no celular, animação só com transform e opacit
   }
   const hud = readFileSync(join(pasta, 'hud.css'), 'utf8');
   assert.match(hud, /\.lugar-cima[\s\S]*?zoom:\s*var\(--zoom\)/);
+  // a barra é um contexto de empilhamento no z do HUD: com popover aberto ela sobe acima da tela (50) e do cartão (40)
+  assert.match(hud, /\.lugar-cima:has\(\.popover\)\s*\{\s*z-index:\s*var\(--z-popover\)/);
+});
+
+test('glifos: a Torre Lâmina lê como torre (lâminas na proporção da D27) e o alerta não depende de preenchimento', async () => {
+  const { glifos } = await ui();
+  const torre = glifos.glifo('arcologia').tracos.map(caixaDoCaminho);
+  // o contorno das lâminas: o mais alto dos traços (o chão, o pódio e o heliponto são baixos)
+  const corpo = torre.reduce((a, c) => (c.y1 - c.y0 > a.y1 - a.y0 ? c : a));
+  const alto = corpo.y1 - corpo.y0;
+  // a lâmina mais baixa (163 de 301 m) passa da metade da torre: com degraus de alturas iguais ela lia como escada
+  const baixa = corpo.y1 - Math.min(...corpo.pts.filter(([x]) => x <= corpo.x0 + 1).map(([, y]) => y));
+  assert.ok(baixa / alto >= 0.5 && baixa / alto <= 0.6, `lâmina baixa com ${(baixa / alto).toFixed(2)} da altura (D27: 0,54)`);
+  assert.ok(alto >= 1.5 * (corpo.x1 - corpo.x0), 'torre larga demais');
+  // o ponto da exclamação é traço cheio (o preenchido a 35% some nos 12 px do saldo negativo)
+  assert.equal(glifos.glifo('alerta').cheios.length, 0);
 });

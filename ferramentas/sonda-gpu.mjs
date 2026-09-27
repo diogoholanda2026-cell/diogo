@@ -63,13 +63,14 @@ export async function sondar(o) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   let r;
+  let o;
   try {
-    r = await sondar(lerArgs(process.argv.slice(2)));
+    o = lerArgs(process.argv.slice(2));
+    r = await sondar(o);
   } catch (e) {
     console.error('sonda-gpu: ' + e.message);
     process.exit(1);
   }
-  const o = lerArgs(process.argv.slice(2));
   if (o.json) writeFileSync(o.json, JSON.stringify(r, null, 1));
   const S = r.sonda;
   const L = S.limites;

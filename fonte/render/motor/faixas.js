@@ -20,17 +20,26 @@ export class Faixas {
     this._marcados = new WeakSet();
   }
 
-  /** Liga a camada da faixa de longe nos objetos de cima da cena (e um nível abaixo). */
+  /**
+   * Liga a camada da faixa de longe em toda a árvore da cena: o que é de longe e tudo o que está dentro dele (um grupo
+   * marcado com faixa 'longe' leva as malhas filhas; o three testa a camada de cada objeto, não a do pai). Quem deixa
+   * de ser de longe perde a camada.
+   */
   marcar(cena) {
-    const ver = (o) => {
-      if (ehDeLonge(o)) o.layers.enable(CAMADA_LONGE);
-      else if (this._marcados.has(o)) o.layers.disable(CAMADA_LONGE);
-      if (ehDeLonge(o)) this._marcados.add(o);
+    const ver = (o, herdado) => {
+      const longe = herdado || ehDeLonge(o);
+      if (longe) {
+        o.layers.enable(CAMADA_LONGE);
+        this._marcados.add(o);
+      } else if (this._marcados.has(o)) {
+        o.layers.disable(CAMADA_LONGE);
+        this._marcados.delete(o);
+      }
+      const filhos = o.children;
+      for (let i = 0; i < filhos.length; i++) ver(filhos[i], longe);
     };
-    for (const o of cena.children) {
-      ver(o);
-      if (o.isGroup) for (const f of o.children) ver(f);
-    }
+    const filhos = cena.children;
+    for (let i = 0; i < filhos.length; i++) ver(filhos[i], false);
   }
 
   /**
@@ -49,6 +58,7 @@ export class Faixas {
     const dist = this.ctx.cameraApi?.estado?.().dist ?? 1000;
     this.limite = Math.max(3000, dist * 1.6);
     const camadas = cam.layers.mask;
+    const autoLimpa = renderer.autoClear;
     faz(() => {
       cam.near = this.limite * 0.9;
       cam.far = LONGE_FAR;
@@ -56,6 +66,8 @@ export class Faixas {
       cam.layers.set(CAMADA_LONGE);
       renderer.render(cena, cam);
     });
+    // a faixa de perto não pode limpar a cor da de longe (sem o céu, o quadro deixa o autoClear ligado)
+    renderer.autoClear = false;
     renderer.clearDepth();
     faz(() => {
       cam.layers.mask = camadas;
@@ -64,6 +76,7 @@ export class Faixas {
       cam.updateProjectionMatrix();
       renderer.render(cena, cam);
     });
+    renderer.autoClear = autoLimpa;
     cam.near = near0;
     cam.far = far0;
     cam.updateProjectionMatrix();

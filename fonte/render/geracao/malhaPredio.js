@@ -19,7 +19,7 @@ export const FACHADA = congelar({
   GALPAO: 10, PAINEL: 11, CASA: 12,
   // de TELHA em diante: materiais sem grade de janelas
   TELHA: 20, LAJE: 21, TELHA_METAL: 22, CONCRETO: 23, METAL: 24, VIDRO: 25, MADEIRA: 26, PEDRA: 27, TOLDO: 28,
-  VERDE: 29, PISO: 30, AGUA: 31, LETREIRO: 32, SOLAR: 33, PORTA: 34, GARAGEM: 35,
+  VERDE: 29, PISO: 30, AGUA: 31, LETREIRO: 32, SOLAR: 33, PORTA: 34, GARAGEM: 35, FIBRO: 36,
 });
 
 /** Térreo desenhado pelo shader na face da frente (bits 5 a 7 de aFac.w) e a altura fixa de cada um. */
@@ -364,6 +364,90 @@ function duasAguas(K, P) {
 }
 const FORRO = { t: FACHADA.MADEIRA, c1: '#8a6d52', v: 2, dg: 0.3 };
 
+const FORRO_FIBRO = { t: FACHADA.CONCRETO, c1: '#7d7b76', v: 2, dg: 0.5 };
+
+/**
+ * Meia-água (fibrocimento das casas de autoconstrução, galpão de fundo): uma água só, do beiral da frente (+z, em y0)
+ * ao dos fundos (-z, em y0 + h), com os oitões triangulares e o pano dos fundos na cor da parede. No LOD1 vira a forma
+ * de duas águas da mesma caixa.
+ */
+function meiaAgua(K, P) {
+  const hw = P.w / 2;
+  const hd = P.d / 2;
+  const y0 = P.y0;
+  const y1 = P.y0 + P.h;
+  const esp = 0.1;
+  const L = Math.hypot(P.d, P.h);
+  const ny = P.d / L;
+  const nz = P.h / L;
+  const pkT = empacotar(P.topo);
+  K.quad(pp(P, -hw, y0, hd), pp(P, hw, y0, hd), pp(P, hw, y1, -hd), pp(P, -hw, y1, -hd), pn(P, [0, ny, nz]), [0, 0, P.w, L], SEM_TOPO, P.w, pkT, 1);
+  const forro = P.forro ?? FORRO_FIBRO;
+  const pkF = empacotar(forro);
+  K.quad(pp(P, hw, y0 - esp, hd), pp(P, -hw, y0 - esp, hd), pp(P, -hw, y1 - esp, -hd), pp(P, hw, y1 - esp, -hd), pn(P, [0, -ny, -nz]), [0, 0, P.w, L], SEM_TOPO, P.w, pkF, 0.5);
+  parede(K, P, -hw, hd, hw, hd, y0 - esp, y0, forro, SEM_TOPO, 0.9);
+  parede(K, P, hw, -hd, -hw, -hd, y1 - esp, y1, forro, SEM_TOPO, 0.9);
+  for (const lado of [1, -1]) {
+    const nn = pn(P, lado > 0 ? N_PX : N_NX);
+    K.quad(pp(P, lado * hw, y0 - esp, hd), pp(P, lado * hw, y0, hd), pp(P, lado * hw, y1, -hd), pp(P, lado * hw, y1 - esp, -hd), nn, [0, 0, 1, 1], SEM_TOPO, 1, pkF, 0.9);
+  }
+  // oitões e o pano dos fundos acima da parede (a caixa de baixo para no topo da parede da frente)
+  const b = P.beiral ?? 0.4;
+  const bo = P.beiralOitao ?? b;
+  const k = P.h / P.d;
+  const zF = hd - b;
+  const zB = -hd + b;
+  const yF = y0 + b * k;
+  const yB = y0 + (P.d - b) * k;
+  const mo = P.mat;
+  const liso = mo._liso ?? (mo._liso = { ...mo, t: FACHADA.LISO, tr: 0, _p: null });
+  const pk = empacotar(liso);
+  for (const lado of [1, -1]) {
+    const x = (hw - bo) * lado;
+    const n = pn(P, lado > 0 ? N_PX : N_NX);
+    const a = K.v(...pp(P, x, yF, zF), ...n, 0, yF - y0, SEM_TOPO, zF - zB, pk, 0.85);
+    const bb = K.v(...pp(P, x, yF, zB), ...n, 1, yF - y0, SEM_TOPO, zF - zB, pk, 0.85);
+    const c = K.v(...pp(P, x, yB, zB), ...n, 1, yB - y0, SEM_TOPO, zF - zB, pk, 0.85);
+    K.tri(a, bb, c);
+  }
+  parede(K, P, hw - bo, zB, -hw + bo, zB, yF, yB, liso, SEM_TOPO, 0.85);
+}
+
+/**
+ * Telhado de quatro águas com beiral (a casa brasileira mais comum): cumeeira ao longo de x da peça (w >= d), águas
+ * inclinadas iguais nas quatro faces; w e d já incluem o beiral. No LOD1 vira a forma de duas águas da mesma caixa.
+ */
+function quatroAguas(K, P) {
+  const hw = P.w / 2;
+  const hd = P.d / 2;
+  const y0 = P.y0;
+  const y1 = P.y0 + P.h;
+  const r = Math.max(0, hw - hd); // meia cumeeira
+  const esp = 0.12;
+  const L = Math.hypot(hd, P.h);
+  const ny = hd / L;
+  const nz = P.h / L;
+  const pkT = empacotar(P.topo);
+  // águas longas (trapézios) e as pontas (triângulos): u ao longo do beiral, v subindo a água
+  K.quad(pp(P, -hw, y0, hd), pp(P, hw, y0, hd), pp(P, r, y1, 0), pp(P, -r, y1, 0), pn(P, [0, ny, nz]), [0, 0, P.w, L], SEM_TOPO, P.w, pkT, 1);
+  K.quad(pp(P, hw, y0, -hd), pp(P, -hw, y0, -hd), pp(P, -r, y1, 0), pp(P, r, y1, 0), pn(P, [0, ny, -nz]), [0, 0, P.w, L], SEM_TOPO, P.w, pkT, 1);
+  for (const lado of [1, -1]) {
+    const n = pn(P, [lado * nz, ny, 0]);
+    const a = K.v(...pp(P, lado * hw, y0, lado * hd), ...n, 0, 0, SEM_TOPO, P.d, pkT, 1);
+    const b = K.v(...pp(P, lado * hw, y0, -lado * hd), ...n, P.d, 0, SEM_TOPO, P.d, pkT, 1);
+    const c = K.v(...pp(P, lado * r, y1, 0), ...n, P.d / 2, L, SEM_TOPO, P.d, pkT, 1);
+    K.tri(a, b, c);
+  }
+  // forro do beiral (por baixo) e a testeira em volta
+  const forro = P.forro ?? FORRO;
+  plano(K, P, -hw, -hd, hw, hd, y0 - esp, forro, 0.5, true);
+  const test = P.testeira ?? forro;
+  parede(K, P, -hw, hd, hw, hd, y0 - esp, y0, test, SEM_TOPO, 0.9);
+  parede(K, P, hw, -hd, -hw, -hd, y0 - esp, y0, test, SEM_TOPO, 0.9);
+  parede(K, P, hw, hd, hw, -hd, y0 - esp, y0, test, SEM_TOPO, 0.9);
+  parede(K, P, -hw, -hd, -hw, hd, y0 - esp, y0, test, SEM_TOPO, 0.9);
+}
+
 /** Prisma de n lados inscrito na caixa (w, d), com topo plano; chanfro = 8 lados com cantos cortados. */
 function prisma(K, P, n, chanfro = 0) {
   const pts = [];
@@ -585,7 +669,10 @@ function piso(K, P) {
   plano(K, P, -P.w / 2, -P.d / 2, P.w / 2, P.d / 2, P.y0, P.mat, P.ao ?? 1);
 }
 
-const EMISSORES = { piso,  caixa, duasAguas, chanfro: (K, P) => prisma(K, P, 8, P.chanfro ?? Math.min(P.w, P.d) * 0.18), cilindro: (K, P) => prisma(K, P, 16), varanda, placa, inclinado, shed, arco, cone, coluna };
+const EMISSORES = {
+  piso, caixa, duasAguas, quatroAguas, meiaAgua, chanfro: (K, P) => prisma(K, P, 8, P.chanfro ?? Math.min(P.w, P.d) * 0.18),
+  cilindro: (K, P) => prisma(K, P, P.lados ?? 16), varanda, placa, inclinado, shed, arco, cone, coluna,
+};
 
 /**
  * Escreve o LOD0 de um plano no construtor (o prédio já posto com K.predio). Devolve os triângulos escritos.
@@ -606,7 +693,7 @@ export function malhaDoPlano(K, plano) {
 
 // ------------------------------------------------------------------------------------------------ LOD1
 
-const IDX_FORMA = { caixa: FORMA.CAIXA, chanfro: FORMA.CHANFRO, cilindro: FORMA.CILINDRO, duasAguas: FORMA.DUAS_AGUAS };
+const IDX_FORMA = { caixa: FORMA.CAIXA, chanfro: FORMA.CHANFRO, cilindro: FORMA.CILINDRO, duasAguas: FORMA.DUAS_AGUAS, quatroAguas: FORMA.DUAS_AGUAS, meiaAgua: FORMA.DUAS_AGUAS };
 const TOPO_NENHUM = { t: FACHADA.LAJE, c1: '#8f8b84' };
 
 /**
@@ -621,7 +708,8 @@ export function instanciasDoPlano(plano, ox, oy, oz, rot, emitir) {
   const b = new Uint8Array(16);
   for (const P of plano.pecas) {
     if (!P.lod1) continue;
-    const f = IDX_FORMA[P.forma];
+    // forma1: a forma do LOD1 quando ela difere (caixa d'água redonda vira caixa, com a mesma caixa envolvente)
+    const f = IDX_FORMA[P.forma1 ?? P.forma];
     if (f === undefined) continue;
     const g = rot + (P.giro ?? 0);
     const cg = Math.cos(g);

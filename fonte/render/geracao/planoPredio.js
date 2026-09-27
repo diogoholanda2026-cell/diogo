@@ -4,12 +4,15 @@
 // marquise, equipamentos, muro e piso do lote), a caixa e a altura do topo. O mesmo plano dá o LOD0 (todas as peças) e
 // o LOD1 (as peças marcadas lod1, como instâncias de forma), então a silhueta não muda na troca.
 //
-// Tipologias brasileiras por zona e nível (o CS2 muda o visual a cada dois níveis): casa térrea ou sobrado com telha
-// ou laje e caixa d'água, sobrados geminados, casa de alto padrão com laje em balanço; prédio sobre pilotis com janela
-// em fita e cobogó, prédio com varandas e garagem no térreo, varanda gourmet; torre sobre pódio com área de lazer,
-// torre de varandas, torre de vidro com heliponto; loja de rua com toldo e platibanda, mercado, galeria, uso misto,
-// centro com pele perfurada; lâmina com brise (Capanema), pele de vidro, torre de controle solar em chanfro ou
-// cilindro; galpão com shed ou arco, silos, fábrica limpa com painel solar.
+// Tipologias brasileiras por zona e nível (o CS2 muda o visual a cada dois níveis): casa de autoconstrução (laje com
+// esperas e caixa d'água azul, fibrocimento em meia-água, tijolo à vista no andar de cima, terraço na frente) ou de
+// padrão médio (telha cerâmica em quatro ou duas águas, platibanda, varanda, aquecedor solar, garagem coberta),
+// sobrados geminados pintados cada um pelo dono, casa de alto padrão com laje em balanço; prédio sobre pilotis com
+// janela em fita e cobogó, prédio com varandas e garagem no térreo, varanda gourmet; torre sobre pódio com prumada
+// saliente, varandas de canto e coroamento, torre de varandas, torre de vidro com heliponto; loja de rua com toldo e
+// platibanda, mercado, galeria, uso misto, centro com pele perfurada; lâmina com brise (Capanema), pele de vidro
+// escalonada, torre de controle solar em chanfro ou cilindro; galpão de duas águas com lanternim, shed ou arco,
+// silos, fábrica limpa com painel solar.
 //
 // Espaço do lote: origem no centro, frente em +z (z = d/2 é o alinhamento da via), y = 0 na cota da plataforma.
 // Peça: { forma, x, z, w, d, y0, h, giro, mat, topo, lod1, principal, chao, lote, sobra, soLod1, ... } (malhaPredio.js).
@@ -181,31 +184,109 @@ function pisoLote(c, z0, z1, mat, x0 = -c.W / 2, x1 = c.W / 2) {
   c.add({ forma: 'piso', x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, y0: 0.04, h: 0, mat, lote: true });
 }
 
-/** Telhado de duas águas sobre uma caixa (bx, bz, bw, bd) com topo das paredes em hW. */
-function telhado(c, bx, bz, bw, bd, hW, parede, { aoLongo = null, tg = null, beiral = null } = {}) {
+/**
+ * Telhado sobre uma caixa (bx, bz, bw, bd) com o topo das paredes em hW:
+ *   'duas'    duas águas de telha cerâmica, cumeeira ao longo do lado maior (ou de aoLongo)
+ *   'quatro'  quatro águas (a casa brasileira mais comum); vira 'duas' se o beiral encosta na divisa
+ *   'meia'    meia-água de fibrocimento, caindo para a frente (cai = 1) ou para os fundos (-1)
+ * O beiral não passa da divisa: do lado do vizinho ele encolhe (casas geminadas).
+ */
+function telhado(c, bx, bz, bw, bd, hW, parede, { tipo = 'duas', aoLongo = null, tg = null, beiral = null, mat = null, cai = 1 } = {}) {
   const { r, W } = c;
-  const t = tg ?? r.entre(0.3, 0.46);
-  const b = beiral ?? r.entre(0.45, 0.75);
-  const longo = aoLongo ?? (bw >= bd * 0.85 ? true : r.chance(0.3));
-  // o beiral não passa da divisa: do lado do vizinho ele encolhe (casas geminadas)
+  const meia = tipo === 'meia';
+  const t = tg ?? (meia ? r.entre(0.1, 0.16) : r.entre(0.3, 0.46));
+  const b = beiral ?? (meia ? r.entre(0.3, 0.55) : r.entre(0.45, 0.75));
   const folgaX = Math.max(0, Math.min((bx - bw / 2) - (-W / 2 + 0.05), (W / 2 - 0.05) - (bx + bw / 2)));
   const bx2 = Math.min(b, folgaX);
-  const bS = longo ? b : bx2;
-  const bO = longo ? bx2 : b;
+  const topo = mat ?? (meia ? c.m(F.FIBRO, c.cor('fibro')) : c.m(F.TELHA, c.cor('telha')));
+  if (meia) {
+    const d = bd + 2 * b;
+    return c.add({
+      forma: 'meiaAgua', x: bx, z: bz, w: bw + 2 * bx2, d, y0: hW - b * t, h: d * t, giro: cai > 0 ? 0 : Math.PI, beiral: b, beiralOitao: bx2,
+      mat: parede, topo, lod1: true,
+    });
+  }
+  const quatro = tipo === 'quatro' && bx2 >= b - 0.01;
+  const longo = quatro ? bw >= bd : aoLongo ?? (bw >= bd * 0.85 ? true : r.chance(0.3));
+  const bS = quatro ? b : longo ? b : bx2;
+  const bO = quatro ? b : longo ? bx2 : b;
   const vao = longo ? bd : bw;
   const comp = longo ? bw : bd;
   const h = (vao / 2 + bS) * t;
   return c.add({
-    forma: 'duasAguas', x: bx, z: bz, w: comp + 2 * bO, d: vao + 2 * bS, y0: hW - bS * t, h, giro: longo ? 0 : Math.PI / 2, beiral: bS, beiralOitao: bO,
-    mat: parede, topo: c.m(F.TELHA, c.cor('telha')), lod1: true,
+    forma: quatro ? 'quatroAguas' : 'duasAguas', x: bx, z: bz, w: comp + 2 * bO, d: vao + 2 * bS, y0: hW - bS * t, h, giro: longo ? 0 : Math.PI / 2,
+    beiral: bS, beiralOitao: bO, mat: parede, topo, lod1: true,
   });
+}
+
+/** Altura da água da frente (+z da peça) de um telhado de duas ou quatro águas num ponto z da peça (0 na cumeeira). */
+const alturaNaAgua = (T, z) => T.y0 + (T.d / 2 - Math.abs(z)) * (T.h / (T.d / 2));
+
+/** Ponto (x, z) da peça T para o espaço do lote. */
+function doTelhado(T, x, z) {
+  const g = T.giro ?? 0;
+  const cg = Math.cos(g);
+  const sg = Math.sin(g);
+  return [T.x + x * cg + z * sg, T.z - x * sg + z * cg];
+}
+
+/** Aquecedor solar sobre a água da frente de um telhado cerâmico: coletores e o reservatório térmico. */
+function aquecedorSolar(c, T) {
+  const { r } = c;
+  const n = r.int(2, 3);
+  const pw = n * 1.05;
+  if (T.w < pw + 2 || T.d < 6) return;
+  const dp = 2.0;
+  const zc = T.d * 0.22;
+  const xc = r.entre(-0.25, 0.25) * (T.w - pw - 2);
+  const yb = alturaNaAgua(T, zc + dp / 2);
+  const ya = alturaNaAgua(T, zc - dp / 2);
+  const [px, pz] = doTelhado(T, xc, zc);
+  c.add({ forma: 'inclinado', x: px, z: pz, w: pw, d: dp, y0: yb + 0.1, h: ya - yb, esp: 0.08, pontas: true, giro: T.giro ?? 0, mat: c.m(F.SOLAR, '#20242a', '#b8bcbe'), baixo: metal(c), sobra: true });
+  const zr = zc - dp / 2 - 0.45;
+  const [rx, rz] = doTelhado(T, xc, zr);
+  c.add({ forma: 'caixa', x: rx, z: rz, w: Math.min(1.7, pw), d: 0.55, y0: alturaNaAgua(T, zr) + 0.05, h: 0.55, giro: T.giro ?? 0, mat: c.m(F.LISO, '#d4d1ca'), topo: c.m(F.LISO, '#d4d1ca'), sobra: true });
+}
+
+/** Caixa d'água de fibra (redonda no LOD0, caixa no LOD1) sobre a laje, às vezes numa base de alvenaria. */
+function caixaDagua(c, x, z, y, { base = false } = {}) {
+  const { r } = c;
+  const d = r.entre(1.3, 1.8);
+  let yb = y;
+  if (base) {
+    const bh = r.entre(0.7, 1.3);
+    c.add({ forma: 'caixa', x, z, w: d + 0.3, d: d + 0.3, y0: y, h: bh, mat: c.m(F.CONCRETO, c.cor('chapisco')), topo: c.m(F.LAJE, '#8e8a84'), lod1: true });
+    yb += bh;
+  }
+  const h = r.entre(0.9, 1.2);
+  const cor = c.cor('caixaAgua');
+  c.add({ forma: 'cilindro', lados: 10, forma1: 'caixa', x, z, w: d, d, y0: yb, h, mat: c.m(F.LISO, cor), topo: c.m(F.LISO, cor), lod1: true });
+  return yb + h;
+}
+
+/** Esperas: os arranques de pilar com a ferragem à vista nos cantos da laje (a casa que ainda vai crescer). */
+function esperas(c, x0, z0, x1, z1, y) {
+  const mat = c.m(F.CONCRETO, '#8f8b84');
+  const ferro = c.m(F.METAL, '#5b4a3f');
+  for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) {
+    const h = c.r.entre(0.25, 0.45);
+    c.add({ forma: 'coluna', x, z, w: 0.2, d: 0.2, y0: y, h, mat, sobra: true });
+    c.add({ forma: 'coluna', x, z, w: 0.09, d: 0.09, y0: y + h, h: c.r.entre(0.4, 0.8), mat: ferro, sobra: true });
+  }
 }
 
 // ------------------------------------------------------------------------------------------------ residencial baixa
 
+/**
+ * Casa térrea ou sobrado. Duas famílias: a de autoconstrução (laje com esperas e caixa d'água azul, fibrocimento em
+ * meia-água, andar de cima no tijolo à vista e às vezes recuado com o terraço na frente, muro de chapisco e grade nas
+ * janelas) e a de padrão médio (telha cerâmica em quatro ou duas águas, ou laje com platibanda escondendo o telhado,
+ * varanda com pilares, aquecedor solar, garagem coberta).
+ */
 function casa(c) {
   const { W, D, r } = c;
-  const recuo = clamp(r.entre(...c.par.recuo), 1.5, Math.max(1.5, D * 0.28));
+  const popular = c.nivel <= 2 && r.chance(c.est.popular ?? 0.35);
+  const recuo = popular ? clamp(r.entre(0.6, 3.2), 0.6, Math.max(0.6, D * 0.25)) : clamp(r.entre(...c.par.recuo), 1.5, Math.max(1.5, D * 0.28));
   const quintal = D >= 20 ? r.entre(3, 6.5) : r.entre(1.2, 2.5);
   const bd = clamp(D - recuo - quintal, 6, 13.5);
   const lado = r.chance(0.5) ? 1 : -1;
@@ -234,57 +315,104 @@ function casa(c) {
   const bz = D / 2 - recuo - bd / 2;
   const n = c.andares;
   const pe = c.par.pe;
-  const hW = n * pe + 0.3;
-  const corParede = c.parede(c.nivel >= 3 ? ['rebocoCor', 'rebocoClaro', 'pastilha'] : ['rebocoCor', 'rebocoClaro', 'tijolo']);
-  const tijolo = PALETAS.tijolo.includes(corParede);
-  // variante 4 a 7: janelas com grade de ferro (mais comum no bairro popular)
-  const grade = r.chance(c.est.id === 'popular' ? 0.65 : 0.3);
-  const parede = c.m(tijolo ? F.TIJOLO : F.CASA, corParede, c.cor('caixilho'), { v: r.entre(2.8, 3.6), vr: grade ? r.int(4, 7) : r.int(0, 3), a: pe });
-  const comTelha = r.chance(c.est.telha * (c.par.telha ?? 0.6) * 1.4);
-  const par = comTelha ? 0 : r.entre(0.5, 0.9);
-  c.add({
-    forma: 'caixa', x: bx, z: bz, w: bw, d: bd, y0: 0, h: hW + par, chao: true, mat: parede, lod1: true, principal: true,
-    topo: comTelha ? c.m(F.TELHA, '#a45a3d') : laje(c), sem: comTelha ? 16 : 0, parapeito: par,
-  });
-  if (comTelha) telhado(c, bx, bz, bw, bd, hW, parede);
-  else {
-    // caixa d'água sobre a laje, às vezes num castelinho de alvenaria
-    const alto = r.chance(0.45);
-    const tw = r.entre(1.8, 2.6);
-    const tx = clamp(bx + r.entre(-0.3, 0.3) * bw, x0 + tw / 2 + 0.3, x1 - tw / 2 - 0.3);
-    const tz = bz - bd * r.entre(0.05, 0.3);
-    c.add({ forma: 'caixa', x: tx, z: tz, w: tw, d: tw, y0: hW, h: alto ? r.entre(2.6, 3.2) : r.entre(1.5, 1.9), mat: c.m(F.LISO, corParede), topo: c.m(F.LAJE, '#8e9aa0'), lod1: true });
-    equipar(c, x0 + 0.4, bz - bd / 2 + 0.4, x1 - 0.4, bz + bd / 2 - 0.4, hW, { max: 1, solar: 0.4 });
+  const corParede = c.parede(popular ? ['rebocoCor', 'chapisco', 'rebocoClaro'] : c.nivel >= 3 ? ['rebocoCor', 'rebocoClaro', 'pastilha'] : ['rebocoCor', 'rebocoClaro', 'tijolo']);
+  const grade = r.chance(popular ? 0.75 : 0.3);
+  const v = r.entre(2.8, 3.6);
+  const matCasa = (cor, t) => c.m(t, cor, c.cor('caixilho'), { v, vr: grade ? r.int(4, 7) : r.int(0, 3), a: pe });
+  const parede = matCasa(corParede, PALETAS.tijolo.includes(corParede) ? F.TIJOLO : F.CASA);
+  const q = r.f();
+  const tipoT = popular ? (q < 0.45 ? 'laje' : q < 0.82 ? 'meia' : 'duas') : q < 0.42 ? 'quatro' : q < 0.72 ? 'duas' : 'platibanda';
+  const inclinado = tipoT === 'duas' || tipoT === 'quatro' || tipoT === 'meia';
+  const hT = pe + 0.3;
+  const par = tipoT === 'platibanda' ? r.entre(0.7, 1.1) : tipoT === 'laje' ? (popular ? (r.chance(0.5) ? 0 : 0.18) : 0.45) : 0;
+  const topoCaixa = inclinado ? c.m(F.TELHA, '#a45a3d') : tipoT === 'platibanda' ? c.m(F.FIBRO, c.cor('fibro')) : laje(c);
+  // corpo: o térreo e, no sobrado, o andar de cima (recuado nos fundos em parte das casas de autoconstrução)
+  let tb = { x: bx, z: bz, w: bw, d: bd, y: hT };
+  if (n <= 1) {
+    c.add({ forma: 'caixa', x: bx, z: bz, w: bw, d: bd, y0: 0, h: hT + par, chao: true, mat: parede, lod1: true, principal: true, topo: topoCaixa, sem: inclinado ? 16 : 0, parapeito: par });
+  } else {
+    const recuada = popular && r.chance(0.4);
+    const ud = recuada ? bd * r.entre(0.6, 0.78) : bd;
+    const tijoloCima = popular && r.chance(0.5);
+    const cima = tijoloCima ? matCasa(c.cor('tijolo'), F.TIJOLO) : parede;
+    // térreo: laje com mureta onde o andar de cima recua (o terraço da frente)
+    const mureta = recuada ? r.entre(0.9, 1.1) : 0;
+    c.add({ forma: 'caixa', x: bx, z: bz, w: bw, d: bd, y0: 0, h: hT + mureta, chao: true, mat: parede, lod1: true, principal: true, topo: laje(c), sem: recuada ? 0 : 16, parapeito: mureta });
+    // recuado 3 cm da mureta do terraço nos lados e nos fundos (as duas faces não brigam no mesmo plano)
+    const ins = recuada ? 0.03 : 0;
+    const uz = bz - bd / 2 + ins + (ud - ins) / 2;
+    const hc = (n - 1) * pe + 0.3;
+    c.add({ forma: 'caixa', x: bx, z: uz, w: bw - 2 * ins, d: ud - ins, y0: hT, h: hc + par, mat: cima, lod1: true, topo: topoCaixa, sem: inclinado ? 16 : 0, parapeito: par });
+    tb = { x: bx, z: uz, w: bw - 2 * ins, d: ud - ins, y: hT + hc };
+  }
+  const topoY = tb.y + par;
+  if (inclinado) {
+    const T = telhado(c, tb.x, tb.z, tb.w, tb.d, tb.y, parede, { tipo: tipoT, cai: r.chance(0.6) ? 1 : -1 });
+    if (!popular && tipoT !== 'meia' && r.chance(0.35)) aquecedorSolar(c, T);
+  } else if (tipoT === 'laje') {
+    // laje de autoconstrução: caixa d'água azul (numa base de alvenaria em parte), esperas e às vezes o quartinho dos fundos
+    const tx = clamp(tb.x + r.entre(-0.3, 0.3) * tb.w, tb.x - tb.w / 2 + 1.2, tb.x + tb.w / 2 - 1.2);
+    const tz = tb.z - tb.d * r.entre(0.1, 0.3);
+    if (popular && tb.w >= 5 && tb.d >= 6 && r.chance(0.28)) {
+      const qw = Math.min(tb.w - 0.4, r.entre(2.8, 3.6));
+      const qd = r.entre(2.6, 3.4);
+      const qx = tb.x + (tb.w - qw) / 2 * (r.chance(0.5) ? 1 : -1);
+      const qz = tb.z - tb.d / 2 + qd / 2 + 0.2;
+      const hq = r.entre(2.3, 2.6);
+      const mq = matCasa(r.chance(0.5) ? c.cor('tijolo') : corParede, F.CASA);
+      c.add({ forma: 'caixa', x: qx, z: qz, w: qw, d: qd, y0: topoY, h: hq, mat: mq, lod1: true, topo: c.m(F.TELHA, '#a45a3d'), sem: 16 });
+      telhado(c, qx, qz, qw, qd, topoY + hq, mq, { tipo: 'meia', cai: 1 });
+      caixaDagua(c, clamp(tx, tb.x - tb.w / 2 + 1, tb.x + tb.w / 2 - 1), clamp(qz + qd / 2 + 1.2, tb.z - tb.d / 2 + 1, tb.z + tb.d / 2 - 1), topoY);
+    } else {
+      caixaDagua(c, tx, tz, topoY, { base: popular && r.chance(0.5) });
+    }
+    if (popular && r.chance(0.6)) esperas(c, tb.x - tb.w / 2 + 0.15, tb.z - tb.d / 2 + 0.15, tb.x + tb.w / 2 - 0.15, tb.z + tb.d / 2 - 0.15, topoY);
+    else equipar(c, tb.x - tb.w / 2 + 0.4, tb.z - tb.d / 2 + 0.4, tb.x + tb.w / 2 - 0.4, tb.z + tb.d / 2 - 0.4, topoY - par, { max: 1, solar: popular ? 0 : 0.4 });
+  } else {
+    equipar(c, tb.x - tb.w / 2 + 0.5, tb.z - tb.d / 2 + 0.5, tb.x + tb.w / 2 - 0.5, tb.z + tb.d / 2 - 0.5, topoY - par, { max: 2, hMax: par - 0.1 });
   }
   // varanda na frente (laje ou telhadinho sobre dois pilares)
   const zf = bz + bd / 2;
-  if (recuo >= 2.6 && r.chance(0.45)) {
+  if (!popular && recuo >= 2.6 && r.chance(0.5)) {
     const pw = bw * r.entre(0.55, 1);
     const px = bx + ((bw - pw) / 2) * (r.chance(0.5) ? 1 : -1);
     const pd = Math.min(recuo - 0.8, r.entre(1.8, 2.5));
     const ph = pe * 0.96;
-    if (comTelha) c.add({ forma: 'inclinado', x: px, z: zf + pd / 2, w: pw, d: pd, y0: ph, h: 0.45, mat: c.m(F.TELHA, c.cor('telha')), baixo: c.m(F.MADEIRA, '#8a6d52'), sobra: true });
+    if (inclinado) c.add({ forma: 'inclinado', x: px, z: zf + pd / 2, w: pw, d: pd, y0: ph, h: 0.45, mat: c.m(F.TELHA, c.cor('telha')), baixo: c.m(F.MADEIRA, '#8a6d52'), sobra: true });
     else c.add({ forma: 'caixa', x: px, z: zf + pd / 2, w: pw, d: pd, y0: ph, h: 0.16, mat: c.m(F.CONCRETO, '#c8c2b6'), topo: laje(c), base: c.m(F.LISO, '#d6d0c4'), sobra: true });
     for (const s of [-1, 1]) c.add({ forma: 'coluna', redonda: r.chance(0.3), x: px + s * (pw / 2 - 0.2), z: zf + pd - 0.2, w: 0.22, d: 0.22, y0: 0, h: ph, mat: c.m(F.LISO, '#d9d4c9'), sobra: true });
   }
   // sacada no andar de cima
-  if (n >= 2 && r.chance(0.4)) {
+  if (n >= 2 && tb.d === bd && r.chance(0.4)) {
     const sw = Math.min(bw - 1, r.entre(2.4, 3.6));
     c.add({ forma: 'varanda', x: bx + r.entre(-0.25, 0.25) * (bw - sw), z: zf + 0.5, w: sw, d: 1.0, y0: pe - 0.16, mat: c.m(F.CONCRETO, '#cfc9bd'), guarda: r.chance(0.5) ? c.m(F.METAL, '#2f3133') : c.m(F.LISO, corParede), sobra: true });
   }
   // porta de entrada (madeira ou metal) na frente da casa, alinhada ao portão social
   const xp = clamp(bx + r.entre(-0.3, 0.3) * bw, x0 + 0.9, x1 - 0.9);
   c.add({ forma: 'placa', umLado: true, x: xp, z: zf + 0.03, w: 0.95, d: 0, y0: 0.05, h: 2.15, mat: c.m(F.PORTA, r.chance(0.6) ? c.cor('madeira') : '#3b3d3f', '#cfd1cf'), sobra: true });
+  // garagem coberta (padrão médio): telhadinho em meia-água sobre dois pilares
+  if (garagem && !popular && r.chance(0.45) && recuo >= 2.5) {
+    const [gx, gw] = garagem;
+    const gd = Math.min(bd * 0.8, 5.5);
+    const gz = zf - gd / 2 + Math.min(recuo - 0.5, 1.5);
+    c.add({ forma: 'inclinado', x: gx, z: gz, w: gw + 0.3, d: gd, y0: 2.5, h: 0.35, esp: 0.06, mat: c.m(F.TELHA_METAL, c.cor('telhaMetal')), baixo: c.m(F.METAL, '#8e9396'), lote: true });
+    for (const s of [-1, 1]) c.add({ forma: 'coluna', x: gx + s * (gw / 2 - 0.1), z: gz + gd / 2 - 0.2, w: 0.12, d: 0.12, y0: 0, h: 2.5, mat: metal(c), lote: true });
+  }
   // muro, portões, divisas e o quintal da frente cimentado
   const portoes = [[xp, 1.0]];
   if (garagem) portoes.push(garagem);
-  muro(c, { h: r.entre(1.2, 2.0), portoes, mat: r.chance(0.3) ? c.m(r.chance(0.5) ? F.PEDRA : F.TIJOLO, r.chance(0.5) ? c.cor('pedra') : c.cor('tijolo')) : null });
+  const muroMat = popular && r.chance(0.55) ? c.m(F.CONCRETO, c.cor('chapisco')) : r.chance(0.3) ? c.m(r.chance(0.5) ? F.PEDRA : F.TIJOLO, r.chance(0.5) ? c.cor('pedra') : c.cor('tijolo')) : null;
+  muro(c, { h: popular ? r.entre(1.8, 2.3) : r.entre(1.2, 2.0), portoes, mat: muroMat, mureta: !popular && r.chance(0.3) });
   if (r.chance(0.5)) {
     for (const s of [-1, 1]) c.add({ forma: 'caixa', x: s * (W / 2 - 0.08), z: zf + (D / 2 - zf) / 2, w: 0.14, d: D / 2 - zf - 0.2, y0: 0, h: 1.9, chao: true, mat: c.m(F.LISO, '#cbc4b6'), topo: concreto(c), lote: true });
   }
   pisoLote(c, zf, D / 2 - 0.25, c.m(F.PISO, r.chance(0.5) ? c.cor('piso') : '#9a6a52'));
 }
 
+/**
+ * Sobrados geminados: a fila de 1 a 4 unidades do mesmo construtor, cada uma pintada pelo dono (cor, janela, grade e
+ * portão próprios), alturas um pouco diferentes, telhado por unidade e as varandas espelhadas de uma para a outra.
+ */
 function sobradoGeminado(c) {
   const { W, D, r } = c;
   const nU = clamp(Math.round(W / r.entre(6.5, 8.5)), 1, 4);
@@ -295,27 +423,32 @@ function sobradoGeminado(c) {
   const n = Math.max(2, c.andares);
   const pe = c.par.pe;
   const hW = n * pe + 0.3;
-  const corParede = c.parede(['rebocoCor', 'rebocoClaro', 'pastilha']);
-  const t = c.fachada(['janela', 'fita', 'pastilha']);
-  const parede = c.m(t === 'pastilha' ? F.PASTILHA : t === 'fita' ? F.FITA : F.CASA, corParede, c.cor('caixilho'), { v: uw / r.int(2, 3), vr: r.int(0, 5), a: pe, tr: r.chance(0.5) ? TERREO.GARAGEM : 0 });
+  const base = c.parede(['rebocoCor', 'rebocoClaro', 'pastilha']);
+  const t = c.fachada(['janela', 'pastilha', 'fita']);
   const comTelha = r.chance(c.est.telha * 1.1);
-  const par = comTelha ? 0 : r.entre(0.6, 1.0);
-  c.add({ forma: 'caixa', x: 0, z: bz, w: W - 2 * FOLGA, d: bd, y0: 0, h: hW + par, chao: true, mat: parede, lod1: true, principal: true, topo: comTelha ? c.m(F.TELHA, '#a45a3d') : laje(c), sem: comTelha ? 16 : 0, parapeito: par });
-  if (comTelha) telhado(c, 0, bz, W - 2 * FOLGA, bd, hW, parede, { aoLongo: true });
   const zf = bz + bd / 2;
   const espelho = r.chance(0.5);
-  const guarda = r.chance(0.5) ? c.m(F.METAL, '#303234') : c.m(F.LISO, corParede);
+  const portoes = [];
   for (let k = 0; k < nU; k++) {
     const ux = -W / 2 + FOLGA + uw * (k + 0.5);
-    const lado = (k % 2 === 0) === espelho ? 1 : -1;
-    // varanda de cada unidade nos andares de cima, espelhada de uma para a outra
-    c.add({ forma: 'placa', umLado: true, x: ux - lado * uw * 0.28, z: zf + 0.03, w: 0.95, d: 0, y0: 0.05, h: 2.15, mat: c.m(F.PORTA, c.cor('madeira'), '#cfd1cf'), sobra: true });
-    for (let a = 1; a < n; a++) c.add({ forma: 'varanda', x: ux + lado * uw * 0.18, z: zf + 0.55, w: uw * 0.55, d: 1.1, y0: a * pe - 0.16, mat: c.m(F.CONCRETO, '#cfc9bd'), guarda, sobra: true });
-    if (!comTelha) c.add({ forma: 'caixa', x: ux - lado * uw * 0.2, z: bz - bd * 0.25, w: 1.8, d: 1.8, y0: hW, h: 1.6, mat: c.m(F.LISO, corParede), topo: c.m(F.LAJE, '#8e9aa0'), lod1: true });
+    const ld = (k % 2 === 0) === espelho ? 1 : -1;
+    // cada dono pinta a sua (metade das vezes a cor do construtor fica)
+    const cor = r.chance(0.5) ? base : c.parede(['rebocoCor', 'rebocoClaro']);
+    const tipo = t === 'pastilha' ? F.PASTILHA : t === 'fita' ? F.FITA : F.CASA;
+    const mat = c.m(tipo, tipo === F.PASTILHA ? c.cor('pastilha') : cor, c.cor('caixilho'), { v: uw / r.int(2, 3), vr: r.int(0, 7), a: pe, tr: r.chance(0.4) ? TERREO.GARAGEM : 0 });
+    const hU = hW + r.entre(-0.25, 0.3);
+    const par = comTelha ? 0 : r.entre(0.6, 1.0);
+    c.add({ forma: 'caixa', x: ux, z: bz, w: uw, d: bd, y0: 0, h: hU + par, chao: true, mat, lod1: true, principal: k === 0, topo: comTelha ? c.m(F.TELHA, '#a45a3d') : laje(c), sem: comTelha ? 16 : 0, parapeito: par });
+    if (comTelha) telhado(c, ux, bz, uw, bd, hU, mat, { aoLongo: true, tg: 0.36, beiral: 0.55 });
+    else {
+      c.add({ forma: 'caixa', x: ux - ld * uw * 0.2, z: bz - bd * 0.25, w: 1.8, d: 1.8, y0: hU, h: 1.6, mat: c.m(F.LISO, cor), topo: c.m(F.LAJE, '#8e9aa0'), lod1: true });
+      equipar(c, ux - uw / 2 + 0.6, bz - bd / 2 + 0.5, ux + uw / 2 - 0.6, bz + bd / 2 - 0.5, hU, { max: 1, solar: 0.3 });
+    }
+    c.add({ forma: 'placa', umLado: true, x: ux - ld * uw * 0.28, z: zf + 0.03, w: 0.95, d: 0, y0: 0.05, h: 2.15, mat: c.m(F.PORTA, c.cor('madeira'), '#cfd1cf'), sobra: true });
+    const guarda = r.chance(0.5) ? c.m(F.METAL, '#303234') : c.m(F.LISO, cor);
+    for (let a = 1; a < n; a++) c.add({ forma: 'varanda', x: ux + ld * uw * 0.18, z: zf + 0.55, w: uw * 0.55, d: 1.1, y0: a * pe - 0.16, mat: c.m(F.CONCRETO, '#cfc9bd'), guarda, sobra: true });
+    portoes.push([ux + (espelho ? 1 : -1) * uw * 0.15, Math.min(uw - 2, 2.6)]);
   }
-  if (!comTelha) equipar(c, -W / 2 + 1, bz - bd / 2 + 0.5, W / 2 - 1, bz + bd / 2 - 0.5, hW, { max: nU, solar: 0.3 });
-  const portoes = [];
-  for (let k = 0; k < nU; k++) portoes.push([-W / 2 + FOLGA + uw * (k + 0.5) + (espelho ? 1 : -1) * uw * 0.15, Math.min(uw - 2, 2.6)]);
   muro(c, { h: r.entre(1.0, 1.8), portoes, mureta: r.chance(0.4) });
   pisoLote(c, zf, D / 2 - 0.25, c.m(F.PISO, c.cor('piso')));
 }
@@ -474,13 +607,15 @@ function varandas(c, { gourmet = false } = {}) {
 }
 
 /** Pódio de torre (garagem, hall e lazer) com a piscina e o verde na laje. */
-function podio(c, { andares = 2, tr = TERREO.PORTARIA, recuo, mat = null, lazer = true }) {
+function podio(c, { andares = 2, tr = TERREO.PORTARIA, recuo, mat = null, lazer = true, lado = null }) {
   const { W, D, r } = c;
   const hPod = TERREO_ALTURA[tr] + (andares - 1) * 3.2;
   const podD = clamp(D - recuo - 2, 10, 44);
   const podZ = D / 2 - recuo - podD / 2;
   const m = mat ?? c.m(F.PAINEL, c.parede(['concreto', 'pedra', 'rebocoClaro']), c.cor('caixilho'), { tr, v: 4, a: 3.2 });
-  c.add({ forma: 'caixa', x: 0, z: podZ, w: W - 2 * FOLGA, d: podD, y0: 0, h: hPod + 1.1, chao: true, mat: m, lado: c.m(F.COBOGO, m.c1), topo: c.m(F.LAJE, '#8d8a82'), parapeito: 1.1, lod1: true });
+  // lados da garagem: cobogó ou a grelha de ventilação (garagem aberta) com o pano liso nos cantos
+  const l = lado ?? (r.chance(0.55) ? c.m(F.COBOGO, m.c1) : c.m(F.JANELA, m.c1, c.cor('caixilho'), { v: r.entre(3.5, 5), vr: 6, a: 3.2, uso: USO.IND }));
+  c.add({ forma: 'caixa', x: 0, z: podZ, w: W - 2 * FOLGA, d: podD, y0: 0, h: hPod + 1.1, chao: true, mat: m, lado: l, fundo: l, topo: c.m(F.LAJE, '#8d8a82'), parapeito: 1.1, lod1: true });
   return { h: hPod, z: podZ, d: podD, lazer };
 }
 
@@ -510,18 +645,47 @@ function torrePodio(c) {
   const nCima = Math.max(10, c.andares - 2);
   const par = r.entre(1.2, 1.8);
   const parede = fachadaPredio(c, ['pastilha', 'janela', 'painel', 'fita']);
-  const h = nCima * pe + par;
+  // coroamento: em metade das torres o último andar recua, em vidro, com o pano alto escondendo as máquinas
+  const coroa = r.chance(0.5) ? 1 : 0;
+  const nCorpo = nCima - coroa;
+  const h = nCorpo * pe + par;
   c.add({ forma: 'caixa', x: 0, z: tz, w: tw, d: td, y0: pod.h, h, mat: parede, topo: laje(c), parapeito: par, lod1: true, principal: true });
-  // pilastras verticais na frente e no fundo: ritmo vertical, nada de listras iguais
-  const np = r.int(1, 2);
-  for (let k = 0; k < np; k++) {
-    const px = (tw / (np + 1)) * (k + 1) - tw / 2;
-    for (const s of [1, -1]) c.add({ forma: 'caixa', x: px, z: tz + s * (td / 2 + 0.25), w: r.entre(0.8, 1.4), d: 0.5, y0: pod.h, h: h - par, mat: c.m(F.LISO, parede.t === F.PASTILHA ? '#d9d4c9' : parede.c1), topo: concreto(c) });
+  // prumada da escada e dos elevadores: volume saliente no fundo, em cobogó ou pastilha, que passa da laje
+  const sw = r.entre(4.5, 6.5);
+  const sx = r.entre(-0.25, 0.25) * (tw - sw);
+  const sd = r.entre(1.2, 2.2);
+  const corS = c.cor(r.chance(0.5) ? 'pastilha' : 'concreto');
+  const matS = r.chance(0.4) ? c.m(F.COBOGO, corS) : c.m(F.PASTILHA, corS, c.cor('caixilho'), { v: sw, vr: r.int(0, 7), a: pe });
+  const topoS = pod.h + h + r.entre(2.5, 3.5);
+  c.add({ forma: 'caixa', x: sx, z: tz - td / 2 - sd / 2 + 0.3, w: sw, d: sd + 0.6, y0: pod.h, h: topoS - pod.h, mat: matS, topo: laje(c), parapeito: 0.4, lod1: true });
+  // varandas de canto na frente, andar por andar (vidro ou pano cheio), ou as pilastras da fachada
+  if (r.chance(0.6)) {
+    const vw = r.entre(3.2, 4.2);
+    const vd = r.entre(1.2, 1.6);
+    const vidro = r.chance(0.55);
+    const guarda = vidro ? c.m(F.VIDRO, '#9fb0b4') : c.m(F.LISO, parede.t === F.PASTILHA ? '#d9d4c9' : parede.c1);
+    const lajeV = c.m(F.CONCRETO, '#d7d2c7');
+    for (let a = 0; a < nCorpo; a++) {
+      for (const s of [-1, 1]) c.add({ forma: 'varanda', x: s * (tw / 2 - vw / 2 - 0.4), z: tz + td / 2 + vd / 2, w: vw, d: vd, y0: pod.h + a * pe, esp: 0.16, gc: 1.05, mat: lajeV, guarda, semPontas: true, sobra: true });
+    }
+  } else {
+    const np = r.int(1, 2);
+    for (let k = 0; k < np; k++) {
+      const px = (tw / (np + 1)) * (k + 1) - tw / 2;
+      c.add({ forma: 'caixa', x: px, z: tz + td / 2 + 0.25, w: r.entre(0.8, 1.4), d: 0.5, y0: pod.h, h: h - par, mat: c.m(F.LISO, parede.t === F.PASTILHA ? '#d9d4c9' : parede.c1), topo: concreto(c) });
+    }
   }
   lazerNoPodio(c, pod, tz, td);
-  const topo = pod.h + h;
-  casaDeMaquinas(c, 0, tz, Math.min(tw * 0.5, 9), Math.min(td * 0.45, 7), topo - par);
-  equipar(c, -tw / 2 + 1, tz - td / 2 + 1, tw / 2 - 1, tz + td / 2 - 1, topo - par, { max: 4 });
+  let topo = pod.h + h;
+  if (coroa) {
+    const cw = tw * r.entre(0.62, 0.8);
+    const cd = td * r.entre(0.6, 0.78);
+    c.add({ forma: 'caixa', x: -sx * 0.3, z: tz + r.entre(-0.1, 0.1) * td, w: cw, d: cd, y0: topo - par, h: pe + 2.6, mat: c.m(F.CORTINA, parede.c1, c.cor('caixilho'), { v: 2.8, a: pe }), topo: laje(c), parapeito: 2.6, lod1: true });
+    topo += pe + 2.6 - par;
+  } else {
+    casaDeMaquinas(c, -sx * 0.4, tz, Math.min(tw * 0.4, 8), Math.min(td * 0.4, 6), topo - par);
+  }
+  equipar(c, -tw / 2 + 1, tz - td / 2 + 1, tw / 2 - 1, tz + td / 2 - 1, pod.h + h - par, { max: 4 });
   muro(c, { h: 2.2, portoes: [[0, 1.6], [W / 2 - 3, 4]], mureta: true });
   pisoLote(c, pod.z + pod.d / 2, D / 2 - 0.2, c.m(F.PISO, c.cor('piso')));
 }
@@ -615,8 +779,10 @@ function lojaToldo(c) {
   const corP = c.parede(['rebocoCor', 'rebocoClaro', 'pastilha']);
   const tipo = n > 1 ? c.fachada(['janela', 'fita', 'pastilha']) : 'janela';
   const frente = c.m(MAT_FACHADA[tipo] ?? F.JANELA, tipo === 'pastilha' ? c.cor('pastilha') : corP, c.cor('caixilho'), { tr: TERREO.VITRINE, v: clamp(W / Math.max(1, Math.round(W / r.entre(3.2, 4.2))), 2.6, 5), vr: r.int(0, 5), a: pe });
+  // empena cega nas divisas; nos fundos, janelas pequenas com grade (depósito, banheiro, a casa de quem mora em cima)
   const lado = c.m(F.LISO, corP);
-  c.add({ forma: 'caixa', x: 0, z: bz, w: W - 2 * FOLGA, d: bd, y0: 0, h: h + par, chao: true, mat: frente, lado, fundo: lado, topo: laje(c), parapeito: par, lod1: true, principal: true });
+  const traseira = c.m(F.CASA, corP, c.cor('caixilho'), { v: r.entre(3.2, 4.4), vr: r.int(4, 7), a: pe });
+  c.add({ forma: 'caixa', x: 0, z: bz, w: W - 2 * FOLGA, d: bd, y0: 0, h: h + par, chao: true, mat: frente, lado, fundo: traseira, topo: laje(c), parapeito: par, lod1: true, principal: true });
   const zf = bz + bd / 2;
   // toldo de lona ou marquise de concreto sobre a calçada
   const t = r.f();
@@ -772,15 +938,30 @@ function peleVidro(c) {
   const par = 1.0;
   const h = TERREO_ALTURA[tr] + (n - 1) * pe;
   const coroaA = r.int(1, 2);
+  const forma = r.chance(0.35) ? 'chanfro' : 'caixa';
   const pele = c.m(F.CORTINA, r.item(MONTANTE), c.cor('caixilho'), { tr, v: r.entre(2.6, 3.4), vr: r.int(0, 3), a: pe, uso: USO.ESC });
-  c.add({ forma: 'caixa', x: 0, z: tz, w: tw, d: td, y0: 0, h: h - coroaA * pe + par, chao: true, mat: pele, topo: laje(c), parapeito: par, lod1: true, principal: true });
+  const hCorpo = h - coroaA * pe + par;
+  let cw = tw;
+  let cd = td;
+  // escalonamento: a torre recua uma vez perto dos dois terços (One Vanderbilt, Faria Lima), com terraço na laje
+  if (n >= 14 && r.chance(0.55)) {
+    const nb = Math.max(4, Math.round((n - coroaA) * r.entre(0.55, 0.72)));
+    const hb = TERREO_ALTURA[tr] + (nb - 1) * pe;
+    c.add({ forma, x: 0, z: tz, w: tw, d: td, y0: 0, h: hb + 1.1, chao: true, mat: pele, topo: laje(c), parapeito: 1.1, lod1: true, principal: true, chanfro: Math.min(tw, td) * 0.16 });
+    cw = tw * r.entre(0.72, 0.86);
+    cd = td * r.entre(0.78, 0.92);
+    const pc = { ...pele, tr: 0, _p: null };
+    c.add({ forma, x: 0, z: tz - (td - cd) / 2, w: cw, d: cd, y0: hb, h: hCorpo - hb, mat: pc, topo: laje(c), parapeito: par, lod1: true, chanfro: Math.min(cw, cd) * 0.16 });
+  } else {
+    c.add({ forma, x: 0, z: tz, w: tw, d: td, y0: 0, h: hCorpo, chao: true, mat: pele, topo: laje(c), parapeito: par, lod1: true, principal: true, chanfro: Math.min(tw, td) * 0.16 });
+  }
   // coroa recuada e a tela que esconde as máquinas
-  const cw = tw * r.entre(0.6, 0.8);
-  const cd = td * r.entre(0.6, 0.8);
-  const yC = h - coroaA * pe + par;
-  c.add({ forma: 'caixa', x: 0, z: tz, w: cw, d: cd, y0: yC - par, h: coroaA * pe + 3, mat: c.m(F.CORTINA, pele.c1, pele.c2, { v: 2.8, a: pe, uso: USO.ESC, vd: pele.vd }), topo: laje(c), parapeito: 3, lod1: true });
+  const zc = tz - (td - cd) / 2;
+  const kw = cw * r.entre(0.6, 0.8);
+  const kd = cd * r.entre(0.6, 0.8);
+  c.add({ forma, x: 0, z: zc, w: kw, d: kd, y0: hCorpo - par, h: coroaA * pe + 3, mat: c.m(F.CORTINA, pele.c1, pele.c2, { v: 2.8, a: pe, uso: USO.ESC, vd: pele.vd }), topo: laje(c), parapeito: 3, lod1: true, chanfro: Math.min(kw, kd) * 0.16 });
   c.add({ forma: 'caixa', x: 0, z: tz + td / 2 + 1.2, w: tw * 0.5, d: 2.4, y0: TERREO_ALTURA[tr] - 0.5, h: 0.35, mat: c.m(F.METAL, '#6f7477'), topo: metal(c), base: c.m(F.LISO, '#dcd7cc'), sobra: true });
-  equipar(c, -tw / 2 + 1, tz - td / 2 + 1, tw / 2 - 1, tz + td / 2 - 1, yC - par, { max: 3 });
+  equipar(c, -cw / 2 + 1, zc - cd / 2 + 1, cw / 2 - 1, zc + cd / 2 - 1, hCorpo - par, { max: 3 });
   pisoLote(c, tz + td / 2, D / 2 - 0.2, c.m(F.PEDRA, c.cor('pedra')));
 }
 
@@ -789,14 +970,16 @@ function torreControleSolar(c) {
   const recuo = r.entre(...c.par.recuo);
   const pe = c.par.pe;
   const tr = TERREO.PORTARIA_ALTA;
-  const pod = podio(c, { andares: 2, tr, recuo, mat: c.m(F.PEDRA, c.cor('pedra'), c.cor('caixilho'), { tr, v: 4, a: 4, uso: USO.ESC }), lazer: false });
+  const pod = podio(c, { andares: 2, tr, recuo, mat: c.m(F.PEDRA, c.cor('pedra'), c.cor('caixilho'), { tr, v: 4, a: 4, uso: USO.ESC }), lazer: false, lado: c.m(F.PAINEL, c.cor('pedra'), c.cor('caixilho'), { v: 4, a: 4, uso: USO.ESC }) });
   const q = r.f();
   const forma = q < 0.45 ? 'chanfro' : q < 0.7 ? 'cilindro' : 'caixa';
   const tw = clamp(W - r.entre(8, 14), 20, 30);
   const td = forma === 'cilindro' ? tw : clamp(D - recuo - r.entre(10, 16), 18, 28);
   const tz = pod.z + r.entre(-2, 1);
   const n = Math.max(20, c.andares - 2);
-  const pele = c.m(r.chance(0.35) ? F.BRISE_V : F.CORTINA, r.item(MONTANTE), r.item(['#5c4b3b', '#3b3d3f', '#8a8d8e', '#cfd1cf']), { v: r.entre(2.4, 3.2), vr: r.int(0, 3), a: pe, uso: USO.ESC, vd: r.f() });
+  const brise = r.chance(0.35);
+  // aletas claras (alumínio, champanhe); na pele de vidro, o montante pode ser escuro (grafite, bronze)
+  const pele = c.m(brise ? F.BRISE_V : F.CORTINA, r.item(MONTANTE), brise ? r.item(['#c9c3b6', '#b9b4aa', '#d2cdc2']) : r.item(['#5c4b3b', '#3b3d3f', '#8a8d8e', '#cfd1cf']), { v: r.entre(2.4, 3.2), vr: r.int(0, 3), a: pe, uso: USO.ESC, vd: r.f() });
   const hC = (n - 2) * pe;
   c.add({ forma, x: 0, z: tz, w: tw, d: td, y0: pod.h, h: hC, mat: pele, topo: laje(c), lod1: true, principal: true, chanfro: Math.min(tw, td) * 0.18 });
   // recuo e coroamento iluminado
@@ -814,6 +997,12 @@ function torreControleSolar(c) {
 
 // ------------------------------------------------------------------------------------------------ indústria
 
+/**
+ * Galpão: estrutura metálica com pilar a cada 5 a 6,5 m, embasamento de bloco e chapa trapezoidal (o shader desenha),
+ * telhado de duas águas baixo com lanternim na cumeeira (o mais comum), shed com a face de vidro ou arco metálico;
+ * escritório de alvenaria na quina da frente, doca com portas de enrolar, pátio de carga; silos ao lado no nível 3 e 4;
+ * fábrica limpa de painel e vidro com painel solar na laje no nível 5.
+ */
 function galpao(c, { silos = false, limpa = false } = {}) {
   const { W, D, r } = c;
   const recuo = r.entre(...c.par.recuo);
@@ -826,27 +1015,57 @@ function galpao(c, { silos = false, limpa = false } = {}) {
   const hW = c.andares * (c.par.pe ?? 8) * r.entre(0.85, 1.05);
   const corG = c.parede(limpa ? ['rebocoClaro'] : ['concreto']);
   const chapa = c.cor('galpao');
-  const parede = limpa ? c.m(F.PAINEL, '#d6d4ce', c.cor('caixilho'), { v: 4, a: hW, uso: USO.IND, tr: TERREO.DOCA }) : c.m(F.GALPAO, chapa, c.cor('caixilho'), { v: 4, a: hW, uso: USO.IND, tr: TERREO.DOCA });
-  const lado = limpa ? c.m(F.FITA, '#d6d4ce', c.cor('caixilho'), { v: 4, a: hW / Math.max(1, Math.round(hW / 4.5)), uso: USO.IND }) : c.m(F.GALPAO, chapa, null, { v: 4, a: hW, uso: USO.IND });
+  const vGalpao = r.entre(5, 6.5);
+  const pilar = r.chance(0.5) ? '#5d6a73' : '#8b8f8e';
+  const parede = limpa
+    ? c.m(F.PAINEL, '#d6d4ce', c.cor('caixilho'), { v: 4, a: hW, uso: USO.IND, tr: TERREO.DOCA })
+    : c.m(F.GALPAO, chapa, pilar, { v: vGalpao, a: hW, uso: USO.IND, tr: TERREO.DOCA });
+  const lado = limpa
+    ? c.m(F.FITA, '#d6d4ce', c.cor('caixilho'), { v: 4, a: hW / Math.max(1, Math.round(hW / 4.5)), uso: USO.IND })
+    : c.m(F.GALPAO, chapa, pilar, { v: vGalpao, a: hW, uso: USO.IND });
   const telhaM = c.m(F.TELHA_METAL, c.cor('telhaMetal'));
-  const tipoTelhado = limpa ? 'laje' : r.chance(0.5) ? 'shed' : 'arco';
-  const subida = tipoTelhado === 'laje' ? 1.2 : tipoTelhado === 'shed' ? r.entre(2.2, 3) : Math.min(gw * 0.12, 5);
-  // envelope do LOD1 (paredes e telhado) e, no LOD0, as paredes com o telhado de verdade
-  c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW + subida, chao: true, mat: parede, lado, fundo: lado, topo: tipoTelhado === 'laje' ? laje(c) : telhaM, parapeito: tipoTelhado === 'laje' ? 1.2 : 0, lod1: true, principal: true, soLod1: tipoTelhado !== 'laje' });
-  if (tipoTelhado === 'shed') {
-    c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW, chao: true, mat: parede, lado, fundo: lado, topo: telhaM, sem: 16 });
-    c.add({ forma: 'shed', x: gx, z: gz, w: gw, d: gd, y0: hW, h: subida, dentes: Math.max(2, Math.round(gd / 7)), mat: lado, topo: telhaM, vidro: c.m(F.CORTINA, '#c9c6bf', '#8a8d8e', { v: 1.5, a: subida, uso: USO.IND }) });
-  } else if (tipoTelhado === 'arco') {
-    c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW, chao: true, mat: parede, lado, fundo: lado, topo: telhaM, sem: 16 });
-    c.add({ forma: 'arco', x: gx, z: gz, w: gd, d: gw, y0: hW, h: subida, giro: Math.PI / 2, mat: lado, topo: telhaM });
+  const q = r.f();
+  const tipoTelhado = limpa ? 'laje' : q < 0.55 ? 'duas' : q < 0.8 ? 'shed' : 'arco';
+  if (tipoTelhado === 'duas') {
+    // duas águas baixas (10% a 18%) com a cumeeira ao longo do lado maior e o lanternim de ventilação em cima
+    c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW, chao: true, mat: parede, lado, fundo: lado, topo: telhaM, sem: 16, lod1: true, principal: true });
+    const longo = gw >= gd;
+    const vao = longo ? gd : gw;
+    const comp = longo ? gw : gd;
+    const t = r.entre(0.1, 0.18);
+    const b = 0.5;
+    const h = (vao / 2 + b) * t;
+    c.add({ forma: 'duasAguas', x: gx, z: gz, w: comp + 2 * b, d: vao + 2 * b, y0: hW - b * t, h, giro: longo ? 0 : Math.PI / 2, beiral: b, beiralOitao: b, mat: lado, topo: telhaM, testeira: c.m(F.METAL, '#a3a6a4'), forro: c.m(F.METAL, '#8e9396'), lod1: true });
+    if (comp > 16 && r.chance(0.7)) {
+      const lw = comp * r.entre(0.55, 0.8);
+      const ld = r.entre(1.8, 2.6);
+      const lh = r.entre(0.7, 1.0);
+      const g = longo ? 0 : Math.PI / 2;
+      const yc = hW - b * t + h - 0.15;
+      c.add({ forma: 'caixa', x: gx, z: gz, w: longo ? lw : ld, d: longo ? ld : lw, y0: yc, h: lh, mat: c.m(F.BRISE_H, '#7e8387', '#b4b8b8', { a: lh, v: 3, uso: USO.IND }), topo: telhaM, sem: 16, sobra: true });
+      c.add({ forma: 'duasAguas', x: gx, z: gz, w: lw + 0.6, d: ld + 0.8, y0: yc + lh - 0.4 * 0.12, h: (ld / 2 + 0.4) * 0.14, giro: g, beiral: 0.4, beiralOitao: 0.3, mat: lado, topo: telhaM, testeira: c.m(F.METAL, '#a3a6a4'), forro: c.m(F.METAL, '#8e9396'), sobra: true });
+    }
   } else {
-    equipar(c, gx - gw / 2 + 2, gz - gd / 2 + 2, gx + gw / 2 - 2, gz + gd / 2 - 2, hW, { max: 4, solar: 1 });
+    const subida = tipoTelhado === 'laje' ? 1.2 : tipoTelhado === 'shed' ? r.entre(2.2, 3) : Math.min(gw * 0.12, 5);
+    // envelope do LOD1 (paredes e telhado) e, no LOD0, as paredes com o telhado de verdade
+    c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW + subida, chao: true, mat: parede, lado, fundo: lado, topo: tipoTelhado === 'laje' ? laje(c) : telhaM, parapeito: tipoTelhado === 'laje' ? 1.2 : 0, lod1: true, principal: true, soLod1: tipoTelhado !== 'laje' });
+    if (tipoTelhado === 'shed') {
+      c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW, chao: true, mat: parede, lado, fundo: lado, topo: telhaM, sem: 16 });
+      c.add({ forma: 'shed', x: gx, z: gz, w: gw, d: gd, y0: hW, h: subida, dentes: Math.max(2, Math.round(gd / 7)), mat: lado, topo: telhaM, vidro: c.m(F.CORTINA, '#c9c6bf', '#8a8d8e', { v: 1.5, a: subida, uso: USO.IND }) });
+    } else if (tipoTelhado === 'arco') {
+      c.add({ forma: 'caixa', x: gx, z: gz, w: gw, d: gd, y0: 0, h: hW, chao: true, mat: parede, lado, fundo: lado, topo: telhaM, sem: 16 });
+      c.add({ forma: 'arco', x: gx, z: gz, w: gd, d: gw, y0: hW, h: subida, giro: Math.PI / 2, mat: lado, topo: telhaM });
+    } else {
+      equipar(c, gx - gw / 2 + 2, gz - gd / 2 + 2, gx + gw / 2 - 2, gz + gd / 2 - 2, hW, { max: 4, solar: 1 });
+    }
   }
   // escritório na quina da frente, diante do galpão; o resto da frente é o pátio de carga
   const ow = Math.min(gw * 0.4, r.entre(8, 12));
   const ox = gx + (gw / 2 - ow / 2) * (r.chance(0.5) ? 1 : -1);
   const oa = limpa ? 2 : r.int(1, 2);
-  c.add({ forma: 'caixa', x: ox, z: gz + gd / 2 + od / 2, w: ow, d: od, y0: 0, h: oa * 3.4 + 0.8, chao: true, mat: c.m(limpa ? F.CORTINA : F.FITA, limpa ? '#d6d4ce' : corG, c.cor('caixilho'), { v: 3, a: 3.4, uso: USO.ESC }), topo: laje(c), parapeito: 0.8, lod1: true });
+  c.add({ forma: 'caixa', x: ox, z: gz + gd / 2 + od / 2, w: ow, d: od, y0: 0, h: oa * 3.4 + 0.8, chao: true, mat: c.m(limpa ? F.CORTINA : F.JANELA, limpa ? '#d6d4ce' : corG, c.cor('caixilho'), { v: 3, a: 3.4, uso: USO.ESC }), topo: laje(c), parapeito: 0.8, lod1: true });
+  // letreiro da empresa na testeira do escritório
+  if (!limpa && r.chance(0.6)) c.add({ forma: 'placa', umLado: true, x: ox, z: gz + gd / 2 + od + 0.04, w: ow * 0.7, d: 0, y0: oa * 3.4 - 0.2, h: 0.9, mat: c.m(F.LETREIRO, c.cor('letreiro')), sobra: true });
   if (silos) {
     const ns = r.int(2, 4);
     const sh = hW + r.entre(6, 12);

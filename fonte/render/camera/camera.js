@@ -2,10 +2,11 @@
 // do nível da rua (10 m) à cidade inteira (9 km), guinada livre, inclinação de 3 graus (o horizonte à vista) a 88
 // (de cima), campo vertical de 40 graus. Movimento com inércia e amortecimento crítico: o arrasto é direto (o chão
 // fica sob o dedo) e, ao soltar, a vista desliza e para; o zoom vai suave na direção do cursor ou do meio da pinça.
-// Colisão: a câmera fica 2 m acima do chão (alturaEm, D4) e, com a R1b, do campo de alturas da cidade
-// (ctx.alturaCidade). O voo (irPara) sobe em arco quando a distância é grande. Plano próximo e distante: com a
-// profundidade invertida, perto de 0,1 m e longe de 100 km; sem ela, o plano próximo dinâmico e as duas faixas
-// (motor/faixas.js). Guinada 0 olha para o norte (-z) e cresce no sentido horário visto de cima.
+// Colisão: a câmera fica 2 m acima do chão (alturaEm, D4, ou a superfície do mar, espelho.mapa.nivelMar) e, com a
+// R1b, do campo de alturas da cidade (ctx.alturaCidade). O voo (irPara) sobe em arco quando a distância é grande.
+// Plano próximo e distante: com a profundidade invertida em ponto flutuante (alvo HDR), perto de 0,1 m e longe de
+// 100 km; no canvas (Leve) e sem ela, o plano próximo cresce com a altura e, sem EXT_clip_control, valem as duas
+// faixas (motor/faixas.js). Guinada 0 olha para o norte (-z) e cresce no sentido horário visto de cima.
 import * as THREE from 'three';
 import { alturaEm } from '../../comum/altura.js';
 
@@ -35,12 +36,23 @@ export function criarCamera(ctx, inicial = {}) {
   const alvoV = new THREE.Vector3();
 
   const terreno = () => ctx.sim?.espelho?.terreno ?? null;
-  const chao = (x, z) => {
+  // sobre o mar vale a superfície da água, não o fundo: o alvo fica na água e a câmera nunca mergulha
+  const nivelMar = () => {
+    const n = ctx.sim?.espelho?.mapa?.nivelMar;
+    return Number.isFinite(n) ? n : 0;
+  };
+  const superficie = (x, z) => {
     const T = terreno();
-    const h = T ? alturaEm(T, x, z) : 0;
+    return T ? Math.max(alturaEm(T, x, z), nivelMar()) : 0;
+  };
+  const chao = (x, z) => {
+    const h = superficie(x, z);
     const c = ctx.alturaCidade ? ctx.alturaCidade(x, z) : -Infinity;
     return Math.max(h, Number.isFinite(c) ? c : -Infinity);
   };
+  // profundidade em ponto flutuante (alvo HDR com a profundidade invertida): plano próximo de centímetros; no canvas
+  // (Leve, sem pós) ou nas duas faixas, 24 bits (ou 16 em alguns celulares) pedem o plano próximo mais longe
+  const profundidadeFina = () => !ctx.semClip && !!ctx.quadro?.pos?.ligado && !!ctx.renderer?.state?.buffers?.depth?.getReversed?.();
   const limitar = () => {
     for (const k of CAMPOS) if (!Number.isFinite(e[k])) e[k] = k === 'dist' ? 1200 : 0;
     e.dist = Math.min(L.distMax, Math.max(L.distMin, e.dist));
@@ -122,10 +134,9 @@ export function criarCamera(ctx, inicial = {}) {
       vel.inclinacao = vi;
     },
     parar: pararInercia,
-    /** Alvo no chão (y pelo terreno). */
+    /** Alvo no chão (y pelo terreno; sobre o mar, a superfície da água). */
     alvo(v = new THREE.Vector3()) {
-      const T = terreno();
-      return v.set(e.x, T ? alturaEm(T, e.x, e.z) : 0, e.z);
+      return v.set(e.x, superficie(e.x, e.z), e.z);
     },
     /** Chão sob um ponto (terreno e, com a R1b, a cidade). */
     chao,
@@ -175,7 +186,7 @@ export function criarCamera(ctx, inicial = {}) {
       if (cam.position.y < piso) cam.position.y = piso;
       cam.lookAt(a);
       const acima = Math.max(1, cam.position.y - chao(cam.position.x, cam.position.z));
-      if (ctx.semClip) {
+      if (!profundidadeFina()) {
         cam.near = Math.min(30, Math.max(0.2, acima * 0.02));
         cam.far = 60000;
       } else {

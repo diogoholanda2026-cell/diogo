@@ -1,9 +1,12 @@
 // Material `edificio` (desenho do render 5.2 e 9.1): a fachada é um shader, não uma textura pintada. Grade de andares
-// e vãos em metros, janela, caixilho, peitoril, vidro escuro que reflete o céu com a normal inclinada por painel,
-// brise, cobogó, pastilha, tijolo, painel, varanda, vitrine do térreo com letreiro, telha, laje, telha metálica e os
-// materiais lisos (concreto, metal, madeira, pedra, toldo, verde, piso, água, painel solar). Desgaste (escorrido sob o
-// peitoril, pé de parede, sujeira no topo, tom por painel), janelas acesas pela agenda do uso e da hora, filtragem pela
-// área do pixel (pulso integrado com fwidth: de longe a fachada vira a média, sem cintilar).
+// e vãos em metros com o RITMO das plantas brasileiras (quarto, sala, banheiro, pano cego, área de serviço e escada,
+// simétrico da borda para o meio), janela recuada na parede por paralaxe (jamba, peitoril e verga à vista), caixilho
+// de correr, persiana de enrolar em altura variável, cortina, vidro canelado no banheiro, ar-condicionado sob parte das
+// janelas com o escorrido embaixo; pele de vidro com montante, faixa opaca e persiana interna; brise vertical com
+// profundidade e brise horizontal em grelha (Capanema); cobogó; varanda desenhada com fechamento de vidro em parte; loja
+// com vitrine, letreiro e porta de aço fechada à noite; telha, fibrocimento, laje, telha metálica e os materiais lisos.
+// Desgaste (escorrido, pé de parede, sujeira no topo, tom por pano), janelas acesas pela agenda do uso e da hora,
+// filtragem pela área do pixel (pulso integrado com fwidth: de longe a fachada vira a média, sem cintilar).
 //
 // Serve às duas variantes com o mesmo programa-fonte: LOD0 fundido por setor (atributos quantizados por vértice, D39)
 // e LOD1/LOD2 instanciado (instanceMatrix e atributos por instância; a posição na fachada sai da forma unitária).
@@ -35,7 +38,7 @@ attribute uint aId;         // idx do prédio (vaga da tabela), inteiro
 uniform highp sampler2D gPredTab;
 varying vec4 vPF;           // u (vãos), v (m), vTopo (m), AO
 flat varying vec4 vFac;     // tipo, andar (m), vão (m), bits
-flat varying vec4 vCor;     // cor 1 e cor 2 empacotadas (r*65536 + g*256 + b), desgaste, vidro
+flat varying vec4 vCor;     // cor 1 e cor 2 empacotadas (r*65536 + g*256 + b), vãos da face + desgaste, vidro
 flat varying vec4 vIdent;   // idx, bits da tabela, agenda, camada
 vec3 gOct( vec2 e ) {
   vec3 v = vec3( e, 1.0 - abs( e.x ) - abs( e.y ) );
@@ -66,9 +69,10 @@ export const VERTICE_MAIN = /* glsl */ `
   vec3 gC1 = aCorA.rgb;
   vec3 gC2 = aCorB.rgb;
   float gBits = aFac.w;
+  float gVao = max( aFac.z * 0.1, 0.5 );
+  float gNB = 1.0;
 #ifdef USE_INSTANCING
   vec3 gE = vec3( length( instanceMatrix[ 0 ].xyz ), length( instanceMatrix[ 1 ].xyz ), length( instanceMatrix[ 2 ].xyz ) );
-  float gVao = max( aFac.z * 0.1, 0.5 );
   float gK = aUnit.z;
   // bit 7 do tipo do topo: a peça desce 2 m no chão (o v da fachada começa no nível do lote)
   float gEnt = step( 127.5, aTopo.x );
@@ -92,19 +96,20 @@ export const VERTICE_MAIN = /* glsl */ `
   } else {
     // parede: vãos inteiros na largura da face (ou no perímetro das formas redondas)
     float gW = aUnit.w < 0.5 ? gE.z : aUnit.w < 1.5 ? gE.x : 1.5708 * ( gE.x + gE.z ) * ( aUnit.w > 2.5 ? 1.0 : 1.12 );
-    float gN = max( 1.0, floor( gW / gVao + 0.5 ) );
+    gNB = max( 1.0, floor( gW / gVao + 0.5 ) );
     float gH = position.y * gE.y - 2.0 * gEnt;
-    vPF = vec4( aUnit.x * gN, gH, gE.y - 2.0 * gEnt - gParap, 1.0 );
+    vPF = vec4( aUnit.x * gNB, gH, gE.y - 2.0 * gEnt - gParap, 1.0 );
     // o térreo só na frente (+z local)
     if ( normal.z < 0.5 || aUnit.w > 1.5 ) gBits = mod( gBits, 32.0 );
     // empena da casa (triângulo do telhado de duas águas): parede lisa com a cor da parede
-    if ( gTopoT == F_TELHA && aUnit.y > 0.5 ) { gTipo = F_LISO; }
+    if ( ( gTopoT == F_TELHA || gTopoT == F_FIBRO || gTopoT == F_TELHA_METAL ) && aUnit.y > 0.5 ) { gTipo = F_LISO; }
   }
 #else
   vPF = vec4( aFacUV.xyz, aAO );
+  gNB = max( 1.0, floor( aFacUV.w / gVao + 0.5 ) );
 #endif
   vFac = vec4( gTipo, aFac.y * 0.05, aFac.z * 0.1, gBits );
-  vCor = vec4( gEmp( gC1 ), gEmp( gC2 ), aCorA.a / 255.0, aCorB.a / 255.0 );
+  vCor = vec4( gEmp( gC1 ), gEmp( gC2 ), min( gNB, 250.0 ) + min( aCorA.a / 255.0, 0.99 ), aCorB.a / 255.0 );
 }
 `;
 
@@ -127,6 +132,11 @@ uniform vec3 gCeuHor;
 uniform vec3 gCeuChao;
 float gMascaraTelhado = 0.0;
 const float G_TERREO_H[ 8 ] = float[ 8 ]( ${alturasTerreo} );
+// ritmo dos vãos, da borda da face para o meio (0 quarto, 1 sala, 2 banheiro ou cozinha, 3 pano cego, 4 área de
+// serviço): oito plantas; a 3 é a grade regular dos prédios modernistas
+const vec4 G_RITMO[ 8 ] = vec4[ 8 ](
+  vec4( 0.0, 1.0, 2.0, 0.0 ), vec4( 1.0, 0.0, 0.0, 2.0 ), vec4( 0.0, 2.0, 1.0, 1.0 ), vec4( 0.0, 0.0, 0.0, 0.0 ),
+  vec4( 1.0, 1.0, 2.0, 0.0 ), vec4( 0.0, 3.0, 1.0, 2.0 ), vec4( 4.0, 0.0, 1.0, 0.0 ), vec4( 0.0, 1.0, 1.0, 3.0 ) );
 
 struct GSup { vec3 alb; float rug; float met; vec3 emi; vec2 inc; float ao; };
 
@@ -149,120 +159,437 @@ float gPulso( float x, float a, float b, float dx ) {
   float w = max( dx, 1e-4 );
   return ( gInt( x + 0.5 * w, a, b ) - gInt( x - 0.5 * w, a, b ) ) / w;
 }
+// retângulo [r.x, r.y] x [r.z, r.w] repetido na célula, filtrado
+float gRet( vec2 p, vec4 r, vec2 d ) { return gPulso( p.x, r.x, r.y, d.x ) * gPulso( p.y, r.z, r.w, d.y ); }
 // linha fina (junta, montante) de largura l (fração da célula) centrada em 0
 float gLinha( float x, float l, float dx ) { return gPulso( x + 0.5 * l, 0.0, l, dx ); }
 // mistura pelo tamanho do pixel na célula: 0 de perto, 1 quando a célula some
 float gLonge( vec2 d ) { return smoothstep( 0.1, 0.45, max( d.x, d.y ) ); }
+// disco filtrado de raio r (mesma unidade de q)
+float gDisco( vec2 q, float r, float w ) { return 1.0 - smoothstep( r - w, r + w, length( q ) ); }
 
 // fração de janelas acesas pela hora do céu e pelo uso (desenho do render 2.9)
 float gAgenda( float uso, float h ) {
   if ( uso < 0.5 ) {
-    if ( h < 5.0 ) return mix( 0.14, 0.06, h / 5.0 );
-    if ( h < 7.0 ) return mix( 0.06, 0.32, ( h - 5.0 ) / 2.0 );
-    if ( h < 9.0 ) return mix( 0.32, 0.08, ( h - 7.0 ) / 2.0 );
-    if ( h < 17.0 ) return 0.08;
-    if ( h < 20.0 ) return mix( 0.08, 0.56, ( h - 17.0 ) / 3.0 );
-    if ( h < 23.0 ) return mix( 0.56, 0.38, ( h - 20.0 ) / 3.0 );
-    return mix( 0.38, 0.12, h - 23.0 );
+    if ( h < 5.0 ) return mix( 0.12, 0.05, h / 5.0 );
+    if ( h < 7.0 ) return mix( 0.05, 0.28, ( h - 5.0 ) / 2.0 );
+    if ( h < 9.0 ) return mix( 0.28, 0.06, ( h - 7.0 ) / 2.0 );
+    if ( h < 17.0 ) return 0.06;
+    if ( h < 20.0 ) return mix( 0.06, 0.5, ( h - 17.0 ) / 3.0 );
+    if ( h < 23.0 ) return mix( 0.5, 0.34, ( h - 20.0 ) / 3.0 );
+    return mix( 0.34, 0.12, h - 23.0 );
   }
-  if ( uso < 1.5 ) return ( h > 7.5 && h < 22.0 ) ? 0.7 : 0.05;
+  if ( uso < 1.5 ) return ( h > 7.5 && h < 22.0 ) ? 0.6 : 0.05;
   if ( uso < 2.5 ) {
-    if ( h < 7.0 ) return 0.1;
-    if ( h < 9.0 ) return mix( 0.1, 0.85, ( h - 7.0 ) / 2.0 );
-    if ( h < 18.0 ) return 0.8;
-    if ( h < 21.0 ) return mix( 0.8, 0.2, ( h - 18.0 ) / 3.0 );
-    return 0.14;
+    if ( h < 7.0 ) return 0.08;
+    if ( h < 9.0 ) return mix( 0.08, 0.8, ( h - 7.0 ) / 2.0 );
+    if ( h < 18.0 ) return 0.78;
+    if ( h < 21.0 ) return mix( 0.78, 0.16, ( h - 18.0 ) / 3.0 );
+    return 0.12;
   }
-  return 0.42;
+  return 0.38;
 }
 
-// cor da luz de uma janela: 2.700 K a 5.000 K, algumas com a luz azulada de tela, cortina filtrando
+// cor da luz de uma janela: 2.700 K a 5.000 K, algumas com a luz azulada de tela
 vec3 gLuz( float h ) {
-  vec3 c = h < 0.45 ? vec3( 1.0, 0.66, 0.38 ) : h < 0.8 ? vec3( 1.0, 0.8, 0.6 ) : h < 0.94 ? vec3( 1.0, 0.92, 0.84 ) : vec3( 0.62, 0.74, 1.0 );
-  return c;
+  return h < 0.42 ? vec3( 1.0, 0.64, 0.36 ) : h < 0.78 ? vec3( 1.0, 0.78, 0.56 ) : h < 0.93 ? vec3( 1.0, 0.9, 0.8 ) : vec3( 0.62, 0.74, 1.0 );
 }
 
-// vidro de uma célula (i, j): reflexo, interior e luz acesa pela agenda
-void gVidro( inout GSup s, float m, vec2 cel, vec2 f, vec3 tinta, float lonje, float uso, float esp ) {
-  if ( m <= 0.0 ) return;
-  vec2 h = gH2( vec3( cel, vIdent.x ) );
-  // vidro com película: espelho escuro tingido (F0 0,13 a 0,25); algumas janelas deixam ver a cortina ou a persiana
-  float cortina = ( h.x < 0.12 ? 1.0 : 0.0 ) * ( 1.0 - lonje ) + 0.12 * lonje;
-  vec3 pano = mix( vec3( 0.3, 0.28, 0.24 ), vec3( 0.2, 0.2, 0.19 ), step( 0.06, h.x ) );
-  vec3 alb = tinta * 1.3 * ( 0.97 + 0.06 * mix( h.y, 0.5, lonje ) );
-  alb = mix( alb, mix( tinta, pano, 0.35 ), cortina );
-  float met = mix( 0.86, 0.6, cortina ) * mix( 1.0, 0.85, 1.0 - esp );
-  s.alb = mix( s.alb, alb, m );
-  s.rug = mix( s.rug, 0.05 + 0.03 * h.y, m );
-  s.met = mix( s.met, met, m );
-  // a ondulação da chapa de vidro quebra o reflexo em mosaico de perto e some de longe
-  s.inc = mix( s.inc, ( gH2( vec3( cel * 1.7, vIdent.x + 3.1 ) ) - 0.5 ) * 0.035 * ( 1.0 - lonje ), m );
-  // janela acesa (a hora de acender de cada uma anda com a semente: a cidade acende janela a janela)
+// luz de uma janela (célula de hash h): a hora de acender de cada uma anda com a semente, a cidade acende janela a
+// janela; brilho e temperatura variam; filtro é o que deixa passar (persiana, cortina)
+vec3 gAcesa( vec2 h, float uso, float lonje ) {
   float hora = mod( gHora + ( h.y - 0.5 ) * 1.6 + ( vIdent.z - 0.5 ) * 1.2 + 24.0, 24.0 );
   float fr = gAgenda( uso, hora );
   float acesa = mix( step( h.x, fr ), fr, lonje );
   if ( mod( vIdent.y, 2.0 ) > 0.5 ) acesa = 0.0; // abandonado
-  vec3 luz = mix( gLuz( fract( h.x * 7.13 + h.y ) ), vec3( 1.0, 0.8, 0.6 ), lonje );
-  float filtro = h.y > 0.55 ? 0.55 : 1.0;
-  s.emi += luz * acesa * m * filtro * ( 0.02 + 1.15 * gNoite );
+  vec3 luz = mix( gLuz( fract( h.x * 7.13 + h.y ) ), vec3( 1.0, 0.76, 0.52 ), lonje );
+  float brilho = mix( 0.4 + 0.6 * fract( h.y * 13.7 + h.x ), 0.7, lonje );
+  // de longe a janela acesa vira a média da fachada: sem esta queda a torre inteira brilharia (a curva de tons clareia
+  // a média muito mais do que clareia os pontos de luz separados)
+  return luz * acesa * brilho * ( 0.012 + 0.42 * gNoite ) * mix( 1.0, 0.45, lonje );
 }
 
-// parede com a grade de janelas: tipo da janela pela variante, peitoril, caixilho, escorrido
-void gGrade( inout GSup s, vec2 uv, vec2 duv, float andar, float vari, vec3 c2, vec3 tinta, float uso, float desg, float tipo ) {
+// vidro comum de janela: interior escuro atrás do reflexo (F0 0,04), cortina clara em parte
+void gVidroClaro( inout GSup s, float m, vec2 h, float cortina, float lonje ) {
+  vec3 fundo = vec3( 0.032, 0.03, 0.028 ) * mix( 0.6 + 0.8 * h.y, 1.0, lonje );
+  vec3 cor = mix( fundo, vec3( 0.34, 0.31, 0.26 ) * mix( 0.8 + 0.4 * h.x, 1.0, lonje ), cortina );
+  s.alb = mix( s.alb, cor, m );
+  s.rug = mix( s.rug, 0.04, m );
+  s.met = mix( s.met, 0.0, m );
+  s.inc = mix( s.inc, ( h - 0.5 ) * 0.025 * ( 1.0 - lonje ), m );
+}
+
+// vidro de controle solar (pele de vidro, torre de escritórios): espelho escuro tingido (F0 0,1 a 0,15)
+void gVidroEspelho( inout GSup s, float m, vec2 h, vec3 tinta, float lonje ) {
+  s.alb = mix( s.alb, tinta * ( 1.22 + 0.12 * ( mix( h.y, 0.5, lonje ) - 0.5 ) ), m );
+  s.rug = mix( s.rug, 0.05 + 0.02 * h.x, m );
+  s.met = mix( s.met, 0.88, m );
+  // a ondulação da chapa quebra o reflexo em mosaico de perto e some de longe
+  s.inc = mix( s.inc, ( h - 0.5 ) * 0.03 * ( 1.0 - lonje ), m );
+}
+
+// ---------------------------------------------------------------- janelas (reboco, pastilha, tijolo, painel, casa, fita)
+void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB, float vari, vec3 c1, vec3 c2, float uso,
+               float desg, float tipo, vec3 vista, vec4 dt ) {
   float fv = uv.y / andar;
-  vec2 cel = vec2( floor( uv.x ), floor( fv ) );
   vec2 d = vec2( duv.x, duv.y / andar );
   float lonje = gLonge( d );
-  // proporções por variante: largura (fração do vão), peitoril e altura (fração do andar)
-  float ww = vari < 0.5 ? 0.46 : vari < 1.5 ? 0.54 : vari < 2.5 ? 0.62 : vari < 3.5 ? 0.7 : vari < 4.5 ? 0.38 : vari < 5.5 ? 0.78 : vari < 6.5 ? 0.86 : 0.8;
-  float y0 = vari > 6.5 ? 0.04 : ( vari > 4.5 ? 0.24 : 0.31 );
-  float y1 = vari > 6.5 ? 0.8 : 0.78;
-  float x0 = 0.5 - ww * 0.5;
-  float x1 = 0.5 + ww * 0.5;
-  if ( tipo == F_FITA ) { x0 = 0.0; x1 = 1.0; y0 = 0.3; y1 = 0.8; }
-  if ( tipo == F_CASA ) {
-    // casa: janelas menores, mais parede
-    x0 = 0.5 - min( ww, 0.46 ) * 0.5;
-    x1 = 1.0 - x0;
-    y0 = 0.34;
-    y1 = 0.72;
-  }
-  float mx = gPulso( uv.x, x0, x1, d.x );
-  float my = gPulso( fv, y0, y1, d.y );
-  float jan = mx * my;
-  // vidro dentro do caixilho (6 cm)
-  float ci = 0.07 / andar;
-  float cx = 0.07 / max( 1.0, vFac.z );
-  float gv = gPulso( uv.x, x0 + cx, x1 - cx, d.x ) * gPulso( fv, y0 + ci, y1 - ci, d.y );
-  if ( tipo == F_FITA ) gv = gPulso( fv, y0 + ci, y1 - ci, d.y ) * ( 1.0 - gLinha( fract( uv.x * 3.0 + 0.5 ) - 0.5, 0.05, d.x * 3.0 ) );
-  // caixilho
-  s.alb = mix( s.alb, c2, max( jan - gv, 0.0 ) );
-  s.rug = mix( s.rug, 0.4, max( jan - gv, 0.0 ) );
-  // peitoril: pingadeira clara sob a janela
-  float pe = gPulso( uv.x, x0 - 0.02, x1 + 0.02, d.x ) * gPulso( fv, y0 - 0.035, y0, d.y );
-  if ( tipo != F_FITA ) s.alb = mix( s.alb, s.alb * 1.12 + 0.03, pe );
-  // escorrido de sujeira sob o peitoril (desgaste), mais forte perto do peitoril
+  float id = vIdent.x;
+  vec2 p = vec2( uv.x, fv );
+  float i = floor( uv.x );
+  float j = floor( fv );
+  vec2 h = gH2( vec3( i, j, id ) );
+  vec2 h2 = gH2( vec3( i * 1.37 + 17.0, j * 1.13 + 3.0, id + 5.0 ) );
+  bool fita = tipo == F_FITA;
+  bool casa = tipo == F_CASA;
+  // tipo do vão pelo ritmo do prédio (simétrico da borda para o meio)
+  float pad = mod( vari + floor( gH1( vec3( id, 5.0, 1.0 ) ) * 8.0 ), 8.0 );
+  float jj = min( i, nB - 1.0 - i );
+  vec4 rr = G_RITMO[ int( pad ) ];
+  float kk = mod( jj, 4.0 );
+  float tv = kk < 0.5 ? rr.x : kk < 1.5 ? rr.y : kk < 2.5 ? rr.z : rr.w;
+  if ( nB >= 5.0 && abs( i - ( nB - 1.0 ) * 0.5 ) < 0.25 && pad > 3.5 ) tv = 5.0;
+  if ( casa ) tv = mod( i + pad, 3.0 ) < 1.0 ? 1.0 : ( mod( i + pad, 3.0 ) < 2.0 ? 0.0 : 2.0 );
+  if ( uso > 1.5 || fita ) tv = 0.0;
+  // janela em metros: largura, peitoril e verga (pé-direito de referência 2,9 m)
+  float w = 1.3;
+  float y0 = 1.05;
+  float y1 = 2.2;
+  if ( tv > 0.5 && tv < 1.5 ) { w = 2.0; y0 = mod( vari, 2.0 ) < 0.5 ? 0.12 : 0.9; y1 = 2.25; }
+  else if ( tv > 1.5 && tv < 2.5 ) { w = 0.7; y0 = 1.5; y1 = 2.1; }
+  else if ( tv > 2.5 && tv < 3.5 ) { w = 0.0; }
+  else if ( tv > 3.5 && tv < 4.5 ) { w = 1.5; y0 = 0.95; y1 = 2.2; }
+  else if ( tv > 4.5 ) { w = 0.55; y0 = 1.25; y1 = 2.05; }
+  float esc = 0.86 + 0.07 * mod( vari, 4.0 );
+  w *= esc;
+  if ( casa ) { w *= 0.85; y0 = max( y0, 0.95 ); }
+  if ( uso > 1.5 ) { w = vao * 0.78; y0 = 0.8; y1 = andar - 0.35; }
+  if ( uso > 2.5 ) { w = vao * 0.7; y0 = andar * 0.62; y1 = andar - 0.25; }
+  float kA = max( andar / 2.9, 0.8 );
+  y0 *= kA;
+  y1 = min( y1 * kA, andar - 0.28 );
+  if ( fita ) { w = vao; y0 = 0.95; y1 = andar - 0.42; }
+  w = min( w, fita ? vao : vao - 0.45 );
+  float x0 = 0.5 - 0.5 * w / vao;
+  float x1 = 0.5 + 0.5 * w / vao;
+  float yy0 = y0 / andar;
+  float yy1 = y1 / andar;
+  vec4 R = vec4( x0, x1, yy0, yy1 );
+  // abertura na parede e o que do plano do vidro aparece por ela (a janela fica recuada: paralaxe)
+  float dep = tv > 3.5 && tv < 4.5 ? 0.06 : 0.14 + 0.08 * mod( vari, 2.0 );
+  vec2 off = clamp( - vista.xy / vista.z * dep, vec2( -0.45 ), vec2( 0.45 ) ) * ( 1.0 - lonje );
+  vec2 q = p + vec2( off.x / vao, off.y / andar );
+  float furo = w > 0.01 ? gRet( p, R, d ) : 0.0;
+  float sx = gPulso( q.x, x0, x1, d.x );
+  float sy = gPulso( q.y, yy0, yy1, d.y );
+  float vidro = furo * sx * sy;
+  float revela = max( furo - vidro, 0.0 );
+  // peitoril de pedra e o escorrido embaixo (desgaste), antes da abertura por cima
   float fy = fract( fv );
-  float esc = smoothstep( y0, y0 - 0.45, fy ) * step( fy, y0 ) * gPulso( uv.x, x0 + 0.05, x1 - 0.05, d.x );
-  s.alb *= 1.0 - desg * 0.22 * esc * ( 1.0 - lonje );
-  gVidro( s, gv, cel, vec2( 0.0 ), tinta, lonje, uso, 1.0 );
-  // grade de ferro na janela da casa (variante 4 a 7): barras verticais e uma travessa
-  if ( tipo == F_CASA && vari > 3.5 ) {
-    float lw = max( x1 - x0, 0.01 );
-    float bx = gLinha( fract( ( uv.x - x0 ) / lw * 5.0 + 0.5 ) - 0.5, 0.1, d.x * 5.0 / lw );
-    float by = gLinha( fract( ( fy - y0 ) / max( y1 - y0, 0.01 ) + 0.5 ) - 0.5, 0.04, d.y / max( y1 - y0, 0.01 ) );
-    float barra = max( bx, by ) * jan * ( 1.0 - lonje );
-    s.alb = mix( s.alb, vec3( 0.03 ), barra );
+  if ( !fita && w > 0.01 ) {
+    float pe = gPulso( p.x, x0 - 0.03, x1 + 0.03, d.x ) * gPulso( fv, yy0 - 0.06 / andar, yy0, d.y );
+    s.alb = mix( s.alb, vec3( 0.42, 0.41, 0.39 ) * ( 0.9 + 0.2 * dt.b ), pe );
+    float esc2 = smoothstep( yy0 - 1.1 / andar, yy0, fy ) * step( fy, yy0 ) * gPulso( p.x, x0 + 0.08, x1 - 0.08, d.x );
+    s.alb *= 1.0 - desg * 0.22 * esc2 * ( 0.6 + 0.8 * dt.g ) * ( 1.0 - lonje );
+  }
+  // espessura da parede: jamba, peitoril (visto de cima, claro) e verga (vista de baixo, escura)
+  float wy = ( 1.0 - sy ) / max( 2.0 - sx - sy, 1e-3 );
+  float sombraR = mix( 0.66, off.y < 0.0 ? 0.9 : 0.42, wy );
+  s.alb = mix( s.alb, s.alb * sombraR, revela );
+  s.ao *= 1.0 - 0.25 * revela;
+  // caixilho de correr e o vidro dentro dele (5 cm)
+  float cxf = 0.05 / vao;
+  float cyf = 0.05 / andar;
+  vec4 Rv = vec4( x0 + cxf, x1 - cxf, yy0 + cyf, yy1 - cyf );
+  float pano = furo * gRet( q, Rv, d );
+  float nf = tv > 0.5 && tv < 1.5 ? 4.0 : ( fita ? max( 2.0, floor( vao / 0.9 ) ) : 2.0 );
+  float lw = max( x1 - x0, 0.01 );
+  float tm = ( q.x - x0 ) / lw * nf;
+  float mont = gLinha( fract( tm + 0.5 ) - 0.5, 0.05 * nf / ( lw * vao ), d.x * nf / lw ) * pano;
+  float caix = max( vidro - pano, 0.0 ) + mont;
+  pano *= 1.0 - mont;
+  float cBrilho = gLum( c2 );
+  s.alb = mix( s.alb, c2, caix );
+  s.rug = mix( s.rug, 0.45, caix );
+  s.met = mix( s.met, cBrilho > 0.45 ? 0.0 : 0.55, caix );
+  // o que tem atrás do vidro: persiana de enrolar (quartos), cortina (salas), vidro canelado (banheiro), grelha (área)
+  float lv = 0.0;
+  if ( uso < 1.5 && tv < 0.5 ) lv = h2.x < 0.36 ? 0.0 : h2.x < 0.6 ? 1.0 : 0.15 + 0.7 * h2.y;
+  if ( uso < 1.5 && tv > 0.5 && tv < 1.5 ) lv = h2.x < 0.8 ? 0.0 : 0.3 * h2.y;
+  if ( fita ) lv = h2.x < 0.5 ? 0.0 : 0.2 + 0.8 * h2.y;
+  if ( uso > 1.5 ) lv = h2.x < 0.55 ? 0.0 : 0.2 + 0.6 * h2.y;
+  lv = mix( lv, 0.3, lonje );
+  float yp = mix( yy1 - cyf, yy0 + cyf, lv );
+  float pers = pano * gPulso( q.y, yp, yy1 - cyf, d.y );
+  float cort = ( tv > 0.5 && tv < 1.5 ) ? step( 0.55, h.y ) : step( 0.86, h.y );
+  cort = mix( cort, 0.25, lonje );
+  float vis = max( pano - pers, 0.0 );
+  vec3 luz = gAcesa( h, uso, lonje );
+  if ( tv > 1.5 && tv < 2.5 ) {
+    // vidro canelado (banheiro, cozinha): claro e fosco
+    s.alb = mix( s.alb, vec3( 0.26, 0.27, 0.26 ), vis );
+    s.rug = mix( s.rug, 0.25, vis );
+    s.met = mix( s.met, 0.0, vis );
+    s.emi += luz * vis * 0.7;
+  } else if ( tv > 3.5 && tv < 4.5 ) {
+    // área de serviço: veneziana fixa de alumínio (ou cobogó) diante do vão escuro
+    float lam = gPulso( q.y * andar / 0.09, 0.0, 0.55, d.y * andar / 0.09 );
+    vec3 fundo = vec3( 0.03 );
+    s.alb = mix( s.alb, mix( fundo, c2 * 0.95, lam ), vis );
+    s.rug = mix( s.rug, 0.5, vis );
+    s.met = mix( s.met, 0.0, vis );
+    s.emi += luz * vis * ( 1.0 - lam ) * 0.6;
+  } else {
+    if ( uso > 1.5 ) gVidroEspelho( s, vis, h, vec3( 0.1, 0.11, 0.12 ), lonje );
+    else gVidroClaro( s, vis, h, cort, lonje );
+    s.emi += luz * vis * ( 1.0 - 0.45 * cort );
+    // persiana: lâminas claras de PVC ou alumínio
+    float ripa = gLinha( fract( q.y * andar / 0.055 + 0.5 ) - 0.5, 0.18, d.y * andar / 0.055 );
+    vec3 cp = mix( vec3( 0.5, 0.49, 0.46 ), c2 * 0.9, step( 0.7, h.x ) ) * ( 0.9 + 0.15 * h.y );
+    s.alb = mix( s.alb, cp * ( 1.0 - 0.25 * ripa * ( 1.0 - lonje ) ), pers );
+    s.rug = mix( s.rug, 0.55, pers );
+    s.met = mix( s.met, 0.0, pers );
+    s.inc = mix( s.inc, vec2( 0.0 ), pers );
+    s.emi += luz * pers * 0.16;
+  }
+  // grade de ferro na janela da casa (variante 4 a 7)
+  if ( casa && vari > 3.5 ) {
+    float bx = gLinha( fract( ( p.x - x0 ) / lw * 6.0 + 0.5 ) - 0.5, 0.08, d.x * 6.0 / lw );
+    float by = gLinha( fract( ( fy - yy0 ) / max( yy1 - yy0, 0.01 ) * 2.0 + 0.5 ) - 0.5, 0.04, 2.0 * d.y / max( yy1 - yy0, 0.01 ) );
+    float barra = max( bx, by ) * furo * ( 1.0 - lonje );
+    s.alb = mix( s.alb, vec3( 0.035 ), barra );
     s.met = mix( s.met, 0.3, barra );
     s.rug = mix( s.rug, 0.6, barra );
   }
-  // profundidade do vão: a verga faz sombra no alto do vidro (a janela fica recuada na parede)
-  float verga = smoothstep( y1 - ci - 0.16 / andar, y1 - ci, fy ) * gv * ( 1.0 - lonje );
-  s.ao *= 1.0 - 0.45 * verga;
-  s.alb *= 1.0 - 0.35 * verga;
+  // ar-condicionado sob parte dos quartos (e das janelas de escritório pequeno), com a sombra e o escorrido
+  if ( uso < 2.5 && tv < 0.5 && !fita && y0 > 0.8 ) {
+    float tem = step( h2.y, 0.2 + 0.3 * desg ) * ( 1.0 - lonje );
+    if ( tem > 0.0 ) {
+      float lado = h.x < 0.5 ? -1.0 : 1.0;
+      float acx = 0.5 + lado * min( 0.25 * w, 0.5 * vao - 0.5 ) / vao;
+      vec4 A = vec4( acx - 0.4 / vao, acx + 0.4 / vao, yy0 - 0.7 / andar, yy0 - 0.14 / andar );
+      float caixa = gRet( p, A, d ) * tem;
+      vec2 cm = vec2( ( fract( p.x ) - ( acx - 0.15 * lado / vao ) ) * vao, ( fy - ( A.z + A.w ) * 0.5 ) * andar );
+      float ven = gDisco( cm, 0.19, max( duv.x * vao, 0.01 ) ) * caixa;
+      float somb = gRet( p, vec4( A.x, A.y, A.z - 0.12 / andar, A.z ), d ) * tem;
+      float pinga = gRet( p, vec4( acx - 0.05 / vao, acx + 0.05 / vao, A.z - 1.6 / andar, A.z ), d ) * tem * desg;
+      s.alb *= 1.0 - 0.35 * somb - 0.3 * pinga * smoothstep( A.z - 1.6 / andar, A.z, fy );
+      s.alb = mix( s.alb, vec3( 0.52, 0.52, 0.5 ) * ( 0.85 + 0.2 * dt.r ), caixa );
+      s.alb = mix( s.alb, vec3( 0.06 ), ven * 0.85 );
+      s.rug = mix( s.rug, 0.6, caixa );
+      s.met = mix( s.met, 0.0, caixa );
+    }
+  }
 }
 
-GSup gFachada() {
+// ---------------------------------------------------------------- pele de vidro com montantes
+void gPele( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari, vec3 c1, vec3 c2, vec3 tinta, float uso ) {
+  float fv = uv.y / andar;
+  vec2 d = vec2( duv.x * 2.0, duv.y / andar );
+  float lonje = gLonge( vec2( duv.x, d.y ) );
+  vec2 p = vec2( uv.x * 2.0, fv );
+  vec2 cel = floor( p );
+  vec2 h = gH2( vec3( cel, vIdent.x ) );
+  vec2 h2 = gH2( vec3( cel.x * 0.37 + 11.0, cel.y * 1.7, vIdent.x + 2.0 ) );
+  float mont = gLinha( fract( p.x + 0.5 ) - 0.5, 0.045 + 0.025 * mod( vari, 2.0 ), d.x );
+  float trav = gLinha( fract( p.y + 0.5 ) - 0.5, 0.03, d.y );
+  // faixa opaca na laje (vidro serigrafado), de 0,9 a 1,3 m
+  float fe = clamp( ( 0.9 + 0.2 * mod( vari, 3.0 ) ) / andar, 0.15, 0.45 );
+  float esp = gPulso( p.y, 0.0, fe, d.y );
+  s.alb = c2;
+  s.rug = 0.35;
+  s.met = gLum( c2 ) > 0.45 ? 0.1 : 0.7;
+  float vg = 1.0 - max( mont, trav );
+  // (o fundo do vidro serigrafado é claro: é ele que tira o preto das torres de vidro vistas do alto)
+  vec3 opaco = mix( c1 * 0.5, tinta * 1.8, 0.45 );
+  s.alb = mix( s.alb, opaco, vg * esp );
+  s.rug = mix( s.rug, 0.18, vg * esp );
+  s.met = mix( s.met, 0.4, vg * esp );
+  float visao = vg * ( 1.0 - esp );
+  // persiana interna (rolô): cada inquilino (andar e grupo de 6 painéis) baixa a sua mais ou menos igual, com
+  // variação pequena de painel a painel e um ou outro fora do padrão; de longe, faixas por andar e não um tabuleiro
+  vec2 hg = gH2( vec3( floor( cel.x / 6.0 ) + 31.0, cel.y, vIdent.x + 7.0 ) );
+  float lv = hg.x < 0.4 ? 0.0 : ( hg.x < 0.52 ? 1.0 : 0.2 + 0.65 * hg.y );
+  lv = clamp( lv + ( h2.x - 0.5 ) * ( lv > 0.01 && lv < 0.99 ? 0.16 : 0.0 ), 0.0, 1.0 );
+  if ( h2.y < 0.08 ) lv = h2.x;
+  lv = mix( lv, 0.3, lonje );
+  float yb = mix( 1.0, fe, lv );
+  float rolo = visao * gPulso( p.y, yb, 1.0, d.y );
+  float vis = max( visao - rolo, 0.0 );
+  gVidroEspelho( s, vis, h, tinta, lonje );
+  s.alb = mix( s.alb, vec3( 0.26, 0.26, 0.25 ) * ( 0.9 + 0.2 * h.y ) + tinta * 0.3, rolo );
+  s.rug = mix( s.rug, 0.1, rolo );
+  s.met = mix( s.met, 0.35, rolo );
+  vec3 luz = gAcesa( h, uso, lonje );
+  // de dia, a luminária do teto aparece no alto do vão nos escritórios acesos
+  float teto = gPulso( p.y, 0.86, 0.94, d.y ) * vis * ( abs( uso - 2.0 ) < 0.5 ? 1.0 : 0.0 );
+  s.emi += luz * ( vis + 0.4 * rolo ) * 0.7 + vec3( 0.9, 0.95, 1.0 ) * teto * step( h.x, 0.7 ) * 0.05 * ( 1.0 - gNoite ) * ( 1.0 - lonje );
+}
+
+// ---------------------------------------------------------------- brises
+void gBrise( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari, vec3 c1, vec3 c2, vec3 tinta, float uso,
+             float tipo, vec3 vista, vec4 dt ) {
+  float fv = uv.y / andar;
+  vec2 d = vec2( duv.x, duv.y / andar );
+  float lonje = gLonge( d );
+  vec2 cel = vec2( floor( uv.x ), floor( fv ) );
+  vec2 h = gH2( vec3( cel, vIdent.x ) );
+  // atrás do brise: vidro em faixa com a laje aparente
+  float laje = gPulso( fv, 0.0, 0.07, d.y );
+  gVidroEspelho( s, 1.0 - laje, h, tinta * 0.9, lonje );
+  s.emi += gAcesa( h, uso, lonje ) * ( 1.0 - laje );
+  float lam;
+  float lado = 1.0;
+  if ( tipo == F_BRISE_V ) {
+    // aletas verticais a cada quarto de vão, 40 cm para fora: de lado a face da aleta cobre mais do vão
+    // (a face do prédio é o plano de fora das aletas; o vidro fica 40 cm para dentro)
+    float passo = vao / 4.0;
+    float t = uv.x * 4.0;
+    float lf = 0.12 / passo;
+    float sw = clamp( 0.4 * abs( vista.x ) / vista.z / passo, 0.0, 0.85 - lf ) * ( 1.0 - lonje );
+    float lp = lf + sw;
+    lam = vista.x > 0.0 ? gPulso( t, 0.0, lp, duv.x * 4.0 ) : gPulso( t + sw, 0.0, lp, duv.x * 4.0 );
+    float face = vista.x > 0.0 ? gPulso( t, 0.0, lf, duv.x * 4.0 ) : gPulso( t + sw, sw, lp, duv.x * 4.0 );
+    lado = mix( 0.72, 1.0, face / max( lam, 1e-3 ) );
+  } else {
+    // grelha de concreto (montante a cada vão) com lâminas horizontais de inclinação variável por módulo
+    float mo = gPulso( uv.x, 0.0, 0.1, duv.x );
+    float lp = 0.34 + clamp( 0.3 * max( vista.y, 0.0 ) / vista.z, 0.0, 0.4 ) * ( 1.0 - lonje );
+    float t = fv * andar / 0.5;
+    lam = max( gPulso( t, 0.0, lp, duv.y / 0.5 ), mo );
+    lado = mix( 0.82 + 0.3 * h.x, 0.95, lonje );
+    lam = max( lam, laje );
+  }
+  vec3 cl = c2 * ( 0.9 + 0.2 * dt.r ) * lado;
+  s.alb = mix( s.alb, cl, lam );
+  s.rug = mix( s.rug, 0.75, lam );
+  s.met = mix( s.met, 0.0, lam );
+  s.inc = mix( s.inc, vec2( 0.0 ), lam );
+  s.emi *= 1.0 - lam;
+}
+
+// ---------------------------------------------------------------- varandas desenhadas (LOD1 e faces sem geometria)
+void gVarandas( inout GSup s, vec2 uv, vec2 duv, float andar, float vari, vec3 c1, vec3 c2, vec3 tinta, float uso, vec3 vista ) {
+  float fv = uv.y / andar;
+  vec2 d = vec2( duv.x, duv.y / andar );
+  float lonje = gLonge( d );
+  vec2 cel = vec2( floor( uv.x ), floor( fv ) );
+  vec2 h = gH2( vec3( cel, vIdent.x ) );
+  float div = gPulso( uv.x, 0.0, 0.06, d.x );
+  float laje = gPulso( fv, 0.0, 0.07, d.y );
+  float gc = gPulso( fv, 0.07, 0.43, d.y ) * ( 1.0 - div );
+  float fundo = gPulso( fv, 0.43, 1.0, d.y ) * ( 1.0 - div );
+  // fechamento de sacada com vidro (um quarto das varandas): o vão vira espelho rente ao guarda-corpo
+  float fecha = mix( step( 0.76, h.x ), 0.2, lonje );
+  vec3 luz = gAcesa( h, uso, lonje );
+  gVidroClaro( s, fundo * gPulso( uv.x, 0.1, 0.9, d.x ), h, step( 0.6, h.y ), lonje );
+  s.alb *= 1.0 - 0.3 * fundo * ( 1.0 - fecha );
+  s.ao *= 1.0 - 0.4 * fundo * ( 1.0 - fecha );
+  s.emi += luz * fundo * 0.8;
+  gVidroEspelho( s, fundo * fecha, h, vec3( 0.1, 0.11, 0.12 ), lonje );
+  // guarda-corpo: vidro (variante par) ou pano cheio
+  bool gv = mod( vari, 2.0 ) < 0.5;
+  vec3 gcCor = gv ? vec3( 0.07, 0.08, 0.085 ) : c1;
+  s.alb = mix( s.alb, gcCor, gc );
+  s.met = mix( s.met, gv ? 0.75 : 0.0, gc );
+  s.rug = mix( s.rug, gv ? 0.1 : 0.8, gc );
+  s.alb = mix( s.alb, c2 * 1.05, laje );
+  s.rug = mix( s.rug, 0.8, laje );
+  s.met = mix( s.met, 0.0, laje );
+  s.emi *= 1.0 - max( laje, gc * 0.7 );
+}
+
+// ---------------------------------------------------------------- térreo
+void gTerreo( inout GSup s, vec2 uv, vec2 duv, float tH, float terreo, float vao, vec3 c1, vec3 c2, vec3 tinta, vec3 vista ) {
+  float id = vIdent.x;
+  float fv = uv.y / tH;
+  vec2 d = vec2( duv.x, duv.y / tH );
+  float um = uv.x * vao;
+  // 6 (vitrine alta) e 7 (portaria alta) desenham como 1 e 2
+  float tt = terreo > 5.5 ? terreo - 5.0 : terreo;
+  if ( tt < 1.5 ) {
+    // loja: pilar no limite do vão, vitrine recuada, letreiro e, de noite, a porta de aço baixada
+    float pil = gPulso( uv.x, 0.0, 0.07, d.x ) + gPulso( uv.x, 0.93, 1.0, d.x );
+    float letr = gPulso( fv, 0.72, 0.93, d.y ) * ( 1.0 - pil );
+    float vao0 = gPulso( fv, 0.02, 0.68, d.y ) * ( 1.0 - pil );
+    vec2 h = gH2( vec3( floor( uv.x ), 3.0, id ) );
+    float hl = gH1( vec3( 7.0, 3.0, id ) );
+    // letreiro: um por fachada, cores gastas; texto claro sobre fundo escuro ou o contrário
+    vec3 cl = gLin( gRGB( vCor.y ) );
+    vec3 corL = hl < 0.2 ? vec3( 0.22, 0.04, 0.03 ) : hl < 0.4 ? vec3( 0.025, 0.07, 0.12 ) : hl < 0.55 ? cl * 0.8 : hl < 0.7 ? vec3( 0.3, 0.19, 0.04 ) : hl < 0.85 ? vec3( 0.55, 0.53, 0.5 ) : vec3( 0.05 );
+    vec3 corT = gLum( corL ) > 0.2 ? vec3( 0.04, 0.05, 0.08 ) : vec3( 0.62, 0.6, 0.55 );
+    float ln = ( fv - 0.72 ) / 0.21;
+    float ch = floor( um / 0.32 );
+    float gl = step( 0.35, gH1( vec3( ch, 9.0, id ) ) ) * gPulso( um / 0.32, 0.12, 0.88, duv.x * vao / 0.32 );
+    float txt = gl * gPulso( ln, 0.28, 0.72, d.y / 0.21 ) * step( 0.12, fract( uv.x ) ) * step( fract( uv.x ), 0.88 );
+    txt *= 1.0 - gLonge( vec2( duv.x * vao / 0.32 ) );
+    s.alb = mix( s.alb, c1 * 0.85, pil );
+    s.alb = mix( s.alb, mix( corL, corT, txt ), letr );
+    s.rug = mix( s.rug, 0.5, letr );
+    float abreH = 7.5 + 2.0 * h.y;
+    float fechaH = 19.0 + 4.0 * h.x;
+    float aberta = ( gHora > abreH && gHora < fechaH ) ? 1.0 : 0.0;
+    if ( gH1( vec3( floor( uv.x ), 4.0, id ) ) < 0.08 ) aberta = 0.0; // loja vazia
+    // vitrine recuada 0,3 m (paralaxe): a moldura aparece de lado
+    vec2 off = clamp( - vista.xy / vista.z * 0.3, vec2( -0.6 ), vec2( 0.6 ) );
+    float vg = vao0 * gPulso( uv.x + off.x / vao, 0.08, 0.92, d.x ) * gPulso( fv + off.y / tH, 0.02, 0.68, d.y );
+    s.alb = mix( s.alb, c1 * 0.6, max( vao0 - vg, 0.0 ) );
+    // a loja vista pelo vidro: escura de dia, com o balcão e as prateleiras mais claros embaixo
+    // prateleiras com mercadoria (cores gastas por vão) e a luminária no forro, que de dia aparece atrás do reflexo
+    float prat = gPulso( fv * 4.0, 0.0, 0.18, d.y * 4.0 ) * step( fv, 0.5 );
+    vec3 merc = mix( vec3( 0.16, 0.1, 0.06 ), vec3( 0.07, 0.1, 0.13 ), h.y ) * ( 0.6 + 0.8 * gH1( vec3( floor( um / 0.6 ), floor( fv * 8.0 ), id ) ) );
+    float gond = gPulso( fv, 0.06, 0.42, d.y ) * step( 0.3, fract( um / 1.8 ) );
+    vec3 loja = mix( vec3( 0.09, 0.085, 0.075 ), vec3( 0.05, 0.055, 0.06 ), h.x ) + prat * vec3( 0.08, 0.07, 0.055 );
+    loja = mix( loja, merc, gond * 0.8 );
+    float forro = gPulso( fv, 0.6, 0.66, d.y );
+    // porta de aço de enrolar (fechada): lâminas horizontais de 10 cm
+    float ripa = gLinha( fract( fv * tH / 0.1 + 0.5 ) - 0.5, 0.3, duv.y / 0.1 );
+    vec3 aco = mix( vec3( 0.34, 0.35, 0.35 ), cl * 0.7, step( 0.6, h.y ) ) * ( 1.0 - 0.3 * ripa );
+    vec3 dentro = mix( aco, mix( loja, tinta, 0.3 ), aberta );
+    s.alb = mix( s.alb, dentro, vg );
+    s.rug = mix( s.rug, mix( 0.5, 0.06, aberta ), vg );
+    s.met = mix( s.met, mix( 0.5, 0.0, aberta ), vg );
+    // loja aberta: a luz de dentro aparece mesmo de dia, atrás do reflexo
+    s.emi += vec3( 1.0, 0.9, 0.76 ) * vg * aberta * ( ( 0.04 + 0.28 * gNoite ) * ( 0.6 + 0.6 * prat + 0.5 * gond + 0.3 * h.y ) + forro * ( 0.2 + 0.45 * gNoite ) );
+    s.emi += mix( corL, vec3( 1.0, 0.9, 0.75 ), txt ) * 1.2 * letr * step( 0.5, fract( hl * 5.3 ) ) * step( gHora, 23.0 ) * gNoite;
+  } else if ( tt < 2.5 ) {
+    // portaria: vidro alto com montantes finos, luz de hall
+    float mont = gLinha( fract( uv.x * 2.0 + 0.5 ) - 0.5, 0.06, d.x * 2.0 );
+    float vg = gPulso( fv, 0.02, 0.86, d.y ) * ( 1.0 - mont );
+    vec2 h = gH2( vec3( floor( uv.x * 2.0 ), 8.0, id ) );
+    s.alb = mix( c1 * 0.95, mix( vec3( 0.2, 0.17, 0.13 ), tinta, 0.5 ), vg );
+    s.alb = mix( s.alb, c2, mont * gPulso( fv, 0.02, 0.86, d.y ) );
+    s.rug = mix( s.rug, 0.07, vg );
+    s.met = mix( s.met, 0.6, vg );
+    s.emi += vec3( 1.0, 0.85, 0.65 ) * vg * ( 0.012 + 0.14 * gNoite ) * ( 0.3 + 1.0 * h.x * h.x );
+  } else if ( tt < 3.5 ) {
+    // garagem: aberturas com grade e ventilação
+    float ab = gPulso( uv.x, 0.12, 0.88, d.x ) * gPulso( fv, 0.0, 0.8, d.y );
+    float grade = gLinha( fract( um / 0.15 + 0.5 ) - 0.5, 0.2, duv.x * vao / 0.15 );
+    s.alb = mix( s.alb * 0.9, mix( vec3( 0.03 ), c2 * 0.6, grade * 0.8 ), ab );
+    s.rug = mix( s.rug, 0.5, ab * grade );
+  } else if ( tt < 4.5 ) {
+    // pilotis (visto de longe): recuo escuro com pilares no ritmo dos vãos
+    float pil = gPulso( uv.x, 0.44, 0.56, d.x );
+    s.alb = mix( vec3( 0.05, 0.05, 0.048 ), c1 * 0.7, pil );
+    s.ao *= 0.6;
+  } else {
+    // doca de galpão: portas de enrolar a cada dois vãos
+    float porta = gPulso( uv.x * 0.5, 0.12, 0.88, d.x * 0.5 ) * gPulso( fv, 0.0, 0.78, d.y );
+    float ripa = gLinha( fract( uv.y / 0.1 + 0.5 ) - 0.5, 0.3, duv.y / 0.1 );
+    s.alb = mix( s.alb, c2 * ( 0.9 - 0.2 * ripa ), porta );
+    s.met = mix( s.met, 0.6, porta );
+    s.rug = mix( s.rug, 0.45, porta );
+  }
+  s.alb *= mix( 0.72, 1.0, smoothstep( 0.0, 0.5, uv.y ) );
+}
+
+// vidro (F0 linear) pelo índice do prédio: cinza-azulado, cinza neutro, azul, verde (raro) ou bronze (raro)
+vec3 gTinta( float vid ) {
+  return vid < 0.42 ? vec3( 0.14, 0.158, 0.176 ) : vid < 0.68 ? vec3( 0.15, 0.15, 0.15 ) : vid < 0.84 ? vec3( 0.115, 0.145, 0.19 ) : vid < 0.93 ? vec3( 0.12, 0.148, 0.135 ) : vec3( 0.165, 0.142, 0.12 );
+}
+
+GSup gFachada( vec3 vista ) {
   GSup s;
   float tipo = vFac.x;
   float andar = max( vFac.y, 0.5 );
@@ -273,7 +600,8 @@ GSup gFachada() {
   float terreo = floor( bits / 32.0 );
   vec3 c1 = gLin( gRGB( vCor.x ) );
   vec3 c2 = gLin( gRGB( vCor.y ) );
-  float desg = vCor.z;
+  float nB = floor( vCor.z );
+  float desg = fract( vCor.z );
   float vid = vCor.w;
   vec2 uv = vPF.xy;
   vec2 duv = max( fwidth( uv ), vec2( 1e-4 ) );
@@ -281,9 +609,7 @@ GSup gFachada() {
   float id = vIdent.x;
   vec4 dt = texture( gDetalhe, vec2( um * 0.11 + id * 0.173, uv.y * 0.11 ) );
   vec4 df = texture( gDetalhe, vec2( um * 0.53, uv.y * 0.53 + id * 0.07 ) );
-  // vidro: azul-acinzentado, verde, bronze ou cinza, pelo índice
-  // vidro (F0 linear): azul-acinzentado, cinza, verde, bronze (raro) ou azul, pelo índice do prédio
-  vec3 tinta = vid < 0.3 ? vec3( 0.085, 0.1, 0.115 ) : vid < 0.5 ? vec3( 0.095, 0.098, 0.1 ) : vid < 0.62 ? vec3( 0.085, 0.1, 0.092 ) : vid < 0.72 ? vec3( 0.11, 0.095, 0.08 ) : vec3( 0.075, 0.095, 0.12 );
+  vec3 tinta = gTinta( vid );
   s.alb = c1;
   s.rug = 0.82;
   s.met = 0.0;
@@ -302,11 +628,22 @@ GSup gFachada() {
       float fiada = gPulso( t.y, 0.0, 0.16, dd.y );
       float capa = 0.5 + 0.5 * cos( 6.2832 * t.x );
       float tom = gH1( vec3( floor( t ), id ) );
-      vec3 c = c1 * ( 0.86 + 0.26 * tom ) * mix( 0.82 + 0.25 * capa, 1.0, l ) * mix( 1.0 - 0.3 * fiada, 0.93, l );
+      vec3 c = c1 * ( 0.86 + 0.26 * mix( tom, 0.5, l ) ) * mix( 0.82 + 0.25 * capa, 1.0, l ) * mix( 1.0 - 0.3 * fiada, 0.93, l );
       c *= 0.8 + 0.35 * dt.r;
-      s.alb = mix( c, c * vec3( 0.78, 0.8, 0.78 ), desg * dt.g );
+      // limo e sujeira escura nas partes baixas da água (telhado velho)
+      s.alb = mix( c, c * vec3( 0.62, 0.64, 0.6 ), desg * smoothstep( 0.45, 0.8, dt.g ) );
       s.rug = 0.72;
       s.inc = vec2( 0.0, ( capa - 0.5 ) * 0.25 * ( 1.0 - l ) );
+      gMascaraTelhado = 1.0;
+    } else if ( tipo == F_FIBRO ) {
+      // fibrocimento ondulado (onda de 17,7 cm descendo a água), cinza com manchas escuras de limo
+      float o = uv.x / 0.177;
+      float l = gLonge( vec2( duv.x / 0.177 ) );
+      float onda = cos( 6.2832 * o );
+      s.alb = c1 * ( 0.84 + 0.3 * dt.r ) * mix( 0.9 + 0.12 * onda, 1.0, l );
+      s.alb *= 1.0 - 0.45 * desg * smoothstep( 0.35, 0.75, dt.g ) - 0.12 * smoothstep( 0.6, 0.9, df.b );
+      s.rug = 0.88;
+      s.inc = vec2( sin( 6.2832 * o ) * 0.35 * ( 1.0 - l ), 0.0 );
       gMascaraTelhado = 1.0;
     } else if ( tipo == F_LAJE ) {
       // laje impermeabilizada: placas de 1 m, manchas de umidade e sujeira
@@ -314,21 +651,27 @@ GSup gFachada() {
       float jt = max( gLinha( fract( uv.x + 0.5 ) - 0.5, 0.03, dd.x ), gLinha( fract( uv.y + 0.5 ) - 0.5, 0.03, dd.y ) );
       float tom = gH1( vec3( floor( uv ), id ) );
       s.alb = c1 * ( 0.9 + 0.14 * tom ) * ( 0.78 + 0.35 * dt.r ) * ( 1.0 - 0.18 * jt );
-      s.alb *= 1.0 - 0.25 * desg * smoothstep( 0.55, 0.8, dt.g );
+      s.alb *= 1.0 - 0.3 * desg * smoothstep( 0.55, 0.8, dt.g );
       s.rug = 0.9;
       gMascaraTelhado = 1.0;
     } else if ( tipo == F_TELHA_METAL ) {
-      // telha metálica ondulada a cada 0,2 m
-      float o = uv.x / 0.2;
-      float l = gLonge( vec2( duv.x / 0.2 ) );
-      s.alb = c1 * ( 0.85 + 0.2 * dt.r ) * mix( 0.9 + 0.1 * cos( 6.2832 * o ), 1.0, l );
+      // telha metálica trapezoidal a cada 0,25 m
+      float o = uv.x / 0.25;
+      float l = gLonge( vec2( duv.x / 0.25 ) );
+      float nerv = gPulso( o, 0.0, 0.18, duv.x / 0.25 );
+      s.alb = c1 * ( 0.85 + 0.2 * dt.r ) * mix( 1.0 - 0.18 * nerv, 0.95, l );
       s.rug = 0.45;
       s.met = 0.55;
-      s.inc = vec2( sin( 6.2832 * o ) * 0.35 * ( 1.0 - l ), 0.0 );
+      s.inc = vec2( ( fract( o ) < 0.09 ? 0.4 : fract( o ) < 0.18 ? -0.4 : 0.0 ) * ( 1.0 - l ), 0.0 );
       s.alb *= 1.0 - 0.3 * desg * smoothstep( 0.5, 0.85, dt.b );
       gMascaraTelhado = 1.0;
     } else if ( tipo == F_CONCRETO || tipo == F_LISO ) {
+      // empena e pano liso: manchas, escorrido comprido da chuva (mais forte no prédio velho) e remendo de pintura
       s.alb = c1 * ( 0.84 + 0.3 * dt.r ) * ( 0.95 + 0.1 * df.g );
+      float esc = smoothstep( 0.5, 0.85, texture( gDetalhe, vec2( um * 0.23 + id * 0.31, uv.y * 0.035 ) ).g );
+      s.alb *= 1.0 - ( 0.06 + 0.2 * desg ) * esc - 0.15 * desg * smoothstep( 0.55, 0.85, dt.g );
+      float remendo = step( 0.8, gH1( vec3( floor( um / 2.3 ), floor( uv.y / 1.7 ), id ) ) ) * desg * ( 1.0 - gLonge( duv / 1.7 ) );
+      s.alb *= 1.0 + 0.08 * remendo;
       s.rug = tipo == F_CONCRETO ? 0.88 : 0.8;
     } else if ( tipo == F_METAL ) {
       s.alb = c1 * ( 0.9 + 0.15 * dt.r );
@@ -347,7 +690,7 @@ GSup gFachada() {
       p.x += step( 0.5, fract( p.y * 0.5 ) ) * 0.5;
       vec2 dd = vec2( duv.x * vao / 0.6, duv.y / 0.3 );
       float jt = max( gLinha( fract( p.x + 0.5 ) - 0.5, 0.05, dd.x ), gLinha( fract( p.y + 0.5 ) - 0.5, 0.08, dd.y ) );
-      s.alb = c1 * ( 0.8 + 0.35 * gH1( vec3( floor( p ), id ) ) ) * ( 1.0 - 0.3 * jt );
+      s.alb = c1 * ( 0.8 + 0.35 * mix( gH1( vec3( floor( p ), id ) ), 0.5, gLonge( dd ) ) ) * ( 1.0 - 0.3 * jt );
       s.rug = 0.7;
     } else if ( tipo == F_TOLDO ) {
       s.alb = c1 * ( 0.85 + 0.2 * df.r );
@@ -369,7 +712,7 @@ GSup gFachada() {
       s.alb = c1 * 0.9;
       s.rug = 0.5;
       float aberto = step( 7.5, gHora ) * step( gHora, 23.0 );
-      s.emi = mix( c1, vec3( 1.0 ), 0.3 ) * ( 0.2 + 1.1 * gNoite ) * aberto * gNoite;
+      s.emi = mix( c1, vec3( 1.0 ), 0.3 ) * ( 0.2 + 0.9 * gNoite ) * aberto * gNoite;
     } else if ( tipo == F_SOLAR ) {
       vec2 p = vec2( uv.x / 1.0, uv.y / 1.65 );
       vec2 dd = duv / vec2( 1.0, 1.65 );
@@ -393,124 +736,31 @@ GSup gFachada() {
   }
 
   // ------------------------------------------------------------------ paredes com fachada
-  // pé de parede mais escuro e tom por pano (desgaste)
+  // tom por pano e desgaste
   float pano = gH1( vec3( floor( um / 3.6 ), floor( uv.y / 6.0 ), id ) );
   s.alb = c1 * ( 0.9 + 0.2 * dt.r ) * ( 1.0 + ( pano - 0.5 ) * 0.07 * desg );
+  // escorrido comprido da chuva descendo da platibanda
+  float escP = smoothstep( 0.55, 0.88, texture( gDetalhe, vec2( um * 0.23 + id * 0.31, uv.y * 0.035 ) ).g );
+  float daBorda = smoothstep( vPF.z - 9.0, vPF.z, uv.y );
+  s.alb *= 1.0 - ( 0.03 + 0.15 * desg ) * escP * daBorda * daBorda;
   bool noTerreo = terreo > 0.5 && uv.y < tH;
   bool platibanda = uv.y > vPF.z;
   vec2 uvA = vec2( uv.x, uv.y - ( terreo > 0.5 ? tH : 0.0 ) );
 
   if ( noTerreo ) {
-    // ---------------- térreo
-    float fv = uv.y / tH;
-    vec2 d = vec2( duv.x, duv.y / tH );
-    // 6 (vitrine alta) e 7 (portaria alta) desenham como 1 e 2
-    float tt = terreo > 5.5 ? terreo - 5.0 : terreo;
-    if ( tt < 1.5 ) {
-      // vitrine: pilar no limite do vão, vidro, letreiro e verga
-      float pil = gPulso( uv.x, 0.0, 0.08, d.x ) + gPulso( uv.x, 0.92, 1.0, d.x );
-      float vg = gPulso( fv, 0.08, 0.66, d.y ) * ( 1.0 - pil );
-      float letr = gPulso( fv, 0.72, 0.93, d.y ) * ( 1.0 - pil );
-      // letreiro: um por fachada, em tons gastos (vinho, azul-petróleo, ocre, grafite ou a cor do caixilho)
-      vec3 cl = gLin( gRGB( vCor.y ) );
-      float hl = gH1( vec3( 7.0, 3.0, id ) );
-      vec3 corLetreiro = hl < 0.2 ? vec3( 0.2, 0.045, 0.035 ) : hl < 0.4 ? vec3( 0.03, 0.075, 0.11 ) : hl < 0.6 ? cl * 0.8 : hl < 0.8 ? vec3( 0.26, 0.17, 0.05 ) : vec3( 0.06, 0.06, 0.06 );
-      s.alb = mix( s.alb, c1 * 0.85, pil );
-      s.alb = mix( s.alb, corLetreiro, letr );
-      s.rug = mix( s.rug, 0.5, letr );
-      // vidro da vitrine: iluminado por dentro das 8 às 22 h
-      // o vidro da vitrine deixa ver a loja (escura de dia, com o balcão e as prateleiras mais claros embaixo)
-      vec2 h = gH2( vec3( floor( uv.x ), 3.0, id ) );
-      float prat = gPulso( fv * 4.0, 0.0, 0.18, d.y * 4.0 ) * step( fv, 0.5 );
-      vec3 loja = mix( vec3( 0.09, 0.085, 0.075 ), vec3( 0.05, 0.055, 0.06 ), h.x ) + prat * vec3( 0.08, 0.07, 0.055 );
-      s.alb = mix( s.alb, mix( loja, tinta, 0.35 ), vg );
-      s.rug = mix( s.rug, 0.07, vg );
-      s.met = mix( s.met, 0.22, vg );
-      float aberta = ( gHora > 8.0 + 2.0 * h.y && gHora < 21.0 + 1.5 * h.x ) ? 1.0 : 0.0;
-      // loja aberta: a luz de dentro aparece mesmo de dia, atrás do reflexo
-      s.emi += vec3( 1.0, 0.88, 0.72 ) * vg * aberta * ( 0.1 + 0.8 * gNoite ) * ( 0.7 + 0.6 * prat + 0.3 * h.y );
-      s.emi += corLetreiro * 1.6 * letr * aberta * gNoite;
-    } else if ( tt < 2.5 ) {
-      // portaria: vidro alto com montantes finos, luz de hall
-      float mont = gLinha( fract( uv.x * 2.0 + 0.5 ) - 0.5, 0.06, d.x * 2.0 );
-      float vg = gPulso( fv, 0.02, 0.86, d.y ) * ( 1.0 - mont );
-      s.alb = mix( c1 * 0.95, mix( vec3( 0.3, 0.26, 0.2 ), tinta, 0.55 ), vg );
-      s.alb = mix( s.alb, c2, mont * gPulso( fv, 0.02, 0.86, d.y ) );
-      s.rug = mix( s.rug, 0.08, vg );
-      s.met = mix( s.met, 0.7, vg );
-      s.emi += vec3( 1.0, 0.85, 0.65 ) * vg * ( 0.02 + 0.6 * gNoite );
-    } else if ( tt < 3.5 ) {
-      // garagem: aberturas com grade e ventilação
-      float ab = gPulso( uv.x, 0.12, 0.88, d.x ) * gPulso( fv, 0.0, 0.8, d.y );
-      float grade = gLinha( fract( um / 0.15 + 0.5 ) - 0.5, 0.2, duv.x * vao / 0.15 );
-      s.alb = mix( s.alb * 0.9, mix( vec3( 0.03 ), c2 * 0.6, grade * 0.8 ), ab );
-      s.rug = mix( s.rug, 0.5, ab * grade );
-    } else if ( tt < 4.5 ) {
-      // pilotis (visto de longe): recuo escuro com pilares no ritmo dos vãos
-      float pil = gPulso( uv.x, 0.44, 0.56, d.x );
-      s.alb = mix( vec3( 0.05, 0.05, 0.048 ), c1 * 0.7, pil );
-      s.ao *= 0.6;
-    } else {
-      // doca de galpão: portas de enrolar a cada dois vãos
-      float porta = gPulso( uv.x * 0.5, 0.12, 0.88, d.x * 0.5 ) * gPulso( fv, 0.0, 0.78, d.y );
-      float ripa = gLinha( fract( uv.y / 0.1 + 0.5 ) - 0.5, 0.3, duv.y / 0.1 );
-      s.alb = mix( s.alb, c2 * ( 0.9 - 0.2 * ripa ), porta );
-      s.met = mix( s.met, 0.6, porta );
-      s.rug = mix( s.rug, 0.45, porta );
-    }
-    s.alb *= mix( 0.72, 1.0, smoothstep( 0.0, 0.5, uv.y ) );
+    gTerreo( s, uv, duv, tH, terreo, vao, c1, c2, tinta, vista );
   } else if ( platibanda ) {
-    // ---------------- platibanda: pano liso, sujeira escorrendo da borda
+    // platibanda: pano liso, sujeira escorrendo da borda, pingadeira no pé
     float topo = smoothstep( vPF.z + 0.9, vPF.z + 0.5, uv.y );
     s.alb = c1 * ( 0.88 + 0.2 * dt.r );
-    s.alb *= 1.0 - desg * 0.18 * ( 1.0 - topo ) * dt.g;
-    // pingadeira (faixa) no pé da platibanda
+    s.alb *= 1.0 - desg * 0.2 * ( 1.0 - topo ) * dt.g;
     s.alb *= 1.0 - 0.2 * gPulso( uv.y - vPF.z, 0.0, 0.12, duv.y );
   } else if ( tipo == F_CORTINA ) {
-    // ---------------- pele de vidro: montante vertical a cada 1/2 vão, travessa e peitoril opaco na laje
-    float fv = uvA.y / andar;
-    vec2 d = vec2( duv.x * 2.0, duv.y / andar );
-    float lonje = gLonge( vec2( duv.x, d.y ) );
-    float mont = gLinha( fract( uv.x * 2.0 + 0.5 ) - 0.5, 0.05 + 0.02 * mod( vari, 2.0 ), d.x );
-    float trav = gLinha( fract( fv + 0.5 ) - 0.5, 0.04, d.y );
-    float esp = gPulso( fv, 0.0, 0.22 + 0.06 * mod( vari, 3.0 ), d.y );
-    vec2 cel = vec2( floor( uv.x * 2.0 ), floor( fv ) );
-    s.alb = c2;
-    s.rug = 0.35;
-    s.met = 0.6;
-    float vg = ( 1.0 - max( mont, trav ) );
-    // peitoril opaco (vidro serigrafado) mais escuro que a visão, nunca mais escuro que o caixilho
-    vec3 opaco = mix( tinta * 1.1, c1 * 0.4, 0.15 );
-    s.alb = mix( s.alb, opaco, vg * esp );
-    s.rug = mix( s.rug, 0.12, vg * esp );
-    s.met = mix( s.met, 0.85, vg * esp );
-    gVidro( s, vg * ( 1.0 - esp ), cel, vec2( 0.0 ), tinta, lonje, uso, 1.0 );
+    gPele( s, uvA, duv, andar, vao, vari, c1, c2, tinta, uso );
   } else if ( tipo == F_BRISE_H || tipo == F_BRISE_V ) {
-    // ---------------- brise-soleil diante do vidro (Capanema): lâminas de concreto ou metal
-    vec2 d = vec2( duv.x, duv.y / andar );
-    float lonje = gLonge( d );
-    float fv = uvA.y / andar;
-    vec2 cel = vec2( floor( uv.x ), floor( fv ) );
-    gVidro( s, gPulso( fv, 0.06, 0.94, d.y ), cel, vec2( 0.0 ), tinta, lonje, uso, 0.8 );
-    float lam;
-    if ( tipo == F_BRISE_H ) {
-      float p = uvA.y / 0.55;
-      lam = gPulso( p, 0.0, 0.34, duv.y / 0.55 );
-      s.inc = mix( s.inc, vec2( 0.0, ( fract( p ) < 0.17 ? 0.5 : -0.5 ) * ( 1.0 - lonje ) ), lam );
-    } else {
-      float p = uv.x * 4.0;
-      lam = gPulso( p, 0.0, 0.3, duv.x * 4.0 );
-      s.inc = mix( s.inc, vec2( ( fract( p ) < 0.15 ? -0.5 : 0.5 ) * ( 1.0 - lonje ), 0.0 ), lam );
-    }
-    // laje aparente em cada andar
-    float laje = gPulso( fv, 0.0, 0.06, d.y );
-    lam = max( lam, laje );
-    s.alb = mix( s.alb, c2 * ( 0.9 + 0.2 * dt.r ), lam );
-    s.rug = mix( s.rug, 0.75, lam );
-    s.met = mix( s.met, 0.0, lam );
-    s.emi *= 1.0 - lam;
+    gBrise( s, uvA, duv, andar, vao, vari, c1, c2, tinta, uso, tipo, vista, dt );
   } else if ( tipo == F_COBOGO ) {
-    // ---------------- cobogó: blocos vazados de 0,4 m com o fundo escuro
+    // cobogó: blocos vazados de 0,4 m com o fundo escuro
     vec2 p = vec2( um / 0.4, uvA.y / 0.4 );
     vec2 dd = vec2( duv.x * vao / 0.4, duv.y / 0.4 );
     float fu = gPulso( p.x, 0.18, 0.82, dd.x ) * gPulso( p.y, 0.18, 0.82, dd.y );
@@ -519,46 +769,41 @@ GSup gFachada() {
     s.alb = mix( c1 * ( 0.9 + 0.2 * dt.r ), vec3( 0.03, 0.03, 0.028 ), furo );
     s.ao *= 1.0 - 0.3 * furo;
     // luz da escada à noite, pelos furos
-    s.emi += vec3( 1.0, 0.82, 0.6 ) * furo * 0.12 * gNoite * step( 0.65, gH1( vec3( floor( uv.x ), floor( uvA.y / 3.0 ), id ) ) );
+    s.emi += vec3( 1.0, 0.82, 0.6 ) * furo * 0.1 * gNoite * step( 0.65, gH1( vec3( floor( uv.x ), floor( uvA.y / 3.0 ), id ) ) );
   } else if ( tipo == F_VARANDA ) {
-    // ---------------- varandas desenhadas (LOD1 e faces sem geometria): laje, guarda-corpo e o recuo escuro
-    float fv = uvA.y / andar;
-    vec2 d = vec2( duv.x, duv.y / andar );
-    float lonje = gLonge( d );
-    vec2 cel = vec2( floor( uv.x ), floor( fv ) );
-    float div = gPulso( uv.x, 0.0, 0.06, d.x );
-    float laje = gPulso( fv, 0.0, 0.07, d.y );
-    float gc = gPulso( fv, 0.07, 0.43, d.y ) * ( 1.0 - div );
-    float fundo = gPulso( fv, 0.43, 1.0, d.y ) * ( 1.0 - div );
-    // o fundo: portas de vidro na sombra da laje de cima
-    gVidro( s, fundo * gPulso( uv.x, 0.1, 0.9, d.x ), cel, vec2( 0.0 ), tinta, lonje, uso, 0.7 );
-    s.ao *= 1.0 - 0.35 * fundo;
-    // guarda-corpo: vidro claro (variante par) ou pano cheio
-    vec3 gcCor = mod( vari, 2.0 ) < 0.5 ? mix( tinta * 1.3, vec3( 0.35, 0.38, 0.38 ), 0.35 ) : c1;
-    s.alb = mix( s.alb, gcCor, gc );
-    s.met = mix( s.met, mod( vari, 2.0 ) < 0.5 ? 0.7 : 0.0, gc );
-    s.rug = mix( s.rug, mod( vari, 2.0 ) < 0.5 ? 0.12 : 0.8, gc );
-    s.alb = mix( s.alb, c2 * 1.05, laje );
-    s.rug = mix( s.rug, 0.8, laje );
-    s.emi *= 1.0 - max( laje, gc * 0.7 );
+    gVarandas( s, uvA, duv, andar, vari, c1, c2, tinta, uso, vista );
   } else if ( tipo == F_GALPAO ) {
-    // ---------------- galpão: chapa ondulada vertical e faixa de janelas alta
+    // galpão: embasamento de bloco de concreto, chapa trapezoidal acima, pilar metálico a cada vão e janelas altas
     float o = um / 0.25;
     float l = gLonge( vec2( duv.x * vao / 0.25 ) );
-    s.alb = c1 * mix( 0.9 + 0.12 * cos( 6.2832 * o ), 1.0, l ) * ( 0.85 + 0.2 * dt.r );
-    s.inc = vec2( sin( 6.2832 * o ) * 0.4 * ( 1.0 - l ), 0.0 );
-    s.met = 0.5;
+    float nerv = gPulso( o, 0.0, 0.2, duv.x * vao / 0.25 );
+    s.alb = c1 * mix( 1.0 - 0.16 * nerv, 0.96, l ) * ( 0.85 + 0.2 * dt.r );
+    s.inc = vec2( ( fract( o ) < 0.1 ? 0.35 : fract( o ) < 0.2 ? -0.35 : 0.0 ) * ( 1.0 - l ), 0.0 );
+    s.met = 0.45;
     s.rug = 0.5;
+    s.alb *= 1.0 - 0.25 * desg * smoothstep( 0.4, 0.9, dt.g ) * smoothstep( 6.0, 0.0, uv.y );
+    float pil = gPulso( uv.x, 0.0, 0.05, duv.x );
+    s.alb = mix( s.alb, c2 * 0.8, pil );
     float fv = uvA.y / andar;
     vec2 d = vec2( duv.x, duv.y / andar );
-    float jan = gPulso( fv, 0.72, 0.88, d.y ) * gPulso( uv.x, 0.06, 0.94, d.x );
-    gVidro( s, jan, vec2( floor( uv.x ), floor( fv ) ), vec2( 0.0 ), tinta, gLonge( d ), uso, 0.6 );
-    // rodapé de concreto
-    float rod = gPulso( uv.y / 100.0, 0.0, 0.012, duv.y / 100.0 );
-    s.alb = mix( s.alb, vec3( 0.34, 0.33, 0.31 ) * ( 0.8 + 0.3 * dt.r ), rod );
-    s.met = mix( s.met, 0.0, rod );
+    float jan = gPulso( fv, 0.74, 0.88, d.y ) * gPulso( uv.x, 0.08, 0.92, d.x );
+    vec2 h = gH2( vec3( floor( uv.x ), floor( fv ), id ) );
+    gVidroClaro( s, jan, h, 0.4, gLonge( d ) );
+    s.alb = mix( s.alb, vec3( 0.3, 0.31, 0.3 ), jan * 0.5 );
+    s.emi += gAcesa( h, uso, gLonge( d ) ) * jan;
+    // embasamento: bloco de concreto aparente até 1,8 m
+    float base = 1.0 - smoothstep( 1.75, 1.85, uv.y );
+    vec2 pb = vec2( um / 0.4, uv.y / 0.2 );
+    pb.x += step( 0.5, fract( pb.y * 0.5 ) ) * 0.5;
+    vec2 db = vec2( duv.x * vao / 0.4, duv.y / 0.2 );
+    float jb = max( gLinha( fract( pb.x + 0.5 ) - 0.5, 0.04, db.x ), gLinha( fract( pb.y + 0.5 ) - 0.5, 0.06, db.y ) );
+    vec3 bloco = vec3( 0.3, 0.29, 0.27 ) * ( 0.85 + 0.25 * dt.r ) * ( 1.0 - 0.2 * jb );
+    s.alb = mix( s.alb, bloco, base );
+    s.met = mix( s.met, 0.0, base );
+    s.rug = mix( s.rug, 0.9, base );
+    s.inc *= 1.0 - base;
   } else {
-    // ---------------- grade de janelas sobre o material da parede
+    // parede com janelas sobre o material dela
     if ( tipo == F_PASTILHA ) {
       // pastilha de 5 cm: rejunte que de longe some na média
       vec2 p = vec2( um / 0.05, uv.y / 0.05 );
@@ -583,20 +828,35 @@ GSup gFachada() {
       s.alb *= 1.0 - 0.28 * jt;
       s.rug = 0.8;
     }
-    gGrade( s, uvA, duv, andar, vari, c2, tinta, uso, desg, tipo );
+    gJanelas( s, uvA, duv, andar, vao, nB, vari, c1, c2, uso, desg, tipo, vista, dt );
   }
-  // pé de parede escuro (umidade e respingo) e sujeira sob a platibanda
-  s.alb *= mix( 1.0 - 0.25 * desg, 1.0, smoothstep( 0.0, 0.7, uv.y ) );
+  // pé de parede escuro (umidade e respingo)
+  s.alb *= mix( 1.0 - 0.28 * desg, 1.0, smoothstep( 0.0, 0.8, uv.y ) );
   s.alb = clamp( s.alb, 0.0, 0.8 );
   s.ao *= mix( 0.7, 1.0, smoothstep( 0.0, 1.6, uv.y ) );
   return s;
 }
 `;
 
-/** Fragmento: a superfície calculada (troca o #include <color_fragment>). */
+/**
+ * Fragmento: a superfície calculada (troca o #include <color_fragment>). A vista vai para o espaço da face (ao longo
+ * de u, para cima, para fora): é o que desloca o vidro das janelas recuadas e a face das aletas.
+ */
 export const FRAGMENTO_COR = /* glsl */ `
 #include <color_fragment>
-GSup gS = gFachada();
+vec3 gVista = vec3( 0.0, 0.0, 1.0 );
+{
+  vec3 gNf = normalize( vNormal );
+  vec3 gVv = normalize( vViewPosition );
+  vec3 gUpv = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
+  vec3 gTv = cross( gUpv, gNf );
+  float gTl = length( gTv );
+  if ( gTl > 0.3 ) {
+    gTv /= gTl;
+    gVista = vec3( dot( gVv, gTv ), dot( gVv, cross( gNf, gTv ) ), max( dot( gVv, gNf ), 0.12 ) );
+  }
+}
+GSup gS = gFachada( gVista );
 diffuseColor.rgb = gS.alb;
 // abandonado: mais escuro e sujo
 if ( mod( vIdent.y, 2.0 ) > 0.5 ) diffuseColor.rgb *= vec3( 0.62, 0.6, 0.57 );

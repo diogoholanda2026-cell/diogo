@@ -15,7 +15,7 @@ import { alturaEm } from '../../comum/altura.js';
 import { cantosRetangulo, pontoNoPoligono } from '../../comum/vetor.js';
 import { atan2, clamp } from '../../comum/util.js';
 import { Rng, semear } from '../../comum/rng.js';
-import { refDe } from '../../contratos/espelho.js';
+import { refDe, idxDaRef, gerDaRef } from '../../contratos/espelho.js';
 import { AGUA, ARESTA, TIPO_PREDIO } from '../../contratos/flags.js';
 import { VIAS } from '../../data/vias.js';
 import { PREDIOS, PREDIOS_ORDEM } from '../../data/predios.js';
@@ -219,7 +219,7 @@ function construirRuasDaVila(sim, mapa, base, nos) {
 const MISTURA = {
   principal: [['sobrado', 5], ['casa', 2], ['loja', 3], ['lojaDupla', 1], ['mercado', 1]],
   praia: [['sobrado', 7], ['casa', 3], ['casaFundo', 1], ['loja', 1]],
-  outras: [['sobrado', 8], ['casa', 3], ['casaFundo', 2]],
+  outras: [['sobrado', 10], ['casa', 3], ['casaFundo', 1]],
 };
 /** Comércio na Vila: a venda, o mercadinho e umas lojas. */
 const MAX_COMERCIO = 6;
@@ -315,7 +315,7 @@ function construirPredios(sim, mapa, base, ruas) {
   const q = [0, 0];
   const d = [0, 0];
   const ordem = ['principal', 'deCima', 'travessaNorte', 'travessaSul', 'praia', 'beiraRio', 'estrada'];
-  for (let volta = 0; volta < 2 && moradores < V.moradores; volta++) {
+  for (let volta = 0; volta < 3 && moradores < V.moradores; volta++) {
     for (const id of ordem) {
       const rua = ruas.find((r) => r.id === id);
       if (!rua) continue;
@@ -363,6 +363,7 @@ function construirPredios(sim, mapa, base, ruas) {
   return { predios: feitos, moradores };
 }
 
+/** A planta inteira dentro da área da Vila, em terra firme acima da água, com até 2,5 m de desnível e sem ocupação. */
 function cabe(base, oc, area, cx, cz, rot, w, d) {
   if (!pontoNoPoligono(cx, cz, area)) return false;
   const c = cantosRetangulo(cx, cz, rot, w, d);
@@ -371,6 +372,7 @@ function cabe(base, oc, area, cx, cz, rot, w, d) {
   for (let k = 0; k <= 4; k++) {
     const x = k < 4 ? c[2 * k] : cx;
     const z = k < 4 ? c[2 * k + 1] : cz;
+    if (k < 4 && !pontoNoPoligono(x, z, area)) return false;
     if (aguaEm(base, x, z) !== AGUA.TERRA) return false;
     const h = alturaEm(base, x, z);
     if (h < 1.3) return false;
@@ -451,6 +453,7 @@ export function registrar(sim) {
 export function noDeEntrada(sim) {
   const r = sim.json.mapa?.entrada ?? -1;
   if (r < 0) return -1;
-  const i = r % 1048576;
-  return sim.tabelas.nos.viva[i] ? i : -1;
+  const i = idxDaRef(r);
+  const N = sim.tabelas.nos;
+  return N.viva[i] && N.ger[i] === gerDaRef(r) ? i : -1;
 }

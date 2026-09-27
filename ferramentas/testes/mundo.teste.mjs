@@ -48,18 +48,25 @@ const simDoMapa = (semente = 'mundo') => criarSimulacao({ semente });
 test('mapa: grade 1025² a 8 m gerada em até 150 ms (motor aquecido), determinística, finita e em faixas reais', () => {
   const a = gerarTerreno();
   const hA = hashGrade(a.altura);
-  // tempo de CPU do processo (a máquina de teste roda outras parcelas junto; o relógio de parede mede a fila)
+  // motor aquecido: duas gerações a mais antes de medir (o otimizador do JavaScript termina de compilar os laços)
+  for (let r = 0; r < 2; r++) {
+    esquecerTerreno(MAPA_HELDOPOLIS.id);
+    gerarTerreno();
+  }
+  // tempo de CPU da thread principal (a máquina de teste roda outras parcelas junto: o relógio de parede mede a fila,
+  // e o do processo soma as threads do coletor e do compilador); o melhor de 6
+  const cpu = process.threadCpuUsage ? () => process.threadCpuUsage() : () => process.cpuUsage();
   const medidas = [];
   const paredes = [];
   let b = null;
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < 6; r++) {
     esquecerTerreno(MAPA_HELDOPOLIS.id);
-    const c0 = process.cpuUsage();
+    const c0 = cpu();
     const t0 = agora();
     b = gerarTerreno();
     paredes.push(agora() - t0);
-    const c = process.cpuUsage(c0);
-    medidas.push((c.user + c.system) / 1000);
+    const c1 = cpu();
+    medidas.push((c1.user - c0.user + c1.system - c0.system) / 1000);
   }
   const melhor = Math.min(...medidas);
   console.log(`# grade 1025²: CPU ${medidas.map((m) => m.toFixed(0)).join(', ')} ms; relógio ${paredes.map((m) => m.toFixed(0)).join(', ')} ms`);
@@ -249,12 +256,24 @@ test('Vila e rodovia: ~60 prédios e ~350 moradores, rua principal e terra, pont
   }
   assert.equal(pontes, 1);
   assert.ok(tipos.rodovia > 20 && tipos.terra > 10 && tipos.rua >= 2, JSON.stringify(tipos));
-  // greide da rodovia até 6%
+  // greide da rodovia até 6%, no vale: cortes e aterros de poucos metros (sem paredão de 40 m na encosta), e menos
+  // ainda no trecho em frente à área inicial, fora a cabeceira da ponte
+  const base = terrenoBase(sim).base;
+  let pior = 0;
+  let piorPerto = 0;
   for (let e = 0; e < A.n; e++) {
     if (!A.viva[e] || VIAS_ORDEM[A.tipo[e]] !== 'rodovia') continue;
     const g = Math.abs(A.y[2 * e + 1] - A.y[2 * e]) / A.comp[e];
     assert.ok(g <= 0.06, `rodovia com ${(g * 100).toFixed(1)}% na aresta ${e}`);
+    if (A.flags[e] & ARESTA.PONTE) continue;
+    for (const no of [A.a[e], A.b[e]]) {
+      const d = Math.abs(N.y[no] - alturaEm(base, N.x[no], N.z[no]));
+      pior = Math.max(pior, d);
+      if (N.x[no] > -1000 && N.x[no] < 1400) piorPerto = Math.max(piorPerto, d);
+    }
   }
+  assert.ok(pior < 18, `corte ou aterro de ${pior.toFixed(1)} m na rodovia`);
+  assert.ok(piorPerto < 8, `corte ou aterro de ${piorPerto.toFixed(1)} m na rodovia em frente à área inicial`);
   // nó de entrada: fim do acesso, ligado à rodovia, dentro da área inicial
   const ent = M.entrada % 1048576;
   assert.ok(N.viva[ent]);

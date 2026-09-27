@@ -53,9 +53,9 @@ export const TORRE_LAMINA = congelar({
   ],
   // andares de vento com vidro claro, forro claro iluminado e montantes contínuos: nunca mais escuros que o corpo
   faceLisa: { costura: 6, vidro: 'escuro', aletas: 'densas', passoCostura: 0.75, recuoCostura: 0.8 },
-  // aletas de bronze champanhe nas faces laterais (as de 50 m, que mostram as penas): lâminas de 0,7 m de fundo e 0,26
-  // de espessura (de lado ainda se vê o vidro entre elas)
-  aletas: { passo: 1.5, material: 'bronze', faces: 'laterais', fundo: 0.7, espessura: 0.26 },
+  // aletas de bronze champanhe nas faces laterais (as de 50 m, que mostram as penas): lâminas de 0,45 m de fundo e 0,26
+  // de espessura (a 45 graus ainda se vê metade de vidro entre elas: a torre lê como vidro com filetes, não como metal)
+  aletas: { passo: 1.5, material: 'bronze', faces: 'laterais', fundo: 0.45, espessura: 0.26 },
   // montantes das faces de frente e da face lisa (geometria no LOD0; no shader no LOD1)
   montantes: { passo: 1.5, fundo: 0.35, espessura: 0.14 },
   // lanterna de vidro de 301 a 318 sobre os 18 m de trás da lâmina 1 (na frente, o terraço-jardim de 301), aletas a
@@ -96,6 +96,39 @@ export function torreParaMundo(torre, lx, ly, lz) {
   return { x: torre.x + dx, y: ly, z: torre.z + dz };
 }
 
+/**
+ * Suaviza uma poligonal (pares x, z) pelo corte de cantos de Chaikin: cada volta troca cada aresta por dois pontos a
+ * 1/4 e 3/4 dela, e a forma converge para uma curva macia (margens de água, caminhos). Aberta, mantém as pontas.
+ * valores (opcional) anda junto, um número por ponto (a largura de um canal).
+ */
+export function suavizar(pontos, { voltas = 3, fechado = true, valores = null } = {}) {
+  let P = pontos.slice();
+  let W = valores ? valores.slice() : null;
+  for (let v = 0; v < voltas; v++) {
+    const n = P.length / 2;
+    const Q = [];
+    const U = [];
+    const m = fechado ? n : n - 1;
+    if (!fechado) {
+      Q.push(P[0], P[1]);
+      if (W) U.push(W[0]);
+    }
+    for (let i = 0; i < m; i++) {
+      const j = (i + 1) % n;
+      Q.push(0.75 * P[2 * i] + 0.25 * P[2 * j], 0.75 * P[2 * i + 1] + 0.25 * P[2 * j + 1]);
+      Q.push(0.25 * P[2 * i] + 0.75 * P[2 * j], 0.25 * P[2 * i + 1] + 0.75 * P[2 * j + 1]);
+      if (W) U.push(0.75 * W[i] + 0.25 * W[j], 0.25 * W[i] + 0.75 * W[j]);
+    }
+    if (!fechado) {
+      Q.push(P[2 * n - 2], P[2 * n - 1]);
+      if (W) U.push(W[n - 1]);
+    }
+    P = Q.map((x) => Math.round(x * 100) / 100);
+    W = W ? U : null;
+  }
+  return valores ? { pontos: P, valores: W } : P;
+}
+
 /** Contorno (pares) de um canal: eixo em pontos [x, z, ...] e meia largura por ponto. Sentido: um lado e volta. */
 export function contornoDoCanal(eixo, larguras) {
   const n = eixo.length / 2;
@@ -132,7 +165,8 @@ export function contornoDoCanal(eixo, larguras) {
  *   podio { contorno, altura }                             plataforma de Hudson Yards (lojas, praça no teto)
  *   sede { arco: { cx, cz, r, de, ate }, fundo, altura }   faixa curva com moldura de pedra e cobertura solar
  *   conselho { x, z, rot, altura }                         torre de 36 x 26 m com cantos de raio 6
- *   anel { arco | caminho, fundo, alturas }                módulos em anfiteatro, o lado de dentro em terraços verdes
+ *   anel { arco | caminho, fundo, alturas, portais? }      faixa contínua em anfiteatro (vãos de ~30 m com juntas de 3 m),
+ *                                                          o lado de dentro em terraços verdes; portais abrem vãos de 40 m
  *   biblioteca { x, z, rot }                               placa dobrada em diamante (76 x 76), esfera e pináculo
  *   vida { x, z, rot, diametro, altura }, supertree { x, z, altura }
  *   escola { x, z, rot }                                   gota baixa em volta do campo, cobertura em anel
@@ -161,10 +195,11 @@ const PLANO_A = {
       pecas: [
         {
           tipo: 'reservatorio', nivel: -2, fundo: -8, borda: 'degraus',
-          contorno: [
+          // margens macias (Chaikin): a baía interna tem a curva de uma enseada, não a de um polígono
+          contorno: suavizar([
             -60, 760, -30, 700, 30, 655, 105, 632, 190, 618, 270, 614, 345, 628, 420, 660, 490, 706, 555, 752, 612, 790,
             640, 808, 528, 922, 440, 918, 340, 908, 240, 892, 140, 866, 60, 836, -10, 804,
-          ],
+          ]),
         },
         { tipo: 'barragem', de: [648, 800], ate: [520, 930], largura: 26 },
       ],
@@ -237,8 +272,13 @@ const PLANO_A = {
 // quarteirão (Hudson Yards) segura a Torre e as Torres do Conselho e abre a praça da Biblioteca para o canal; o Anel
 // acompanha a margem sudoeste em blocos que sobem para o noroeste; a Vida marca a cabeceira do canal; a Escola e a
 // Universidade ficam nas margens, com o parque na porta.
-const CANAL_B = [-290, 250, -200, 330, -60, 410, 60, 470, 170, 530, 280, 598, 390, 672, 470, 750, 535, 830, 585, 900];
-const LARG_B = [44, 50, 60, 120, 132, 70, 56, 56, 60, 64];
+// o eixo corre da cabeceira (noroeste) à foz (sudeste) em S suave, com 25 m de amplitude, e alarga no lago do meio
+const CANAL_B0 = [
+  -290, 250, -211.3, 326.8, -129.3, 399, -41.8, 464, 51.2, 521.8, 147.5, 575, 243.8, 628.2, 336.8, 686, 424.3, 751,
+  506.3, 823.2, 585, 900,
+];
+const LARG_B0 = [44, 48, 56, 92, 132, 124, 72, 56, 56, 60, 64];
+const { pontos: CANAL_B, valores: LARG_B } = suavizar(CANAL_B0, { voltas: 3, fechado: false, valores: LARG_B0 });
 const PLANO_B = {
   id: 'B',
   nome: 'Parque-canal',
@@ -265,7 +305,7 @@ const PLANO_B = {
     },
     {
       id: 'anel', nome: 'Anel de moradia',
-      pecas: [{ tipo: 'anel', caminho: [-250, 470, -130, 540, 0, 590, 110, 640, 220, 700, 320, 760, 400, 830], fundo: 26, alturas: [66, 34], lado: 'esquerda' }],
+      pecas: [{ tipo: 'anel', caminho: suavizar([-250, 470, -130, 548, 0, 600, 110, 646, 220, 704, 320, 764, 400, 832], { voltas: 2, fechado: false }), fundo: 26, alturas: [66, 34], lado: 'esquerda', portais: [0.3, 0.63] }],
     },
     { id: 'biblioteca', nome: 'Biblioteca', pecas: [{ tipo: 'biblioteca', x: 128, z: 452, olhar: [100, 520] }] },
     {
@@ -336,7 +376,7 @@ const PLANO_C = {
       pecas: [
         {
           tipo: 'reservatorio', nivel: -3, fundo: -10, borda: 'pedra',
-          contorno: [-250, 770, -190, 736, -110, 740, -60, 780, -64, 840, -120, 876, -200, 880, -260, 846],
+          contorno: suavizar([-262, 782, -214, 738, -150, 728, -98, 748, -58, 790, -70, 842, -118, 880, -176, 872, -232, 884, -268, 840], { voltas: 2 }),
         },
       ],
     },
@@ -350,7 +390,7 @@ const PLANO_C = {
     },
     {
       id: 'anel', nome: 'Anel de moradia',
-      pecas: [{ tipo: 'anel', arco: { cx: C_CENTRO[0], cz: C_CENTRO[1], r: 540, de: 247, ate: 294 }, fundo: 28, alturas: [36, 64] }],
+      pecas: [{ tipo: 'anel', arco: { cx: C_CENTRO[0], cz: C_CENTRO[1], r: 540, de: 247, ate: 294 }, fundo: 28, alturas: [36, 64], portais: [0.5] }],
     },
     { id: 'biblioteca', nome: 'Biblioteca', pecas: [{ tipo: 'biblioteca', x: 250, z: 876, olhar: [250, 1000] }] },
     {

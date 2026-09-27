@@ -10,22 +10,29 @@ import { congelar } from '../comum/util.js';
 
 /** Paletas por material. */
 export const PALETAS = congelar({
-  // reboco pintado claro (prédios, casas de alto padrão)
-  rebocoClaro: ['#e2ddd2', '#ddd5c4', '#d8cfbd', '#e0dbd1', '#d3cdc2', '#cfc6b4'],
+  // reboco pintado claro (prédios, casas de alto padrão): branco-gelo, areia, palha, cinza claro
+  rebocoClaro: ['#e2ddd2', '#ddd5c4', '#d8cfbd', '#e0dbd1', '#d3cdc2', '#cfc6b4', '#dad2c0', '#cdcdc6', '#d6d0c2'],
   // reboco colorido de casa e de comércio de rua (tons gastos pelo sol)
-  rebocoCor: ['#cfae83', '#c49a78', '#bd8c73', '#c9a99a', '#a8b3a0', '#a2b1b6', '#d3c28f', '#b9ae9c', '#c8b59a', '#b8a58c'],
+  rebocoCor: ['#cfae83', '#c49a78', '#bd8c73', '#c9a99a', '#a8b3a0', '#a2b1b6', '#d3c28f', '#b9ae9c', '#c8b59a', '#b8a58c', '#c7b9a6', '#b4a98f'],
+  // chapisco e reboco sem pintura (casa em construção, muro de autoconstrução)
+  chapisco: ['#9e9a92', '#a8a298', '#938f88', '#aaa396'],
   concreto: ['#aaa59c', '#9f9a90', '#b4afa5', '#a39f97'],
-  pastilha: ['#8f9d91', '#a8b2b6', '#c9c1b1', '#838f97', '#b39579', '#9aa4a8', '#c4b8a2', '#7e8a80'],
+  // pastilha: os tons dos prédios dos anos 60 a 90 (bege, branca gasta, cinza-azulada, verde-oliva, marrom)
+  pastilha: ['#c9c3b5', '#d0ccc2', '#a8b1b4', '#b8a68b', '#94a095', '#9ea8ab', '#c4b8a2', '#a78e77', '#b9bcb6'],
   tijolo: ['#9a5d45', '#a4684b', '#8e5641'],
   madeira: ['#7b5b40', '#8e6c4c', '#6e5039'],
   pedra: ['#8e8a84', '#b3aa9b', '#6f6c69', '#a39b8e'],
   caixilho: ['#cfd1cf', '#3b3d3f', '#5c4b3b', '#dedfdb', '#8a8d8e'],
   vidro: ['#2b3a45', '#343f3a', '#3d3631', '#2a2f35', '#324251'],
   telha: ['#94604c', '#8a5846', '#9b6853', '#7e5244', '#8f5f4e', '#86604f'],
+  // fibrocimento ondulado, cinza e escurecido pelo tempo
+  fibro: ['#8e8d88', '#9a9892', '#85847e', '#a19f98'],
   telhaMetal: ['#9ea4a7', '#8b9296', '#a7a59d'],
+  // caixa d'água de fibra (azul desbotado pelo sol) ou de polietileno cinza
+  caixaAgua: ['#557a93', '#5e7f96', '#6b8698', '#aeb1ae'],
   laje: ['#8f8b84', '#a09a8f', '#7d7973', '#978f82'],
   toldo: ['#4b5b4f', '#6b3b35', '#3f4b58', '#857655', '#5e5e5c', '#7a5a3a'],
-  galpao: ['#b9bcbb', '#a6adb0', '#c1bdb1', '#8f999d', '#aeb3a8'],
+  galpao: ['#b9bcbb', '#a6adb0', '#c1bdb1', '#8f999d', '#aeb3a8', '#c6c7c2'],
   letreiro: ['#8e3a2e', '#2e4a63', '#9a7a3a', '#3d5c48', '#6b3a48', '#c9c4b8', '#3a3a3a'],
   metal: ['#8e9396', '#6f7477', '#a3a6a4'],
   piso: ['#8a857c', '#77736c', '#9a948a'],
@@ -38,10 +45,10 @@ export const PALETAS = congelar({
  * popular de autoconstrução, orla de Santos e Balneário) e o nível muda a tipologia.
  */
 export const ESTILOS_BAIRRO = congelar([
-  { id: 'modernista', nome: 'Modernista', paredes: ['pastilha', 'concreto', 'rebocoClaro'], fachadas: { fita: 3, janela: 2, briseH: 2, briseV: 1, cobogo: 2, painel: 1, cortina: 1 }, telha: 0.45 },
-  { id: 'contemporaneo', nome: 'Contemporâneo', paredes: ['rebocoClaro', 'concreto', 'pastilha'], fachadas: { cortina: 3, janela: 2, fita: 1, briseV: 2, painel: 2, cobogo: 0.5 }, telha: 0.35 },
-  { id: 'popular', nome: 'Popular', paredes: ['rebocoCor', 'rebocoClaro', 'tijolo'], fachadas: { janela: 4, fita: 1, pastilha: 1, cobogo: 1 }, telha: 0.6 },
-  { id: 'orla', nome: 'Orla', paredes: ['rebocoClaro', 'pastilha', 'rebocoCor'], fachadas: { janela: 2, fita: 2, cortina: 2, briseV: 1, varanda: 3 }, telha: 0.4 },
+  { id: 'modernista', nome: 'Modernista', paredes: ['pastilha', 'rebocoClaro', 'concreto'], fachadas: { fita: 1.5, janela: 3, briseH: 1.2, briseV: 1.5, cobogo: 1.5, painel: 1, cortina: 1, pastilha: 2 }, telha: 0.45, popular: 0.3 },
+  { id: 'contemporaneo', nome: 'Contemporâneo', paredes: ['rebocoClaro', 'concreto', 'pastilha'], fachadas: { cortina: 3, janela: 3, fita: 0.5, briseV: 2, painel: 2, cobogo: 0.5 }, telha: 0.35, popular: 0.2 },
+  { id: 'popular', nome: 'Popular', paredes: ['rebocoCor', 'rebocoClaro', 'tijolo'], fachadas: { janela: 5, fita: 0.5, pastilha: 1, cobogo: 1 }, telha: 0.6, popular: 0.8 },
+  { id: 'orla', nome: 'Orla', paredes: ['rebocoClaro', 'pastilha', 'rebocoCor'], fachadas: { janela: 3, fita: 1, cortina: 2, briseV: 1, varanda: 3, pastilha: 1 }, telha: 0.4, popular: 0.25 },
 ]);
 
 /**

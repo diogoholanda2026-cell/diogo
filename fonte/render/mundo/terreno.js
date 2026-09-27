@@ -17,6 +17,7 @@ import { AGUA, PREDIO, TIPO_PREDIO, CELULA } from '../../contratos/flags.js';
 import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { pedeTudo } from '../ponte.js';
+import { CELULA_M } from '../../contratos/espelho.js';
 
 // ------------------------------------------------------------------------------------------------ parâmetros
 
@@ -302,11 +303,11 @@ export function limitesAltura(P, x0, z0, x1, z1, fora = true) {
  * baixo; o filho fora do alcance vira um pedaço do tamanho do filho marcado com o nível do filho (o "morph" dele fica
  * inteiro, então ele desenha na resolução do pai). Nós só de mar fundo saem (a água opaca cobre).
  * @param {{ cam: {x,y,z}, visivel?: (caixa) => boolean, faixas: number[], P: object, fora?: boolean,
- *           copa?: number, fundo?: number }} op
+ *           copa?: number, fundo?: number, saida?: Float32Array }} op  saida: onde escrever (o quadro reusa a do atributo)
  * @returns {Float32Array} 4 por nó: x0, z0, lado, nível (e .n com o número de nós)
  */
-export function selecionarNos({ cam, visivel = () => true, faixas, P, fora = true, copa = COPA_ALTURA, fundo = -2.5, max = MAX_NOS }) {
-  const out = new Float32Array(max * 4);
+export function selecionarNos({ cam, visivel = () => true, faixas, P, fora = true, copa = COPA_ALTURA, fundo = -2.5, max = MAX_NOS, saida = null }) {
+  const out = saida && saida.length >= max * 4 ? saida : new Float32Array(max * 4);
   let n = 0;
   const caixa = { x0: 0, z0: 0, x1: 0, z1: 0, y0: 0, y1: 0 };
   const limites = (x0, z0, s) => {
@@ -365,8 +366,6 @@ export function selecionarNos({ cam, visivel = () => true, faixas, P, fora = tru
 
 // uso do solo ------------------------------------------------------------------------------------
 
-const CANAL = Object.freeze({ via: 0, piso: 1, terra: 2, gramado: 3 });
-
 function carimbar(buf, lado, t, ox, oz, x0, z0, x1, z1, cobre, canais) {
   const i0 = Math.max(0, Math.floor((x0 - ox) / t));
   const j0 = Math.max(0, Math.floor((z0 - oz) / t));
@@ -396,10 +395,32 @@ function canaisDoLote(P, i) {
   if (f & PREDIO.ABANDONADO) return [0, 0.5, 0.45, 0.2];
   if (P.tipo[i] !== TIPO_PREDIO.ZONA) return [0, 0.65, 0.05, 0.4];
   const fam = ZONAS[ZONAS_ORDEM[P.zona[i]]]?.familia;
-  if (fam === 'res') return P.nivel[i] >= 3 ? [0, 0.7, 0, 0.35 + 0.2 * s] : [0, 0.35 + 0.2 * s, 0.05, 0.62];
+  // o quintal brasileiro é quase todo cimentado; o gramado é pouco (e o jardim do prédio alto, um canteiro)
+  if (fam === 'res') return P.nivel[i] >= 3 ? [0, 0.72, 0.04, 0.26 + 0.14 * s] : [0, 0.5 + 0.2 * s, 0.12, 0.26];
   if (fam === 'com') return [0, 0.85, 0, 0.12 + 0.1 * s];
   if (fam === 'ind') return [0, 0.62, 0.3 + 0.2 * s, 0.05];
   return [0, 0.8, 0, 0.2];
+}
+
+/**
+ * Canais de uma célula de zona: vazia é terreno baldio (terra batida e capim ralo, mais terra perto da rua), ocupada é
+ * quintal (cimentado e um pouco de terra). O lote do prédio vem por cima.
+ */
+function canaisDaCelula(C, c) {
+  const frente = C.linha ? Math.max(0, 1 - C.linha[c] / 5) : 0.5;
+  if (C.estado[c] === CELULA.OCUPADA) return [0, 0.36 + 0.12 * frente, 0.16, 0.1];
+  return [0, 0.03, 0.12 + 0.1 * frente, 0.1];
+}
+
+/** Caixa de uma célula de zona (com a folga do giro), ou null. out evita alocar (o laço do uso do solo reusa um). */
+export function caixaCelula(C, c, out = [0, 0, 0, 0]) {
+  if (!C.viva[c] || !C.zona[c] || C.estado[c] === CELULA.INVALIDA) return null;
+  const r = CELULA_M * 0.75 + 2;
+  out[0] = C.x[c] - r;
+  out[1] = C.z[c] - r;
+  out[2] = C.x[c] + r;
+  out[3] = C.z[c] + r;
+  return out;
 }
 
 /** Largura da calçada de cada lado de uma via (m), pelo perfil de data/vias.js. */
@@ -420,70 +441,118 @@ function bezierPonto(p, o, t, out) {
 }
 
 /** Caixa (x0, z0, x1, z1) de uma aresta com a meia largura, ou null. */
-export function caixaAresta(A, e) {
+export function caixaAresta(A, e, out = [0, 0, 0, 0]) {
   if (!A.viva[e]) return null;
   const tipo = VIAS[VIAS_ORDEM[A.tipo[e]]] ?? VIAS.rua;
   const m = tipo.largura / 2 + 4;
+  const p = A.p;
   const o = 8 * e;
-  const xs = [A.p[o], A.p[o + 2], A.p[o + 4], A.p[o + 6]];
-  const zs = [A.p[o + 1], A.p[o + 3], A.p[o + 5], A.p[o + 7]];
-  return [Math.min(...xs) - m, Math.min(...zs) - m, Math.max(...xs) + m, Math.max(...zs) + m];
+  out[0] = Math.min(p[o], p[o + 2], p[o + 4], p[o + 6]) - m;
+  out[1] = Math.min(p[o + 1], p[o + 3], p[o + 5], p[o + 7]) - m;
+  out[2] = Math.max(p[o], p[o + 2], p[o + 4], p[o + 6]) + m;
+  out[3] = Math.max(p[o + 1], p[o + 3], p[o + 5], p[o + 7]) + m;
+  return out;
 }
 
 /** Caixa de um prédio (planta girada), ou null. */
-export function caixaPredio(P, i) {
+export function caixaPredio(P, i, out = [0, 0, 0, 0]) {
   if (!P.viva[i]) return null;
   const r = Math.hypot(P.w[i], P.d[i]) / 2 + 4;
-  return [P.x[i] - r, P.z[i] - r, P.x[i] + r, P.z[i] + r];
+  out[0] = P.x[i] - r;
+  out[1] = P.z[i] - r;
+  out[2] = P.x[i] + r;
+  out[3] = P.z[i] + r;
+  return out;
 }
 
 const cruza = (a, b) => a && b && a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 
 /**
  * Uso do solo (RGBA8 lado x lado sobre o mapa): R via (asfalto e calçada escura), G piso (lotes e calçadas), B terra
- * batida (ruas de terra, obra), A gramado dos lotes. Refaz o retângulo ret = [x0, z0, x1, z1] em metros (tudo sem ret).
+ * batida (ruas de terra, obra), A gramado dos lotes. Refaz o retângulo ret = [x0, z0, x1, z1] em metros, ou uma lista
+ * deles, numa passada só pelas tabelas (tudo sem ret). Devolve os texels refeitos, [i0, j0, i1, j1] (uma lista se ret
+ * era uma lista).
  */
 export function rasterizarUso(esp, buf, lado, mapa, ret = null) {
   const t = mapa.lado / lado;
   const ox = mapa.ox;
   const oz = mapa.oz;
-  const r = ret ?? [ox, oz, ox + mapa.lado, oz + mapa.lado];
-  const i0 = Math.max(0, Math.floor((r[0] - ox) / t));
-  const j0 = Math.max(0, Math.floor((r[1] - oz) / t));
-  const i1 = Math.min(lado - 1, Math.ceil((r[2] - ox) / t));
-  const j1 = Math.min(lado - 1, Math.ceil((r[3] - oz) / t));
-  for (let j = j0; j <= j1; j++) buf.fill(0, 4 * (j * lado + i0), 4 * (j * lado + i1 + 1));
-  const recorte = [ox + i0 * t, oz + j0 * t, ox + (i1 + 1) * t, oz + (j1 + 1) * t];
-  const limitar = (b) => [Math.max(b[0], recorte[0]), Math.max(b[1], recorte[1]), Math.min(b[2], recorte[2]), Math.min(b[3], recorte[3])];
-  // lotes primeiro, vias por cima (max por canal)
+  const lista = ret == null ? [[ox, oz, ox + mapa.lado, oz + mapa.lado]] : Array.isArray(ret[0]) ? ret : [ret];
+  // limpa todos os retângulos antes de carimbar (um item que cruza dois é carimbado nos dois)
+  const texels = [];
+  const recortes = [];
+  const tudo = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const r of lista) {
+    const i0 = Math.max(0, Math.floor((r[0] - ox) / t));
+    const j0 = Math.max(0, Math.floor((r[1] - oz) / t));
+    const i1 = Math.min(lado - 1, Math.ceil((r[2] - ox) / t));
+    const j1 = Math.min(lado - 1, Math.ceil((r[3] - oz) / t));
+    texels.push([i0, j0, i1, j1]);
+    if (i1 < i0 || j1 < j0) continue;
+    for (let j = j0; j <= j1; j++) buf.fill(0, 4 * (j * lado + i0), 4 * (j * lado + i1 + 1));
+    const rc = [ox + i0 * t, oz + j0 * t, ox + (i1 + 1) * t, oz + (j1 + 1) * t];
+    recortes.push(rc);
+    tudo[0] = Math.min(tudo[0], rc[0]);
+    tudo[1] = Math.min(tudo[1], rc[1]);
+    tudo[2] = Math.max(tudo[2], rc[2]);
+    tudo[3] = Math.max(tudo[3], rc[3]);
+  }
+  const lim = (b, rc) => [Math.max(b[0], rc[0]), Math.max(b[1], rc[1]), Math.min(b[2], rc[2]), Math.min(b[3], rc[3])];
+  const cx = [0, 0, 0, 0]; // caixa de trabalho (sem alocar por item: a cidade tem centenas de milhares de células)
+  // células de zona, lotes e vias (max por canal)
+  const C = esp.celulas;
+  if (C && recortes.length) {
+    const m = CELULA_M / 2;
+    for (let c = 0; c < C.n; c++) {
+      if (!cruza(caixaCelula(C, c, cx), tudo)) continue;
+      const cs = Math.cos(C.ang[c]);
+      const sn = Math.sin(C.ang[c]);
+      const x = C.x[c];
+      const z = C.z[c];
+      const cobre = (px, pz) => {
+        const dx = px - x;
+        const dz = pz - z;
+        return cobertura(Math.max(Math.abs(dx * cs - dz * sn), Math.abs(dx * sn + dz * cs)) - m, t);
+      };
+      const canais = canaisDaCelula(C, c);
+      for (const rc of recortes) {
+        if (!cruza(cx, rc)) continue;
+        const b = lim(cx, rc);
+        carimbar(buf, lado, t, ox, oz, b[0], b[1], b[2], b[3], cobre, canais);
+      }
+    }
+  }
   const P = esp.predios;
-  if (P) {
+  if (P && recortes.length) {
     for (let i = 0; i < P.n; i++) {
-      const cx = caixaPredio(P, i);
-      if (!cruza(cx, recorte)) continue;
+      if (!cruza(caixaPredio(P, i, cx), tudo)) continue;
       const cs = Math.cos(P.rot[i]);
       const sn = Math.sin(P.rot[i]);
       const hw = P.w[i] / 2;
       const hd = P.d[i] / 2;
       const x = P.x[i];
       const z = P.z[i];
-      const b = limitar(cx);
-      carimbar(buf, lado, t, ox, oz, b[0], b[1], b[2], b[3], (px, pz) => {
+      const cobre = (px, pz) => {
         const dx = px - x;
         const dz = pz - z;
         const lx = dx * cs - dz * sn;
         const lz = dx * sn + dz * cs;
         return cobertura(Math.max(Math.abs(lx) - hw, Math.abs(lz) - hd), t);
-      }, canaisDoLote(P, i));
+      };
+      const canais = canaisDoLote(P, i);
+      for (const rc of recortes) {
+        if (!cruza(cx, rc)) continue;
+        const b = lim(cx, rc);
+        carimbar(buf, lado, t, ox, oz, b[0], b[1], b[2], b[3], cobre, canais);
+      }
     }
   }
   const A = esp.vias?.arestas;
-  if (A) {
+  if (A && recortes.length) {
     const a = [0, 0];
     const b = [0, 0];
     for (let e = 0; e < A.n; e++) {
-      const cx = caixaAresta(A, e);
-      if (!cruza(cx, recorte)) continue;
+      if (!cruza(caixaAresta(A, e, cx), tudo)) continue;
       const tipo = VIAS[VIAS_ORDEM[A.tipo[e]]] ?? VIAS.rua;
       const meia = tipo.largura / 2;
       const calc = calcadaDe(tipo);
@@ -491,32 +560,104 @@ export function rasterizarUso(esp, buf, lado, mapa, ret = null) {
       const pista = meia - calc;
       const o = 8 * e;
       const passos = Math.max(2, Math.ceil((A.comp?.[e] || 60) / 6));
-      bezierPonto(A.p, o, 0, a);
-      for (let s = 1; s <= passos; s++) {
-        bezierPonto(A.p, o, s / passos, b);
-        const ax = a[0];
-        const az = a[1];
-        const vx = b[0] - ax;
-        const vz = b[1] - az;
-        const l2 = vx * vx + vz * vz || 1;
-        const dSeg = (px, pz) => {
-          const u = Math.min(1, Math.max(0, ((px - ax) * vx + (pz - az) * vz) / l2));
-          return Math.hypot(px - ax - vx * u, pz - az - vz * u);
-        };
-        const bb = limitar([Math.min(ax, b[0]) - meia - t, Math.min(az, b[1]) - meia - t, Math.max(ax, b[0]) + meia + t, Math.max(az, b[1]) + meia + t]);
-        if (bb[2] >= bb[0] && bb[3] >= bb[1]) {
-          if (terra) carimbar(buf, lado, t, ox, oz, bb[0], bb[1], bb[2], bb[3], (px, pz) => cobertura(dSeg(px, pz) - meia, t), [0, 0, 1, 0]);
-          else {
-            if (calc > 0) carimbar(buf, lado, t, ox, oz, bb[0], bb[1], bb[2], bb[3], (px, pz) => cobertura(dSeg(px, pz) - meia, t), [0, 1, 0, 0]);
-            carimbar(buf, lado, t, ox, oz, bb[0], bb[1], bb[2], bb[3], (px, pz) => cobertura(dSeg(px, pz) - pista, t), [1, 0, 0, 0]);
+      for (const rc of recortes) {
+        if (!cruza(cx, rc)) continue;
+        bezierPonto(A.p, o, 0, a);
+        for (let s = 1; s <= passos; s++) {
+          bezierPonto(A.p, o, s / passos, b);
+          const ax = a[0];
+          const az = a[1];
+          const vx = b[0] - ax;
+          const vz = b[1] - az;
+          const l2 = vx * vx + vz * vz || 1;
+          const dSeg = (px, pz) => {
+            const u = Math.min(1, Math.max(0, ((px - ax) * vx + (pz - az) * vz) / l2));
+            return Math.hypot(px - ax - vx * u, pz - az - vz * u);
+          };
+          const bb = lim([Math.min(ax, b[0]) - meia - t, Math.min(az, b[1]) - meia - t, Math.max(ax, b[0]) + meia + t, Math.max(az, b[1]) + meia + t], rc);
+          if (bb[2] >= bb[0] && bb[3] >= bb[1]) {
+            if (terra) carimbar(buf, lado, t, ox, oz, bb[0], bb[1], bb[2], bb[3], (px, pz) => cobertura(dSeg(px, pz) - meia, t), [0, 0, 1, 0]);
+            else {
+              if (calc > 0) carimbar(buf, lado, t, ox, oz, bb[0], bb[1], bb[2], bb[3], (px, pz) => cobertura(dSeg(px, pz) - meia, t), [0, 1, 0, 0]);
+              carimbar(buf, lado, t, ox, oz, bb[0], bb[1], bb[2], bb[3], (px, pz) => cobertura(dSeg(px, pz) - pista, t), [1, 0, 0, 0]);
+            }
           }
+          a[0] = b[0];
+          a[1] = b[1];
         }
-        a[0] = b[0];
-        a[1] = b[1];
       }
     }
   }
-  return [i0, j0, i1, j1];
+  return ret != null && Array.isArray(ret[0]) ? texels : texels[0];
+}
+
+/**
+ * Caixas guardadas por índice (x0, z0, x1, z1; NaN sem caixa) numa Float32Array que cresce: a caixa velha de um item
+ * que mudou (o uso do solo refaz onde ele estava e onde está), sem um array por célula.
+ */
+export class CaixasGuardadas {
+  constructor() {
+    this.d = new Float32Array(0);
+  }
+
+  garantir(n) {
+    if (this.d.length >= 4 * n) return;
+    const d = new Float32Array(Math.max(4 * n, 2 * this.d.length, 256)).fill(NaN);
+    d.set(this.d);
+    this.d = d;
+  }
+
+  /** A caixa guardada do item k (um array novo) ou null. */
+  ler(k) {
+    const o = 4 * k;
+    if (o >= this.d.length || Number.isNaN(this.d[o])) return null;
+    return [this.d[o], this.d[o + 1], this.d[o + 2], this.d[o + 3]];
+  }
+
+  gravar(k, caixa) {
+    this.garantir(k + 1);
+    const o = 4 * k;
+    if (caixa) this.d.set(caixa, o);
+    else this.d.fill(NaN, o, o + 4);
+  }
+
+  /** Refaz todas pelas tabelas (n itens, caixa(k, out) de caixaCelula, caixaPredio ou caixaAresta). */
+  refazer(n, caixa) {
+    this.d = new Float32Array(0);
+    this.garantir(n);
+    const out = [0, 0, 0, 0];
+    for (let k = 0; k < n; k++) this.gravar(k, caixa(k, out));
+  }
+}
+
+/**
+ * Junta os retângulos que se tocam (até não sobrar par que se cruze) e, se ainda sobrarem mais que max, devolve a
+ * união de todos. Evita refazer a mesma área várias vezes e, no mapa de cor, assar o mapa inteiro por causa de duas
+ * mudanças longe uma da outra.
+ */
+export function juntarRetangulos(rets, max = Infinity) {
+  let lista = rets.map((r) => r.slice(0, 4));
+  // passadas até nenhum par se cruzar (cada passada junta cada um no primeiro que ele cruza)
+  for (let mudou = true; mudou; ) {
+    mudou = false;
+    const saida = [];
+    for (const r of lista) {
+      const q = saida.find((o) => cruza(o, r));
+      if (!q) {
+        saida.push(r);
+        continue;
+      }
+      q[0] = Math.min(q[0], r[0]);
+      q[1] = Math.min(q[1], r[1]);
+      q[2] = Math.max(q[2], r[2]);
+      q[3] = Math.max(q[3], r[3]);
+      mudou = true;
+    }
+    lista = saida;
+  }
+  if (lista.length <= max) return lista;
+  const u = lista.reduce((q, r) => [Math.min(q[0], r[0]), Math.min(q[1], r[1]), Math.max(q[2], r[2]), Math.max(q[3], r[3])]);
+  return [u];
 }
 
 /**
@@ -552,8 +693,6 @@ export function rasterizarCelulas(esp, buf, lado, mapa, valor = null) {
 }
 
 // ------------------------------------------------------------------------------------------------ material
-
-const linear = (hex) => new THREE.Color(hex);
 
 /** Uniformes do chão (um objeto só: o terreno, o assado e a água usam os mesmos). */
 export function criarUniformes() {
@@ -709,9 +848,20 @@ class Assador {
     this.vezes++;
   }
 
+  /** Assa vários retângulos; os mipmaps saem uma vez só, no último (o three os refaz a cada render no alvo). */
+  assarVarios(mapa, rets) {
+    const tex = this.alvo.texture;
+    rets.forEach((r, k) => {
+      tex.generateMipmaps = k === rets.length - 1;
+      this.assar(mapa, r);
+    });
+    tex.generateMipmaps = true;
+  }
+
   descartar() {
     this.alvo.dispose();
     this.mat.dispose();
+    for (const m of this.cena.children) m.geometry.dispose();
   }
 }
 
@@ -736,7 +886,8 @@ function criarTerreno(ctx) {
   const modo = modoMateriais();
   const estado = {
     T: null, F: null, dist: null, dados: null, P: null, uso: null, mapa: null, texAlt: null, texDados: null, texUso: null,
-    assador: null, sujoCor: null, sujoUso: [], ultimoAssado: -1e9, caixasA: [], caixasP: [], camadasCC0: null,
+    assador: null, sujoCor: [], ultimoAssado: -1e9, camadasCC0: null, faixas: null,
+    caixasA: new CaixasGuardadas(), caixasP: new CaixasGuardadas(), caixasC: new CaixasGuardadas(),
     sobre: { camada: null, zona: false, ladrilhos: false, texZona: null, texCamada: null, texLad: null, zonaSuja: true },
     ab: false, instAssinatura: '',
   };
@@ -748,7 +899,8 @@ function criarTerreno(ctx) {
   function ligarDetalhe() {
     pt = PERFIL_TERRENO[ctx.perfil.id] ?? PERFIL_TERRENO.media;
     U.uTerDetalhe.value.set(pt.detalhe, pt.faixa, 1, pt.copaRelevo);
-    faixasCDLOD(pt.r0).forEach((r, l) => U.uTerMorph.value[l].set(MORPH.inicio * r, 1 / ((MORPH.fim - MORPH.inicio) * r)));
+    estado.faixas = faixasCDLOD(pt.r0);
+    estado.faixas.forEach((r, l) => U.uTerMorph.value[l].set(MORPH.inicio * r, 1 / ((MORPH.fim - MORPH.inicio) * r)));
     if (pt.detalhe > 0) {
       const t = ctx.textura('chao.camadas');
       U.uTerCamadas.value = t;
@@ -834,8 +986,8 @@ function criarTerreno(ctx) {
       estado.texUso = tu;
       U.uTerUso.value = tu;
     }
-    rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
     guardarCaixas(esp);
+    rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
     estado.texUso.needsUpdate = true;
     // mapa de cor
     const ladoCor = pt.cor;
@@ -844,7 +996,7 @@ function criarTerreno(ctx) {
       estado.assador = new Assador(ctx.renderer, U, ladoCor, pt.aniso);
       U.uTerCor.value = estado.assador.alvo.texture;
     }
-    estado.sujoCor = null;
+    estado.sujoCor = [];
     estado.assador.assar(estado.mapa);
     estado.sobre.zonaSuja = true;
     atualizarSobre(esp);
@@ -853,14 +1005,15 @@ function criarTerreno(ctx) {
   function guardarCaixas(esp) {
     const A = esp.vias?.arestas;
     const P = esp.predios;
-    estado.caixasA = [];
-    estado.caixasP = [];
-    if (A) for (let e = 0; e < A.n; e++) estado.caixasA[e] = caixaAresta(A, e);
-    if (P) for (let i = 0; i < P.n; i++) estado.caixasP[i] = caixaPredio(P, i);
+    const C = esp.celulas;
+    estado.caixasA.refazer(A?.n ?? 0, (e, out) => caixaAresta(A, e, out));
+    estado.caixasP.refazer(P?.n ?? 0, (i, out) => caixaPredio(P, i, out));
+    estado.caixasC.refazer(C?.n ?? 0, (c, out) => caixaCelula(C, c, out));
   }
 
+  /** Marca um retângulo do mapa de cor para assar de novo (juntos os que se tocam; até 16 separados, senão a união). */
   function sujarCor(r) {
-    estado.sujoCor = unir(estado.sujoCor, r);
+    estado.sujoCor = juntarRetangulos([...estado.sujoCor, r], 16);
   }
 
   /** Retângulos sujos do terreno (aplainar) e da floresta: refaz dados, alturas e a pirâmide no pedaço. */
@@ -886,13 +1039,13 @@ function criarTerreno(ctx) {
     if (tudo) sujarCor(tudo);
   }
 
+  /** Refaz o uso do solo nos retângulos (uma passada pelas tabelas para todos) e marca o mapa de cor. */
   function refazerUso(esp, rets) {
-    const mapa = estado.mapa;
-    for (const r of rets) {
-      const [i0, j0, i1, j1] = rasterizarUso(esp, estado.uso, LADO_USO, mapa, r);
+    const texels = rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa, rets);
+    for (const [i0, j0, i1, j1] of texels) {
       for (let j = j0; j <= j1; j++) estado.texUso.addUpdateRange(4 * (j * LADO_USO + i0), 4 * (i1 - i0 + 1));
-      sujarCor(r);
     }
+    for (const r of rets) sujarCor(r);
     estado.texUso.needsUpdate = true;
   }
 
@@ -900,30 +1053,19 @@ function criarTerreno(ctx) {
     const rets = [];
     const A = esp.vias?.arestas;
     const P = esp.predios;
-    if (pedeTudo(d, 'vias') || pedeTudo(d, 'arestas') || pedeTudo(d, 'predios')) return 'tudo';
-    for (const e of d.arestas ?? []) {
-      const velha = estado.caixasA[e];
-      const nova = A ? caixaAresta(A, e) : null;
+    const C = esp.celulas;
+    if (pedeTudo(d, 'vias') || pedeTudo(d, 'arestas') || pedeTudo(d, 'predios') || pedeTudo(d, 'celulas')) return 'tudo';
+    const trocar = (cache, k, nova) => {
+      const velha = cache.ler(k);
       if (velha) rets.push(velha);
       if (nova) rets.push(nova);
-      estado.caixasA[e] = nova;
-    }
-    for (const i of d.predios ?? []) {
-      const velha = estado.caixasP[i];
-      const nova = P ? caixaPredio(P, i) : null;
-      if (velha) rets.push(velha);
-      if (nova) rets.push(nova);
-      estado.caixasP[i] = nova;
-    }
-    if (rets.length > 48) return 'tudo';
-    // junta os que se tocam (evita refazer a mesma área várias vezes)
-    const juntos = [];
-    for (const r of rets) {
-      const j = juntos.find((q) => cruza(q, r));
-      if (j) Object.assign(j, unir(j, r));
-      else juntos.push(r.slice());
-    }
-    return juntos;
+      cache.gravar(k, nova);
+    };
+    for (const c of d.celulas ?? []) trocar(estado.caixasC, c, C ? caixaCelula(C, c) : null);
+    for (const e of d.arestas ?? []) trocar(estado.caixasA, e, A ? caixaAresta(A, e) : null);
+    for (const i of d.predios ?? []) trocar(estado.caixasP, i, P ? caixaPredio(P, i) : null);
+    if (rets.length > 4096) return 'tudo';
+    return juntarRetangulos(rets);
   }
 
   // ---------------------------------------------------------------- sobreposições
@@ -1068,9 +1210,9 @@ function criarTerreno(ctx) {
       m4.multiplyMatrices(camCorte.projectionMatrix, cam.matrixWorldInverse);
     } else m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     frustum.setFromProjectionMatrix(m4);
-    const nos = selecionarNos({ cam: cam.position, visivel, faixas: faixasCDLOD(pt.r0), P: estado.P, fora: U.uTerFora.value.x > 0.5 });
+    // escreve direto no atributo (sem um Float32Array novo por quadro)
     const attr = geo.getAttribute('aNo');
-    attr.array.set(nos);
+    const nos = selecionarNos({ cam: cam.position, visivel, faixas: estado.faixas, P: estado.P, fora: U.uTerFora.value.x > 0.5, saida: attr.array });
     attr.clearUpdateRanges();
     attr.addUpdateRange(0, nos.n * 4);
     attr.needsUpdate = true;
@@ -1095,8 +1237,8 @@ function criarTerreno(ctx) {
       if (floresta.length) refazerTerreno(esp, floresta, false);
       const uso = mudancasDeUso(d, esp);
       if (uso === 'tudo') {
-        rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
         guardarCaixas(esp);
+        rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
         estado.texUso.needsUpdate = true;
         sujarCor([estado.mapa.ox, estado.mapa.oz, estado.mapa.ox + estado.mapa.lado, estado.mapa.oz + estado.mapa.lado]);
       } else if (uso.length) refazerUso(esp, uso);
@@ -1108,9 +1250,9 @@ function criarTerreno(ctx) {
     },
     quadro(tMs, c) {
       const agora = typeof performance !== 'undefined' ? performance.now() : tMs;
-      if (estado.sujoCor && estado.assador && agora - estado.ultimoAssado > 200) {
-        estado.assador.assar(estado.mapa, estado.sujoCor);
-        estado.sujoCor = null;
+      if (estado.sujoCor.length && estado.assador && agora - estado.ultimoAssado > 200) {
+        estado.assador.assarVarios(estado.mapa, estado.sujoCor);
+        estado.sujoCor = [];
         estado.ultimoAssado = agora;
       }
       U.uTerEstacao.value = estacaoSeca(c.sim.espelho.tempo?.diaDoAno);

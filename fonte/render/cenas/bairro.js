@@ -1,6 +1,7 @@
 // Cena 'bairro' (desenho do render 15.2, A10: 9h): um bairro misto da cidade sintética (casas, lojas de rua, prédios
 // médios, torres e escritórios) a 400 m e 45 graus, para a troca LOD0/LOD1 e a sombra de perto. ?vista= troca a câmera
-// sem sair do lugar: rua (nível da calçada), 50, 200 (metros), lod1 (1,1 km) e lod2 (3,2 km); ?hora= a hora do céu.
+// sem sair do lugar: rua (nível da calçada), 50, 200 (metros), lod1 (1,1 km) e lod2 (3,2 km), e as de tipologia
+// (torres, escritorios, industria, orla); ?hora= a hora do céu.
 // A cena espera a oficina entregar os setores da vista (predios.preparar) antes de liberar a captura, e o resultado
 // traz as medidas do gerador (setores, LOD0 visíveis, instâncias, triângulos por LOD, memória, sombra).
 
@@ -15,6 +16,11 @@ export const VISTAS = Object.freeze({
   200: { dist: 200, inclinacao: 30, x: 330, z: -880, guinada: 20 },
   lod1: { dist: 1100, inclinacao: 30 },
   lod2: { dist: 3200, inclinacao: 24 },
+  // de perto, por tipologia: torres residenciais sobre pódio, escritórios, galpões e prédios médios da orla
+  torres: { dist: 170, inclinacao: 20, x: -157, z: -675, guinada: 35 },
+  escritorios: { dist: 190, inclinacao: 16, x: -381, z: -517, guinada: 210 },
+  industria: { dist: 150, inclinacao: 28, x: 1231, z: -661, guinada: 60 },
+  orla: { dist: 150, inclinacao: 20, x: 420, z: 1718, guinada: 330 },
 });
 
 export function registrar(registrarCena) {

@@ -48,8 +48,9 @@ const SOMBRA = {
   fragmento: { pars: SOMBRA_PARS, sol: SOMBRA_SOL, indireta: '', fim: '' },
 };
 
-// 'neblina': de altura com perspectiva aérea; a cor é o anel do horizonte do céu (materiais/shaders/neblina.glsl.js).
-// Os valores vêm de ambiente/neblina.js a cada quadro; o céu lê o mesmo anel.
+// 'neblina': de altura com perspectiva aérea (materiais/shaders/neblina.glsl.js): a luz do ar baixo (sol em
+// Henyey-Greenstein e luz ambiente) perto, o anel do horizonte do céu quando o caminho satura. Os valores vêm de
+// ambiente/neblina.js a cada quadro; o céu lê o mesmo anel.
 const NEBLINA = {
   uniformes: {
     gNeblinaBeta: { value: new THREE.Vector3(1.5e-4, 1.72e-4, 2.2e-4) }, // extinção por metro no nível do mar
@@ -58,6 +59,11 @@ const NEBLINA = {
     gNeblinaAnel: { value: Array.from({ length: 12 }, () => new THREE.Vector3(0.62, 0.7, 0.8)) }, // linear
     gNeblinaZenite: { value: new THREE.Vector3(0.3, 0.45, 0.7) },
     gNeblinaSolDir: { value: new THREE.Vector3(0, 1, 0) },
+    gNeblinaSolCor: { value: new THREE.Vector3(0, 0, 0) }, // sol que o ar baixo espalha (irradiância vezes o albedo do ar)
+    gNeblinaAmb: { value: new THREE.Vector3(0.1, 0.12, 0.15) }, // luz ambiente que o ar baixo espalha (céu, chão, cidade)
+    gNeblinaG: { value: 0.6 }, // anisotropia do lóbulo do sol (Henyey-Greenstein)
+    // uma cor só do horizonte ao lado do sol (linear), para shaders próprios que não leem o anel (nome da F0)
+    gNeblinaCor: { value: new THREE.Color(0.62, 0.7, 0.8) },
   },
   vertice: { pars: '', main: '' },
   fragmento: { pars: NEBLINA_PARS, sol: '', indireta: '', fim: NEBLINA_FIM },

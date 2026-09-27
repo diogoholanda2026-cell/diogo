@@ -44,7 +44,8 @@ export class Quadro {
     this._corLimpa = new THREE.Color(0, 0, 0);
     this._db = new THREE.Vector2();
     // mede a tela só quando ela muda (ler o layout a cada quadro força o navegador a refazê-lo depois da interface)
-    if (typeof addEventListener !== 'undefined') addEventListener('resize', () => (this._medir = true));
+    this._aoMudarTela = () => (this._medir = true);
+    if (typeof addEventListener !== 'undefined') addEventListener('resize', this._aoMudarTela);
   }
 
   /** Tamanho da tela em px CSS (no começo do quadro, só depois de um resize ou de trocar a razão de pixels). */
@@ -122,6 +123,7 @@ export class Quadro {
   }
 
   descartar() {
+    if (typeof removeEventListener !== 'undefined') removeEventListener('resize', this._aoMudarTela);
     this.pos.descartar();
   }
 }

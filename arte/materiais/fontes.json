@@ -1,0 +1,111 @@
+{
+  "nota": "Fotos CC0 do chão (D46), na ordem de PALETA_CHAO. Cada camada é um material da ambientCG (CC0) na versão 1K-JPG, sem edição. O proxy desta máquina recusa ambientcg.com; as cópias vieram de espelhos no GitHub (raw.githubusercontent.com), conferidas pelo sha256 e, quando havia mais de um espelho, iguais byte a byte entre eles. codificar-texturas.mjs --baixar refaz a pasta fonte/ a partir daqui.",
+  "licenca": "CC0 1.0 (https://docs.ambientcg.com/license/)",
+  "camadas": {
+    "grama": {
+      "ambientcg": "Grass004",
+      "cor": {
+        "sha256": "9e1c60da44b34a9738b1256ba827541f097dc583521b1d281e61b5f4b4217bc5",
+        "espelhos": [
+          "spimort/TerraBrush/demo/Assets/cc0_textures/Grass/Grass004_1K-JPG_Color.jpg",
+          "noava/monke-sim/assets/textures/Grass/Grass004_1K-JPG_Color.jpg",
+          "DigitallyTailored/godot4-mp-client-position-sync/materials/grass/Grass004_1K-JPG_Color.jpg"
+        ]
+      },
+      "altura": {
+        "sha256": "8268bbb7075ea22714913ab3f38a9ff35a2c759cb7d4961a2e87d0ef29b1b849",
+        "espelhos": ["spimort/TerraBrush/demo/Assets/cc0_textures/Grass/Grass004_1K-JPG_Displacement.jpg"]
+      }
+    },
+    "capim": {
+      "ambientcg": "Ground073",
+      "cor": {
+        "sha256": "6ed644737b6c568670a00f4d660a59cc7a84ca2848917e59ee283cf6277ac0a7",
+        "espelhos": ["Nielstupido/PinTails/PinTails/Textures/Dirt/Ground073_1K-JPG_Color.jpg"]
+      },
+      "altura": {
+        "sha256": "97670e39629e5a953e2b98f7f901fea8c4f9014f2594ae51de0d9a95dc2876cb",
+        "espelhos": ["Nielstupido/PinTails/PinTails/Textures/Dirt/Ground073_1K-JPG_Displacement.jpg"]
+      }
+    },
+    "terraRoxa": {
+      "ambientcg": "Ground067",
+      "cor": {
+        "sha256": "e6bce1dd438558de561a18be36683d099cd1f9dbf4eb69414a907991c6c80144",
+        "espelhos": [
+          "AlexDergach/Snake-Simulation/Assets/Textures/RockSand/Ground067_1K-JPG_Color.jpg",
+          "Seerban/godot-vehicle/Material/Assets/Ground067_1K-JPG/Ground067_1K-JPG_Color.jpg"
+        ]
+      },
+      "altura": {
+        "sha256": "45e652e0f1014ae5e3de768a3be6c1a8467219e95966a8a14e5e9266aa38ed0b",
+        "espelhos": ["Seerban/godot-vehicle/Material/Assets/Ground067_1K-JPG/Ground067_1K-JPG_Displacement.jpg"]
+      }
+    },
+    "terraClara": {
+      "ambientcg": "Ground103",
+      "cor": {
+        "sha256": "22650b378d43e7f62bf32c23aebf39a735c5e978ac27fac39827e142e6bd9ddf",
+        "espelhos": [
+          "aheckman3/Dart/Assets/Art/Ground103_1K-JPG_Color.jpg",
+          "jaFriend/Isosweeper/assets/block/Ground103_1K-JPG_Color.jpg"
+        ]
+      }
+    },
+    "granito": {
+      "ambientcg": "Rock050",
+      "cor": {
+        "sha256": "6d0e6458909008a46efe1b2dffe92bfde48880c8f7003aa2174e1153478ab2a1",
+        "espelhos": [
+          "AlexDergach/Snake-Simulation/Assets/Textures/Rock/Rock050_1K-JPG_Color.jpg",
+          "AlekseySilver/SpaceAkroSport/textures/Rock050_1K-JPG_Color.jpg",
+          "ShockBock/TheOpenWastes/images/Textures/Rock/Rock050_1K-JPG_Color.jpg"
+        ]
+      },
+      "altura": {
+        "sha256": "b9f81f77592a60aef82f8baf266e4c73e35dff91a2a906e3fa184814bd60a158",
+        "espelhos": ["AlexDergach/Snake-Simulation/Assets/Textures/Rock/Rock050_1K-JPG_Displacement.jpg"]
+      }
+    },
+    "areia": {
+      "ambientcg": "Ground080",
+      "cor": {
+        "sha256": "99c3ed6b80e59253f5755460f527d2a37f1c3d8088be624ad10469f41998f5be",
+        "espelhos": [
+          "LuDoSniper/DAoH/assets/textures/Sand/Ground080_1K-JPG_Color.jpg",
+          "Friedmonkey/MonkeyIsland-Godot/Materials/Sand/Ground080_1K-JPG_Color.jpg",
+          "Seerban/godot-vehicle/Material/Assets/Ground080_1K-JPG/Ground080_1K-JPG_Color.jpg"
+        ]
+      },
+      "altura": {
+        "sha256": "6d30eaac740d83a8ac06fdd166f43edd8e91529b8fff510b6f562564b59b69be",
+        "espelhos": ["Seerban/godot-vehicle/Material/Assets/Ground080_1K-JPG/Ground080_1K-JPG_Displacement.jpg"]
+      }
+    },
+    "folhico": {
+      "ambientcg": "Ground040",
+      "cor": {
+        "sha256": "93326253aae66d60c1002d9a044a628d764a8154c307a997296073781b52c26b",
+        "espelhos": ["LampeB/tactical-rpg-game/assets/terrain_textures/JungleMud/Ground040_1K-JPG_Color.jpg"]
+      },
+      "altura": {
+        "sha256": "b734d333678ad6ebdba9771490733f2cdc6fd05724cd676ca24db2a0efabf06a",
+        "espelhos": ["LampeB/tactical-rpg-game/assets/terrain_textures/JungleMud/Ground040_1K-JPG_Displacement.jpg"]
+      }
+    },
+    "concreto": {
+      "ambientcg": "Concrete047A",
+      "cor": {
+        "sha256": "74cbb49d821ac1a26dde8adf54527d84400c07aaf4e49918aed060a8a4715071",
+        "espelhos": [
+          "CodeOS99/OnTheLine/assets/textures/concrete_1k/Concrete047A_1K-JPG_Color.jpg",
+          "ryukgod26/Engine-of-Dread/assets/Materials/Concrete047A_1K-JPG/Concrete047A_1K-JPG_Color.jpg"
+        ]
+      },
+      "altura": {
+        "sha256": "22f4aab777cb5680d5d7abddaaecb6fb2d2f4ad917c13cfa511d534d607423ef",
+        "espelhos": ["ryukgod26/Engine-of-Dread/assets/Materials/Concrete047A_1K-JPG/Concrete047A_1K-JPG_Displacement.jpg"]
+      }
+    }
+  }
+}

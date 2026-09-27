@@ -40,8 +40,9 @@ export function cotaEm(T, x, z) {
 // ================================================================================================ paisagem
 
 const KP = {
-  grama: acab('#4b5933', { rugo: 0.95, padrao: PADRAO.grama }),
-  gramaEscura: acab('#3f4d2e', { rugo: 0.95, padrao: PADRAO.grama }),
+  // gramado cuidado: um pouco mais verde e mais claro que o capim do platô (sem chegar ao verde-lima)
+  grama: acab('#5b6a3a', { rugo: 0.95, padrao: PADRAO.grama }),
+  gramaEscura: acab('#4f5d34', { rugo: 0.95, padrao: PADRAO.grama }),
   piso: acab('#b0a695', { rugo: 0.8, padrao: PADRAO.piso }),
   portuguesa: acab('#8c877c', { rugo: 0.85, padrao: PADRAO.portuguesa }),
   asfalto: acab('#2c2e31', { rugo: 0.85 }),
@@ -160,7 +161,12 @@ export function montarPaisagem(plano, { chao, opaco, arvores, nivel = 1, fora = 
     nArv++;
     arvore(arvores, x, chao(x, z) + 0.15, z, { detalhe: 0, ...op });
   };
-  P.parques.forEach((poly, i) => deitar(opaco, poly, chao, 0.14, i % 2 ? KP.gramaEscura : KP.grama));
+  P.parques.forEach((poly, i) => {
+    deitar(opaco, poly, chao, 0.14, i % 2 ? KP.gramaEscura : KP.grama);
+    // caminho de 3 m em volta: a borda do parque lê como paisagismo (Burle Marx), não como um tapete colado no chão
+    const C = orientar(poly);
+    fita(opaco, [...C, C[0], C[1]], 3, chao, 0.18, orla ? KP.portuguesa : KP.calcada);
+  });
   for (const poly of P.pracas) deitar(opaco, poly, chao, 0.2, orla ? KP.portuguesa : KP.piso);
   for (const ps of P.passeios) {
     fita(opaco, ps.caminho, ps.largura, chao, 0.24, orla ? KP.portuguesa : KP.piso);

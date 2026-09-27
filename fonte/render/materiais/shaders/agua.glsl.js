@@ -1,21 +1,23 @@
 // GLSL do mar, do rio e da lagoa (desenho do render 3.4): uma família de material, sem redesenhar a cena. A
 // profundidade sai da grade de alturas (a mesma leitura do terreno); o fundo visto pela água é o mapa de cor assado do
-// terreno no mesmo ponto, escurecido pela absorção (Beer) da água de cada tipo; ondas por dois mapas de normal
-// rolando; espuma na arrebentação (faixas que andam para a praia) e na linha d'água; reflexo do céu pelo IBL com
-// Fresnel (sem IBL, um céu analítico com a cor do horizonte). Fora dos índices: quem usa importa. Tudo em highp.
+// terreno no mesmo ponto, escurecido pela absorção (Beer) da água de cada tipo; ondas por um mapa de normal em quatro
+// escalas rolando (as que o pixel não resolve viram rugosidade); espuma na arrebentação (faixas que andam para a
+// praia) e na linha d'água; reflexo do céu pelo IBL com Fresnel (sem IBL, um céu analítico com a cor do horizonte).
+// Fora dos índices: quem usa importa. Tudo em highp.
 import { GLSL_TER_COMUM, GLSL_TER_ALTURA, PALETA_CHAO } from './terreno.glsl.js';
 import { vec3Linear } from './folha.glsl.js';
 
-/** Óptica de cada água: absorção por metro (rgb), cor do espalhamento no fundo (linear), rugosidade e força das ondas. */
-/** Fundo de lodo do rio e da lagoa (linear): a areia do assado é só do mar. */
+/** Fundo de lodo do rio e da lagoa (linear): a areia do assado é só do mar. LODO_RASO: o lodo claro e a areia da
+ * margem, onde a água tem menos de um metro. */
 export const LODO = [0.045, 0.04, 0.03];
+export const LODO_RASO = [0.13, 0.115, 0.08];
 
+/** Óptica de cada água: absorção por metro (rgb), cor do espalhamento no fundo (linear), rugosidade e força das ondas. */
 export const AGUAS = Object.freeze({
   mar: { tipo: 0, absorcao: [0.42, 0.11, 0.075], espalha: [0.017, 0.066, 0.072], rug: 0.09, ondas: 0.16 },
   rio: { tipo: 1, absorcao: [1.3, 1.05, 0.95], espalha: [0.085, 0.078, 0.048], rug: 0.1, ondas: 0.12 },
-  lagoa: { tipo: 2, absorcao: [0.95, 0.8, 0.72], espalha: [0.016, 0.022, 0.016], rug: 0.04, ondas: 0.06 },
+  lagoa: { tipo: 2, absorcao: [0.95, 0.8, 0.72], espalha: [0.018, 0.026, 0.017], rug: 0.04, ondas: 0.06 },
 });
-
 
 const v3 = (a) => `vec3( ${a.map((x) => x.toFixed(4)).join(', ')} )`;
 
@@ -52,22 +54,32 @@ float aguaEspuma;
   // no lugar de map_fragment
   cor: /* glsl */ `
 vec2 aW = vGPosMundo.xz;
-float aDist = length( vGPosMundo - cameraPosition );
 float aFundo = terAltura( aW );
 float aProf = max( vGPosMundo.y - aFundo, 0.0 );
 vec2 aUV = terUVMapa( aW );
 bool aDentro = all( greaterThanEqual( aUV, vec2( 0.0 ) ) ) && all( lessThanEqual( aUV, vec2( 1.0 ) ) );
 vec4 aDados = texture( uTerDados, terUVDados( aW ) );
+// distância à terra: a leitura filtrada basta na água (a marca do mar só troca na foz, onde o rio encontra o mar, e ali
+// a espuma de arrebentação some numa faixa de poucos metros); terAguaExata custaria 4 leituras por pixel de água
 float aTerra = aDentro ? terAgua( aDados.a ).x : 255.0;
 vec3 aLeito = texture( uTerCor, aUV ).rgb;
 aLeito = aDentro ? aLeito * aLeito : ${vec3Linear(PALETA_CHAO[5].cor)} * 0.8;
-if ( vAgua > 0.5 ) aLeito = ${v3(LODO)};
-// ondas: dois mapas rolando em direções diferentes, e rajadas de vento (manchas de 180 m)
+if ( vAgua > 0.5 ) aLeito = mix( ${v3(LODO_RASO)}, ${v3(LODO)}, smoothstep( 0.15, 1.1, aProf ) );
+// ondas: três escalas rolando em direções diferentes, rajadas de vento (manchas de 180 m) e, de longe, as faixas de
+// água lisa que o vento deixa (manchas de 1,9 km). A escala menor some quando o pixel cobre mais do que ela resolve:
+// senão o azulejo de 19 m vira uma cintilação repetida de longe.
 vec4 aVento = texture( uTerRuido, aW * ( 1.0 / 180.0 ) + uAguaTempo * vec2( 0.0021, 0.0013 ) );
 vec4 aQuebra = texture( uTerRuido, aW * ( 1.0 / 47.0 ) + uAguaTempo * vec2( 0.006, -0.004 ) );
+vec4 aLiso = texture( uTerRuido, mat2( 0.8, 0.6, -0.6, 0.8 ) * aW * ( 1.0 / 1900.0 ) + vec2( 0.3, 0.6 ) );
 vec2 aCorre = vAgua > 0.5 && vAgua < 1.5 ? vFluxo * uAguaTempo * 0.35 : vec2( 0.0 );
+vec2 aPe2 = fwidth( aW );
+float aPe = max( aPe2.x, aPe2.y );
+vec3 aN0 = texture( uAguaOndas, mat2( 0.8, 0.6, -0.6, 0.8 ) * aW * ( 1.0 / 233.0 ) + uAguaTempo * vec2( 0.0023, -0.0016 ) - aCorre / 233.0 ).xyz;
 vec3 aN1 = texture( uAguaOndas, aW * ( 1.0 / 61.0 ) + uAguaTempo * vec2( 0.008, 0.005 ) - aCorre / 61.0 ).xyz;
-vec3 aN2 = texture( uAguaOndas, mat2( 0.6, -0.8, 0.8, 0.6 ) * aW * ( 1.0 / 19.0 ) - uAguaTempo * vec2( 0.011, 0.019 ) - aCorre / 19.0 ).xyz;
+vec4 aN2 = texture( uAguaOndas, mat2( 0.6, -0.8, 0.8, 0.6 ) * aW * ( 1.0 / 19.0 ) - uAguaTempo * vec2( 0.011, 0.019 ) - aCorre / 19.0 );
+vec4 aN3 = texture( uAguaOndas, mat2( -0.28, 0.96, -0.96, -0.28 ) * aW * ( 1.0 / 5.3 ) + uAguaTempo * vec2( 0.021, -0.013 ) );
+float aK2 = 1.0 - smoothstep( 0.35, 2.0, aPe );
+float aK1 = 1.0 - smoothstep( 0.9, 4.0, aPe );
 vec3 aSigma;
 vec3 aEspalha;
 float aRugBase;
@@ -79,24 +91,38 @@ if ( vAgua < 0.5 ) {
 } else {
   aSigma = ${v3(AGUAS.lagoa.absorcao)}; aEspalha = ${v3(AGUAS.lagoa.espalha)}; aRugBase = ${AGUAS.lagoa.rug.toFixed(3)}; aForca = ${AGUAS.lagoa.ondas.toFixed(3)};
 }
+// rio e lagoa: manchas de sedimento e alga (tom de 150 a 400 m), sem mexer no mar
+if ( vAgua > 0.5 ) aEspalha *= 0.75 + 0.5 * smoothstep( 0.25, 0.75, aVento.x * 0.6 + aLiso.y * 0.4 );
 // absorção na ida e na volta: o fundo some com a profundidade, fica a cor do espalhamento
 vec3 aTrans = exp( -aSigma * aProf * 1.6 );
 vec3 aCor = aLeito * aTrans + aEspalha * ( 1.0 - aTrans );
-// espuma: faixas da arrebentação andando para a praia e a lavagem na linha d'água (só no mar; fraca na lagoa)
+// espuma: as cristas da arrebentação andando para a praia e a lavagem na linha d'água (só no mar; fraca na lagoa).
+// As duas em renda (as cristas das ondas curtas recortam a mancha), não em nuvem; a lavagem é fina, onde a água
+// tem poucos centímetros, e vai e volta.
+float aRenda = smoothstep( 0.5, 0.72, aN2.w * 0.55 + aN3.w * 0.45 ) * ( 0.55 + 0.45 * aK2 ) + ( 1.0 - aK2 ) * 0.35;
 float aFase = fract( aTerra / 21.0 + uAguaTempo * 0.085 + aVento.x * 0.6 );
 float aCrista = smoothstep( 0.8, 0.95, aFase ) * ( 1.0 - smoothstep( 0.95, 1.0, aFase ) );
 float aZona = exp( -aTerra / 26.0 ) * smoothstep( 0.2, 1.2, aProf );
-float aEsp = aCrista * aZona * smoothstep( 0.38, 0.72, aQuebra.w * 0.75 + aVento.w * 0.45 ) * step( vAgua, 0.5 );
-aEsp += ( 1.0 - smoothstep( 0.04, 0.4, aProf ) ) * ( 0.35 + 0.65 * aQuebra.z ) * smoothstep( 0.2, 0.5, aVento.w + aQuebra.x * 0.4 );
+float aEsp = aCrista * aZona * smoothstep( 0.38, 0.72, aQuebra.w * 0.75 + aVento.w * 0.45 ) * step( vAgua, 0.5 ) * ( 0.35 + 0.9 * aRenda );
+float aVai = 0.06 + 0.05 * sin( uAguaTempo * 0.9 + aVento.x * 6.2831 );
+aEsp += ( 1.0 - smoothstep( aVai * 0.3, aVai, aProf ) ) * smoothstep( 0.3, 0.6, aQuebra.z * 0.5 + aRenda * 0.5 ) * 0.85;
 // rio: a espuma dele (correnteza) é da R2b; lagoa: só um fio na margem
 aEsp *= vAgua < 0.5 ? 1.0 : vAgua < 1.5 ? 0.0 : 0.25;
 aguaEspuma = clamp( aEsp, 0.0, 1.0 );
-float aLonge = 1.0 - smoothstep( 500.0, 5000.0, aDist );
-float aF = aForca * ( 0.6 + 0.7 * aVento.y ) * ( 0.25 + 0.75 * aLonge );
-vec2 aInc = ( aN1.xy * 2.0 - 1.0 ) * 0.65 + ( aN2.xy * 2.0 - 1.0 ) * 0.5 * ( 0.4 + 0.6 * aVento.z );
+// água lisa: faixas onde o vento cai (mais espelhada e mais escura de perto do zênite)
+float aCalma = smoothstep( 0.55, 0.75, aLiso.x ) * ( vAgua < 0.5 ? 1.0 : 0.4 );
+float aF = aForca * ( 0.6 + 0.7 * aVento.y ) * ( 1.0 - 0.65 * aCalma );
+// ondas longas têm inclinação pequena (a maior parte da inclinação vem das curtas): pesos 0,12, 0,24, 0,6 e 0,4
+float aK3 = 1.0 - smoothstep( 0.06, 0.3, aPe );
+vec2 aInc = ( aN0.xy * 2.0 - 1.0 ) * 0.12 + ( aN1.xy * 2.0 - 1.0 ) * 0.24 * aK1 + ( aN2.xy * 2.0 - 1.0 ) * 0.6 * ( 0.5 + 0.5 * aVento.z ) * aK2
+  + ( aN3.xy * 2.0 - 1.0 ) * 0.4 * aK3;
 aguaNormal = normalize( vec3( aInc.x * aF, 1.0, aInc.y * aF ) );
 aguaNormal = normalize( mix( aguaNormal, vec3( 0.0, 1.0, 0.0 ), aguaEspuma * 0.7 ) );
-aguaRug = mix( aRugBase * ( 0.7 + 0.8 * aVento.y ) + 0.06 * smoothstep( 300.0, 3000.0, aDist ), 0.75, aguaEspuma );
+// as ondas que o pixel não resolve viram rugosidade (o brilho do sol se espalha em vez de cintilar)
+float aNaoResolve = ( 1.0 - aK3 ) * 0.03 + ( 1.0 - aK2 ) * 0.05 + ( 1.0 - aK1 ) * 0.05;
+aguaRug = mix( aRugBase * ( 0.7 + 0.8 * aVento.y ) * ( 1.0 - 0.5 * aCalma ) + aNaoResolve, 0.75, aguaEspuma );
+// lagoa: sem vento a água vira espelho; as rajadas riscam manchas foscas (as "patas de gato" de uns 50 a 150 m)
+if ( vAgua > 1.5 ) aguaRug = mix( 0.02, 0.14, smoothstep( 0.45, 0.8, aVento.y * 0.7 + aQuebra.x * 0.3 ) ) + aNaoResolve;
 diffuseColor.rgb = mix( aCor, vec3( 0.74, 0.76, 0.75 ), aguaEspuma * 0.9 );
 `,
   rugosidade: /* glsl */ `
@@ -105,8 +131,12 @@ float roughnessFactor = aguaRug;
   normal: /* glsl */ `
 normal = normalize( ( viewMatrix * vec4( aguaNormal, 0.0 ) ).xyz );
 `,
-  // sem IBL: reflexo de um céu analítico com o Fresnel de Schlick (F0 = 0,02)
+  // sem IBL: reflexo de um céu analítico com o Fresnel de Schlick (F0 = 0,02); com ou sem IBL, a água de poucos
+  // centímetros reflete menos (a linha d'água some na areia molhada em vez de riscar a praia)
   indireta: /* glsl */ `
+reflectedLight.indirectSpecular *= mix( 0.3, 1.0, smoothstep( 0.0, 0.35, aProf ) );
+// rio e lagoa: junto da margem a água reflete a mata e o barranco, mais escuros que o céu
+if ( vAgua > 0.5 ) reflectedLight.indirectSpecular *= mix( 0.4, 1.0, smoothstep( 6.0, 50.0, aTerra ) );
 #ifndef USE_ENVMAP
 {
   vec3 aV = normalize( cameraPosition - vGPosMundo );

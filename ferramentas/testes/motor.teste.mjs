@@ -1,9 +1,11 @@
 // Testes da R1a (motor, luz, céu, neblina, sombra própria, câmera e sonda), sem navegador: o sol pela latitude e a
 // lua pela fase; o modelo do céu na unidade do jogo (luz no chão, parte do céu, cor do sol, crepúsculo que cai sem
-// voltar a subir, o anel do horizonte que a neblina e o céu dividem); a exposição; a câmera à CS2 (limites, inércia,
-// zoom com âncora, colisão, voo em arco); o raio contra o terreno; a sombra própria (encaixe no texel nas duas
-// cascatas, a profundidade invertida); a contagem do GLSL contra a guarda do Mali; perfis e resolução dinâmica;
-// quadros-chave da luz do ambiente; ruído das nuvens; e os ganchos publicados. Roda sozinho:
+// voltar a subir, o anel do horizonte que a neblina e o céu dividem); a exposição; a luz do ar baixo da neblina (bem
+// mais escura que o horizonte, indo até ele quando o caminho satura); a câmera à CS2 (limites, inércia, zoom com
+// âncora, colisão, voo em arco); o raio contra o terreno; a sombra própria (encaixe no texel nas duas cascatas, a
+// profundidade invertida, a cascata encolhida pelo sol baixo, a cidade instanciada compactada na cascata e o foco
+// puxado para a câmera nas vistas rasantes); a contagem do GLSL contra a guarda do Mali; perfis e resolução
+// dinâmica; quadros-chave da luz do ambiente; ruído das nuvens; e os ganchos publicados. Roda sozinho:
 //   node --test ferramentas/testes/motor.teste.mjs (o simular --testes descobre)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,16 +13,18 @@ import * as THREE from 'three';
 import { posicaoSol, posicaoLua, nascerEPor, faseDaLua, astros } from '../../fonte/render/ambiente/astro.js';
 import * as C from '../../fonte/render/ambiente/ceu.js';
 import { exposicaoAlvo, Exposicao, EXPOSICAO } from '../../fonte/render/ambiente/exposicao.js';
-import { umidadeManha } from '../../fonte/render/ambiente/neblina.js';
+import { umidadeManha, luzDoAr, luzNoCaminho, henyeyGreenstein } from '../../fonte/render/ambiente/neblina.js';
 import { ruidoNuvem } from '../../fonte/render/ambiente/nuvens.js';
 import { horasChave, trecho } from '../../fonte/render/ambiente/ibl.js';
 import { criarCamera, LIMITES_CAMERA } from '../../fonte/render/camera/camera.js';
 import { raioNoTerreno, raioDaTela } from '../../fonte/render/camera/raio.js';
-import { SombraPropria } from '../../fonte/render/sombra/mapa.js';
+import { SombraPropria, COMPACTAR_ACIMA } from '../../fonte/render/sombra/mapa.js';
 import { contarPrograma, preprocessar } from '../../fonte/render/motor/capacidades.js';
 import { PERFIS, degrausDoPerfil } from '../../fonte/render/motor/perfis.js';
 import { Resolucao } from '../../fonte/render/motor/resolucao.js';
-import { ehDeLonge } from '../../fonte/render/motor/faixas.js';
+import { ehDeLonge, Faixas, CAMADA_LONGE } from '../../fonte/render/motor/faixas.js';
+import { Sol } from '../../fonte/render/ambiente/sol.js';
+import { registrar as registrarBancada } from '../../fonte/render/motor/bancada.js';
 import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { ALBEDOS, ALBEDO_MAXIMO, luminanciaAlbedo } from '../../fonte/render/materiais/biblioteca.js';
 import { fragmentoCeu } from '../../fonte/render/materiais/shaders/ceu.glsl.js';
@@ -130,6 +134,24 @@ test('neblina: umidade da manhã sobe no nascer e some em ~3 h', () => {
   assert.equal(umidadeManha(2, 5.5), 0);
 });
 
+test('neblina: a luz do ar baixo é bem mais escura que o horizonte e vai até ele quando o caminho satura', () => {
+  const est = C.estadoCeu(astroEl(60), { nuvens: 0.3 }, 0.6);
+  const ar = luzDoAr(est);
+  const sol = est.P.sol;
+  const lado = [-sol[2], 0.02, sol[0]]; // 90 graus do sol, rente ao chão
+  const n = Math.hypot(...lado);
+  const d = lado.map((x) => x / n);
+  const hz = C.corVista(d, est);
+  const perto = luzNoCaminho(d, [0.95, 0.95, 0.95], ar, sol, hz);
+  assert.ok(C.luma(perto) < 0.5 * C.luma(hz), `perto ${C.luma(perto)} contra horizonte ${C.luma(hz)} (sem véu claro)`);
+  const longe = luzNoCaminho(d, [0, 0, 0], ar, sol, hz);
+  for (let i = 0; i < 3; i++) assert.ok(Math.abs(longe[i] - hz[i]) < 1e-9, 'caminho saturado: a cor do horizonte (sem costura)');
+  assert.ok(henyeyGreenstein(0.95) > 10 * henyeyGreenstein(-0.95), 'claro na direção do sol, escuro de costas');
+  assert.ok(ar.amb[2] > ar.amb[0], 'a parte ambiente é azulada (luz do céu)');
+  const noite = luzDoAr(C.estadoCeu(astroEl(-30), { nuvens: 0.3 }, 0.6));
+  assert.ok(C.luma(noite.sol) === 0 && noite.amb[0] > noite.amb[2] * 0.8, `de noite o ar leva o brilho da cidade: ${noite.amb}`);
+});
+
 // ------------------------------------------------------------------------------------------------ câmera e raio
 
 function ctxCamera(T = terrenoPlano()) {
@@ -195,6 +217,18 @@ test('câmera: colisão com o chão e voo em arco que resolve', async () => {
   }
 });
 
+test('câmera: sobre o mar o alvo fica na água e a câmera não mergulha', () => {
+  const T = terrenoPlano({ cota: -25 }); // baía de 25 m de fundo
+  const ctx = ctxCamera(T);
+  ctx.sim.espelho.mapa.nivelMar = 0;
+  const cam = criarCamera(ctx, { x: 0, z: 0, dist: 10, inclinacao: 3 });
+  cam.atualizar(0);
+  assert.equal(cam.alvo().y, 0, 'alvo na superfície da água');
+  assert.ok(ctx.camera.position.y >= 2 - 1e-6, `acima da água: ${ctx.camera.position.y}`);
+  // sem o alvo HDR em ponto flutuante (testes, Leve, duas faixas) o plano próximo cresce com a altura
+  assert.ok(ctx.camera.near >= 0.2 - 1e-9, `plano próximo ${ctx.camera.near}`);
+});
+
 test('raio: acerta o chão plano, a encosta e não acerta subindo', () => {
   const T = terrenoPlano({ cota: 5 });
   const p = raioNoTerreno(T, { origem: [0, 105, 0], dir: [0.6, -0.8, 0] });
@@ -241,8 +275,17 @@ test('sombra: encaixe no texel nas duas cascatas, atlas e profundidade invertida
   const passou = sol.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 2 * s.degrau); // em volta do eixo vertical o ângulo real é menor (cos da elevação)
   assert.equal(s.acompanhar(new THREE.Vector3(133.37, 0, -71.9), 600, passou), true);
   // profundidade invertida: um ponto no plano perto da luz vai a z = 1 (a comparação troca, o viés troca de sinal)
-  const renderer = { state: { buffers: { depth: { getReversed: () => true } } }, getRenderTarget: () => null };
+  const alvos = [];
+  const renderer = { state: { buffers: { depth: { getReversed: () => true } } }, getRenderTarget: () => null, setRenderTarget: (a) => alvos.push(a), clear() {} };
   const u = Object.fromEntries(Object.entries(ganchos.uniformes).map(([k, v]) => [k, { value: v.value?.clone ? v.value.clone() : v.value }]));
+  // sem sombra (Leve) o gSombraMapa ainda recebe uma textura de profundidade já criada na GPU: um sampler2DShadow
+  // ligado a nada faz o WebGL recusar todas as chamadas dos materiais com o gancho
+  s.ligada = false;
+  s.desenhar(renderer, null, u);
+  assert.equal(u.gSombraMapa.value, s.alvo.depthTexture);
+  assert.equal(u.gSombraLigada.value, 0);
+  assert.ok(alvos.includes(s.alvo), 'o alvo foi limpo uma vez (a DepthTexture existe antes de ser lida)');
+  s.ligada = true;
   s.desenhar(renderer, null, u);
   assert.equal(s.invertida, true);
   assert.equal(s.alvo.depthTexture.compareFunction, THREE.GreaterEqualCompare);
@@ -250,6 +293,58 @@ test('sombra: encaixe no texel nas duas cascatas, atlas e profundidade invertida
   const cam = s.cams[0];
   const perto = new THREE.Vector3(0, 0, -cam.near).applyMatrix4(cam.matrixWorld).applyMatrix4(s.matriz);
   assert.ok(Math.abs(perto.z - 1) < 1e-4, `z do plano perto: ${perto.z}`);
+  s.descartar();
+});
+
+test('sombra: a cidade instanciada projeta só a vizinhança da cascata, e com o sol baixo a cascata encolhe na direção dele', () => {
+  const s = new SombraPropria({ tam: 1024, cascatas: 1 });
+  const n = 4000;
+  const cidade = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshBasicMaterial(), n);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < n; i++) {
+    const x = ((i % 64) - 32) * 60 + 7;
+    const z = (Math.floor(i / 64) - 31) * 60 + 11;
+    cidade.setMatrixAt(i, m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(20, 10 + (i % 7) * 15, 20)));
+  }
+  const g = s.projetor(cidade, { compactar: true });
+  assert.notEqual(g.instanceMatrix, cidade.instanceMatrix, 'buffer próprio na compactada');
+  const falso = { state: { buffers: { depth: { getReversed: () => false } } }, autoClear: true, getRenderTarget: () => null, setRenderTarget() {}, render() {}, clear() {} };
+  const alto = new THREE.Vector3(0.2, 0.95, 0.1).normalize();
+  s.acompanhar(new THREE.Vector3(0, 0, 0), 600, alto);
+  s.desenhar(falso, null, null);
+  const cam = s.cams[0];
+  assert.ok(g.count > 100 && g.count < 0.25 * n, `sol alto: ${g.count} de ${n} projetam`);
+  // toda instância copiada está perto do quadrado da cascata no chão
+  const v = new THREE.Vector3();
+  for (let i = 0; i < g.count; i++) {
+    v.setFromMatrixPosition(m.fromArray(g.instanceMatrix.array, i * 16));
+    assert.ok(Math.hypot(v.x, v.z) < 600 * 1.5 + 200, `instância longe demais: ${v.x}, ${v.z}`);
+  }
+  const baixo = new THREE.Vector3(0.95, Math.sin(12 * RAD), 0.2).normalize();
+  s.acompanhar(new THREE.Vector3(0, 0, 0), 600, baixo);
+  s.desenhar(falso, null, null);
+  assert.ok(cam.top - cam.bottom < 0.6 * (cam.right - cam.left), `sol a 12 graus: ${cam.top - cam.bottom} por ${cam.right - cam.left}`);
+  assert.ok(g.count < 0.3 * n, `sol baixo: ${g.count} projetam (a faixa comprida no chão ficou de fora)`);
+  const pequeno = new THREE.InstancedMesh(cidade.geometry, cidade.material, 3);
+  assert.equal(s.projetor(pequeno).instanceMatrix, pequeno.instanceMatrix, 'a pequena compartilha o buffer');
+  const enorme = new THREE.InstancedMesh(cidade.geometry, cidade.material, COMPACTAR_ACIMA + 1);
+  assert.notEqual(s.projetor(enorme).instanceMatrix, enorme.instanceMatrix, 'acima do limite compacta sozinha');
+  s.descartar();
+});
+
+test('sombra: nas vistas rasantes o foco anda para baixo da câmera sem tirar o alvo da cascata; de cima fica no alvo', () => {
+  const s = new SombraPropria({ tam: 1024, cascatas: 1 });
+  const alvo = new THREE.Vector3(100, 10, 200);
+  s.vista = { position: new THREE.Vector3(100, 10 + 1800 * Math.sin(3 * RAD), 200 + 1800 * Math.cos(3 * RAD)) };
+  const raio = 1080;
+  const f = s.foco(alvo, raio, new THREE.Vector3());
+  const andou = f.z - alvo.z;
+  assert.ok(andou > 500 && andou <= 0.7 * raio + 1e-6 && Math.abs(f.x - alvo.x) < 1e-9, `rasante: ${andou} m para a câmera`);
+  s.vista.position.set(100, 10 + 1800, 200 + 1800 * Math.cos(88 * RAD));
+  assert.ok(s.foco(alvo, raio, new THREE.Vector3()).distanceTo(alvo) < 1, 'de cima o foco é o alvo');
+  s.vista = null;
+  assert.ok(s.foco(alvo, raio, new THREE.Vector3()).equals(alvo), 'sem a câmera da vista, o alvo');
   s.descartar();
 });
 
@@ -293,6 +388,9 @@ void main() { cor = texture( a, vUv ) * c; }`;
   assert.match(contarPrograma(vs, muitos).falhas.join(), /amostradores no fragmento/);
   const media = fs.replace('precision highp float;', 'precision ' + 'med' + 'iump float;');
   assert.match(contarPrograma(vs, media).falhas.join(), /precisão média/);
+  const pmrem = contarPrograma(vs.replace('SHADER_NAME prova', 'SHADER_NAME PMREMGGXConvolution'), media.replace('SHADER_NAME prova', 'SHADER_NAME PMREMGGXConvolution'));
+  assert.ok(pmrem.precisaoMedia && pmrem.falhas.length === 0, 'o PMREM do three fica anotado, sem falha (a D44 vale para os shaders próprios)');
+  assert.equal(contarPrograma('#define SHADER_TYPE MeshStandardMaterial\n#define SHADER_NAME \n' + vs.replace('#define SHADER_NAME prova\n', ''), fs.replace('#define SHADER_NAME prova\n', '')).nome, 'MeshStandardMaterial');
   assert.equal(preprocessar('#if defined(A) && B > 2\nx\n#else\ny\n#endif').texto.trim(), 'y');
 });
 
@@ -350,15 +448,78 @@ test('nuvens: ruído azulejável e na faixa inteira', () => {
 // ------------------------------------------------------------------------------------------------ ganchos e materiais
 
 test('ganchos: sombra com cascatas e nuvens, neblina com o anel do horizonte, nomes estáveis', () => {
-  for (const u of ['gSombraMapa', 'gSombraMatriz', 'gSombraMatriz1', 'gSombraCascatas', 'gSombraAmostras', 'gSombraForca', 'gNuvemMapa', 'gNuvemParams', 'gNuvemDesloc', 'gNeblinaBeta', 'gNeblinaQueda', 'gNeblinaAnel', 'gNeblinaZenite', 'gNeblinaSolDir']) {
+  for (const u of ['gSombraMapa', 'gSombraMatriz', 'gSombraMatriz1', 'gSombraCascatas', 'gSombraAmostras', 'gSombraForca', 'gNuvemMapa', 'gNuvemParams', 'gNuvemDesloc', 'gNeblinaBeta', 'gNeblinaQueda', 'gNeblinaAnel', 'gNeblinaZenite', 'gNeblinaSolDir', 'gNeblinaSolCor', 'gNeblinaAmb', 'gNeblinaG', 'gNeblinaCor']) {
     assert.ok(u in ganchos.uniformes, u);
   }
   assert.equal(ganchos.uniformes.gNeblinaAnel.value.length, C.ANEL);
   const t = ganchos.trechos(['sombra', 'neblina']);
   assert.match(t.fragmentoPars, /uniform highp sampler2DShadow gSombraMapa/);
   assert.match(t.fragmentoPars, /gNeblinaCorVista/);
+  assert.match(t.fragmentoPars, /gNeblinaLuz/);
+  assert.ok(ganchos.uniformes.gNeblinaCor.value.isColor, 'gNeblinaCor (nome da F0) segue uma cor do three para os shaders próprios');
   assert.match(t.sol, /gNuvemSombra/);
   assert.ok(ehDeLonge({ userData: { familia: 'terreno' } }) && !ehDeLonge({ userData: { familia: 'predios' } }));
+});
+
+test('faixas: a camada de longe desce pela árvore inteira e sai de quem deixa de ser de longe', () => {
+  const cena = new THREE.Scene();
+  const grupo = new THREE.Group();
+  grupo.userData.faixa = 'longe';
+  const sub = new THREE.Group();
+  const malha = new THREE.Mesh(new THREE.BufferGeometry());
+  sub.add(malha);
+  grupo.add(sub);
+  const perto = new THREE.Mesh(new THREE.BufferGeometry());
+  const luz = new THREE.DirectionalLight();
+  const outro = new THREE.Group();
+  outro.add(luz); // luz dentro de um grupo: entra nas duas faixas (a mesma contagem de luzes nos dois passes)
+  cena.add(grupo, perto, outro);
+  const f = new Faixas({ semClip: true });
+  f.marcar(cena);
+  const longe = (o) => o.layers.isEnabled(CAMADA_LONGE);
+  assert.ok(longe(malha) && longe(sub) && longe(grupo), 'as malhas dentro do grupo de longe vão para a faixa de longe');
+  assert.ok(!longe(perto), 'o resto fica só na de perto');
+  assert.ok(longe(luz), 'a luz aninhada vai para as duas faixas');
+  grupo.userData.faixa = null;
+  f.marcar(cena);
+  assert.ok(!longe(malha) && !longe(grupo), 'saiu da faixa de longe');
+});
+
+test('sol: a luz direcional nunca some (o número de luzes não muda entre o dia e a noite sem lua)', () => {
+  const cena = new THREE.Scene();
+  const ctx = { cena, camera: new THREE.PerspectiveCamera(), sol: { dir: new THREE.Vector3() }, sombra: null };
+  const sol = new Sol(ctx);
+  const dia = astroEl(40);
+  sol.atualizar(dia, { solIrr: [3, 3, 3], luaIrr: [0, 0, 0] });
+  assert.ok(sol.luz.visible && sol.luz.intensity > 1);
+  const noiteSemLua = astroEl(-30, { dir: [0, -1, 0], elevacao: -1.5, iluminada: 0, fase: 0 });
+  sol.atualizar(noiteSemLua, { solIrr: [0, 0, 0], luaIrr: [0, 0, 0] });
+  assert.equal(sol.luz.visible, true, 'visível com intensidade 0: esconder trocaria o programa de todo material');
+  assert.equal(sol.luz.intensity, 0);
+  sol.descartar();
+});
+
+test('bancada: a medida trava a resolução só enquanto mede e devolve o relatório do contrato', async () => {
+  let fabrica = null;
+  registrarBancada({ registrarDominio: (nome, f) => (fabrica = f) });
+  const stats = { calls: 120, tris: 400000, callsSombra: 3, trisSombra: 20000, msaa: 2, alvo: 'r11g11b10', familias: {}, gpuMs: 0, gpuMsTimer: 0 };
+  const ctx = {
+    gpu: 'Mali-G615 MC2', perfil: { id: 'media', nome: 'Média' }, pr: 1, medidas: { stats },
+    capac: { programas: { lista: [] }, clipControl: true, invertida: true, multiDraw: false, timer: false, limites: {}, sonda: {} },
+    quadro: { resolucao: { fixa: false } },
+  };
+  const dom = fabrica(ctx);
+  const p = ctx.bancada({ quadros: 3 });
+  assert.equal(ctx.quadro.resolucao.fixa, true, 'travada durante a medida');
+  for (let t = 0; t <= 80; t += 20) dom.quadro(t);
+  const rel = await p;
+  assert.equal(ctx.quadro.resolucao.fixa, false, 'a resolução dinâmica volta depois da medida');
+  assert.equal(ctx.medirGpu, false);
+  for (const k of ['perfil', 'sugerido', 'msMedio', 'p95', 'qps', 'calls', 'tris', 'pior', 'gpuMs', 'familias', 'programas', 'capac']) assert.ok(k in rel, k);
+  assert.equal(rel.sugerido, 'media');
+  assert.equal(rel.pior.calls, 120);
+  dom.descartar();
+  assert.equal(ctx.bancada, undefined);
 });
 
 test('biblioteca: albedos reais, nada acima de 0,80, grama oliva', () => {

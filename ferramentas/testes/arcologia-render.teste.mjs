@@ -6,12 +6,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   malhasTorre, malhasTorreLod1, malhaSombraTorre, trechosCorpo, contornoTrecho, NIVEL, Malha, triangular, areaPoli,
+  DIST_LOD0, LUZ_NOITE,
 } from '../../fonte/render/arcologia/torre.js';
+import { assentarHora } from '../../fonte/render/cenas/torre.js';
 import { malhasDoPlano, pontoDentro } from '../../fonte/render/arcologia/planos.js';
 import { montarParte, deslocar } from '../../fonte/render/arcologia/partes.js';
 import { cavarTerreno, descavar } from '../../fonte/render/arcologia/lago.js';
 import {
   TORRE_LAMINA as TL, PLANOS, PARTES_ORDEM, GLEBA_ENVELOPE, cavaDoPlano, POUSO, TORRE_POSICAO, HELIPONTO_LOCAL, torreParaMundo,
+  suavizar,
 } from '../../fonte/data/arcologia-plano.js';
 import { pontoNoPoligono, distPoligono } from '../../fonte/comum/vetor.js';
 
@@ -136,6 +139,47 @@ test('Torre: malhas determinísticas (a mesma entrada dá os mesmos números)', 
   assert.deepEqual(a.vidro.c, b.vidro.c);
 });
 
+test('Torre: LOD0 só de perto (aletas e montantes finos não fazem moiré) e LOD1 com as aletas do corpo no shader', () => {
+  // o LOD0 troca pelo LOD1 enquanto a aleta de 0,26 m ainda cobre perto de meio pixel numa tela de 1080 linhas a 40 graus
+  const ordem = ['leve', 'media', 'alta', 'ultra'];
+  for (let i = 1; i < ordem.length; i++) assert.ok(DIST_LOD0[ordem[i]] > DIST_LOD0[ordem[i - 1]], 'distâncias crescem com o perfil');
+  const pixel = (d) => (2 * d * Math.tan((20 * Math.PI) / 180)) / 1080;
+  assert.ok(TL.aletas.espessura / pixel(DIST_LOD0.media) >= 0.5, `aleta com ${(TL.aletas.espessura / pixel(DIST_LOD0.media)).toFixed(2)} px no Média`);
+  // no LOD1 não há aleta em geometria no corpo (entre o pódio e o terraço da lâmina 3): só as penas e a coroa
+  const X = TL.planta.largura / 2;
+  const l1 = malhasTorreLod1();
+  let corpo = 0;
+  for (let i = 0; i < l1.opaco.p.length; i += 3) {
+    const [x, y] = [Math.abs(l1.opaco.p[i]), l1.opaco.p[i + 1]];
+    if (x > X + 0.05 && x < X + TL.aletas.fundo + 0.05 && y > TL.podio.altura + 20 && y < TL.laminas[2].topo - 20) corpo++;
+  }
+  assert.equal(corpo, 0, 'aletas do corpo em geometria no LOD1');
+  // e as penas continuam lá (a silhueta de lado)
+  let penas = 0;
+  for (let i = 0; i < l1.opaco.p.length; i += 3) if (Math.abs(l1.opaco.p[i]) > X + 0.05 && l1.opaco.p[i + 1] > TL.laminas[2].topo + 1) penas++;
+  assert.ok(penas > 100, 'penas das lâminas no LOD1');
+});
+
+test('Torre: luz da noite calibrada para a exposição da R1a (janela quente sem estourar, lanterna e aro acendem o bloom)', () => {
+  const tela = (v) => v * LUZ_NOITE.exposicaoNoite;
+  assert.ok(tela(LUZ_NOITE.janela) > 0.8 && tela(LUZ_NOITE.janela) < 2, `janela ${tela(LUZ_NOITE.janela)}`);
+  assert.ok(tela(LUZ_NOITE.forro) > tela(LUZ_NOITE.janela) && tela(LUZ_NOITE.forro) < 4, 'andar de vento acima das janelas');
+  assert.ok(tela(LUZ_NOITE.lanterna) > tela(LUZ_NOITE.forro), 'a lanterna é a luz mais forte da torre');
+  assert.ok(tela(LUZ_NOITE.aro) > 4 && tela(LUZ_NOITE.aro) < 16, 'aro do heliponto');
+});
+
+test('cenas: a hora forçada que muda espera o céu assentar (quadros-chave e cubo em fatias, D9)', async () => {
+  const pedidos = [];
+  let hora = 17.5;
+  const R = { tempo: { forcar: (f) => { hora = f.hora; } }, foto: async (op) => pedidos.push(op) };
+  const ctx = { horaDoCeu: () => hora };
+  assert.equal(await assentarHora(R, ctx, 17.5), 0, 'mesma hora: nada a esperar');
+  assert.equal(await assentarHora(R, ctx, 21, 12), 12);
+  assert.equal(pedidos.length, 12);
+  assert.ok(pedidos.every((p) => p.w <= 16 && p.h <= 16), 'quadros pequenos');
+  assert.equal(await assentarHora(R, ctx, 21 + 24), 0, 'a volta do relógio é a mesma hora');
+});
+
 // ------------------------------------------------------------------------------------------------ planos (dados)
 
 const DENTRO = GLEBA_ENVELOPE.contorno;
@@ -178,6 +222,29 @@ test('planos: Torre, portões e vias dentro da gleba; portões na borda; a Torre
     for (let i = 0; i < res.contorno.length; i += 2) assert.ok(pontoNoPoligono(res.contorno[i], res.contorno[i + 1], DENTRO), `${id}: reservatório sai da gleba`);
     assert.ok(res.fundo < res.nivel && res.nivel < 0, `${id}: nível e fundo relativos à gleba`);
   }
+});
+
+test('planos: margens de água macias (Chaikin): nenhuma quina de polígono nos reservatórios (a mais viva, na barragem)', () => {
+  const quina = (P, i) => {
+    const n = P.length / 2;
+    const a = [P[2 * i] - P[2 * ((i + n - 1) % n)], P[2 * i + 1] - P[2 * ((i + n - 1) % n) + 1]];
+    const b = [P[2 * ((i + 1) % n)] - P[2 * i], P[2 * ((i + 1) % n) + 1] - P[2 * i + 1]];
+    const c = (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b) || 1);
+    return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
+  };
+  for (const id of ['A', 'C']) {
+    const r = PLANOS[id].partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
+    let pior = 0;
+    for (let i = 0; i < r.contorno.length / 2; i++) pior = Math.max(pior, quina(r.contorno, i));
+    assert.ok(pior < 45, `${id}: quina de ${pior.toFixed(1)} graus`);
+  }
+  // aberta: mantém as pontas e leva os valores junto
+  const { pontos, valores } = suavizar([0, 0, 100, 0, 100, 100], { fechado: false, voltas: 2, valores: [10, 20, 30] });
+  assert.deepEqual(pontos.slice(0, 2), [0, 0]);
+  assert.deepEqual(pontos.slice(-2), [100, 100]);
+  assert.equal(valores.length, pontos.length / 2);
+  assert.equal(valores[0], 10);
+  assert.equal(valores[valores.length - 1], 30);
 });
 
 test('planos: a cava do reservatório como forma do aplainar (D5)', () => {
@@ -250,6 +317,22 @@ test('partes: cada tipo de peça monta sem NaN e dá caixa de seleção', () => 
     assert.ok(d.vidro.triangulos + d.opaco.triangulos + d.arvores.triangulos > 20, `${p.tipo}: vazio`);
     assert.equal(r.caixas.length >= 1, true, `${p.tipo}: sem caixa`);
   }
+});
+
+test('partes: o anel é uma faixa contínua (juntas de 3 m) e abre os portais pedidos', () => {
+  const montar = (extra) => {
+    const d = { chao: () => 10, vidro: new Malha('vidro'), opaco: new Malha('opaco'), arvores: new Malha('opaco'), nivelAgua: 8 };
+    return montarParte({ id: 'anel', pecas: [{ tipo: 'anel', arco: { cx: 0, cz: 0, r: 372, de: 168, ate: 262 }, fundo: 28, alturas: [34, 66], ...extra }] }, d);
+  };
+  const cheio = montar({}).caixas;
+  const comto = 372 * ((262 - 168) * Math.PI) / 180;
+  // vãos de ~31 m: de longe lê como faixa contínua (a soma dos vãos cobre mais de 85% do arco)
+  assert.ok(cheio.length >= Math.floor(comto / 40), `${cheio.length} vãos em ${comto.toFixed(0)} m`);
+  const alturas = cheio.map((c) => c[4] - c[1]);
+  for (let i = 1; i < alturas.length; i++) assert.ok(Math.abs(alturas[i] - alturas[i - 1]) <= 3.15 * 3 + 1e-6, 'vãos vizinhos diferem até 3 andares');
+  assert.ok(alturas[alturas.length - 1] > alturas[0], 'o anfiteatro sobe de uma ponta à outra');
+  const comPortal = montar({ portais: [0.5] }).caixas;
+  assert.ok(comPortal.length < cheio.length, 'o portal abre um vão');
 });
 
 test('lago: a cava da cena desce ao leito dentro do contorno e volta ao chão depois de 24 m (e se desfaz)', () => {

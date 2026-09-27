@@ -1,17 +1,23 @@
 // Testes do chão, do mar e da lagoa (R2a): ruído puro e periódico, paridade da altura do GLSL com alturaEm (D4),
 // distância à água, dados por amostra, pirâmides de alturas, escolha dos nós do CDLOD (orçamento e vizinhos com no
 // máximo um nível de diferença), uso do solo, geometria da água, paleta (albedo real, sem verde-limão, D44 e A9).
+// Também o caminho CC0 do A/B (D46): manifesto das fotos, licenças e o KTX2 de arte/materiais/.
 // Roda sozinho: node ferramentas/testes/terreno.teste.mjs (o simular --testes descobre e roda).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, existsSync, statSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { hash2, hashF, valor, gradiente, fbm, worley, copas, texturaOndas } from '../../fonte/render/geracao/ruido.js';
 import { alturaEm } from '../../fonte/comum/altura.js';
-import { AGUA, TIPO_PREDIO } from '../../fonte/contratos/flags.js';
+import { AGUA, TIPO_PREDIO, CELULA } from '../../fonte/contratos/flags.js';
 import {
   alturaComoGLSL, distanciaAgua, codificarAgua, prepararDados, piramideAlturas, limitesAltura, mipsDeMinimos,
-  selecionarNos, faixasCDLOD, rasterizarUso, rasterizarCelulas, estacaoSeca, PERFIL_TERRENO, RAIZ_CDLOD,
+  selecionarNos, faixasCDLOD, rasterizarUso, rasterizarCelulas, estacaoSeca, caixaCelula, PERFIL_TERRENO, RAIZ_CDLOD,
 } from '../../fonte/render/mundo/terreno.js';
+import { lerManifesto, conferirLicencas, normalizarFatia, TETO_BYTES } from '../codificar-texturas.mjs';
 import { geometriaAgua, faixasDeMar, curvaDoRio, abrirContorno } from '../../fonte/render/mundo/agua.js';
 import {
   PALETA_CHAO, CORES_APOIO, GLSL_TER_VERTICE, GLSL_TER_FRAGMENTO, GLSL_ASSAR, GLSL_GERAR_CAMADAS, GLSL_GERAR_RUIDO,
@@ -21,6 +27,8 @@ import { GLSL_AGUA_FRAGMENTO, AGUAS } from '../../fonte/render/materiais/shaders
 import { CORES_COPA } from '../../fonte/render/materiais/shaders/folha.glsl.js';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
 import { gerarCidadeSintetica, SINTETICA } from '../cidade-sintetica.mjs';
+
+const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // cidade sintética uma vez só (1 a 2 s)
 let sintetica = null;
@@ -253,6 +261,27 @@ test('uso do solo: via, lote e recorte por retângulo', () => {
   assert.equal(z[Math.floor((-40 - mapa.oz) / 4) * lado + Math.floor((40 - mapa.ox) / 4)], 12);
 });
 
+test('uso do solo: célula vazia é terreno baldio, ocupada é quintal, sem zona ou inválida não pinta', () => {
+  const mapa = { ox: -256, oz: -256, lado: 512 };
+  const lado = 128; // 4 m
+  const C = {
+    n: 4, viva: [1, 1, 1, 1], zona: [1, 1, 0, 2], estado: [CELULA.LIVRE, CELULA.OCUPADA, CELULA.LIVRE, CELULA.INVALIDA],
+    x: [-100, 0, 100, 0], z: [0, 0, 0, 100], ang: [0, 0.4, 0, 0], linha: [0, 0, 0, 0],
+  };
+  const buf = new Uint8Array(lado * lado * 4);
+  rasterizarUso({ celulas: C }, buf, lado, mapa);
+  const texel = (x, z) => 4 * (Math.floor((z - mapa.oz) / 4) * lado + Math.floor((x - mapa.ox) / 4));
+  const vazia = texel(-100, 0);
+  const ocupada = texel(0, 0);
+  assert.ok(buf[vazia + 2] > buf[vazia + 1], 'baldio: mais terra que piso');
+  assert.ok(buf[ocupada + 1] > buf[ocupada + 2], 'quintal: mais piso que terra');
+  assert.equal(buf[vazia], 0, 'célula não é via');
+  for (const k of [texel(100, 0), texel(0, 100)]) assert.equal(buf[k] + buf[k + 1] + buf[k + 2] + buf[k + 3], 0);
+  assert.equal(caixaCelula(C, 2), null);
+  assert.equal(caixaCelula(C, 3), null);
+  assert.ok(caixaCelula(C, 0)[2] - caixaCelula(C, 0)[0] >= 8);
+});
+
 // ------------------------------------------------------------------------------------------------ água
 
 test('água: tudo virado para cima, rio e lagoa acima do leito, mar cobrindo o mar da grade', () => {
@@ -349,4 +378,70 @@ test('shaders: nenhuma precisão média, amostradores do terreno dentro da guard
 test('estação: capim seco no inverno (julho), verde no verão (janeiro)', () => {
   assert.ok(estacaoSeca(212) > 0.99);
   assert.ok(estacaoSeca(15) < 0.05);
+});
+
+// ------------------------------------------------------------------------------------------------ materiais CC0 (D46)
+
+test('CC0: manifesto com as 8 camadas, sha256 e espelhos; material de cada uma em LICENCAS.md', () => {
+  const m = lerManifesto(RAIZ);
+  assert.ok(m, 'falta arte/materiais/fontes.json');
+  const licencas = readFileSync(join(RAIZ, 'arte/LICENCAS.md'), 'utf8');
+  for (const c of PALETA_CHAO) {
+    const e = m.camadas[c.id];
+    assert.ok(e, `${c.id} fora do manifesto`);
+    assert.match(e.ambientcg, /^[A-Za-z]+\d{3}[A-Z]?$/, `${c.id}: id da ambientCG`);
+    assert.ok(licencas.includes(e.ambientcg), `${e.ambientcg} fora de LICENCAS.md`);
+    for (const papel of ['cor', 'altura']) {
+      if (!e[papel]) continue;
+      assert.match(e[papel].sha256, /^[0-9a-f]{64}$/);
+      assert.ok(e[papel].espelhos.length >= 1);
+      for (const esp of e[papel].espelhos) assert.ok(esp.includes(e.ambientcg), `${esp}: espelho de outro material`);
+    }
+  }
+  assert.ok(m.camadas.grama.cor, 'a cor é obrigatória');
+});
+
+test('CC0: a conferência de licença recusa arquivo sem licença ou com sha256 diferente', () => {
+  const pasta = mkdtempSync(join(tmpdir(), 'r2a-'));
+  try {
+    const foto = join(pasta, 'grama.jpg');
+    writeFileSync(foto, 'não é a foto');
+    const manifesto = { camadas: { grama: { ambientcg: 'Grass004', cor: { sha256: '0'.repeat(64), espelhos: [] } } } };
+    assert.match(conferirLicencas([{ id: 'grama', foto }], 'Grass004', manifesto).join(), /sha256/);
+    assert.match(conferirLicencas([{ id: 'grama', foto }], '', manifesto).join(), /LICENCAS/);
+    assert.match(conferirLicencas([{ id: 'capim', foto }], '', null).join(), /sem licença/);
+    assert.deepEqual(conferirLicencas([{ id: 'capim', foto }], '| grama.jpg |', null), []);
+  } finally {
+    rmSync(pasta, { recursive: true, force: true });
+  }
+});
+
+test('CC0: a fatia normalizada tem média 0,5 por canal (o detalhe não muda a cor da paleta)', () => {
+  const n = 64 * 64;
+  const rgba = new Uint8Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    rgba[4 * i] = 40 + (hash2(i, 1, 3) % 80);
+    rgba[4 * i + 1] = 90 + (hash2(i, 2, 3) % 60);
+    rgba[4 * i + 2] = 20 + (hash2(i, 3, 3) % 30);
+    rgba[4 * i + 3] = 255;
+  }
+  const f = normalizarFatia(rgba);
+  for (let c = 0; c < 4; c++) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += f[4 * i + c];
+    assert.ok(Math.abs(s / n / 255 - 0.5) < 0.02, `canal ${c}: média ${(s / n / 255).toFixed(3)}`);
+  }
+});
+
+test('CC0: arte/materiais/chao-camadas.ktx2 é um KTX2 de 8 fatias de 1024, até 8 MB (A1)', () => {
+  const arq = join(RAIZ, 'arte/materiais/chao-camadas.ktx2');
+  if (!existsSync(arq)) return; // sem o arquivo o chão fica procedural (e o A/B avisa)
+  assert.ok(statSync(arq).size <= TETO_BYTES, 'passa do teto de 8 MB');
+  const b = readFileSync(arq);
+  assert.deepEqual([...b.subarray(0, 12)], [0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a], 'identificador KTX2');
+  const u32 = (o) => b.readUInt32LE(o);
+  assert.equal(u32(20), 1024, 'largura');
+  assert.equal(u32(24), 1024, 'altura');
+  assert.equal(u32(32), PALETA_CHAO.length, 'fatias');
+  assert.ok(u32(40) >= 10, 'mipmaps');
 });

@@ -43,7 +43,8 @@ void main() {
   float fr = pow( 1.0 - abs( dot( n, v ) ), 2.2 );
   float linhas = max( gLinhaF( vUvM.y / 4.2, 0.05 ), gLinhaF( vUvM.x / 6.0, 0.04 ) ) * step( abs( n.y ), 0.7 );
   float a = ( 0.05 + 0.55 * fr + 0.35 * linhas ) * uForca;
-  vec3 c = uCor * ( 0.6 + 0.8 * fr + 1.2 * linhas ) * mix( 1.0, 2.2, uNoiteF );
+  // à noite a exposição sobe até 8 (R1a): o holograma baixa a luz para não estourar
+  vec3 c = uCor * ( 0.6 + 0.8 * fr + 1.2 * linhas ) * mix( 1.0, 0.3, uNoiteF );
   gl_FragColor = vec4( c, clamp( a, 0.0, 0.85 ) );
   G_FIM
   #include <tonemapping_fragment>

@@ -19,6 +19,13 @@
   zoom: var(--zoom);
   animation: entraTela var(--d3) var(--curva);
 }
+/* no PC largo a tela vira uma janela centrada, como o painel de economia do CS2: linhas de 1.700 px não se leem */
+@media (min-width: 1400px) {
+  .tela {
+    max-width: 1240px;
+    margin-inline: auto;
+  }
+}
 @keyframes entraTela {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }

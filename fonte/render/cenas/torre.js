@@ -1,7 +1,9 @@
-// Cena 'torre' (X1a, A10): a Torre Lâmina no platô, com a cidade sintética em volta, e a prancha de aceite: 4 azimutes
-// e 2 closes (pódio e coroa, a 30 m), de dia e de noite. ?cena=torre abre a vista livre a ~1 km; ?prancha=1 monta a
-// prancha na própria página (cada vista sai de R.foto, com o mesmo quadro do jogo) e a mostra por cima do canvas.
-//   window.__cenaTorre.prancha({ hora })  → Promise: monta a prancha na hora pedida (a captura chama duas vezes)
+// Cena 'torre' (X1a, A10): a Torre Lâmina no platô do mapa de Heldópolis (S1a), com o plano padrão construído em
+// volta, e a prancha de aceite: 4 azimutes e 2 closes (pódio e coroa, a 30 m), de dia e de noite. ?cena=torre abre a
+// vista livre a ~1 km; ?prancha=1 monta a prancha na própria página (cada vista sai de R.foto, com o mesmo quadro do
+// jogo) e a mostra por cima do canvas; ?sim=sintetica põe a Torre na cidade sintética de 12 mil prédios.
+//   window.__cenaTorre.prancha({ hora })  → Promise: monta a prancha na hora pedida. Mudar a hora no meio pede ~30
+//   quadros para a luz do ambiente e o cubo do céu assentarem (D9); a captura abre a página já na hora (?hora=21).
 // window.__resultado confere o orçamento da D27 (triângulos do LOD0 do perfil, LOD1 e sombra) e as cotas.
 import { TORRE_LAMINA as TL, PLANOS, PLANO_PADRAO, GLEBA_ENVELOPE } from '../../data/arcologia-plano.js';
 import { cavarPlanoNaCena, descavar } from '../arcologia/lago.js';
@@ -9,6 +11,26 @@ import { CeuReserva, estadoDoCeu, PONTOS_TORRE } from '../arcologia/torre.js';
 import { ARESTA } from '../../contratos/flags.js';
 
 const P = PLANOS[PLANO_PADRAO].torre;
+const consulta = () => (typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams());
+
+/** Simulação das cenas da Arcologia: o mapa de verdade (S1a) ou, com ?sim=sintetica, a cidade sintética. */
+export function simDaCena() {
+  const s = consulta().get('sim');
+  return s === 'sintetica' || s === 'vazia' ? s : 'partida';
+}
+
+/**
+ * Força a hora do céu e, se ela mudou, desenha quadros pequenos até a luz do ambiente (quadros-chave em fatias) e o
+ * cubo do céu (uma face por quadro, em duplo buffer) assentarem na hora nova (D9).
+ */
+export async function assentarHora(R, ctx, hora, quadros = 30) {
+  const antes = ctx.horaDoCeu();
+  R.tempo.forcar({ hora });
+  const dh = Math.abs(((((hora - antes + 12) % 24) + 24) % 24) - 12);
+  if (dh < 0.25) return 0; // a mesma hora
+  for (let i = 0; i < quadros; i++) await R.foto({ w: 8, h: 8 });
+  return quadros;
+}
 
 /**
  * Vistas da prancha, no espaço local da Torre (frente das penas para +z): de onde a câmera olha, para onde e o campo
@@ -68,7 +90,7 @@ export function tirarAnelSintetico(ctx) {
 
 export function registrar(registrarCena) {
   registrarCena('torre', {
-    sim: 'sintetica',
+    sim: simDaCena(),
     hora: 17.5,
     camera: { x: P.x, z: P.z, dist: 1150, guinada: 20, inclinacao: 9 },
     async montar(ctx) {
@@ -117,7 +139,7 @@ export function registrar(registrarCena) {
       async function prancha({ hora = 17.5 } = {}) {
         const R = window.__held?.R;
         if (!R) throw new Error('prancha: o render ainda não está pronto');
-        R.tempo.forcar({ hora });
+        await assentarHora(R, ctx, hora);
         const tt = t();
         R.camera.definir({ x: tt.x, z: tt.z, dist: 700, guinada: 200, inclinacao: 20 });
         const folha = document.createElement('canvas');

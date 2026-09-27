@@ -165,8 +165,9 @@ function forCelulas(E, poligono, fn) {
 }
 
 /**
- * Extrai n unidades de um recurso das células dentro do polígono (a planta do prédio que extrai): tira das células com
- * mais recurso primeiro, uma unidade de cada vez (determinístico). Devolve quanto tirou; marca a versão da camada.
+ * Extrai n unidades de um recurso das células dentro do polígono (a planta do prédio que extrai): esgota primeiro a
+ * célula com mais recurso, depois a seguinte (empate: a de menor índice; determinístico). Devolve quanto tirou; marca
+ * a versão da camada.
  */
 export function extrair(sim, tipo, poligono, n) {
   const E = sim.espelho.recursos;

@@ -7,8 +7,9 @@
 import * as THREE from 'three';
 import { TELA_VERTICE, PREFILTRO, REDUZ, AMPLIA, COMPOSICAO } from '../materiais/shaders/pos.glsl.js';
 
-function materialTela(frag, uniforms, blending = THREE.NoBlending) {
+function materialTela(nome, frag, uniforms, blending = THREE.NoBlending) {
   return new THREE.ShaderMaterial({
+    name: nome,
     vertexShader: TELA_VERTICE, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, blending,
     transparent: blending !== THREE.NoBlending, toneMapped: false,
   });
@@ -51,12 +52,12 @@ export class Pos {
     this.malha.frustumCulled = false;
     this.cena.add(this.malha);
     this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    this.mPre = materialTela(PREFILTRO, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uLimiar: { value: 1.1 }, uJoelho: { value: 0.5 }, uExposicao: { value: 1 } });
-    this.mReduz = materialTela(REDUZ, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mAmplia = materialTela(AMPLIA, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uPeso: { value: 1 } }, THREE.AdditiveBlending);
-    this.mComp = materialTela(COMPOSICAO, {
+    this.mPre = materialTela('pos-prefiltro', PREFILTRO, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uLimiar: { value: 1.1 }, uJoelho: { value: 0.5 }, uExposicao: { value: 1 } });
+    this.mReduz = materialTela('pos-reduz', REDUZ, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.mAmplia = materialTela('pos-amplia', AMPLIA, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uPeso: { value: 1 } }, THREE.AdditiveBlending);
+    this.mComp = materialTela('pos-composicao', COMPOSICAO, {
       tCena: { value: null }, tBloom: { value: null }, uTexel: { value: new THREE.Vector2() }, uBloom: { value: 0.05 },
-      uExposicao: { value: 1 }, uPotencia: { value: 1.18 }, uSaturacao: { value: 1.1 }, uCas: { value: 0 }, uVinheta: { value: 0.12 }, uAspecto: { value: 1.7 }, uTempo: { value: 0 },
+      uExposicao: { value: 1 }, uPotencia: { value: 1.45 }, uSaturacao: { value: 1.05 }, uCas: { value: 0 }, uVinheta: { value: 0.12 }, uAspecto: { value: 1.7 }, uTempo: { value: 0 },
       uEsmaecer: { value: 0 }, uCorEsmaecer: { value: new THREE.Vector3(0.02, 0.03, 0.05) },
     });
     this.alvo = null;
@@ -65,8 +66,10 @@ export class Pos {
     this.h = 0;
     this.amostras = 0;
     this.forcaBloom = 0.05;
-    // o "look" do AgX (contraste pela curva e saturação em volta da luma; 1 e 1 é o AgX puro)
-    this.look = { potencia: 1.18, saturacao: 1.1 };
+    // o "look" do AgX (contraste pela curva e saturação em volta da luma; 1 e 1 é o AgX puro): o AgX puro tem o pé
+    // longo e deixa a cidade cinza; a potência de 1,45 devolve o preto da sombra e do asfalto (como o Punchy do
+    // Blender), com a saturação quase neutra (1,05)
+    this.look = { potencia: 1.45, saturacao: 1.05 };
     this.esmaecer = 0;
     this.passes = 0;
   }

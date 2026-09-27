@@ -11,6 +11,12 @@
   zoom: var(--zoom);
 }
 
+/* a barra é um contexto de empilhamento (z do HUD, 20): com um popover aberto ela sobe para o z dos popovers, senão
+   o "de onde vem" abre por baixo da tela de gestão (50) e do cartão (40), que ficam logo abaixo dela */
+.lugar-cima:has(.popover) {
+  z-index: var(--z-popover);
+}
+
 .hud-cima {
   position: relative;
   display: flex;
@@ -46,7 +52,9 @@
   left: 0;
   right: 0;
 }
-/* item com popover aberto: fundo leve (o texto de 12 px segue acima de 4,5:1 sobre céu branco) e o traço azul */
+/* item com popover aberto (ou tela aberta, no PC): fundo leve (o texto de 12 px segue acima de 4,5:1 sobre céu
+   branco) e o traço azul */
+.bt.hud-item[aria-expanded='true'],
 .bt.hud-item[aria-pressed='true'] {
   background: rgba(255, 255, 255, 0.05);
   box-shadow: inset 0 -2px 0 var(--ac);
@@ -55,7 +63,8 @@
 .hud-grupo > .hud-item:first-child {
   border-radius: var(--r2) 0 0 var(--r2);
 }
-.hud-grupo > .hud-item:last-child {
+.hud-grupo > .hud-item:last-child,
+.hud-grupo > .ancora:last-child .hud-item {
   border-radius: 0 var(--r2) var(--r2) 0;
 }
 .hud-item .glifo {

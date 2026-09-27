@@ -17,28 +17,43 @@ import { Glifo } from '../glifos/Glifo.jsx';
 import { glifoBemEstar } from '../glifos/glifos.js';
 import { Ancora, Popover } from '../comp/Popover.jsx';
 import { Barra, fracao } from '../comp/Barra.jsx';
-import { REGRAS_DONO } from '../../data/economia.js';
+import { REGRAS_DONO, bemEstarArredondado } from '../../data/economia.js';
 import { MES, MESES_ANO, RODADA, HORA } from '../../comum/relogio.js';
 
 const GLIFO_VEL = ['pausa', 'vel1', 'vel2', 'vel3'];
+// gatilho de popover: aria-expanded (não aria-pressed, que é de botão que liga e desliga)
+const expande = (aberto) => ({ 'aria-expanded': String(!!aberto), 'aria-haspopup': 'dialog' });
+// "reduzir movimento": o do sistema ou o do jogador (prefs.reduzirMovimento marca a raiz, ui/prefs.js)
+const movimentoReduzido = () =>
+  (typeof document !== 'undefined' && document.documentElement?.dataset?.movimento === 'reduzido') ||
+  (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 // um glifo por fase do céu: no celular estreito o nome da fase sai da barra e o glifo basta (o popover diz o nome)
 export const GLIFO_FASE = Object.freeze({ manha: 'solNascente', tarde: 'sol', fimDeTarde: 'solBaixo', noite: 'lua' });
 const glifoFase = (f) => GLIFO_FASE[f] ?? 'sol';
 // telas de gestão que ganham botão com rótulo no PC (desenho da UI 7.4), na ordem da barra
 const GESTAO = ['holding', 'economia', 'cidade', 'progresso', 'conselho'];
+const GLIFO_TELA = Object.freeze({ holding: 'holding', economia: 'dinheiro', cidade: 'populacao', progresso: 'marco', conselho: 'conselho' });
 
 // ------------------------------------------------------------------------------------------ regras de leitura (puras)
 
+/** Bem-estar que a barra mostra: o da tarifa (D11), inteiro de 0 a 100; sem número (NaN, cidade vazia) vale 0. */
+export const bemDaBarra = (b) => bemEstarArredondado(b?.bemEstarTarifa ?? b?.bemEstar);
+
+/** Cidade sem moradores (partida nova): o bem-estar não tem de quem ser média, então não há rosto nem degrau. */
+export const semMoradores = (b) => b?.populacao === 0;
+
 /**
  * Margem do bem-estar até o degrau da tarifa (D11): "+3 acima de 61"; âmbar abaixo de 63 (a 2 pontos do degrau).
- * Sem degrau: abaixo de 31 diz quanto falta para subir; na faixa de cima, sem risco, diz a faixa.
+ * Sem degrau: abaixo de 31 diz quanto falta para subir; na faixa de cima, sem risco, diz a faixa. Sem moradores, diz
+ * isso (um rosto triste e "faltam 31" numa cidade vazia assustariam à toa).
  * @returns {{ texto: string, estado: 'al' | null }}
  */
 export function textoMargem(b) {
+  if (semMoradores(b)) return { texto: t('barra.bem.semMoradores'), estado: null };
   const m = b?.margem ?? {};
-  const bem = Math.round(b?.bemEstarTarifa ?? b?.bemEstar ?? 0);
+  const bem = bemDaBarra(b);
   if (m.degrau !== null && m.degrau !== undefined) {
-    const delta = Math.max(0, Math.round(m.delta ?? bem - m.degrau));
+    const delta = Math.max(0, Math.round(Number.isFinite(m.delta) ? m.delta : bem - m.degrau));
     return { texto: t('barra.bem.acima', { n: delta, degrau: m.degrau }), estado: delta < 2 ? 'al' : null };
   }
   const prox = REGRAS_DONO.renda.faixas.find(([de]) => de > bem);
@@ -92,8 +107,7 @@ function useCreditos(valor, ritmoHora) {
     clearTimeout(x.fim);
     setSalto(d > 0 ? 'sobe' : 'desce');
     x.fim = setTimeout(() => setSalto(null), d > 0 ? 500 : 300);
-    const reduzir = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduzir || typeof requestAnimationFrame !== 'function') return;
+    if (movimentoReduzido() || typeof requestAnimationFrame !== 'function') return;
     if (x.id) cancelAnimationFrame(x.id);
     const de = x.mostrado ?? a; // um salto no meio de outro continua do número que está na tela
     const t0 = performance.now();
@@ -184,9 +198,10 @@ export function BarraCima({ ui }) {
   const saldoNeg = b.saldoHora < 0;
   const saldo = fmt.porHora(b.saldoHora);
   const margem = textoMargem(b);
-  const bem = Math.round(b.bemEstarTarifa ?? b.bemEstar ?? 0);
-  const glifoBem = glifoBemEstar(b.tarifa);
-  const estadoBem = b.tarifa >= 11 ? 'ok' : b.tarifa >= 8 ? null : 'er';
+  const bem = bemDaBarra(b);
+  const vazia = semMoradores(b);
+  const glifoBem = vazia ? 'bemEstarMedio' : glifoBemEstar(b.tarifa);
+  const estadoBem = vazia ? null : b.tarifa >= 11 ? 'ok' : b.tarifa >= 8 ? null : 'er';
   const pausado = b.velocidade === 0;
   const pendentes = b.decisoesPendentes ?? 0;
   const dicaHora = fmt.dicaHora();
@@ -197,7 +212,7 @@ export function BarraCima({ ui }) {
     <div class="hud-cima">
       <div class="hud-grupo vidro" data-hud="cima-esquerda">
         <Ancora>
-          <Botao a="holding" rotulo={t('barra.holding')} class="hud-item hud-marca" onClick={() => abrir('holding', 'holding')}>
+          <Botao a="holding" rotulo={t('barra.holding')} {...(ui.telas().includes('holding') ? {} : expande(aberto === 'holding'))} class="hud-item hud-marca" onClick={() => abrir('holding', 'holding')}>
             <Glifo n="holding" tam={24} />
           </Botao>
           <Popover aberto={aberto === 'holding'} aoFechar={fechar} titulo={t('barra.holding')} a="barra.holding">
@@ -205,7 +220,7 @@ export function BarraCima({ ui }) {
           </Popover>
         </Ancora>
         <Ancora>
-          <Botao a="marco" rotulo={t('barra.marco.rotulo', { n: marco.n ?? 0, nome: marco.nome ?? '' })} ativo={aberto === 'marco'} class="hud-item hud-marco" onClick={() => alternar('marco')}>
+          <Botao a="marco" rotulo={t('barra.marco.rotulo', { n: marco.n ?? 0, nome: marco.nome ?? '' })} {...expande(aberto === 'marco')} class="hud-item hud-marco" onClick={() => alternar('marco')}>
             <Anel frac={fracaoMarco(marco)} n={marco.n ?? 0} />
           </Botao>
           <Popover aberto={aberto === 'marco'} aoFechar={fechar} titulo={t('barra.marco.titulo', { n: marco.n ?? 0, nome: marco.nome ?? '' })} a="barra.marco">
@@ -224,7 +239,7 @@ export function BarraCima({ ui }) {
           </span>
         </Botao>
         <Ancora>
-          <Botao a="populacao" rotulo={t('barra.pop.rotulo', { valor: fmt.populacao(b.populacao), hora: fmt.porHora(b.popHora) })} ativo={ui.telas().includes('cidade') ? undefined : aberto === 'pop'} class="hud-item" onClick={() => abrir('cidade', 'pop')}>
+          <Botao a="populacao" rotulo={t('barra.pop.rotulo', { valor: fmt.populacao(b.populacao), hora: fmt.porHora(b.popHora) })} {...(ui.telas().includes('cidade') ? {} : expande(aberto === 'pop'))} class="hud-item" onClick={() => abrir('cidade', 'pop')}>
             <Glifo n="populacao" />
             <span class="pilha">
               <b class="num hud-valor">{fmt.populacao(b.populacao)}</b>
@@ -240,7 +255,7 @@ export function BarraCima({ ui }) {
           </Popover>
         </Ancora>
         <Ancora>
-          <Botao a="bemEstar" rotulo={t('barra.bem.rotulo', { n: bem, margem: margem.texto })} ativo={aberto === 'bem'} class="hud-item" onClick={() => alternar('bem')}>
+          <Botao a="bemEstar" rotulo={t('barra.bem.rotulo', { n: bem, margem: margem.texto })} {...expande(aberto === 'bem')} class="hud-item" onClick={() => alternar('bem')}>
             <Glifo n={glifoBem} class={estadoBem ? `tx-${estadoBem}` : ''} />
             <span class="pilha">
               <b class="num hud-valor">{bem}</b>
@@ -256,7 +271,7 @@ export function BarraCima({ ui }) {
           </Popover>
         </Ancora>
         <Ancora>
-          <Botao a="demanda" rotulo={t('barra.demanda.rotulo', { r: b.demanda?.R ?? 0, c: b.demanda?.C ?? 0, i: b.demanda?.I ?? 0 })} ativo={aberto === 'demanda'} class="hud-item hud-demanda" onClick={() => alternar('demanda')}>
+          <Botao a="demanda" rotulo={t('barra.demanda.rotulo', { r: b.demanda?.R ?? 0, c: b.demanda?.C ?? 0, i: b.demanda?.I ?? 0 })} {...expande(aberto === 'demanda')} class="hud-item hud-demanda" onClick={() => alternar('demanda')}>
             <BarrasDemanda demanda={b.demanda} />
           </Botao>
           <Popover aberto={aberto === 'demanda'} aoFechar={fechar} titulo={t('barra.demanda.titulo')} a="barra.demanda">
@@ -292,13 +307,19 @@ export function BarraCima({ ui }) {
 
       <div class="hud-grupo vidro" data-hud="cima-direita">
         {pendentes > 0 ? (
-          <Botao a="conselho" rotulo={t('barra.conselho', { n: pendentes })} class="hud-item hud-conselho" onClick={() => ui.abrirTela('conselho')}>
-            <Glifo n="conselho" />
-            <span class="selo num">{pendentes}</span>
-          </Botao>
+          <Ancora>
+            <Botao a="conselho" rotulo={t('barra.conselho', { n: pendentes })} {...(ui.telas().includes('conselho') ? {} : expande(aberto === 'conselho'))} class="hud-item hud-conselho" onClick={() => abrir('conselho', 'conselho')}>
+              <Glifo n="conselho" />
+              <span class="selo num">{pendentes}</span>
+            </Botao>
+            <Popover aberto={aberto === 'conselho'} aoFechar={fechar} titulo={t('barra.tela.conselho')} a="barra.conselho">
+              <Par rotulo={t('barra.conselho.pendentes')} valor={fmt.numero(pendentes)} />
+              <p class="popover-nota">{t('app.emBreve')}</p>
+            </Popover>
+          </Ancora>
         ) : null}
         <Ancora>
-          <Botao a="calendario" rotulo={`${fmt.dataCalendario(b.data)}, ${fmt.fase(b.data?.fase)}`} ativo={aberto === 'data'} class="hud-item hud-data" onClick={() => alternar('data')}>
+          <Botao a="calendario" rotulo={`${fmt.dataCalendario(b.data)}, ${fmt.fase(b.data?.fase)}`} {...expande(aberto === 'data')} class="hud-item hud-data" onClick={() => alternar('data')}>
             <Glifo n={glifoFase(b.data?.fase)} />
             <span class="pilha">
               <b class="num hud-data-mes">
@@ -323,9 +344,14 @@ export function BarraCima({ ui }) {
             </Botao>
           ))}
         </div>
-        <Botao a="menu" rotulo={t('barra.menu')} class="hud-item hud-menu" onClick={() => ui.abrirTela('menu')}>
-          <Glifo n="menu" />
-        </Botao>
+        <Ancora>
+          <Botao a="menu" rotulo={t('barra.menu')} {...(ui.telas().includes('menu') ? {} : expande(aberto === 'menu'))} class="hud-item hud-menu" onClick={() => abrir('menu', 'menu')}>
+            <Glifo n="menu" />
+          </Botao>
+          <Popover aberto={aberto === 'menu'} aoFechar={fechar} titulo={t('barra.menu')} lado="direita" largura={240} a="barra.menu">
+            <PopMenu ui={ui} fechar={fechar} />
+          </Popover>
+        </Ancora>
       </div>
 
       {pausado ? (
@@ -418,6 +444,29 @@ function PopData({ b }) {
       <Par rotulo={t('barra.data.anoNovo', { ano })} valor={fmt.contagem(tiques, b.mult)} glifo={b.velocidade === 0 ? 'pausa' : null} />
       <p class="popover-nota">{t('barra.data.escala')}</p>
       <p class="popover-nota">{t('barra.data.emprestimo')}</p>
+    </>
+  );
+}
+
+/**
+ * Menu enquanto a tela 'menu' (U1b) não existe: as telas de gestão já registradas e o aviso do resto. Assim o botão
+ * do canto nunca fica mudo na prévia.
+ */
+function PopMenu({ ui, fechar }) {
+  const telas = GESTAO.filter((id) => ui.telas().includes(id));
+  return (
+    <>
+      {telas.length ? (
+        <div class="popover-lista">
+          {telas.map((id) => (
+            <Botao a="barra.menu.tela" k={id} rotulo={t(`barra.tela.${id}`)} class="popover-item" onClick={() => { fechar(); ui.abrirTela(id); }}>
+              <Glifo n={GLIFO_TELA[id] ?? 'setaDir'} tam={18} />
+              <span>{t(`barra.tela.${id}`)}</span>
+            </Botao>
+          ))}
+        </div>
+      ) : null}
+      <p class="popover-nota">{t('app.emBreve')}</p>
     </>
   );
 }
