@@ -888,6 +888,13 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   projetar e a caixa LOD1 invisível projetando, com `callsSombra` à parte; a bancada roda a guarda do Mali sobre os
   programas da depuração.
 - **Testa sem as outras:** é a primeira. **Depende de:** nada. **Regra:** curta; regra de domínio fica como substituto.
+- **Entregue em 27/09/2026** (F0-A, F0-B e F0-C, fechada na F0-R). Diferente do plano: as ferramentas das outras
+  parcelas (`mapa`, `codificar-texturas`, `sonda-gpu`, `robo/robo-sim`, `robo-navegador`, `aceite-cor`) são esqueletos
+  de linha de comando que só dizem a dona, sem `registrar()`, porque nenhum índice as importa; `ferramentas/saves/`,
+  `ferramentas/vitrine/cenas/` e `arte/materiais/` nascem com as donas. Além de `nucleo` e `contratos`, os testes da F0
+  são `casca`, `ferramentas` e `integracao` (simulação e render falsos contra os contratos). O espelho ganhou
+  `nos.lig`, `arestas.arco`, `celulas.coluna` e `origem` nas grades (em `contratos/espelho.js`). A tag `jogo-antigo`
+  fica para o commit do integrador.
 
 #### S1a. Mapa autoral e terreno (onda 1; 2 sessões)
 - **Arquivos:** `sim/mundo/*`, `data/mapa-heldopolis.js`, `ferramentas/mapa.mjs`, `ferramentas/testes/mundo.teste.mjs`,

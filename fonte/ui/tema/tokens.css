@@ -1,0 +1,118 @@
+/* Tokens da interface (desenho da UI, seção 4): vidro grafite, Inter, champanhe para dinheiro e prestígio, azul para
+   interação, verde, âmbar e vermelho só para estado. Não há tema claro: o mundo é a parte clara da tela. F0 cria;
+   a U1a mantém. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fontes/inter-latin-wght-normal.woff2') format('woff2');
+}
+:root {
+  /* superfícies: vidro grafite, sem desfoque no celular (a opacidade garante o contraste sobre céu claro) */
+  --s0: rgba(12, 16, 22, 0.84);
+  --s1: rgba(16, 21, 28, 0.94);
+  --s2: rgba(255, 255, 255, 0.04);
+  --s3: rgba(255, 255, 255, 0.08);
+  --veu: rgba(6, 9, 13, 0.55);
+  --fio: rgba(255, 255, 255, 0.08);
+  --fio2: rgba(255, 255, 255, 0.14);
+  --luz: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* texto (sobre --s0 no pior caso: 10,8 / 5,6 / 2,9) */
+  --t1: #eef2f6;
+  --t2: #a7b1bd;
+  --t3: #6f7a87;
+  --tinv: #0b0f14;
+  /* interação e prestígio */
+  --ac: #5ab0ff;
+  --ac2: #8cc8ff;
+  --acE: #2f7fd0;
+  --acF: rgba(90, 176, 255, 0.16);
+  --ch: #d9bd84;
+  --chF: rgba(217, 189, 132, 0.14);
+  /* estado: sempre com glifo e forma */
+  --ok: #4cc38a;
+  --al: #f2b14c;
+  --er: #ff7b6e;
+  --off: #5e6875;
+  /* zonas (D23): três famílias por cor; escritório é azul com hachura */
+  --zR: #199e70;
+  --zC: #3987e5;
+  --zI: #c98500;
+  /* séries de gráfico, divergente e sequencial das camadas */
+  --g1: #3987e5;
+  --g2: #d95926;
+  --g3: #199e70;
+  --g4: #c98500;
+  --divBom: #3987e5;
+  --divMeio: #383835;
+  --divRuim: #e66767;
+  /* forma e espaço */
+  --r1: 6px;
+  --r2: 10px;
+  --r3: 14px;
+  --rp: 999px;
+  --e1: 4px;
+  --e2: 8px;
+  --e3: 12px;
+  --e4: 16px;
+  --e5: 24px;
+  --sombra1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --sombra2: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --alvo: 44px;
+  --barra: 40px;
+  --linha: 48px;
+  /* tipo */
+  --fonte: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'Roboto Mono', 'Cascadia Mono', monospace;
+  --t12: 12px;
+  --t13: 13px;
+  --t15: 15px;
+  --t17: 17px;
+  --t20: 20px;
+  --t28: 28px;
+  --t40: 40px;
+  /* movimento */
+  --d1: 80ms;
+  --d2: 160ms;
+  --d3: 240ms;
+  --d4: 360ms;
+  --curva: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* escala: altura da janela e o ajuste do jogador */
+  --escala: 1;
+  /* camadas (z) */
+  --z-rotulos: 10;
+  --z-hud: 20;
+  --z-bandeja: 30;
+  --z-folha: 40;
+  --z-tela: 50;
+  --z-popover: 60;
+  --z-avisos: 70;
+  --z-modal: 80;
+  /* margem segura (furo da câmera nas bordas laterais em paisagem) */
+  --mE: max(8px, env(safe-area-inset-left));
+  --mD: max(8px, env(safe-area-inset-right));
+  --mC: max(8px, env(safe-area-inset-top));
+  --mB: max(8px, env(safe-area-inset-bottom));
+}
+@media (pointer: fine) {
+  :root {
+    --linha: 36px;
+  }
+}
+@media (min-height: 700px) {
+  :root {
+    --escala: 1.1;
+  }
+}
+@media (min-height: 1000px) {
+  :root {
+    --escala: 1.25;
+  }
+}
+:root[data-contraste='1'] {
+  --s0: rgba(10, 13, 18, 0.94);
+  --s1: rgba(12, 16, 22, 0.98);
+  --fio: rgba(255, 255, 255, 0.22);
+  --t2: #c9d1da;
+}

@@ -1,0 +1,2 @@
+// Listas de instâncias por região compactadas. Esqueleto da F0 (dona: R4a); registrar(api) vem de render/index.js.
+export function registrar() {}

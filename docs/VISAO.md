@@ -2,7 +2,8 @@
 
 Documento de direção do jogo. Diz o que o jogo quer ser, o que pegamos de Cities: Skylines II e de Highrise City,
 onde ele deve rodar, como crescer até o tamanho pedido e quem (entre agentes e ferramentas) faz cada parte.
-Atualizado em 26/09/2026, depois da fase 1 (desmate, porto, jatinhos, esportivos e limites maiores).
+Atualizado em 27/09/2026: o jogo está sendo refeito do zero e o plano e o roteiro dele estão em `docs/PROJETO.md` (seção 6
+deste documento). A visão de longo prazo continua aqui.
 
 ## 1. Onde estamos
 
@@ -245,19 +246,16 @@ Cada metrópole faz o papel de um país. Tem arquitetura, clima, moeda, leis, re
 Os conselheiros de hoje continuam: Íris, Tomé, Nara, Caio e Dona Cida. Entram novos personagens: a diretora
 financeira, o advogado, a chefe de relações públicas, os fundadores rivais e os líderes políticos.
 
-## 6. Roteiro por fases
+## 6. Roteiro
 
-| Fase | O que entra | Pronto quando |
-|---|---|---|
-| 1 (feita) | desmate, porto, jatinhos, esportivos, limites maiores, esta visão e a equipe de IA | publicada em 26/09/2026 |
-| 1.1 (feita) | plano diretor da Arcologia (eixo, quadras, anel viário, saídas para a cidade), Torre da Holding com heliponto e helicóptero, Cúpula da Vida, cores dos prédios | publicada em 26/09/2026 |
-| 1.2 (feita) | Trevo da Holding: a Arcologia como uma construção só (Anel Mestre, tambores, folhas, contorno, eixo), gabarito desde o capítulo 1, Torre em bolo de noiva, linha de luz | publicada em 27/09/2026 |
-| 2 | Holding com divisões, influência, rivais e aliados na primeira metrópole, eventos de decisão com memória, bombeiros, lixo, telecom e marcos | robô vence um rival e completa 10 eventos |
-| 3 | estradas livres (reta, curva, rotatória), zonas com demanda, linhas de ônibus e metrô, trânsito com rotas | uma cidade crescida só por zonas e estradas |
-| 4 | motor em escala: WebGPU, simulação em worker, mapa em blocos, níveis de detalhe, estações e chuva, agentes estatísticos | 50 mil lotes a 60 quadros no PC e 30 no Poco X7 |
-| 5 | apps: `.exe` de PC (Electron) e APK (TWA), saves em arquivo, nuvem opcional | instalados e testados nos seus aparelhos |
-| 6 | mapa-múndi e a segunda metrópole (EUA), rotas de avião e navio, câmbio | uma filial lucrativa fora do Brasil |
-| 7 | as 12 metrópoles, política e geopolítica completas | todas jogáveis no mesmo save |
+O roteiro por fases saiu daqui. O jogo está sendo refeito do zero, e o plano dele é um documento só:
+**`docs/PROJETO.md`**. Lá estão o M1 "Heldópolis nasce" (seção 4: M1a e M1b, parcelas, prévias e os portões em que
+você aprova a direção), os critérios de aceite medidos e o roteiro do M2 ao M6 (seção 5.1).
+
+As fases 1 a 1.2 (desmate, porto, jatinhos, esportivos, limites maiores, plano diretor e Trevo da Holding) ficaram no
+jogo anterior, que continua jogável e congelado em `app/` até a publicação do M1 e, depois dela, em `jogo-antigo/`.
+A visão deste documento (a Holding, os rivais, a política e as 12 metrópoles, seção 5) continua valendo e entra no
+jogo novo a partir do M2.
 
 ## 7. Equipe de IA
 
@@ -265,12 +263,13 @@ financeira, o advogado, a chefe de relações públicas, os fundadores rivais e 
 
 | Agente | Faz | Usa |
 |---|---|---|
-| `diretor-de-jogo` | mantém a visão coerente, escreve regras e eventos, decide o que entra em cada fase | este documento, `fonte/data`, simulação |
-| `engenheiro-simulacao` | regras em `fonte/sim/estado.js`, save, testes de regra, economia | `simular.mjs --testes`, robô |
-| `engenheiro-grafico` | render, desempenho, níveis de detalhe, WebGPU, orçamento por aparelho | `testar.mjs`, medição de chamadas e triângulos |
-| `artista-3d` | modelos procedurais no padrão da foto, ícones | `fonte/render/cidade.js`, `icones.js`, capturas |
-| `roteirista` | história, personagens, falas, decisões e consequências | `fonte/data/historia.js`, eventos |
-| `testador` | robô de partida, vitrine da interface, capturas de aceite, caça a regressões | ferramentas de teste |
+| `diretor-de-jogo` | mantém a visão coerente, escreve regras, decisões e objetivos, decide o que entra em cada parcela | `docs/PROJETO.md`, este documento, `fonte/data` |
+| `engenheiro-simulacao` | simulação por registro em `fonte/sim/`, save, determinismo, economia, testes | `simular.mjs --testes`, `--determinismo`, `--bancada`, robô |
+| `engenheiro-grafico` | render em WebGL2, sombra própria, LOD, oficina, orçamento por perfil | `bancada.mjs`, `testar.mjs` |
+| `artista-3d` | gerador de prédios, colocáveis, Torre Lâmina, com referência real | `fonte/render/geracao/`, cenas da bancada |
+| `engenheiro-interface` | interface em Preact: HUD, folhas, telas, ferramentas, glifos, gestos | `vitrine-ui.mjs`, render e simulação falsos |
+| `roteirista` | história, personagens, falas, decisões e todos os textos da interface | `fonte/data/historia.js`, `fonte/ui/textos/` |
+| `testador` | testes, bancada, vitrine, robô e capturas de aceite, caça a regressões | ferramentas de teste |
 
 ### 7.2 Personas
 
@@ -296,9 +295,9 @@ financeira, o advogado, a chefe de relações públicas, os fundadores rivais e 
 
 ### 7.4 Skills (em `.claude/skills/`)
 
-- `verificar-e-publicar`: montar, testes de regra, robô, vitrine, commits separados (fonte e montagem) e envio.
-- `novo-predio-da-cidade`: dados, modelo por nível, ícone, altura, painel, robô, teste e README.
-- `capturas-de-aceite`: capturas com a câmera certa, obra no meio e medição de chamadas e triângulos.
+- `verificar-e-publicar`: montar numa pasta temporária, testes e guarda de texto, bancada, vitrine, robô, commits de
+  fonte (e a montagem só nas prévias e na publicação do M1).
+- `novo-predio-da-cidade` e `capturas-de-aceite`: o essencial do jogo novo; reescritas na C2 com o M1 pronto.
 
 ### 7.5 O que preciso de você
 

@@ -1,15 +1,22 @@
 ---
 name: engenheiro-grafico
-description: Engenheiro gráfico (three.js r186). Use para render, desempenho, níveis de detalhe, instâncias, sombras, pós-processamento, o caminho para WebGPU e o orçamento por aparelho (PC com placa de vídeo e Poco X7).
+description: Engenheiro gráfico do jogo novo (three.js 0.186 em WebGL2, fonte/render). Use para motor, luz, sombra própria, céu, terreno, água, LOD, setores e oficina, instâncias, ganchos GLSL, desempenho e o orçamento por perfil (PC Ultra e Poco X7 Média).
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
-Orçamento (docs/VISAO.md): PC Ultra até 1.500 chamadas e 5 milhões de triângulos; Poco X7 Média até 300 chamadas e
-900 mil triângulos. Meça sempre com `engine.stats` numa vista aberta de cidade grande via `ferramentas/testar.mjs`
-(o Chromium daqui é SwiftShader: mede chamadas e triângulos, não quadros por segundo reais).
+Leia antes: `docs/PROJETO.md` (2.4 espelho e diário, 2.7 API do render, 2.8 workers, D14, D39, D43, D44, D45, 4.8
+orçamento) e `docs/desenho/render.md` na parte da parcela.
 
 Regras da casa:
-- Muitos objetos iguais = InstancedMesh; peças estáticas prontas = fusão por bairro e material (mundo.js `fontes`).
-- Nada de alocação por quadro nos laços de update; frustum culling por grupo (bairro, lugar).
-- Qualidade por aparelho em `engine.q.id` (ultra, alta, media, leve); o celular fica em media/leve.
-- Materiais compartilhados em `render/materials.js`; geometrias compartilhadas marcadas `userData.compartilhada`.
-- Depois de mudar o render: montar, captura da cena afetada e medição do orçamento; registre os números no README.
+- A UI nunca toca no three; o render lê `sim.espelho` e `sim.mudancas.desde(v)` uma vez por quadro (teto de 2 ms).
+- Tudo por registro: `registrarDominio`, `registrarCena`, `ganchos.definir`, `registrarTextura`,
+  `registrarGeradorOficina`, `registrarSelecionavel`. `fonte/render/geracao/` não importa o three (roda no worker
+  `oficina`, teto de 250 KB).
+- Sombra de perto própria (D43), `shadowMap` do three desligado; `precision highp` e nenhum `mediump` nos shaders.
+- Guarda do Mali (D44): até 12 amostradores por estágio, 12 varyings, 200 vetores de uniforme no fragmento e 14
+  atributos, contados no GLSL final pela bancada.
+- `R.stats` soma todos os passes do quadro e separa as famílias da 4.8.
+
+Medir, não estimar: `node ferramentas/bancada.mjs --pasta <montagem> --cenas <cenas> --perfis leve,media,ultra`
+(pior quadro de 120 com o sol andando; falha acima do orçamento, da família ou da guarda). O Chromium daqui é
+SwiftShader: chamadas e triângulos são exatos, milissegundos não valem. Monte numa pasta temporária
+(`montar.mjs --saida <pasta>`); capturas com `testar.mjs --consulta "cena=<nome>&q=media&pr=1"`, só do que mudou.

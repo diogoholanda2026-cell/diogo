@@ -1,19 +1,22 @@
 {
   "name": "arcologia-de-held",
-  "version": "2.0.0",
+  "version": "3.0.0-dev",
   "private": true,
-  "description": "Arcologia de Held — maquete viva em 3D com mecânica estilo SimCity BuildIt",
+  "description": "Arcologia de Held: construa Heldópolis e erga a Arcologia (jogo de cidade em 3D, PWA)",
   "type": "module",
   "scripts": {
     "montar": "node ferramentas/montar.mjs",
-    "testar": "node ferramentas/testar.mjs",
-    "simular": "node ferramentas/simular.mjs 3 1",
-    "simular:todos": "node ferramentas/simular.mjs --todos",
-    "simular:testes": "node ferramentas/simular.mjs --testes"
+    "simular:testes": "node ferramentas/simular.mjs --testes",
+    "guarda": "node ferramentas/guarda-texto.mjs",
+    "vitrine": "node ferramentas/vitrine-ui.mjs",
+    "bancada": "node ferramentas/bancada.mjs"
   },
   "devDependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@preact/signals": "2.11.2",
     "esbuild": "0.28.2",
-    "three": "0.186.0",
-    "playwright": "1.56.1"
+    "playwright": "1.56.1",
+    "preact": "10.29.8",
+    "three": "0.186.0"
   }
 }

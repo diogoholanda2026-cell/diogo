@@ -1,0 +1,240 @@
+/* Base da interface: raiz sobre o canvas, lugares do HUD (ui/index.jsx), vidro, botões, foco e movimento. A barra de
+   cima mínima da F0 mora aqui até a U1a levá-la para hud.css. Só transform e opacity animam; nada de desfoque no
+   celular (desenho da UI 4 e 12.6). */
+#ui {
+  font-family: var(--fonte);
+  font-size: var(--t15);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--t1);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'tnum' 1;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#ui * {
+  box-sizing: border-box;
+}
+.ui-raiz {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lugar {
+  position: absolute;
+  pointer-events: none;
+}
+.lugar-cima {
+  top: var(--mC);
+  left: var(--mE);
+  right: var(--mD);
+  z-index: var(--z-hud);
+}
+.lugar-centro {
+  top: calc(var(--mC) + 48px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-hud);
+}
+.lugar-direita {
+  top: calc(var(--mC) + 48px);
+  right: var(--mD);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+  z-index: var(--z-hud);
+}
+.lugar-baixo {
+  left: var(--mE);
+  right: var(--mD);
+  bottom: var(--mB);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--e2);
+  z-index: var(--z-bandeja);
+}
+.lugar-mundo {
+  inset: 0;
+  z-index: var(--z-rotulos);
+}
+.lugar-folha {
+  left: var(--mE);
+  top: calc(var(--mC) + 48px);
+  bottom: var(--mB);
+  z-index: var(--z-folha);
+}
+.lugar-sobre {
+  inset: 0;
+  z-index: var(--z-avisos);
+}
+.vidro {
+  background: var(--s0);
+  box-shadow: var(--luz), var(--sombra1);
+  border-radius: var(--r2);
+  pointer-events: auto;
+}
+
+/* botões */
+.bt {
+  position: relative;
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  transition: transform var(--d1) var(--curva), background-color var(--d2) var(--curva);
+}
+.bt:active {
+  transform: scale(0.97);
+}
+.bt:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+.bt[aria-disabled='true'] {
+  opacity: 0.5;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.glifo {
+  flex: none;
+  display: block;
+}
+.ch {
+  color: var(--ch);
+}
+
+/* barra de cima mínima (F0; a U1a refaz em hud.css) */
+.barra-cima {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--e2);
+}
+.barra-cima .grupo {
+  display: flex;
+  align-items: stretch;
+  height: var(--barra);
+}
+.barra-cima .item {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  height: 100%;
+  min-width: 44px;
+  padding: 0 var(--e3);
+}
+/* alvo de 44 px com o desenho de 40: a área de toque passa 2 px acima e abaixo */
+.barra-cima .bt.item::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+}
+.barra-cima .item + .item,
+.barra-cima .item + .vel {
+  border-left: 1px solid var(--fio);
+}
+.barra-cima .marca {
+  justify-content: center;
+  padding: 0 var(--e2);
+  color: var(--ch);
+}
+.barra-cima .pilha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+  gap: 2px;
+  text-align: left;
+}
+.barra-cima .pilha b {
+  font-size: var(--t15);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.barra-cima .pilha .sub {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--t12);
+  font-weight: 600;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.barra-cima .pilha .sub.neg {
+  color: var(--al);
+}
+.barra-cima .data {
+  padding: 0 var(--e3) 0 var(--e2);
+}
+.barra-cima .data .pilha b {
+  font-size: var(--t13);
+  font-weight: 600;
+}
+.barra-cima .data .fase {
+  color: var(--ch);
+}
+.barra-cima .vel {
+  display: flex;
+}
+.barra-cima .vel .seg {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+  color: var(--t2);
+}
+.barra-cima .vel .seg + .seg {
+  border-left: 0;
+}
+.barra-cima .vel .seg.ligado {
+  background: var(--s3);
+  color: var(--t1);
+  box-shadow: inset 0 -2px 0 var(--ac);
+}
+.barra-cima .vel .seg.ligado.pausa {
+  color: var(--al);
+  box-shadow: inset 0 -2px 0 var(--al);
+}
+.barra-cima .vel .seg:last-child {
+  border-radius: 0 var(--r2) var(--r2) 0;
+}
+.chip-pausado {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 28px;
+  padding: 0 var(--e3);
+  display: flex;
+  align-items: center;
+  border-radius: var(--rp);
+  font-size: var(--t12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--al);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ui *,
+  #ui *::before,
+  #ui *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+:root[data-movimento='reduzido'] #ui * {
+  transition: none !important;
+  animation: none !important;
+}

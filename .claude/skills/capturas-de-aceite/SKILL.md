@@ -1,19 +1,23 @@
 ---
 name: capturas-de-aceite
-description: Como capturar cenas 3D da Arcologia de Held no Chromium de teste (sem GPU) - montar a cena por script, posicionar a câmera, obras com operários nos postos, e medir chamadas de desenho e triângulos. Use para conferir modelos, obras, lugares e o orçamento gráfico.
+description: Como capturar cenas 3D do jogo novo no Chromium de teste (sem GPU) - cenas fixas por ?cena=, perfis, câmera e a medida de chamadas e triângulos pela bancada. Use para conferir modelos, obras, a Torre e o orçamento gráfico. (A reescrever na C2, com as cenas finais do M1.)
 ---
-# Capturas de aceite
+# Capturas de aceite (a reescrever na C2)
 
-- Ferramenta: `node ferramentas/testar.mjs <png> "teste=1&novo=1&q=alta" 1232 555 <ms> "<script>"`. O script roda
-  na página (`window.__held` = {engine, rig, env, mundo, obras, J, C, ...}); embrulhe em `{ ... }` e sem `return`.
-  A saída JSON traz `st.calls` e `st.tris`; `window.__resultado` volta em `res`.
-- SwiftShader desenha 1 quadro a cada 5 a 7 s em Alta: animações quase não andam. Para obras, crie a obra com
-  `m.obra.ini = agora - 1 h` e `fim = agora + 30 min`, remova os canteiros (`C._removerSite`) e chame
-  `C.sincronizar()`: os operários já nascem nos postos (novo = false).
-- Prédios prontos: `construirCidade` (desmate antes: `C.desmatar(lote)` ou `J.S.cidade.limpos[lote] = 1`), depois
-  `m.nivel = N; m.obra = null`, `J._derivar()`, `C.sincronizar()`, `H.mundo.refundirAgora()`.
-- Câmera: `H.rig.pitchFix = null; H.rig.target.set(x, 0, z); H.rig.dist = D; H.rig.yaw = Y; H.rig.tilt = T; H.rig.apply()`.
-  Remova balões (`document.querySelectorAll('.balao,.bolha').forEach((e) => e.remove())`).
-- Orçamento: vista aberta (dist 150+) com a Arcologia completa (todas as etapas `feita`, módulos no máximo) e 150+
-  prédios da cidade no nível máximo. Registre chamadas e triângulos no README.
+O essencial do jogo novo, até a C2 reescrever com as cenas finais:
+
+- **Montagem** numa pasta temporária: `node ferramentas/montar.mjs --saida <scratch>/montagem`.
+- **Uma captura**: `node ferramentas/testar.mjs --pasta <scratch>/montagem --consulta "cena=<nome>&q=media&pr=1"
+  --tam 1376x768 --espera 1500 --saida <scratch>/<nome>.png`. A saída JSON traz `stats` (o `R.stats`: `calls`,
+  `tris`, `callsSombra`, `trisSombra`, `familias`) e `resultado` (`window.__resultado`). `--script` roda código na
+  página depois de `window.__pronto` (`window.__held` = { sim, R, ui }); `--semClip` e `--webgpu` são opcionais.
+- **Números para o orçamento** saem da bancada, não da captura: `node ferramentas/bancada.mjs --pasta <montagem>
+  --cenas aberta,rua,horizonte --perfis leve,media,ultra` (pior quadro de 120 com o sol andando, PNG e JSON por
+  cena). Metas: 4.8 e A6 do `docs/PROJETO.md`.
+- **Cenas do aceite (A10)**: `aberta` (10h), `rua` (16h), `bairro` (9h), `horizonte` (17h30), `costa` (12h), `obra`
+  (10h), `servicos` (15h), `camadas`, `ferramentas`, `noite` (21h) e a prancha da Torre (4 azimutes às 17h30 e 2
+  closes a 30 m). Cada parcela registra as suas cenas em `fonte/render/cenas/` (`registrarCena`).
+- **SwiftShader** desenha poucos quadros por segundo: espere o `__pronto`, fixe hora e câmera pela consulta da cena
+  e evite animação na captura. Obras: crie a obra com `obraIni` no passado para a fase aparecer.
+- Interface sem WebGL: `ferramentas/vitrine-ui.mjs` (render falso), não esta skill.
 - Mande ao dono só as capturas que mostram o que mudou.
