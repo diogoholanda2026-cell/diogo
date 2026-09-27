@@ -1,22 +1,23 @@
-// Canteiro de obras (pátio de obras no canto noroeste do plano diretor, junto à saída do anel viário): escritório,
-// almoxarifado, usinas de materiais e oficinas. Some no fim, quando a área é reflorestada.
+// Canteiro de obras: o pátio de obras no canto noroeste da mesa, fora da figura (a 0,4 do tapete e a 0,65 da pista),
+// com o acesso pela pista norte do anel viário (A.canteiro.acesso). Escritório, almoxarifado, usinas de materiais e
+// oficinas nos 12 lotes de 2,4 x 2,4 do plano (A.canteiro.lotes, giro 0: cada prédio cabe no seu lote, com a porta
+// para o sul), cerca em volta do polígono com o portão no acesso, piso de concreto do portão até a pista e pilhas de
+// material nos cantos livres. Some no fim, quando a área é reflorestada.
 import * as THREE from 'three';
 import { M, dupla } from '../materials.js';
 import { beams } from '../geom.js';
 import { treeGroup } from '../forest.js';
+import { A } from '../../data/planta.js';
+import { ACESSO_CANTEIRO } from '../ground.js';
+import { inPoly, clamp } from '../../core/util.js';
 
-export const LOTES = {
-  escritorio: { x: -27.9, z: -19.6, r: 0.15 },
-  almox: { x: -30.7, z: -19.8, r: 0.05 },
-  usina1: { x: -34.9, z: -19.9, r: 0 }, usina2: { x: -34.9, z: -22.7, r: 0 }, usina3: { x: -34.9, z: -25.5, r: 0 },
-  carpintaria: { x: -31.4, z: -22.6, r: 0 }, concreto: { x: -28.9, z: -22.8, r: 0.1 },
-  serralheria: { x: -31.4, z: -25.3, r: 0 }, vidracaria: { x: -28.9, z: -25.4, r: 0.1 },
-  eletrica: { x: -27.0001, z: -22.1, r: 0.3 }, horto: { x: -33.3, z: -26.6, r: 0 }, laboratorio: { x: -30.3, z: -26.5, r: 0 },
-};
+// lotes do plano (x, z, r = giro em radianos): a obra, o jogo e os balões leem daqui
+export const LOTES = Object.fromEntries(Object.entries(A.canteiro.lotes).map(([k, l]) => [k, { x: l.x, z: l.z, r: l.r || 0 }]));
+const LADO = 2.4; // lote de 2,4 x 2,4
 // Pontos de produção de cada prédio (para a obra/atividade mostrar fumaça, esteira, serra, betoneira e faíscas
 // quando o prédio estiver produzindo). Coordenadas do mundo, já com a posição e o giro do lote.
 const LOCAIS = {
-  usina: [['chamine', 1.45, 1.32, -0.4], ['esteira', 1.1, 0.52, 0.4]], carpintaria: [['serra', 0.2, 0.3, 0.75]], concreto: [['betoneira', 0.95, 0.32, 0.45], ['chamine', 0.95, 1.22, -0.2]],
+  usina: [['chamine', 0.7, 1.32, -0.4], ['esteira', 0.35, 0.52, 0.4]], carpintaria: [['serra', 0.2, 0.3, 0.75]], concreto: [['betoneira', 0.95, 0.32, 0.45], ['chamine', 0.95, 1.22, -0.2]],
   serralheria: [['faisca', 0.0, 0.26, 0.75]], vidracaria: [['chamine', -0.5, 0.62, -0.3]], eletrica: [['faisca', -0.1, 0.15, 0.72]], laboratorio: [['chamine', 0.45, 1.0, 0.2]],
 };
 export const PONTOS_ATIVOS = Object.fromEntries(Object.entries(LOTES).map(([id, l]) => {
@@ -25,6 +26,8 @@ export const PONTOS_ATIVOS = Object.fromEntries(Object.entries(LOTES).map(([id, 
 }));
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
 const B = (w, h, d, m, x, y, z) => { const o = mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y + h / 2, z); return o; };
+const USINA_X = -0.35; // centro do galpão da usina no lote
+const _v = new THREE.Vector3();
 let MT = null;
 function mats() {
   if (MT) return MT;
@@ -55,11 +58,11 @@ export function predioCanteiro(tipo) {
   } else if (tipo === 'almox') {
     g.add(galpao(2.3, 1.3, 0.62, mt.chapa)); const pal = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 0.14, 0.22), M.woodFrame, 12); const m4 = new THREE.Matrix4();
     for (let i = 0; i < 12; i++) pal.setMatrixAt(i, m4.makeTranslation(-0.9 + (i % 6) * 0.36, 0.07 + ((i / 6) | 0) * 0.15, 0.9)); pal.castShadow = true; g.add(pal); g.userData.paletes = pal;
-  } else if (tipo.startsWith('usina')) {
-    g.add(galpao(2.5, 1.5, 0.7, M.white, true)); const silo = mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), mt.chapa); silo.position.set(1.45, 0.55, -0.4); g.add(silo);
-    const cone = mesh(new THREE.ConeGeometry(0.22, 0.2, 12), mt.chapa); cone.position.set(1.45, 1.2, -0.4); g.add(cone);
-    const belt = mesh(new THREE.BoxGeometry(1.1, 0.04, 0.12), M.dark); belt.position.set(1.1, 0.5, 0.4); belt.rotation.z = 0.5; g.add(belt);
-    const pile = mesh(new THREE.ConeGeometry(0.35, 0.3, 10), mt.brita); pile.position.set(1.6, 0.15, 0.55); g.add(pile);
+  } else if (tipo.startsWith('usina')) { // galpão de 1,7 deslocado para oeste; silo, esteira e o monte de brita a leste (cabe em 2,4)
+    const gp = galpao(1.7, 1.5, 0.7, M.white, true); gp.position.x = USINA_X; g.add(gp); const silo = mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), mt.chapa); silo.position.set(0.7, 0.55, -0.4); g.add(silo);
+    const cone = mesh(new THREE.ConeGeometry(0.22, 0.2, 12), mt.chapa); cone.position.set(0.7, 1.2, -0.4); g.add(cone);
+    const belt = mesh(new THREE.BoxGeometry(1.1, 0.04, 0.12), M.dark); belt.position.set(0.35, 0.5, 0.4); belt.rotation.z = 0.5; g.add(belt);
+    const pile = mesh(new THREE.ConeGeometry(0.35, 0.3, 10), mt.brita); pile.position.set(0.85, 0.15, 0.55); g.add(pile);
   } else if (tipo === 'carpintaria') {
     g.add(galpao(1.7, 1.1, 0.5, M.woodLight)); for (let i = 0; i < 6; i++) { const l = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8, 7), mt.tora); l.rotation.z = Math.PI / 2; l.position.set(0.2, 0.05 + ((i / 3) | 0) * 0.09, 0.75 + (i % 3) * 0.1); g.add(l); }
   } else if (tipo === 'concreto') {
@@ -83,12 +86,41 @@ export function predioCanteiro(tipo) {
   }
   return g;
 }
-// pilhas de material, caminhões e cerca: ambientação permanente do canteiro
+// Ambientação permanente do canteiro: cerca em volta do polígono (0,12 para dentro) com o portão no acesso, piso de
+// concreto do portão até a borda da pista norte e pilhas de areia e brita nos cantos livres (fora dos lotes e do acesso)
+const POLY = A.canteiro.poly;
+function distBorda(x, z) { let d = 1e9; for (let i = 0, j = POLY.length - 1; i < POLY.length; j = i++) { const [ax, az] = POLY[j], [bx, bz] = POLY[i], vx = bx - ax, vz = bz - az, t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; }
+// acesso: o corredor do chão (ground.js), da borda da pista (A.canteiro.acesso) para dentro, perpendicular à pista
+const ACESSO = ACESSO_CANTEIRO;
+const noAcesso = (x, z, f = 0) => { const dx = x - ACESSO.a[0], dz = z - ACESSO.a[1], t = dx * ACESSO.u[0] + dz * ACESSO.u[1]; return t > -0.2 && t < ACESSO.L + 0.6 + f && Math.abs(dx * ACESSO.u[1] - dz * ACESSO.u[0]) < ACESSO.m + f; };
+const foraLotes = (x, z, r) => Object.values(LOTES).every((l) => Math.max(Math.abs(x - l.x), Math.abs(z - l.z)) > LADO / 2 + r);
+// pilhas: pontos livres escolhidos longe uns dos outros (o mais folgado primeiro), [x, z, raio, areia?]
+function pilhas(n = 6) {
+  const cand = []; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of POLY) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  for (let z = z0; z <= z1; z += 0.2) for (let x = x0; x <= x1; x += 0.2) { if (!inPoly(x, z, POLY) || noAcesso(x, z, 0.4)) continue; const f = distBorda(x, z); if (f < 0.6) continue; let r = 0.5; while (r > 0.28 && !foraLotes(x, z, r + 0.12)) r -= 0.05; if (r > 0.28 && f > r + 0.2) cand.push([x, z, Math.min(r, f - 0.2)]); }
+  const out = []; while (out.length < n && cand.length) { let best = -1, bd = -1; cand.forEach((c, i) => { const d = out.length ? Math.min(...out.map((o) => Math.hypot(o[0] - c[0], o[1] - c[1]))) : c[2]; if (d > bd) { bd = d; best = i; } }); if (out.length && bd < 1.2) break; out.push(cand.splice(best, 1)[0]); }
+  return out.map(([x, z, r], i) => [x, z, Math.min(r, 0.5), i % 2 === 0]);
+}
 export function ambienteCanteiro() {
   const g = new THREE.Group(); g.name = 'canteiroAmb'; const mt = mats();
-  for (const [x, z, r, m] of [[-36.2, -18.5, 0.5, mt.areia], [-35.2, -18.4, 0.4, mt.brita], [-32.6, -18.5, 0.45, mt.areia], [-26.4, -25.1, 0.35, mt.brita]]) { const p = mesh(new THREE.ConeGeometry(r, r * 0.8, 12), m); p.position.set(x, r * 0.4, z); g.add(p); }
-  const fence = []; for (let x = -37.0001; x <= -26.4; x += 0.5) fence.push([[x, 0, -27.45], [x, 0.25, -27.45]]); g.add(beams(fence, 0.012, M.steel, 3));
-  const tape = mesh(new THREE.BoxGeometry(10.6, 0.05, 0.01), M.stripes, false); tape.position.set(-31.7, 0.2, -27.45); g.add(tape);
+  for (const [x, z, r, areia] of pilhas()) { const p = mesh(new THREE.ConeGeometry(r, r * 0.8, 12), areia ? mt.areia : mt.brita); p.position.set(x, r * 0.4, z); g.add(p); }
+  // cerca: postes a cada 0,5 e dois arames ao longo do polígono recuado 0,12, abertos no portão
+  const n = POLY.length, cw = (() => { let s = 0; for (let i = 0; i < n; i++) { const a = POLY[i], b = POLY[(i + 1) % n]; s += a[0] * b[1] - b[0] * a[1]; } return s > 0 ? 1 : -1; })();
+  const rec = POLY.map((p, i) => { const a = POLY[(i - 1 + n) % n], b = POLY[(i + 1) % n]; const t1 = [p[0] - a[0], p[1] - a[1]], t2 = [b[0] - p[0], b[1] - p[1]]; const l1 = Math.hypot(...t1) || 1, l2 = Math.hypot(...t2) || 1; const nx = -cw * (t1[1] / l1 + t2[1] / l2), nz = cw * (t1[0] / l1 + t2[0] / l2), l = Math.hypot(nx, nz) || 1; return [p[0] + (nx / l) * 0.12, p[1] + (nz / l) * 0.12]; });
+  const postes = [], arames = [];
+  for (let i = 0; i < n; i++) {
+    const a = rec[i], b = rec[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.max(1, Math.round(L / 0.5)); let ini = null;
+    for (let j = 0; j <= k; j++) { const x = a[0] + ((b[0] - a[0]) * j) / k, z = a[1] + ((b[1] - a[1]) * j) / k, livre = !noAcesso(x, z, -0.1);
+      if (livre && j < k) postes.push([[x, 0, z], [x, 0.3, z]]);
+      if (livre && ini === null) ini = [x, z]; if ((!livre || j === k) && ini) { const f = livre ? [x, z] : [a[0] + ((b[0] - a[0]) * (j - 1)) / k, a[1] + ((b[1] - a[1]) * (j - 1)) / k]; if (Math.hypot(f[0] - ini[0], f[1] - ini[1]) > 1e-3) for (const y of [0.12, 0.26]) arames.push([[ini[0], y, ini[1]], [f[0], y, f[1]]]); ini = null; } }
+  }
+  g.add(beams(postes, 0.012, M.steel, 3)); g.add(beams(arames, 0.006, M.steel, 3));
+  // portão no acesso: dois pilares, a cancela listrada levantada e o piso de concreto até a pista
+  const { a: [ax, az], u: [ux, uz], L, m } = ACESSO, ang = Math.atan2(-uz, ux); let tg = L; for (let t = 0; t <= L + 0.6; t += 0.02) if (inPoly(ax + ux * t, az + uz * t, POLY)) { tg = t + 0.12; break; } // linha da cerca no eixo do acesso
+  const gx = ax + ux * tg, gz = az + uz * tg, px = -uz, pz = ux;
+  g.add(beams([-1, 1].map((s) => [[gx + px * s * (m - 0.05), 0, gz + pz * s * (m - 0.05)], [gx + px * s * (m - 0.05), 0.5, gz + pz * s * (m - 0.05)]]), 0.03, M.steelDark, 6));
+  const arm = mesh(new THREE.BoxGeometry(0.04, 0.05, 1.6), M.stripes, false); arm.geometry.translate(0, 0, 0.8); arm.position.set(gx - px * (m - 0.05), 0.42, gz - pz * (m - 0.05)); arm.rotation.set(0, ang, 0); arm.rotateX(-1.1); g.add(arm);
+  const piso = mesh(new THREE.BoxGeometry(tg + 0.9, 0.03, 2 * m), M.concreto, false); piso.position.set(ax + ux * (tg + 0.9) / 2, 0.015, az + uz * (tg + 0.9) / 2); piso.rotation.y = ang; g.add(piso);
   return g;
 }
 
@@ -99,7 +131,7 @@ export function ambienteCanteiro() {
 // (cada partícula nasce de novo a cada volta); a CPU só suaviza a intensidade de cada emissor (1 chamada).
 const TIPO = { chamine: 0, esteira: 1, serra: 2, betoneira: 3, faisca: 4, luz: 5, alerta: 6, cultivo: 7 };
 const POR = [10, 6, 8, 6, 12, 1, 1, 1]; // partículas por emissor
-const GALPAO = { usina: [1.5, 0.7], carpintaria: [1.1, 0.5], concreto: [1.1, 0.5], serralheria: [1.1, 0.5], vidracaria: [1.1, 0.5], eletrica: [1.0, 0.48], laboratorio: [1.0, 0.5] }; // [fundo, altura]
+const GALPAO = { usina: [1.5, 0.7, USINA_X], carpintaria: [1.1, 0.5], concreto: [1.1, 0.5], serralheria: [1.1, 0.5], vidracaria: [1.1, 0.5], eletrica: [1.0, 0.48], laboratorio: [1.0, 0.5] }; // [fundo, altura, x do galpão no lote]
 const AV = /* glsl */`
   attribute vec3 aOrig; attribute vec3 aDir; attribute vec3 aInfo; // tipo, semente, emissor
   uniform float uT; uniform float uOn[ 48 ]; uniform float uEsc; uniform float uPR;
@@ -130,11 +162,11 @@ export class AtividadeCanteiro {
     for (const [id, l] of Object.entries(LOTES)) {
       const tipo = id.startsWith('usina') ? 'usina' : id; const c = Math.cos(l.r), s = Math.sin(l.r); const W = (x, y, z) => [l.x + x * c + z * s, y, l.z - x * s + z * c];
       for (const p of PONTOS_ATIVOS[id] || []) add(id, p.tipo, p.pos, p.tipo === 'esteira' ? [0.878 * c, 0.479, -0.878 * s] : [0, 0, 0]);
-      const g = GALPAO[tipo]; if (g) { add(id, 'luz', W(0, g[1] * 0.35, g[0] / 2 + 0.07)); add(id, 'alerta', W(0, g[1] + (tipo === 'usina' ? 0.3 : 0.28), 0)); }
+      const g = GALPAO[tipo]; if (g) { add(id, 'luz', W(g[2] || 0, g[1] * 0.35, g[0] / 2 + 0.07)); add(id, 'alerta', W(g[2] || 0, g[1] + (tipo === 'usina' ? 0.3 : 0.28), 0)); }
       if (tipo === 'horto') { add(id, 'cultivo', W(0, 0.28, 0)); add(id, 'alerta', W(0.8, 0.62, 0)); }
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(O, 3)); geo.setAttribute('aOrig', new THREE.Float32BufferAttribute(O, 3)); geo.setAttribute('aDir', new THREE.Float32BufferAttribute(D, 3)); geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(I, 3));
-    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(-31.6, 0.8, -22.7), 8);
+    const bx = new THREE.Box3(); for (const l of Object.values(LOTES)) bx.expandByPoint(_v.set(l.x, 0.8, l.z)); geo.boundingSphere = bx.getBoundingSphere(new THREE.Sphere()); geo.boundingSphere.radius += LADO; // os lotes do plano
     this.on = new Float32Array(48);
     this.mat = new THREE.ShaderMaterial({ vertexShader: AV, fragmentShader: AF, uniforms: { uT: { value: 0 }, uOn: { value: this.on }, uEsc: { value: 400 }, uPR: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
     this.pontos = new THREE.Points(geo, this.mat); this.pontos.name = 'canteiro-vivo'; this.pontos.renderOrder = 5; this.pontos.userData.semHAO = true; this.pontos.visible = false;
@@ -156,5 +188,5 @@ export class AtividadeCanteiro {
 // Modelo do epílogo (etapas sem peça própria): foco e âncora sobre o canteiro, para a prancha e os balões
 export function modeloReflorestar() {
   const root = new THREE.Group(); root.name = 'reflorestar'; const e0 = new THREE.Group(), e1 = new THREE.Group(); root.add(e0, e1);
-  return { id: 'reflorestar', root, partes: { e0, e1 }, esqueletos: {}, grua: {}, foco: { x: -31.5, z: -22.5, dist: 16 }, ancora: [-31.5, 2.2, -22.5] };
+  const [cx, cz] = A.canteiro.c; return { id: 'reflorestar', root, partes: { e0, e1 }, esqueletos: {}, grua: {}, foco: { x: cx, z: cz, dist: 16 }, ancora: [cx, 2.2, cz] };
 }

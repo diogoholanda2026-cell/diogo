@@ -1,112 +1,172 @@
-// Terreno da Arcologia: malha com o lago da Sede rebaixado e o fosso do acelerador, textura pintada a partir do plano
-// diretor (mata, gramados, praça e eixo, vias de asfalto com faixa tracejada, pátio de obras) e duas texturas de
-// detalhe (grão de perto e flocagem que some de longe). A água do lago lê um mapa da distância até a margem.
+// Terreno da Arcologia (Trevo da Holding): malha da mesa de 80 x 62 com as 4 bacias do lago rebaixadas (a ilha e a
+// faixa dos diques ficam secas; as pontes do eixo passam sobre a água) e o fosso do acelerador. Textura pintada a
+// partir do plano mestre: chão de mata em volta, o tapete de grama da figura, o jardim do miolo e os gramados das
+// folhas mais claros, o GABARITO da figura (a pegada de toda a construção em grama aparada clara com borda fina de
+// piso claro, desde o cap. 1: as peças construídas cobrem e ele nunca some), leito e margem do lago, o anel viário e
+// as saídas de asfalto, as zonas que mudam com as etapas (praça e eixo norte pavimentados, pátios, acelerador) e o
+// canteiro de obras com o acesso pela pista norte. Duas texturas de detalhe (grão de perto e flocagem que some de
+// longe). A água lê um mapa da altura do leito; os canais e repuxos dos vales ganham ali um leito virtual (a placa de
+// água deles lê como funda sem o terreno rebaixar antes da obra).
 import * as THREE from 'three';
-import { MESA, A, ZONAS, distAnelViario, ANEL_VIARIO, AVENIDA, ROTATORIA, EIXO } from '../data/planta.js';
-import { hash, vnoise, fbm, inPoly, inEllipse, clamp, smooth, rng } from '../core/util.js';
+import { MESA, A, ZONAS, FITAS, distAnelViario, ANEL_VIARIO, trechosDe, trecho } from '../data/planta.js';
+import { hash, vnoise, fbm, inPoly, clamp, smooth } from '../core/util.js';
 import { tex, canvasTex } from './textures.js';
 import { AGUA } from './materials.js';
 
-const S = 28; // pixels de textura por unidade (a mesa do plano diretor tem 80 x 56)
+const S = 26; // pixels de textura por unidade: 2080 x 1612 (3,35 Mpx, menos que os 3,5 da mesa antiga de 80 x 56 a 28)
 const W = (MESA.x1 - MESA.x0), D = (MESA.z1 - MESA.z0);
-export const toPx = (x, z) => [(x - MESA.x0) * S, (z - MESA.z0) * S];
+const toPx = (x, z) => [(x - MESA.x0) * S, (z - MESA.z0) * S];
 
-function polyDist(x, z, poly) { // distância com sinal até a borda do polígono (negativa dentro)
-  let d = 1e9;
+function polyDist(x, z, poly) { // distância com sinal até a borda do polígono (negativa dentro); laço único, sem hypot (quente)
+  let d2 = 1e18, dentro = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [ax, az] = poly[j], [bx, bz] = poly[i]; const vx = bx - ax, vz = bz - az; const t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz), 0, 1);
-    d = Math.min(d, Math.hypot(x - (ax + vx * t), z - (az + vz * t)));
+    const a = poly[j], b = poly[i], ax = a[0], az = a[1], bx = b[0], bz = b[1], vx = bx - ax, vz = bz - az, l = vx * vx + vz * vz;
+    let t = l > 0 ? ((x - ax) * vx + (z - az) * vz) / l : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - ax - vx * t, dz = z - az - vz * t, q = dx * dx + dz * dz; if (q < d2) d2 = q;
+    if ((bz > z) !== (az > z) && x < ((ax - bx) * (z - bz)) / (az - bz) + bx) dentro = !dentro;
   }
-  return inPoly(x, z, poly) ? -d : d;
+  const d = Math.sqrt(d2); return dentro ? -d : d;
 }
+// elipse (rot em radianos): distância com sinal de primeira ordem ((k - 1) / |grad k|), boa perto da borda
 function ellDist(x, z, cx, cz, rx, rz, rot = 0) {
   const c = Math.cos(-rot), s = Math.sin(-rot); const dx = x - cx, dz = z - cz; const u = dx * c - dz * s, v = dx * s + dz * c;
-  const k = Math.hypot(u / rx, v / rz); return (k - 1) * Math.min(rx, rz);
+  const p = u / rx, q = v / rz, k = Math.sqrt(p * p + q * q); if (k < 1e-6) return -Math.min(rx, rz);
+  const gx = p / rx, gz = q / rz; return ((k - 1) * k) / Math.sqrt(gx * gx + gz * gz);
 }
-// profundidade da água num ponto (0 = seco): o lago da Sede (os lagos de dentro da Cúpula são peças do modelo)
+// retângulo alinhado aos eixos (positiva fora)
+function retDist(x, z, x0, x1, z0, z1) { const qx = Math.max(x0 - x, x - x1), qz = Math.max(z0 - z, z - z1), px = Math.max(qx, 0), pz = Math.max(qz, 0); return Math.sqrt(px * px + pz * pz) + Math.min(Math.max(qx, qz), 0); }
+function distPolilinha(x, z, p) {
+  let d2 = 1e18;
+  for (let i = 1; i < p.length; i++) { const a = p[i - 1], b = p[i], ax = a[0], az = a[1], vx = b[0] - ax, vz = b[1] - az; const t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); const dx = x - ax - vx * t, dz = z - az - vz * t; d2 = Math.min(d2, dx * dx + dz * dz); }
+  return Math.sqrt(d2);
+}
+const area = (p) => { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+// cópia [x, z] no sentido das elipses do canvas (área positiva em x, z): subcaminhos somam na união por nonzero
+const positivo = (p) => { const q = p.map((v) => [v[0], v[1]]); return area(q) < 0 ? q.reverse() : q; };
+// faixa (polígono) de meia largura m ao longo de uma polilinha ([x, z] ou [x, z, altura])
+function faixaPoly(pts, m) {
+  const E = [], Dr = [];
+  for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / l, tz = (b[1] - a[1]) / l; E.push([pts[i][0] + tz * m, pts[i][1] - tx * m]); Dr.push([pts[i][0] - tz * m, pts[i][1] + tx * m]); }
+  return [...E, ...Dr.reverse()];
+}
+
+// ---------------------------------------------------------------- água
+// lago da Sede: a oval menos a ilha e a faixa dos diques (as 4 bacias). Distância com sinal até a margem (negativa na água)
+const LAGO = A.lago, ILHA = A.ilha;
+const DIQUES = (A.lagoDiques || []).map((q) => ({ x0: Math.min(q.x0, q.x1), x1: Math.max(q.x0, q.x1), z0: q.z - q.w / 2, z1: q.z + q.w / 2 }));
+function lagoDist(x, z) {
+  let d = ellDist(x, z, LAGO.c[0], LAGO.c[1], LAGO.rx, LAGO.rz); if (d > 0) return d;
+  d = Math.max(d, ILHA.r - Math.hypot(x - ILHA.c[0], z - ILHA.c[1]));
+  for (const q of DIQUES) d = Math.max(d, -retDist(x, z, q.x0, q.x1, q.z0, q.z1));
+  return d;
+}
+// profundidade da água num ponto (0 = seco; rampa de 1,2 da margem). Os lagos de dentro da Cúpula e os espelhos são peças
 export function waterDepth(x, z) {
-  let d = polyDist(x, z, A.lago);
-  const di = Math.hypot(x - A.ilha.c[0], z - A.ilha.c[1]) - A.ilha.r;
-  if (d < 0 && di < 0) d = Math.max(d, -di);
-  return d < 0 ? smooth(clamp(-d / 1.2, 0, 1)) : 0;
+  if (Math.abs(x - LAGO.c[0]) > LAGO.rx + 0.05 || Math.abs(z - LAGO.c[1]) > LAGO.rz + 0.05) return 0;
+  const d = lagoDist(x, z); return d < 0 ? smooth(clamp(-d / 1.2, 0, 1)) : 0;
 }
-export function inPit(x, z) { const p = A.acelerador; return inEllipse(x, z, p.c[0], p.c[1], p.rx, p.rz); }
-export function heightAt(x, z) {
-  const w = waterDepth(x, z); if (w > 0) return -0.42 * w;
-  let h = 0;
-  // relevo suave apenas na floresta (longe das clareiras)
-  const clear = clearance(x, z); if (clear > 0) h += (fbm(x, z, 5, 3, 3) - 0.45) * 0.35 * clamp(clear / 2, 0, 1) * clamp(distVias(x, z) / 1.5, 0, 1); // (plano sob as vias)
-  const edge = Math.min(x - MESA.x0, MESA.x1 - x, z - MESA.z0, MESA.z1 - z); h *= clamp(edge / 1.5, 0, 1);
-  return h;
+// leito virtual dos canais e repuxos dos vales (lago.e3): distância com sinal (negativa dentro)
+function valeDist(x, z) {
+  let d = 1e9;
+  for (const v of Object.values(A.vales || {})) { const c = v.canal, r = v.repuxo; d = Math.min(d, retDist(x, z, Math.min(c.x0, c.x1), Math.max(c.x0, c.x1), c.z - c.w / 2, c.z + c.w / 2), Math.hypot(x - r.c[0], z - r.c[1]) - r.r); }
+  return d;
 }
-// distância até a clareira mais próxima (>0 dentro da floresta)
+function inPit(x, z) { const p = A.acelerador; const dx = (x - p.c[0]) / p.rx, dz = (z - p.c[1]) / p.rz; return dx * dx + dz * dz <= 1; }
+
+// ---------------------------------------------------------------- clareiras, vias e canteiro
+// Zonas que desenham a borda da clareira: o tapete e o que sai dele (o canteiro). Uma zona inteira dentro do tapete
+// nunca muda a menor distância com sinal (dentro dela a do tapete é mais negativa; fora, a dela é maior), então sai
+// da conta
+const zonaDist = (Z, x, z) => (Z.poly ? polyDist(x, z, Z.poly) : ellDist(x, z, Z.elipse[0][0], Z.elipse[0][1], Z.elipse[1], Z.elipse[2], Z.elipse[3] || 0));
+let _zb = null;
+function zonasBorda() {
+  if (_zb) return _zb; const T = ZONAS.find((Z) => Z.id === 'tapete' && Z.poly); if (!T) return (_zb = ZONAS.map((Z) => ({ Z })));
+  const dentro = (Z) => { if (Z === T) return false; const pts = Z.poly || Array.from({ length: 32 }, (_, i) => { const [c, rx, rz, rot = 0] = Z.elipse, a = (i / 32) * Math.PI * 2, u = Math.cos(a) * rx, v = Math.sin(a) * rz; return [c[0] + u * Math.cos(rot) - v * Math.sin(rot), c[1] + u * Math.sin(rot) + v * Math.cos(rot)]; }); return pts.every(([x, z]) => polyDist(x, z, T.poly) < -0.05); };
+  const caixa = (Z) => { if (!Z.poly) return null; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of Z.poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } return [x0, x1, z0, z1]; };
+  return (_zb = ZONAS.filter((Z) => !dentro(Z)).map((Z) => ({ Z, bx: caixa(Z) })).sort((a, b) => (b.Z === T) - (a.Z === T)));
+}
+// distância até a clareira mais próxima (>0 dentro da mata); a caixa de cada polígono descarta os que não chegam perto
 export function clearance(x, z) {
   let d = 1e9;
-  for (const Z of ZONAS) {
-    if (Z.poly) d = Math.min(d, polyDist(x, z, Z.poly));
-    else { const [c, rx, rz, rot] = Z.elipse; d = Math.min(d, ellDist(x, z, c[0], c[1], rx, rz, rot)); }
-  }
+  for (const { Z, bx } of zonasBorda()) { if (bx && d < 1e9 && retDist(x, z, bx[0], bx[1], bx[2], bx[3]) >= d) continue; d = Math.min(d, zonaDist(Z, x, z)); }
   return d;
 }
-// distância até uma polilinha
-function distPolilinha(x, z, p) {
-  let d = 1e9;
-  for (let i = 1; i < p.length; i++) { const [ax, az] = p[i - 1], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); }
-  return d;
-}
-// trilhas bege pela mata (norte da Sede e oeste do Anel), da planta (A.trilhasMata: lista ou objeto de polilinhas)
-// ou desta reserva; já suavizadas, para a pintura e a mata (sem árvore a menos de 0,32) baterem
-const TRILHAS_RESERVA = { norte: [[-14.0, -17.6], [-6.0, -17.9], [2.0, -18.0], [9.0, -17.4], [12.4, -16.2]], 'anel-oeste': [[-21.9, 6.0], [-24.0, 5.2], [-26.6, 3.8]] };
-let _trilhas = null;
-export function trilhasMata() {
-  if (_trilhas) return _trilhas; const src = A.trilhasMata || TRILHAS_RESERVA; const lista = Array.isArray(src) ? src : Object.values(src);
-  return (_trilhas = lista.map((t) => suave(t.pts || t)));
-}
-// aldeia de casinhas de telhado terracota a oeste do Anel (A.aldeia ou reserva): [x, z, rotação], fora da via, das
-// trilhas, da água e das clareiras, com 1,15 entre casas
-const ALDEIA_RESERVA = { c: [-27.5, 3.0], rx: 3.2, rz: 2.6, n: 9 };
-let _aldeia = null;
-export function aldeiaCasas() {
-  if (_aldeia) return _aldeia; const a = A.aldeia || ALDEIA_RESERVA; const R = rng(2727); const out = []; const vias = (A.vias || []).map((v) => suave(v.pts)); const tr = trilhasMata();
-  for (let i = 0; i < 600 && out.length < (a.n || 9); i++) {
-    const u = R() * 6.283, r = 0.25 + Math.sqrt(R()) * 0.7; const x = a.c[0] + Math.cos(u) * r * a.rx, z = a.c[1] + Math.sin(u) * r * a.rz;
-    if (x < MESA.x0 + 0.9 || x > MESA.x1 - 0.9 || z < MESA.z0 + 0.9 || z > MESA.z1 - 0.9) continue;
-    if (waterDepth(x, z) > 0 || clearance(x, z) < 0.9) continue;
-    if (vias.some((p) => distPolilinha(x, z, p) < 0.8) || tr.some((p) => distPolilinha(x, z, p) < 0.65)) continue;
-    if (out.some(([hx, hz]) => Math.hypot(hx - x, hz - z) < 1.15)) continue;
-    out.push([x, z, R() * 6.283]);
-  }
-  return (_aldeia = out);
-}
-// distância até a borda da via do plano mais perto (anel viário, avenida, rotatória e o eixo; 0 em cima dela)
+// distância até a borda da via mais perto (anel viário e o começo das saídas; 0 em cima dela)
+const SAIDAS_MESA = (A.vias || []).filter((v) => !v.fechada);
 export function distVias(x, z) {
   let d = distAnelViario(x, z) - ANEL_VIARIO.w / 2;
-  if (Math.abs(x) < ANEL_VIARIO.x1) d = Math.min(d, Math.abs(z - AVENIDA.z) - AVENIDA.w / 2);
-  d = Math.min(d, Math.hypot(x - ROTATORIA.c[0], z - ROTATORIA.c[1]) - ROTATORIA.r);
-  const ex = Math.abs(x - EIXO.x) - EIXO.meia, ez = Math.max(EIXO.z0 - z, z - EIXO.z1); d = Math.min(d, Math.hypot(Math.max(ex, 0), Math.max(ez, 0)) + Math.min(Math.max(ex, ez), 0));
+  for (const v of SAIDAS_MESA) d = Math.min(d, distPolilinha(x, z, v.pts) - v.w / 2);
   return Math.max(0, d);
 }
-export const naVia = (x, z, m = 0) => distVias(x, z) < m + 1e-9;
+// acesso do canteiro: corredor de 1,8 da borda da pista norte (A.canteiro.acesso) para dentro do pátio de obras, na
+// normal da pista ({ a, u, L, m, poly }; canteiro.js põe ali o portão e o piso)
+export const ACESSO_CANTEIRO = (() => {
+  const [ax, az] = A.canteiro.acesso, e = 0.01; const gx = distAnelViario(ax + e, az) - distAnelViario(ax - e, az), gz = distAnelViario(ax, az + e) - distAnelViario(ax, az - e), l = Math.hypot(gx, gz) || 1;
+  const u = [gx / l, gz / l], L = 1.6, m = 0.9; return { a: [ax, az], u, L, m, poly: positivo([[ax - u[1] * m, az + u[0] * m], [ax + u[0] * L - u[1] * m, az + u[1] * L + u[0] * m], [ax + u[0] * L + u[1] * m, az + u[1] * L - u[0] * m], [ax + u[1] * m, az - u[0] * m]]) };
+})();
+const ACESSO = ACESSO_CANTEIRO, CANTEIRO = positivo(A.canteiro.poly);
+function naAcessoCanteiro(x, z) { const dx = x - ACESSO.a[0], dz = z - ACESSO.a[1]; const t = dx * ACESSO.u[0] + dz * ACESSO.u[1]; return t > -0.05 && t < ACESSO.L && Math.abs(dx * ACESSO.u[1] - dz * ACESSO.u[0]) < ACESSO.m; }
+// pátio de obras (o polígono e o corredor do acesso): sem mata até o reflorestamento
+export const noCanteiro = (x, z) => inPoly(x, z, A.canteiro.poly) || naAcessoCanteiro(x, z);
+export function heightAt(x, z) {
+  const w = waterDepth(x, z); if (w > 0) return -0.42 * w;
+  // relevo suave apenas na mata (longe das clareiras), plano sob as vias e na borda da mesa
+  const clear = clearance(x, z); if (clear <= 0) return 0;
+  const h = (fbm(x, z, 5, 3, 3) - 0.45) * 0.35 * clamp(clear / 2, 0, 1) * clamp(distVias(x, z) / 1.5, 0, 1);
+  const edge = Math.min(x - MESA.x0, MESA.x1 - x, z - MESA.z0, MESA.z1 - z); return h * clamp(edge / 1.5, 0, 1);
+}
+// mata: fora do tapete, do canteiro e do acesso, das vias e da água
 export function isForest(x, z) {
   if (distVias(x, z) < 0.35) return false;
-  if (waterDepth(x, z) > 0.02) return false;
   if (clearance(x, z) < 0.25) return false;
-  for (const p of trilhasMata()) if (distPolilinha(x, z, p) < 0.32) return false;
-  for (const h of aldeiaCasas()) if (Math.hypot(x - h[0], z - h[1]) < 0.75) return false;
-  return true;
+  if (naAcessoCanteiro(x, z)) return false;
+  return waterDepth(x, z) <= 0.02;
 }
-// polilinha suave (Catmull-Rom) para caminhos e trilhas
-export function suave(pts, n = 8) {
-  if (pts.length < 3) return pts; const out = []; const P = (i) => pts[Math.max(0, Math.min(pts.length - 1, i))];
-  for (let i = 0; i < pts.length - 1; i++) for (let k = 0; k < n; k++) { const t = k / n, t2 = t * t, t3 = t2 * t; const a = P(i - 1), b = P(i), c = P(i + 1), d = P(i + 2); out.push([0, 1].map((j) => 0.5 * (2 * b[j] + (-a[j] + c[j]) * t + (2 * a[j] - 5 * b[j] + 4 * c[j] - d[j]) * t2 + (-a[j] + 3 * b[j] - 3 * c[j] + d[j]) * t3))); }
-  out.push(pts[pts.length - 1]); return out;
+// etapas que mudam o chão (zonas com quando/ate e vias com quando): flags.feitas só precisa delas
+export const ETAPAS_CHAO = [...new Set([...ZONAS.flatMap((Z) => [Z.quando, Z.ate]), ...(A.vias || []).map((v) => v.quando)].filter(Boolean))];
+
+// ---------------------------------------------------------------- gabarito da figura
+// A pegada de toda a construção: { poly } ou { elipse: [c, rx, rz, rot (rad)] }, polígonos no sentido das elipses do
+// canvas (área positiva em x, z), para a união por nonzero num caminho só. As fitas vão por trecho (os portais ficam
+// abertos; nas aberturas dos tambores fica o disco do tambor)
+const GAB = { m: 0.04, b: 0.1, piso: '#e2dccb' }; // grama além da face (m) e a borda de piso claro (b)
+let _gab = null;
+function formasGabarito() {
+  if (_gab) return _gab; const G = [];
+  const P = (p) => { if (p && p.length > 2) G.push({ poly: positivo(p) }); };
+  const E = (c, rx, rz = rx, rot = 0) => G.push({ elipse: [c, rx, rz, rot] });
+  const faixa = (pts, w) => pts && pts.length > 1 && P(faixaPoly(pts, w / 2));
+  for (const k of FITAS) { const f = A[k]; if (!f?.caminho) continue; for (const [f0, f1] of trechosDe(f)) faixa(trecho(f.caminho, f0, f1), f.w); }
+  // ligações com seção de fita: colunata, Elo do Santuário, crescente do Centro de Física, portal do Anel, pórtico da Sede
+  for (const k of ['O', 'L']) { faixa(A.colunata?.caminhos?.[k], A.colunata?.w); faixa(A.eloSant?.caminhos?.[k], A.eloSant?.w); }
+  const cr = A.acelerador?.crescente; if (cr) faixa(cr.caminho, cr.w);
+  faixa(A.portal?.caminho, A.portal?.w); faixa(A.sede?.portico?.caminho, A.sede?.portico?.w);
+  // tambores, ilha (com o radier da Torre), diques, pavilhão e piscinas da Sede
+  for (const t of Object.values(A.tambores || {})) E(t.c, t.r);
+  E(ILHA.c, ILHA.r); for (const q of A.lagoDiques || []) P(q.poly);
+  const pv = A.sedePatio?.pavilhao; if (pv) E(pv.c, pv.r); for (const p of A.sedePatio?.piscinas || []) E(p.c, p.rx + (p.deck || 0), p.rz + (p.deck || 0));
+  // eixo: praça (disco, passagem norte, esplanada e eixo da boca) com as 2 fontes da esplanada, eixo norte, Caminho da
+  // Frente e Bulevar
+  P(A.praca?.poly); for (const f of A.fontes || []) E(f.c, f.rx, f.rz); P(A.eixoN?.poly); faixa(A.frente?.pts, A.frente?.w); faixa(A.bulevar?.pts, A.bulevar?.w);
+  // pátios da boca, rampas em hélice (com o patamar: lado w na direção rot, em graus) e o poço do acelerador
+  for (const b of [A.patios?.escola?.base, A.anfiteatro?.base]) if (b) E(b.c, b.rx, b.rz);
+  for (const h of Object.values(A.patios?.rampas || {})) {
+    E(h.c, h.r); const q = h.patamar; if (!q) continue;
+    const a = (q.rot * Math.PI) / 180, ux = (Math.cos(a) * q.w) / 2, uz = (Math.sin(a) * q.w) / 2, vx = (-Math.sin(a) * q.d) / 2, vz = (Math.cos(a) * q.d) / 2, [cx, cz] = q.c;
+    P([[cx - ux - vx, cz - uz - vz], [cx + ux - vx, cz + uz - vz], [cx + ux + vx, cz + uz + vz], [cx - ux + vx, cz - uz + vz]]);
+  }
+  const po = A.acelerador?.poco; if (po) E(po.c, po.rx, po.rz);
+  // miolos das folhas: campo, Ciências e Ponte Coberta, espelho da Biblioteca e CRD, Cúpula, Estufa, Galeria e Trilha
+  P(A.campo?.poly); P(A.ciencias?.poly); faixa(A.ponteCoberta?.pts, A.ponteCoberta?.w);
+  if (A.biblio?.espelho) E(A.biblio.espelho.c, A.biblio.espelho.r); P(A.crd?.poly);
+  for (const k of ['bioma', 'gorilas', 'galeria']) if (A[k]?.c) E(A[k].c, A[k].r);
+  faixa(A.trilha?.pts, A.trilha?.w);
+  // vales: canais e repuxos
+  for (const v of Object.values(A.vales || {})) { P(v.canal.poly); E(v.repuxo.c, v.repuxo.r); }
+  return (_gab = G);
 }
-// caminhos em leque da praça: da planta ou curvas do bulevar ao acelerador, ao Anel e à frente
-function caminhosPraca() {
-  if (A.pracaCaminhos) return A.pracaCaminhos;
-  const o = [2.2, 13.6]; const curva = (b, k) => { const m = [(o[0] + b[0]) / 2 + (b[1] - o[1]) * k, (o[1] + b[1]) / 2 - (b[0] - o[0]) * k]; return [o, m, b]; };
-  return [curva(A.acelerador.c, 0.12), curva([-2.0, 13.0], 0.1), curva([1.0, 19.2], -0.14), curva([5.5, 19.4], 0.12), curva([9.0, 12.6], -0.08)];
-}
+// gramados claros (sempre): os miolos das folhas (o jardim do miolo do Anel é a zona 'jardim', com claro)
+const GRAMADOS = [A.campo?.gramado, A.gramadoUni, A.biblio?.gramado, A.savana?.gramado].filter((g) => g?.c && g.r);
 
 export class Ground {
   constructor(engine) {
@@ -157,28 +217,28 @@ export class Ground {
     this.tampa = new THREE.Mesh(tg, mat); this.tampa.receiveShadow = true; this.group.add(this.tampa);
   }
   _buildWater() {
-    const mk = (shape, mat, y) => { const g = new THREE.ShapeGeometry(shape, 32); g.rotateX(-Math.PI / 2); const pa = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < pa.count; i++) uv.setXY(i, pa.getX(i) / 6, pa.getZ(i) / 6); const m = new THREE.Mesh(g, mat); m.position.y = y; m.receiveShadow = true; this.group.add(m); return m; };
+    // lâmina d'água: as bacias (norte e sul, cada uma em volta de meia ilha, recortadas pelos diques) numa malha só
     const shp = (pts) => new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
-    const lago = shp(A.lago);
-    const ilha = new THREE.Path(); for (let i = 0; i <= 24; i++) { const a = (i / 24) * Math.PI * 2; const x = A.ilha.c[0] + Math.cos(a) * (A.ilha.r - 0.05), z = A.ilha.c[1] + Math.sin(a) * (A.ilha.r - 0.05); i ? ilha.lineTo(x, -z) : ilha.moveTo(x, -z); }
-    lago.holes.push(ilha);
+    const g = new THREE.ShapeGeometry((LAGO.bacias || [LAGO]).map(shp), 32); g.rotateX(-Math.PI / 2);
+    const pa = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < pa.count; i++) uv.setXY(i, pa.getX(i) / 6, pa.getZ(i) / 6);
     this.waterMat = this.e.mats.water;
-    this.lake = mk(lago, this.waterMat, -0.1);
-    const ell = ({ c: [cx, cz], rx, rz, rot = 0 }) => { const s = new THREE.Shape(); for (let i = 0; i <= 40; i++) { const a = (i / 40) * Math.PI * 2; const u = Math.cos(a) * (rx + 0.05), v = Math.sin(a) * (rz + 0.05); const x = cx + u * Math.cos(rot) - v * Math.sin(rot), z = cz + u * Math.sin(rot) + v * Math.cos(rot); i ? s.lineTo(x, -z) : s.moveTo(x, -z); } return s; };
-    // mapa da altura do leito sob a água (0,25 unidade por texel; -0,45 a 0,05): a lâmina d'água é a
-    // altura da superfície menos o leito, então a margem acompanha o nível (lago assoreado ou cheio);
-    // no verde, a máscara do lago central (o único que assoreia)
+    this.lake = new THREE.Mesh(g, this.waterMat); this.lake.position.y = -0.1; this.lake.receiveShadow = true; this.group.add(this.lake);
+    // mapa da altura do leito sob a água (0,25 unidade por texel; -0,45 a 0,05): a lâmina d'água é a altura da superfície
+    // menos o leito, então a margem acompanha o nível (lago assoreado ou cheio). Nos canais e repuxos dos vales, um leito
+    // virtual de -0,25 (a placa d'água da obra lê como funda). No verde, a máscara do lago central (o único que assoreia)
     const NX = W * 4, NZ = D * 4, dat = new Uint8Array(NX * NZ * 2);
     for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
       const x = MESA.x0 + ((i + 0.5) * W) / NX, z = MESA.z0 + ((j + 0.5) * D) / NZ; const wd = waterDepth(x, z), k = (j * NX + i) * 2;
-      dat[k] = clamp(((wd > 0 ? -0.42 * wd : 0.05) + 0.45) / 0.5, 0, 1) * 255; dat[k + 1] = polyDist(x, z, A.lago) < 0.3 ? 255 : 0;
+      let leito = wd > 0 ? -0.42 * wd : 0.05; if (wd <= 0) { const dv = valeDist(x, z); if (dv < 0) leito = 0.05 - 0.3 * clamp(-dv / 0.2, 0, 1); }
+      dat[k] = clamp((leito + 0.45) / 0.5, 0, 1) * 255; dat[k + 1] = ellDist(x, z, LAGO.c[0], LAGO.c[1], LAGO.rx, LAGO.rz) < 0.3 ? 255 : 0;
     }
     const t = new THREE.DataTexture(dat, NX, NZ, THREE.RGFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
     AGUA.tProf.value = t; AGUA.aguaOn.value = 1; this.agua = AGUA; // uniformes da água (cores e tempo), para ajuste
   }
   // Pede uma nova pintura do chão (feita no próximo quadro, no máximo uma por quadro; durante a festa de uma aprovação,
   // só depois dela: adiarAte, em ms de performance.now).
-  // flags: { praca, verde: {zona: true}, reflorestado, vias: {id: false} }
+  // flags: { feitas: {etapa: true} (as de ETAPAS_CHAO), tudo (todas feitas), reflorestado, vias: {id: false} } e, do
+  // contrato antigo, praca (praca.e1 feita) e verde: {projeto: true} (qualquer etapa do projeto conta como feita)
   paint(flags = this.flags) { this.flags = flags; this._sujo = true; }
   // camada fixa: chão de floresta e manchas de copa vistas de cima (meia resolução, desenhada uma vez)
   _camadaFixa() {
@@ -187,14 +247,14 @@ export class Ground {
     c.fillStyle = c.createPattern(tex.forestFloor().userData.canvas, 'repeat'); c.save(); c.scale(0.5, 0.5); c.fillRect(0, 0, w * 2, h * 2); c.restore();
     // chão de mata escuro (a foto nunca mostra o chão): a base [66,94,40] da textura cai aqui mesmo, sem mexer na textura
     c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(96,120,108)'; c.fillRect(0, 0, w, h); c.globalCompositeOperation = 'source-over'; // ~[17,26,14]: fundo escuro da mata da foto
-    for (let i = 0; i < 2600; i++) { const x = hash(i, 1, 501) * w, y = hash(i, 2, 501) * h, r = (6 + hash(i, 3, 501) * 22) / 2; c.fillStyle = `rgba(${16 + hash(i, 4, 501) * 22},${58 + hash(i, 5, 501) * 40},${18 + hash(i, 6, 501) * 16},0.6)`; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
+    for (let i = 0; i < 2800; i++) { const x = hash(i, 1, 501) * w, y = hash(i, 2, 501) * h, r = (6 + hash(i, 3, 501) * 22) / 2; c.fillStyle = `rgba(${16 + hash(i, 4, 501) * 22},${58 + hash(i, 5, 501) * 40},${18 + hash(i, 6, 501) * 16},0.6)`; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
     return (this._fixo = f);
   }
-  // borda das clareiras em sombra: faixa de ~0,7 para dentro de cada zona (união pela distância com sinal, a 1/8
-  // da resolução e desfocada ao desenhar), calculada uma vez
+  // borda das clareiras em sombra: faixa de ~0,7 para dentro do tapete e do canteiro (distância com sinal, a 1/8 da
+  // resolução e desfocada ao desenhar), calculada uma vez
   _bordaClareiras() {
     if (this._borda) return this._borda;
-    const k = 8, bw = (W * S) / k, bh = (D * S) / k; const f = document.createElement('canvas'); f.width = bw; f.height = bh; const c = f.getContext('2d');
+    const k = 8, bw = Math.round((W * S) / k), bh = Math.round((D * S) / k); const f = document.createElement('canvas'); f.width = bw; f.height = bh; const c = f.getContext('2d');
     const img = c.createImageData(bw, bh), d = img.data;
     for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
       const x = MESA.x0 + ((i + 0.5) / bw) * W, z = MESA.z0 + ((j + 0.5) / bh) * D; const cl = clearance(x, z); if (cl >= 0.05 || cl <= -0.95) continue;
@@ -202,113 +262,106 @@ export class Ground {
     }
     c.putImageData(img, 0, 0); return (this._borda = f);
   }
+  // grama aparada do gabarito: a grama clareada, com faixas de corte leste-oeste de 0,6 (32 px), num ladrilho opaco de
+  // 512 px (sem alfa: as bordas de dentro da união não dobram a cor)
+  _padraoGab(c) {
+    if (!this._gabTile) {
+      const g0 = tex.grass(), t = document.createElement('canvas'); t.width = t.height = 512; const g = t.getContext('2d');
+      g.drawImage(g0.userData.canvas || g0.image, 0, 0, 512, 512); g.fillStyle = 'rgba(214,232,168,0.40)'; g.fillRect(0, 0, 512, 512);
+      g.fillStyle = 'rgba(240,248,214,0.10)'; for (let y = 0; y < 512; y += 32) g.fillRect(0, y, 512, 16); this._gabTile = t;
+    }
+    return c.createPattern(this._gabTile, 'repeat');
+  }
   _pintar() {
     const t0 = performance.now(); const flags = this.flags;
     const c = this.canvas.getContext('2d'); const w = this.canvas.width, h = this.canvas.height;
     const P = (x, z) => toPx(x, z);
     const pat = (t) => c.createPattern(t.userData.canvas || t.image, 'repeat');
-    const path = (poly, g = c, k = 1) => { g.beginPath(); poly.forEach(([x, z], i) => { const [px, py] = P(x, z); i ? g.lineTo(px * k, py * k) : g.moveTo(px * k, py * k); }); g.closePath(); };
-    const ell = ([cx, cz], rx, rz, rot = 0, g = c, k = 1) => { g.beginPath(); const [px, py] = P(cx, cz); g.ellipse(px * k, py * k, rx * S * k, rz * S * k, rot, 0, Math.PI * 2); };
-    const zona = (Z, g = c, k = 1, m = 0) => { if (Z.poly) path(Z.poly, g, k); else { const [cc, rx, rz, rot] = Z.elipse; ell(cc, rx + m, rz + m, rot, g, k); } };
+    const sub = (poly, g = c, k = 1) => poly.forEach(([x, z], i) => { const [px, py] = P(x, z); i ? g.lineTo(px * k, py * k) : g.moveTo(px * k, py * k); });
+    // elipse como subcaminho (sem a reta do ponto anterior): começa no ângulo 0 da elipse girada
+    const subEll = ([cx, cz], rx, rz, rot = 0, g = c, k = 1) => { const [px, py] = P(cx, cz); g.moveTo((px + Math.cos(rot) * rx * S) * k, (py + Math.sin(rot) * rx * S) * k); g.ellipse(px * k, py * k, rx * S * k, rz * S * k, rot, 0, Math.PI * 2); };
+    const forma = (F, g = c, k = 1, m = 0) => { if (F.poly) { sub(F.poly, g, k); g.closePath(); } else { const [cc, rx, rz, rot] = F.elipse; subEll(cc, rx + m, rz + m, rot, g, k); } };
+    const zona = (Z, g = c, k = 1, m = 0) => { g.beginPath(); forma(Z, g, k, m); };
     const linhaCrua = (pts, g = c) => { g.beginPath(); pts.forEach(([x, z], i) => { const [px, py] = P(x, z); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke(); };
-    const linha = (pts, g = c) => linhaCrua(suave(pts), g);
-    const V = flags.verde || {}; const ligado = (id) => !!(V[id] || (id === 'pracaSul' && flags.praca) || Object.keys(V).some((k) => V[k] && id.startsWith(k)));
-    const EIXO_IDS = new Set(['praca', 'eixo', 'rotatoria']); const pronta = (Z) => (EIXO_IDS.has(Z.id) ? !!flags.praca : ligado(Z.id)); // zona pavimentada já feita
-    // 1) chão de floresta (copas escuras vistas de cima), da camada fixa
+    // etapas feitas: flags.feitas (contrato novo), flags.tudo, e o contrato antigo (praca e verde por projeto)
+    const Fe = flags.feitas || {}, V = flags.verde || {};
+    const feita = (k) => !!k && !!(flags.tudo || Fe[k] || (k === 'praca.e1' && flags.praca) || V[k.split('.')[0]]);
+    const ativa = (Z) => (Z.sempre || !Z.quando || feita(Z.quando)) && !(Z.ate && feita(Z.ate));
+    const tapete = ZONAS.filter((Z) => Z.sempre && Z.tipo === 'grama' && !Z.claro), claras = ZONAS.filter((Z) => Z.sempre && Z.claro);
+    // 1) chão de mata (copas escuras vistas de cima), da camada fixa
     c.filter = 'none'; c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
     c.drawImage(this._camadaFixa(), 0, 0, w, h);
-    // 2) clareiras: halo desfocado (desenhado a 1/4 e ampliado), depois pasto degradado no início e
-    //    gramado quando a obra da área começa
+    // 2) clareiras: halo desfocado do tapete e do canteiro (desenhado a 1/4 e ampliado) e o tapete de grama
     if (!this._zonas) { this._zonas = document.createElement('canvas'); this._zonas.width = w >> 2; this._zonas.height = h >> 2; }
     const zc = this._zonas.getContext('2d'); zc.clearRect(0, 0, w >> 2, h >> 2); zc.filter = 'blur(2.5px)'; zc.fillStyle = '#7c8e4c';
-    for (const Z of ZONAS) { zona(Z, zc, 0.25, Z.poly ? 0 : 0.5); zc.fill(); }
+    for (const Z of ZONAS) { if (!(Z.sempre || Z.tipo === 'canteiro') || (Z.tipo === 'canteiro' && flags.reflorestado)) continue; zona(Z, zc, 0.25, Z.poly ? 0 : 0.5); zc.fill(); }
     zc.filter = 'none'; c.drawImage(this._zonas, 0, 0, w, h);
-    c.save(); c.globalAlpha = 0.95;
-    // (praça por fazer = pasto)
-    for (const Z of ZONAS) {
-      if (Z.tipo === 'canteiro' || (Z.tipo === 'praca' && pronta(Z))) continue; const on = (Z.sempre || ligado(Z.id)) && Z.tipo !== 'praca'; if (Z.tipo === 'areia' && on) continue;
-      if (Z.tipo === 'terra') { c.fillStyle = pat(tex.soil()); zona(Z); c.fill(); c.fillStyle = 'rgba(184,134,90,0.35)'; c.fill(); continue; } // piquete de terra
-      c.fillStyle = pat(on && Z.tipo === 'grama' ? tex.grass() : tex.pasto()); zona(Z); c.fill();
-    }
-    c.restore();
-    // 2b) variação ampla nas clareiras: manchas de 3 a 8 unidades (±10%), mais verdes nas baixadas (os
-    //     gradientes são criados na origem porque a mancha é desenhada já transladada e girada);
-    //     o raio encolhe perto da borda para a mancha não invadir a mata
+    c.save(); c.globalAlpha = 0.95; c.fillStyle = pat(tex.grass()); for (const Z of tapete) { zona(Z); c.fill(); } c.restore();
+    // 2b) variação ampla no tapete: manchas de 3 a 8 unidades (±10%), mais verdes nas baixadas (os gradientes são criados
+    //     na origem porque a mancha é desenhada já transladada e girada); o raio encolhe perto da borda da clareira
     for (let i = 0, n = 0; i < 400 && n < 60; i++) {
       const x = MESA.x0 + hash(i, 1, 601) * W, z = MESA.z0 + hash(i, 2, 601) * D; const cl = clearance(x, z); if (cl > -0.3) continue; n++;
-      const r = Math.min((3 + hash(i, 3, 601) * 5) * 0.5, 0.6 - cl) * S, [px, py] = P(x, z); const baixo = heightAt(x, z) < 0 || waterDepth(x, z) > 0;
+      const r = Math.min((3 + hash(i, 3, 601) * 5) * 0.5, 0.6 - cl) * S, [px, py] = P(x, z); const baixo = waterDepth(x, z) > 0;
       const cor = baixo ? '90,150,56' : hash(i, 4, 601) < 0.5 ? '255,250,220' : '40,76,20'; const a = baixo ? 0.07 : 0.045;
       const gr = c.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(1, `rgba(${cor},0)`);
       c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, 6, 601) * 3); c.scale(1, 0.55 + hash(i, 5, 601) * 0.45); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
     }
-    // 2c) pasto degradado (antes da obra de cada área): manchas de terra nua, capim seco e rebrota de
-    //     1 a 3 unidades, que somem quando a área vira gramado (zonas de grama ligadas e o pasto do
-    //     Santuário, coberto pelo gramado dele)
-    for (const [zi, Z] of ZONAS.entries()) {
-      if (Z.sempre || !(Z.tipo === 'grama' || Z.tipo === 'pasto' || Z.tipo === 'areia' || (Z.tipo === 'praca' && !pronta(Z))) || (ligado(Z.id) && Z.tipo === 'grama')) continue;
-      const dentro = Z.poly ? (x, z) => inPoly(x, z, Z.poly) : (x, z) => inEllipse(x, z, Z.elipse[0][0], Z.elipse[0][1], Z.elipse[1], Z.elipse[2], Z.elipse[3]);
-      let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9; if (Z.poly) for (const [x, z] of Z.poly) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); bz0 = Math.min(bz0, z); bz1 = Math.max(bz1, z); } else { const [[cx, cz], rx, rz] = Z.elipse; const r = Math.max(rx, rz); bx0 = cx - r; bx1 = cx + r; bz0 = cz - r; bz1 = cz + r; }
-      const n = Math.min(60, Math.max(5, ((bx1 - bx0) * (bz1 - bz0)) / 3)) | 0;
-      for (let i = 0, k = 0; i < n * 4 && k < n; i++) {
-        const x = bx0 + hash(i, zi, 611) * (bx1 - bx0), z = bz0 + hash(i, zi, 612) * (bz1 - bz0); if (!dentro(x, z)) continue; k++;
-        const [px, py] = P(x, z), r = (0.8 + hash(i, zi, 613) * 1.8) * S, t = hash(i, zi, 614); const cor = t < 0.4 ? '150,118,78' : t < 0.75 ? '206,190,128' : '96,146,58'; const a = 0.24 + hash(i, zi, 615) * 0.12;
-        const gr = c.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, `rgba(${cor},${a})`); gr.addColorStop(0.6, `rgba(${cor},${a * 0.6})`); gr.addColorStop(1, `rgba(${cor},0)`);
-        c.fillStyle = gr; c.save(); c.translate(px, py); c.rotate(hash(i, zi, 616) * 3); c.scale(1, 0.5 + hash(i, zi, 617) * 0.5); c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
-      }
-    }
+    // 2c) jardim do miolo do Anel e gramados das folhas: grama mais clara
+    c.save(); c.beginPath(); for (const Z of claras) forma(Z); for (const g of GRAMADOS) subEll(g.c, g.r, g.r);
+    c.fillStyle = pat(tex.grass()); c.fill(); c.fillStyle = 'rgba(200,226,140,0.2)'; c.fill(); c.restore();
     // 2d) borda das clareiras em sombra (a mata projeta sombra no gramado)
     c.save(); c.filter = 'blur(3px)'; c.drawImage(this._bordaClareiras(), 0, 0, w, h); c.restore();
-    // 4) margem e leito do lago da Sede (linha de pedra cinza fina na borda, fundo escuro sob a água)
-    c.save(); c.filter = 'blur(3px)'; c.fillStyle = '#8a8a66'; path(A.lago); c.fill();
-    c.lineWidth = 0.3 * S; c.strokeStyle = '#cfcabb'; path(A.lago); c.stroke(); c.restore();
-    // 5) trilhas bege pela mata (se a planta tiver)
-    c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.filter = 'blur(1px)';
-    c.strokeStyle = '#e6dcc0'; c.lineWidth = 0.3 * S; for (const pts of trilhasMata()) linhaCrua(pts);
+    // 3) gabarito: a união das pegadas num caminho só (nonzero). Borda: tudo afastado m + b em piso claro; depois a
+    //    grama aparada afastada m por cima (as bordas de dentro somem e fica só a de fora da união)
+    const gab = formasGabarito();
+    c.save(); c.lineJoin = 'round'; c.lineCap = 'round'; c.beginPath(); for (const F of gab) forma(F);
+    c.fillStyle = c.strokeStyle = GAB.piso; c.lineWidth = 2 * (GAB.m + GAB.b) * S; c.fill(); c.stroke();
+    c.fillStyle = c.strokeStyle = this._padraoGab(c); c.lineWidth = 2 * GAB.m * S; c.fill(); c.stroke();
     c.restore();
-    // 5b) vias de asfalto no nível do chão (da planta); terra batida enquanto a obra vizinha não sai
-    if (A.vias) {
-      c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
-      for (const v of A.vias) {
-        const asfalto = !v.quando || (v.quando === 'praca' ? !!flags.praca : ligado(v.quando)) || flags.reflorestado; if (flags.vias && flags.vias[v.id] === false) continue;
-        const traco = v.fechada ? (pts) => { linhaCrua([...pts, pts[0]]); } : linha; // (a via fechada já vem densa)
-        c.strokeStyle = asfalto ? 'rgba(244,244,236,.85)' : 'rgba(196,172,136,.6)'; c.lineWidth = v.w * S + 3; traco(v.pts);
-        c.strokeStyle = asfalto ? '#52565e' : '#a8886a'; c.lineWidth = v.w * S - 2; traco(v.pts);
-        if (asfalto && v.w >= 1.2) { c.setLineDash([0.45 * S, 0.45 * S]); c.strokeStyle = 'rgba(250,246,230,.75)'; c.lineWidth = 0.06 * S; traco(v.pts); c.setLineDash([]); } // faixa central tracejada
-      }
-      c.restore();
+    // 4) leito do lago (as 4 bacias; opaco sob a água, à vista na margem e no lago assoreado) e a linha de pedra da margem
+    const bacias = LAGO.bacias || [LAGO];
+    c.save(); c.filter = 'blur(1.5px)'; c.fillStyle = '#7d7d5e'; c.beginPath(); for (const b of bacias) { sub(b); c.closePath(); } c.fill(); c.restore();
+    c.save(); c.lineJoin = 'round'; c.lineWidth = 0.12 * S; c.strokeStyle = '#d6d0bf'; c.beginPath(); for (const b of bacias) { sub(b); c.closePath(); } c.stroke(); c.restore();
+    // 5) vias de asfalto no nível do chão (anel viário e o começo das saídas): bordas claras, asfalto e faixa tracejada,
+    //    em três passadas (os encontros das saídas com o anel ficam limpos); terra batida enquanto a obra vizinha não sai
+    const vias = (A.vias || []).filter((v) => !(flags.vias && flags.vias[v.id] === false)); const asf = (v) => !v.quando || feita(v.quando) || flags.reflorestado;
+    const traco = (v) => linhaCrua(v.fechada ? [...v.pts, v.pts[0]] : v.pts);
+    c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+    for (const v of vias) { c.strokeStyle = asf(v) ? 'rgba(244,244,236,.85)' : 'rgba(196,172,136,.6)'; c.lineWidth = v.w * S + 3; traco(v); }
+    for (const v of vias) { c.strokeStyle = asf(v) ? '#52565e' : '#a8886a'; c.lineWidth = v.w * S - 2; traco(v); }
+    c.setLineDash([0.45 * S, 0.45 * S]); c.strokeStyle = 'rgba(250,246,230,.75)'; c.lineWidth = 0.06 * S;
+    for (const v of vias) {
+      if (!asf(v) || v.w < 1.2) continue; if (v.fechada) { traco(v); continue; }
+      const [a, b] = v.pts, L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, o = Math.min(v.w * 0.6, L); linhaCrua([[a[0] + ((b[0] - a[0]) * o) / L, a[1] + ((b[1] - a[1]) * o) / L], b]); // a faixa da saída começa depois da pista do anel
     }
-    // 6) praça central e demais zonas pavimentadas (vale urbanizado): piso cinza-rosado com caminhos
-    //    curvos em leque e canteiros; antes da obra, o pasto degradado dos passos 2 e 2c
+    c.restore();
+    // 6) zonas que mudam com as etapas (por cima do gabarito, que segue à vista na borda): praça e eixo norte
+    //    pavimentados, pátios e o gramado do acelerador; terra batida no poço antes da escavação
+    const centro = A.praca?.centro || A.praca?.c;
     for (const Z of ZONAS) {
-      if (Z.tipo !== 'praca' || !pronta(Z)) continue;
+      if (Z.sempre || Z.tipo === 'canteiro' || !ativa(Z)) continue;
       c.save(); zona(Z);
-      c.fillStyle = pat(tex.pavers()); c.fill(); c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(226,224,232)'; c.fill(); c.globalCompositeOperation = 'source-over';
-      c.clip();
-      if (Z.id === 'praca') {
-        const cam = caminhosPraca(); c.lineCap = 'round'; c.lineJoin = 'round';
-        // três canteiros curvos entre caminhos vizinhos (grama com borda escura), longe dos caminhos
-        // e dos espelhos d'água
-        const lagos = A.lagosPraca || [], lin = cam.map((p) => suave(p)); const o = cam[0][0];
-        const ang = (p) => Math.atan2(p[p.length - 1][1] - o[1], p[p.length - 1][0] - o[0]);
-        const ord = lin.map((p, i) => [ang(p), i]).sort((u, v) => u[0] - v[0]).map((u) => lin[u[1]]);
-        const dLin = (x, z, p) => { let d = 1e9; for (let i = 1; i < p.length; i++) { const [ax, az] = p[i - 1], [bx, bz] = p[i]; const vx = bx - ax, vz = bz - az; const t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; };
-        let nc = 0;
-        for (let i = 0; i + 1 < ord.length && nc < 3; i++) for (const f of [0.6, 0.45, 0.75, 0.85]) {
-          const a = ord[i], b = ord[i + 1]; const pa = a[Math.min(a.length - 1, (a.length * f) | 0)], pb = b[Math.min(b.length - 1, (b.length * f) | 0)];
-          const x = (pa[0] + pb[0]) / 2, z = (pa[1] + pb[1]) / 2; const folga = Math.min(...lin.map((p) => dLin(x, z, p)));
-          if (!inPoly(x, z, Z.poly) || polyDist(x, z, Z.poly) > -0.7 || folga < 0.75 || lagos.some((l) => inEllipse(x, z, l.c[0], l.c[1], l.rx + 0.9, l.rz + 0.9, l.rot || 0))) continue;
-          const an = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]) + Math.PI / 2, L = Math.min(1.5, folga * 1.6);
-          const [px, py] = P(x, z); c.save(); c.translate(px, py); c.rotate(an); c.beginPath(); c.moveTo(-L * S, 0); c.quadraticCurveTo(0, -0.7 * folga * S, L * S, 0); c.quadraticCurveTo(0, 0.3 * folga * S, -L * S, 0); c.closePath();
-          c.fillStyle = pat(tex.grass()); c.fill(); c.strokeStyle = 'rgba(90,110,70,.5)'; c.lineWidth = 2; c.stroke(); c.restore(); nc++; break;
+      if (Z.tipo === 'praca') {
+        c.fillStyle = pat(tex.pavers()); c.fill(); c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(226,224,232)'; c.fill(); c.globalCompositeOperation = 'source-over';
+        if (centro && Z.poly && inPoly(centro[0], centro[1], Z.poly)) for (const cam of A.pracaCaminhos || []) { // anel de piso mais escuro em volta do espelho
+          c.lineWidth = (cam.w || 0.8) * S; c.lineJoin = 'round'; c.strokeStyle = pat(tex.pavers()); linhaCrua(cam); c.globalCompositeOperation = 'multiply'; c.strokeStyle = 'rgb(184,176,170)'; linhaCrua(cam); c.globalCompositeOperation = 'source-over';
         }
-        c.strokeStyle = 'rgba(246,242,236,.5)'; c.lineWidth = 0.4 * S; for (const pts of cam) linha(pts); // caminhos em leque discretos
-      }
+        if (centro && Z.poly && inPoly(centro[0], centro[1], Z.poly)) for (const l of A.lagosPraca || []) { // lugar do espelho d'água: pedra mais escura com a borda clara (o espelho é peça da praça)
+          c.beginPath(); subEll(l.c, l.rx, l.rz, l.rot || 0); c.fillStyle = 'rgba(120,116,112,0.35)'; c.fill(); c.lineWidth = 0.08 * S; c.strokeStyle = GAB.piso; c.stroke();
+        }
+      } else if (Z.tipo === 'terra') { c.fillStyle = pat(tex.soil()); c.fill(); c.fillStyle = 'rgba(184,134,90,0.35)'; c.fill(); } // piquete de terra
+      else if (Z.tipo === 'areia') { c.fillStyle = pat(tex.sand()); c.fill(); }
+      else { c.fillStyle = pat(tex.grass()); c.fill(); }
       c.restore();
     }
-    // 7) canteiro de obras (terra batida) ou reflorestamento
-    c.save(); path(A.canteiro.poly);
-    if (!flags.reflorestado) { c.filter = 'blur(2px)'; c.fillStyle = pat(tex.soil()); c.fill(); c.strokeStyle = 'rgba(80,60,40,.5)'; c.lineWidth = 2; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of A.canteiro.poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } for (let i = 0; i < 40; i++) { const [px, py] = P(x0 + 1 + hash(i, 1, 77) * (x1 - x0 - 3), z0 + 0.8 + hash(i, 2, 77) * (z1 - z0 - 1.6)); c.beginPath(); c.moveTo(px, py); c.lineTo(px + 40, py + 6); c.stroke(); } }
-    c.restore();
+    // 7) canteiro de obras (terra batida, com o acesso até a pista norte) ou reflorestamento
+    if (!flags.reflorestado) {
+      c.save(); c.beginPath(); sub(CANTEIRO); c.closePath(); sub(ACESSO.poly); c.closePath();
+      c.filter = 'blur(2px)'; c.fillStyle = pat(tex.soil()); c.fill(); c.filter = 'none'; c.clip(); c.strokeStyle = 'rgba(80,60,40,.5)'; c.lineWidth = 2;
+      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of A.canteiro.poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      for (let i = 0; i < 40; i++) { const [px, py] = P(x0 + 1 + hash(i, 1, 77) * (x1 - x0 - 3), z0 + 0.8 + hash(i, 2, 77) * (z1 - z0 - 1.6)); c.beginPath(); c.moveTo(px, py); c.lineTo(px + 40, py + 6); c.stroke(); }
+      c.restore();
+    }
     this.tex.needsUpdate = true;
     this.stats.pinturas++; this.stats.ms = performance.now() - t0;
   }

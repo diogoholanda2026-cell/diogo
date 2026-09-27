@@ -1,8 +1,11 @@
 // Arredores no estilo do SimCity BuildIt: a obra não flutua mais numa mesa no escuro. O terreno continua além
-// da planta (até ~10 vezes a largura dela para cada lado, com a borda fundida no chão da obra), com a mata em
-// volta (instâncias com nível de detalhe por célula), campos em retalhos com sebes, morros atrás da obra e
-// serras ao longe (que a neblina azula), uma praia com coqueiros a oeste (à esquerda na vista padrão e na da
-// foto) com mar turquesa → azul, ondas e espuma branca na areia, alguns barcos e nuvens de algodão.
+// da planta (até ~10 vezes a largura dela para cada lado, com a borda fundida no chão da mesa de 80 x 62), com a mata
+// em volta (instâncias com nível de detalhe por célula), campos em retalhos com sebes, morros atrás da obra e serras ao
+// longe (que a neblina azula), uma praia com coqueiros a oeste (à esquerda na vista padrão) com mar turquesa → azul,
+// ondas e espuma branca na areia, alguns barcos e nuvens de algodão. As 4 saídas do anel viário (sul até a rua de borda
+// do Bairro Sul em z 30,4, norte até a do Bairro Norte em z -36,6, leste até a do Bairro Leste em x 44,4 e o porto até
+// x -47, as duas em z -3,5) correm num corredor plano e sem mata (o asfalto de fora da mesa é de plano.js), e os carros
+// andam no anel viário e nas saídas, até a rua do bairro.
 // Orçamento medido: ~12 chamadas e ~64 mil triângulos na vista geral e na do canteiro.
 import * as THREE from 'three';
 import { MESA, A, SAIDAS } from '../data/planta.js';
@@ -10,7 +13,7 @@ import { ORDEM_BAIRROS, areaBairro, AEROPORTO, PORTO } from '../data/cidade.js';
 import { hash, fbm, clamp, rng } from '../core/util.js';
 import { tex } from './textures.js';
 import { treeGroup } from './forest.js';
-import { suave, heightAt } from './ground.js';
+import { heightAt } from './ground.js';
 import { comTomDoCeu } from './hao.js';
 
 export const MAR_Y = -0.25;                  // nível do mar (a água dos lagos da obra fica em -0,1)
@@ -25,8 +28,10 @@ const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t
 export const distPlanta = (x, z) => Math.hypot(Math.max(Math.abs(x - CX) - HX, 0), Math.max(Math.abs(z - CZ) - HZ, 0));
 // faixa de mata em volta da planta (largura por lado: oeste até as dunas, atrás mais larga)
 const FAIXA = { oeste: 5, leste: 4, fundo: 6, frente: 4 };
-// as saídas do anel viário até a cidade (a mata da faixa não nasce nelas)
-const naSaida = (x, z) => SAIDAS.some(({ pts: [a, b] }) => { const vx = b[0] - a[0], vz = b[1] - a[1]; const t = clamp(((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz), 0, 1); return Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t) < 1.4; });
+// as saídas do anel viário até a cidade: distância até o eixo da saída mais perto (a mata da faixa não nasce nelas e o
+// terreno fica plano no corredor)
+const distSaida = (x, z) => { let d = 1e9; for (const { pts: [a, b] } of SAIDAS) { const vx = b[0] - a[0], vz = b[1] - a[1]; const t = clamp(((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz), 0, 1); d = Math.min(d, Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t)); } return d; };
+const naSaida = (x, z) => distSaida(x, z) < 1.4;
 const naFaixa = (x, z) => {
   if (distPlanta(x, z) <= 0.05) return false;
   const dx = x < MESA.x0 ? MESA.x0 - x : x > MESA.x1 ? x - MESA.x1 : 0, dz = z < MESA.z0 ? MESA.z0 - z : z > MESA.z1 ? z - MESA.z1 : 0;
@@ -55,6 +60,7 @@ export function alturaArredor(x, z) {
   if (serra > 0) { const r = 1 - Math.abs(fbm(x * 0.011, z * 0.011, 1, 747, 4) * 2 - 1); h += serra * (18 + 52 * r * r); }
   h = Math.max(h, -0.1 * k);
   const zc = zonaCidade(x, z); if (zc > 0) h *= 1 - zc; // bairros planos
+  h *= sm(1.2, 3.5, distSaida(x, z)); // corredor plano das saídas (a estrada de plano.js acompanha este chão)
   // praia: sobe do nível do mar a +0,15 em 4 unidades e encontra o chão
   const praia = MAR_Y + Math.min(c, 4) * 0.1;
   return c < 9 ? praia + (Math.max(praia, h) - praia) * sm(3, 9, c) : h;
@@ -238,21 +244,25 @@ function juntar(lista) {
 }
 
 // ---------------------------------------------------------------- carros
-// Carros nas vias do plano diretor (A.vias: o anel viário, a avenida transversal e a rotatória), numa InstancedMesh
-// com a carroceria colorida por instância e a cabine escura por vértice; andam a 0,9 unidade/s pelas polilinhas
-// (as mesmas da pintura do chão): nas vias fechadas dão a volta, nas abertas voltam nas pontas; atualizados a cada
-// 2 quadros sem alocar.
-const CARROS = { anel: 22, avenidaO: 6, avenidaL: 6, rotatoria: 3 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
+// Carros no anel viário (A.vias 'anel', fechado: dão a volta) e nas 4 saídas (do eixo da pista até a rua de borda do
+// bairro ou o porto, SAIDAS inteiras: vão e voltam nas pontas), numa InstancedMesh com a carroceria colorida por
+// instância e a cabine escura por vértice; andam a 0,9 unidade/s, com o chão da mesa dentro dela e o dos arredores fora;
+// atualizados a cada 2 quadros sem alocar. Nada de carro dentro da figura (não há mais avenida nem rotatória).
+const CARROS = { anel: 22, 'saida-sul': 2, 'saida-norte': 2, 'saida-leste': 2, 'saida-porto': 2 }, COR_CARRO = [0xf4f4f0, 0xe2543f, 0x3f88e2, 0x3a4250, 0xf4f4f0, 0xe8c840];
+const naMesa = (x, z) => x >= MESA.x0 && x <= MESA.x1 && z >= MESA.z0 && z <= MESA.z1;
 function carros() {
   const vias = (A.vias || []).filter((v) => CARROS[v.id]); if (!vias.length) return null;
   const partes = [];
   const corpo = new THREE.BoxGeometry(0.42, 0.16, 0.2); corpo.translate(0, 0.11, 0); pinta(corpo, [1, 1, 1]); partes.push(corpo);
   const cabine = new THREE.BoxGeometry(0.22, 0.1, 0.18); cabine.translate(-0.02, 0.24, 0); pinta(cabine, [0.043, 0.057, 0.083]); partes.push(cabine);
   const geo = juntar(partes);
-  // vias amostradas: pontos [x, y, z] a cada ~0,25 (y do terreno) e comprimento acumulado
+  // vias amostradas: pontos [x, y, z] a cada ~0,5 nas saídas (y do chão: mesa ou arredores) e comprimento acumulado
   const R = rng(4343); const rotas = vias.map((v) => {
-    const pts = v.fechada ? [...v.pts, v.pts[0]] : suave(v.pts, 6); const P = [], L = [0]; let acc = 0;
-    for (let i = 0; i < pts.length; i++) { const [x, z] = pts[i]; if (i) acc += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]); P.push(x, heightAt(x, z) + 0.02, z); if (i) L.push(acc); }
+    const sa = v.id.startsWith('saida-') && SAIDAS.find((q) => 'saida-' + q.id === v.id); let pts;
+    if (v.fechada) pts = [...v.pts, v.pts[0]];
+    else { const [a, b] = sa ? sa.pts : v.pts, L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 0.5)); pts = Array.from({ length: n + 1 }, (_, i) => [a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]); }
+    const P = [], L = [0]; let acc = 0;
+    for (let i = 0; i < pts.length; i++) { const [x, z] = pts[i]; if (i) acc += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]); P.push(x, (naMesa(x, z) ? heightAt(x, z) : alturaArredor(x, z)) + 0.02, z); if (i) L.push(acc); }
     return { P: new Float32Array(P), L: new Float32Array(L), total: acc, n: pts.length, fechada: !!v.fechada };
   });
   const lista = []; rotas.forEach((r, k) => { for (let i = 0; i < CARROS[vias[k].id]; i++) lista.push({ r, s: R() * r.total, dir: R() < 0.5 ? 1 : -1, i: 0, cor: (R() * COR_CARRO.length) | 0 }); });

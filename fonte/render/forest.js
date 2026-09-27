@@ -1,9 +1,10 @@
-// Árvores instanciadas: floresta ao redor da arcologia (em blocos, com descarte por visão e três níveis
-// de detalhe), e grupos de árvores de paisagismo usados pelos modelos (praças, pátios, savana).
+// Árvores instanciadas: a mata da mesa (moldura escura em volta do Trevo, do tapete até o anel viário e além dele,
+// em blocos com descarte por visão e três níveis de detalhe; nenhuma árvore da mata dentro da figura, do canteiro ou
+// das vias) e grupos de árvores de paisagismo usados pelos modelos (praças, pátios, savana).
 import * as THREE from 'three';
 import { MESA, A } from '../data/planta.js';
-import { hash, vnoise, fbm, clamp, rng, inPoly, inEllipse, smoothstep } from '../core/util.js';
-import { isForest, heightAt, clearance, aldeiaCasas } from './ground.js';
+import { hash, vnoise, fbm, clamp, rng, inPoly, smoothstep } from '../core/util.js';
+import { isForest, heightAt, clearance, noCanteiro, distVias } from './ground.js';
 
 // ---------- geometrias base (compartilhadas) ----------
 let GEO = null;
@@ -220,38 +221,17 @@ export function treeGroup(list, opts = {}) {
   return g;
 }
 
-// ---------- aldeia ----------
-// casinha de 0,9 x 0,7 x 0,4 (paredes creme) com telhado de duas águas de 0,25 e beiral de 0,08 (terracota):
-// 14 triângulos com cor por vértice; as 9 casas numa InstancedMesh (uma chamada)
-let ALDEIA_GEO = null;
-function aldeiaGeo() {
-  if (ALDEIA_GEO) return ALDEIA_GEO;
-  const P = [], C = []; const par = [0.896, 0.822, 0.686], tel = [0.578, 0.133, 0.043]; // #f3ead8 e #c8663a em linear
-  const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); C.push(...col, ...col, ...col); };
-  const quad = (a, b, c, d, col) => { tri(a, b, c, col); tri(a, c, d, col); };
-  const w = 0.45, d = 0.35, h = 0.4, hr = 0.25, e = 0.08, ye = h - (e * hr) / d;
-  quad([-w, 0, d], [w, 0, d], [w, h, d], [-w, h, d], par); quad([w, 0, -d], [-w, 0, -d], [-w, h, -d], [w, h, -d], par);
-  quad([w, 0, d], [w, 0, -d], [w, h, -d], [w, h, d], par); quad([-w, 0, -d], [-w, 0, d], [-w, h, d], [-w, h, -d], par);
-  tri([w, h, d], [w, h, -d], [w, h + hr, 0], par); tri([-w, h, -d], [-w, h, d], [-w, h + hr, 0], par);
-  quad([-w - e, ye, d + e], [w + e, ye, d + e], [w + e, h + hr, 0], [-w - e, h + hr, 0], tel); quad([w + e, ye, -d - e], [-w - e, ye, -d - e], [-w - e, h + hr, 0], [w + e, h + hr, 0], tel);
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeVertexNormals(); g.computeBoundingSphere();
-  g.userData.compartilhada = true; return (ALDEIA_GEO = g);
-}
-function aldeiaMesh(casas) {
-  const im = new THREE.InstancedMesh(aldeiaGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), casas.length);
-  casas.forEach(([x, z, rot], i) => { const k = 0.88 + hash(i, 3, 2727) * 0.24; _p.set(x, heightAt(x, z) - 0.04, z); _e.set(0, rot, 0); _q.setFromEuler(_e); _s.set(k, 0.92 + hash(i, 4, 2727) * 0.16, k); im.setMatrixAt(i, _m4.compose(_p, _q, _s)); });
-  im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); im.name = 'aldeia'; return im;
-}
-
 // ---------- floresta da mesa ----------
-// Blocos de 16 x 10 unidades para o descarte por visão, cada um com três malhas de copa (lóbulos
-// redondos bem de perto, lóbulos simples a meia distância e cacho alongado de longe) no mesmo material.
-// O nível de detalhe é escolhido por célula de 8 x 5 dentro do bloco (raio da copa em pixels no ponto da
-// célula mais perto da câmera, com histerese): cada malha do bloco desenha só as células do seu nível,
-// e um bloco custa 1 chamada (2 ou 3 só quando mistura níveis). As coníferas ficam em 3 faixas (fundo e
+// A mata é a moldura do Trevo: nasce só fora do tapete (a clareira da figura), do canteiro e do acesso dele, das vias e
+// das pegadas das fitas (A.semMata), do tapete até o anel viário e na faixa entre a pista e a borda da mesa.
+// Blocos de 20 x 15,5 unidades (4 x 4 na mesa de 80 x 62; os do meio, dentro do tapete, nem existem) para o descarte
+// por visão, cada um com três malhas de copa (lóbulos redondos bem de perto, lóbulos simples a meia distância e cacho
+// alongado de longe) no mesmo material. O nível de detalhe é escolhido por célula de 8 x 5 dentro do bloco (raio da
+// copa em pixels no ponto da célula mais perto da câmera, com histerese): cada malha do bloco desenha só as células do
+// seu nível, e um bloco custa 1 chamada (2 ou 3 só quando mistura níveis). As coníferas ficam em 3 faixas (fundo e
 // laterais), uma chamada cada.
-const BLOCO_X = 20, BLOCO_Z = 14, CEL_X = 8, CEL_Z = 5, RAIO_COPA = 0.45; // (4 x 4 blocos na mesa de 80 x 56)
-const LOD = [[15, 13.5], [31, 27]]; // [entra, sai] do nível 1 e do 2 (na vista da foto a 1376x768 quase tudo fica no nível de 15 triângulos)
+const BLOCO_X = (MESA.x1 - MESA.x0) / 4, BLOCO_Z = (MESA.z1 - MESA.z0) / 4, CEL_X = 8, CEL_Z = 5, RAIO_COPA = 0.45;
+const LOD = [[15, 13.5], [31, 27]]; // [entra, sai] do nível 1 e do 2 (na vista padrão a 1376x768 quase tudo fica no nível de 15 triângulos)
 export class Forest {
   constructor(engine) {
     this.e = engine; this.group = new THREE.Group(); this.group.name = 'floresta'; engine.scene.add(this.group);
@@ -260,28 +240,26 @@ export class Forest {
   }
   _build() {
     const step = 0.5; const R = rng(4242); const trees = []; const cant = []; // (mata 44% mais densa: o dono liberou o triplo do volume)
-    const semMata = A.semMata || []; const aldeia = aldeiaCasas(); const ca = (A.aldeia || { c: [-27.5, 3.0] }).c;
-    // três classes em manchas de 3 a 6 unidades: arbusto (30%), média (50%) e emergente (20%); perto da aldeia só as duas primeiras
-    const classe = (jx, jz, pertoAldeia) => { let f = fbm(jx, jz, 4, 22, 2); if (pertoAldeia && f > 0.62) f = 0.55; return f < 0.41 ? [0.3 + R() * 0.1, 0.7] : f > 0.62 ? [0.72 + R() * 0.23, 1.25 + R() * 0.15] : [0.48 + R() * 0.18, 1.0]; };
+    const semMata = A.semMata || []; const naFita = (x, z) => semMata.some((p) => (!p.caixa || (x >= p.caixa[0] && z >= p.caixa[1] && x <= p.caixa[2] && z <= p.caixa[3])) && inPoly(x, z, p));
+    // três classes em manchas de 3 a 6 unidades: arbusto (30%), média (50%) e emergente (20%)
+    const classe = (jx, jz) => { const f = fbm(jx, jz, 4, 22, 2); return f < 0.41 ? [0.3 + R() * 0.1, 0.7] : f > 0.62 ? [0.72 + R() * 0.23, 1.25 + R() * 0.15] : [0.48 + R() * 0.18, 1.0]; };
     for (let z = MESA.z0 + 0.35; z < MESA.z1 - 0.3; z += step) {
       for (let x = MESA.x0 + 0.35; x < MESA.x1 - 0.3; x += step) {
         const jx = x + (R() - 0.5) * step * 0.9, jz = z + (R() - 0.5) * step * 0.9;
-        const inCant = inPoly(jx, jz, A.canteiro.poly);
-        if (!inCant && !isForest(jx, jz)) continue;
-        if (!inCant && semMata.some((p) => inPoly(jx, jz, p))) continue; // pegada da fita do Santuário
+        const inCant = noCanteiro(jx, jz) && distVias(jx, jz) >= 0.35; // o pátio de obras e o acesso (longe da pista, como a mata): só o reflorestamento do cap. 6
+        if (!inCant && (!isForest(jx, jz) || naFita(jx, jz))) continue;
         const cl = inCant ? 2 : clearance(jx, jz); const edge = clamp(cl, 0, 3);
+        const fundo = cl > 3 && !inCant; if (fundo && R() < 0.3) continue; // miolo da mata (a mais de 3 da clareira): 70% das copas, 10% maiores (o chão escuro fecha o resto)
         // ciprestes em grupos de 3 a 8 na orla oeste, na leste e no fundo (4% soltos em toda parte)
         const largo = Math.abs(jx) > 28 || jz < -20; const pc = (largo ? 0.55 * smoothstep(0.55, 0.72, fbm(jx, jz, 5, 23, 2)) : 0) + 0.04;
         const conif = !inCant && R() < pc;
-        const [s0, h] = classe(jx, jz, Math.hypot(jx - ca[0], jz - ca[1]) < 2); const s = s0 * (0.8 + 0.2 * clamp(edge / 1.5, 0, 1));
+        const [s0, h] = classe(jx, jz); const s = s0 * (0.8 + 0.2 * clamp(edge / 1.5, 0, 1)) * (fundo ? 1.1 : 1);
         const kind = inCant ? 'folha' : conif ? 'conifera' : R() < 0.5 ? 'folha' : 'folha2';
         const pal = inCant ? 'mata' : conif ? 'conifera' : R() < 0.02 ? 'outono' : 'mata';
         const t = { x: jx, z: jz, s: conif ? 0.42 + R() * 0.12 : s, kind, pal, h: conif ? 1.1 + R() * 0.4 : h, orla: inCant ? undefined : cl };
         (inCant ? cant : trees).push(t);
       }
     }
-    // 6 ciprestes altos junto à aldeia
-    for (let i = 0, n = 0; i < 12 && n < 6; i++) { const [hx, hz] = aldeia[i % aldeia.length] || ca; const a = (i / 6) * 6.283 + R() * 0.5, r = 1.0 + R() * 0.8; const jx = hx + Math.cos(a) * r, jz = hz + Math.sin(a) * r; if (!isForest(jx, jz)) continue; n++; trees.push({ x: jx, z: jz, s: 0.46 + R() * 0.1, kind: 'conifera', pal: 'conifera', h: 1.35 + R() * 0.15, orla: clearance(jx, jz) }); }
     const G = treeGeos();
     // folhosas: blocos de descarte, com as árvores em ordem de célula
     const blocos = new Map();
@@ -291,8 +269,6 @@ export class Forest {
     const faixas = [[], [], []]; for (const t of trees) if (t.kind === 'conifera') faixas[t.z < -20 ? 0 : t.x < 0 ? 1 : 2].push(t);
     for (const l of faixas) { if (!l.length) continue; const g = new THREE.Group(); g.name = 'mata'; const cm = this._nova(G.conifera, l.length); preencher(cm, l, 'conifera'); cm.computeBoundingSphere(); cm.userData.kind = 'conifera'; g.add(cm); this.group.add(g); this.chunks.push(g); }
     this.count = trees.length; this.coniferas = faixas[0].length + faixas[1].length + faixas[2].length;
-    // aldeia de telhados terracota (uma chamada)
-    if (aldeia.length) { this.aldeia = aldeiaMesh(aldeia); this.group.add(this.aldeia); }
     this.canteiro = treeGroup(cant, { name: 'reflorestamento', cast: this.cast }); this.canteiro.visible = false; this.group.add(this.canteiro);
     this.canteiroN = cant.length;
   }

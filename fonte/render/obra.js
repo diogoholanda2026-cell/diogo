@@ -3,11 +3,14 @@
 // depois o acabamento com a luz de trabalho fria. O andaime fica sempre um lance acima do nível de
 // trabalho, com diagonais, rodapé e tela; a grua faz o ciclo de içamento (pega na pilha, gira, pousa a
 // carga na laje) com a carga balançando como pêndulo; o caminhão entra de ré no pátio e descarrega os
-// materiais que o jogador entregou; os operários vão a postos no andaime, na laje e no pátio.
+// materiais que o jogador entregou; os operários vão a postos no andaime, na laje e no pátio. A caixa da obra (a
+// caixaObra da parte) limita também o casco do andaime. Na ilha do lago (a Torre) o pátio fica na margem norte, a grua
+// no pódio da Torre e uma passarela provisória de tábuas liga a ilha ao pátio.
 // Modos: subir (prédios), caminho (passarelas avançam do começo ao fim), plantio (itens um a um),
 // caixas (animais chegam em caixas de transporte), terra (corte vertical com escavadeira), pavimento
-// (terraplenagem e piso radial), draga (desassoreamento do lago), desmontar (canteiro desfeito peça por
-// peça) e replantar (mudas que crescem até virar a mata).
+// (terraplenagem e piso radial), draga (desassoreamento das bacias do lago, levada por terra de uma para a outra, com o
+// monte de lodo e o caminhão pelo portal do eixo), desmontar (canteiro desfeito peça por peça, os caminhões pelo acesso
+// da pista norte) e replantar (mudas que crescem até virar a mata).
 // Custo: as peças de todos os canteiros ficam em poucas malhas instanciadas compartilhadas (treliça,
 // caixas, cilindros, montes, luzes, sombras de contato, chão de obra, operários e partículas); cada
 // canteiro só tem as 3 do andaime. Nada disso projeta no mapa de sombra: grua, caminhão e máquinas
@@ -18,11 +21,11 @@ import { Crowd } from './figuras.js';
 import { canvasTex, tex } from './textures.js';
 import { clamp, lerp, hash, inPoly, fatia, easeOutCubic, easeInCubic, easeInQuad, easeInOutCubic, easeInOutSine, easeOutBack, easeOutBounce } from '../core/util.js';
 import { normals, FH } from './geom.js';
-import { heightAt } from './ground.js';
+import { heightAt, waterDepth } from './ground.js';
 import { descartar } from './descartar.js';
 import { LOTES, AtividadeCanteiro } from './models/canteiro.js';
 import { ITENS } from '../data/itens.js';
-import { A, MESA } from '../data/planta.js';
+import { A, MESA, FITAS, trechosDe, trecho } from '../data/planta.js';
 import { PROJETOS, alvoEtapa } from '../data/obras.js';
 
 const SEM_TL = typeof location !== 'undefined' && new URLSearchParams(location.search).has('semTimelapse');
@@ -68,6 +71,7 @@ function passoAndar(s, k, liga) { const n = k * s.nAnd; const f = n - Math.floor
 function mChao(ax, az, bx, bz, y, w) { return mCaixa((ax + bx) / 2, y, (az + bz) / 2, Math.hypot(bx - ax, bz - az), 1, w, Math.atan2(-(bz - az), bx - ax)); }
 const RODAS_X = [0.26, -0.08, -0.24], LADOS = [-1, 1], TIROS = [900, 1150, 1400];
 const VISTA = [Math.sin(0.55), Math.cos(0.55)]; // de onde o jogador costuma olhar (giro da câmera de jogo)
+const ACESSO = A.canteiro.acesso; // de onde vêm os caminhões do canteiro (pela pista norte do anel viário)
 // matriz de instância escalada k em torno de um pivô (sem mudar giro): src/dst Float32Array, offset o
 function escalaPivo(src, so, dst, d, k, px, py, pz) {
   for (let i = 0; i < 12; i++) dst[d + i] = src[so + i] * (i % 4 === 3 ? 1 : k);
@@ -279,15 +283,16 @@ function clipClone(base, modo, planos, U, tampaOk = true) {
 
 // ---------------------------------------------------------------- casco, contorno e caminhos
 // Casco convexo do alvo no plano XZ: andaimes e operários abraçam prédios redondos em vez de seguir a
-// caixa envolvente (que atravessaria os vizinhos).
-function casco(obj) {
+// caixa envolvente (que atravessaria os vizinhos). Com a caixa da obra (b: a caixaObra de uma parte grande), só os
+// pontos dentro dela: a Torre, e não o pátio inteiro da Sede em volta do lago.
+function casco(obj, b = null) {
   const P = []; const v = new THREE.Vector3(); const mi = new THREE.Matrix4(); obj.updateWorldMatrix(true, true);
   obj.traverse((o) => {
     const pos = o.isMesh ? o.geometry?.attributes?.position : null; if (!pos) return;
     const n = o.isInstancedMesh ? o.count : 1; const step = Math.max(1, Math.floor(pos.count / (o.isInstancedMesh ? 24 : 1500)));
     for (let k = 0; k < n; k++) {
       if (o.isInstancedMesh) { o.getMatrixAt(k, mi); mi.premultiply(o.matrixWorld); } else mi.copy(o.matrixWorld);
-      for (let i = 0; i < pos.count; i += step) { v.fromBufferAttribute(pos, i).applyMatrix4(mi); P.push([v.x, v.z]); }
+      for (let i = 0; i < pos.count; i += step) { v.fromBufferAttribute(pos, i).applyMatrix4(mi); if (!b || (v.x > b.min.x - 0.05 && v.x < b.max.x + 0.05 && v.z > b.min.z - 0.05 && v.z < b.max.z + 0.05)) P.push([v.x, v.z]); }
     }
   });
   if (P.length < 3) return null;
@@ -321,6 +326,52 @@ function reamostra(path, passo, o = 0, closed = false) {
   return out;
 }
 const distCaixa = (x, z, b) => Math.hypot(Math.max(b.min.x - x, 0, x - b.max.x), Math.max(b.min.z - z, 0, z - b.max.z));
+
+// ---------------------------------------------------------------- draga: água das bacias e o que já está no plano
+// dentro d'água a mais de m da margem (as bacias do lago: a oval menos a ilha e a faixa dos diques)
+function distBorda(x, z, p) { let d = 1e9; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [ax, az] = p[j], [bx, bz] = p[i], vx = bx - ax, vz = bz - az, t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); d = Math.min(d, Math.hypot(x - ax - vx * t, z - az - vz * t)); } return d; }
+function naAgua(x, z, m) { for (const b of A.lago.bacias || [A.lago]) if (inPoly(x, z, b) && distBorda(x, z, b) > m) return true; return false; }
+// pegadas do plano onde o caminhão da draga não entra: fitas por trecho (os portais do eixo ficam abertos), colunata,
+// Elo do Santuário e tambores, afastadas 0,25 (caixa [x0, z0, x1, z1] para o descarte rápido)
+let _peg = null;
+function naPegada(x, z) {
+  if (!_peg) {
+    const P = [], D = Object.values(A.tambores || {}).map((t) => [t.c[0], t.c[1], t.r + 0.25]);
+    const faixa = (pts, m) => {
+      if (!pts || pts.length < 2) return; const E = [], Dr = [];
+      for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / l, tz = (b[1] - a[1]) / l; E.push([pts[i][0] + tz * m, pts[i][1] - tx * m]); Dr.push([pts[i][0] - tz * m, pts[i][1] + tx * m]); }
+      const p = [...E, ...Dr.reverse()], xs = p.map((v) => v[0]), zs = p.map((v) => v[1]); P.push({ p, bx: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)] });
+    };
+    for (const k of FITAS) { const f = A[k]; if (f?.caminho) for (const [f0, f1] of trechosDe(f)) faixa(trecho(f.caminho, f0, f1), f.w / 2 + 0.25); }
+    for (const k of ['O', 'L']) { if (A.colunata) faixa(A.colunata.caminhos[k], A.colunata.w / 2 + 0.25); if (A.eloSant) faixa(A.eloSant.caminhos[k], A.eloSant.w / 2 + 0.25); }
+    _peg = { P, D };
+  }
+  for (const [cx, cz, r] of _peg.D) if (Math.hypot(x - cx, z - cz) < r) return true;
+  for (const q of _peg.P) if (x >= q.bx[0] && x <= q.bx[2] && z >= q.bx[1] && z <= q.bx[3] && inPoly(x, z, q.p)) return true;
+  return false;
+}
+// pontos de controle das curvas do caminhão (entra, ré e sai) até (ux, uz), como em _rotaCaminhao
+const rotaPts = (P, ux, uz) => [[3.6, 1.6], [2.0, 1.1], [0.9, 0.95], [0.55, 0.35], [0, 0], [1.4, -0.2], [3.6, -1.4]].map(([o, l]) => [ux + P.ox * o + P.lx * l, uz + P.oz * o + P.lz * l]);
+// Saída do recalque da draga: o ponto da margem mais perto do canteiro de onde o monte de lodo, o pátio e a manobra do
+// caminhão ficam em terra, na mesa e fora das pegadas do plano (com o Anel Mestre em volta do lago, só pelos portais do
+// eixo). O pátio fica ao lado do monte (lat) e o caminhão dá ré até ele. Calculada uma vez; n = pontos que batem
+let _saida = null;
+function saidaDraga() {
+  if (_saida) return _saida; const L = A.lago, cc = A.canteiro.c; let best = null;
+  const bate = (x, z) => x < MESA.x0 + 0.5 || x > MESA.x1 - 0.5 || z < MESA.z0 + 0.5 || z > MESA.z1 - 0.5 || waterDepth(x, z) > 0 || naPegada(x, z);
+  for (let k = 0; k < 144; k++) {
+    const t = (k / 144) * TAU, p = [L.c[0] + Math.cos(t) * L.rx, L.c[1] + Math.sin(t) * L.rz]; const nx = Math.cos(t) / L.rx, nz = Math.sin(t) / L.rz, nl = Math.hypot(nx, nz), ox = nx / nl, oz = nz / nl;
+    const monte = [p[0] + ox * 1.5, p[1] + oz * 1.5], dist = Math.hypot(p[0] - cc[0], p[1] - cc[1]); if (best && best.n === 0 && dist > best.dist) continue;
+    for (const lat of [0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6]) {
+      const P = { x: monte[0] + oz * lat, z: monte[1] - ox * lat, ox, oz, lx: -oz, lz: ox }; let n = 0;
+      for (const [a, b] of [[0, 0], [0.8, 0.55], [0.8, -0.55], [-0.8, 0.55], [-0.8, -0.55], [0, 0.9]]) if (bate(monte[0] + ox * a + oz * b, monte[1] + oz * a - ox * b)) n++; // os dois montes de lodo
+      const R = rotaPts(P, P.x + ox * 0.7 + P.lx * 0.25, P.z + oz * 0.7 + P.lz * 0.25);
+      for (let i = 1; i < R.length; i++) { const [ax, az] = R[i - 1], [bx, bz] = R[i], m = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.25)); for (let j = i === 1 ? 0 : 1; j <= m; j++) if (bate(ax + ((bx - ax) * j) / m, az + ((bz - az) * j) / m)) n++; }
+      if (!best || n < best.n || (n === best.n && dist < best.dist)) best = { n, dist, p, ox, oz, monte, P };
+    }
+  }
+  return (_saida = best);
+}
 
 // modos antigos aceitos
 const MODOS = { crescer: 'plantio', surgir: 'caixas', nivel: 'draga', reflorestar: 'replantar' };
@@ -359,7 +410,7 @@ export class Obras {
     s.box = box; s.y0 = box.min.y; s.y1 = box.max.y; s.H = Math.max(0.05, s.y1 - s.y0); s.cx = (box.min.x + box.max.x) / 2; s.cz = (box.min.z + box.max.z) / 2;
     s.nAnd = Math.max(1, Math.round(s.H / FH)); s.fh = s.H / s.nAnd; s.itens = (opts.itens && opts.itens.length ? opts.itens : ['concreto', 'viga', 'painel']).slice(0, 3);
     s.tipos = s.itens.map(tipoCarga); s.concreto = s.itens.some((k) => k === 'concreto' || k === 'cimento'); // tipo de volume de cada item (pilha, gancho e caminhão), uma vez só
-    s.casco = !opts.caminho && ['subir', 'plantio', 'caixas'].includes(modo) ? casco(alvo) : null;
+    s.casco = !opts.caminho && ['subir', 'plantio', 'caixas'].includes(modo) ? casco(alvo, box) : null;
     s.hull = s.casco || [[box.min.x, box.min.z], [box.max.x, box.min.z], [box.max.x, box.max.z], [box.min.x, box.max.z]];
     s.raio = 0; for (const [x, z] of s.hull) s.raio = Math.max(s.raio, Math.hypot(x - s.cx, z - s.cz));
     s.wl = s.y0; s.skY = s.y0; s.hy = s.y0; s.hyS = -1e9; s.yb = Math.min(s.y0, 0);
@@ -523,27 +574,30 @@ export class Obras {
     s.piso = { mesh, U, rMax: rMax + 0.1, c };
   }
   // ---------------------------------------------------------------- draga (desassoreamento do lago)
+  // Faixas leste-oeste de 1,15 nas bacias (a 0,65 da margem), emendadas pela ponta mais perto que se alcança por água;
+  // de uma bacia para a outra (os diques e a ilha no meio) a draga é levada por terra: trecho 'salto', sem desenho
   _prepDraga(s) {
-    const L = A.lago, il = A.ilha; let z0 = 1e9, z1 = -1e9, lx0 = 1e9, lx1 = -1e9; for (const [x, z] of L) { z0 = Math.min(z0, z); z1 = Math.max(z1, z); lx0 = Math.min(lx0, x - 0.5); lx1 = Math.max(lx1, x + 0.5); }
-    // faixas de norte a sul dentro do lago (0,7 da margem e fora da ilha), em zigue-zague
-    const pts = []; let lado = 0;
-    for (let z = z0 + 0.9; z < z1 - 0.6; z += 1.15) {
-      const seg = []; let ini = null;
-      for (let x = lx0; x <= lx1; x += 0.2) { const ok = inPoly(x, z, L) && inPoly(x - 0.7, z, L) && inPoly(x + 0.7, z, L) && inPoly(x, z - 0.6, L) && inPoly(x, z + 0.6, L) && Math.hypot(x - il.c[0], z - il.c[1]) > il.r + 0.7; if (ok && ini === null) ini = x; if (!ok && ini !== null) { seg.push([ini, x - 0.2]); ini = null; } }
-      for (const [a, b] of lado ? seg.reverse() : seg) { if (b - a < 0.6) continue; pts.push(lado ? [b, z] : [a, z], lado ? [a, z] : [b, z]); }
-      lado = 1 - lado;
+    const L = A.lago; let z0 = 1e9, z1 = -1e9, lx0 = 1e9, lx1 = -1e9; for (const [x, z] of L) { z0 = Math.min(z0, z); z1 = Math.max(z1, z); lx0 = Math.min(lx0, x - 0.5); lx1 = Math.max(lx1, x + 0.5); }
+    const segs = [];
+    for (let z = z0 + 0.9; z < z1 - 0.6; z += 1.15) { let ini = null; for (let x = lx0; x <= lx1 + 0.2; x += 0.2) { const ok = x <= lx1 && naAgua(x, z, 0.65); if (ok && ini === null) ini = x; if (!ok && ini !== null) { if (x - 0.2 - ini >= 0.6) segs.push([[ini, z], [x - 0.2, z]]); ini = null; } } }
+    const alcanca = (a, b) => { const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.2); for (let i = 1; i < n; i++) if (!naAgua(a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n, 0.3)) return false; return true; };
+    const pts = [], salto = [];
+    if (segs.length) { const g = segs.shift(); pts.push(g[0], g[1]); salto.push(false, false); }
+    while (segs.length) {
+      const e = pts[pts.length - 1]; let bi = 0, inv = false, bd = 1e9, ba = false;
+      segs.forEach((g, i) => { for (const k of [0, 1]) { const d = Math.hypot(g[k][0] - e[0], g[k][1] - e[1]), al = alcanca(e, g[k]); if ((al && !ba) || (al === ba && d < bd)) { bd = d; bi = i; inv = k === 1; ba = al; } } });
+      const g = segs.splice(bi, 1)[0]; pts.push(inv ? g[1] : g[0], inv ? g[0] : g[1]); salto.push(!ba, false);
     }
-    if (pts.length < 2) pts.push([s.cx - 1, s.cz], [s.cx + 1, s.cz]);
+    if (pts.length < 2) { pts.push([s.cx - 1, s.cz], [s.cx + 1, s.cz]); salto.push(false, false); }
     const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    // saída do recalque: a margem voltada para o canteiro de obras; o lodo seca num monte na terra
-    let best = null, bd = 1e9; for (const [x, z] of L) { const d = Math.hypot(x - A.canteiro.c[0], z - A.canteiro.c[1]); if (d < bd) { bd = d; best = [x, z]; } }
-    let cx = 0, cz = 0; for (const [x, z] of L) { cx += x; cz += z; } cx /= L.length; cz /= L.length; const ox = best[0] - cx, oz = best[1] - cz, ol = Math.hypot(ox, oz) || 1;
-    s.draga = { pts, cum, L: cum[cum.length - 1], saida: [best[0] + (ox / ol) * 0.35, best[1] + (oz / ol) * 0.35], monte: [best[0] + (ox / ol) * 1.5, best[1] + (oz / ol) * 1.5], dir: [ox / ol, oz / ol], x: pts[0][0], z: pts[0][1], h: 0, t: 0 };
-    s.patioFixo = { x: s.draga.monte[0] + (oz / ol) * 1.2, z: s.draga.monte[1] - (ox / ol) * 1.2, ox: ox / ol, oz: oz / ol };
+    // recalque até a margem do lado do canteiro; o lodo seca num monte em terra e o caminhão encosta nele
+    const { p, ox, oz, monte, P } = saidaDraga();
+    s.draga = { pts, salto, cum, L: cum[cum.length - 1], saida: [p[0] + ox * 0.35, p[1] + oz * 0.35], monte, dir: [ox, oz], x: pts[0][0], z: pts[0][1], h: 0, t: 0, oculto: false };
+    s.patioFixo = { x: P.x, z: P.z, ox, oz };
   }
   // ---------------------------------------------------------------- desmontar o canteiro
   _prepDesmontar(s) {
-    const alvos = (s.opts.alvos || [s.alvo]).filter(Boolean); const ac = s.opts.acesso || [-19.6, 16.4];
+    const alvos = (s.opts.alvos || [s.alvo]).filter(Boolean); const ac = s.opts.acesso || ACESSO;
     s.pecas = alvos.map((o) => { const b = new THREE.Box3().setFromObject(o); const c = b.getCenter(new THREE.Vector3()); return { o, b, x: c.x, z: c.z, y0: Math.min(b.min.y, 0) - 0.02, y1: b.max.y + 0.02, d: Math.hypot(c.x - ac[0], c.z - ac[1]) }; })
       .filter((p) => !p.b.isEmpty()).sort((a, b) => a.d - b.d);
     const N = s.pecas.length || 1;
@@ -587,9 +641,19 @@ export class Obras {
       let best = -1e9, B = null;
       for (const c of this._bordas(s)) { const [px, pz, ox, oz, bonus] = c; const x = px + ox * 1.3, z = pz + oz * 1.3; const sc = Math.min(this._livre(s, x, z), this._livre(s, x + ox * 0.9, z + oz * 0.9)) + 0.45 * (ox * VISTA[0] + oz * VISTA[1]) + bonus; if (sc > best) { best = sc; B = c; } }
       const [px, pz, ox, oz] = B; s.patio = { x: px + ox * 1.35, z: pz + oz * 1.35, ox, oz, lx: -oz, lz: ox };
+      // obra na ilha (a Torre): o lago em volta, nenhum lado seco. O pátio vai para a margem norte, onde o caminhão chega
+      // pelo portal da Sede (o mesmo da draga)
+      if (waterDepth(s.patio.x, s.patio.z) > 0 && Math.hypot(s.cx - A.ilha.c[0], s.cz - A.ilha.c[1]) < A.ilha.r) { const d = saidaDraga(); s.patio = { x: d.P.x, z: d.P.z, ox: d.ox, oz: d.oz, lx: -d.oz, lz: d.ox }; s.naIlha = true; }
     }
     // pilha: ao lado do pátio (a grua pega aqui); o estoque diminui com a obra
     s.pilha = { n: s.opts.novo === false ? Math.round(12 * (1 - 0.85 * s.p) * 0.7) : 0, cap: 12, pop: new Float32Array(12).fill(-1), x: s.patio.x + s.patio.lx * 0.55, z: s.patio.z + s.patio.lz * 0.55 };
+    // na ilha, uma passarela provisória de tábuas da ponta da ilha (entre o andaime e a margem) até a terra do pátio: os
+    // carregadores entregam na ponta dela
+    if (s.naIlha) {
+      const I = A.ilha, dx = s.pilha.x - I.c[0], dz = s.pilha.z - I.c[1], l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l; let t = I.r + 0.2;
+      while (t < l && waterDepth(I.c[0] + ux * t, I.c[1] + uz * t) > 0) t += 0.1;
+      s.ponteObra = [[I.c[0] + ux * (I.r - 0.12), I.c[1] + uz * (I.r - 0.12)], [I.c[0] + ux * (t + 0.25), I.c[1] + uz * (t + 0.25)]];
+    }
     // os 6 lugares de cada camada (3 x 2) com a altura do chão já lida: o terreno não muda e o quadro só lê
     const pl = s.pilha, P = s.patio; pl.y = chao(pl.x, pl.z);
     pl.base = Array.from({ length: 6 }, (_, k) => { const ox = ((k % 3) - 1) * 0.3, oz = (((k / 3) | 0) - 0.5) * 0.28; const x = pl.x + P.lx * ox + P.ox * oz, z = pl.z + P.lz * ox + P.oz * oz; return [x, z, chao(x, z)]; });
@@ -602,10 +666,13 @@ export class Obras {
     else {
       let best = -1e9; const ux = P.x + P.ox * 0.7, uz = P.z + P.oz * 0.7;
       for (const [px, pz, ox, oz] of this._bordas(s)) {
-        const x = px + ox * 1.25, z = pz + oz * 1.25; const d = Math.hypot(x - pl.x, z - pl.z); if (d < 0.9 || d > 5.2) continue;
+        const x = px + ox * 1.25, z = pz + oz * 1.25; const d = Math.hypot(x - pl.x, z - pl.z); if (d < 0.9 || d > 5.2 || waterDepth(x, z) > 0) continue; // (nunca dentro d'água)
         const sc = this._livre(s, x, z) + 0.35 * -(ox * VISTA[0] + oz * VISTA[1]) - 0.15 * Math.abs(d - 2.4) - (Math.hypot(x - ux, z - uz) < 1.2 ? 3 : 0);
         if (sc > best) { best = sc; gx = x; gz = z; }
       }
+      // na ilha: no anel do pódio da Torre (entre a torre e o andaime, a 0,35 da margem), 17 graus ao lado da passarela; a
+      // lança alcança a pilha na margem norte e a Torre
+      if (gx === undefined && s.naIlha) { const I = A.ilha, a = Math.atan2(pl.z - I.c[1], pl.x - I.c[0]) + 0.3; gx = I.c[0] + Math.cos(a) * (I.r - 0.35); gz = I.c[1] + Math.sin(a) * (I.r - 0.35); }
       if (gx === undefined) { gx = P.x - P.lx * 0.55; gz = P.z - P.lz * 0.55; }
     }
     const gy = chao(gx, gz);
@@ -725,6 +792,7 @@ export class Obras {
     // carregador: pilha (pega uma unidade) → borda do prédio mais perto da pilha (entrega) → pilha
     if (w.cat === 'carrega' && s.pilha && s.pilha.n > 0) {
       const pl = s.pilha;
+      if (w.pega && s.ponteObra) { w.pega = false; w.leva = tipoDe(s, (rnd(s) * 12) | 0); const [x, z] = s.ponteObra[0]; C.setPosto(w, [x, chao(x, z), z], 'trabalhar', { olhar: [s.cx, s.cz], dur: 0.8 + rnd(s) * 0.6 }); return; } // (na ilha: pela passarela)
       if (w.pega) { w.pega = false; w.leva = tipoDe(s, (rnd(s) * 12) | 0); let h = s.hull[0], bd = 1e9; for (let k = 0; k < 4; k++) { const q = s.hull[(rnd(s) * s.hull.length) | 0], d = Math.hypot(q[0] - pl.x, q[1] - pl.z); if (d < bd) { bd = d; h = q; } }
         const dx = h[0] - s.cx, dz = h[1] - s.cz, d = Math.hypot(dx, dz) || 1, x = h[0] + (dx / d) * 0.22, z = h[1] + (dz / d) * 0.22; C.setPosto(w, [x, chao(x, z), z], 'trabalhar', { olhar: [s.cx, s.cz], dur: 0.8 + rnd(s) * 0.6 }); return; }
       if (w.leva && !primeiro && rnd(s) < 0.4) this._poeira(s, 2, 0.25, w.x, w.z, 0.15);
@@ -1016,6 +1084,7 @@ export class Obras {
     if (s.grua) this._grua(s, dts, dt);
     this._caminhao(s, dts, dt);
     this._pilha(s, dt);
+    if (s.ponteObra && !(s.estado === 'fim' && s.tf > 1300)) { const [[ax, az], [bx, bz]] = s.ponteObra; this.L.caixa.put(mCaixa((ax + bx) / 2, -0.02, (az + bz) / 2, Math.hypot(bx - ax, bz - az), 0.05, 0.6, Math.atan2(-(bz - az), bx - ax)), COR.tabua); } // passarela provisória da ilha
     this._chaoDesenha(s);
     if (s.escav) this._escavadeira(s, dts);
     if (s.bichos && s.estado !== 'fim' && !s.caixasAbrindo) this._caixas(s, p, dt); else if (s.caixasAbrindo || (s.bichos && s.estado === 'fim')) this._caixasDesenha(s, true);
@@ -1133,7 +1202,7 @@ export class Obras {
     const c = s.cam; c.ciclo++; c.fase = 'entra'; c.t = 0; c.enche = 0; c.saiRapido = false;
     const concreto = s.concreto; const p = s.pilha, cap = Math.round(12 * (1 - 0.85 * s.pv));
     if (c.tipo === 'plataforma' || c.tipo === 'betoneira') { c.tipo = concreto && c.ciclo % 2 === 0 ? 'betoneira' : 'plataforma'; c.carga = c.tipo === 'plataforma' ? (p.n >= cap ? 0 : 3) : 0; c.tipoCarga = s.tipos[c.ciclo % s.tipos.length]; }
-    if (c.tipo === 'basculante') { if (s.escav) { const e = s.escav; this._rotaCaminhao(s, e.x - 0.95, e.z, [-1, 0]); } /* atrás da escavadeira, no lado já cortado */ else if (s.draga) this._rotaCaminhao(s, s.draga.monte[0] + s.patio.lx * 0.9, s.draga.monte[1] + s.patio.lz * 0.9); else if (s.pecaAtual) { const pc = s.pecaAtual, ac = s.opts.acesso || [-19.6, 16.4]; const dx = ac[0] - pc.x, dz = ac[1] - pc.z, d = Math.hypot(dx, dz) || 1; const r = Math.max(pc.b.max.x - pc.b.min.x, pc.b.max.z - pc.b.min.z) / 2 + 0.5; this._rotaCaminhao(s, pc.x + (dx / d) * r, pc.z + (dz / d) * r, [dx / d, dz / d]); } }
+    if (c.tipo === 'basculante') { if (s.escav) { const e = s.escav; this._rotaCaminhao(s, e.x - 0.95, e.z, [-1, 0]); } /* atrás da escavadeira, no lado já cortado */ else if (s.draga) this._rotaCaminhao(s); /* ré até o pátio, ao lado do monte de lodo (saidaDraga conferiu a manobra) */ else if (s.pecaAtual) { const pc = s.pecaAtual, ac = s.opts.acesso || ACESSO; const dx = ac[0] - pc.x, dz = ac[1] - pc.z, d = Math.hypot(dx, dz) || 1; const r = Math.max(pc.b.max.x - pc.b.min.x, pc.b.max.z - pc.b.min.z) / 2 + 0.5; this._rotaCaminhao(s, pc.x + (dx / d) * r, pc.z + (dz / d) * r, [dx / d, dz / d]); } }
     c.x = c.entra.points[0].x; c.z = c.entra.points[0].z;
   }
   _desenhaCaminhao(c) {
@@ -1272,12 +1341,13 @@ export class Obras {
   // ---------------------------------------------------------------- draga
   _draga(s, p, dts) {
     const D = s.draga; const f = (s.estado === 'obra' ? p : 1) * D.L; let i = 1; while (i < D.cum.length - 1 && D.cum[i] < f) i++;
-    const a = D.pts[i - 1], b = D.pts[i]; const t = clamp((f - D.cum[i - 1]) / (D.cum[i] - D.cum[i - 1] || 1), 0, 1); D.x = lerp(a[0], b[0], t); D.z = lerp(a[1], b[1], t); D.h = Math.atan2(-(b[1] - a[1]), b[0] - a[0]); D.t += dts;
+    const a = D.pts[i - 1], b = D.pts[i]; const t = clamp((f - D.cum[i - 1]) / (D.cum[i] - D.cum[i - 1] || 1), 0, 1); D.x = lerp(a[0], b[0], t); D.z = lerp(a[1], b[1], t); D.h = Math.atan2(-(b[1] - a[1]), b[0] - a[0]); D.t += dts; D.oculto = s.estado === 'obra' && !!D.salto?.[i]; // levada por terra entre as bacias
     s.wl = s.y1; D.y = s.opts.nivelAgua ? s.opts.nivelAgua() : -0.1;
-    if (s.estado === 'obra' && (D.tp = (D.tp || 0) + dts) > 0.5) { D.tp = 0; const cx = D.x + Math.cos(D.h) * 0.7, cz = D.z - Math.sin(D.h) * 0.7; for (let k = 0; k < 3; k++) this.pontos.add(cx, D.y + 0.02, cz, (rnd(s) - 0.5) * 0.3, 0.02, (rnd(s) - 0.5) * 0.3, this._tl, 1.4, 0.5, 0, COR.lodo); }
+    if (s.estado === 'obra' && !D.oculto && (D.tp = (D.tp || 0) + dts) > 0.5) { D.tp = 0; const cx = D.x + Math.cos(D.h) * 0.7, cz = D.z - Math.sin(D.h) * 0.7; for (let k = 0; k < 3; k++) this.pontos.add(cx, D.y + 0.02, cz, (rnd(s) - 0.5) * 0.3, 0.02, (rnd(s) - 0.5) * 0.3, this._tl, 1.4, 0.5, 0, COR.lodo); }
   }
   _dragaDesenha(s) {
     const D = s.draga, Cx = this.L.caixa, Ci = this.L.cil; if (s.estado === 'fim' && s.tf > 1300) return; const y = D.y, h = D.h, fx = Math.cos(h), fz = -Math.sin(h), rx = Math.sin(h), rz = Math.cos(h);
+    const m = D.monte, g = s.estado === 'obra' ? 0.2 + 0.8 * s.pv : 1; if (D.oculto) { this._dragaMonte(s, m, g); return; } // (entre as bacias: só o monte)
     const W = this._local(D.x, y, D.z, h);
     let v = W(0, 0.03, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.9, 0.1, 0.4, h), COR.branco);
     v = W(-0.25, 0.16, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.26, 0.16, 0.22, h), COR.branco); v = W(-0.13, 0.18, 0); Cx.put(mCaixa(v.x, v.y, v.z, 0.02, 0.07, 0.18, h), COR.vidroC);
@@ -1289,8 +1359,12 @@ export class Obras {
     // recalque: 12 boias até a margem e o tubo até o monte de lodo, que cresce
     const sx = D.saida[0], sz = D.saida[1]; const st = W(-0.45, 0.05, 0); const bx = st.x, bz = st.z;
     for (let k = 0; k < 12; k++) { const u = (k + 0.5) / 12; const mx = lerp(bx, sx, u) + Math.sin(u * Math.PI) * (sz - bz) * 0.12, mz = lerp(bz, sz, u) - Math.sin(u * Math.PI) * (sx - bx) * 0.12; Ci.put(mEixo(mx, y + 0.02, mz, sx - bx, 0, sz - bz, 0.08, 0.14), COR.laranja); }
-    const m = D.monte; Cx.put(mSeg(sx, chao(sx, sz) + 0.04, sz, m[0], chao(m[0], m[1]) + 0.1, m[1], 0.05, 0.05, true), COR.escuro);
-    const g = s.estado === 'obra' ? 0.2 + 0.8 * s.pv : 1; this.L.monte.put(mCaixa(m[0], chao(m[0], m[1]) - 0.02, m[1], 1.6 * g, 0.5 * g, 1.1 * g, Math.atan2(-D.dir[1], D.dir[0])), COR.lodo);
+    Cx.put(mSeg(sx, chao(sx, sz) + 0.04, sz, m[0], chao(m[0], m[1]) + 0.1, m[1], 0.05, 0.05, true), COR.escuro);
+    this._dragaMonte(s, m, g);
+  }
+  // monte de lodo que cresce com a obra (o caminhão basculante leva o lodo)
+  _dragaMonte(s, m, g) {
+    const D = s.draga; this.L.monte.put(mCaixa(m[0], chao(m[0], m[1]) - 0.02, m[1], 1.6 * g, 0.5 * g, 1.1 * g, Math.atan2(-D.dir[1], D.dir[0])), COR.lodo);
     this.L.monte.put(mCaixa(m[0] + D.dir[1] * 0.9, chao(m[0], m[1]) - 0.02, m[1] - D.dir[0] * 0.9, 0.9 * g, 0.3 * g, 0.7 * g), COR.lodo);
     if (s.cam) s.cam.lodo = true;
   }

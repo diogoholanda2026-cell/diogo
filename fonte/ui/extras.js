@@ -1,6 +1,7 @@
 // Configurações (modal largo com cartões de opção em duas colunas, sem rolar em 986x443, com o ciclo de dia e
-// noite), modo Apreciar (X fixo, placa de legenda viva, barra de vidro com Mais, seis enquadramentos, Comparar com
-// cabo e noite forçada, rótulos, planta, hora do dia, passeio de câmera, fotografar em cartão com a referência), rótulos presos ao mundo como legendas de maquete (no
+// noite), modo Apreciar (X fixo, placa de legenda viva, barra de vidro com Mais, sete enquadramentos do Trevo da
+// Holding lidos da planta, Comparar com cabo e noite forçada, rótulos, planta, hora do dia, passeio de câmera,
+// fotografar em cartão com a referência), rótulos presos ao mundo como legendas de maquete (no
 // máximo 6, sem cruzar o HUD nem uns aos outros; fora do Apreciar só o da obra em foco) e as ligações da economia
 // nova que o Controle não conhece: toque no calendário (abre Finanças) e na pílula de moradores (popover da renda),
 // ícone voando ao Almoxarifado na coleta automática, redesenho do painel nos eventos novos, aviso do ano novo e o
@@ -12,7 +13,7 @@ import { QUALITY } from '../render/engine.js';
 import { REGRAS } from '../sim/estado.js';
 import { LOTES } from '../render/models/canteiro.js';
 import { A, VISTA_FOTO } from '../data/planta.js';
-import { PROJ } from '../data/obras.js';
+import { PROJ, MODULOS } from '../data/obras.js';
 import { rendaHoraDe } from './hud.js';
 import { exportar, importar, apagar, persistir, gravar, gravarImportado, gravarConfig } from '../core/salvar.js';
 
@@ -23,11 +24,23 @@ const numEx = (n) => Math.round(n || 0).toLocaleString('pt-BR');
 // hora do dia no Apreciar: Automático segue o ciclo das configurações; as outras fixam a hora (env.setHora pausa o
 // ciclo e env.setCiclo o retoma). Sair do Apreciar volta ao automático.
 const HORAS = [{ t: 'Automático', ic: 'ciclo' }, { t: 'Manhã', h: 7, ic: 'manha' }, { t: 'Meio-dia', h: 12, ic: 'sol' }, { t: 'Pôr do sol', h: 18, ic: 'por' }, { t: 'Noite', h: 22, ic: 'lua' }];
-// enquadramentos prontos do Apreciar: o centro de cada conjunto na planta, uma distância fixa, o nome (placa e cartão da
-// foto), a obra (recorte da foto de referência) e os rótulos que ficam acesos por 3 s depois do voo
-const centroDe = (a) => (a?.c ? a.c : a?.poly ? a.poly.reduce((s, [x, z]) => [s[0] + x / a.poly.length, s[1] + z / a.poly.length], [0, 0]) : [0, 0]);
-const ENQ = [['sede', 'Sede da Holding', 28, 'sede', ['sede']], ['ciencias', 'Faculdade de Ciências', 22, 'ciencias', ['ciencias']], ['biblio', 'Biblioteca Central', 20, 'biblioteca', ['biblioteca']], ['bioma', 'Cúpula da Vida', 28, 'bioma', ['bioma', 'gorilas', 'santuario']], ['praca', 'Praça da Entrada', 21, 'praca', ['praca']], ['anel', 'Anel do Campus', 31, 'escola', ['escola', 'humanidades', 'instituto', 'engenharia']]]
-  .map(([id, nome, dist, obra, rot]) => { const [x, z] = centroDe(A[id]); return { id, nome, dist, obra, rot, x, z }; });
+// enquadramentos prontos do Apreciar (plano mestre "Trevo da Holding"): o centro na planta (lido de A), o desvio
+// [dx, dz] do alvo (o alvo da câmera fica no chão: a Torre, alta, recua o alvo para o norte; a Escola o leva ao pátio
+// oeste), a distância, o nome (placa e cartão da foto), a obra (recorte da foto de referência) e os rótulos (obra de
+// cada um) que ficam acesos por 3 s depois do voo. Desvio e distância medidos com fov 38 (o voo fixa o fov): no Poco X7
+// (986 x 443), em 915 x 412 e em 1376 x 768 os rótulos de cada vista cabem na tela acima da barra (só o do Portal, na
+// vista da Torre, fica atrás dela), e a Torre e o lago aparecem inteiros. Ordem: o coração, as quatro folhas em volta
+// dele e os dois extremos do eixo.
+const FOV_ENQ = 38;
+const ENQ = [
+  ['torre', 'Torre e lago', A.torre.c, [0, -5], 38, 'sede', ['sede', 'anel', 'pas_anel']],
+  ['escola', 'Escola e Campus', A.escola.c, [3, 0], 26, 'escola', ['escola', 'campo', 'humanidades']],
+  ['uni', 'Universidade', A.uni.c, [0, -1], 24, 'ciencias', ['uni', 'ciencias', 'engenharia', 'instituto']],
+  ['biblio', 'Biblioteca Central', A.biblio.c, [0, -2], 22, 'biblioteca', ['biblioteca', 'crd', 'anelBib']],
+  ['bioma', 'Cúpula da Vida', A.bioma.c, [0, 0], 24, 'bioma', ['bioma', 'gorilas', 'santuarioInt', 'santuario']],
+  ['praca', 'Praça e Bulevar', A.bulevar.pts[1], [0, 1], 29, 'praca', ['praca', 'pas_anel', 'humanidades', 'casas', 'anfiteatro']],
+  ['fisica', 'Centro de Física', A.acelerador.poco.c, [0, 3], 24, 'acelerador', ['acelerador', 'pas_elo']],
+].map(([id, nome, [x, z], [dx, dz], dist, obra, rot]) => ({ id, nome, dist, obra, rot, x: x + dx, z: z + dz }));
 // glifos monocromáticos da barra do Apreciar (traço na cor do texto)
 const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const G = {
@@ -95,7 +108,7 @@ export function instalarExtras(C, o) {
   };
   // ---------------- apreciar ----------------
   // X fixo no canto (sai do modo) e placa de legenda viva no canto de baixo à esquerda: os dois ficam quando a barra some.
-  // Barra de vidro com Fotografar (latão), Comparar e Mais; a linha Mais traz Vista geral, Enquadrar (seis estruturas),
+  // Barra de vidro com Fotografar (latão), Comparar e Mais; a linha Mais traz Vista geral, Enquadrar (sete vistas),
   // Rótulos, Planta e a hora do dia em segmento. Comparar: o toque alterna a divisão com o cabo arrastável (obra à
   // esquerda, referência à direita); segurar mostra a referência inteira enquanto o dedo fica. Nos dois a câmera vai à
   // vista da foto, o passeio para e a hora vai para a noite (a foto é noturna); ao sair, volta a hora escolhida.
@@ -144,10 +157,10 @@ export function instalarExtras(C, o) {
     if (on) { foto.style.clipPath = ''; foto.style.opacity = 1; if (!comp) verFoto(true); C.vibra.tique(); }
     else if (comp) moverCabo(xCabo); else { foto.style.opacity = 0; verFoto(false); }
   };
-  // ---- Enquadrar: as seis estruturas, uma por toque ----
+  // ---- Enquadrar: as sete vistas, uma por toque ----
   const enquadrar = () => {
     if (comp) comparar(false); iEnq = (iEnq + 1) % ENQ.length; const E = ENQ[iEnq];
-    rig.pitchFix = null; C._naFoto = false; rig.flyTo({ x: E.x, z: E.z, dist: E.dist, yaw: VISTA_FOTO.yaw, tilt: 0, roll: 0 }, 1200, { cine: true });
+    rig.pitchFix = null; C._naFoto = false; rig.flyTo({ x: E.x, z: E.z, dist: E.dist, yaw: VISTA_FOTO.yaw, tilt: 0, fov: FOV_ENQ, roll: 0 }, 1200, { cine: true });
     C._enq = E; C._enqAte = performance.now() + 3000; tPlaca = 0; engine.acordar?.(1500);
   };
   const sair = () => { clearTimeout(tBarra); clearTimeout(tEspia); for (const e of [barra, xis, placa, cabo, etiq]) e?.remove(); barra = xis = placa = cabo = etiq = null; foto.style.opacity = 0; foto.style.clipPath = ''; };
@@ -186,12 +199,12 @@ export function instalarExtras(C, o) {
   };
   // ---------------- fotografar: cartão 1200x630 com a obra e a referência lado a lado ----------------
   // Canvas 2D separado: à esquerda o quadro do jogo (desenhado agora e copiado na mesma tarefa, porque o buffer do WebGL
-  // não é preservado), à direita o recorte da foto de referência da estrutura em foco (PROJETOS.foto, em px da foto de
-  // 1376x768, levado à proporção do quadro) e embaixo a legenda em placa de latão. Salva como antes (compartilhar ou baixar).
+  // não é preservado), à direita o recorte da foto de referência da estrutura em foco (foto do projeto ou do conjunto de
+  // módulos, em px da foto de 1376x768, levado à proporção do quadro) e embaixo a legenda em placa de latão. Salva como antes (compartilhar ou baixar).
   let fotoP = null;
   const carregarFoto = () => fotoP || (fotoP = new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => { fotoP = null; ok(null); }; im.src = fotoURL; }));
   const recorte = (obra, ar, FW, FH) => {
-    const k = FW / 1376, f = PROJ[obra]?.foto; let [x, y, w, h] = f ? f.map((v) => v * k) : [0, 0, FW, FH]; const cx = x + w / 2, cy = y + h / 2;
+    const k = FW / 1376, f = (PROJ[obra] || MODULOS[obra])?.foto; let [x, y, w, h] = f ? f.map((v) => v * k) : [0, 0, FW, FH]; const cx = x + w / 2, cy = y + h / 2;
     if (f) { w *= 1.25; h *= 1.25; } if (w / h < ar) w = h * ar; else h = w / ar; if (w > FW) { w = FW; h = w / ar; } if (h > FH) { h = FH; w = h * ar; }
     return [clamp(cx - w / 2, 0, FW - w), clamp(cy - h / 2, 0, FH - h), w, h];
   };
