@@ -1,311 +1,274 @@
-// Lado leste e fundo: Vila Estudantil (anfiteatro em ferradura de degraus claros e casas de tamanhos diferentes em
-// faixa diagonal) e o Acelerador (bacia creme com rampa helicoidal, anel azul de colares brancos e injetor reto). A
-// casca geodésica e os rochedos servem à Cúpula da Vida (cupula.js), que substituiu os habitats de animais.
+// Norte e pátio leste do Trevo da Holding (plano mestre, revisão 6), tudo em coordenadas do mundo e medidas de A:
+// - Acelerador (fim do eixo norte): e1 poço oval com a parede de contenção clara debaixo de uma coroa branca, rampa na
+//   parede leste e guarda-corpo de vidro; e2 anel azul com colares no fundo, a linha de luz ciano em volta do contorno
+//   (A.luz) e o injetor reto no piso do eixo norte, numa malha só; e3 detectores em camadas, racks e as 4 claraboias de
+//   vidro aceso na linha (a do portão embutida no Caminho da Frente); e4 Centro de Física Avançada: crescente de vidro em fita (Faixa de 1 módulo, teto verde,
+//   friso claro) com a seção do Elo do Santuário, cujos braços chegam de ponta, e os dois bosquetes norte.
+// - Anfiteatro da Vila (pátio leste, espelho do Pátio da Escola): ferradura de 4 degraus no lado norte, virada para o
+//   sul (a câmera vê a plateia), palco de madeira com fundo curvo de vidro e pórtico de luzes.
 import * as THREE from 'three';
-import { A } from '../../data/planta.js';
-import { M, dupla } from '../materials.js';
-import { beams, merge, BAY, FH } from '../geom.js';
+import { A, FITAS, J } from '../../data/planta.js';
+import { M } from '../materials.js';
+import { beams, merge, medidas } from '../geom.js';
 import { treeGroup } from '../forest.js';
 import { heightAt } from '../ground.js';
-import { hash, rng, TAU } from '../../core/util.js';
+import { hash, TAU } from '../../core/util.js';
+import { Faixa } from './faixa.js';
 
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
-// materiais só do leste (uma instância por módulo, criada quando o materials.js já está pronto)
-const LOCAL = {};
-const local = (k, make) => LOCAL[k] || (LOCAL[k] = make());
-const std = (o) => new THREE.MeshStandardMaterial(o);
-// guarda-corpo de vidro quase invisível (só o reflexo): borda do acelerador
-const vidroCerca = () => local('vidroCerca', () => std({ color: 0xe6f5fb, roughness: 0.05, metalness: 0.15, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.3 }));
-export function rocha(x, z, s, seed = 1, y = null, mat = null) {
-  const g = new THREE.DodecahedronGeometry(1, 1); const p = g.attributes.position; const R = rng(seed * 97 + 5);
-  const k = new Map(); for (let i = 0; i < p.count; i++) { const key = p.getX(i).toFixed(3) + p.getY(i).toFixed(3) + p.getZ(i).toFixed(3); if (!k.has(key)) k.set(key, 0.75 + R() * 0.5); const f = k.get(key); p.setXYZ(i, p.getX(i) * f, Math.max(-0.2, p.getY(i)) * f * 0.8, p.getZ(i) * f); }
-  g.computeVertexNormals(); const m = mesh(g, mat || M.rock); m.scale.set(s, s * (0.7 + R() * 0.5), s * (0.8 + R() * 0.3)); m.rotation.y = R() * 6; m.position.set(x, (y ?? heightAt(x, z)) + s * 0.1, z); return m;
+const rad = (a) => (a * Math.PI) / 180;
+const _up = new THREE.Vector3(0, 1, 0), _um = new THREE.Vector3(1, 1, 1);
+// geometria de listas (posição e índice; uv opcional; normais calculadas se não vierem)
+function geo(p, idx, uv = null, n = null) {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); if (n) g.setAttribute('normal', new THREE.Float32BufferAttribute(n, 3)); else g.computeVertexNormals(); g.computeBoundingSphere(); return g;
 }
-function ellShape(cx, cz, rx, rz, rot = 0, n = 64) { const s = new THREE.Shape(); for (let i = 0; i <= n; i++) { const a = (i / n) * Math.PI * 2; const u = Math.cos(a) * rx, v = Math.sin(a) * rz; const x = cx + u * Math.cos(rot) - v * Math.sin(rot), z = cz + u * Math.sin(rot) + v * Math.cos(rot); i ? s.lineTo(x, -z) : s.moveTo(x, -z); } return s; }
-// polígono [x, z] em Shape (mesma convenção de ellShape)
-function polyShape(pts) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); return s; }
-function flatShape(shape, mat, y) { const g = new THREE.ShapeGeometry(shape, 48); g.rotateX(-Math.PI / 2); const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); const m = mesh(g, mat, false); m.position.y = y; return m; }
-// anel elíptico vertical (paredes, guarda-corpos); uvFac: mapa de fachada na escala dos vãos (BAY x FH)
-function ellWall(cx, cz, rx, rz, y0, h, mat, a0 = 0, a1 = Math.PI * 2, seg = 72, side = THREE.DoubleSide, uvFac = false) {
-  const pos = [], idx = [], uv = []; let arc = 0, px = 0, pz = 0;
+// vira todos os triângulos se o maior dos primeiros não olha para quer(centróide) ([x, y, z])
+function orienta(p, idx, quer) {
+  let best = 0, s = 0;
+  for (let t = 0; t < Math.min(idx.length, 90); t += 3) {
+    const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3; const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, m = Math.hypot(nx, ny, nz); if (m <= best) continue;
+    const q = quer([(p[a] + p[b] + p[c]) / 3, (p[a + 1] + p[b + 1] + p[c + 1]) / 3, (p[a + 2] + p[b + 2] + p[c + 2]) / 3]); best = m; s = nx * q[0] + ny * q[1] + nz * q[2];
+  }
+  if (s < 0) for (let t = 0; t < idx.length; t += 3) { const q = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = q; }
+  return idx;
+}
+// faixa vertical numa elipse (c, rx, rz) de y0 a y1, de a0 a a1 (radianos); dentro: face para o centro
+function parede(cx, cz, rx, rz, y0, y1, mat, a0 = 0, a1 = TAU, seg = 72, dentro = false) {
+  const p = [], uv = [], idx = []; let s = 0, px = 0, pz = 0;
   for (let i = 0; i <= seg; i++) {
-    const a = a0 + ((a1 - a0) * i) / seg; const x = cx + Math.cos(a) * rx, z = cz + Math.sin(a) * rz; if (i) arc += Math.hypot(x - px, z - pz); px = x; pz = z;
-    pos.push(x, y0, z, x, y0 + h, z); if (i) { const k = i * 2; if (side === THREE.BackSide) idx.push(k - 2, k, k - 1, k - 1, k, k + 1); else idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
-    if (uvFac) uv.push(arc / (BAY * 32), 0, arc / (BAY * 32), h / (FH * 4)); else { const u = (i / seg) * (rx + rz) * 1.2; uv.push(u, 0, u, 1); }
+    const a = a0 + ((a1 - a0) * i) / seg, x = cx + Math.cos(a) * rx, z = cz + Math.sin(a) * rz; if (i) s += Math.hypot(x - px, z - pz); px = x; pz = z;
+    p.push(x, y0, z, x, y1, z); uv.push(s / 1.5, y0 / 1.5, s / 1.5, y1 / 1.5); if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  return mesh(g, side === THREE.DoubleSide ? dupla(mat) : mat);
+  orienta(p, idx, ([x, , z]) => { const d = [(x - cx) / (rx * rx), 0, (z - cz) / (rz * rz)]; return dentro ? [-d[0], 0, -d[2]] : d; });
+  return mesh(geo(p, idx, uv), mat);
 }
-// coroa elíptica horizontal (patamares, lajes de galeria, topo de muretas), normal para cima
-function ellFlat(cx, cz, rx0, rz0, rx1, rz1, y, mat, a0 = 0, a1 = Math.PI * 2, seg = 72, cast = false) {
-  const pos = [], nor = [], uv = [], idx = [];
+// coroa horizontal entre as elipses r0 = [rx, rz] e r1 no nível y, de a0 a a1 (radianos), face para cima
+function plano(cx, cz, r0, r1, y, mat, a0 = 0, a1 = TAU, seg = 72, cast = false) {
+  const p = [], uv = [], n = [], idx = [];
   for (let i = 0; i <= seg; i++) {
-    const a = a0 + ((a1 - a0) * i) / seg; const c = Math.cos(a), s = Math.sin(a); const x0 = cx + c * rx0, z0 = cz + s * rz0, x1 = cx + c * rx1, z1 = cz + s * rz1;
-    pos.push(x0, y, z0, x1, y, z1); nor.push(0, 1, 0, 0, 1, 0); uv.push(x0 / 2.2, z0 / 2.2, x1 / 2.2, z1 / 2.2);
-    if (i) { const k = i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+    const a = a0 + ((a1 - a0) * i) / seg, c = Math.cos(a), s = Math.sin(a); const x0 = cx + c * r0[0], z0 = cz + s * r0[1], x1 = cx + c * r1[0], z1 = cz + s * r1[1];
+    p.push(x0, y, z0, x1, y, z1); n.push(0, 1, 0, 0, 1, 0); uv.push(x0 / 2.2, z0 / 2.2, x1 / 2.2, z1 / 2.2); if (i) { const k = i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); }
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeBoundingSphere();
-  return mesh(g, mat, cast);
+  orienta(p, idx, () => [0, 1, 0]); return mesh(geo(p, idx, uv, n), mat, cast);
 }
-// rampa elíptica: coroa com a altura interpolada de y0 (em a0) a y1 (em a1) — deque helicoidal encostado na parede
-function ellRampa(cx, cz, rx0, rz0, rx1, rz1, y0, y1, a0, a1, seg, mat) {
-  const pos = [], uv = [], idx = [];
-  for (let i = 0; i <= seg; i++) {
-    const t = i / seg, a = a0 + (a1 - a0) * t, y = y0 + (y1 - y0) * t; const c = Math.cos(a), s = Math.sin(a);
-    pos.push(cx + c * rx0, y, cz + s * rz0, cx + c * rx1, y, cz + s * rz1); uv.push(t * 12, 0, t * 12, 1);
-    if (i) { const k = i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+// disco elíptico plano (piso), face para cima
+function disco(cx, cz, rx, rz, y, mat, seg = 64) {
+  const p = [cx, y, cz], uv = [cx / 2.2, cz / 2.2], n = [0, 1, 0], idx = [];
+  for (let i = 0; i <= seg; i++) { const a = (i / seg) * TAU, x = cx + Math.cos(a) * rx, z = cz + Math.sin(a) * rz; p.push(x, y, z); uv.push(x / 2.2, z / 2.2); n.push(0, 1, 0); if (i) idx.push(0, i + 1, i); }
+  orienta(p, idx, () => [0, 1, 0]); return mesh(geo(p, idx, uv, n), mat, false);
+}
+// rampa elíptica: coroa de r0 a r1 com a altura de y0 (em a0) a y1 (em a1); parapeito: faixa de altura h em cima
+// da borda r (rampaParede)
+function rampa(cx, cz, r0, r1, y0, y1, a0, a1, seg, mat) {
+  const p = [], uv = [], idx = [];
+  for (let i = 0; i <= seg; i++) { const t = i / seg, a = a0 + (a1 - a0) * t, y = y0 + (y1 - y0) * t, c = Math.cos(a), s = Math.sin(a); p.push(cx + c * r0[0], y, cz + s * r0[1], cx + c * r1[0], y, cz + s * r1[1]); uv.push(t * 12, 0, t * 12, 1); if (i) { const k = i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); } }
+  orienta(p, idx, () => [0, 1, 0]); return mesh(geo(p, idx, uv), mat);
+}
+function rampaParede(cx, cz, r, y0, y1, h, a0, a1, seg, mat, dentro) {
+  const p = [], uv = [], idx = [];
+  for (let i = 0; i <= seg; i++) { const t = i / seg, a = a0 + (a1 - a0) * t, y = y0 + (y1 - y0) * t, x = cx + Math.cos(a) * r[0], z = cz + Math.sin(a) * r[1]; p.push(x, y, z, x, y + h, z); uv.push(t * 12, 0, t * 12, 1); if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); } }
+  orienta(p, idx, ([x, , z]) => { const d = [(x - cx) / (r[0] * r[0]), 0, (z - cz) / (r[1] * r[1])]; return dentro ? [-d[0], 0, -d[2]] : d; });
+  return mesh(geo(p, idx, uv), mat);
+}
+// faixa plana de largura w ao longo de [[x, z]] (normal para cima), altura yDe(x, z) por vértice; fechada: o 1º ponto
+// repete o último e as pontas usam os vizinhos do laço. Acumula em acc { p, n, i } (várias faixas numa geometria)
+function faixaPlana(acc, pts, w, yDe, fechada = false) {
+  const N = pts.length, h = w / 2, b = acc.p.length / 3;
+  for (let k = 0; k < N; k++) {
+    const a = pts[k > 0 ? k - 1 : fechada ? N - 2 : 0], c = pts[k < N - 1 ? k + 1 : fechada ? 1 : N - 1]; let tx = c[0] - a[0], tz = c[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    const [x, z] = pts[k]; for (const s of [1, -1]) { const px = x + tz * h * s, pz = z - tx * h * s; acc.p.push(px, yDe(px, pz), pz); acc.n.push(0, 1, 0); }
+    if (k) { const q = b + k * 2; acc.i.push(q - 2, q - 1, q, q - 1, q + 1, q); }
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere();
-  return mesh(g, mat);
+  return acc;
 }
-// parede baixa que acompanha a rampa (parapeito), y interpolado como em ellRampa
-function ellRampaWall(cx, cz, rx, rz, y0, y1, h, a0, a1, seg, mat) {
-  const pos = [], uv = [], idx = [];
-  for (let i = 0; i <= seg; i++) { const t = i / seg, a = a0 + (a1 - a0) * t, y = y0 + (y1 - y0) * t; const x = cx + Math.cos(a) * rx, z = cz + Math.sin(a) * rz; pos.push(x, y, z, x, y + h, z); uv.push(t * 12, 0, t * 12, 1); if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); } }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere();
-  return mesh(g, dupla(mat));
+// anel de pontos [x, z] de uma elipse (áreas de pessoas)
+function anelPts(cx, cz, rx, rz, n, inverso = false) { const out = []; for (let i = 0; i < n; i++) { const a = (i / n) * TAU * (inverso ? -1 : 1); out.push([+(cx + Math.cos(a) * rx).toFixed(3), +(cz + Math.sin(a) * rz).toFixed(3)]); } return out; }
+// distância de p a uma polilinha e o ponto mais perto
+function maisPerto(p, pts) {
+  let d = 1e9, m = null;
+  for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], vx = b[0] - a[0], vz = b[1] - a[1], l = vx * vx + vz * vz; const t = l ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vz) / l)) : 0; const q = [a[0] + vx * t, a[1] + vz * t], e = Math.hypot(p[0] - q[0], p[1] - q[1]); if (e < d) { d = e; m = q; } }
+  return [d, m];
 }
-// fitas entre polilinhas 3D (deques em hélice): a orientação de cada quadrilátero segue a normal pretendida (sem uso hoje)
-class Fitas {
-  constructor() { this.p = []; this.n = []; this.uv = []; this.i = []; }
-  strip(P0, P1, nrm, us = 1) {
-    const base = this.p.length / 3; let s = 0;
-    for (let j = 0; j < P0.length; j++) { if (j) s += Math.hypot(P0[j][0] - P0[j - 1][0], P0[j][1] - P0[j - 1][1], P0[j][2] - P0[j - 1][2]); const nn = nrm(j); this.p.push(...P0[j], ...P1[j]); this.n.push(...nn, ...nn); this.uv.push(s * us, 0, s * us, 1); }
-    const P = this.p, N = this.n;
-    for (let j = 0; j < P0.length - 1; j++) {
-      const a0 = base + j * 2, b0 = a0 + 1, a1 = a0 + 2, b1 = a0 + 3;
-      const e1 = [P[b0 * 3] - P[a0 * 3], P[b0 * 3 + 1] - P[a0 * 3 + 1], P[b0 * 3 + 2] - P[a0 * 3 + 2]], e2 = [P[a1 * 3] - P[a0 * 3], P[a1 * 3 + 1] - P[a0 * 3 + 1], P[a1 * 3 + 2] - P[a0 * 3 + 2]];
-      const cx = e1[1] * e2[2] - e1[2] * e2[1], cy = e1[2] * e2[0] - e1[0] * e2[2], cz = e1[0] * e2[1] - e1[1] * e2[0];
-      if (cx * N[a0 * 3] + cy * N[a0 * 3 + 1] + cz * N[a0 * 3 + 2] >= 0) this.i.push(a0, b0, a1, b0, b1, a1); else this.i.push(a0, a1, b0, b0, a1, b1);
-    }
-  }
-  geo() { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2)); g.setIndex(this.i); g.computeBoundingSphere(); g.computeBoundingBox(); return g; }
-}
-void Fitas;
-// triângulos soltos (lista de coordenadas) com a orientação virada para fora de um centro: telhadinhos
-function orientar(P, c) {
-  for (let i = 0; i < P.length; i += 9) { const ax = P[i + 3] - P[i], ay = P[i + 4] - P[i + 1], az = P[i + 5] - P[i + 2], bx = P[i + 6] - P[i], by = P[i + 7] - P[i + 1], bz = P[i + 8] - P[i + 2]; const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx; const gx = (P[i] + P[i + 3] + P[i + 6]) / 3 - c[0], gy = (P[i + 1] + P[i + 4] + P[i + 7]) / 3 - c[1], gz = (P[i + 2] + P[i + 5] + P[i + 8]) / 3 - c[2]; if (nx * gx + ny * gy + nz * gz < 0) for (let k = 0; k < 3; k++) { const t = P[i + 3 + k]; P[i + 3 + k] = P[i + 6 + k]; P[i + 6 + k] = t; } }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.computeVertexNormals(); return g;
-}
-// anel de pontos [x, z] de uma elipse (áreas de pessoas, polígonos das manadas)
-function anelPts(cx, cz, rx, rz, n, rot = 0, inverso = false) { const out = []; for (let i = 0; i < n; i++) { const a = (i / n) * TAU * (inverso ? -1 : 1); const u = Math.cos(a) * rx, v = Math.sin(a) * rz; out.push([+(cx + u * Math.cos(rot) - v * Math.sin(rot)).toFixed(3), +(cz + u * Math.sin(rot) + v * Math.cos(rot)).toFixed(3)]); } return out; }
+// matriz de uma peça em (x, y, z) com o eixo y local na direção dir ([x, y, z])
+const pose = (x, y, z, dir) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromUnitVectors(_up, new THREE.Vector3(...dir).normalize()), _um);
 
-// ---------------- casca geodésica (usada pela Cúpula da Vida, cupula.js) ----------------
-// Casca ovoide baixa: esfera unitária cortada na latitude -k (a parte de baixo curva para dentro), esticada em
-// rx/rz no plano e hy na vertical, pousada no anel de concreto a y0. bocas: portais {ang, meia, yMax} (setor de
-// ângulo ang ± meia até a latitude yMax); a borda de cada portal sai à parte (lábio grosso).
-export function geodome(rx, rz, hy, k, y0, detail = 4, bocas = []) {
-  const ico = new THREE.IcosahedronGeometry(1, detail); const p = ico.attributes.position; const tri = []; const edges = new Map(); const fb = Math.sqrt(1 - k * k);
-  const V = (i) => [p.getX(i), p.getY(i), p.getZ(i)];
-  const tf = ([x, y, z]) => { const yy = Math.max(-k, y); const f = yy > y ? fb / (Math.hypot(x, z) || 1) : 1; return [x * f * rx, (yy + k) * hy + y0, z * f * rz]; };
-  const naBoca = (x, y, z) => bocas.some((b) => { if (y > b.yMax) return false; let d = Math.atan2(z * rz, x * rx) - b.ang; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return Math.abs(d) < b.meia; });
-  const key = (u, v) => { const k1 = u.map((q) => q.toFixed(3)).join(), k2 = v.map((q) => q.toFixed(3)).join(); return k1 < k2 ? k1 + '|' + k2 : k2 + '|' + k1; };
-  const daBoca = new Set();
-  for (let i = 0; i < p.count; i += 3) {
-    const a = V(i), b = V(i + 1), c = V(i + 2); if (Math.max(a[1], b[1], c[1]) < -k + 0.002) continue;
-    const cx = (a[0] + b[0] + c[0]) / 3, cy = (a[1] + b[1] + c[1]) / 3, cz = (a[2] + b[2] + c[2]) / 3; const A2 = tf(a), B2 = tf(b), C2 = tf(c);
-    if (naBoca(cx, cy, cz)) { for (const [u, v] of [[A2, B2], [B2, C2], [C2, A2]]) daBoca.add(key(u, v)); continue; }
-    tri.push(...A2, ...B2, ...C2);
-    for (const [u, v] of [[A2, B2], [B2, C2], [C2, A2]]) { const kk = key(u, v); const e = edges.get(kk); if (e) e.n++; else edges.set(kk, { u, v, n: 1 }); }
+// ---------------- Acelerador de Partículas Subterrâneo e Centro de Física Avançada ----------------
+// O terreno (malha de 0,5, recortada pelo centróide de cada triângulo) entra até 0,35 na elipse do poço e o buraco passa
+// até 0,27 dela: a parede de contenção fica COROA para dentro da elipse, debaixo da borda da coroa branca, e o piso cinza
+// em volta vai até 0,46 para fora.
+const COROA = 0.3;
+const B_PE = medidas({ o0: 0, o1: 0 }).B; // rodapé (beiral do térreo) padrão das fitas
+// crescente do Centro de Física: a seção do Elo do Santuário (praca.js, pasFaixa com FAIXA_PAS.elo: largura 1,5, beiral
+// 0,1, laje 0,05, floreira 0,04 x 0,08, passeio de 0,5 no meio do teto verde, topo 1,6), do chão, com vidro nas duas
+// faces: laje, floreira e passeio continuam do braço para o crescente na mesma altura (1,65)
+const profCrescente = (cr) => ({ o0: -cr.w / 2, o1: cr.w / 2, fh: cr.h, setIn: 0, setOut: 0, beiral: 0.1, slab: 0.05, curb: 0.04, curbW: 0.08, passeioW: 0.5, passeioAt: 0.5,
+  fac: 'vidroEspelhado', facIn: 'vidroEspelhado', caminho: 'caminhoTeto' });
+// a linha de luz passa por cima do Caminho da Frente (faixa embutida no piso); fora dele, a luzH do chão
+const naFrente = (x, z) => { const f = A.frente; return maisPerto([x, z], f.pts)[0] <= f.w / 2 + 0.02; };
+const yLuz = (x, z) => Math.max(0, heightAt(x, z)) + (naFrente(x, z) ? Math.max(A.acelerador.luzH, A.frente.h + 0.006) : A.acelerador.luzH);
+// Claraboia: os pontos de A caem na linha de luz, 0,25 fora da face da fita (o raio de 0,5 entraria no rodapé dela). Cada
+// uma sai ao longo da reta que vem do caminho mais perto até ficar a J do rodapé padrão (B_PE, o maior; colunata, Elo e
+// crescente têm 0,1) das fitas, da colunata, do Elo e do crescente. Com B_PE o aro sai inteiro da linha e um ramal liga os
+// dois; se a planta afastar a linha, o empurrão zera sozinho (e a linha passa sob o disco, que fica acima dela).
+function lugarClaraboia(p, r) {
+  const cams = [...FITAS.map((k) => [A[k].caminho, A[k].w]), ...Object.values(A.colunata.caminhos).map((c) => [c, A.colunata.w]), ...Object.values(A.eloSant.caminhos).map((c) => [c, A.eloSant.w]), [A.acelerador.crescente.caminho, A.acelerador.crescente.w]];
+  let q = [p[0], p[1]];
+  for (let it = 0; it < 4; it++) {
+    let falta = 0, dir = null;
+    for (const [cam, w] of cams) { const [d, m] = maisPerto(q, cam); const f = w / 2 + B_PE + J + r - d; if (f > falta && d > 1e-6) { falta = f; dir = [(q[0] - m[0]) / d, (q[1] - m[1]) / d]; } }
+    if (!dir) break; q = [q[0] + dir[0] * (falta + 0.005), q[1] + dir[1] * (falta + 0.005)];
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(tri, 3)); g.computeVertexNormals();
-  const all = [], borda = []; for (const [kk, { u, v }] of edges) { all.push([u, v]); if (daBoca.has(kk)) borda.push([u, v]); }
-  return { glass: g, edges: all, borda, tf };
+  return q;
 }
-// ---------------- Vila Estudantil Expandida ----------------
-function sector(r0, r1, a0, a1, h, y, mat, seg = 40) {
-  const s = new THREE.Shape(); for (let i = 0; i <= seg; i++) { const a = a0 + ((a1 - a0) * i) / seg; const x = Math.cos(a) * r1, z = Math.sin(a) * r1; i ? s.lineTo(x, -z) : s.moveTo(x, -z); }
-  for (let i = seg; i >= 0; i--) { const a = a0 + ((a1 - a0) * i) / seg; s.lineTo(Math.cos(a) * r0, -Math.sin(a) * r0); }
-  const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 4 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
-  return mesh(g, mat);
+// crescente de vidro (Faixa de 1 módulo no nível 1): malhas por material, arbustos das floreiras e a caixa pronta
+function crescente() {
+  const cr = A.acelerador.crescente; const F = new Faixa({ id: 'crescente', closed: false, path: cr.caminho, modulos: 1, ponta: 0, passo: 0.4, niveis: 1, andaresExtra: 0, prof: profCrescente(cr), ripas: false, arbustoPasso: 0.7, arbustoMax: 60 });
+  F.setTodos(1); const g = new THREE.Group(); for (const o of [...F.merged.children, ...F.extras.children]) g.add(o);
+  return { g, caixa: F.caixa(0, 1), prof: F.prof };
 }
-// perfil em escada [r, y] de N fileiras (piso de cada fileira em (k + 1) dh, do raio r0 ao RA)
-function perfilDegraus(r0, RA, N, dh, up = 0) { const dr = (RA - r0) / N; const P = [[r0, 0]]; for (let k = 0; k < N; k++) P.push([r0 + k * dr, (k + 1) * dh + up], [r0 + (k + 1) * dr, (k + 1) * dh + up]); return P; }
-// polígono [r, y] posto no plano vertical do ângulo a (ShapeGeometry → malha), com material de dupla face
-// lado = 0: dupla face; +1/-1: face única virada para o sentido de ângulo crescente/decrescente
-function paredeRadial(poly, a, mat, lado = 0) {
-  const sg = new THREE.ShapeGeometry(new THREE.Shape(poly.map(([r, y]) => new THREE.Vector2(r, y)))); const p = sg.attributes.position; const c = Math.cos(a), s = Math.sin(a);
-  for (let i = 0; i < p.count; i++) { const r = p.getX(i), y = p.getY(i); p.setXYZ(i, r * c, y, r * s); }
-  if (lado) { const ix = sg.index.array; const n = new THREE.Vector3(), A2 = new THREE.Vector3(), B2 = new THREE.Vector3(), C2 = new THREE.Vector3(); A2.fromBufferAttribute(p, ix[0]); B2.fromBufferAttribute(p, ix[1]); C2.fromBufferAttribute(p, ix[2]); n.subVectors(B2, A2).cross(C2.sub(A2)); if (n.x * -s * lado + n.z * c * lado < 0) for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } }
-  sg.computeVertexNormals(); sg.computeBoundingSphere(); return mesh(sg, lado ? mat : dupla(mat));
-}
-// Anfiteatro em ferradura (260 graus, boca para sudeste): 12 fileiras de degraus claros uniformes, uma escada
-// radial, uma cunha lisa entre dois parapeitos radiais, muro externo alto só no setor leste, mureta fina do
-// lado da mata, orquestra plana com tablado, canteiro curvo arborizado na boca e público sentado.
-export function anfiteatro() {
-  const [cx, cz] = A.anfiteatro.c; const root = new THREE.Group(); root.name = 'anfiteatro'; root.position.set(cx, 0, cz); const ry = -0.75; root.rotation.y = ry; const P = {};
-  const a0 = Math.PI * 0.28, a1 = Math.PI * 1.72, c0 = Math.PI * 1.30, c1 = Math.PI * 1.39; // ferradura; cunha lisa entre c0 e c1
-  const RA = A.anfiteatro.r, r0 = 1.05, N = 12, dr = (RA - r0) / N, dh = 0.075, topo = N * dh;
-  P.e1 = new THREE.Group();
-  { // arquibancada: pisos (creme, normal para cima) e espelhos (brancos) numa geometria cada, em dois arcos
-    const fp = [], fi = [], fn = [], ep = [], ei = [];
-    const arco = (b0, b1, seg) => { for (let k = 0; k < N; k++) { const ri = r0 + k * dr, ro = ri + dr, y = (k + 1) * dh; const bf = fp.length / 3, be = ep.length / 3;
-        for (let i = 0; i <= seg; i++) { const a = b0 + ((b1 - b0) * i) / seg, c = Math.cos(a), s = Math.sin(a); fp.push(c * ri, y, s * ri, c * ro, y, s * ro); fn.push(0, 1, 0, 0, 1, 0); ep.push(c * ri, y - dh, s * ri, c * ri, y, s * ri);
-          if (i) { const q = bf + i * 2; fi.push(q - 2, q, q - 1, q - 1, q, q + 1); const w = be + i * 2; ei.push(w - 2, w - 1, w, w - 1, w + 1, w); } } } };
-    arco(a0, c0, 34); arco(c1, a1, 8);
-    const gf = new THREE.BufferGeometry(); gf.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); gf.setAttribute('normal', new THREE.Float32BufferAttribute(fn, 3)); gf.setIndex(fi); gf.computeBoundingSphere(); P.e1.add(mesh(gf, M.cream));
-    const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3)); ge.setIndex(ei); ge.computeVertexNormals(); ge.computeBoundingSphere(); P.e1.add(mesh(ge, M.whiteSmooth));
-    const perfil = [...perfilDegraus(r0, RA, N, dh), [RA, 0]]; P.e1.add(paredeRadial(perfil, a0, M.cream, 1)); P.e1.add(paredeRadial(perfil, a1, M.cream, -1)); // tampas das pontas (as da cunha ficam atrás dos parapeitos)
-  }
-  P.e1.add(ellWall(0, 0, RA + 0.02, RA + 0.02, 0, topo, M.cream, a0, c0, 40, THREE.FrontSide)); // tardoz (face única para fora)
-  P.e1.add(ellWall(0, 0, RA + 0.06, RA + 0.06, 0, 1.30, M.concreto, c1, a1, 32)); // muro externo alto só no setor leste
-  { const g = new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(r0, 0), new THREE.Vector2(RA + 0.06, 0), new THREE.Vector2(RA + 0.06, 1.30), new THREE.Vector2(r0, 0.55)]), { depth: 0.08, bevelEnabled: false }); g.translate(0, 0, -0.04); const w = mesh(g, M.concreto); w.rotation.y = -a1; P.e1.add(w); } // parede radial na ponta leste, topo inclinado
-  { // cunha lisa inclinada entre dois parapeitos radiais
-    const pos = [], idx = []; for (let i = 0; i <= 2; i++) { const a = c0 + ((c1 - c0) * i) / 2, c = Math.cos(a), s = Math.sin(a); pos.push(c * r0, dh, s * r0, c * (RA + 0.06), topo, s * (RA + 0.06)); if (i) { const q = i * 2; idx.push(q - 2, q, q - 1, q - 1, q, q + 1); } }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere(); P.e1.add(mesh(g, M.bandaCinza));
-    const par = [[r0, 0], [RA + 0.06, 0], [RA + 0.06, topo + 0.35], ...perfilDegraus(r0, RA, N, dh, 0.35).slice(1).reverse(), [r0, dh + 0.35]]; for (const a of [c0, c1]) P.e1.add(paredeRadial(par, a, M.whiteSmooth));
-  }
-  P.e1.add(ellFlat(0, 0, RA + 0.02, RA + 0.02, RA + 0.14, RA + 0.14, 0.92, M.whiteSmooth, a0, c0, 40)); P.e1.add(ellWall(0, 0, RA + 0.14, RA + 0.14, 0.86, 0.06, M.whiteSmooth, a0, c0, 40)); // mureta fina do lado da mata
-  P.e1.add(flatShape(ellShape(0, 0, r0, r0), M.pavers, 0.02)); // orquestra
-  { // escada radial: 24 subdegraus de 0,0375 numa faixa de 0,12
-    const ae = Math.PI * 0.72, pos = [], idx = []; const quad = (r1, y1, r2, y2) => { const b = pos.length / 3; for (const [r, y] of [[r1, y1], [r2, y2]]) { const w = 0.06 / r; for (const da of [-w, w]) pos.push(Math.cos(ae + da) * r, y, Math.sin(ae + da) * r); } idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); };
-    for (let k = 0; k < N; k++) for (let j = 0; j < 2; j++) { const rr = r0 + k * dr + (j * dr) / 2, yb = k * dh + (j * dh) / 2, yt = yb + dh / 2; quad(rr, yb, rr, yt + 0.004); quad(rr, yt + 0.004, rr + dr / 2, yt + 0.004); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere(); P.e1.add(mesh(g, dupla(M.whiteSmooth)));
-  }
-  { // público sentado: 40 caixinhas escuras em grupos, quase todas nos setores oeste e norte, fundidas numa malha
-    const bg = new THREE.BoxGeometry(0.06, 0.11, 0.06); const lista = []; const grupos = [3, 4, 3, 2, 4, 3, 3, 4, 2, 3, 4, 5]; const m = new THREE.Matrix4();
-    grupos.forEach((n, gi) => { const k = 3 + ((gi * 5) % 9); const ab = Math.PI * (0.55 + 0.9 * hash(gi, 1, 91)); const r = r0 + (k + 0.5) * dr; for (let j = 0; j < n; j++) { const a = ab + (j - (n - 1) / 2) * (0.07 / r) * 1.4; lista.push([bg, m.clone().makeTranslation(Math.cos(a) * r, (k + 1) * dh + 0.055, Math.sin(a) * r)]); } });
-    P.e1.add(mesh(merge(lista), M.dark, false));
-  }
-  { const area = []; for (let i = 0; i < 12; i++) { const a = 1.35 + ((4.93 - 1.35) * i) / 11; const x = Math.cos(a) * 0.95, z = Math.sin(a) * 0.95; area.push([+(cx + x * Math.cos(ry) + z * Math.sin(ry)).toFixed(3), +(cz - x * Math.sin(ry) + z * Math.cos(ry)).toFixed(3)]); } P.e1.userData.pessoas = { area, y: 0.03, n: 14 }; }
-  P.e2 = new THREE.Group(); // tablado baixo, canteiro curvo arborizado na boca e três luminárias no muro
-  const tab = mesh(new THREE.BoxGeometry(1.2, 0.06, 0.6), M.woodLight); tab.position.set(0.55, 0.03, 0); P.e2.add(tab);
-  P.e2.add(sector(1.10, 1.36, -Math.PI * 0.30, Math.PI * 0.30, 0.15, 0, M.cream, 24));
-  { const veg = []; for (let i = 0; i < 10; i++) { const a = -0.27 * Math.PI + (0.54 * Math.PI * i) / 9; const r = 1.17 + hash(i, 1, 93) * 0.12; veg.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: 0.15, s: 0.10 + hash(i, 2, 93) * 0.03, kind: 'folhaLow', pal: 'jardim', h: 0.8 }); }
-    for (let i = 0; i < 5; i++) { const a = -0.24 * Math.PI + (0.48 * Math.PI * i) / 4; veg.push({ x: Math.cos(a) * 1.23, z: Math.sin(a) * 1.23, y: 0.15, s: 0.25 + hash(i, 3, 93) * 0.07, kind: 'folha', pal: 'jardim', trunk: true, h: 1.1 }); }
-    P.e2.add(treeGroup(veg, { trunks: true, name: 'canteiro' })); }
-  { const lamps = []; for (const a of [1.45, 1.55, 1.65]) { const x = Math.cos(a * Math.PI) * (RA + 0.06), z = Math.sin(a * Math.PI) * (RA + 0.06); lamps.push([[x, 1.30, z], [x, 1.80, z]]); }
-    P.e2.add(beams(lamps, 0.015, M.steelDark, 4)); for (const [, b] of lamps) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), M.lampGlow); l.position.set(...b); P.e2.add(l); } }
-  for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'anfiteatro', root, partes: P, esqueletos: {}, grua: {}, foco: { x: cx + 0.8, z: cz + 0.6, dist: 11 }, ancora: [cx, 1.6, cz] };
-}
-// Casas da Vila (módulos residenciais, nível 1 a 3): faixa diagonal de 6 caixas de tamanhos diferentes, do
-// penhasco (sudoeste) ao Bioma (nordeste): barra da frente de 3 pavimentos com 2 fileiras de 4 janelas,
-// casinha de duas águas íngreme, caixas de 2 pavimentos com balanço, bloco do meio e bloco grande de 3
-// pavimentos com platibanda e tabuleiro de recortes escuros no telhado. Lajes brancas são a superfície mais
-// clara; paredes brancas; janelas escuras mais altas que largas, só nas faces sul e oeste.
-const MODS_VILA = [
-  { c: [-1.3, 0.5], w: 1.0, d: 0.55, tipo: 'barra' }, { c: [-0.35, 0.55], w: 0.5, d: 0.6, tipo: 'gable' }, { c: [0.5, 0.55], w: 0.8, d: 0.8 },
-  { c: [-1.35, -0.5], w: 0.8, d: 0.8 }, { c: [-0.3, -0.5], w: 1.1, d: 0.9 }, { c: [1.05, -0.5], w: 1.4, d: 1.1, tipo: 'grande' },
-];
-const PISOS_VILA = { barra: 3, gable: 2, grande: 3, caixa: 2 };
-export class CasasVila {
-  constructor() {
-    const v = A.vila; this.group = new THREE.Group(); this.group.name = 'casas'; this.id = 'casas'; this.group.position.set(v.c[0], 0, v.c[1]); this.group.rotation.y = v.rot ?? 0.62;
-    const lista = v.mods?.length === 6 ? v.mods : MODS_VILA;
-    this.mods = lista.map((m, i) => ({ i, x: m.c[0], z: m.c[1], w: m.w, d: m.d, tipo: m.tipo || 'caixa', pisos: PISOS_VILA[m.tipo || 'caixa'] || 2, nivel: 0, g: null, lado: i % 2 ? 1 : -1, frente: i < 3 ? 1 : -1, escura: true }));
-    this.max = 3;
-  }
-  // caixa do andar f (extensões x0, x1, z0, z1 relativas ao centro do módulo): balanço de 0,2 nos andares 2 e 3, só para fora do aglomerado
-  _caixa(m, f) {
-    const { w, d } = m; const B = f >= 1 ? 0.2 : 0; const ex = Math.abs(m.x) >= Math.abs(m.z) * 1.6;
-    const x0 = -w / 2 - (ex && m.x < 0 ? B : 0), x1 = w / 2 + (ex && m.x > 0 ? B : 0), z0 = -d / 2 - (!ex && m.z < 0 ? B : 0), z1 = d / 2 + (!ex && m.z > 0 ? B : 0);
-    return [x0, x1, z0, z1];
-  }
-  _casa(m, n) {
-    const g = new THREE.Group(); const fh = 0.44; const jan = M.dark; const F = Math.min(n, m.pisos);
-    const add = (geo, mat, x, y, z, cast = true) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.castShadow = cast; o.receiveShadow = true; g.add(o); return o; };
-    for (let f = 0; f < F; f++) {
-      const [x0, x1, z0, z1] = this._caixa(m, f); const bw = x1 - x0, bd = z1 - z0, mx = m.x + (x0 + x1) / 2, mz = m.z + (z0 + z1) / 2; const yb = f * fh;
-      add(new THREE.BoxGeometry(bw, fh, bd), M.white, mx, yb + fh / 2, mz);
-      // janelas: mais altas que largas, só nas faces sul (+z) e oeste (-x); a barra com 4 por fileira nos andares 2 e 3, o bloco grande com fendas
-      if (m.tipo === 'barra') { if (f >= 1) for (let j = 0; j < 4; j++) add(new THREE.BoxGeometry(0.09, 0.12, 0.012), jan, mx - 0.33 + j * 0.22, yb + 0.24, m.z + z1 + 0.006, false); }
-      else if (m.tipo === 'grande') { for (let j = 0; j < 3; j++) add(new THREE.BoxGeometry(0.06, 0.36, 0.012), jan, mx - 0.4 + j * 0.4, yb + 0.22, m.z + z1 + 0.006, false); }
-      else { const nz = Math.min(3, Math.max(1, Math.floor(bw / 0.24))), nx = Math.min(3, Math.max(1, Math.floor(bd / 0.24)));
-        for (let j = 0; j < nz; j++) add(new THREE.BoxGeometry(0.07, 0.12, 0.012), jan, mx - ((nz - 1) * 0.22) / 2 + j * 0.22, yb + 0.24, m.z + z1 + 0.006, false);
-        for (let j = 0; j < nx; j++) add(new THREE.BoxGeometry(0.012, 0.12, 0.07), jan, m.x + x0 - 0.006, yb + 0.24, mz - ((nx - 1) * 0.22) / 2 + j * 0.22, false); }
-      add(new THREE.BoxGeometry(bw + 0.04, 0.035, bd + 0.04), M.whiteSmooth, mx, yb + fh, mz); // laje clara em todos os andares
-      if (f === F - 1) { // cobertura: recortes escuros (tabuleiro no bloco grande), platibanda no grande, telhado na casinha
-        const yt = yb + fh + 0.028;
-        if (m.tipo === 'grande') { for (let j = 0; j < 6; j++) add(new THREE.BoxGeometry(0.3, 0.02, 0.3), M.dark, mx - 0.45 + (j % 2) * 0.36, yt, mz - 0.36 + ((j / 2) | 0) * 0.36, false);
-          for (const [x, z, w2, d2] of [[0, -bd / 2, bw + 0.04, 0.05], [0, bd / 2, bw + 0.04, 0.05], [-bw / 2, 0, 0.05, bd + 0.04], [bw / 2, 0, 0.05, bd + 0.04]]) add(new THREE.BoxGeometry(w2, 0.08, d2), M.bandaCinza, mx + x, yb + fh + 0.05, mz + z, false); }
-        else if (m.tipo === 'barra') add(new THREE.BoxGeometry(0.6, 0.02, 0.2), M.dark, mx + 0.1, yt, mz, false);
-        else if (m.i === 4) add(new THREE.BoxGeometry(0.3, 0.02, 0.3), M.dark, mx - 0.2, yt, mz + 0.1, false);
-        if (m.tipo === 'gable' && n >= 2) { // telhado de duas águas íngreme: cumeeira 0,38 acima do beiral, empenas brancas com janelinha
-          const hw = bw / 2 + 0.04, hd = bd / 2 + 0.04, rp = 0.38; const P0 = [-hw, 0, -hd], P1 = [hw, 0, -hd], P2 = [hw, 0, hd], P3 = [-hw, 0, hd], R0 = [0, rp, -hd], R1 = [0, rp, hd];
-          const aguas = orientar([...P0, ...R0, ...P3, ...R0, ...R1, ...P3, ...P1, ...P2, ...R0, ...R0, ...P2, ...R1], [0, rp * 0.3, 0]);
-          const emp = orientar([...P0, ...P1, ...R0, ...P3, ...R1, ...P2], [0, rp * 0.3, 0]);
-          add(aguas, M.concreto, mx, F * fh, mz); add(emp, M.white, mx, F * fh, mz); add(new THREE.BoxGeometry(0.08, 0.08, 0.012), jan, mx, F * fh + 0.12, mz + hd + 0.006, false);
-        }
-      }
-    }
-    if ((m.i === 2 || m.i === 3) && n >= 1) { // anexo baixo de um pavimento no desnível, com um arbusto no terraço
-      const sx = m.i === 2 ? 1 : -1; const ax = m.x + sx * (m.w / 2 + 0.225), az = m.z;
-      add(new THREE.BoxGeometry(0.45, fh, 0.6), M.white, ax, fh / 2, az); add(new THREE.BoxGeometry(0.49, 0.035, 0.64), M.whiteSmooth, ax, fh, az);
-      add(new THREE.IcosahedronGeometry(0.09, 0), M.grassBright, ax + sx * 0.1, fh + 0.09, az + 0.12, false);
-    }
-    return g;
-  }
-  setNivel(i, n) { const m = this.mods[i]; if (m.g) this.group.remove(m.g); m.nivel = n; m.g = n > 0 ? this._casa(m, n) : null; if (m.g) this.group.add(m.g); }
-  setTodos(n) { for (const m of this.mods) this.setNivel(m.i, n); }
-  andar(i, f, F) { const m = this.mods[i]; const full = this._casa(m, F); const acabado = new THREE.Group(); const ch = full.children.filter((c) => c.position.y >= f * 0.44 - 0.01); for (const c of ch) acabado.add(c); return { acabado, esqueleto: null }; }
-  centro(i) { const m = this.mods[i]; const v = new THREE.Vector3(m.x, 0, m.z).applyMatrix4(this.group.matrixWorld); return [v.x, v.z]; }
-  alturaTopo(n) { return n * 0.44 + 0.1; }
-  refresh() {}
-}
-
-// ---------------- Acelerador de Partículas Subterrâneo ----------------
-// bacia elíptica escavada em creme (dois degraus baixos com faixa clara), rampa helicoidal com corrimãos na parede
-// leste, anel azul cobalto com colares brancos sobre plinto branco, injetor reto com galeria de vidro até um portal
-// escuro no muro nordeste, detector bronze, caminhão, módulo branco, luminárias globo e o guarda-corpo de vidro em volta
+// Acelerador: poço (A.acelerador.poco), anel e detectores no fundo, linha de luz (A.luz) com o injetor, claraboias,
+// crescente e bosquetes norte
 export function acelerador() {
-  const a = A.acelerador; const [cx, cz] = a.c; const root = new THREE.Group(); root.name = 'acelerador'; const P = {}; const D = 1.3, NS = 2, st = D / NS, rec = 0.10;
-  const rxF = a.rx - (NS - 1) * rec, rzF = a.rz - (NS - 1) * rec; // raio do degrau de baixo
-  P.e1 = new THREE.Group(); // escavação: paredes creme, patamar, piso, mureta baixa com banda pavimentada e a rampa helicoidal
-  for (let k = 0; k < NS; k++) {
-    const rx = a.rx - k * rec, rz = a.rz - k * rec;
-    P.e1.add(ellWall(cx, cz, rx, rz, -(k + 1) * st, st, M.sand, 0, TAU, 64, THREE.BackSide));
-    P.e1.add(ellWall(cx, cz, rx + 0.006, rz + 0.006, -k * st - 0.05, 0.05, M.fascia, 0, TAU, 64));
-    if (k) P.e1.add(ellFlat(cx, cz, rx, rz, rx + rec, rz + rec, -k * st, M.sand, 0, TAU, 64));
+  const a = A.acelerador, po = a.poco, [cx, cz] = po.c, D = po.fundo; const root = new THREE.Group(); root.name = 'acelerador'; const P = {};
+  const ex = po.rx - COROA, ez = po.rz - COROA, rxB = po.rx + 0.1, rzB = po.rz + 0.1; // parede de contenção e borda de fora da coroa
+  // ---- e1: escavação: parede clara com duas faixas brancas, piso, coroa, piso cinza em volta, rampa e guarda-corpo
+  P.e1 = new THREE.Group();
+  P.e1.add(parede(cx, cz, ex, ez, -D, 0.06, M.fasciaBeiral, 0, TAU, 72, true));
+  P.e1.add(parede(cx, cz, ex - 0.006, ez - 0.006, -0.08, 0.06, M.whiteSmooth, 0, TAU, 72, true)); P.e1.add(parede(cx, cz, ex - 0.006, ez - 0.006, -D / 2 - 0.03, -D / 2 + 0.03, M.whiteSmooth, 0, TAU, 72, true));
+  P.e1.add(disco(cx, cz, ex, ez, -D, M.concreto));
+  P.e1.add(plano(cx, cz, [ex, ez], [rxB, rzB], 0.06, M.whiteSmooth)); P.e1.add(parede(cx, cz, rxB, rzB, -0.02, 0.06, M.whiteSmooth));
+  P.e1.add(plano(cx, cz, [rxB, rzB], [po.rx + 0.46, po.rz + 0.46], 0.012, M.caminhoTeto));
+  const q0 = rad(-80), q1 = rad(40), ri = [ex - 0.34, ez - 0.34], ro = [ex - 0.02, ez - 0.02]; // rampa: do nor-nordeste (coroa) ao sudeste (fundo)
+  { P.e1.add(rampa(cx, cz, ri, ro, 0.06, -D, q0, q1, 40, M.caminhoTeto)); P.e1.add(rampaParede(cx, cz, ri, 0.06, -D, 0.12, q0, q1, 40, M.whiteSmooth, true));
+    const pt = (r, t, dy) => { const an = q0 + (q1 - q0) * t; return [cx + Math.cos(an) * r[0], 0.06 + (-D - 0.06) * t + dy, cz + Math.sin(an) * r[1]]; }; const cor = [], pst = [];
+    for (let i = 0; i < 16; i++) { const t0 = i / 16, t1 = (i + 1) / 16; cor.push([pt(ri, t0, 0.34), pt(ri, t1, 0.34)], [pt(ro, t0, 0.34), pt(ro, t1, 0.34)]); }
+    for (let i = 0; i <= 10; i++) pst.push([pt(ri, i / 10, 0.12), pt(ri, i / 10, 0.34)]);
+    P.e1.add(beams([...cor, ...pst], 0.01, M.whiteSmooth, 4)); }
+  { // guarda-corpo de vidro na borda, aberto na chegada da rampa
+    const g0 = q0 + rad(14), g1 = q0 - rad(4) + TAU, rg = [ex + 0.03, ez + 0.03]; const vid = parede(cx, cz, rg[0], rg[1], 0.06, 0.4, M.glassRail, g0, g1, 64); vid.castShadow = false; P.e1.add(vid);
+    const pp = (t, y) => [cx + Math.cos(g0 + (g1 - g0) * t) * rg[0], y, cz + Math.sin(g0 + (g1 - g0) * t) * rg[1]]; const par = [];
+    for (let i = 0; i < 28; i++) par.push([pp(i / 28, 0.42), pp((i + 1) / 28, 0.42)]); for (let i = 0; i <= 14; i++) par.push([pp(i / 14, 0.06), pp(i / 14, 0.42)]);
+    P.e1.add(beams(par, 0.012, M.whiteSmooth, 4)); }
+  P.e1.userData.pessoas = { area: [...anelPts(cx, cz, po.rx + 0.42, po.rz + 0.42, 28), ...anelPts(cx, cz, po.rx + 0.14, po.rz + 0.14, 28, true)], y: 0.012, n: 10 };
+  // ---- e2: anel azul com colares sobre apoios brancos, o tubo até a parede sul, e a linha de luz com o injetor (1 malha)
+  P.e2 = new THREE.Group(); const ax = cx - 0.1, az = cz, Rx = 1.2, Rz = 0.92, yA = -D + 0.3;
+  P.e2.add(plano(ax, az, [Rx - 0.16, Rz - 0.16], [Rx + 0.16, Rz + 0.16], -D + 0.012, M.whiteSmooth));
+  { const tor = new THREE.TorusGeometry(1, 0.09, 8, 64); tor.rotateX(Math.PI / 2); tor.scale(Rx, 1, Rz); tor.translate(ax, yA, az); P.e2.add(mesh(tor, M.blue)); }
+  { const col = new THREE.CylinderGeometry(0.13, 0.13, 0.07, 10), apo = new THREE.BoxGeometry(0.07, 1, 0.07); const lc = [], la = [];
+    for (let i = 0; i < 20; i++) { const t = (i / 20) * TAU, x = ax + Math.cos(t) * Rx, z = az + Math.sin(t) * Rz; lc.push([col, pose(x, yA, z, [-Math.sin(t) * Rx, 0, Math.cos(t) * Rz])]); if (i % 2 === 0) la.push([apo, new THREE.Matrix4().makeScale(1, yA - 0.1 + D, 1).setPosition(x, -D + (yA - 0.1 + D) / 2, z)]); }
+    P.e2.add(mesh(merge(lc), M.whiteSmooth)); P.e2.add(mesh(merge(la), M.whiteSmooth)); }
+  { const zS = cz + ez, zR = az + Rz; const tb = new THREE.CylinderGeometry(0.05, 0.05, zS - zR, 8); tb.rotateX(Math.PI / 2); tb.translate(ax, yA, (zS + zR) / 2); P.e2.add(mesh(tb, M.blue));
+    const pl = new THREE.BoxGeometry(0.34, 0.34, 0.04); pl.translate(ax, yA, zS - 0.03); P.e2.add(mesh(pl, M.whiteSmooth)); }
+  { const acc = faixaPlana({ p: [], n: [], i: [] }, a.luz, a.luzW, yLuz, true); faixaPlana(acc, a.injetor.pts, a.injetor.w, yLuz);
+    const luz = mesh(geo(acc.p, acc.i, null, acc.n), M.cyanGlow, false); luz.name = 'linha-de-luz'; P.e2.add(luz); }
+  const caixaPoco = new THREE.Box3(new THREE.Vector3(cx - po.rx - 0.5, -D, cz - po.rz - 0.5), new THREE.Vector3(cx + po.rx + 0.5, 0.6, cz + po.rz + 0.5));
+  P.e2.userData.caixaObra = caixaPoco.clone().expandByPoint(new THREE.Vector3(a.injetor.pts[0][0], 0, a.injetor.pts[0][1])); // a obra fica no poço e no eixo, não no contorno inteiro
+  // ---- e3: detectores em camadas (barris coaxiais no feixe) nos pontos oeste e norte do anel, racks, luminárias e as 4
+  // claraboias de vidro aceso na linha de luz
+  P.e3 = new THREE.Group(); const cam = new Map(); const pc = (mat, g, m) => { if (!cam.has(mat)) cam.set(mat, []); cam.get(mat).push([g, m]); };
+  const detector = (x, z, eixo, camadas) => { // camadas: [raio, comprimento, material, lados], de fora para dentro
+    for (const [r, l, mat, n] of camadas) { const g = new THREE.CylinderGeometry(r, r, l, n); pc(mat, g, pose(x, yA, z, eixo)); }
+    const r0 = camadas[0][0], berco = new THREE.BoxGeometry(eixo[0] ? camadas[0][1] * 0.8 : r0 * 1.5, yA - r0 + D + 0.02, eixo[0] ? r0 * 1.5 : camadas[0][1] * 0.8); pc(M.whiteSmooth, berco, new THREE.Matrix4().makeTranslation(x, -D + (yA - r0 + D + 0.02) / 2, z));
+  };
+  detector(ax - Rx, az, [0, 0, 1], [[0.3, 0.5, M.whiteSmooth, 8], [0.23, 0.66, M.blue, 12], [0.16, 0.8, M.ouro, 12], [0.05, 1.0, M.steelDark, 8]]);
+  detector(ax, az - Rz, [1, 0, 0], [[0.25, 0.42, M.ouro, 8], [0.19, 0.56, M.whiteSmooth, 12], [0.12, 0.7, M.blue, 12], [0.05, 0.86, M.steelDark, 8]]);
+  for (let i = 0; i < 4; i++) { // racks de computação com a tela ciano voltada para o anel
+    const t = rad(108 + i * 12), x = cx + Math.cos(t) * ex * 0.84, z = cz + Math.sin(t) * ez * 0.84, ry = Math.atan2(-Math.cos(t) * ez, -Math.sin(t) * ex);
+    const m = new THREE.Matrix4().makeRotationY(ry).setPosition(x, -D + 0.15, z); pc(i % 2 ? M.blue : M.whiteSmooth, new THREE.BoxGeometry(0.16, 0.3, 0.18), m);
+    pc(M.cyanGlow, new THREE.BoxGeometry(0.1, 0.05, 0.01), new THREE.Matrix4().makeRotationY(ry).setPosition(x - Math.cos(t) * 0.095, -D + 0.22, z - Math.sin(t) * 0.095));
   }
-  P.e1.add(flatShape(ellShape(cx, cz, rxF, rzF), M.sand, -D));
-  P.e1.add(ellWall(cx, cz, a.rx + 0.08, a.rz + 0.08, -0.02, 0.08, M.whiteSmooth, 0, TAU, 64)); P.e1.add(ellFlat(cx, cz, a.rx - 0.01, a.rz - 0.01, a.rx + 0.1, a.rz + 0.1, 0.06, M.whiteSmooth, 0, TAU, 64));
-  P.e1.add(ellFlat(cx, cz, a.rx + 0.05, a.rz + 0.05, a.rx + 0.4, a.rz + 0.4, 0.012, M.bandaCinza, 0, TAU, 64));
-  { // rampa: deque cinza de rx - 0,42 a rx - 0,10 descendo do nor-nordeste (y 0) ao sudeste (y -D), parapeito interno e dois corrimãos
-    const q0 = -1.396, q1 = 0.698, ri = [a.rx - 0.42, a.rz - 0.42], ro = [a.rx - 0.10, a.rz - 0.10];
-    P.e1.add(ellRampa(cx, cz, ri[0], ri[1], ro[0], ro[1], 0, -D, q0, q1, 40, M.bandaCinza));
-    P.e1.add(ellRampaWall(cx, cz, ri[0], ri[1], 0, -D, 0.12, q0, q1, 40, M.fascia));
-    const cor = [], pst = []; const pt = (r, t, dy) => { const an = q0 + (q1 - q0) * t; return [cx + Math.cos(an) * r[0], -D * t + dy, cz + Math.sin(an) * r[1]]; };
-    for (let i = 0; i < 20; i++) { const t0 = i / 20, t1 = (i + 1) / 20; cor.push([pt(ri, t0, 0.34), pt(ri, t1, 0.34)], [pt(ro, t0, 0.34), pt(ro, t1, 0.34)]); }
-    for (let i = 0; i <= 11; i++) { const t = i / 11; pst.push([pt(ri, t, 0.12), pt(ri, t, 0.34)], [pt(ro, t, 0), pt(ro, t, 0.34)]); }
-    P.e1.add(beams(cor, 0.01, M.whiteSmooth, 4)); P.e1.add(beams(pst, 0.01, M.whiteSmooth, 4));
-  }
-  P.e1.userData.pessoas = { area: [...anelPts(cx, cz, a.rx + 0.40, a.rz + 0.40, 24), ...anelPts(cx, cz, a.rx + 0.12, a.rz + 0.12, 24, 0, true)], y: 0.012, n: 10 };
-  // e2: anel azul quase circular com colares brancos regulares sobre plinto branco, e o tubo do injetor
-  P.e2 = new THREE.Group(); const ax = cx - 0.1, az = cz + 0.2, Rx = 1.3, Rz = 1.05;
-  P.e2.add(ellFlat(ax, az, Rx - 0.17, Rz - 0.17, Rx + 0.17, Rz + 0.17, -D + 0.02, M.whiteSmooth, 0, TAU, 72));
-  { const tor = new THREE.TorusGeometry(1, 0.11, 8, 72); tor.rotateX(Math.PI / 2); tor.scale(Rx, 1, Rz); tor.translate(ax, -D + 0.17, az); P.e2.add(mesh(tor, M.blue)); }
-  { const up = new THREE.Vector3(0, 1, 0), tg = new THREE.Vector3(); for (let i = 0; i < 24; i++) { const t = (i / 24) * TAU; const f = mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.08, 10), M.whiteSmooth); f.position.set(ax + Math.cos(t) * Rx, -D + 0.17, az + Math.sin(t) * Rz); f.quaternion.setFromUnitVectors(up, tg.set(-Math.sin(t) * Rx, 0, Math.cos(t) * Rz).normalize()); P.e2.add(f); } }
-  const I0 = [cx - 0.9, cz + 0.75], I1 = [cx + 1.83, cz - 1.09]; const IL = Math.hypot(I1[0] - I0[0], I1[1] - I0[1]), Ic = [(I0[0] + I1[0]) / 2, (I0[1] + I1[1]) / 2], Ir = Math.atan2(-(I1[1] - I0[1]), I1[0] - I0[0]);
-  const inj = (w, h, d, mat, y, cast = true) => { const m = mesh(new THREE.BoxGeometry(w, h, d), mat, cast); m.position.set(Ic[0], y, Ic[1]); m.rotation.y = Ir; return m; };
-  P.e2.add(inj(IL, 0.03, 0.34, M.whiteSmooth, -D + 0.015)); P.e2.add(inj(IL, 0.16, 0.16, M.blue, -D + 0.12));
-  // e3: detector bronze alto com o cilindro azul e a esfera dourada, racks, caminhão branco, módulo branco e luminárias globo
-  P.e3 = new THREE.Group();
-  { const det = mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.9, 20), M.madeiraClara || M.giraffe); det.position.set(cx - 1.15, -D + 0.45, cz - 0.35); P.e3.add(det);
-    const tp = new THREE.TorusGeometry(0.3, 0.04, 6, 20); tp.rotateX(Math.PI / 2); tp.translate(cx - 1.15, -D + 0.9, cz - 0.35); P.e3.add(mesh(tp, M.whiteSmooth));
-    const az2 = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.6, 12), M.blue); az2.position.set(cx - 1.45, -D + 0.3, cz - 0.15); P.e3.add(az2);
-    const esf = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), M.lampGlow); esf.position.set(cx - 1.3, -D + 0.35, cz + 0.05); P.e3.add(esf);
-    const postes = [[[cx - 1.3, -D, cz + 0.05], [cx - 1.3, -D + 0.3, cz + 0.05]]]; for (const [x, z] of [[cx - 1.9, cz - 0.1], [cx - 1.75, cz + 0.35]]) { postes.push([[x, -D, z], [x, -D + 0.6, z]]); const gl = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), M.lampGlow); gl.position.set(x, -D + 0.64, z); P.e3.add(gl); }
-    P.e3.add(beams(postes, 0.012, M.whiteSmooth, 4)); }
-  for (let i = 0; i < 6; i++) { const r = mesh(new THREE.BoxGeometry(0.16, 0.3, 0.2), i % 2 ? M.blue : M.whiteSmooth); r.position.set(cx - 1.3 + i * 0.22, -D + 0.15, cz + 1.0); P.e3.add(r); const s = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.01), M.cyanGlow); s.position.set(r.position.x, -D + 0.22, cz + 1.105); P.e3.add(s); }
-  { const cam = new THREE.Group(); cam.position.set(cx + 1.85, -D, cz + 0.3); cam.rotation.y = -0.61; P.e3.add(cam);
-    const plat = mesh(new THREE.BoxGeometry(0.6, 0.05, 0.42), M.fascia); plat.position.y = 0.025; cam.add(plat);
-    const cor = mesh(new THREE.BoxGeometry(0.5, 0.28, 0.26), M.whiteSmooth); cor.position.set(-0.02, 0.19, 0); cam.add(cor);
-    const cab = mesh(new THREE.BoxGeometry(0.16, 0.2, 0.26), M.blue); cab.position.set(0.3, 0.15, 0); cam.add(cab);
-    const luz = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.05), M.cyanGlow); luz.position.set(0.3, 0.29, 0); cam.add(luz); }
-  { const mod = mesh(new THREE.BoxGeometry(0.5, 0.18, 0.3), M.whiteSmooth); mod.position.set(cx + 0.35, -D + 0.09, cz + 0.95); P.e3.add(mod); }
-  { const g = new THREE.CircleGeometry(0.5, 24); g.rotateX(-Math.PI / 2); const ap = mesh(g, M.bandaCinza, false); ap.position.set(cx - 1.7, -D + 0.012, cz + 0.4); P.e3.add(ap); }
-  // e4: Centro de Física — galeria de vidro do injetor até o portal escuro no muro nordeste e o guarda-corpo de vidro em toda a borda
-  P.e4 = new THREE.Group();
-  { const vid = inj(IL - 0.3, 0.36, 0.38, M.glass, -D + 0.2, false); vid.renderOrder = 3; P.e4.add(vid); P.e4.add(inj(IL - 0.3, 0.04, 0.4, M.fascia, -D + 0.4));
-    const mont = []; for (let i = 0; i < 9; i++) { const t = 0.06 + (0.84 * i) / 8; const x = I0[0] + (I1[0] - I0[0]) * t, z = I0[1] + (I1[1] - I0[1]) * t; const nx = Math.sin(Ir) * 0.19, nz = Math.cos(Ir) * 0.19; mont.push([[x + nx, -D, z + nz], [x + nx, -D + 0.38, z + nz]], [[x - nx, -D, z - nz], [x - nx, -D + 0.38, z - nz]]); } P.e4.add(beams(mont, 0.012, M.whiteSmooth, 4));
-    const por = mesh(new THREE.BoxGeometry(0.25, 0.5, 0.5), M.dark); por.position.set(I1[0], -D + 0.25, I1[1]); por.rotation.y = Ir; P.e4.add(por); const ver = mesh(new THREE.BoxGeometry(0.3, 0.06, 0.6), M.fascia); ver.position.set(I1[0], -D + 0.53, I1[1]); ver.rotation.y = Ir; P.e4.add(ver); }
-  { const fx = a.rx + 0.14, fz = a.rz + 0.14;
-    const rail = ellWall(cx, cz, fx, fz, 0.06, 0.36, vidroCerca(), 0, TAU, 72); rail.castShadow = false; rail.renderOrder = 3; P.e4.add(rail);
-    const cor = new THREE.TorusGeometry(1, 0.012, 3, 72); cor.rotateX(Math.PI / 2); cor.scale(fx, 1, fz); cor.translate(cx, 0.42, cz); P.e4.add(mesh(cor, M.whiteSmooth));
-    const pt = []; for (let i = 0; i < 20; i++) { const t = (i / 20) * TAU; const x = cx + Math.cos(t) * fx, z = cz + Math.sin(t) * fz; pt.push([[x, 0.02, z], [x, 0.42, z]]); } P.e4.add(beams(pt, 0.01, M.whiteSmooth, 4));
-    P.e4.userData.pessoas = { area: [...anelPts(cx, cz, rxF - 0.25, rzF - 0.25, 24), ...anelPts(ax, az, Rx + 0.35, Rz + 0.35, 24, 0, true)], y: -D + 0.03, n: 8 }; }
+  for (const t of [rad(225), rad(60)]) { const x = cx + Math.cos(t) * ex * 0.85, z = cz + Math.sin(t) * ez * 0.85; pc(M.steelDark, new THREE.CylinderGeometry(0.012, 0.012, 0.6, 5), new THREE.Matrix4().makeTranslation(x, -D + 0.3, z)); pc(M.lampGlow, new THREE.SphereGeometry(0.06, 8, 6), new THREE.Matrix4().makeTranslation(x, -D + 0.64, z)); }
+  { const r = a.claraboiaR, rv = r * 0.8, ciano = { p: [], n: [], i: [] }; const L = [];
+    for (const p0 of a.claraboias) {
+      const q = lugarClaraboia(p0, r), piso = naFrente(q[0], q[1]), yb = Math.max(0, heightAt(q[0], q[1])) + (piso ? A.frente.h : 0); L.push(q);
+      const dq = Math.hypot(q[0] - p0[0], q[1] - p0[1]); if (dq > r) faixaPlana(ciano, [p0, [q[0] + ((p0[0] - q[0]) * r) / dq, q[1] + ((p0[1] - q[1]) * r) / dq]], a.luzW, yLuz); // ramal da linha até o aro
+      const yl = yb + a.luzH; // aro e disco acima da linha: se ela passar por baixo (empurrão menor que o raio), não disputam a altura
+      P.e3.add(plano(q[0], q[1], [rv, rv], [r, r], yl + 0.012, M.whiteSmooth, 0, TAU, 28)); P.e3.add(parede(q[0], q[1], r, r, yb - 0.01, yl + 0.012, M.whiteSmooth, 0, TAU, 28));
+      P.e3.add(disco(q[0], q[1], rv, rv, yl + 0.004, M.cyanGlow, 28));
+      if (piso) continue; // no Caminho da Frente (portão) a claraboia fica embutida no piso: sem cúpula no caminho de quem chega
+      const dom = new THREE.SphereGeometry(rv, 20, 4, 0, TAU, 0, Math.PI / 2); dom.scale(1, 0.14 / rv, 1); dom.translate(q[0], yl + 0.006, q[1]); P.e3.add(mesh(dom, M.glass, false));
+    }
+    if (ciano.p.length) P.e3.add(mesh(geo(ciano.p, ciano.i, null, ciano.n), M.cyanGlow, false)); P.e3.userData.claraboias = L; }
+  for (const [mat, l] of cam) P.e3.add(mesh(merge(l), mat, mat !== M.cyanGlow && mat !== M.lampGlow));
+  P.e3.userData.caixaObra = caixaPoco.clone();
+  // ---- e4: Centro de Física Avançada: o crescente (Faixa), montantes claros no vidro, friso aceso sob a laje de cima, e os
+  // bosquetes norte (massas de copas no jardim entre a Sede e os braços do Elo)
+  P.e4 = new THREE.Group(); const cr = a.crescente, C4 = crescente(); P.e4.add(C4.g);
+  { const md = medidas(C4.prof), yv = md.slab, yt = md.y(1), rb = md.B + 0.05; const m0 = rad(cr.a0) + rb / cr.r, m1 = rad(cr.a1) - rb / cr.r; // o vidro recua rb nas pontas
+    const rO = cr.r + cr.w / 2, rI = cr.r - cr.w / 2; P.e4.add(parede(cr.c[0], cr.c[1], rO + 0.008, rO + 0.008, yt - 0.16, yt, M.fasciaLuz, m0, m1, 40)); P.e4.add(parede(cr.c[0], cr.c[1], rI - 0.008, rI - 0.008, yt - 0.16, yt, M.fasciaLuz, m0, m1, 30, true));
+    const mt = new THREE.BoxGeometry(0.035, yt - yv, 0.035), l = []; const n = Math.max(2, Math.round(((m1 - m0) * rO) / 0.5));
+    for (let i = 0; i <= n; i++) { const t = m0 + ((m1 - m0) * i) / n; for (const r of [rO + 0.017, rI - 0.017]) l.push([mt, new THREE.Matrix4().makeRotationY(-t).setPosition(cr.c[0] + Math.cos(t) * r, (yv + yt) / 2, cr.c[1] + Math.sin(t) * r)]); }
+    P.e4.add(mesh(merge(l), M.whiteSmooth)); }
+  { const arv = [];
+    for (const [bi, b] of a.bosquesN.entries()) { const n = 11; for (let i = 0; i < n; i++) {
+      const u = -0.86 + (1.72 * i) / (n - 1) + (hash(i, bi, 311) - 0.5) * 0.06, meia = b.rz * Math.sqrt(Math.max(0, 1 - u * u)); const s = Math.min(0.36, meia * 0.92); if (s < 0.14) continue;
+      const v = (i % 2 ? 1 : -1) * Math.max(0, meia - s) * 0.6; arv.push({ x: b.c[0] + u * b.rx, z: b.c[1] + v, y: 0, s: s * (0.9 + hash(i, bi, 312) * 0.12), h: 1.2 + (meia / b.rz) * 0.5 + hash(i, bi, 313) * 0.2, kind: 'folha', pal: hash(i, bi, 314) < 0.25 ? 'jardim' : 'mata' }); } }
+    P.e4.add(treeGroup(arv, { name: 'bosques-norte' })); }
+  { const cm = cr.caminho, e = [], d = []; cm.forEach((p, i) => { const q = cm[Math.min(i + 1, cm.length - 1)], o = cm[Math.max(i - 1, 0)], tx = q[0] - o[0], tz = q[1] - o[1], l = Math.hypot(tx, tz); e.push([p[0] + (tz / l) * 0.2, p[1] - (tx / l) * 0.2]); d.push([p[0] - (tz / l) * 0.2, p[1] + (tx / l) * 0.2]); });
+    P.e4.userData.pessoas = { area: [...e, ...d.reverse()].map(([x, z]) => [+x.toFixed(3), +z.toFixed(3)]), y: medidas(C4.prof).y(1) + medidas(C4.prof).slab + 0.005, n: 6 }; } // no passeio do teto, entre os braços do Elo
+  P.e4.userData.caixaObra = C4.caixa.clone(); // grua e canteiro no crescente
   for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'acelerador', root, partes: P, esqueletos: {}, grua: { e4: true }, foco: { x: cx, z: cz + 0.5, dist: 9 }, ancora: [cx, 1.4, cz] };
+  return { id: 'acelerador', root, partes: P, esqueletos: {}, grua: { e4: true }, foco: { x: cx, z: cz - 0.8, dist: 13 }, ancora: [cx, 2.4, cz - 0.4] };
+}
+
+// ---------------- Anfiteatro da Vila (pátio leste) ----------------
+// tampa de uma arquibancada elíptica no ângulo a (graus): polígono [d, y] (d = recuo da borda de fora), face no sentido
+// do ângulo crescente (para = 1) ou decrescente (-1)
+function tampaRadial(c, rx, rz, poly, a, para, mat) {
+  const t = rad(a), ca = Math.cos(t), sa = Math.sin(t); const sg = new THREE.ShapeGeometry(new THREE.Shape(poly.map(([d, y]) => new THREE.Vector2(d, y))));
+  const p = sg.attributes.position; for (let i = 0; i < p.count; i++) { const d = p.getX(i), y = p.getY(i); p.setXYZ(i, c[0] + ca * (rx - d), y, c[1] + sa * (rz - d)); }
+  orienta(p.array, sg.index.array, () => [-sa * rx * para, 0, ca * rz * para]); sg.deleteAttribute('normal'); sg.computeVertexNormals(); return mesh(sg, mat);
+}
+// Ferradura rx x rz (largura w) com os degraus de a0 a a1 (lado norte): cada degrau sobe h / degraus, espelhos brancos
+// virados para o palco e para a câmera do sul, pisos de concreto, encosto branco atrás, dois corredores de
+// meio-degrau, orquestra de piso e público sentado; e2 palco de madeira com fundo curvo de vidro e pórtico de luzes
+export function anfiteatro() {
+  const an = A.anfiteatro, c = an.c, [cx, cz] = c, n = an.degraus, dr = an.w / n, dh = an.h / n, A0 = rad(an.a0), A1 = rad(an.a1); const root = new THREE.Group(); root.name = 'anfiteatro'; const P = {};
+  const ENC = 0.06, HE = 0.15; // encosto (espessura e altura acima do último degrau)
+  P.e1 = new THREE.Group();
+  for (let k = 0; k < n; k++) { // degrau k (0 = o de dentro, mais baixo): piso e espelho
+    const r0 = an.w - k * dr, r1 = Math.max(an.w - (k + 1) * dr, k === n - 1 ? ENC : 0); // recuos da borda de fora
+    P.e1.add(plano(cx, cz, [an.rx - r0, an.rz - r0], [an.rx - r1, an.rz - r1], (k + 1) * dh, M.concreto, A0, A1, 48, true));
+    P.e1.add(parede(cx, cz, an.rx - r0, an.rz - r0, k * dh, (k + 1) * dh, M.whiteSmooth, A0, A1, 48, true));
+  }
+  P.e1.add(parede(cx, cz, an.rx, an.rz, 0, an.h + HE, M.concreto, A0, A1, 48)); // costas (para o norte)
+  P.e1.add(parede(cx, cz, an.rx - ENC, an.rz - ENC, an.h, an.h + HE, M.whiteSmooth, A0, A1, 48, true)); P.e1.add(plano(cx, cz, [an.rx - ENC, an.rz - ENC], [an.rx, an.rz], an.h + HE, M.whiteSmooth, A0, A1, 48));
+  { const poly = [[an.w, 0]]; for (let k = 0; k < n; k++) poly.push([an.w - k * dr, (k + 1) * dh], [k === n - 1 ? ENC : an.w - (k + 1) * dr, (k + 1) * dh]); poly.push([ENC, an.h + HE], [0, an.h + HE], [0, 0]);
+    P.e1.add(tampaRadial(c, an.rx, an.rz, poly, an.a0, -1, M.concreto)); P.e1.add(tampaRadial(c, an.rx, an.rz, poly, an.a1, 1, M.concreto)); }
+  const CORR = [an.a0 + (an.a1 - an.a0) * 0.3, an.a0 + (an.a1 - an.a0) * 0.7]; // ângulos dos corredores
+  { const l = []; // corredores: faixa branca no piso de cada degrau e meio-degrau na metade de trás (escada de 0,1)
+    for (const ag of CORR) { const t = rad(ag), ca = Math.cos(t), sa = Math.sin(t), ry = Math.atan2(-ca * an.rz, -sa * an.rx); const em = (d, y, h, p) => [new THREE.BoxGeometry(0.18, h, p), new THREE.Matrix4().makeRotationY(ry).setPosition(cx + ca * (an.rx - d), y, cz + sa * (an.rz - d))];
+      for (let k = 0; k < n; k++) { l.push(em(an.w - (k + 0.5) * dr, (k + 1) * dh + 0.004, 0.008, dr)); if (k < n - 1) l.push(em(an.w - (k + 0.75) * dr, (k + 1) * dh + dh / 4, dh / 2, dr / 2)); }
+      l.push(em(an.w + 0.12, 0.02, 0.04, 0.24)); } // soleira na orquestra
+    P.e1.add(mesh(merge(l), M.whiteSmooth)); }
+  P.e1.add(disco(cx, cz, an.rx - an.w, an.rz - an.w, 0.015, M.caminhoTeto)); // orquestra
+  { const g = new THREE.BoxGeometry(0.06, 0.11, 0.06), l = []; const grupos = [3, 4, 2, 4, 3, 5, 3, 4, 2, 3, 4, 3]; // público sentado, em grupos
+    grupos.forEach((q, gi) => { const k = 1 + (gi % (n - 1)), ab = an.a0 + 10 + ((an.a1 - an.a0 - 20) * (gi + hash(gi, 1, 91) * 0.6)) / grupos.length; const d = an.w - (k + 0.4) * dr;
+      for (let j = 0; j < q; j++) { const ag = ab + (j - (q - 1) / 2) * 3.2, t = rad(ag); if (CORR.some((cg) => Math.abs(ag - cg) < 5)) continue; l.push([g, new THREE.Matrix4().makeTranslation(cx + Math.cos(t) * (an.rx - d), (k + 1) * dh + 0.055, cz + Math.sin(t) * (an.rz - d))]); } });
+    P.e1.add(mesh(merge(l), M.steelDark, false)); }
+  { const area = []; const ri = [an.rx - an.w - 0.08, an.rz - an.w - 0.08], zp = an.palco.c[1] - an.palco.d / 2 - 0.1; for (let i = 0; i <= 12; i++) { const t = A0 + ((A1 - A0) * i) / 12; area.push([+(cx + Math.cos(t) * ri[0]).toFixed(3), +(cz + Math.sin(t) * ri[1]).toFixed(3)]); }
+    area.push([+(cx + ri[0] * 0.95).toFixed(3), zp], [+(cx - ri[0] * 0.95).toFixed(3), zp]); P.e1.userData.pessoas = { area, y: 0.03, n: 14 }; }
+  // ---- e2: palco (o retângulo de A sem o canto sudeste, que entraria no rodapé do lado de dentro da Vila: fica fora do
+  // círculo de F com R + w/2 + B_PE + J), degrau da frente, fundo curvo de vidro com aro branco e pórtico de luzes
+  P.e2 = new THREE.Group(); const pa = an.palco, [px, pz] = pa.c; const V = A.casas, RV = V.R + V.w / 2 + B_PE + J;
+  const livre = ([x, z]) => { const dx = x - V.F[0], dz = z - V.F[1], d = Math.hypot(dx, dz); return d >= RV ? [x, z] : [V.F[0] + (dx / d) * RV, V.F[1] + (dz / d) * RV]; };
+  { const x0 = px - pa.w / 2, x1 = px + pa.w / 2, z0 = pz - pa.d / 2, z1 = pz + pa.d / 2, cont = []; const lado = (a, b, n) => { for (let i = 0; i < n; i++) cont.push(livre([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n])); };
+    lado([x0, z0], [x1, z0], 22); lado([x1, z0], [x1, z1], 10); lado([x1, z1], [x0, z1], 22); lado([x0, z1], [x0, z0], 10);
+    const sh = new THREE.Shape(cont.filter((p, i) => i === 0 || Math.hypot(p[0] - cont[i - 1][0], p[1] - cont[i - 1][1]) > 1e-3).map(([x, z]) => new THREE.Vector2(x, -z)));
+    const laje = (y0, h, mat) => { const g = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y0, 0); return mesh(g, mat); };
+    P.e2.add(laje(0, pa.h - 0.03, M.whiteSmooth)); P.e2.add(laje(pa.h - 0.03, 0.03, M.madeiraClara));
+    const dg = new THREE.BoxGeometry(0.7, pa.h / 2, 0.18); dg.translate(px, pa.h / 4, z0 - 0.09); P.e2.add(mesh(dg, M.madeiraClara)); }
+  const fx = pa.w / 2 - 0.06, fz = pa.d * 0.42, fc = [px, pz]; // fundo: meia elipse do lado sul do palco, côncava para a plateia
+  P.e2.add(parede(fc[0], fc[1], fx, fz, pa.h, pa.h + 0.6, M.vidroDossel, 0, Math.PI, 24));
+  { const pp = (t, y) => [fc[0] + Math.cos(t) * fx, y, fc[1] + Math.sin(t) * fz]; const l = []; for (let i = 0; i < 12; i++) l.push([pp((i / 12) * Math.PI, pa.h + 0.6), pp(((i + 1) / 12) * Math.PI, pa.h + 0.6)]);
+    for (const t of [0, Math.PI / 2, Math.PI]) l.push([pp(t, pa.h), pp(t, pa.h + 0.62)]);
+    const xL = fx * 0.86, zL = pz + fz * Math.sqrt(1 - 0.86 * 0.86), yL = 1.35; for (const s of [-1, 1]) l.push([[px + s * xL, pa.h, zL], [px + s * xL, yL, zL]]); // pórtico de luzes nos montantes do fundo
+    l.push([[px - xL, yL, zL], [px + xL, yL, zL]], [[px - xL, yL - 0.08, zL], [px + xL, yL - 0.08, zL]]);
+    P.e2.add(beams(l.slice(0, 15), 0.015, M.whiteSmooth, 4)); P.e2.add(beams(l.slice(15), 0.025, M.steelDark, 5));
+    const sg = [], sp = new THREE.BoxGeometry(0.08, 0.07, 0.1); for (let i = 0; i < 4; i++) sg.push([sp, new THREE.Matrix4().makeRotationX(0.5).setPosition(px - xL * 0.75 + (i * xL * 1.5) / 3, yL - 0.14, zL - 0.02)]); P.e2.add(mesh(merge(sg), M.lampGlow, false)); }
+  { const x0 = px - pa.w / 2 + 0.2, x1 = px + pa.w / 2 - 0.2, z0 = pz - pa.d / 2 + 0.15, z1 = pz; P.e2.userData.pessoas = { area: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], y: pa.h + 0.01, n: 4 }; }
+  for (const k of Object.keys(P)) root.add(P[k]);
+  return { id: 'anfiteatro', root, partes: P, esqueletos: {}, grua: {}, foco: { x: cx, z: cz + 0.4, dist: 10 }, ancora: [cx, 1.4, cz] };
 }

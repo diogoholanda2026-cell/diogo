@@ -1,23 +1,28 @@
-// Plano diretor em 3D: o que dá forma às quadras e liga a Arcologia à cidade.
-//   base (sempre): postes no anel viário e na avenida, renques de árvores na avenida e ao longo do eixo, o meio-fio da
-//     ilha da rotatória e as saídas asfaltadas do anel viário até os bairros e o porto (fora da mesa)
-//   eixo (com as etapas da praça): e1 bancos e postes do eixo monumental; e2 os espelhos d'água com repuxos dos dois
-//     lados do Bulevar e do Passeio da Holding; e3 o Marco da Holding na ilha da rotatória (chafariz redondo e a agulha
-//     branca com o guarda-chuva dourado no topo)
+// Plano viário e eixo monumental da Arcologia (Trevo da Holding, plano mestre revisão 6). Carro só no anel viário de
+// fora; o eixo x = 0 é de pedestres. O anel viário e o começo das saídas são pintados no terreno (A.vias, ground.js) e o
+// gabarito da figura também (P9); aqui ficam as peças em 3D.
+//   base (sempre): postes no anel viário (lado de dentro, a cada 4,6, fora das saídas e do acesso do canteiro) e as
+//     saídas asfaltadas (SAIDAS) da borda de fora do anel viário até as ruas de borda dos bairros e o porto (fora da mesa
+//     acompanham o terreno dos arredores), com as bordas claras
+//   eixo (com as etapas da praça: jogo.js chama setEixo(n) e mundo.js funde eixo[k] com userData.feito): e1 balizadores
+//     de luz, bancos e os dois pilaretes do portão, ao longo do Caminho da Frente, da esplanada do Bulevar e do eixo
+//     norte (margem norte, portal da Sede e poço); e2 renques baixos nos bordos da esplanada e do eixo norte; e3
+//     luminárias altas dos dois lados do Bulevar e do eixo norte. Nada sobre as fitas, o lago ou a praça (o Marco da
+//     Holding mora na praça, praca.e3)
 import * as THREE from 'three';
-import { A, PASSARELAS, ZONAS, EIXO, AVENIDA, ROTATORIA, SAIDAS, MESA } from '../../data/planta.js';
-import { M, dupla } from '../materials.js';
+import { A, SAIDAS, MESA, ANEL_MESTRE, J } from '../../data/planta.js';
+import { M } from '../materials.js';
 import { beams } from '../geom.js';
 import { treeGroup } from '../forest.js';
 import { heightAt } from '../ground.js';
 import { alturaArredor } from '../arredores.js';
-import { rng, inPoly, inEllipse } from '../../core/util.js';
+import { rng, inPoly } from '../../core/util.js';
 
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
-function plate(pts, y, h, mat) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); return mesh(g, mat); }
-const ret = (x0, z0, x1, z1) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
 const distLinha = (x, z, l) => { let d = 1e9; for (let i = 1; i < l.length; i++) { const a = l[i - 1], b = l[i]; const vx = b[0] - a[0], vz = b[1] - a[1]; const t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz || 1))); d = Math.min(d, Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t)); } return d; };
-const asfalto = () => M._asfalto || (M._asfalto = new THREE.MeshStandardMaterial({ color: 0x52565e, roughness: 0.92 }));
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
+// instâncias de uma geometria em [x, y, z] (sem giro)
+function inst(geo, mat, pts, sombra = true) { const im = new THREE.InstancedMesh(geo, mat, pts.length); pts.forEach(([x, y, z], i) => im.setMatrixAt(i, _m4.compose(_v.set(x, y, z), _q.identity(), _s))); im.castShadow = sombra; im.receiveShadow = true; im.computeBoundingSphere(); return im; }
 
 // pontos a cada passo ao longo de uma polilinha (fechada ou não): [x, z, tx, tz]
 function aoLongo(pts, passo, fechada, fase = 0) {
@@ -26,59 +31,61 @@ function aoLongo(pts, passo, fechada, fase = 0) {
   return out;
 }
 
+// eixo x = 0 no chão: faixas livres de cada trecho (medidas de A)
+function trechosEixo() {
+  const { c, rx, rz, w } = ANEL_MESTRE, col = A.colunata;
+  const faceSul = (x) => c[1] + (rz + J) * Math.sqrt(Math.max(0, 1 - (x / (rx + J)) ** 2)); // face externa sul do Anel (mais a junta)
+  const faceN = (x, r, rzz) => c[1] - (rzz + J) * Math.sqrt(Math.max(0, 1 - (x / (r + J)) ** 2)); // faces da Sede (norte)
+  const colS = (x) => col.c[1] - Math.sqrt(Math.max(0, (col.r + col.w / 2 + J) ** 2 - x * x)); // borda de fora da colunata
+  const N = A.eixoN, sedeIn = (x) => c[1] - (rz - w - J) * Math.sqrt(Math.max(0, 1 - (x / (rx - w - J)) ** 2)); // face interna da Sede (menos a junta)
+  return { faceSul, colS, sedeIn, sedeOut: (x) => faceN(x, rx, rz), zN0: N.z0, zN1: N.z1, xN: N.x };
+}
+
 export function plano() {
   const root = new THREE.Group(); root.name = 'plano'; const base = new THREE.Group(); base.name = 'plano-base'; root.add(base);
-  const eixo = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() }; for (const g of Object.values(eixo)) { g.visible = false; root.add(g); }
-  const R = rng(5150); const pass = Object.values(PASSARELAS).map((p) => p.pts);
-  const fora = ['gorilas', 'bioma', 'santuario', 'sede', 'canteiro', 'acelerador', 'praca'].map((id) => ZONAS.filter((Z) => Z.id === id)).flat();
-  const naZona = (x, z) => fora.some((Z) => (Z.poly ? inPoly(x, z, Z.poly) : inEllipse(x, z, Z.elipse[0][0], Z.elipse[0][1], Z.elipse[1], Z.elipse[2], Z.elipse[3] || 0)));
-  const livre = (x, z, m = 1.2) => !naZona(x, z) && pass.every((l) => distLinha(x, z, l) > m) && distLinha(x, z, A.uni.elo) > 1.4 && x > MESA.x0 + 0.6 && x < MESA.x1 - 0.6 && z > MESA.z0 + 0.6 && z < MESA.z1 - 0.6;
-  // postes: anel viário (lado de dentro) e avenida (dos dois lados)
+  const eixo = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() }; for (const [k, g] of Object.entries(eixo)) { g.name = 'eixo-' + k; g.visible = false; root.add(g); }
+  const R = rng(5150);
+  // ---- base: postes no anel viário (lado de dentro), fora das saídas, do acesso do canteiro e do canteiro
   const postes = [], luz = [];
   const poste = (x, z) => { const y = heightAt(x, z); postes.push([[x, y, z], [x, y + 0.95, z]]); luz.push([x, y + 0.98, z]); };
-  const anel = A.vias.find((v) => v.id === 'anel'); const [cx, cz] = [(MESA.x0 + MESA.x1) / 2, (MESA.z0 + MESA.z1) / 2];
-  for (const [x, z, tx, tz] of aoLongo(anel.pts, 4.6, true, 1)) { let nx = -tz, nz = tx; if (nx * (cx - x) + nz * (cz - z) < 0) { nx = -nx; nz = -nz; } const px = x + nx * 1.05, pz = z + nz * 1.05; if (SAIDAS.some((q) => distLinha(px, pz, q.pts) < 1.6)) continue; poste(px, pz); }
-  for (const lado of [-1, 1]) for (let x = -37; x <= 37; x += 4.2) { if (Math.abs(x) < 5.2) continue; const z = AVENIDA.z + lado * (AVENIDA.w / 2 + 0.55); if (!naZona(x, z)) poste(x, z); }
+  const anel = A.vias.find((v) => v.id === 'anel'); const [cx, cz] = [(MESA.x0 + MESA.x1) / 2, (MESA.z0 + MESA.z1) / 2]; const ac = A.canteiro.acesso;
+  for (const [x, z, tx, tz] of aoLongo(anel.pts, 4.6, true, 1)) {
+    let nx = -tz, nz = tx; if (nx * (cx - x) + nz * (cz - z) < 0) { nx = -nx; nz = -nz; } const px = x + nx * 1.05, pz = z + nz * 1.05;
+    if (SAIDAS.some((q) => distLinha(px, pz, q.pts) < 1.6) || Math.hypot(px - ac[0], pz - ac[1]) < 1.8 || inPoly(px, pz, A.canteiro.poly)) continue; poste(px, pz);
+  }
   base.add(beams(postes, 0.018, M.steelDark, 4));
-  const gl = new THREE.InstancedMesh(new THREE.SphereGeometry(0.055, 8, 6), M.lampGlow, luz.length); const m4 = new THREE.Matrix4(); luz.forEach((p, i) => gl.setMatrixAt(i, m4.makeTranslation(...p))); gl.userData.semHAO = true; base.add(gl);
-  // renques: avenida (dos dois lados, por fora dos postes) e o eixo (entre o piso e a margem verde)
-  const arv = [];
-  for (const lado of [-1, 1]) for (let x = -36.2; x <= 36.2; x += 2.4) { if (Math.abs(x) < 6.2) continue; const z = AVENIDA.z + lado * (AVENIDA.w / 2 + 1.45); if (livre(x, z)) arv.push({ x, z, y: heightAt(x, z), s: 0.36 + R() * 0.06, kind: 'folha', pal: 'jardim', h: 1.15 }); }
-  for (const lado of [-1, 1]) for (const [z0, z1] of [[5.4, 14.2], [EIXO.z0 + 0.8, -3.4]]) for (let z = z0; z <= z1 + 0.01; z += 1.5) { const x = lado * (EIXO.meia + 0.75); arv.push({ x, z, y: 0, s: 0.32 + R() * 0.05, kind: 'folha', pal: 'jardim', h: 1.1 }); }
-  base.add(treeGroup(arv, { trunks: true, name: 'renques' }));
-  // meio-fio branco da ilha da rotatória
-  { const g = new THREE.RingGeometry(ROTATORIA.ilha - 0.1, ROTATORIA.ilha + 0.04, 64); g.rotateX(-Math.PI / 2); const m = mesh(g, M.whiteSmooth, false); m.position.set(ROTATORIA.c[0], 0.03, ROTATORIA.c[1]); base.add(m); }
-  // saídas asfaltadas até a cidade (fora da mesa: acompanham o terreno dos arredores), com as bordas claras
+  { const gl = inst(new THREE.SphereGeometry(0.055, 6, 4), M.lampGlow, luz, false); gl.userData.semHAO = true; base.add(gl); }
+  // ---- base: saídas asfaltadas até a cidade (fora da mesa acompanham o terreno dos arredores), com as bordas claras; começam
+  //      na borda de fora da pista (o anel viário pintado no terreno fica limpo no encontro)
   for (const q of SAIDAS) {
-    const [a, b] = q.pts; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const tx = (b[0] - a[0]) / L, tz = (b[1] - a[1]) / L; const nx = -tz, nz = tx;
+    const [a0, b] = q.pts; const L0 = Math.hypot(b[0] - a0[0], b[1] - a0[1]); const tx = (b[0] - a0[0]) / L0, tz = (b[1] - a0[1]) / L0; const nx = -tz, nz = tx;
+    const a = [a0[0] + (tx * anel.w) / 2, a0[1] + (tz * anel.w) / 2], L = L0 - anel.w / 2;
     const dentro = (x, z) => x > MESA.x0 && x < MESA.x1 && z > MESA.z0 && z < MESA.z1; const n = Math.ceil(L / 0.5);
-    for (const [w, mat, dy] of [[0.78, M.whiteSmooth, 0.025], [0.62, asfalto(), 0.035]]) {
-      const P = [], I = []; for (let i = 0; i <= n; i++) { const x = a[0] + tx * (L * i) / n, z = a[1] + tz * (L * i) / n; for (const s of [-1, 1]) { const px = x + nx * w * s, pz = z + nz * w * s; P.push(px, (dentro(px, pz) ? heightAt(px, pz) : alturaArredor(px, pz)) + dy, pz); } if (i) { const k = (i - 1) * 2; I.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); } }
+    for (const [w, mat, dy] of [[0.78, M.whiteSmooth, 0.025], [0.62, M.dark, 0.035]]) {
+      const P = [], I = []; for (let i = 0; i <= n; i++) { const x = a[0] + (tx * (L * i)) / n, z = a[1] + (tz * (L * i)) / n; for (const s of [-1, 1]) { const px = x + nx * w * s, pz = z + nz * w * s; P.push(px, (dentro(px, pz) ? heightAt(px, pz) : alturaArredor(px, pz)) + dy, pz); } if (i) { const k = (i - 1) * 2; I.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); } }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); g.computeVertexNormals(); if (g.attributes.normal.getY(0) < 0) { g.setIndex(I.map((_, j) => I[j - (j % 3) + [0, 2, 1][j % 3]])); g.computeVertexNormals(); }
       base.add(mesh(g, mat, false));
     }
   }
-  // e1: bancos brancos e postes baixos ao longo do eixo (dos dois lados do piso)
-  { const pos = [], lz = []; for (const lado of [-1, 1]) for (const [z0, z1] of [[5.6, 14.0], [EIXO.z0 + 0.6, -3.4]]) for (let z = z0; z <= z1 + 0.01; z += 2.1) { pos.push([lado * (EIXO.meia - 0.35), z]); lz.push([[lado * (EIXO.meia - 0.1), 0, z + 1.05], [lado * (EIXO.meia - 0.1), 0.62, z + 1.05]]); }
-    const bg = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.12, 0.62), M.whiteSmooth, pos.length); pos.forEach(([x, z], i) => bg.setMatrixAt(i, m4.makeTranslation(x, 0.06, z))); bg.castShadow = true; bg.receiveShadow = true; eixo.e1.add(bg);
-    eixo.e1.add(beams(lz, 0.014, M.steelDark, 4)); const lg = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 8, 6), M.lampGlow, lz.length); lz.forEach(([, [x, y, z]], i) => lg.setMatrixAt(i, m4.makeTranslation(x, y + 0.03, z))); lg.userData.semHAO = true; eixo.e1.add(lg); }
-  // e2: espelhos d'água dos dois lados do Bulevar e do Passeio da Holding, com repuxos
-  { const jatos = []; const jato = dupla(M.glassRail);
-    for (const lado of [-1, 1]) for (const [z0, z1] of [[5.8, 13.8], [EIXO.z0 + 0.9, -3.8]]) {
-      const x0 = lado > 0 ? 1.25 : -2.35, x1 = x0 + 1.1; eixo.e2.add(plate(ret(x0 - 0.1, z0 - 0.1, x1 + 0.1, z1 + 0.1), 0, 0.07, M.whiteSmooth)); eixo.e2.add(plate(ret(x0, z0, x1, z1), 0, 0.075, M.pool));
-      for (let z = z0 + 0.5; z < z1; z += 1.1) jatos.push([(x0 + x1) / 2, z]);
-    }
-    const jg = new THREE.InstancedMesh(new THREE.ConeGeometry(0.035, 0.55, 6, 1, true), jato, jatos.length); jatos.forEach(([x, z], i) => jg.setMatrixAt(i, m4.makeTranslation(x, 0.35, z))); jg.castShadow = false; eixo.e2.add(jg); }
-  // e3: Marco da Holding: chafariz redondo na ilha, agulha branca de base quadrada, anéis e o guarda-chuva dourado
-  { const [mx, mz] = ROTATORIA.c; const g = new THREE.Group(); g.position.set(mx, 0, mz); eixo.e3.add(g);
-    const b = mesh(new THREE.CylinderGeometry(ROTATORIA.ilha - 0.35, ROTATORIA.ilha - 0.3, 0.22, 48), M.whiteSmooth); b.position.y = 0.11; g.add(b);
-    const w = new THREE.Mesh(new THREE.CircleGeometry(ROTATORIA.ilha - 0.5, 48), M.pool); w.rotation.x = -Math.PI / 2; w.position.y = 0.2; w.receiveShadow = true; g.add(w);
-    const pe = mesh(new THREE.CylinderGeometry(0.5, 0.62, 0.35, 4), M.whiteSmooth); pe.rotation.y = Math.PI / 4; pe.position.y = 0.3; g.add(pe);
-    const ag = mesh(new THREE.CylinderGeometry(0.09, 0.3, 3.2, 4), M.whiteSmooth); ag.rotation.y = Math.PI / 4; ag.position.y = 0.45 + 1.6; g.add(ag);
-    for (const y of [1.2, 2.4]) { const an = new THREE.Mesh(new THREE.TorusGeometry(0.24 - y * 0.05, 0.025, 4, 16), M.ouro || M.yellow); an.rotation.x = Math.PI / 2; an.position.y = 0.45 + y; g.add(an); }
-    const gc = mesh(new THREE.ConeGeometry(0.42, 0.22, 8), M.ouro || M.yellow); gc.position.y = 3.78; g.add(gc); const cabo = mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 6), M.ouro || M.yellow); cabo.position.y = 3.95; g.add(cabo);
-    const jt = []; for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; jt.push([Math.cos(a) * 1.3, Math.sin(a) * 1.3]); }
-    const jg = new THREE.InstancedMesh(new THREE.ConeGeometry(0.04, 0.8, 6, 1, true), dupla(M.glassRail), jt.length); jt.forEach(([x, z], i) => jg.setMatrixAt(i, m4.makeTranslation(x, 0.6, z))); jg.castShadow = false; g.add(jg); }
+  // ---- eixo: trechos livres no chão
+  const T = trechosEixo(), fr = A.frente.pts, sim = (l) => l.flatMap(([x, ...r]) => [[-x, ...r], [x, ...r]]); // espelha no eixo
+  const esp0 = (x) => T.faceSul(x) + 0.3, esp1 = (x) => T.colS(x) - 0.3; // esplanada: da face do Anel até a colunata
+  const j0 = T.zN0 - 0.25, j1 = T.sedeIn(T.xN + 0.4) + 0.15, p0 = T.sedeOut(T.xN + 0.4) - 0.15, p1 = T.zN1 + 0.1; // eixo norte: jardim (margem norte -> Sede) e poço (Sede -> poço)
+  // e1: balizadores de luz (0,32), bancos brancos com assento de madeira e os pilaretes do portão (0,5)
+  { const bal = sim([[3.0, esp0(3.0) + 0.3], [3.0, (esp0(3.0) + esp1(3.0)) / 2], [3.0, esp1(3.0) - 0.3], [0.85, A.colunata.c[1] + A.colunata.r + 0.2], [1.42, j0 - 0.1], [1.42, j1 + 0.35], [1.42, p0 - 0.3], [1.42, (p0 + p1) / 2], [1.42, p1 + 0.25]]);
+    const pil = sim([[0.9, fr[0][1] - 0.25]]);
+    const ban = sim([[2.15, esp0(2.15) + 1.3], [2.15, esp1(2.15) - 1.2], [1.95, (j0 + j1) / 2], [1.95, p0 - 0.9]]);
+    eixo.e1.add(beams([...bal.map(([x, z]) => [[x, -0.02, z], [x, 0.3, z]]), ...pil.map(([x, z]) => [[x, -0.02, z], [x, 0.48, z]])], 0.035, M.whiteSmooth, 6));
+    const gl = inst(new THREE.SphereGeometry(0.045, 6, 4), M.lampGlow, [...bal.map(([x, z]) => [x, 0.32, z]), ...pil.map(([x, z]) => [x, 0.52, z])], false); gl.userData.semHAO = true; eixo.e1.add(gl);
+    eixo.e1.add(inst(new THREE.BoxGeometry(0.16, 0.1, 0.62), M.whiteSmooth, ban.map(([x, z]) => [x, 0.05, z])), inst(new THREE.BoxGeometry(0.18, 0.03, 0.64), M.madeiraClara, ban.map(([x, z]) => [x, 0.115, z]))); }
+  // e2: renques baixos (arbustos em fila) nos bordos da esplanada e dos dois trechos do eixo norte
+  { const arb = []; const fila = (x, z0, z1) => { for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z += 0.22) for (const s of [-1, 1]) arb.push({ x: s * x + (R() - 0.5) * 0.04, z, y: 0, s: 0.1 + R() * 0.035, kind: 'folhaLow', pal: 'jardim', h: 0.85 }); };
+    const xr = 2.45; fila(3.38, esp0(3.38) - 0.1, esp1(3.38)); fila(xr, j0 + 0.1, T.sedeIn(xr + 0.15) + 0.15); fila(xr, T.sedeOut(xr + 0.15) - 0.15, p1); // (as faces da Sede medidas no renque, com a copa)
+    eixo.e2.add(treeGroup(arb, { cast: false, name: 'renques-eixo' })); }
+  // e3: luminárias altas (poste de 1,15 com a luz em cima) dos dois lados do Bulevar e do eixo norte
+  { const lum = sim([[1.5, esp0(1.5) + 0.6], [1.5, (esp0(1.5) + esp1(1.5)) / 2], [1.5, esp1(1.5) - 0.5], [1.58, (j0 + j1) / 2 + 0.3], [1.58, (p0 + p1) / 2 + 0.55]]);
+    eixo.e3.add(beams(lum.map(([x, z]) => [[x, -0.02, z], [x, 1.15, z]]), 0.02, M.steelDark, 5), beams(lum.map(([x, z]) => [[x, 1.12, z], [x - Math.sign(x) * 0.14, 1.16, z]]), 0.012, M.steelDark, 4));
+    const gl = inst(new THREE.SphereGeometry(0.06, 6, 4), M.lampGlow, lum.map(([x, z]) => [x - Math.sign(x) * 0.14, 1.12, z]), false); gl.userData.semHAO = true; eixo.e3.add(gl); }
   // setEixo(n): as n primeiras partes do eixo prontas (a fusão do mundo esconde a fonte: vale o userData.feito)
   return { root, base, eixo, setEixo(n) { let mudou = false; for (const [k, g] of Object.entries(eixo)) { const f = n >= +k.slice(1); if (!!g.userData.feito !== f) { g.userData.feito = f; g.visible = f; mudou = true; } } return mudou; } };
 }
