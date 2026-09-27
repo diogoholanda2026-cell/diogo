@@ -1,196 +1,193 @@
-// Interior do Anel do Campus (Escola e Campus para Jovens, campo, faculdades em blocos brancos) e o interior da arena
-// do Campus Universitário (campo com pista, bosques, ala do portal, fita da frente, laço com a escadaria-jardim e rampa).
+// Miolos da frente do Trevo da Holding (plano mestre, revisão 6; todas as medidas vêm de A, em planta.js):
+//   escola: o Pátio da Escola na boca oeste do Anel (a base de grama é a zona 'escola' do terreno, ligada em e2).
+//     e2 dois morros de terraços verdes com borda clara, areia no topo e brinquedos coloridos (trepa-trepa, gira-gira e
+//     escorregadores); e3 piscina com borda clara e deque de madeira (obra em modo terra: a escavação). O bloco escolar
+//     (e1, etapa de nível) é a fita 'escola' (aneis.js): este modelo não tem e1.
+//   campo: miolo da folha SO. e1 terraplenagem (terra batida só sob o campo: M.soil venceria o gramado de longe); e2
+//     gramado do miolo, calçada e campo com marcações (girado com o lado comprido de frente para a arquibancada), com
+//     jogadores; e3 arquibancada verde de 3 degraus no pescoço, de costas para o tambor, e 4 torres de luz.
+//   gramadoUni: miolo da folha SE. Gramado (vazado na Ciências), pista de atletismo em volta da Ciências (passa sob a
+//     Ponte Coberta), com corredores, e o cordão de árvores baixas junto à face interna da gota, fora da Ponte Coberta.
+// Par espelhado no eixo: campo x Ciências (miolos da frente) e Pátio da Escola x Anfiteatro (leste.js).
+// Tudo em coordenadas do mundo; as placas do chão não se sobrepõem (sem briga de profundidade entre elas).
 import * as THREE from 'three';
-import { A } from '../../data/planta.js';
+import { A, J } from '../../data/planta.js';
 import { M } from '../materials.js';
-import { curve, ellipse, beams, sweep, tube, deckGeo, FH } from '../geom.js';
+import { tube, deckGeo } from '../geom.js';
 import { treeGroup } from '../forest.js';
-import { hash, rng } from '../../core/util.js';
-import { Faixa, matDe } from './faixa.js';
+import { rng } from '../../core/util.js';
 
+const rad = (g) => (g * Math.PI) / 180;
 const mesh = (g, m, cast = true) => { const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; return o; };
-const addMap = (grp, map, matFn) => { for (const [k, g] of map) grp.add(mesh(g, matFn(k))); };
-function blobPts(cx, cz, rx, rz, rot, seed, n = 60) { const out = []; const c = Math.cos(rot), s = Math.sin(rot); const p1 = hash(seed, 1, 5) * 6; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const k = 1 + 0.12 * Math.sin(2 * a + p1) + 0.06 * Math.sin(3 * a + p1 * 2); const x = Math.cos(a) * rx * k, z = Math.sin(a) * rz * k; out.push([cx + x * c - z * s, cz + x * s + z * c]); } return out; }
-function plate(pts, y, h, mat) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); s.closePath(); const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2); return mesh(g, mat); }
-// retângulo arredondado em coordenadas do mundo (raio r, n pontos por canto)
-function retRed(c, w, d, rot, r = 0.45, n = 6) {
-  const out = []; const co = Math.cos(rot), si = Math.sin(rot); const hx = w / 2 - r, hz = d / 2 - r;
-  for (const [cx, cz, a0] of [[hx, hz, 0], [-hx, hz, Math.PI / 2], [-hx, -hz, Math.PI], [hx, -hz, Math.PI * 1.5]]) for (let i = 0; i <= n; i++) { const a = a0 + (i / n) * (Math.PI / 2); const u = cx + Math.cos(a) * r, v = cz + Math.sin(a) * r; out.push([c[0] + u * co - v * si, c[1] + u * si + v * co]); }
-  return out;
-}
-// brinquedos tubulares laranja (a foto): n tubos em curvas soltas sobre o pátio
-function brinquedos(cx, cz, y, seed, n = 3, r = 0.03, esp = 0.9) {
-  const g = new THREE.Group(); const R = rng(seed);
-  for (let i = 0; i < n; i++) {
-    const x0 = cx + (R() - 0.5) * esp * 2, z0 = cz + (R() - 0.5) * esp; const pts = []; const k = 4 + ((R() * 2) | 0);
-    for (let j = 0; j < k; j++) pts.push([x0 + (R() - 0.5) * 0.6, y + 0.05 + R() * 0.3, z0 + (R() - 0.5) * 0.5]);
-    g.add(tube(pts, r, M.orange, 10, 6));
+// oval [x, z] (rot em graus, de +x para +z), n pontos sem repetir o primeiro
+const oval = (c, rx, rz, n = 36, rot = 0) => { const co = Math.cos(rad(rot)), si = Math.sin(rad(rot)); return Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2, u = Math.cos(a) * rx, v = Math.sin(a) * rz; return [c[0] + u * co - v * si, c[1] + u * si + v * co]; }); };
+// retângulo w x d em c, com o lado w na direção rot (graus)
+const ret = (c, w, d, rot) => { const co = Math.cos(rad(rot)), si = Math.sin(rad(rot)); return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [c[0] + u * co - v * si, c[1] + u * si + v * co]); };
+const area = (p) => { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+
+// ---------------------------------------------------------------- geometria em listas (uma por material)
+class Geo {
+  constructor() { this.p = []; this.n = []; this.uv = []; this.i = []; }
+  v(x, y, z, nx, ny, nz, u, w) { this.p.push(x, y, z); this.n.push(nx, ny, nz); this.uv.push(u, w); return this.p.length / 3 - 1; }
+  // triângulo virado para a normal do primeiro vértice
+  t(a, b, c) {
+    const P = this.p, ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2]; const e1 = [P[b * 3] - ax, P[b * 3 + 1] - ay, P[b * 3 + 2] - az], e2 = [P[c * 3] - ax, P[c * 3 + 1] - ay, P[c * 3 + 2] - az];
+    const d = (e1[1] * e2[2] - e1[2] * e2[1]) * this.n[a * 3] + (e1[2] * e2[0] - e1[0] * e2[2]) * this.n[a * 3 + 1] + (e1[0] * e2[1] - e1[1] * e2[0]) * this.n[a * 3 + 2];
+    if (d >= 0) this.i.push(a, b, c); else this.i.push(a, c, b);
   }
+  q(a, b, c, d) { this.t(a, b, c); this.t(a, c, d); }
+  get vazio() { return !this.i.length; }
+  geo() {
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2)); g.setIndex(this.i); g.computeBoundingSphere(); g.computeBoundingBox(); return g;
+  }
+}
+// tampo plano em y (contorno com furos), uv planar
+function tampa(G, pts, y, furos = []) {
+  const V = (l) => l.map(([x, z]) => new THREE.Vector2(x, z)); const tri = THREE.ShapeUtils.triangulateShape(V(pts), furos.map(V)); const todos = [...pts, ...furos.flat()];
+  const b = G.p.length / 3; for (const [x, z] of todos) G.v(x, y, z, 0, 1, 0, x / 2.2, z / 2.2);
+  for (const [a, c, d] of tri) G.t(b + a, b + c, b + d);
+}
+// paredes de um contorno fechado de y0 a y1, normais suaves para fora (fora = -1: para dentro, a face de um furo)
+function lados(G, pts, y0, y1, fora = 1) {
+  const n = pts.length, s = Math.sign(area(pts)) * fora; const nr = []; let L = 0;
+  for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1; nr.push([(dz / l) * s, (-dx / l) * s]); }
+  const b0 = G.p.length / 3;
+  for (let i = 0; i <= n; i++) {
+    const k = i % n, m = nr[(k - 1 + n) % n], e = nr[k]; let nx = m[0] + e[0], nz = m[1] + e[1]; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+    if (i) L += Math.hypot(pts[k][0] - pts[i - 1][0], pts[k][1] - pts[i - 1][1]); const [x, z] = pts[k];
+    G.v(x, y0, z, nx, 0, nz, L / 2.2, y0 / 2.2); G.v(x, y1, z, nx, 0, nz, L / 2.2, y1 / 2.2);
+  }
+  for (let i = 0; i < n; i++) { const a = b0 + i * 2; G.q(a, a + 2, a + 3, a + 1); }
+}
+// faixa plana entre dois contornos fechados com o mesmo número de pontos; uvf(i, fora) = [u, v] (padrão planar)
+function faixaPlana(G, ext, int, y, uvf) {
+  const n = ext.length, b = G.p.length / 3;
+  for (let i = 0; i <= n; i++) { const k = i % n; for (const [p, f] of [[ext[k], 1], [int[k], 0]]) { const [u, v] = uvf ? uvf(i, f) : [p[0] / 2.2, p[1] / 2.2]; G.v(p[0], y, p[1], 0, 1, 0, u, v); } }
+  for (let i = 0; i < n; i++) { const a = b + i * 2; G.q(a, a + 2, a + 3, a + 1); }
+}
+// prisma de contorno fechado: paredes e tampo
+const prisma = (G, pts, y0, y1) => { lados(G, pts, y0, y1); tampa(G, pts, y1); };
+// anel de borda (aro): paredes de fora e de dentro e o tampo, de y0 a y1
+const aro = (G, ext, int, y0, y1) => { lados(G, ext, y0, y1); lados(G, int, y0, y1, -1); faixaPlana(G, ext, int, y1); };
+// malhas de um mapa { material: Geo } num grupo
+const addGeos = (grp, mapa, cast = true) => { for (const [mat, G] of mapa) if (!G.vazio) grp.add(mesh(G.geo(), mat, cast)); };
+
+// ---------------------------------------------------------------- Pátio da Escola
+// brinquedos coloridos: trepa-trepa em arcos cruzados (tubos) sobre a areia
+function trepa(grp, c, y, r, mats, a0 = 0.3) {
+  mats.forEach((m, i) => { const a = (i * Math.PI) / mats.length + a0, co = Math.cos(a), si = Math.sin(a); const pts = []; for (let k = 0; k <= 8; k++) { const t = (k / 8) * Math.PI; pts.push([c[0] + co * Math.cos(t) * r, y + Math.sin(t) * r * 0.95, c[1] + si * Math.cos(t) * r]); } grp.add(tube(pts, 0.022, m, 12, 5)); });
+}
+// morro de terraços verdes: degraus de grama (M.roof) com a borda clara, cada um menor e puxado para o norte (os
+// terraços abrem para o sul, de frente para a câmera), areia no topo; o escorregador desce do topo pela lateral (sx)
+function morro(grp, m, sx, cores) {
+  const n = m.h >= 0.8 ? 3 : 2, passo = n === 3 ? 0.27 : 0.45, T = []; const G = new Map([[M.roof, new Geo()], [M.fasciaBeiral, new Geo()], [M.sand, new Geo()]]);
+  for (let i = 0; i < n; i++) {
+    const s = 1 - i * passo, rx = m.rx * s, rz = m.rz * s, c = [m.c[0], m.c[1] - (1 - s) * m.rz * 0.3], y = (m.h * (i + 1)) / n; T.push({ c, rx, rz, y });
+    prisma(G.get(M.roof), oval(c, rx - 0.02, rz - 0.02), 0, y);
+    aro(G.get(M.fasciaBeiral), oval(c, rx, rz), oval(c, rx - 0.07, rz - 0.07), y - 0.035, y + 0.02);
+  }
+  const t = T[n - 1]; tampa(G.get(M.sand), oval(t.c, t.rx - 0.07, t.rz - 0.07), t.y + 0.012); addGeos(grp, G);
+  // escorregador: segue os degraus por cima (0,045 acima de cada borda) e chega ao chão fora do morro
+  const zs = t.c[1], R = T.map((d) => d.rx * Math.sqrt(Math.max(0, 1 - ((zs - d.c[1]) / d.rz) ** 2)));
+  const perfil = [[R[n - 1] - 0.12, t.y + 0.05]]; for (let i = n - 1; i >= 0; i--) perfil.push([R[i] + 0.04, T[i].y + 0.045]); perfil.push([R[0] + 0.3, 0.1], [R[0] + 0.45, 0.035]);
+  grp.add(mesh(deckGeo(perfil.map(([r, y]) => [m.c[0] + sx * r, y, zs]), 0.15, 0.025), cores[0]));
+  return t;
+}
+// Escola e Campus para Jovens: só os pátios (e2) e a piscina (e3); o bloco escolar é a fita 'escola'
+export function escola() {
+  const E = A.patios.escola; const root = new THREE.Group(); root.name = 'escola'; const P = { e2: new THREE.Group(), e3: new THREE.Group() };
+  // e2: o morro grande (3 terraços) com trepa-trepa e escorregador para o oeste; o pequeno (2) com gira-gira e
+  // escorregador para o leste
+  const [m1, m2] = E.morros;
+  const t1 = morro(P.e2, m1, -1, [M.yellow]); trepa(P.e2, t1.c, t1.y + 0.012, Math.min(t1.rx, t1.rz) * 0.6, [M.orange, M.teal, M.yellow]);
+  const t2 = morro(P.e2, m2, 1, [M.teal]), gx = t2.c[0] - 0.2; const gira = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.035, 14), M.orange); gira.position.set(gx, t2.y + 0.03, t2.c[1]); P.e2.add(gira);
+  const eixo = mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 6), M.steel); eixo.position.set(gx, t2.y + 0.12, t2.c[1]); P.e2.add(eixo);
+  trepa(P.e2, [t2.c[0] + 0.22, t2.c[1]], t2.y + 0.012, 0.18, [M.yellow], Math.PI / 2);   // arco entre o gira-gira e o escorregador
+  // e3: piscina (água M.pool) com borda clara e deque de madeira; o deque e a borda param na junta da Humanidades (a
+  // água de A fica a ~0,19 da pegada dela): recorte radial a partir do centro F do arco da Humanidades
+  const p = E.piscina, [dx, dz] = p.deck, H = A.humanidades, lim = H.R + H.w / 2 + J; const rF = (q) => Math.hypot(q[0] - H.F[0], q[1] - H.F[1]);
+  const afasta = (l) => l.map((q) => { const r = rF(q); return r >= lim ? q : [H.F[0] + ((q[0] - H.F[0]) / r) * lim, H.F[1] + ((q[1] - H.F[1]) / r) * lim]; });
+  const agua = oval(p.c, p.rx, p.rz, 40), borda = afasta(oval(p.c, p.rx + 0.06, p.rz + 0.06, 40)), deque = afasta(oval(p.c, p.rx + dx, p.rz + dz, 40));
+  const G = new Map([[M.madeiraClara, new Geo()], [M.fasciaBeiral, new Geo()], [M.pool, new Geo()]]);
+  aro(G.get(M.madeiraClara), deque, borda, 0, 0.06); aro(G.get(M.fasciaBeiral), borda, agua, 0, 0.075); tampa(G.get(M.pool), agua, 0.04); addGeos(P.e3, G);
+  for (const k of Object.keys(P)) root.add(P[k]);
+  const c = E.c; return { id: 'escola', root, partes: P, esqueletos: {}, grua: {}, modos: { e3: 'terra' }, foco: { x: c[0], z: c[1], dist: 11 }, ancora: [c[0], 1.5, c[1]] };
+}
+
+// ---------------------------------------------------------------- campo (miolo da folha SO)
+// arquibancada em arco (c, r0 a r1, a0 a a1 graus, h, degraus): pisos de grama, espelhos claros virados para o campo,
+// costas e cabeceiras de pedra clara
+function arquibancada(aq) {
+  const G = new Map([[M.lawn, new Geo()], [M.fasciaBeiral, new Geo()], [M.concretoClaro, new Geo()]]); const n = aq.degraus, d = (aq.r1 - aq.r0) / n, hs = aq.h / n, c = aq.c;
+  const a0 = rad(aq.a0), a1 = rad(aq.a1), seg = Math.max(8, Math.ceil(Math.abs(aq.a1 - aq.a0) / 3));
+  // tira ao longo do arco entre (ra, ya) e (rb, yb), normal (radial nr, vertical ny)
+  const tira = (Gm, ra, ya, rb, yb, nr, ny, plano) => {
+    const b = Gm.p.length / 3;
+    for (let k = 0; k <= seg; k++) { const a = a0 + ((a1 - a0) * k) / seg, co = Math.cos(a), si = Math.sin(a), s = (Math.abs(a - a0) * (ra + rb)) / 2;
+      for (const [r, y] of [[ra, ya], [rb, yb]]) { const x = c[0] + co * r, z = c[1] + si * r; Gm.v(x, y, z, co * nr, ny, si * nr, plano ? x / 2.2 : s / 2.2, plano ? z / 2.2 : y / 2.2); } }
+    for (let k = 0; k < seg; k++) { const i = b + k * 2; Gm.q(i, i + 2, i + 3, i + 1); }
+  };
+  for (let k = 0; k < n; k++) { const r = aq.r0 + k * d; tira(G.get(M.fasciaBeiral), r, k * hs, r, (k + 1) * hs, -1, 0); tira(G.get(M.lawn), r, (k + 1) * hs, r + d, (k + 1) * hs, 0, 1, true); }
+  tira(G.get(M.concretoClaro), aq.r1, 0, aq.r1, aq.h, 1, 0);
+  // cabeceiras: o perfil em escada nas duas pontas do arco
+  const perfil = [[aq.r0, 0]]; for (let k = 0; k < n; k++) perfil.push([aq.r0 + k * d, (k + 1) * hs], [aq.r0 + (k + 1) * d, (k + 1) * hs]); perfil.push([aq.r1, 0]);
+  const tri = THREE.ShapeUtils.triangulateShape(perfil.map(([r, y]) => new THREE.Vector2(r, y)), []); const Gc = G.get(M.concretoClaro);
+  for (const [a, s] of [[a0, -Math.sign(a1 - a0)], [a1, Math.sign(a1 - a0)]]) {
+    const co = Math.cos(a), si = Math.sin(a), b = Gc.p.length / 3; for (const [r, y] of perfil) Gc.v(c[0] + co * r, y, c[1] + si * r, -si * s, 0, co * s, r / 2.2, y / 2.2);
+    for (const [i, j, k] of tri) Gc.t(b + i, b + j, b + k);
+  }
+  const g = new THREE.Group(); addGeos(g, G); return g;
+}
+// torre de luz (r de pegada, altura h): base de concreto, mastro de aço e o refletor inclinado para o centro do campo
+function torreLuz(p, alvo, tl) {
+  const g = new THREE.Group(); const base = mesh(new THREE.CylinderGeometry(tl.r * 0.85, tl.r, 0.1, 8), M.concreto); base.position.set(p[0], 0.05, p[1]); g.add(base);
+  const hm = tl.h - 0.3, mastro = mesh(new THREE.CylinderGeometry(0.045, 0.07, hm, 6, 1, true), M.steel); mastro.position.set(p[0], 0.1 + hm / 2, p[1]); g.add(mastro);
+  const cab = new THREE.Group(); cab.position.set(p[0], tl.h - 0.13, p[1]); cab.rotation.y = Math.atan2(alvo[0] - p[0], alvo[1] - p[1]); g.add(cab);
+  const inc = new THREE.Group(); inc.rotation.x = 0.4; cab.add(inc);
+  const caixa = mesh(new THREE.BoxGeometry(0.36, 0.22, 0.07), M.steelDark); inc.add(caixa);
+  const luz = mesh(new THREE.PlaneGeometry(0.3, 0.16), M.lampGlow, false); luz.position.z = 0.036; inc.add(luz);
   return g;
 }
-// Um bloco branco frio: caixas empilhadas e deslocadas (2 a 3 por bloco), faixa escura de janelas, cobertura cinza
-// (M.concreto) com equipamentos brancos; alguns são um "U" de dois pavimentos em volta de um pátio de areia
-function caixa(grp, px, pz, y, w, h, d, ry, R, faixa = true) {
-  const b = mesh(new THREE.BoxGeometry(w, h, d), M.whiteSmooth); b.position.set(px, y + h / 2, pz); b.rotation.y = ry; grp.add(b);
-  if (faixa) { const win = mesh(new THREE.BoxGeometry(w * 1.01, h * 0.28, d * 1.01), M.fac_escuro || M.fac_lab, false); win.position.set(px, y + h * 0.45, pz); win.rotation.y = ry; const uv = win.geometry.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * 0.12, 0.3 + uv.getY(k) * 0.12); grp.add(win); }
-  const cap = mesh(new THREE.BoxGeometry(w + 0.02, 0.03, d + 0.02), M.concreto); cap.position.set(px, y + h - 0.01, pz); cap.rotation.y = ry; grp.add(cap);
-}
-function bloco(low, high, equip, x, z, ry, bx, bz, floors, R, pU = 0.22) {
-  const c = Math.cos(ry), s = Math.sin(ry); const local = (ox, oz) => [x + ox * c + oz * s, z - ox * s + oz * c];
-  const plinto = mesh(new THREE.BoxGeometry(bx + 0.1, 0.08, bz + 0.1), M.whiteSmooth); { const [px, pz] = local(0, 0); plinto.position.set(px, 0.04, pz); plinto.rotation.y = ry; low.add(plinto); } // plinto claro
-  const topo = (px, pz, w, d) => { const n = 4 + ((R() * 4) | 0); for (let i = 0; i < n; i++) equip.push([px + (R() - 0.5) * (w - 0.16) * c + (R() - 0.5) * (d - 0.16) * s, floors * FH + 0.04, pz - (R() - 0.5) * (w - 0.16) * s + (R() - 0.5) * (d - 0.16) * c, ry]); };
-  if (floors >= 2 && bx > 0.42 && R() < pU) { // pátio em U: fundo e duas alas de 2 pavimentos, areia no meio
-    const wing = bx * 0.3, back = bz * 0.36;
-    for (let f = 0; f < 2; f++) {
-      const grp = f === 0 ? low : high; const y = 0.08 + f * FH;
-      let [px, pz] = local(0, -bz / 2 + back / 2); caixa(grp, px, pz, y, bx, FH - 0.04, back, ry, R);
-      for (const sg of [-1, 1]) { [px, pz] = local(sg * (bx / 2 - wing / 2), back / 2 - 0.01); caixa(grp, px, pz, y, wing, FH - 0.04, bz - back, ry, R); }
-    }
-    const [qx, qz] = local(0, back / 2); const patio = mesh(new THREE.BoxGeometry(bx - 2 * wing - 0.02, 0.03, bz - back - 0.02), M.sand, false); patio.position.set(qx, 0.1, qz); patio.rotation.y = ry; low.add(patio);
-    { const [px, pz] = local(0, -bz / 2 + back / 2); topo(px, pz, bx, back); }
-    return;
-  }
-  let ox = 0, oz = 0, w = bx, d = bz;
-  for (let f = 0; f < floors; f++) {
-    const grp = f === 0 ? low : high;
-    if (f > 0) { w = bx * 0.86; d = bz * 0.86; ox = (R() - 0.5) * bx * 0.2; oz = (R() - 0.5) * bz * 0.2; } // caixa de cima menor e deslocada: sobra o terraço
-    const [px, pz] = local(ox, oz); caixa(grp, px, pz, 0.08 + f * FH, w, FH - 0.04, d, ry, R);
-    if (f === floors - 1) topo(px, pz, w, d);
-  }
-}
-// equipamentos brancos das coberturas cinza: uma InstancedMesh por conjunto
-function equipamentos(high, equip) {
-  if (!equip.length) return; const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.07, 0.1), M.whiteSmooth, equip.length); const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion(); const e = new THREE.Euler(); const v = new THREE.Vector3(), s3 = new THREE.Vector3();
-  equip.forEach(([x, y, z, ry], i) => im.setMatrixAt(i, m4.compose(v.set(x, y + 0.035, z), q.setFromEuler(e.set(0, ry, 0)), s3.set(0.8 + hash(i, 1, 9) * 0.6, 0.7 + hash(i, 2, 9) * 0.8, 0.8 + hash(i, 3, 9) * 0.6)))); im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); high.add(im);
-}
-// blocos ao longo de um arco de elipse (t0..t1 rad), girados pela tangente, em nAcross fileiras para dentro; blocos de
-// 2 pavimentos (3 em 15%), largos, quase encostados (vãos até 0,12)
-function blocosArco(cx, cz, rx, rz, rot, t0, t1, nAlong, nAcross, seed, fMin = 2, fMax = 3, passo = 0.62, pU = 0.22) {
-  const R = rng(seed); const low = new THREE.Group(), high = new THREE.Group(); const c = Math.cos(rot), s = Math.sin(rot); const equip = [];
-  for (let i = 0; i < nAlong; i++) for (let j = 0; j < nAcross; j++) {
-    if (R() < 0.03) continue; const a = t0 + ((t1 - t0) * (i + 0.5 + (j % 2) * 0.35)) / nAlong; const k = 1 - (j * passo) / Math.min(rx, rz);
-    const u = Math.cos(a) * rx * k, v = Math.sin(a) * rz * k; const x = cx + u * c - v * s, z = cz + u * s + v * c;
-    const tu = -Math.sin(a) * rx, tv = Math.cos(a) * rz; const tx = tu * c - tv * s, tz = tu * s + tv * c; const ry = -Math.atan2(tz, tx);
-    const L = (Math.hypot(tx, tz) * (t1 - t0)) / nAlong * k; const floors = fMax > fMin && R() < 0.15 ? fMin + 1 : fMin;
-    bloco(low, high, equip, x, z, ry, L * (0.84 + R() * 0.08), passo * (0.88 + R() * 0.1), floors, R, pU);
-  }
-  equipamentos(high, equip); return { low, high };
+export function campo() {
+  const c = A.campo, S = c.gramado.c; const root = new THREE.Group(); root.name = 'campo'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
+  // e1: terraplenagem do campo: terra batida no retângulo do campo, 0,08 para dentro. M.soil tem polygonOffset (vence o
+  // terreno logo abaixo) e, de longe, ganharia de qualquer placa sem deslocamento pouco acima dela: só o campo de e2
+  // (M.field, deslocamento maior e mais alto) cobre a terra; o gramado e a calçada ficam fora dela
+  const T = new Geo(); tampa(T, ret(c.c, c.w - 0.16, c.d - 0.16, c.rot), 0.012); P.e1.add(mesh(T.geo(), M.soil, false));
+  // e2: gramado vazado no campo, calçada clara de 0,15 em volta e o campo com as marcações (M.field)
+  const moldura = ret(c.c, c.w + 0.3, c.d + 0.3, c.rot), G = new Map([[M.lawn, new Geo()], [M.caminhoTeto, new Geo()]]);
+  tampa(G.get(M.lawn), oval(S, c.gramado.r, c.gramado.r, 64), 0.05, [moldura]); tampa(G.get(M.caminhoTeto), moldura, 0.05, [ret(c.c, c.w, c.d, c.rot)]); addGeos(P.e2, G, false);
+  const f = new THREE.PlaneGeometry(c.w, c.d); f.rotateX(-Math.PI / 2); const quadra = mesh(f, M.field, false); quadra.position.set(c.c[0], 0.05, c.c[1]); quadra.rotation.y = -rad(c.rot); P.e2.add(quadra);
+  P.e2.userData.pessoas = { area: c.poly, y: 0.05, n: 12 };      // os jogadores
+  // e3: arquibancada no pescoço e as 4 torres de luz
+  P.e3.add(arquibancada(c.arquibancada)); for (const p of c.torresLuz) P.e3.add(torreLuz(p, c.c, c.torreLuz));
+  for (const k of Object.keys(P)) root.add(P[k]);
+  return { id: 'campo', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'terra', e2: 'crescer' }, foco: { x: S[0], z: S[1], dist: 13 }, ancora: [S[0], 1.0, S[1]] };
 }
 
-// (desenhada na planta antiga: os números já vêm com o deslocamento do Anel, DESLOC.anel)
-export function escola() {
-  const root = new THREE.Group(); root.name = 'escola'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
-  // e1: bloco escolar em "S" (3 andares) — é uma fita própria, com beirais finos como o Anel
-  const bloco = new Faixa({ id: 'escolaBloco', closed: false, path: curve([[-25.6, 15.7], [-24.4, 17.2], [-22.4, 16.9], [-20.9, 18.0001]], false, 60), modulos: 1, ponta: 1.0, passo: 0.26,
-    prof: { o0: -0.5, o1: 0.5, setIn: 0.12, setOut: 0.12, beiral: 0.12, slab: 0.05, curb: 0.04, curbW: 0.08, passeioW: 0.12, fac: 'fac_fita', facIn: 'fac_fita' }, niveis: 3 });
-  bloco.setTodos(3); P.e1.add(bloco.group);
-  // e2: pátios de piso terracota salmão: dois em plataformas altas (no nível dos terraços do setor oeste do Anel) e um
-  // no chão, com brinquedos tubulares laranja; rampa clara da plataforma A ao campo
-  const terracota = M.terracota || M.pavers; const aro = M.fasciaBeiral || M.fascia;
-  const A1 = { x: -25.4, z: 11.4, rx: 2.0, rz: 1.25, rot: 0.9, h: 1.6, sd: 11 }, B1 = { x: -23.9, z: 14.1, rx: 1.5, rz: 1.0, rot: 0.4, h: 1.2, sd: 12 };
-  for (const q of [A1, B1]) {
-    // a plataforma pousa num morro em três degraus de grama (como os terraços do talude do Anel na foto), não num pilar
-    for (const [dr, k] of [[0.62, 0.42], [0.32, 0.74]]) { P.e2.add(plate(blobPts(q.x, q.z, q.rx + dr, q.rz + dr, q.rot, q.sd), 0, q.h * k, M.roof)); P.e2.add(plate(blobPts(q.x, q.z, q.rx + dr + 0.03, q.rz + dr + 0.03, q.rot, q.sd), q.h * k, 0.03, aro)); }
-    const pts = blobPts(q.x, q.z, q.rx, q.rz, q.rot, q.sd); P.e2.add(plate(pts, 0, q.h, M.roof)); P.e2.add(plate(blobPts(q.x, q.z, q.rx + 0.04, q.rz + 0.04, q.rot, q.sd), q.h, 0.04, aro)); P.e2.add(plate(blobPts(q.x, q.z, q.rx - 0.05, q.rz - 0.05, q.rot, q.sd), q.h + 0.04, 0.02, terracota));
-  }
-  { const co = Math.cos(A1.rot), si = Math.sin(A1.rot); P.e2.add(brinquedos(A1.x + 0.8 * co, A1.z + 0.8 * si, A1.h + 0.06, 11, 3, 0.03, 0.6)); }
-  P.e2.add(brinquedos(B1.x, B1.z, B1.h + 0.06, 12, 3, 0.03, 0.7));
-  P.e2.add(plate(blobPts(-20.4, 12.8, 0.9, 0.6, 0.2, 13), 0, 0.03, terracota)); P.e2.add(brinquedos(-20.4, 12.8, 0.03, 13, 4, 0.045, 0.5));
-  P.e2.add(mesh(deckGeo([[-23.75, A1.h + 0.02, 12.15], [-22.7, 1.15, 12.7], [-21.6, 0.6, 13.3], [-20.6, 0.04, 13.95]], 0.28, 0.05), M.caminhoTeto || M.concreto));
-  // e3: piscina afunilada turquesa na plataforma A, com aro claro e 4 ilhas de areia
-  { const co = Math.cos(A1.rot), si = Math.sin(A1.rot); const pc = [A1.x - 0.55 * co, A1.z - 0.55 * si]; const y = A1.h + 0.02;
-    P.e3.add(plate(retRed(pc, 1.85, 0.9, A1.rot, 0.3, 4), y, 0.03, aro)); P.e3.add(plate(retRed(pc, 1.7, 0.75, A1.rot, 0.28, 4), y + 0.01, 0.03, M.pool));
-    for (const [u, v, r] of [[-0.55, 0.05, 0.2], [-0.1, -0.15, 0.24], [0.3, 0.12, 0.3], [0.62, -0.1, 0.18]]) P.e3.add(plate(blobPts(pc[0] + u * co - v * si, pc[1] + u * si + v * co, r, r * 0.7, 0.3, 21 + (r * 10 | 0)), y + 0.03, 0.03, M.sand)); }
-  for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'escola', root, partes: P, esqueletos: {}, grua: { e1: true }, foco: { x: -24.2, z: 13.8, dist: 12 }, ancora: [-24.2, 2.2, 14.2] };
-}
-// setor de coroa circular (degrau curvo) no plano, de r0 a r1 e de a0 a a1, com altura h
-function setor(r0, r1, a0, a1, h, y, mat, seg = 16) {
-  const s = new THREE.Shape(); for (let i = 0; i <= seg; i++) { const a = a0 + ((a1 - a0) * i) / seg; i ? s.lineTo(Math.cos(a) * r1, -Math.sin(a) * r1) : s.moveTo(Math.cos(a) * r1, -Math.sin(a) * r1); }
-  for (let i = seg; i >= 0; i--) { const a = a0 + ((a1 - a0) * i) / seg; s.lineTo(Math.cos(a) * r0, -Math.sin(a) * r0); }
-  const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false, curveSegments: 1 }); g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
-  const uv = g.attributes.uv, p = g.attributes.position; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2.2, p.getZ(i) / 2.2);
-  return mesh(g, mat);
-}
-export function campo() {
-  const c = A.campo; const root = new THREE.Group(); root.name = 'campo'; const P = { e1: new THREE.Group(), e2: new THREE.Group(), e3: new THREE.Group() };
-  const g = new THREE.PlaneGeometry(c.w + 0.6, c.d + 0.6); g.rotateX(-Math.PI / 2);
-  const soil = mesh(g, M.soil, false); soil.position.set(c.c[0], 0.03, c.c[1]); soil.rotation.y = -c.rot; P.e1.add(soil);
-  const f = new THREE.PlaneGeometry(c.w, c.d); f.rotateX(-Math.PI / 2); const field = mesh(f, M.field, false); field.position.set(c.c[0], 0.045, c.c[1]); field.rotation.y = -c.rot; P.e2.add(field);
-  // e3: 7 degraus verdes estreitos com lábio claro, só no arco oeste do campo (sem torres de luz)
-  const st = new THREE.Group(); st.position.set(c.c[0], 0, c.c[1]); st.rotation.y = -c.rot; P.e3.add(st);
-  const deg = A.campo.degraus || [2.4, 3.4];
-  for (let k = 0; k < 7; k++) { const r0 = 3.0 + k * 0.3; st.add(setor(r0, r0 + 0.3, deg[0], deg[1], 0.09 * (k + 1), 0, M.lawn, 12)); st.add(setor(r0 + 0.26, r0 + 0.3, deg[0], deg[1], 0.03, 0.09 * (k + 1), M.fasciaBeiral || M.fascia, 12)); }
-  for (const k of Object.keys(P)) root.add(P[k]);
-  return { id: 'campo', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'terra', e2: 'crescer' }, foco: { x: c.c[0], z: c.c[1], dist: 11 }, ancora: [c.c[0], 1.2, c.c[1]] };
-}
-// Faculdade de Engenharia: fileira sul de 9 blocos largos sobre plinto claro, junto à borda interna da frente do Anel
-export function engenharia() {
-  const a = A.anel; const root = new THREE.Group(); root.name = 'engenharia'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.85, a.rz - 3.75, a.rot, 0.55, 1.75, 9, 1, 31, 2, 3, 0.95);
-  const P = { e1: b.low, e2: b.high }; root.add(P.e1, P.e2);
-  const m = [a.c[0] + Math.cos(1.15) * (a.rx - 4.0), a.c[1] + Math.sin(1.15) * (a.rz - 3.8)];
-  return { id: 'engenharia', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: m[0], z: m[1], dist: 11 }, ancora: [m[0], 1.8, m[1]] };
-}
-// Instituto de Estudos Urbanos: agrupamento leste de 3 fileiras irregulares, vários blocos em U
-export function instituto() {
-  const a = A.anel; const root = new THREE.Group(); root.name = 'instituto'; const b = blocosArco(a.c[0], a.c[1], a.rx - 3.85, a.rz - 3.75, a.rot, -0.55, 0.5, 5, 3, 47, 2, 3, 0.8, 0.4);
-  const P = { e1: b.low, e2: b.high }; root.add(P.e1, P.e2);
-  const m = [a.c[0] + (a.rx - 4.3) * Math.cos(a.rot), a.c[1] + (a.rx - 4.3) * Math.sin(a.rot)];
-  return { id: 'instituto', root, partes: P, esqueletos: {}, grua: { e2: true }, foco: { x: m[0], z: m[1], dist: 10 }, ancora: [m[0], 2.2, m[1]] };
-}
-// perfil de uma fita baixa de 2 pavimentos (0,8): lajes claras finas avançando 0,08 e vidro entre elas, topo claro
-function perfilFita(meia) {
-  const E = []; const lado = (sg) => { const o = sg * meia, oa = sg * (meia + 0.08);
-    const seq = [[oa, 0, oa, 0.06, 'fasciaBeiral', 'run'], [oa, 0.06, o, 0.06, 'fasciaBeiral', 'plan'], [o, 0.06, o, 0.4, 'fac_fita', 'facade'], [o, 0.4, oa, 0.4, 'fasciaBeiral', 'plan'], [oa, 0.4, oa, 0.46, 'fasciaBeiral', 'run'], [oa, 0.46, o, 0.46, 'fasciaBeiral', 'plan'], [o, 0.46, o, 0.8, 'fac_fita', 'facade'], [o, 0.8, oa, 0.8, 'fasciaBeiral', 'plan'], [oa, 0.8, oa, 0.86, 'fasciaBeiral', 'run']];
-    for (const [a0, a1, b0, b1, mat, uv] of seq) E.push(sg > 0 ? { a: [a0, a1], b: [b0, b1], mat, uv, cap: mat === 'fasciaBeiral' } : { a: [b0, b1], b: [a0, a1], mat, uv }); };
-  lado(1); lado(-1); E.push({ a: [meia + 0.08, 0.86], b: [-meia - 0.08, 0.86], mat: 'caminhoTeto', uv: 'plan' });
-  const poly = [[meia + 0.08, 0], [meia + 0.08, 0.06], [meia, 0.06], [meia, 0.4], [meia + 0.08, 0.4], [meia + 0.08, 0.46], [meia, 0.46], [meia, 0.8], [meia + 0.08, 0.8], [meia + 0.08, 0.86], [-meia - 0.08, 0.86], [-meia - 0.08, 0.8], [-meia, 0.8], [-meia, 0.46], [-meia - 0.08, 0.46], [-meia - 0.08, 0.4], [-meia, 0.4], [-meia, 0.06], [-meia - 0.08, 0.06], [-meia - 0.08, 0]];
-  return { E, poly };
-}
-// Ala do portal: bloco de 8 faixas finas (lajes claras avançando 0,10 sobre vidro escuro), cobertura clara com
-// platibanda, ponta leste em plano inclinado liso com um tambor de meio cilindro no pé
-function alaPortal(al, grp) {
-  const plano = retRed(al.c, al.w, al.d, al.rot, 0.12, 3); const n = al.faixas || 8, fh = 2.2 / n, LJ = 0.06, AV = 0.1; const laje = M.fasciaBeiral || M.fascia; let y = 0;
-  const E = [];
-  for (let f = 0; f < n; f++) { E.push({ a: [AV, y], b: [AV, y + LJ], mat: 'laje', uv: 'run' }, { a: [AV, y + LJ], b: [0, y + LJ], mat: 'laje', uv: 'plan' }, { a: [0, y + LJ], b: [0, y + fh], mat: 'fac', uv: 'facade', vBase: 0 }); if (f > 0) E.push({ a: [0, y], b: [AV, y], mat: 'laje', uv: 'plan' }); y += fh; }
-  E.push({ a: [AV, y], b: [AV, y + 0.05], mat: 'laje', uv: 'run' }, { a: [0, y], b: [AV, y], mat: 'laje', uv: 'plan' }, { a: [AV, y + 0.05], b: [0, y + 0.05], mat: 'laje', uv: 'plan' });
-  addMap(grp, sweep(plano, true, E), (k) => (k === 'laje' ? laje : M.fac_fita || M.fac_escuro));
-  grp.add(plate(plano, y, 0.03, laje));
-  // plano inclinado da ponta leste (rampa 1.1 além do bloco), com as cunhas laterais, e o tambor no pé
-  const co = Math.cos(al.rot), si = Math.sin(al.rot); const L = (u, v) => [al.c[0] + u * co - v * si, al.c[1] + u * si + v * co]; const hw = al.w / 2, hd = al.d / 2, r = al.rampa || 1.1;
-  const P = [], I = []; const push = (u, v, yy) => { const [x, z] = L(u, v); P.push(x, yy, z); return P.length / 3 - 1; };
-  const a0 = push(hw - 0.02, -hd, y + 0.03), a1 = push(hw - 0.02, hd, y + 0.03), a2 = push(hw + r, hd, 0), a3 = push(hw + r, -hd, 0), b0 = push(hw, -hd, 0), b1 = push(hw, hd, 0);
-  I.push(a0, a2, a1, a0, a3, a2, a1, a2, b1, a0, b0, a3); // plano e cunhas (a orientação é conferida abaixo)
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); g.computeVertexNormals();
-  { const nrm = g.attributes.normal; const [ex, ez] = [co, si]; const idx = g.index.array; for (let i = 0; i < idx.length; i += 3) { const k = idx[i]; const fora = nrm.getX(k) * ex + nrm.getZ(k) * ez + nrm.getY(k) * 0.3; if (fora < 0) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; } } g.computeVertexNormals(); }
-  const ug = new Float32Array((P.length / 3) * 2); g.setAttribute('uv', new THREE.BufferAttribute(ug, 2)); grp.add(mesh(g, laje));
-  const tb = al.tambor || { r: 0.5, h: 1.0 }; const [tx, tz] = L(hw + r - tb.r * 0.4, 0); const tam = mesh(new THREE.CylinderGeometry(tb.r, tb.r, tb.h, 16, 1, false, 0, Math.PI), laje); tam.position.set(tx, tb.h / 2, tz); tam.rotation.y = -al.rot - Math.PI / 2; grp.add(tam);
-  const tampa = mesh(new THREE.CircleGeometry(tb.r, 16, 0, Math.PI), laje); tampa.rotation.x = -Math.PI / 2; tampa.rotation.z = -al.rot - Math.PI / 2; tampa.position.set(tx, tb.h, tz); grp.add(tampa);
-}
-// laço em U de 2 pavimentos aberto para a frente (+z), com a escadaria-jardim de 8 degraus no meio
-function lacoEscada(la, grp) {
-  const [cx, cz] = la.c; const hw = la.w / 2, hd = la.d / 2, m = (la.fita || 0.9) / 2, r = 0.55;
-  const pts = []; const arco = (ax, az, a0, a1, n = 6) => { for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; pts.push([ax + Math.cos(a) * r, az + Math.sin(a) * r]); } };
-  pts.push([cx - hw + m, cz + hd]); arco(cx - hw + m + r, cz - hd + m + r, Math.PI, Math.PI * 1.5); arco(cx + hw - m - r, cz - hd + m + r, Math.PI * 1.5, Math.PI * 2); pts.push([cx + hw - m, cz + hd]);
-  const { E, poly } = perfilFita(m); addMap(grp, sweep(pts, false, E, { caps: true, capPoly: poly, capMat: 'fasciaBeiral' }), (k) => matDe(k));
-  // escadaria-jardim: patamar de grama e 8 degraus (grama e concreto alternados) descendo para a frente
-  const n = la.degraus || 8, w = la.w - 2 * (la.fita || 0.9); const z0 = cz - hd + 2 * m;
-  const pat = mesh(new THREE.BoxGeometry(w, 0.8, 0.4), M.lawn); pat.position.set(cx, 0.4, z0 + 0.2); grp.add(pat);
-  for (let k = 0; k < n; k++) { const h = 0.8 - (k + 1) * 0.075; const d = mesh(new THREE.BoxGeometry(w, h, 0.2), k % 2 ? M.concreto : M.lawn); d.position.set(cx, h / 2, z0 + 0.4 + 0.1 + k * 0.2); grp.add(d); }
-}
-// Interior da arena do Campus Universitário: campo com pista, cordão de árvores junto à parede, bosque no lóbulo
-// leste, a ala do portal, a fita reta da frente, o laço com a escadaria e a rampa clara da ponta NE ao laço
+// ---------------------------------------------------------------- gramado do Campus Universitário (miolo da folha SE)
+// gramado (vazado na Ciências, com a junta), pista de atletismo com as linhas claras, o cordão de árvores baixas junto à
+// face interna da gota (fora da pista e da Ponte Coberta) e corredores na pista
 export function gramadoUni() {
-  const u = A.uni, cp = u.campo, al = u.ala, ar = u.arena; const root = new THREE.Group(); root.name = 'gramadoUni'; const P = { e1: new THREE.Group() };
-  const f = new THREE.PlaneGeometry(cp.w, cp.d); f.rotateX(-Math.PI / 2); const field = mesh(f, M.field, false); field.position.set(cp.c[0], 0.03, cp.c[1]); field.rotation.y = -cp.rot; P.e1.add(field);
-  if (cp.pista) { const ps = cp.pista; addMap(P.e1, sweep(ellipse(ps.c[0], ps.c[1], ps.rx, ps.rz, ps.rot, 64), true, [{ a: [0.1, 0.045], b: [-0.1, 0.045], mat: 'c', uv: 'plan' }]), () => M.caminhoTeto || M.concreto); }
-  const tr = []; const R = rng(88);
-  for (const [x, z] of ellipse(ar.c[0], ar.c[1], ar.rx - 1.95, ar.rz - 1.9, ar.rot, 24, 0, 1, ar.a0 + 0.08, ar.a1 - 0.08)) tr.push({ x: x + (R() - 0.5) * 0.2, z: z + (R() - 0.5) * 0.2, s: 0.16 + R() * 0.06, pal: 'jardim' });
-  P.e1.add(treeGroup(tr));
-  alaPortal(al, P.e1);
-  if (u.frente) { const { E, poly } = perfilFita((u.laco?.fita || 0.9) / 2); addMap(P.e1, sweep(curve(u.frente, false, 12), false, E, { caps: true, capPoly: poly, capMat: 'fasciaBeiral' }), (k) => matDe(k)); }
-  if (u.laco) lacoEscada(u.laco, P.e1);
-  if (u.rampa) { const [a, b] = u.rampa; P.e1.add(mesh(deckGeo([[a[0], 0.04, a[1]], [(a[0] + b[0]) / 2, 0.45, (a[1] + b[1]) / 2], [b[0], 0.86, b[1]]], 0.6, 0.05), M.caminhoTeto || M.concreto)); }
+  const g = A.gramadoUni, ps = g.pista, S = g.c, ci = A.ciencias, pc = A.ponteCoberta; const root = new THREE.Group(); root.name = 'gramadoUni'; const P = { e1: new THREE.Group() };
+  const rOut = ps.r, rIn = ps.r - ps.w, lin = 0.04, N = 96, circ = (r) => oval(S, r, r, N);
+  const G = new Map([[M.lawn, new Geo()], [M.track, new Geo()], [M.fasciaBeiral, new Geo()]]);
+  faixaPlana(G.get(M.lawn), circ(g.r), circ(rOut), 0.03);
+  tampa(G.get(M.lawn), circ(rIn), 0.03, [oval(ci.c, ci.rx + J, ci.rz + J, 40, ci.rot)]);
+  faixaPlana(G.get(M.fasciaBeiral), circ(rOut), circ(rOut - lin), 0.03); faixaPlana(G.get(M.fasciaBeiral), circ(rIn + lin), circ(rIn), 0.03);
+  // pista: as raias da textura correm ao longo (u pelo comprimento, v de dentro para fora)
+  const rm = (rOut + rIn) / 2; faixaPlana(G.get(M.track), circ(rOut - lin), circ(rIn + lin), 0.03, (i, fora) => [((i / N) * Math.PI * 2 * rm) / 2.0, fora ? 1 : 0]);
+  addGeos(P.e1, G, false);
+  // cordão de árvores entre a pista e a borda do gramado (centro a 4,8, copa até ~0,18: fica fora da floreira do térreo
+  // da gota), fora da Ponte Coberta (meia largura + junta + copa)
+  const [a, b] = pc.pts, dSeg = (x, z) => { const vx = b[0] - a[0], vz = b[1] - a[1], l = vx * vx + vz * vz, t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / l)); return Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t); };
+  const R = rng(88), rA = rOut + 0.2, nA = Math.floor((2 * Math.PI * rA) / 0.5), tr = [];
+  for (let i = 0; i < nA; i++) { const t = ((i + 0.5) / nA) * Math.PI * 2, r = rA + (R() - 0.5) * 0.02, x = S[0] + Math.cos(t) * r, z = S[1] + Math.sin(t) * r, s = 0.13 + R() * 0.02; if (dSeg(x, z) < pc.w / 2 + J + 0.2) continue; tr.push({ x, z, s, h: 0.9, pal: 'jardim' }); }
+  P.e1.add(treeGroup(tr, { name: 'cordaoUni' }));
+  // corredores: a área é o anel da pista (contorno de fora e o de dentro ao contrário, pela costura em t = 0)
+  const cf = circ(rOut - 0.06), cd = circ(rIn + 0.06); P.e1.userData.pessoas = { area: [...cf, cf[0], cd[0], ...cd.slice(1).reverse(), cd[0]], y: 0.03, n: 10 };
   root.add(P.e1);
-  return { id: 'gramadoUni', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'crescer' }, foco: { x: (cp.c[0] + al.c[0]) / 2, z: (cp.c[1] + al.c[1]) / 2, dist: 14 }, ancora: [al.c[0], 3.0, al.c[1]] };
+  const u = [Math.cos(rad(ci.rot)), Math.sin(rad(ci.rot))], an = [S[0] - u[0] * rm, S[1] - u[1] * rm];   // âncora na pista, do lado oposto ao tambor
+  return { id: 'gramadoUni', root, partes: P, esqueletos: {}, grua: {}, modos: { e1: 'crescer' }, foco: { x: S[0], z: S[1], dist: 14 }, ancora: [an[0], 0.8, an[1]] };
 }
