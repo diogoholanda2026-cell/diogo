@@ -1,56 +1,43 @@
-# Arcologia de Held: guia do projeto para o Claude
+# Arcologia de Held (jogo novo): guia do projeto para o Claude
 
-Jogo de construção e negócios em 3D (three.js r186), PWA, para PC e para o Poco X7 do dono. A visão, as referências
-(Cities: Skylines II e Highrise City), a avaliação de plataforma e o roteiro por fases estão em `docs/VISAO.md`:
-leia antes de propor ou começar uma fase.
+O jogo está sendo refeito do zero, no nível do **Cities: Skylines II** (referência máxima) com o que o **Highrise City**
+acrescenta: você é a Holding Held, concessionária que planeja Heldópolis (vias livres, zonas com demanda, serviços,
+redes, trânsito), produz os materiais da cidade em cadeias com lotes de 1 a 10 e ergue a Arcologia de Held, o
+megaprojeto de assinatura (a Torre Lâmina, retangular de alto luxo, primeiro). three.js r186 em WebGL2, Preact na
+interface, PWA para PC e para o Poco X7 do dono.
+
+**O documento que manda é `docs/PROJETO.md`** (decisões, contratos, estrutura, parcelas do M1 e regras de trabalho).
+Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesquisa/*.md` (fontes). `docs/VISAO.md` é a
+visão de longo prazo (Holding, rivais, 12 metrópoles).
 
 ## Como o dono trabalha
 - Fala português do Brasil; responda em português: resultado primeiro, frases curtas, sem travessão.
-- Joga sozinho; dá autonomia ("pode continuar sem pedir permissão"), mas é sensível a custo: não repetir etapas já
-  feitas, capturas só as necessárias.
-- Regras de economia fixadas por ele (não mudar sem pedido): lotes de 1 a 10, vendas no Depósito a 150% do preço
-  base (até 100 por janela), empréstimo (50 mil por ano, 10% ao ano, dívida até 500 mil) e renda de 5/8/11 créditos
-  por morador por hora conforme o bem-estar.
+- Joga sozinho, dá autonomia ("continue sem pedir permissão"), mas é sensível a custo: não repetir etapas já feitas,
+  capturas só as necessárias.
+- Regras de economia fixadas por ele (valem no jogo novo com os mesmos números, em `REGRAS_DONO`): produção em lotes
+  de 1 a 10; vendas no Depósito a 150% do preço base, até 100 por janela; empréstimo de 50 mil por ano, 10% ao ano,
+  dívida até 500 mil; renda de 5/8/11 créditos por morador por hora conforme o bem-estar.
+- Estética proibida: SimCity BuildIt, maquete, cartum, verde-lima, formas "quadradas e robóticas", Torre em bolo.
+  Arquitetura sempre com referência em megaprojetos reais.
 
-## Estrutura
-- `fonte/` código (ES modules): `sim/estado.js` (regras, save, eventos: toda regra nova passa por aqui),
-  `data/` (itens, obras, história, cidade: bairros, lotes, tipos, empresas, lugares), `render/` (engine, mundo,
-  cidade, obra, arredores, aéreo, marítimo, floresta, figuras), `ui/` (HUD, painéis, ícones em canvas, CSS),
-  `jogo.js` (Controle: liga simulação, 3D e interface), `main.js` (arranque, câmera, laço).
-- Plano diretor da Arcologia em `data/planta.js` (mesa 80 x 62): o **Trevo da Holding**, gerado por poucas medidas
-  (Anel Mestre em volta do lago, 4 tambores, 4 folhas em gota, contorno, eixo x = 0). Toda posição vem de `A`, nunca
-  de número solto no modelo. As fitas são `Faixa` (`render/models/faixa.js`: ordem dos módulos, vãos por corte,
-  tambores, pilares, tampa acabada) montadas em `render/models/aneis.js`. Regra das juntas (0,12 entre projetos):
-  `ferramentas/teste-planta.mjs` na planta e `ferramentas/conexoes.mjs` na geometria; os dois testes de geometria entram
-  no `simular --testes`. Cúpula da Vida em `render/models/cupula.js` (sem bichos à vista), Torre e lago em
-  `render/models/centro.js`, helicóptero da Holding em `render/aereo.js` (`HeliHolding`).
-- Cores: `PALETA` em `data/cidade.js`; `pintarCidade`/`pintarObra` na simulação; `tinta`/`pintar` em
-  `render/materials.js` (a cor entra na fusão do mundo).
-- `app/` e `arcologia-de-held.html` são gerados por `node ferramentas/montar.mjs`. Nunca editar à mão.
-- `ferramentas/`: `montar.mjs`, `testar.mjs` (Chromium com SwiftShader: sem GPU, poucos quadros por segundo),
-  `robo-partida.js` (joga a partida inteira no navegador), `simular.mjs` (simulação sem navegador e `--testes`),
-  `vitrine-ui.mjs` (capturas da interface sem WebGL), `cap-obra.mjs` (capturas da obra com relógio preso).
+## Estrutura (ver `docs/PROJETO.md`, seção 3)
+- `fonte/`: jogo novo. `comum/` (rng, hash, relógio, Bézier, caminhos, altura), `contratos/` (só o integrador muda),
+  `data/`, `sim/` (determinística, sem relógio nem `Math.random`, sem three), `render/`, `ui/` (Preact, JSX),
+  `app/` (arranque, laço, controle), `web/` (index, sw, manifesto).
+- `ferramentas/`: `montar.mjs` (monta `previa/` durante o M1; `--saida app` só na publicação do M1), `simular.mjs`
+  (`--testes` roda todo `ferramentas/testes/*.teste.mjs` e a guarda de texto), `testar.mjs`, `bancada.mjs`,
+  `vitrine-ui.mjs`, `guarda-texto.mjs`, `cidade-sintetica.mjs`.
+- `antigo/`: o jogo anterior (fonte, arte, ferramentas), só consulta; sai na publicação do M1.
+- `app/` e `arcologia-de-held.html`: o jogo anterior congelado e publicado até o M1. Ninguém edita antes da publicação.
+- `previa/`: montagem do jogo novo durante o M1; só o integrador monta.
 
-## Verificação antes de publicar
-1. `node ferramentas/montar.mjs` (sem avisos de chave duplicada).
-2. `node ferramentas/simular.mjs --testes` → `testes ok`.
-3. Robô: `node ferramentas/testar.mjs <png> "teste=1&novo=1&q=leve&pr=1" 700 400 2000 "$(cat ferramentas/robo-partida.js)"`
-   (5 a 15 min; rode em segundo plano). Aceite: `cap 6`, `vida 100`, `erros []`, sem linhas `error:`.
-4. `node ferramentas/vitrine-ui.mjs <pasta> <cenas|todas> 986x443,915x412 noite` → `sem erros de página`.
-5. Capturas 3D só do que mudou (script em `testar.mjs`; para obras, crie a obra com `ini` no passado para os
-   operários já estarem nos postos). Não reconstrua `app/` enquanto um robô estiver rodando.
-
-## Publicação
-- Branch de trabalho indicado na sessão; `git push -u origin <branch>`.
-- Dois commits: primeiro a fonte (`fonte/`, `ferramentas/`, docs), depois "Montagem ..." com `app/` e
-  `arcologia-de-held.html`. Mensagens em português. O GitHub Pages publica o branch.
-- README: seções da cidade e de gráficos acompanham o que mudou (números medidos, não estimados).
-
-## Orçamento gráfico (meta)
-PC Ultra até 1.500 chamadas e 5 milhões de triângulos; Poco X7 Média até 300 chamadas e 900 mil triângulos. Meça
-com `engine.stats` (calls, tris) numa vista aberta com a cidade grande. O painel de desempenho (Configurações >
-Vídeo) mostra o mesmo no aparelho do dono.
-
-## Receitas
-- Novo prédio da cidade: skill `novo-predio-da-cidade`. Verificar e publicar: skill `verificar-e-publicar`.
-  Capturas: skill `capturas-de-aceite`. Agentes especializados em `.claude/agents/`.
+## Regras de trabalho
+- Cada parcela edita só os arquivos dela (tabela da seção 3.1 do PROJETO); tudo entra por registro; ninguém edita
+  índice, `sim/nucleo.js`, `app/` ou `contratos/` sem ser o integrador.
+- Textos em `ui/textos/<parcela>.js`, português do Brasil, sem travessão, unidades da D42 ("/h" de jogo).
+- Entrega: `montar.mjs` sem avisos numa pasta temporária, `simular.mjs --testes` verde, cenas da parcela verdes,
+  capturas só do que mudou. Commits só de fonte, mensagens em português; quem commita é o integrador.
+- Orçamento: Poco X7 em Média até 300 chamadas e 900 mil triângulos na vista aberta com a cidade grande, 30 qps;
+  PC Ultra até 1.500 chamadas e 5 milhões. Medir com a bancada, não estimar.
+- Publicação: branch da sessão, `git push -u origin <branch>`; dois commits (fonte, depois "Montagem ..." com a pasta
+  montada). O GitHub Pages publica o branch.
