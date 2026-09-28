@@ -781,7 +781,8 @@ function lojaToldo(c) {
   const frente = c.m(MAT_FACHADA[tipo] ?? F.JANELA, tipo === 'pastilha' ? c.cor('pastilha') : corP, c.cor('caixilho'), { tr: TERREO.VITRINE, v: clamp(W / Math.max(1, Math.round(W / r.entre(3.2, 4.2))), 2.6, 5), vr: r.int(0, 5), a: pe });
   // empena cega nas divisas; nos fundos, janelas pequenas com grade (depósito, banheiro, a casa de quem mora em cima)
   const lado = c.m(F.LISO, corP);
-  const traseira = c.m(F.CASA, corP, c.cor('caixilho'), { v: r.entre(3.2, 4.4), vr: r.int(4, 7), a: pe });
+  // (na loja térrea, uma fileira só, na altura da loja)
+  const traseira = c.m(F.CASA, corP, c.cor('caixilho'), { v: r.entre(3.2, 4.4), vr: r.int(4, 7), a: n === 1 ? tH : pe });
   const zf = bz + bd / 2;
   // loja térrea funda: a platibanda alta da frente (a "fachada falsa") esconde a água de fibrocimento ou de telha
   // metálica que cai para os fundos; dos lados, a empena sobe acompanhando a água

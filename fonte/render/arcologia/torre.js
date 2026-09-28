@@ -1376,32 +1376,39 @@ void gVidroPainel( float col, float fl, float fv, float sem, float esp, float ca
   fAlb = mix( fAlb, vec3( 0.045, 0.045, 0.045 ), esp );
   fInc = ( vec2( gH1( vec2( col, fl ) * 3.1 + 1.3 ), gH1( vec2( fl, col ) * 2.3 + 7.1 ) ) - 0.5 ) * 0.012 * ( 1.0 - longe );
   // noite: a unidade (6 painéis, 9 m) está ocupada ou não; nas ocupadas, cada cômodo (2 painéis, 3 m) acende pela
-  // agenda, com força e tom próprios (2.700 a 4.000 K, um em dez com luz fria de tela), mais forte perto do forro; os
-  // cômodos apagados das unidades ocupadas guardam o brilho fraco do fundo (corredor). Força muito variada e o vidro
-  // apagado escuro: lê janela a janela, nunca como tijolo. De longe, o brilho médio da fachada
+  // agenda, com força e tom próprios (2.700 a 4.000 K, um em dez com luz fria de tela), mais forte perto do forro.
+  // Força muito variada e o vidro apagado escuro: lê janela a janela, nunca como tijolo
   float ap = floor( col / 6.0 );
   float un = floor( col / 2.0 );
   float fr = casa > 0.5 ? gAcesasCasa( uHora ) : gAcesas( uHora );
   float ocupado = step( gH1( vec2( ap, fl ) + sem * 31.0 ), 0.6 );
   float comodo = step( gH1( vec2( un * 1.7, fl * 0.3 ) + sem * 13.0 ), fr / 0.6 );
   float forca = gH1( vec2( un * 1.3, fl * 0.7 ) + 9.1 );
-  // três em quatro cômodos acesos com a luz cheia, um com abajur; a média de longe fica abaixo da média linear (pontos
-  // claros sobre o escuro leem mais escuros que a mesma luz espalhada)
+  // três em quatro cômodos acesos com a luz cheia, um com abajur
   float acesa = ocupado * comodo * step( 0.06, hp ) * ( forca < 0.25 ? 0.14 : 0.55 + 0.45 * forca );
-  // o fundo aceso das unidades ocupadas fica no limite do visível: com 0,03 o vidro apagado saía marrom (mediana da
-  // prancha das 21h em 41, 27, 14 de sRGB) e a fachada lia como parede de tijolo com janelas
-  acesa = max( acesa, ocupado * 0.008 * gH1( vec2( un, fl ) * 1.9 + 4.3 ) );
-  acesa = mix( acesa, fr * 0.2, longe ) * ( 1.0 - esp );
-  // de longe, a média de luz quente com vidro escuro: menos saturada que a lâmpada (o laranja chapado lia como tijolo)
-  float hu = mix( gH1( vec2( fl, ap ) + 3.7 ), 0.85, longe );
-  // cor saturada na entrada: o AgX dessatura o que é claro, e a janela ainda sai âmbar na tela, não bege
+  // de longe (o painel já não cabe num pixel) quem acende é a unidade inteira, um andar de 9 m: a fachada continua a
+  // ler como vidro escuro com pontos quentes. A média chapada da luz das janelas era uma parede marrom uniforme (a Torre
+  // a 1 km às 21h saía em 45, 31, 22 de sRGB, sem uma janela: tijolo). Bem de longe (a unidade em 2 ou 3 pixels), a
+  // média, mais fraca que a média linear (pontos claros sobre o escuro leem mais escuros que a mesma luz espalhada)
+  float muitoLonge = smoothstep( 2.2, 4.5, fwidth( vUvM.x ) );
+  float hUn = gH1( vec2( fl, ap ) + 3.7 );
+  float unid = step( gH1( vec2( ap * 1.3, fl * 0.7 ) + sem * 7.0 + 2.9 ), fr * 0.62 ) * ( 0.45 + 0.35 * hUn );
+  acesa = mix( acesa, mix( unid, fr * 0.16, muitoLonge ), longe ) * ( 1.0 - esp );
+  // cor saturada na entrada: o AgX dessatura o que é claro, e a janela ainda sai âmbar na tela, não bege. Bem de longe,
+  // a média de luz quente com vidro escuro, menos saturada que a lâmpada
+  float hu = mix( hUn, 0.85, muitoLonge );
   vec3 corLuz = mix( vec3( 1.0, 0.4, 0.1 ), vec3( 1.0, 0.64, 0.32 ), hu );
-  corLuz = mix( corLuz, vec3( 0.72, 0.84, 1.0 ), step( 0.9, gH1( vec2( un * 2.3, fl * 1.1 ) + 1.7 ) ) * ( 1.0 - longe ) );
+  float fria = mix( gH1( vec2( un * 2.3, fl * 1.1 ) + 1.7 ), gH1( vec2( ap * 2.3, fl * 1.1 ) + 1.7 ), longe );
+  corLuz = mix( corLuz, vec3( 0.72, 0.84, 1.0 ), step( 0.9, fria ) * ( 1.0 - muitoLonge ) );
   float teto = mix( 0.45 + 0.55 * smoothstep( 0.15, 0.78, fv ), 0.8, longe );
   fEmi = corLuz * acesa * uNoite * G_LUZ_JANELA * teto * ( 1.0 - emPers * 0.45 );
-  // à noite o vidro apagado quase não reflete: o interior escuro vence o reflexo do céu da cidade. O pouco que sobra
-  // puxa para o azul do céu noturno: o brilho alaranjado do ambiente no vidro deixava a fachada cor de tijolo
-  fTint *= mix( vec3( 1.0 ), vec3( 0.3, 0.36, 0.46 ), uNoite );
+  // os cômodos apagados das unidades ocupadas guardam um brilho frio no limite do visível (tela, corredor): nunca o
+  // laranja das lâmpadas, que deixava o vidro apagado marrom (26, 15, 12 de sRGB na prancha das 21h)
+  fEmi += vec3( 0.5, 0.6, 0.8 ) * ocupado * ( 1.0 - acesa ) * 0.006 * gH1( vec2( un, fl ) * 1.9 + 4.3 ) * uNoite * G_LUZ_JANELA * ( 1.0 - longe ) * ( 1.0 - esp );
+  // à noite o vidro apagado reflete menos (o interior escuro vence o reflexo do céu da cidade) e puxa para o azul do
+  // céu noturno: o brilho alaranjado do ambiente no vidro deixava a fachada cor de tijolo. Sem apagar de todo: o vidro
+  // escuro ainda lê como vidro, não como um recorte preto no céu
+  fTint *= mix( vec3( 1.0 ), vec3( 0.5, 0.58, 0.75 ), uNoite );
 }
 void gFachada() {
   float tipo = floor( vC.x + 0.5 );
@@ -1519,7 +1526,9 @@ void gFachada() {
       fMet = mix( 0.18, 1.0, m );
       fRug = mix( 0.05, 0.3, m );
       fAlb = mix( vec3( 0.06, 0.08, 0.07 ), vec3( 0.0 ), m );
-      fEmi = vec3( 0.75, 0.95, 0.8 ) * uNoite * 0.06 * ( 1.0 - m );
+      // à noite o jardim de dentro aceso em luz morna, com as copas tapando parte dela (com 0,06 em verde-menta chapado
+      // a casca inteira brilhava como um ovo de luz: 150, 160, 153 de sRGB na aérea das 21h)
+      fEmi = vec3( 0.95, 0.9, 0.74 ) * uNoite * 0.022 * ( 1.0 - m ) * ( 0.55 + 0.45 * gRuidoF( vec2( u, y ) / 7.0 ) );
       fInc *= 0.4;
     } else if ( tipo < 9.5 ) {
       // biblioteca: brises horizontais (as estantes de Tianjin)
@@ -1603,7 +1612,9 @@ void gOpaco() {
   else if ( cls > 4.5 && cls < 5.5 ) oEmi = vec3( 1.0, 0.74, 0.45 ) * uNoite * 0.2 * smoothstep( 300.0, 330.0, vUvM.y );
   else if ( cls > 5.5 && cls < 6.5 ) oEmi = vec3( 1.0, 0.76, 0.48 ) * uNoite * G_LUZ_JANELA * step( 0.45, gH1( floor( p / vec2( 1.5, 3.2 ) ) ) );
   else if ( cls > 6.5 && cls < 7.5 ) oEmi = vec3( 1.0, 0.88, 0.7 ) * mix( 0.01, 0.45, uNoite );
-  else if ( cls > 7.5 && cls < 8.5 ) oEmi = mix( vec3( 1.0, 0.72, 0.4 ), vec3( 0.55, 0.62, 1.0 ), gH1( floor( p / 9.0 ) ) ) * uNoite * 0.3;
+  // copa das Supertrees: pontos de luz na treliça, com a cor de cada trecho. Com 0,3 a copa inteira estourava em branco
+  // na exposição da noite e cada árvore lia como uma taça acesa
+  else if ( cls > 7.5 && cls < 8.5 ) oEmi = mix( vec3( 1.0, 0.72, 0.4 ), vec3( 0.55, 0.62, 1.0 ), gH1( floor( p / 9.0 ) ) ) * uNoite * ( 0.012 + 0.06 * max( gLinha( p.x / 2.5, 0.25 ), gLinha( p.y / 2.5, 0.25 ) ) );
   // reflexo: metal que recebe a luz da lanterna logo abaixo (a face de baixo do heliponto), um brilho morno e fraco
   else if ( cls > 8.5 && cls < 9.5 ) oEmi = vec3( 1.0, 0.72, 0.42 ) * uNoite * 0.014;
 }
@@ -1766,7 +1777,10 @@ export function estadoDoCeu(ctx, alvo = {}) {
   const dia = THREE.MathUtils.smoothstep(dir.y, -0.1, 0.1);
   alvo.dir = dir;
   alvo.hora = hora;
-  alvo.noite = 1 - dia;
+  // a noite pelo fator de dia do render (ctx.sol.dia, da R1a ou do substituto) e na mesma conta das janelas da cidade
+  // (R4a): a Arcologia acende junto com a cidade no anoitecer, não antes nem depois
+  const diaRender = ctx.sol?.dia;
+  alvo.noite = Number.isFinite(diaRender) ? Math.min(1, Math.max(0, 1 - 1.25 * diaRender)) : 1 - dia;
   alvo.baixo = 1 - THREE.MathUtils.smoothstep(dir.y, 0.02, 0.4);
   return alvo;
 }
@@ -1980,23 +1994,23 @@ export function criarTorre(ctx, { perfil = ctx.perfil, comEsplanada = true } = {
   return api;
 }
 
-/** Atualiza os uniformes da Arcologia (noite, hora e tempo) e o reflexo de reserva. Chame uma vez por quadro. */
+/**
+ * Atualiza os uniformes da Arcologia (noite, hora e tempo) e o reflexo de reserva. Chame uma vez por quadro.
+ * O reflexo não muda de força à noite por aqui: com a luz do ambiente da R1a (cena.environment e envMap nulo) o three
+ * troca o envMapIntensity do material pelo scene.environmentIntensity, e a mesma queda escureceria também a luz
+ * difusa da pedra, do gramado e das árvores. Quem escurece o vidro e o bronze à noite é o shader (fTint e oCor).
+ */
 export function atualizarArcologia(ctx, tMs, estado = estadoDoCeu(ctx)) {
   const m = materiais(ctx);
   UNIFORMES.uNoite.value = estado.noite;
   UNIFORMES.uHora.value = estado.hora;
   UNIFORMES.uTempo.value = tMs / 1000;
   const env = m.ambiente.quadro(estado);
-  // à noite o reflexo do céu no vidro e no bronze cai a 15%: a fachada fica escura e as janelas acesas contam
-  // (sem isso o bronze claro refletia o céu noturno na exposição de 8 e a torre inteira lia cinza)
-  const intens = 1 - 0.85 * estado.noite;
   for (const mat of m.lista) {
     if (mat.envMap !== env) {
       mat.envMap = env;
       mat.needsUpdate = true;
     }
-    if (mat.userData.envBase === undefined) mat.userData.envBase = mat.envMapIntensity;
-    mat.envMapIntensity = mat.userData.envBase * intens;
   }
   return estado;
 }

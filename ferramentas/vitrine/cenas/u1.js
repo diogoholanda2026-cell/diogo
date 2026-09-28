@@ -3,7 +3,7 @@
 // glifos.
 //   node ferramentas/vitrine-ui.mjs <pasta> u1-barra,u1-cartao-res,u1-cartao-servico,u1-economia
 // A simulação falsa dá os números de uma cidade de 12 mil; o serviço é montado aqui sobre q.predio (a falsa só tem
-// zonas), com a categoria que o cartão usa para o glifo.
+// zonas) no formato do contrato: o tipo do catálogo ('clinica') diz a categoria, sem campo extra.
 import { h, render } from 'preact';
 import { useState } from 'preact/hooks';
 import { nomesGlifos, glifo } from '../../../fonte/ui/glifos/glifos.js';
@@ -39,10 +39,10 @@ function servicoFalso(sim) {
     if (ref !== REF(IDX_SERV)) return original(ref);
     const tique = sim.estado.tique;
     return {
-      ref, tipo: 'servico', modelo: 0, nome: 'Clínica da Família Santa Cida', zona: 0, nivel: 1, estado: 'ok', obra: null,
+      ref, tipo: 'clinica', modelo: 0, nome: 'Clínica da Família Santa Cida', zona: 0, nivel: 1, estado: 'ok', obra: null,
       moradia: null, trabalho: null, nivelProx: null,
       servicos: { agua: 'ok', esgoto: 'ok', energia: 'ok', saude: 1, educacao: 0, seguranca: 0, bombeiros: 0, lazer: 0 },
-      servico: { categoria: 'saude', capacidade: 800, uso: 620, eficiencia: 0.74, alcance: 600, manutencaoHora: 400 },
+      servico: { capacidade: 800, uso: 620, eficiencia: 0.74, alcance: 600, manutencaoHora: 400 },
       holding: null, cor: 0, via: { ref: 2, nome: 'Rua da Matriz' },
       avisos: [{ codigo: 'semTrabalhadores', gravidade: 'atencao', desde: tique - 240, acao: null }],
       faz: 'atende a saúde de quem mora a até 600 m',
@@ -238,6 +238,26 @@ export function registrar(registrarCenaVitrine) {
     },
     conferir: () => [...barraCabe(), ...conferirTexto('[data-a="bemEstar"]', /\+1 acima de 61/, 'margem âmbar')()],
   });
+  // PC com as cinco telas de gestão registradas (como ficará com a U1b): a barra aperta (sem os botões repetidos de
+  // Holding e Conselho, depois só com glifo e, se preciso, sem o valor e a dívida) em vez de sair da tela
+  registrarCenaVitrine('u1-barra-pc', {
+    cenario: 'meio',
+    repouso: true,
+    tamanhos: ['1376x768', '1920x1080'],
+    async preparar({ sim, ui, acionar, esperar }) {
+      contaFechada(sim);
+      for (const id of ['holding', 'cidade', 'progresso', 'conselho']) ui.ui.registrarTela(id, () => null);
+      acionar('velocidade', 1);
+      await esperar(120); // o aperto mede no quadro seguinte ao do ResizeObserver
+    },
+    conferir: () => {
+      const f = barraCabe();
+      // Economia, Cidade e Progresso ficam sempre; Holding e Conselho só com folga (o H e o chip abrem as duas)
+      const k = [...document.querySelectorAll('[data-a="gestao"]')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.dataset.k);
+      for (const id of ['economia', 'cidade', 'progresso']) if (!k.includes(id)) f.push(`sem o botão da tela ${id}`);
+      return f;
+    },
+  });
   // popover do bem-estar: as faixas da regra do dono
   registrarCenaVitrine('u1-bem', {
     cenario: 'meio',
@@ -309,6 +329,7 @@ export function registrar(registrarCenaVitrine) {
     conferir: () => [
       ...conferirTexto('.cartao', /Atendidos/, 'cartão de serviço')(),
       ...conferirTexto('.cartao', /Faltam trabalhadores/, 'aviso do cartão')(),
+      ...conferirTexto('.cartao-sub', /^Saúde · alcance de 600 m$/, 'categoria pelo tipo do catálogo')(),
     ],
   });
   // cartão de prédio em obra: a fase e a barra no lugar dos números, o aviso de material em cima

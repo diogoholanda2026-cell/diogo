@@ -10,10 +10,13 @@ import { congelar } from '../comum/util.js';
 
 /** Paletas por material. */
 export const PALETAS = congelar({
-  // reboco pintado claro (prédios, casas de alto padrão): branco-gelo, areia, palha, cinza claro
-  rebocoClaro: ['#e2ddd2', '#ddd5c4', '#d8cfbd', '#e0dbd1', '#d3cdc2', '#cfc6b4', '#dad2c0', '#cdcdc6', '#d6d0c2'],
-  // reboco colorido de casa e de comércio de rua (tons gastos pelo sol)
-  rebocoCor: ['#cfae83', '#c49a78', '#bd8c73', '#c9a99a', '#a8b3a0', '#a2b1b6', '#d3c28f', '#b9ae9c', '#c8b59a', '#b8a58c', '#c7b9a6', '#b4a98f'],
+  // reboco pintado claro (prédios, casas de alto padrão): branco-gelo amarelado pelo tempo, creme, areia, palha e
+  // um ou outro cinza claro (o branco puro some das fachadas reais em um verão)
+  rebocoClaro: ['#ddd5c4', '#d9cfba', '#d6caaf', '#e0d8c6', '#d2c7b1', '#cfc3a9', '#dbd0b8', '#cdcac2', '#d4ccbb', '#d8cdb3'],
+  // reboco colorido de casa e de comércio de rua (tons gastos pelo sol): ocre, pêssego, salmão, rosa antigo, amarelo
+  // pálido, verde-água e azul acinzentados, terracota clara, bege
+  rebocoCor: ['#cfae83', '#c49a78', '#bd8c73', '#c9a99a', '#a8b3a0', '#a2b1b6', '#d3c28f', '#b9ae9c', '#c8b59a', '#b8a58c', '#c7b9a6', '#b4a98f',
+    '#d6b399', '#d4c48e', '#aebdaa', '#a9bac1', '#c59f84', '#cdb28a'],
   // chapisco e reboco sem pintura (casa em construção, muro de autoconstrução)
   chapisco: ['#9e9a92', '#a8a298', '#938f88', '#aaa396'],
   concreto: ['#aaa59c', '#9f9a90', '#b4afa5', '#a39f97'],

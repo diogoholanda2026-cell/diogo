@@ -38,6 +38,16 @@ function dataTexture(THREE, dados, n, { repetir = true, mip = true, aniso = 1 } 
   return t;
 }
 
+/**
+ * O registro solta a textura (dispose) na troca de qualidade. Numa textura de alvo de render isso não libera nada no
+ * three (quem apaga a textura e o framebuffer da GPU é o dispose do alvo): sem este elo, cada troca deixava o ruído e
+ * as 8 fatias do detalhe (11 MB no Média, 45 MB no Ultra) presos na GPU.
+ */
+export function soltarComAlvo(tex, alvo) {
+  tex.userData.alvo = alvo;
+  tex.addEventListener('dispose', () => alvo.dispose());
+}
+
 const anisoDe = (perfil) => ({ ultra: 8, alta: 8, media: 4, leve: 1 })[perfil?.id] ?? 4;
 
 // Os passes de geração ficam guardados (um por tipo): a troca de qualidade refaz as texturas com o mesmo programa, e a
@@ -129,7 +139,7 @@ function gerarCamadas({ renderer, THREE, perfil }) {
   tex.userData.ganhos = medirGanhos(renderer, THREE, tex, lado);
   tex.userData.lado = lado;
   tex.userData.fonte = 'proc';
-  tex.userData.alvo = alvo;
+  soltarComAlvo(tex, alvo);
   return tex;
 }
 
@@ -156,7 +166,7 @@ function gerarRuido({ renderer, THREE, perfil }) {
   renderer.setRenderTarget(alvo);
   renderer.render(p.cena, p.cam);
   renderer.setRenderTarget(antes);
-  alvo.texture.userData.alvo = alvo;
+  soltarComAlvo(alvo.texture, alvo);
   return alvo.texture;
 }
 

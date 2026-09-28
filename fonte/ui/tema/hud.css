@@ -300,6 +300,21 @@
 @media (min-width: 1600px) {
   .hud-pc2 { display: flex; }
 }
+/* barra apertada (BarraCima: useAperto): no nível 1 saem os botões de Holding e Conselho (o H e o chip já abrem as
+   telas); no 2 os botões ficam só com o glifo; no 3 saem o valor da Holding e a dívida (seguem no popover do H e na
+   Economia) */
+.hud-rotulo .hud-rotulo-glifo { display: none; }
+.aperto-2 .hud-rotulo,
+.aperto-3 .hud-rotulo {
+  width: var(--alvo);
+  padding: 0;
+  justify-content: center;
+}
+.aperto-2 .hud-rotulo .hud-rotulo-glifo,
+.aperto-3 .hud-rotulo .hud-rotulo-glifo { display: block; }
+.aperto-2 .hud-rotulo-texto,
+.aperto-3 .hud-rotulo-texto,
+.hud-cima.aperto-3 .hud-pc2 { display: none; }
 
 /* celular estreito (915 x 412): folgas menores para caber o Conselho e números de 7 dígitos sem cortar */
 @media (max-width: 940px) {

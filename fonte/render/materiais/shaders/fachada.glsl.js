@@ -178,17 +178,18 @@ float gAgenda( float uso, float h ) {
     if ( h < 7.0 ) return mix( 0.05, 0.28, ( h - 5.0 ) / 2.0 );
     if ( h < 9.0 ) return mix( 0.28, 0.06, ( h - 7.0 ) / 2.0 );
     if ( h < 17.0 ) return 0.06;
-    if ( h < 20.0 ) return mix( 0.06, 0.5, ( h - 17.0 ) / 3.0 );
-    if ( h < 23.0 ) return mix( 0.5, 0.34, ( h - 20.0 ) / 3.0 );
-    return mix( 0.34, 0.12, h - 23.0 );
+    if ( h < 20.0 ) return mix( 0.06, 0.42, ( h - 17.0 ) / 3.0 );
+    if ( h < 23.0 ) return mix( 0.42, 0.28, ( h - 20.0 ) / 3.0 );
+    return mix( 0.28, 0.12, h - 23.0 );
   }
   if ( uso < 1.5 ) return ( h > 7.5 && h < 22.0 ) ? 0.6 : 0.05;
   if ( uso < 2.5 ) {
-    if ( h < 7.0 ) return 0.08;
-    if ( h < 9.0 ) return mix( 0.08, 0.8, ( h - 7.0 ) / 2.0 );
+    // escritório: cheio no expediente, esvaziando até as 20h; à noite, a limpeza e um ou outro andar
+    if ( h < 7.0 ) return 0.06;
+    if ( h < 9.0 ) return mix( 0.06, 0.8, ( h - 7.0 ) / 2.0 );
     if ( h < 18.0 ) return 0.78;
-    if ( h < 21.0 ) return mix( 0.78, 0.16, ( h - 18.0 ) / 3.0 );
-    return 0.12;
+    if ( h < 20.5 ) return mix( 0.78, 0.12, ( h - 18.0 ) / 2.5 );
+    return 0.09;
   }
   return 0.38;
 }
@@ -211,7 +212,7 @@ vec3 gAcesa( vec2 h, float uso, float lonje, float queda ) {
   // de longe a janela acesa vira a média da fachada: sem esta queda a torre inteira brilharia (a curva de tons clareia
   // a média muito mais do que clareia os pontos de luz separados)
   // a janela acesa fica em meio-tom depois da curva de tons: âmbar e não branca (a noite de metrópole das fotos)
-  return luz * acesa * brilho * ( 0.01 + 0.26 * gNoite ) * mix( 1.0, 0.45, max( lonje, 0.8 * queda ) );
+  return luz * acesa * brilho * ( 0.01 + 0.26 * gNoite ) * mix( 1.0, 0.36, max( lonje, 0.85 * queda ) );
 }
 
 // vidro comum de janela: interior escuro atrás do reflexo (F0 0,04), cortina clara em parte
@@ -256,18 +257,19 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
   if ( nB >= 5.0 && abs( i - ( nB - 1.0 ) * 0.5 ) < 0.25 && pad > 3.5 ) tv = 5.0;
   if ( casa ) tv = mod( i + pad, 3.0 ) < 1.0 ? 1.0 : ( mod( i + pad, 3.0 ) < 2.0 ? 0.0 : 2.0 );
   if ( uso > 1.5 || fita ) tv = 0.0;
-  // janela em metros: largura, peitoril e verga (pé-direito de referência 2,9 m)
-  float w = 1.3;
-  float y0 = 1.05;
+  // janela em metros: largura, peitoril e verga (pé-direito de referência 2,9 m), nas medidas comuns das plantas
+  // brasileiras: quarto 1,5 x 1,2, sala 2,0 a 2,4 (porta-janela ou peitoril baixo), banheiro 0,8 x 0,6, área 1,5
+  float w = 1.5;
+  float y0 = 1.0;
   float y1 = 2.2;
-  if ( tv > 0.5 && tv < 1.5 ) { w = 2.0; y0 = mod( vari, 2.0 ) < 0.5 ? 0.12 : 0.9; y1 = 2.25; }
-  else if ( tv > 1.5 && tv < 2.5 ) { w = 0.7; y0 = 1.5; y1 = 2.1; }
+  if ( tv > 0.5 && tv < 1.5 ) { w = 2.2; y0 = mod( vari, 2.0 ) < 0.5 ? 0.12 : 0.9; y1 = 2.25; }
+  else if ( tv > 1.5 && tv < 2.5 ) { w = 0.8; y0 = 1.5; y1 = 2.1; }
   else if ( tv > 2.5 && tv < 3.5 ) { w = 0.0; }
   else if ( tv > 3.5 && tv < 4.5 ) { w = 1.5; y0 = 0.95; y1 = 2.2; }
-  else if ( tv > 4.5 ) { w = 0.55; y0 = 1.25; y1 = 2.05; }
-  float esc = 0.86 + 0.07 * mod( vari, 4.0 );
+  else if ( tv > 4.5 ) { w = 0.6; y0 = 1.25; y1 = 2.05; }
+  float esc = 0.9 + 0.07 * mod( vari, 4.0 );
   w *= esc;
-  if ( casa ) { w *= 0.85; y0 = max( y0, 0.95 ); }
+  if ( casa ) { y0 = max( y0, 0.95 ); }
   if ( uso > 1.5 ) { w = vao * 0.78; y0 = 0.8; y1 = andar - 0.35; }
   if ( uso > 2.5 ) { w = vao * 0.7; y0 = andar * 0.62; y1 = andar - 0.25; }
   float kA = max( andar / 2.9, 0.8 );
@@ -329,7 +331,10 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
   float cort = ( tv > 0.5 && tv < 1.5 ) ? step( 0.55, h.y ) : step( 0.86, h.y );
   cort = mix( cort, 0.25, lonje );
   float vis = max( pano - pers, 0.0 );
-  vec3 luz = gAcesa( h, uso, gLongeLuz( d ), lonje );
+  // a luz acende por unidade (apartamento de ~3 vãos, sala de escritório), com uma ou outra janela fora do padrão:
+  // de perto e de longe a torre acesa lê em faixas de unidades, não num salpicado de janelas soltas
+  vec2 hu = gH2( vec3( floor( i / 3.0 ) + 41.0, j, id + 13.0 ) );
+  vec3 luz = gAcesa( vec2( fract( hu.x + 0.22 * h.x ), h.y ), uso, gLongeLuz( d ), lonje );
   if ( tv > 1.5 && tv < 2.5 ) {
     // vidro canelado (banheiro, cozinha): claro e fosco
     s.alb = mix( s.alb, vec3( 0.26, 0.27, 0.26 ), vis );
@@ -429,7 +434,9 @@ void gPele( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari,
   s.alb = mix( s.alb, vec3( 0.2, 0.2, 0.19 ) * ( 0.9 + 0.2 * h.y ) + tinta * 0.25, rolo );
   s.rug = mix( s.rug, 0.07, rolo );
   s.met = mix( s.met, 0.62, rolo );
-  vec3 luz = gAcesa( h, uso, gLongeLuz( d ), lonje );
+  // a luz acende por unidade: o inquilino do escritório (6 painéis, como as persianas), o cômodo do apartamento (2)
+  vec2 hl = gH2( vec3( floor( cel.x / ( uso > 1.5 ? 6.0 : 2.0 ) ) + 53.0, cel.y, vIdent.x + 11.0 ) );
+  vec3 luz = gAcesa( vec2( fract( hl.x + 0.18 * h.x ), h.y ), uso, gLongeLuz( d ), lonje );
   // de dia, a luminária do teto aparece no alto do vão nos escritórios acesos
   float teto = gPulso( p.y, 0.86, 0.94, d.y ) * vis * ( abs( uso - 2.0 ) < 0.5 ? 1.0 : 0.0 );
   s.emi += luz * ( vis + 0.4 * rolo ) * 0.7 + vec3( 0.9, 0.95, 1.0 ) * teto * step( h.x, 0.7 ) * 0.05 * ( 1.0 - gNoite ) * ( 1.0 - lonje );
@@ -443,10 +450,11 @@ void gBrise( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari
   float lonje = gLonge( d );
   vec2 cel = vec2( floor( uv.x ), floor( fv ) );
   vec2 h = gH2( vec3( cel, vIdent.x ) );
-  // atrás do brise: vidro em faixa com a laje aparente
+  // atrás do brise: vidro em faixa com a laje aparente; a luz por painel (meio vão), só no vidro de visão
   float laje = gPulso( fv, 0.0, 0.07, d.y );
   gVidroEspelho( s, 1.0 - laje, h, tinta * 0.9, lonje );
-  s.emi += gAcesa( h, uso, gLongeLuz( d ), lonje ) * ( 1.0 - laje );
+  vec2 hp = gH2( vec3( floor( uv.x * 2.0 ), cel.y, vIdent.x + 3.0 ) );
+  s.emi += gAcesa( hp, uso, gLongeLuz( vec2( d.x * 2.0, d.y ) ), lonje ) * gPulso( fv, 0.12, 0.86, d.y );
   float lam;
   float lado = 1.0;
   if ( tipo == F_BRISE_V ) {

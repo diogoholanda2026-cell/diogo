@@ -4,7 +4,8 @@
 //   window.__cenaPlanos.mostrar({ plano, hora })  → Promise: troca o plano (cava o reservatório dele) e a câmera
 // Relevo: o mapa de Heldópolis (S1a); ?sim=sintetica usa a cidade sintética. O chão da cava sai como o aplainar
 // faria (D5).
-// window.__resultado confere o orçamento da Arcologia (LOD1 perto de 25 mil triângulos, até 45 chamadas no Média).
+// window.__resultado confere a Arcologia no quadro (até o teto de 60 mil triângulos da família no Média) e mede as
+// chamadas da cena; as chamadas por malha da Arcologia ficam no teste (arcologia-render) e a medida na bancada.
 import { PLANOS, PLANO_PADRAO, GLEBA_ENVELOPE } from '../../data/arcologia-plano.js';
 import { CeuReserva, estadoDoCeu } from '../arcologia/torre.js';
 import { cavarPlanoNaCena, descavar } from '../arcologia/lago.js';

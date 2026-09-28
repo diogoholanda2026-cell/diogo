@@ -45,11 +45,13 @@ vec3 copaCor( vec4 rc, vec4 rf, vec4 rm ) {
   float coroa = mix( rc.z, rf.z, sec );
   return mix( ${vec3Linear(CORES_COPA.sombra)}, c, 0.3 + 0.7 * smoothstep( 0.04, 0.5, coroa ) );
 }
-// relevo da copa em metros (para o relevo por derivadas)
-float copaRelevo( vec4 rc, vec4 rf, vec4 rm ) {
+// relevo da copa em metros (para o relevo por derivadas); kf (0 a 1) é a parte das copas pequenas (4 m), que o relevo
+// por derivada de tela só desenha com o pixel bem menor que elas (senão, com o sol baixo, vira chuvisco em quadradinhos)
+float copaRelevo( vec4 rc, vec4 rf, vec4 rm, float kf ) {
   float sec = copaSecundaria( rc, rm );
-  return ( mix( 2.6 * rc.z + 0.7 * rf.z, 1.6 * rf.z + 0.6 * rc.z, sec ) + 0.3 * rf.w ) * ( 0.6 + 0.8 * rf.y );
+  return ( mix( 2.6 * rc.z + 0.7 * rf.z * kf, 1.6 * rf.z * kf + 0.6 * rc.z, sec ) + 0.3 * rf.w * kf ) * ( 0.6 + 0.8 * rf.y );
 }
+float copaRelevo( vec4 rc, vec4 rf, vec4 rm ) { return copaRelevo( rc, rf, rm, 1.0 ); }
 `;
 
 /** Tom por instância para as árvores (R2b): varia a cor da folha em torno da copa, sem sair da faixa de albedo. */

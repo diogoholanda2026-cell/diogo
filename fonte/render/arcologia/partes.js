@@ -19,7 +19,8 @@ const K = {
   concreto: acab('#a9a397', { rugo: 0.8 }),
   concretoClaro: acab('#c8c2b6', { rugo: 0.75 }),
   champanhe: acab('#b8a684', { rugo: 0.32, metal: 1, padrao: PADRAO.metal }),
-  metalClaro: acab('#b9b8b3', { rugo: 0.35, metal: 1, padrao: PADRAO.metal }),
+  // aço inox acetinado dos tubos da Física: com 0,35 o tubo espelhava o céu e lia como cano de plástico azul e branco
+  metalClaro: acab('#b9b8b3', { rugo: 0.55, metal: 1, padrao: PADRAO.metal }),
   metalEscuro: acab('#3a3c40', { rugo: 0.5, metal: 0.6 }),
   solar: acab('#1d2129', { rugo: 0.38, metal: 0.25, padrao: PADRAO.solar }), // painel fosco: de cima não vira faixa azul
   telhadoVerde: acab('#435031', { rugo: 0.95, padrao: PADRAO.grama }),
@@ -350,18 +351,24 @@ function anel(g, p) {
     })(), y - 2.5, y + 0.4, { paredes: K.granito, topo: K.piso });
     g.caixa([meio.x, y, meio.z], (s1 - s0) / 2 + fundo / 2, H);
   }
-  for (let i = 1; i + 1 < topos.length; i += 4) {
-    if (topos[i + 1].s0 - topos[i].s1 > fenda + 1) continue; // um portal no meio
-    const a = at(topos[i].s1 - 2);
-    const b = at(topos[i + 1].s0 + 2);
-    const h = Math.min(topos[i].H, topos[i + 1].H) * 0.7;
-    const y = g.chao(a.x, a.z);
-    const mx = (a.x + b.x) / 2;
-    const mz = (a.z + b.z) / 2;
-    const l = Math.hypot(b.x - a.x, b.z - a.z);
-    const ux = (b.x - a.x) / (l || 1);
-    const uz = (b.z - a.z) / (l || 1);
-    caixa(g.vidro, mx - a.dx * (fundoBase / 2 - 6), mz - a.dz * (fundoBase / 2 - 6), l / 2 + 1, 4, y + h, y + h + 2 * PE, k, { ux, uz, base: true });
+  // juntas de vidro entre os vãos: 3 m, recuadas 1,2 m da face de fora e da de dentro, um andar abaixo do vão mais
+  // baixo. Sem elas as juntas eram vãos abertos e, do alto, o anel lia como uma fila de lâminas soltas (formas
+  // robóticas); com elas lê como a faixa contínua de Marina One e Tietgen. Os portais continuam abertos
+  const f0 = -fundoBase / 2 + 1.2;
+  const f1 = -fundoBase / 2 + 10 - 1.2;
+  for (let i = 0; i + 1 < topos.length; i++) {
+    const a = topos[i];
+    const b = topos[i + 1];
+    if (b.s0 - a.s1 > fenda + 1) continue; // portal
+    const hJ = Math.min(a.H, b.H) - PE;
+    if (hJ < 2 * PE) continue;
+    const q = [at(a.s1 - 0.3), at((a.s1 + b.s0) / 2), at(b.s0 + 0.3)];
+    const poly = [];
+    for (const e of q) poly.push(e.x + e.dx * f0, e.z + e.dz * f0);
+    for (let s = q.length - 1; s >= 0; s--) poly.push(q[s].x + q[s].dx * f1, q[s].z + q[s].dz * f1);
+    const y = g.chao(q[1].x, q[1].z);
+    paredes(g.vidro, poly, y, y + hJ, k, y);
+    tampa(g.opaco, poly, y + hJ, K.telhadoVerde, true);
   }
 }
 

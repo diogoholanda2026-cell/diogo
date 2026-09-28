@@ -8,8 +8,11 @@ import { t } from '../textos.js';
 export function Modal({ sobretitulo = null, titulo, aoFechar = null, acoes = null, largura = 620, a = 'modal', children }) {
   useEffect(() => {
     if (!aoFechar) return undefined;
+    // Esc fecha só o modal (a tela de gestão embaixo dele fica; ui/index.jsx ouve na janela)
     const tecla = (ev) => {
-      if (ev.key === 'Escape') aoFechar();
+      if (ev.key !== 'Escape') return;
+      ev.stopPropagation();
+      aoFechar();
     };
     document.addEventListener('keydown', tecla);
     return () => document.removeEventListener('keydown', tecla);

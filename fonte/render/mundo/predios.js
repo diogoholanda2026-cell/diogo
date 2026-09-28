@@ -2,9 +2,11 @@
 //   LOD0  por setor de 256 m: a malha fundida que a oficina gera (fundir.js), um Mesh por setor perto da câmera, com
 //         cache LRU e teto de memória por perfil
 //   LOD1  instâncias de forma (caixa, chanfro, cilindro, duas águas) com a fachada inteira no shader; LOD2 é o mesmo
-//         buffer só com a peça principal de cada prédio; os buffers são montados com os setores visíveis
-//   sombra própria (D43): listas de projetores com o LOD1 inteiro dos setores em volta do alvo da câmera, cujos
-//         buffers de instância o gêmeo da cena de sombra compartilha (o LOD0 nunca projeta)
+//         buffer só com a peça principal de cada prédio; os buffers são montados com os setores visíveis. Com as duas
+//         faixas de profundidade (?semClip=1, sem EXT_clip_control) os setores além do corte vão numa segunda lista,
+//         só da faixa de longe, e os de perto numa só da faixa de perto: a cidade não é desenhada duas vezes
+//   sombra própria (D43): listas de projetores com o LOD1 dos setores cuja sombra cai no chão da cascata
+//         (ctx.sombra.regiao), cujos buffers de instância o gêmeo da cena de sombra compartilha (o LOD0 nunca projeta)
 //   tabela de prédios na GPU: RGBA8 512² (R camada, G bits, B agenda) e RG32F 512² (início e fim da obra, R4b)
 // Publica para as outras parcelas: criarMaterialEdificio(ctx) (X1a, R5), uniformesEdificio, e no domínio
 // ctx.dominio('predios'): { tabela, obra, material, preparar(), pronto(), caixaDoPredio(idx), medidas() }.
@@ -22,6 +24,7 @@ import { PRIORIDADE } from '../camera/selecao.js';
 import { pedeTudo } from '../ponte.js';
 import { carregarDetalheCC0 } from '../materiais/texturas-predio.js';
 import { modoMateriais } from '../materiais/texturas-chao.js';
+import { CAMADA_LONGE } from '../motor/faixas.js';
 
 /** Lado das tabelas de prédios na GPU (262.144 vagas, D19). */
 export const LADO_TABELA = 512;
@@ -32,6 +35,35 @@ export const LADO_TABELA = 512;
  */
 const LOD1_NA_CARGA = 40000;
 const BYTES_INST = ['aFac', 'aCorA', 'aCorB', 'aTopo'];
+/** Folga (m) em volta do chão da cascata para escolher os setores que projetam sombra. */
+const FOLGA_SOMBRA = 60;
+/** Alcance máximo (m) da sombra de um setor com o sol baixo. */
+const SOMBRA_MAX = 600;
+
+/**
+ * Corte entre as duas faixas de profundidade (?semClip=1): a mesma conta de motor/faixas.js (Faixas.desenhar), que
+ * só a faz na hora de desenhar; aqui ela escolhe a lista de cada setor antes.
+ */
+export const limiteFaixas = (dist) => Math.max(3000, dist * 1.6);
+
+/** Distância do ponto (px, pz) ao retângulo [x0, x1] x [z0, z1] no chão (0 dentro). */
+function distRet(px, pz, x0, z0, x1, z1) {
+  const dx = px < x0 ? x0 - px : px > x1 ? px - x1 : 0;
+  const dz = pz < z0 ? z0 - pz : pz > z1 ? pz - z1 : 0;
+  return Math.hypot(dx, dz);
+}
+
+/**
+ * A sombra do setor alcança o círculo (cx, cz, raio)? O setor varrido para longe do sol (ux, uz: direção do sol no
+ * chão) por até `alcance` m: a distância do centro ao retângulo que anda é convexa, então 5 amostras bastam com a folga.
+ */
+export function sombraAlcanca(x0, z0, lado, cx, cz, raio, ux, uz, alcance) {
+  for (let k = 0; k <= 4; k++) {
+    const t = (alcance * k) / 4;
+    if (distRet(cx + ux * t, cz + uz * t, x0, z0, x0 + lado, z0 + lado) <= raio) return true;
+  }
+  return false;
+}
 
 // ------------------------------------------------------------------------------------------------ material
 
@@ -145,7 +177,16 @@ function criarPredios(ctx) {
   const mascara = typeof location !== 'undefined' && new URLSearchParams(location.search).get('passe') === 'mascara';
   uniformesEdificio.gPrediosMascara.value = mascara ? 1 : 0;
 
-  // listas do LOD1/LOD2 visível e dos projetores de sombra, uma por forma
+  // listas do LOD1/LOD2 visível e dos projetores de sombra, uma por forma; com as duas faixas de profundidade
+  // (ctx.semClip), 'vis' fica só na faixa de perto e 'longe' (os setores além do corte) só na de longe
+  const duasFaixas = !!ctx.semClip;
+  const naCena = (faixa) => (m, velha) => {
+    if (velha) cena.remove(velha);
+    medidas.familia(m, 'predios');
+    if (faixa === 'longe') m.layers.set(CAMADA_LONGE);
+    if (faixa) m.userData.faixa = faixa;
+    cena.add(m);
+  };
   const formas = FORMAS.map((nome, f) => {
     const { g, tris } = geometriaForma(f);
     const gs = new THREE.BufferGeometry();
@@ -153,18 +194,20 @@ function criarPredios(ctx) {
     gs.setIndex(g.index);
     const vis = new ListaCompactada({ geometria: g, material, nome: `predios:lod1:${nome}`, bytes: BYTES_INST, comId: true, cap: 2048 });
     const sombra = new ListaCompactada({ geometria: gs, material: null, nome: `predios:sombra:${nome}`, cap: 1024 });
-    vis.aoCriar = (m, velha) => {
-      if (velha) cena.remove(velha);
-      medidas.familia(m, 'predios');
-      cena.add(m);
-    };
+    vis.aoCriar = naCena(duasFaixas ? 'perto' : null);
     vis.aoCriar(vis.malha, null);
+    let longe = null;
+    if (duasFaixas) {
+      longe = new ListaCompactada({ geometria: g, material, nome: `predios:lod2:${nome}`, bytes: BYTES_INST, comId: true, cap: 2048 });
+      longe.aoCriar = naCena('longe');
+      longe.aoCriar(longe.malha, null);
+    }
     sombra.aoCriar = (m, velha) => {
       if (velha) ctx.sombra.soltar(velha);
       medidas.familia(ctx.sombra.projetor(m), 'sombra');
     };
     sombra.aoCriar(sombra.malha, null);
-    return { vis, sombra, tris };
+    return { vis, longe, sombra, tris };
   });
 
   const setores = new Map();
@@ -441,6 +484,7 @@ function criarPredios(ctx) {
     const vis = [];
     let quer0 = 0;
     let lod0Vis = 0;
+    const lim = duasFaixas ? limiteFaixas(ctx.cameraApi?.estado?.().dist ?? cp.length()) : Infinity;
     // carga: o LOD1 que falta sai aqui mesmo, sem a oficina
     if (carga) {
       carga = false;
@@ -481,9 +525,19 @@ function criarPredios(ctx) {
       if (st.modo === 0) quer0++;
       if (mostra0 && st.vis) lod0Vis++;
       if (st.vis && st.lod1 && !mostra0) {
+        // faixa de profundidade: perto se algo do setor fica antes do corte da de perto, longe se algo passa do
+        // começo da de longe (o setor na emenda vai nas duas)
+        let fx = 1;
+        if (duasFaixas) {
+          const ex = Math.max(Math.abs(cp.x - st.x0), Math.abs(cp.x - st.x0 - LADO_SETOR));
+          const ey = Math.max(Math.abs(cp.y - st.ymin), Math.abs(cp.y - st.ymax));
+          const ez = Math.max(Math.abs(cp.z - st.z0), Math.abs(cp.z - st.z0 - LADO_SETOR));
+          fx = (d < lim * 1.02 ? 1 : 0) | (Math.sqrt(ex * ex + ey * ey + ez * ez) > lim * 0.9 ? 2 : 0);
+        }
+        st.faixa = fx;
         vis.push(st);
         hv = Math.imul(hv ^ st.s, 0x01000193);
-        hv = Math.imul(hv ^ (st.modo * 7919 + st.v1), 0x01000193);
+        hv = Math.imul(hv ^ (st.modo * 7919 + st.v1 * 4 + fx), 0x01000193);
       }
     }
     // pedidos: os mais perto primeiro
@@ -502,30 +556,52 @@ function criarPredios(ctx) {
       chaveVis = hv;
       let n = 0;
       formas.forEach((F, f) => {
-        const ped = [];
+        const perto = [];
+        const longe = [];
         for (const st of vis) {
           const x = st.lod1[f];
           const k = st.modo === 2 ? x.np : x.n;
-          if (k) ped.push({ mat: x.mat, ids: x.ids, bytes: x.bytes, n: k });
+          if (!k) continue;
+          const p = { mat: x.mat, ids: x.ids, bytes: x.bytes, n: k };
+          if (st.faixa & 1) perto.push(p);
+          if (st.faixa & 2) longe.push(p);
         }
-        n += F.vis.compactar(ped);
+        n += F.vis.compactar(perto);
+        if (F.longe) n += F.longe.compactar(longe);
       });
       ctx.stats.instancias.predios = n;
     }
-    // projetores de sombra: o LOD1 inteiro dos setores em volta do alvo, até o raio da sombra e mais uma folga
-    ctx.cameraApi?.alvo?.(alvo);
-    const distAlvo = cp.distanceTo(alvo);
-    const raio = Math.min(ctx.perfil.sombra.raioMax, Math.max(60, 0.6 * distAlvo)) + 120;
-    // de perto do alvo todas as peças; mais longe só a principal de cada prédio (o texel da sombra já passa de 1 m)
+    // projetores de sombra (D43): os setores cuja sombra cai no chão da cascata (ctx.sombra.regiao: o foco que a R1a
+    // puxa para baixo da câmera nas vistas rasantes, não o alvo), varridos para longe do sol pela altura do setor;
+    // antes do primeiro passe, em volta do alvo da câmera
+    const reg = ctx.sombra?.regiao;
+    let rx;
+    let rz;
+    let raio;
+    if (reg) {
+      rx = reg.x;
+      rz = reg.z;
+      raio = reg.raio + FOLGA_SOMBRA;
+    } else {
+      ctx.cameraApi?.alvo?.(alvo);
+      rx = alvo.x;
+      rz = alvo.z;
+      raio = Math.min(ctx.perfil.sombra.raioMax, Math.max(60, 0.6 * cp.distanceTo(alvo))) + FOLGA_SOMBRA;
+    }
+    const sd = ctx.sol?.dir;
+    const sh = sd ? Math.hypot(sd.x, sd.z) : 0;
+    const ux = sh > 1e-4 ? sd.x / sh : 0;
+    const uz = sh > 1e-4 ? sd.z / sh : 0;
+    // cotangente da elevação do sol, com o sol no mínimo a ~11 graus (abaixo disso a sombra some na luz da tarde)
+    const cot = sd ? sh / Math.max(0.2, sd.y) : 0;
+    // de perto do foco todas as peças; mais longe só a principal de cada prédio (o texel da sombra já passa de 1 m)
     let hs = 0x811c9dc5;
     const somb = [];
     for (const st of setores.values()) {
       if (!st.lod1) continue;
-      const dx = Math.max(st.x0 - alvo.x, 0, alvo.x - st.x0 - LADO_SETOR);
-      const dz = Math.max(st.z0 - alvo.z, 0, alvo.z - st.z0 - LADO_SETOR);
-      const d2 = dx * dx + dz * dz;
-      if (d2 > raio * raio) continue;
-      st.sombraToda = d2 < 250 * 250;
+      const alcance = Math.min(SOMBRA_MAX, Math.max(0, st.ymax - st.ymin) * cot);
+      if (!sombraAlcanca(st.x0, st.z0, LADO_SETOR, rx, rz, raio, ux, uz, alcance)) continue;
+      st.sombraToda = distRet(rx, rz, st.x0, st.z0, st.x0 + LADO_SETOR, st.z0 + LADO_SETOR) < 250;
       somb.push(st);
       hs = Math.imul(hs ^ st.s, 0x01000193);
       hs = Math.imul(hs ^ (st.v1 * 2 + (st.sombraToda ? 1 : 0)), 0x01000193);
@@ -659,8 +735,9 @@ function criarPredios(ctx) {
       let inst = 0;
       let tris1 = 0;
       formas.forEach((F) => {
-        inst += F.vis.count;
-        tris1 += F.vis.count * F.tris;
+        const c = F.vis.count + (F.longe?.count ?? 0);
+        inst += c;
+        tris1 += c * F.tris;
       });
       let tris0 = 0;
       for (const st of setores.values()) if (st.lod0?.tris && st.lod0.mesh.visible) tris0 += st.lod0.tris;
@@ -681,6 +758,10 @@ function criarPredios(ctx) {
       for (const st of setores.values()) soltarLod0(st);
       for (const F of formas) {
         cena.remove(F.vis.malha);
+        if (F.longe) {
+          cena.remove(F.longe.malha);
+          F.longe.descartar();
+        }
         ctx.sombra.soltar(F.sombra.malha);
         F.vis.descartar();
         F.sombra.descartar();

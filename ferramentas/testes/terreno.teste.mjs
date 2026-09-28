@@ -16,6 +16,7 @@ import { AGUA, TIPO_PREDIO, CELULA } from '../../fonte/contratos/flags.js';
 import {
   alturaComoGLSL, distanciaAgua, codificarAgua, prepararDados, piramideAlturas, limitesAltura, mipsDeMinimos,
   selecionarNos, faixasCDLOD, rasterizarUso, rasterizarCelulas, estacaoSeca, caixaCelula, PERFIL_TERRENO, RAIZ_CDLOD,
+  COPA_ALTURA, COPA_MAX,
 } from '../../fonte/render/mundo/terreno.js';
 import { lerManifesto, conferirLicencas, normalizarFatia, TETO_BYTES } from '../codificar-texturas.mjs';
 import { geometriaAgua, faixasDeMar, curvaDoRio, abrirContorno } from '../../fonte/render/mundo/agua.js';
@@ -24,6 +25,7 @@ import {
   NIVEIS_CDLOD, GRADE_NO,
 } from '../../fonte/render/materiais/shaders/terreno.glsl.js';
 import { GLSL_AGUA_FRAGMENTO, AGUAS } from '../../fonte/render/materiais/shaders/agua.glsl.js';
+import { soltarComAlvo } from '../../fonte/render/materiais/texturas-chao.js';
 import { CORES_COPA } from '../../fonte/render/materiais/shaders/folha.glsl.js';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
 import { gerarCidadeSintetica, SINTETICA } from '../cidade-sintetica.mjs';
@@ -401,6 +403,57 @@ test('relevo fino do fragmento: cada termo some pelo pixel em 3D (na encosta a p
   }
   assert.ok(!/length\( abs\( tDx \) \+ abs\( tDy \) \)/.test(cor), 'corte pelo pixel só em x e z (falha na encosta)');
   assert.match(cor, /terRelevo\( tN, \( tRel \+ tCopaRel \* 0\.65 \+ tRelRocha \+ tRelVeg \)/);
+});
+
+test('relevo fino: inclinação limitada e sem NaN (a parede da copa levantada leva o det a zero)', () => {
+  const pars = GLSL_TER_FRAGMENTO.pars;
+  const i0 = pars.indexOf('vec3 terRelevo(');
+  const corpo = pars.slice(i0, pars.indexOf('\n}', i0));
+  assert.match(corpo, /if \( lg > 1\.2 \* ad \) g \*= 1\.2 \* ad \/ lg;/, 'sem o limite da inclinação');
+  assert.match(corpo, /dot\( r, r \) > 1e-24 \? normalize\( r \) : n/, 'normalize de vetor nulo dá NaN');
+});
+
+test('água: a inclinação de cada mapa de ondas girado volta ao mundo pela transposta do mesmo giro', () => {
+  const cor = GLSL_AGUA_FRAGMENTO.cor;
+  // aN0 a aN3: o giro da leitura (mat2 antes de aW) e o da inclinação (mat2 depois de aNk.xy) têm de ser o mesmo
+  for (let k = 0; k < 4; k++) {
+    const leitura = cor.match(new RegExp(`aN${k} = texture\\( uAguaOndas, (mat2\\([^)]*\\))? ?\\*? ?aW`));
+    assert.ok(leitura, `leitura de aN${k}`);
+    const giro = leitura[1] ?? null;
+    const inc = cor.match(new RegExp(`\\( aN${k}\\.xy \\* 2\\.0 - 1\\.0 \\)( \\* (mat2\\([^)]*\\)))?`));
+    assert.ok(inc, `inclinação de aN${k}`);
+    assert.equal(inc[2] ?? null, giro, `aN${k}: giro da leitura ${giro} e da inclinação ${inc[2]}`);
+  }
+});
+
+test('texturas do chão: soltar a textura de um alvo de render solta o alvo (o three só apaga pela do alvo)', () => {
+  const alvo = new THREE.WebGLRenderTarget(4, 4);
+  let soltou = 0;
+  alvo.addEventListener('dispose', () => soltou++);
+  soltarComAlvo(alvo.texture, alvo);
+  alvo.texture.dispose();
+  assert.equal(soltou, 1);
+  assert.equal(alvo.texture.userData.alvo, alvo);
+});
+
+test('vegetação: na borda (cobertura parcial) o vão escuro entre as copas mostra o chão; a mata fechada fica igual', () => {
+  const cam = GLSL_TER_FRAGMENTO.pars;
+  assert.match(cam, /float terCobVeg\( float cob, vec3 cor \)/);
+  // a mesma regra no assado e no pintado por pixel (senão o perto e o longe mudam de cor na troca)
+  assert.match(cam, /float veg = terCobVeg\( terVegetacao\( e, cv \), cv \);/);
+  assert.match(GLSL_TER_FRAGMENTO.cor, /tAlb = mix\( tAlb, cVeg, terCobVeg\( tVeg, cVeg \) \* tMed \);/);
+  // a conta em JavaScript: vão (luminância 0,01) com cobertura 1 continua; com cobertura 0,5 quase some
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const cobVeg = (cob, lum) => cob * (1 - (1 - ss(0.013, 0.026, lum)) * (1 - ss(0.4, 0.95, cob)));
+  assert.equal(cobVeg(1, 0.01), 1);
+  assert.equal(cobVeg(0.5, 0.05), 0.5);
+  assert.ok(cobVeg(0.5, 0.01) < 0.05);
+});
+
+test('CDLOD: a caixa de cada nó cobre a copa mais alta que o vértice levanta (senão o corte pela vista come copa)', () => {
+  const m = GLSL_TER_VERTICE.normal.match(/tCopa \*= uTerCopaV\.x \* \( ([\d.]+) \+ ([\d.]+) \* tRc\.z \);/);
+  assert.ok(m, 'fator da copa no vértice');
+  assert.ok(COPA_MAX >= COPA_ALTURA * (Number(m[1]) + Number(m[2])) - 1e-9, `COPA_MAX ${COPA_MAX} abaixo da copa do GLSL`);
 });
 
 test('estação: capim seco no inverno (julho), verde no verão (janeiro)', () => {

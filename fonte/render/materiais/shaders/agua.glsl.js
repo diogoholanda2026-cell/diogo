@@ -124,10 +124,13 @@ float aF = aForca * ( 0.6 + 0.7 * aVento.y ) * ( 1.0 - 0.65 * aCalma );
 // 150 m), que é o que mostra de cima que a água é água e não um disco liso
 float aPata = smoothstep( 0.45, 0.8, aVento.y * 0.7 + aQuebra.x * 0.3 );
 if ( vAgua > 1.5 ) aF = aForca * mix( 0.3, 1.7, aPata ) * ( 1.0 - 0.5 * aCalma );
-// ondas longas têm inclinação pequena (a maior parte da inclinação vem das curtas): pesos 0,12, 0,24, 0,6 e 0,4
+// ondas longas têm inclinação pequena (a maior parte da inclinação vem das curtas): pesos 0,12, 0,24, 0,6 e 0,4. A
+// inclinação lida num mapa girado volta para o mundo pela transposta do giro (v * M), senão o brilho do sol corre
+// numa direção e as cristas em outra
 float aK3 = 1.0 - smoothstep( 0.06, 0.3, aPe );
-vec2 aInc = ( aN0.xy * 2.0 - 1.0 ) * 0.12 + ( aN1.xy * 2.0 - 1.0 ) * 0.24 * aK1 + ( aN2.xy * 2.0 - 1.0 ) * 0.6 * ( 0.5 + 0.5 * aVento.z ) * aK2
-  + ( aN3.xy * 2.0 - 1.0 ) * 0.4 * aK3;
+vec2 aInc = ( aN0.xy * 2.0 - 1.0 ) * mat2( 0.8, 0.6, -0.6, 0.8 ) * 0.12 + ( aN1.xy * 2.0 - 1.0 ) * 0.24 * aK1
+  + ( aN2.xy * 2.0 - 1.0 ) * mat2( 0.6, -0.8, 0.8, 0.6 ) * 0.6 * ( 0.5 + 0.5 * aVento.z ) * aK2
+  + ( aN3.xy * 2.0 - 1.0 ) * mat2( -0.28, 0.96, -0.96, -0.28 ) * 0.4 * aK3;
 aguaNormal = normalize( vec3( aInc.x * aF, 1.0, aInc.y * aF ) );
 aguaNormal = normalize( mix( aguaNormal, vec3( 0.0, 1.0, 0.0 ), aguaEspuma * 0.7 ) );
 // as ondas que o pixel não resolve viram rugosidade (o brilho do sol se espalha em vez de cintilar)

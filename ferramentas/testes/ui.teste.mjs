@@ -37,6 +37,7 @@ async function ui() {
     export * as quantidade from ${abs('ui/comp/Quantidade.jsx')};
     export * as textos from ${abs('ui/textos.js')};
     export * as glifos from ${abs('ui/glifos/glifos.js')};
+    export * as loja from ${abs('ui/loja.js')};
   `;
   const r = await build({
     stdin: { contents: entrada, resolveDir: RAIZ, loader: 'js' }, bundle: true, write: false, format: 'esm', platform: 'node',
@@ -295,7 +296,17 @@ test('cartão: números por tipo (Contribuição em /h, nunca Aluguel), aviso ma
   // o tipo do q.predio não tem forma fixa no contrato: o bloco servico decide (nunca o glifo residencial da zona 0)
   assert.equal(cartao.aparencia({ tipo: 1, zona: 0, servico: { capacidade: 10 } }).familia, 'servico');
   assert.equal(cartao.aparencia({ tipo: 2, zona: 0, holding: { nivel: 1 } }).glifo, 'holding');
+  // o contrato do q.predio não tem categoria: o tipo do catálogo (data/servicos.js) diz o glifo e o nome
+  const clinica = { tipo: 'clinica', zona: 0, servico: { capacidade: 8000, uso: 10, eficiencia: 1, alcance: 1200, manutencaoHora: 700 } };
+  assert.equal(cartao.aparencia(clinica).glifo, 'saude');
+  assert.equal(cartao.subtitulo(clinica), 'Saúde · alcance de 1.200 m');
+  assert.deepEqual(['poco', 'ete', 'solar', 'escolaM', 'delegacia', 'parqueG'].map((tipo) => cartao.aparencia({ tipo, servico: {} }).glifo), ['agua', 'esgoto', 'energia', 'educacao', 'policia', 'parque']);
+  assert.equal(cartao.subtitulo({ tipo: 'novoServico', servico: { alcance: 0 } }), 'Serviço', 'tipo novo sem categoria: o nome genérico');
   assert.equal(cartao.numerosDoCartao({ ...ind, nivel: NaN }).at(-1).valor, '1 de 5');
+  // prédio da Holding sem o bloco trabalho: os números vêm do bloco holding (antes a faixa ficava vazia)
+  const conc = { tipo: 'holding', nivel: 2, holding: { nivel: 2, vagas: [4, 6, 2, 0], ocupadas: [4, 5, 1, 0], linhas: [{ item: 'concreto', parada: false }, { item: 'brita', parada: true }] } };
+  assert.deepEqual(cartao.numerosDoCartao(conc).map((x) => [x.id, x.valor, x.estado ?? null]), [['trabalhadores', '10 de 12', null], ['linhas', '1 de 2', 'al'], ['nivel', '2 de 5', null]]);
+  assert.deepEqual(cartao.numerosDoCartao({ tipo: 'holding', holding: { vagas: 8, ocupadas: NaN } }).map((x) => x.valor), ['0 de 8', '0 de 0', '1 de 5']);
 });
 
 // ------------------------------------------------------------------------------------------------ Economia
@@ -364,6 +375,18 @@ test('gráfico: escala com o zero e passos redondos; tabela ordena números e te
   assert.equal(quantidade.limitar(10500, 1000, 10500, 1000), 10000);
   assert.equal(quantidade.limitar(99999, 1000, 10500, 1000), 10000);
   assert.equal(quantidade.limitar(5, 1, 10, 0), 5, 'passo inválido vale 1');
+  // no limite o botão fica fraco mas o toque diz o porquê (antes o desligado do Botao engolia o toque no celular)
+  const { loja } = await ui();
+  let mudou = 0;
+  const noLimite = quantidade.botaoDoPasso(true, 'Máximo: 10', () => mudou++);
+  assert.equal(noLimite['aria-disabled'], 'true');
+  noLimite.onClick();
+  assert.equal(mudou, 0);
+  assert.equal(loja.avisos.value.at(-1)?.texto, 'Máximo: 10');
+  const livre = quantidade.botaoDoPasso(false, 'Máximo: 10', () => mudou++);
+  assert.equal(livre['aria-disabled'], undefined);
+  livre.onClick();
+  assert.equal(mudou, 1);
 });
 
 test('cartão: só seleção de prédio consulta q.predio (via e Arcologia têm outro índice)', async () => {

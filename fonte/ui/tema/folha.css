@@ -46,13 +46,17 @@
   flex: 1;
   min-width: 0;
 }
+/* nome em até duas linhas (os nomes brasileiros são longos: "Clínica da Família Santa Cida"); além disso, reticências */
 .cartao-nome {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   font-size: var(--t15);
   font-weight: 650;
   line-height: 1.2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .cartao-sub,
 .folha-sub {

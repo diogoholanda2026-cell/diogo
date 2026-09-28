@@ -309,3 +309,21 @@ test('material edificio: o shader monta sobre o MeshStandardMaterial do three co
   const nv = (shader.vertexShader.match(/^\s*(flat\s+)?varying\s+vec4\s+v(PF|Fac|Cor|Ident)\b/gm) ?? []).length;
   assert.equal(nv, 4);
 });
+
+test('sombra própria e duas faixas: setores projetores pelo chão da cascata e pelo sol; o corte é o das faixas', async () => {
+  const THREE = await import('three');
+  const { sombraAlcanca, limiteFaixas } = await import('../../fonte/render/mundo/predios.js');
+  const { Faixas } = await import('../../fonte/render/motor/faixas.js');
+  // setor de 256 m com o canto a 300 m a leste do foco (raio 100): só projeta dentro com o sol a leste e baixo
+  assert.equal(sombraAlcanca(300, -128, 256, 0, 0, 100, 1, 0, 0), false, 'sem alcance, fora do raio');
+  assert.equal(sombraAlcanca(300, -128, 256, 0, 0, 100, 1, 0, 250), true, 'sol baixo a leste: a sombra chega');
+  assert.equal(sombraAlcanca(300, -128, 256, 0, 0, 100, -1, 0, 600), false, 'sol a oeste: a sombra vai para o outro lado');
+  assert.equal(sombraAlcanca(-50, -50, 256, 0, 0, 10, 0, 1, 0), true, 'o foco dentro do setor');
+  // o corte das faixas é a mesma conta do motor (a lista de longe e a de perto se encontram na emenda)
+  for (const dist of [200, 1500, 2500, 6000]) {
+    const f = new Faixas({ semClip: true, cameraApi: { estado: () => ({ dist }) } });
+    const falso = { autoClear: true, render() {}, clearDepth() {} };
+    f.desenhar(falso, new THREE.Scene(), new THREE.PerspectiveCamera(40, 1, 1, 1000), null);
+    assert.equal(limiteFaixas(dist), f.limite, `corte a ${dist} m`);
+  }
+});

@@ -4,6 +4,8 @@
 //   residencial: moradores de capacidade, bem-estar, contribuição por hora de jogo (D42: nunca "Aluguel")
 //   serviço: atendidos de capacidade, eficiência, manutenção por hora de jogo
 //   comercial e indústria: trabalhadores de vagas, produtividade, nível
+//   Holding (sem o bloco trabalho): trabalhadores de vagas, linhas de produção ativas, nível
+//   serviço: o tipo do catálogo (clinica, escolaF...) dá o glifo e o nome; o contrato não tem categoria
 // A consulta q.predio(ref) é relida 2 vezes por segundo enquanto há seleção de prédio e fica em loja.detalhe (a folha
 // usa). Via e Arcologia não são prédios: o ref delas não vai para q.predio (daria o prédio de mesmo índice).
 import { signal, effect } from '@preact/signals';
@@ -42,6 +44,15 @@ const GLIFO_SERVICO = {
   agua: 'agua', esgoto: 'esgoto', energia: 'energia', saude: 'saude', educacao: 'educacao', seguranca: 'policia',
   policia: 'policia', bombeiros: 'bombeiros', lazer: 'praca', praca: 'praca', parque: 'parque',
 };
+// O q.predio diz o serviço pelo tipo (os ids de data/servicos.js, tabela da seção 8.1 do desenho da simulação), não por
+// uma categoria: sem esta tabela toda clínica e toda escola de verdade cairia no glifo e no nome genéricos.
+const CATEGORIA_DO_TIPO = {
+  captacao: 'agua', poco: 'agua', ete: 'esgoto', solar: 'energia', termica: 'energia', praca: 'praca', clinica: 'saude',
+  hospital: 'saude', escolaF: 'educacao', escolaM: 'educacao', delegacia: 'seguranca', bombeiros: 'bombeiros',
+  parque: 'parque', parqueG: 'parque',
+};
+/** Categoria do serviço: a que a simulação mandar ou a do tipo do catálogo (null se nenhuma). */
+export const categoriaServico = (p) => p?.servico?.categoria ?? p?.categoria ?? CATEGORIA_DO_TIPO[p?.tipo] ?? null;
 // código do aviso para o glifo; o código que já é nome de glifo (transito, lixo, incendio...) usa o próprio
 const GLIFO_AVISO = {
   semEsgoto: 'esgoto', semAcesso: 'semVia', racionado: 'semEnergia', caixaZerado: 'semCreditos',
@@ -61,7 +72,7 @@ const ehHolding = (p) => p?.tipo === 'holding' || (!!p?.holding && !p?.servico);
 /** Família e glifo do prédio: zona pela família (D23), serviço pela categoria, Holding pelo monograma. */
 export function aparencia(p) {
   if (!p) return { glifo: 'info', cor: null, familia: null };
-  if (ehServico(p)) return { glifo: GLIFO_SERVICO[p.servico?.categoria ?? p.categoria] ?? 'servicos', cor: null, familia: 'servico' };
+  if (ehServico(p)) return { glifo: GLIFO_SERVICO[categoriaServico(p)] ?? 'servicos', cor: null, familia: 'servico' };
   if (ehHolding(p)) return { glifo: 'holding', cor: 'var(--ch)', familia: 'holding' };
   const z = dadosZona(p.zona);
   const fam = z?.familia ?? null;
@@ -72,7 +83,7 @@ export function aparencia(p) {
 export function subtitulo(p) {
   if (!p) return '';
   if (ehServico(p)) {
-    const cat = p.servico?.categoria ?? p.categoria;
+    const cat = categoriaServico(p);
     const nome = cat && temTexto(`cartao.servico.${cat}`) ? t(`cartao.servico.${cat}`) : t('cartao.servico');
     return p.servico?.alcance > 0 ? t('cartao.sub.alcance', { tipo: nome, m: fmt.numero(p.servico.alcance) }) : nome;
   }
@@ -105,9 +116,23 @@ export function numerosDoCartao(p) {
       { id: 'manutencao', rotulo: t('cartao.manutencao'), valor: fmt.porHora(-(s.manutencaoHora ?? 0)), dica: hora },
     ];
   }
+  // soma das vagas por escolaridade ([4]) ou o número direto; campo torto vale 0
+  const soma = (l) => (Array.isArray(l) ? l.reduce((a, x) => a + (Number.isFinite(x) ? x : 0), 0) : Number.isFinite(l) ? l : 0);
+  if (p.holding && !p.trabalho) {
+    // prédio da Holding (q.predio.holding: nível, linhas de produção, vagas e ocupadas): sem os três números, o cartão
+    // ficava com a faixa dos números vazia
+    const h = p.holding;
+    const linhas = Array.isArray(h.linhas) ? h.linhas : [];
+    const paradas = linhas.filter((l) => l?.parada).length;
+    const nivel = h.nivel > 0 ? h.nivel : p.nivel > 0 ? p.nivel : 1;
+    return [
+      { id: 'trabalhadores', rotulo: t('cartao.trabalhadores'), valor: t('cartao.deN', { a: fmt.numero(soma(h.ocupadas)), b: fmt.numero(soma(h.vagas)) }), frac: soma(h.vagas) ? soma(h.ocupadas) / soma(h.vagas) : 0 },
+      { id: 'linhas', rotulo: t('cartao.linhas'), valor: t('cartao.deN', { a: fmt.numero(linhas.length - paradas), b: fmt.numero(linhas.length) }), estado: paradas ? 'al' : null, glifo: paradas ? 'alerta' : null },
+      { id: 'nivel', rotulo: t('cartao.nivel'), valor: t('cartao.deN', { a: nivel, b: 5 }) },
+    ];
+  }
   if (p.trabalho) {
     const w = p.trabalho;
-    const soma = (l) => (l ?? []).reduce((a, x) => a + (x || 0), 0);
     const prod = w.produtividade ?? 0;
     return [
       { id: 'trabalhadores', rotulo: t('cartao.trabalhadores'), valor: t('cartao.deN', { a: fmt.numero(soma(w.ocupadas)), b: fmt.numero(soma(w.vagas)) }), frac: soma(w.vagas) ? soma(w.ocupadas) / soma(w.vagas) : 0 },
@@ -172,7 +197,9 @@ export function Cartao({ ui }) {
           <Glifo n={ap.glifo} tam={20} />
         </span>
         <div class="cartao-titulos">
-          <h2 class="cartao-nome">{p.nome}</h2>
+          <h2 class="cartao-nome" title={p.nome}>
+            {p.nome}
+          </h2>
           <span class="cartao-sub">{subtitulo(p)}</span>
         </div>
         <Botao a="cartao.localizar" rotulo={t('comp.localizar')} class="bt-glifo" onClick={localizar}>
@@ -200,7 +227,7 @@ export function Cartao({ ui }) {
           <span class="rot">{t('cartao.obra', { fase: obra.nome })}</span>
           <Barra valor={obra.frac} estado="al" rotulo={t('cartao.obra', { fase: obra.nome })} texto={fmt.pct(obra.frac)} />
         </div>
-      ) : (
+      ) : numeros.length ? (
         <dl class="cartao-numeros">
           {numeros.map((x) => (
             <div class="cartao-num" data-k={x.id}>
@@ -212,7 +239,7 @@ export function Cartao({ ui }) {
             </div>
           ))}
         </dl>
-      )}
+      ) : null}
       <footer class="cartao-pe">
         <div class="cartao-onde">
           {via ? <span class="cartao-via">{via}</span> : null}

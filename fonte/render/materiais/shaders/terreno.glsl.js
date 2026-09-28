@@ -307,6 +307,13 @@ float terVegetacao( TerEntrada e, out vec3 cor ) {
   return cob;
 }
 
+// cobertura com que a cor da vegetação entra: na borda (cobertura parcial) o vão escuro entre as copas mostra o chão
+// de baixo, não a sombra funda da mata fechada (a mata fechada, cobertura 1, fica igual)
+float terCobVeg( float cob, vec3 cor ) {
+  float vao = 1.0 - smoothstep( 0.013, 0.026, dot( cor, vec3( 0.2126, 0.7152, 0.0722 ) ) );
+  return cob * ( 1.0 - vao * ( 1.0 - smoothstep( 0.4, 0.95, cob ) ) );
+}
+
 // areia molhada na linha da água e a vegetação por cima de tudo
 void terAcabamento( TerEntrada e, inout vec3 alb, inout float rug ) {
   float sub = 1.0 - smoothstep( -0.6, 0.4, e.h );
@@ -316,7 +323,7 @@ void terAcabamento( TerEntrada e, inout vec3 alb, inout float rug ) {
   alb *= 1.0 - 0.36 * molhado;
   rug = mix( rug, 0.4, molhado );
   vec3 cv;
-  float veg = terVegetacao( e, cv );
+  float veg = terCobVeg( terVegetacao( e, cv ), cv );
   alb = mix( alb, cv, veg );
   rug = mix( rug, 0.82, veg );
 }
@@ -449,7 +456,10 @@ float terRug;
 float terMasc;
 vec3 terLinha;
 
-// relevo fino por derivadas de tela (Mikkelsen), no espaço do mundo
+// relevo fino por derivadas de tela (Mikkelsen), no espaço do mundo. A inclinação fica em até ~50 graus: onde a malha
+// fica de lado para a normal do chão (a parede da copa levantada na borda da mata, a quina do costão) o det vai a zero
+// e qualquer degrau do relevo dentro de um pixel deitaria a normal de vez; com det zero e relevo zero, o normalize de
+// um vetor nulo dava NaN
 vec3 terRelevo( vec3 n, float h ) {
   vec3 dpx = dFdx( vGPosMundo );
   vec3 dpy = dFdy( vGPosMundo );
@@ -459,7 +469,11 @@ vec3 terRelevo( vec3 n, float h ) {
   vec3 r2 = cross( n, dpx );
   float det = dot( dpx, r1 );
   vec3 g = sign( det ) * ( dhx * r1 + dhy * r2 );
-  return normalize( abs( det ) * n - g );
+  float ad = abs( det );
+  float lg = length( g );
+  if ( lg > 1.2 * ad ) g *= 1.2 * ad / lg;
+  vec3 r = ad * n - g;
+  return dot( r, r ) > 1e-24 ? normalize( r ) : n;
 }
 
 #ifdef TER_DETALHE
@@ -505,7 +519,11 @@ vec4 tUso = texture( uTerUso, tUVM );
 terRuidos( tW );
 bool tDentro = all( greaterThanEqual( tUVM, vec2( 0.0 ) ) ) && all( lessThanEqual( tUVM, vec2( 1.0 ) ) );
 vec3 tN = terNormalDados( tDados );
-vec3 tNF = normalize( cross( dFdx( vGPosMundo ), dFdy( vGPosMundo ) ) );
+// normal da malha pelas derivadas; num triângulo visto de lado (a parede fina da copa levantada na borda da mata) o
+// produto vetorial pode sair nulo ou infinito e o normalize dá NaN, que o mix com peso 0 não apaga (NaN vezes 0 é NaN)
+vec3 tNFc = cross( dFdx( vGPosMundo ), dFdy( vGPosMundo ) );
+float tNFq = dot( tNFc, tNFc );
+vec3 tNF = tNFq > 1e-24 && tNFq < 1e30 ? tNFc * inversesqrt( tNFq ) : tN;
 tNF *= sign( tNF.y + 1e-5 );
 float tFora = smoothstep( 0.0, 200.0, terDistFora( tW ) );
 tN = normalize( mix( tN, tNF, tFora ) );
@@ -611,11 +629,17 @@ if ( ( tMed > 0.0 || tParedao * tMedR > 0.0 ) && tDentro ) {
   float v = mA.x * 0.4 + mA.y * 0.25 + mB.x * 0.2 + mB.w * 0.15;
   vec3 mCampo = vec3( 0.74 + 0.52 * v ) * mix( vec3( 1.0 ), vec3( 1.12, 1.04, 0.74 ), smoothstep( 0.55, 0.78, mA.y * 0.6 + mB.y * 0.4 ) * 0.7 );
   vec3 mSolo = vec3( 0.84 + 0.32 * ( mA.x * 0.5 + mB.w * 0.5 ) );
+  // areia: trechos pisados, varridos pelo vento e mais úmidos (manchas de 1 a 6 m, média 1); sem isto a praia de perto
+  // era um plano bege liso, de maquete
+  float areia = p[ 5 ] / ps * ( 1.0 - tVeg );
+  vec3 mAreia = vec3( 0.91 + 0.18 * ( mA.y * 0.55 + mB.x * 0.45 ) )
+    * mix( vec3( 1.0 ), vec3( 0.95, 0.96, 1.0 ), smoothstep( 0.58, 0.8, mA.x ) * 0.7 );
   // pisos dos lotes: cimentado, cerâmica e sujeira variam de quintal para quintal (manchas de 5 a 20 m)
   float piso = p[ 7 ] / ps * ( 1.0 - asf / max( p[ 7 ], 1e-4 ) );
   vec3 mPiso = vec3( 0.8 + 0.34 * mA.y ) * mix( vec3( 1.0 ), vec3( 1.14, 0.96, 0.84 ), smoothstep( 0.6, 0.8, mA.x ) * 0.8 )
     * mix( vec3( 1.0 ), vec3( 0.82, 0.86, 0.8 ), smoothstep( 0.62, 0.82, mB.y ) * 0.6 );
-  vec3 tM = mix( vec3( 1.0 ), mCampo, campo ) * mix( vec3( 1.0 ), mSolo, solo ) * mix( vec3( 1.0 ), mPiso, piso );
+  vec3 tM = mix( vec3( 1.0 ), mCampo, campo ) * mix( vec3( 1.0 ), mSolo, solo ) * mix( vec3( 1.0 ), mPiso, piso )
+    * mix( vec3( 1.0 ), mAreia, areia );
   tAlb *= mix( vec3( 1.0 ), tM, tMed );
   // vegetação nítida (o assado de 4 m borra as copas de 3 a 16 m); de perto, os tufos de 1 a 2 m das moitas e das
   // copas, com o vão escuro entre eles (senão a moita pintada vira um feltro liso)
@@ -626,7 +650,7 @@ if ( ( tMed > 0.0 || tParedao * tMedR > 0.0 ) && tDentro ) {
   cVeg *= mix( 1.0, 0.62 + 0.55 * tufoV, pertoV );
   // relevo dos tufos de ~1,4 m: só com o pixel abaixo de ~0,3 m
   tRelVeg = tVeg * tMed * planoV * ( 1.0 - smoothstep( 0.12, 0.35, tPix ) ) * ( 0.9 * tufoV + 0.25 * mB.x );
-  tAlb = mix( tAlb, cVeg, tVeg * tMed );
+  tAlb = mix( tAlb, cVeg, terCobVeg( tVeg, cVeg ) * tMed );
   // granito do paredão e do costão: projeção lateral onde é íngreme (riscos verticais da chuva, líquen, mato nas
   // fendas) e de cima onde é suave (matacões de 1 a 3 m); a faixa molhada escurece junto da água
   float tCostaoP = terCostao( tE );
@@ -658,7 +682,10 @@ if ( ( tMed > 0.0 || tParedao * tMedR > 0.0 ) && tDentro ) {
     granito *= mix( vec3( 1.0 ), vec3( 0.8, 0.75, 0.68 ) * ( 0.82 + 0.36 * sM.x ), kc );
     granito *= 1.0 - 0.62 * kc * ( 1.0 - smoothstep( 1.5 + 1.5 * sM.y, 3.5 + 2.5 * sM.y, vTer.x ) );
     granito *= 1.0 - 0.45 * ( 1.0 - smoothstep( 0.4, 2.2, vTer.x ) ) * tCostaoP;
-    granito = mix( granito, copaCor( terR2, terR3, terR1 ), mato * 0.85 );
+    // mato nas fendas: o verde das copas sem os vãos escuros entre elas (a mancha tem ~1 m; o vão de mata fechada
+    // pintava parte delas quase preta)
+    vec3 matoCor = copaCor( vec4( terR2.xy, 0.6, terR2.w ), vec4( terR3.xy, 0.6, terR3.w ), terR1 ) * ( 0.8 + 0.3 * sR.w );
+    granito = mix( granito, matoCor, mato * 0.85 );
     tAlb = mix( tAlb, granito, pr );
     tRug = mix( tRug, mix( 0.68, 0.82, mato ), pr );
     // os blocos têm volume: a luz do sol modela cada um (e quebra as faixas das linhas da malha na parede); a borda
@@ -670,7 +697,9 @@ if ( ( tMed > 0.0 || tParedao * tMedR > 0.0 ) && tDentro ) {
 // relevo: detalhe de perto e as copas até mais longe (fora de qualquer "if": derivadas de tela)
 // o relevo das copas some quando um pixel cobre mais que uns 2 m (derivada de tela serrilharia com o sol baixo)
 // na encosta a projeção de cima estica as copas em riscos (escamas com o sol rasante): ali o relevo delas some
-float tCopaRel = copaRelevo( terR2, terR3, terR1 ) * max( terCopa( tE.mata ) * ( 1.0 - smoothstep( 0.35, 0.8, terCostao( tE ) ) ) * ( 1.0 - tParedao ), tVeg * 0.8 )
+// as copas pequenas (4 m) só com o pixel abaixo de ~0,5 m: a 700 m, com o sol baixo, a normal por quadra de 2 x 2
+// pixels desenhava um xadrez claro e escuro na encosta; as grandes (16 m) seguem até o pixel de ~2 m
+float tCopaRel = copaRelevo( terR2, terR3, terR1, 1.0 - smoothstep( 0.3, 0.8, tPix ) ) * max( terCopa( tE.mata ) * ( 1.0 - smoothstep( 0.35, 0.8, terCostao( tE ) ) ) * ( 1.0 - tParedao ), tVeg * 0.8 )
   * ( 1.0 - smoothstep( uTerDetalhe.w * 0.6, uTerDetalhe.w, tDist ) ) * ( 1.0 - smoothstep( 0.9, 2.5, tPix ) )
   * ( 1.0 - smoothstep( 0.22, 0.45, 1.0 - tN.y ) );
 // a copa levantada faz paredes na borda da mata: ali (a normal da malha bem mais em pé que a do chão), tom de sombra e

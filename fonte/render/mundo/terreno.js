@@ -31,6 +31,8 @@ export const PERFIL_TERRENO = Object.freeze({
 export const LADO_USO = 2048; // 4 m por texel no mapa de 8.192 m
 export const RAIZ_CDLOD = Object.freeze({ x: -16384, z: -16384, lado: 32768 }); // moldura de 32 km (1.4)
 export const COPA_ALTURA = 18;
+/** A copa mais alta que o vértice levanta (COPA_ALTURA vezes 0,72 + 0,5 do ruído, no GLSL): a caixa do nó cobre até ela. */
+export const COPA_MAX = COPA_ALTURA * 1.22;
 export const FORA = Object.freeze({ faixa: 1600, serra: 230, mar: 45 });
 const MORPH = Object.freeze({ inicio: MORPH_INICIO, fim: 0.95 });
 const MAX_NOS = 1024;
@@ -306,7 +308,7 @@ export function limitesAltura(P, x0, z0, x1, z1, fora = true) {
  *           copa?: number, fundo?: number, saida?: Float32Array }} op  saida: onde escrever (o quadro reusa a do atributo)
  * @returns {Float32Array} 4 por nó: x0, z0, lado, nível (e .n com o número de nós)
  */
-export function selecionarNos({ cam, visivel = () => true, faixas, P, fora = true, copa = COPA_ALTURA, fundo = -2.5, max = MAX_NOS, saida = null }) {
+export function selecionarNos({ cam, visivel = () => true, faixas, P, fora = true, copa = COPA_MAX, fundo = -2.5, max = MAX_NOS, saida = null }) {
   const out = saida && saida.length >= max * 4 ? saida : new Float32Array(max * 4);
   let n = 0;
   const caixa = { x0: 0, z0: 0, x1: 0, z1: 0, y0: 0, y1: 0 };
@@ -1073,6 +1075,7 @@ function criarTerreno(ctx) {
   const texR8 = (dados, n, filtro) => {
     const t = new THREE.DataTexture(dados, n, n, THREE.RedFormat, THREE.UnsignedByteType);
     t.minFilter = t.magFilter = filtro;
+    t.unpackAlignment = 1; // linhas de n bytes: com o alinhamento 4 do padrão, uma grade de lado ímpar sairia torta
     t.generateMipmaps = false;
     t.colorSpace = THREE.NoColorSpace;
     t.needsUpdate = true;

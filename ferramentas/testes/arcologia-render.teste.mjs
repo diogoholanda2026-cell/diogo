@@ -6,8 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   malhasTorre, malhasTorreLod1, malhaSombraTorre, trechosCorpo, contornoTrecho, NIVEL, Malha, triangular, areaPoli,
-  DIST_LOD0, LUZ_NOITE, torno, cilindro,
+  DIST_LOD0, LUZ_NOITE, torno, cilindro, materiais, descartarMateriais, atualizarArcologia, UNIFORMES,
 } from '../../fonte/render/arcologia/torre.js';
+import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { assentarHora } from '../../fonte/render/cenas/torre.js';
 import { malhasDoPlano, pontoDentro, tocaGleba } from '../../fonte/render/arcologia/planos.js';
 import { ORCAMENTO } from '../../fonte/contratos/render.js';
@@ -167,6 +168,22 @@ test('Torre: luz da noite calibrada para a exposição da R1a (janela quente sem
   assert.ok(tela(LUZ_NOITE.forro) > tela(LUZ_NOITE.janela) && tela(LUZ_NOITE.forro) < 4, 'andar de vento acima das janelas');
   assert.ok(tela(LUZ_NOITE.lanterna) > tela(LUZ_NOITE.forro), 'a lanterna é a luz mais forte da torre');
   assert.ok(tela(LUZ_NOITE.aro) > 4 && tela(LUZ_NOITE.aro) < 16, 'aro do heliponto');
+});
+
+test('noite: o reflexo não cai pelo envMapIntensity (com a luz do ambiente da R1a o three o ignora e a queda apagaria a pedra)', () => {
+  // com cena.environment e envMap nulo o three usa scene.environmentIntensity no lugar do envMapIntensity do material; e
+  // quando vale (reflexo de reserva), a mesma queda escurece a luz difusa da pedra, do gramado e das árvores. Quem
+  // escurece o vidro e o bronze à noite é o shader
+  const ctx = { cena: { environment: { isTexture: true } }, ganchos, horaDoCeu: () => 21, sim: null };
+  const m = materiais(ctx);
+  const antes = [...m.lista].map((x) => x.envMapIntensity);
+  atualizarArcologia(ctx, 0, { noite: 1, hora: 21 });
+  assert.equal(UNIFORMES.uNoite.value, 1);
+  assert.deepEqual([...m.lista].map((x) => x.envMapIntensity), antes);
+  for (const x of m.lista) assert.equal(x.envMap, null, `${x.name}: envMap próprio com o ambiente da cena`);
+  descartarMateriais(ctx);
+  assert.equal(m.lista.size, 0, 'materiais soltos ao descartar');
+  UNIFORMES.uNoite.value = 0;
 });
 
 test('cenas: a hora forçada que muda espera o céu assentar (quadros-chave e cubo em fatias, D9)', async () => {

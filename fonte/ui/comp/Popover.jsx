@@ -19,8 +19,11 @@ export function Popover({ aberto, aoFechar, titulo = null, lado = 'esquerda', la
       const ancora = ref.current?.parentElement;
       if (ancora && !ancora.contains(ev.target)) fecharRef.current?.();
     };
+    // Esc fecha só a camada de cima: o popover, não a tela de gestão embaixo dele (ui/index.jsx ouve na janela)
     const tecla = (ev) => {
-      if (ev.key === 'Escape') fecharRef.current?.();
+      if (ev.key !== 'Escape') return;
+      ev.stopPropagation();
+      fecharRef.current?.();
     };
     document.addEventListener('pointerdown', fora, true);
     document.addEventListener('keydown', tecla);

@@ -5,8 +5,9 @@
 //     em número), velocidade (pausa, 1x, 2x, 4x) e menu.
 // Cada número abre a sua tela quando ela existe (créditos: Economia; população e demanda: Cidade; marco: Progresso;
 // H: Holding) e, antes disso, um popover com o "de onde vem". No PC entram o valor da Holding, a dívida e os botões
-// das telas registradas. Os números são sempre explícitos; a cor de estado vem sempre com glifo.
-import { useState, useRef, useEffect } from 'preact/hooks';
+// das telas registradas, que apertam em vez de sair da tela (useAperto). Os números são sempre explícitos; a cor de
+// estado vem sempre com glifo.
+import { useState, useRef, useEffect, useLayoutEffect } from 'preact/hooks';
 import { barra, tela } from '../loja.js';
 import * as fmt from '../formato.js';
 import { t, temTexto } from '../textos.js';
@@ -33,6 +34,9 @@ const glifoFase = (f) => GLIFO_FASE[f] ?? 'sol';
 // telas de gestão que ganham botão com rótulo no PC (desenho da UI 7.4), na ordem da barra
 const GESTAO = ['holding', 'economia', 'cidade', 'progresso', 'conselho'];
 const GLIFO_TELA = Object.freeze({ holding: 'holding', economia: 'dinheiro', cidade: 'populacao', progresso: 'marco', conselho: 'conselho' });
+// telas que a barra já abre por outro caminho (o H; o chip do Conselho e o menu): as primeiras a sair quando aperta
+const REPETIDAS = ['holding', 'conselho'];
+const NIVEL_MAX = 3;
 
 // ------------------------------------------------------------------------------------------ regras de leitura (puras)
 
@@ -130,6 +134,45 @@ function useCreditos(valor, ritmoHora) {
   return { salto, visto: visto ?? valor };
 }
 
+/**
+ * Aperto da barra no PC (desenho da UI 7.4): 0 com tudo; 1 sem os botões de Holding e Conselho (o H e o chip já abrem
+ * essas telas); 2 com os botões que ficam só com o glifo; 3 também sem o valor da Holding e a dívida. Sobe quando os
+ * grupos pedem mais que a largura (com as cinco telas da U1b, a 1376 e a 1920 os rótulos não cabem) e desce quando a
+ * largura volta a caber o que o nível de baixo pedia, sem vaivém. A medida roda no quadro seguinte ao do
+ * ResizeObserver (mudar o nível dentro dele daria o erro de laço do observador). No celular os extras nem aparecem.
+ */
+function useAperto(ref, chave) {
+  const [nivel, setNivel] = useState(0);
+  const e = useRef({ nivel: 0, pedida: [], quadro: 0 }).current;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver !== 'function' || typeof requestAnimationFrame !== 'function') return undefined;
+    const medir = () => {
+      e.quadro = 0;
+      const grupos = [...el.children].filter((c) => c.classList.contains('hud-grupo') && c.offsetWidth > 0);
+      const folga = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const pede = grupos.reduce((s, g) => s + g.offsetWidth, 0) + folga * Math.max(0, grupos.length - 1);
+      const livre = el.clientWidth;
+      let n = e.nivel;
+      if (pede > livre + 0.5 && n < NIVEL_MAX) e.pedida[n++] = pede;
+      else if (n > 0 && livre >= e.pedida[n - 1]) n--;
+      if (n !== e.nivel) setNivel((e.nivel = n));
+    };
+    const agendar = () => {
+      if (!e.quadro) e.quadro = requestAnimationFrame(medir);
+    };
+    const ro = new ResizeObserver(agendar);
+    ro.observe(el);
+    for (const g of el.children) ro.observe(g);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(e.quadro);
+      e.quadro = 0;
+    };
+  }, [chave]);
+  return nivel;
+}
+
 function Anel({ frac, n }) {
   const r = 12;
   const c = 2 * Math.PI * r;
@@ -207,9 +250,14 @@ export function BarraCima({ ui }) {
   const dicaHora = fmt.dicaHora();
   const telasPc = GESTAO.filter((id) => ui.telas().includes(id));
   const marco = b.marco ?? {};
+  const cima = useRef(null);
+  // os grupos observados mudam quando uma tela de gestão se registra ou o chip do Conselho aparece (o grupo das telas
+  // nunca some ao apertar: a Economia é desta parcela e fica)
+  const aperto = useAperto(cima, `${telasPc.join(',')}|${pendentes > 0}`);
+  const telasBarra = aperto >= 1 ? telasPc.filter((id) => !REPETIDAS.includes(id)) : telasPc;
 
   return (
-    <div class="hud-cima">
+    <div ref={cima} class={`hud-cima${aperto ? ` aperto-${aperto}` : ''}`}>
       <div class="hud-grupo vidro" data-hud="cima-esquerda">
         <Ancora>
           <Botao a="holding" rotulo={t('barra.holding')} {...(ui.telas().includes('holding') ? {} : expande(aberto === 'holding'))} class="hud-item hud-marca" onClick={() => abrir('holding', 'holding')}>
@@ -255,18 +303,19 @@ export function BarraCima({ ui }) {
           </Popover>
         </Ancora>
         <Ancora>
-          <Botao a="bemEstar" rotulo={t('barra.bem.rotulo', { n: bem, margem: margem.texto })} {...expande(aberto === 'bem')} class="hud-item" onClick={() => alternar('bem')}>
+          <Botao a="bemEstar" rotulo={vazia ? t('barra.bem.rotuloVazia', { margem: margem.texto }) : t('barra.bem.rotulo', { n: bem, margem: margem.texto })} {...expande(aberto === 'bem')} class="hud-item" onClick={() => alternar('bem')}>
             <Glifo n={glifoBem} class={estadoBem ? `tx-${estadoBem}` : ''} />
             <span class="pilha">
-              <b class="num hud-valor">{bem}</b>
+              {/* cidade sem moradores: sem número (a média não tem de quem ser), o nome no lugar */}
+              <b class={vazia ? 'hud-valor' : 'num hud-valor'}>{vazia ? t('barra.bem.nome') : bem}</b>
               <small class={`num hud-sub${margem.estado ? ` tx-${margem.estado}` : ''}`}>
                 {margem.estado ? <Glifo n="alerta" tam={12} /> : null}
                 {margem.texto}
               </small>
             </span>
           </Botao>
-          <Popover aberto={aberto === 'bem'} aoFechar={fechar} titulo={t('barra.bem.titulo', { n: bem })} largura={300} a="barra.bem">
-            <PopBemEstar b={b} margem={margem} />
+          <Popover aberto={aberto === 'bem'} aoFechar={fechar} titulo={vazia ? t('barra.bem.nome') : t('barra.bem.titulo', { n: bem })} largura={300} a="barra.bem">
+            <PopBemEstar b={b} margem={margem} vazia={vazia} />
             <VerTudo ui={ui} tela="cidade" fechar={fechar} />
           </Popover>
         </Ancora>
@@ -295,11 +344,13 @@ export function BarraCima({ ui }) {
         </span>
       </div>
 
-      {telasPc.length ? (
+      {telasBarra.length ? (
         <div class="hud-grupo vidro hud-pc hud-gestao" data-hud="cima-gestao">
-          {telasPc.map((id) => (
-            <Botao a="gestao" k={id} rotulo={t(`barra.tela.${id}`)} ativo={tela.value === id} class="hud-item hud-rotulo" onClick={() => (tela.value === id ? ui.fecharTela() : ui.abrirTela(id))}>
-              {t(`barra.tela.${id}`)}
+          {telasBarra.map((id) => (
+            <Botao a="gestao" k={id} rotulo={t(`barra.tela.${id}`)} dica={aperto >= 2 ? t(`barra.tela.${id}`) : undefined} ativo={tela.value === id} class="hud-item hud-rotulo" onClick={() => (tela.value === id ? ui.fecharTela() : ui.abrirTela(id))}>
+              {/* apertada, a barra mostra só o glifo (o nome fica no rótulo acessível e na dica do mouse) */}
+              <Glifo n={GLIFO_TELA[id] ?? 'setaDir'} class="hud-rotulo-glifo" />
+              <span class="hud-rotulo-texto">{t(`barra.tela.${id}`)}</span>
             </Botao>
           ))}
         </div>
@@ -395,18 +446,20 @@ function PopMarco({ marco }) {
   );
 }
 
-function PopBemEstar({ b, margem }) {
-  const faixas = faixasTarifa(b.tarifa);
-  const anterior = faixas.filter((f) => f.tarifa < b.tarifa).pop();
+function PopBemEstar({ b, margem, vazia }) {
+  // cidade sem moradores: as faixas ficam como regra, sem faixa "atual" nem "cai para" (não há de quem ser a média)
+  const faixas = faixasTarifa(vazia ? null : b.tarifa);
+  const anterior = vazia ? null : faixas.filter((f) => f.tarifa < b.tarifa).pop();
   return (
     <>
-      <p class="popover-texto">{t('barra.bem.paga', { tarifa: b.tarifa })}</p>
+      <p class="popover-texto">{vazia ? t('barra.bem.pagaVazia') : t('barra.bem.paga', { tarifa: b.tarifa })}</p>
       {anterior ? <p class={`popover-texto${margem.estado ? ' tx-al' : ''}`}>{t('barra.bem.cai', { degrau: anterior.ate + 1, tarifa: anterior.tarifa })}</p> : null}
       <div class="faixas" role="list" aria-label={t('barra.bem.faixas')}>
         {faixas.map((f) => (
           <div class={`faixa${f.atual ? ' atual' : ''}`} role="listitem">
             <span class="faixa-de num">{f.de === 0 ? t('barra.bem.ate', { ate: f.ate }) : t('barra.bem.deAte', { de: f.de, ate: f.ate })}</span>
-            <Glifo n="setaDir" tam={14} />
+            {/* seta de "paga", não chevron de navegar: a linha não abre nada */}
+            <Glifo n="ir" tam={14} />
             <span class="faixa-tarifa num">{t('barra.bem.tarifa', { tarifa: f.tarifa })}</span>
             {f.atual ? <Glifo n="check" tam={14} class="tx-ok" /> : null}
           </div>
