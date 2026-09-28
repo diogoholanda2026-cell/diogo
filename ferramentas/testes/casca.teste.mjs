@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ARESTA } from '../../fonte/contratos/flags.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const fonte = (p) => join(RAIZ, 'fonte', p);
@@ -88,14 +89,17 @@ test('ações: Promise sempre, id (sessao, seq) crescente, recusa vira frase e a
   const r = await p;
   assert.equal(r.ok, true);
   assert.equal(sim.estado.v, 3, 'o comando aplica na hora (D17)');
-  assert.equal(typeof r.id.sessao, 'string');
+  assert.equal(typeof r.idComando.sessao, 'string');
   const r2 = await acoes.comando('velocidade', { v: 9 });
   assert.equal(r2.ok, false);
   assert.equal(r2.codigo, 'valor');
-  assert.equal(r2.id.seq, r.id.seq + 1);
+  assert.equal(r2.idComando.seq, r.idComando.seq + 1);
   assert.equal(acoes.frase(r2), 'Valor fora do permitido.');
   assert.equal(loja.avisos.value.at(-1).codigo, 'valor');
   assert.equal(depois, 2);
+  // o id do contrato (a ref da coisa criada) passa intacto
+  sim.cmd = () => ({ ok: true, id: 1048583 });
+  assert.equal((await acoes.comando('construir', {})).id, 1048583);
   acoes.ligarAcoes({ obterSim: () => null });
   assert.equal((await acoes.comando('velocidade', { v: 1 }, { silencioso: true })).codigo, 'erro');
 });
@@ -235,15 +239,35 @@ test('ganchos: nomes do contrato, highp, sem precisão média, definir troca e s
   assert.throws(() => ganchos.definir('inventado', {}), /fora do contrato/);
 });
 
-test('cenas: a prova da sombra está registrada; os nomes batem com o contrato', async () => {
-  const { listarCenas, obterCena } = await import('../../fonte/render/cenas/index.js');
+test('cenas: vêm sob demanda, cada arquivo registra a sua; os nomes batem com o contrato', async () => {
+  const { listarCenas, obterCena, carregarCena } = await import('../../fonte/render/cenas/index.js');
   const { CENAS } = await import('../../fonte/contratos/render.js');
-  const c = obterCena('prova-sombra');
+  assert.equal(obterCena('prova-sombra'), null, 'antes de carregar, nada registrado');
+  const c = await carregarCena('prova-sombra');
   assert.ok(c, 'prova-sombra registrada');
   assert.equal(c.sim, 'vazia');
   assert.equal(c.dominios, false);
-  for (const n of listarCenas()) assert.ok(n in CENAS, `cena fora do contrato: ${n}`);
-  assert.equal(obterCena('inventada'), null);
+  assert.equal(obterCena('prova-sombra'), c);
+  for (const n of listarCenas()) {
+    assert.ok(n in CENAS, `cena fora do contrato: ${n}`);
+    // o esqueleto da F0 ainda não registra nada; as outras registram com o nome do próprio arquivo
+    const esqueleto = /Esqueleto da F0/.test(readFileSync(fonte(`render/cenas/${n}.js`), 'utf8'));
+    if (!esqueleto) assert.ok(await carregarCena(n), `a cena ${n} não registrou o nome do arquivo`);
+  }
+  assert.deepEqual(Object.keys(CENAS).filter((n) => !listarCenas().includes(n)), []);
+  assert.equal(await carregarCena('inventada'), null);
+  assert.equal(await carregarCena('toString'), null);
+});
+
+test('THREE do contexto: todo THREE.Nome lido sem o import do three existe no subconjunto (A1)', async () => {
+  const { THREE_TEXTURAS } = await import('../../fonte/render/materiais/texturas.js');
+  const faltam = [];
+  for (const f of listar(fonte('render'), /\.js$/)) {
+    const txt = readFileSync(f, 'utf8');
+    if (/\bimport\s*\*\s*as\s+THREE\s+from\s*['"]three['"]/.test(txt)) continue;
+    for (const m of txt.matchAll(/(?<![.\w$])THREE\.(\w+)/g)) if (!(m[1] in THREE_TEXTURAS)) faltam.push(`${relative(RAIZ, f)}: ${m[1]}`);
+  }
+  assert.deepEqual([...new Set(faltam)], []);
 });
 
 test('depuração: sol pela latitude (D9), caixa pelo catálogo e raio no chão', async () => {
@@ -380,22 +404,24 @@ async function importarControle() {
   return import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'));
 }
 
-test('canteiro de prova: ruas e prédios pelas APIs, invariantes do espelho, determinístico, sai com o mapa', async () => {
-  const { criarSimulacao } = await import('../../fonte/sim/estado.js');
+test('partida: começa no mapa autoral (Vila e rodovia da S1a), sem o canteiro de prova da F0', async () => {
   const { conferirEspelho } = await import('../../fonte/contratos/espelho.js');
-  const { semearCanteiro } = await importarControle();
-  // o canteiro semeia num mundo vazio (só a F0); com o mapa da S1a (Vila e rodovia) ele não roda
-  assert.equal(semearCanteiro(criarSimulacao({ semente: 'canteiro-teste' })), 0, 'com o mapa da S1a o canteiro não roda');
-  const a = criarSimulacao({ semente: 'canteiro-teste', dominios: false });
-  const n = semearCanteiro(a);
-  assert.ok(n > 80, `${n} prédios`);
-  assert.deepEqual(conferirEspelho(a.espelho, { alturaEm: (x, z) => a.alturaEm(x, z) }), []);
-  assert.deepEqual(a.validar(), []);
-  assert.ok(a.agregados.populacao > 0);
-  const b = criarSimulacao({ semente: 'canteiro-teste', dominios: false });
-  semearCanteiro(b);
-  assert.equal(a.hash(), b.hash());
-  assert.equal(semearCanteiro(a), 0, 'com o mundo ocupado o canteiro não roda de novo');
+  const { criarSimDoTipo, CAMERAS } = await importarControle();
+  const sim = await criarSimDoTipo('partida', { semente: 'heldopolis-1' });
+  const A = sim.espelho.vias.arestas;
+  let rodovia = 0;
+  let vivas = 0;
+  for (let e = 0; e < A.n; e++) {
+    if (!A.viva[e]) continue;
+    vivas++;
+    if (A.flags[e] & ARESTA.RODOVIA) rodovia++;
+  }
+  assert.ok(rodovia > 0, 'a rodovia do mapa');
+  assert.ok(vivas > rodovia, 'as ruas da Vila');
+  assert.ok(sim.tabelas.predios.vivos >= 50, `${sim.tabelas.predios.vivos} prédios na Vila`);
+  assert.deepEqual(conferirEspelho(sim.espelho, { alturaEm: (x, z) => sim.alturaEm(x, z) }), []);
+  // a câmera de partida olha a área inicial (o alvo dentro do 4 x 4 de ladrilhos)
+  assert.ok(Math.abs(CAMERAS.partida.x) < 1024 && Math.abs(CAMERAS.partida.z) < 1024);
 });
 
 // ------------------------------------------------------------------------------------------------ índices fixos
@@ -409,7 +435,8 @@ function listar(dir, ext) {
   }
   return out;
 }
-const importados = (arquivo) => [...readFileSync(arquivo, 'utf8').matchAll(/^import\s[^'"]*['"](\.[^'"]+)['"]/gm)].map((m) => resolve(dirname(arquivo), m[1]));
+// import estático no começo da linha ou import('./...') dinâmico (as cenas vêm sob demanda)
+const importados = (arquivo) => [...readFileSync(arquivo, 'utf8').matchAll(/^import\s[^'"]*['"](\.[^'"]+)['"]|\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/gm)].map((m) => resolve(dirname(arquivo), m[1] ?? m[2]));
 
 test('índices: todo módulo do render e da interface está ligado a um índice fixo (esqueletos inclusive)', () => {
   const r = (p) => fonte(`render/${p}`);

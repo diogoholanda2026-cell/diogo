@@ -294,7 +294,7 @@ export async function criarRenderFalso(canvas, opcoes = {}) {
       atlas(cv, mapa) { estado.atlas = { canvas: cv, mapa }; sujar(); },
       definir(lista) { estado.marcadores = lista || []; sujar(); },
     },
-    selecionado(ref) { estado.selecionado = ref == null ? null : ref % 2 ** 20; sujar(); },
+    selecionado(s) { const ref = s !== null && typeof s === 'object' ? s.ref : s; estado.selecionado = ref == null ? null : ref % 2 ** 20; sujar(); },
     tempo: { forcar(f) { estado.fase = f?.fase ?? null; sujar(); } },
     sempreDia(b) { estado.sempreDia = !!b; sujar(); },
     estado(e) { estado.estadoR = e; },

@@ -140,8 +140,8 @@ export function escolherEncaixe(encaixes, ponto, raio = 40) {
 export const chaveDaSessao = (n, pagina = SESSAO) => `${pagina}.${n}`;
 
 /**
- * Ref da coisa criada por um comando (contrato: Resposta.id). ui/acoes.js põe o id do COMANDO ({ sessao, seq }) em
- * `id`, então a ref pode chegar em `ref` ou em `dados.ref`; um `id` que não é número não serve. null se não veio.
+ * Ref da coisa criada por um comando (contrato: Resposta.id; o id do comando, { sessao, seq }, vem em idComando). A
+ * ref também pode chegar em `ref` ou em `dados.ref`; um `id` que não é número não serve. null se não veio.
  */
 export function refCriada(r) {
   if (!r?.ok) return null;

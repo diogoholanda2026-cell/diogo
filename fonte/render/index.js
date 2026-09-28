@@ -23,9 +23,9 @@ import { Quadro, SombraPropria } from './motor/quadro.js';
 import { Medidas } from './motor/medidas.js';
 import { ganchos } from './motor/ganchos.js';
 import { PonteRender } from './ponte.js';
-import { registrarTextura, ligarTexturas, textura, memoriaTexturasMB } from './materiais/texturas.js';
+import { registrarTextura, ligarTexturas, textura, memoriaTexturasMB, THREE_TEXTURAS } from './materiais/texturas.js';
 import { registrarSelecionavel, selecionarPorRaio, PRIORIDADE } from './camera/selecao.js';
-import { registrarCena, obterCena, listarCenas } from './cenas/index.js';
+import { registrarCena, obterCena, carregarCena, listarCenas } from './cenas/index.js';
 import * as depuracao from './depuracao.js';
 import { AGUA } from '../contratos/flags.js';
 import { celulaEm } from '../comum/altura.js';
@@ -87,7 +87,7 @@ import * as sobreCamadas from './sobreposicoes/camadas.js';
 import * as sobreMarcadores from './sobreposicoes/marcadores.js';
 import * as sobreAncoras from './sobreposicoes/ancoras.js';
 
-export { registrarCena, registrarTextura, registrarSelecionavel, ganchos, listarCenas, obterCena, PERFIS, sugerirPerfil };
+export { registrarCena, registrarTextura, registrarSelecionavel, ganchos, listarCenas, obterCena, carregarCena, PERFIS, sugerirPerfil };
 
 /** Índice fixo, na ordem de registro (a depuração vem antes: os donos trocam os substitutos dela). */
 export const MODULOS_RENDER = Object.freeze([
@@ -109,7 +109,7 @@ function coletarRegistros({ forcarDepuracao = false } = {}) {
   const dominios = [];
   const pecas = { camera: null, entrada: null, raio: null };
   const api = {
-    THREE,
+    THREE: THREE_TEXTURAS, // subconjunto (materiais/texturas.js): o namespace como valor impedia a poda do three
     ganchos,
     registrarTextura,
     registrarSelecionavel,
@@ -143,6 +143,8 @@ function coletarRegistros({ forcarDepuracao = false } = {}) {
 // ------------------------------------------------------------------------------------------------ render
 
 const HORA_SEMPRE_DIA = 11;
+/** Velocidade do voo de câmera, em unidades de S (caminhoVoo) por segundo. */
+const VEL_VOO = 1.1;
 
 /**
  * Cria o render sobre o canvas.
@@ -154,7 +156,7 @@ const HORA_SEMPRE_DIA = 11;
  */
 export async function criarRender(canvas, opcoes = {}) {
   const { sim, qualidade = 'auto', semClip = false, pr: prFixo = 0, cena: nomeCena = null, solAnda = false, depuracao: forcarDepuracao = false } = opcoes;
-  const defCena = nomeCena ? obterCena(nomeCena) : null;
+  const defCena = nomeCena ? await carregarCena(nomeCena) : null;
   if (nomeCena && !defCena) throw new Error(`cena desconhecida: ${nomeCena} (registradas: ${listarCenas().join(', ') || 'nenhuma'})`);
 
   // perfil pelo aparelho (D33) e o renderizador
@@ -176,7 +178,7 @@ export async function criarRender(canvas, opcoes = {}) {
   const tempoForcado = { hora: null, anda: false, hora0: 0, sempreDia: false };
 
   const ctx = {
-    THREE,
+    THREE: THREE_TEXTURAS,
     canvas,
     renderer: rz.renderer,
     gl: rz.gl,
@@ -235,7 +237,7 @@ export async function criarRender(canvas, opcoes = {}) {
       }
     },
   };
-  ligarTexturas({ renderer: rz.renderer, THREE, perfil });
+  ligarTexturas({ renderer: rz.renderer, THREE: THREE_TEXTURAS, perfil });
 
   const quadro = new Quadro(ctx);
   quadro.medirTela();
@@ -369,7 +371,13 @@ export async function criarRender(canvas, opcoes = {}) {
       atlas: (cv, mapa) => ctx.emitir('marcadores.atlas', { canvas: cv, mapa }),
       definir: (lista) => ctx.emitir('marcadores', lista ?? []),
     },
-    selecionado: (ref) => ctx.emitir('selecionado', ref ?? null),
+    // aceita { tipo, ref } (o domínio do selecionado) ou só a ref (um prédio, como antes); 'selecionado' leva a ref do
+    // prédio ou do colocável (predios.js) e 'selecao' leva { tipo, ref } para os outros domínios (a aresta das vias)
+    selecionado(s) {
+      const sel = s == null ? null : typeof s === 'object' ? { tipo: s.tipo ?? 'predio', ref: s.ref ?? null } : { tipo: 'predio', ref: s };
+      ctx.emitir('selecionado', sel && (sel.tipo === 'predio' || sel.tipo === 'colocavel') ? sel.ref : null);
+      ctx.emitir('selecao', sel);
+    },
     tempo: {
       /** { fase } (modo foto, D42), ou { hora, anda } (cenas e testes), ou null para voltar ao relógio do jogo. */
       forcar(f) {
@@ -397,7 +405,7 @@ export async function criarRender(canvas, opcoes = {}) {
       ctx.perfil = novo;
       ctx.pr = razaoDePixels(novo, dpr, prFixo);
       medidas.stats.perfil = novo.id;
-      ligarTexturas({ renderer: rz.renderer, THREE, perfil: novo });
+      ligarTexturas({ renderer: rz.renderer, THREE: THREE_TEXTURAS, perfil: novo });
       sombra.redimensionar(novo.sombra.tam);
       sombra.degrau = (novo.id === 'ultra' || novo.id === 'alta' ? 1 : 1.5) * (Math.PI / 180);
       ctx.emitir('qualidade', novo);
@@ -452,7 +460,14 @@ export async function criarRender(canvas, opcoes = {}) {
       });
     },
     foto: ({ w = 1920, h = 1080 } = {}) => R.capa(w, h),
-    voo: (alvo) => camApi.irPara(alvo, 2600),
+    /** Voo de câmera com a duração pelo comprimento S do caminho de van Wijk e Nuij (caminhoVoo): 0,8 a 4,5 s. */
+    voo(alvo = {}) {
+      const de = camApi.estado();
+      const w1 = Number.isFinite(alvo.dist) ? alvo.dist : de.dist;
+      const d = Math.hypot((Number.isFinite(alvo.x) ? alvo.x : de.x) - de.x, (Number.isFinite(alvo.z) ? alvo.z : de.z) - de.z);
+      const S = camera.caminhoVoo(Math.max(1, de.dist), Math.max(1, w1), d).S;
+      return camApi.irPara(alvo, Math.min(4500, Math.max(800, (1000 * (Number.isFinite(S) ? S : 2.6)) / VEL_VOO)));
+    },
     /** Resultado da cena fixa (window.__resultado) ou null. */
     resultado: () => (instCena?.resultado ? instCena.resultado() : null),
     /** Nomes dos domínios ativos (substitutos marcados). */

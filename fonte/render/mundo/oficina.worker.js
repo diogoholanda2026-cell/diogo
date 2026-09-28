@@ -25,11 +25,12 @@ import * as fundir from '../geracao/fundir.js';
 import * as quantizar from '../geracao/quantizar.js';
 import * as ponte from '../geracao/ponte.js';
 import * as colocaveis from '../colocaveis/index.js';
+import * as campoAlturas from '../ambiente/campoAlturas.js';
 
 /** Índice fixo dos módulos que registram geradores. */
 export const MODULOS_OFICINA = Object.freeze([
   ruido, arvores, impostor, perfilVia, malhaVia, cruzamento, veiculos, veiculosLuxo, pessoas, planoPredio, malhaPredio,
-  fundir, quantizar, ponte, colocaveis,
+  fundir, quantizar, ponte, colocaveis, campoAlturas,
 ]);
 
 const TIPOS = new Set([...TIPOS_OFICINA, 'prova']);

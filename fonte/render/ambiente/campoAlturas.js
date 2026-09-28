@@ -523,8 +523,14 @@ function criarDominio(ctx) {
   const malhas = new Map(); // fonte (Mesh que projeta) -> assinatura
   let pendentes = []; // retângulos a compor (os distantes separados)
   const publicado = { retangulos: [], versao: 0 };
+  // pedidos ao worker `oficina` em voo, por setor: vale só a resposta do último pedido do setor, e só se o campo não
+  // foi refeito (troca de qualidade) no caminho
+  const emVoo = new Map();
+  let pedidos = 0;
+  let geracao = 0;
 
   function montar() {
+    geracao++;
     const N = LADO_CAMPO[ctx.perfil?.id] ?? 1024;
     campo = new Campo({ N, tam, origem });
     textura?.dispose();
@@ -612,15 +618,32 @@ function criarDominio(ctx) {
     }
   }
 
-  /** Refaz o ladrilho de um setor (aqui mesmo: o gerador puro, sem worker). */
-  function refazerSetor(s) {
+  /**
+   * Refaz o ladrilho de um setor: no worker `oficina` quando ele existe (a carga de uma cidade grande sai da thread
+   * principal) e aqui mesmo sem ele ou com `local` (preparar, que termina tudo na hora).
+   */
+  function refazerSetor(s, { local = false } = {}) {
     const P = ctx.sim.espelho.predios;
     const l = lista.get(s) ?? [];
     let L = null;
     if (l.length && P) {
       const { dados } = pedidoDoSetor(P, l, setoresGrade, s, false);
-      L = alturasDoSetor({ ...dados, N: campo.N, passo: campo.passo, gx: campo.gx, gz: campo.gz });
+      const pedido = { ...dados, N: campo.N, passo: campo.passo, gx: campo.gx, gz: campo.gz };
+      const ofi = local ? null : ctx._oficina;
+      if (ofi?.worker) {
+        const n = ++pedidos;
+        const g = geracao;
+        emVoo.set(s, n);
+        ofi.pedir('alturasCidade', pedido).then((r) => {
+          if (emVoo.get(s) !== n || g !== geracao) return;
+          emVoo.delete(s);
+          marcar(campo.trocarLadrilho(`s${s}`, r?.grade ? r : alturasDoSetor(pedido)));
+        });
+        return;
+      }
+      L = alturasDoSetor(pedido);
     }
+    emVoo.delete(s);
     marcar(campo.trocarLadrilho(`s${s}`, L));
   }
 
@@ -658,7 +681,7 @@ function criarDominio(ctx) {
   }
 
   /** Processa o que está sujo: chão, setores (com teto de tempo), malhas; compõe e sobe à GPU. */
-  function passo({ semTeto = false } = {}) {
+  function passo({ semTeto = false, local = false } = {}) {
     const esp = ctx.sim?.espelho;
     const T = esp?.terreno ?? null;
     const nivel = Number.isFinite(esp?.mapa?.nivelMar) ? esp.mapa.nivelMar : 0;
@@ -672,7 +695,7 @@ function criarDominio(ctx) {
       const livre = semTeto || (carga && total <= NA_CARGA);
       const t0 = agora();
       for (const { s } of ordemSujos()) {
-        refazerSetor(s);
+        refazerSetor(s, { local });
         sujos.delete(s);
         if (!livre && agora() - t0 > TETO_QUADRO) break;
       }
@@ -711,7 +734,7 @@ function criarDominio(ctx) {
     /** Termina todo o trabalho pendente agora (cenas e capturas). */
     preparar() {
       if (!iniciado && ctx.sim?.mudancas) aplicar(ctx.sim.mudancas.desde(-1), ctx.sim.espelho);
-      passo({ semTeto: true });
+      passo({ semTeto: true, local: true });
       return { setores: lista.size, sujos: sujos.size, versao: campo.versao };
     },
     get campo() {

@@ -1,30 +1,28 @@
-# Retomada da onda 2 (pausada em 28/09/2026, 06:03 UTC)
+# Retomada da Prévia 1 (pausada em 28/09/2026, 12:16 UTC)
 
-Pausa pedida pelo dono antes do limite de uso de 5 horas. Nada rodando.
+Pausa pedida pelo dono. Nada rodando.
 
 ## Estado
-- Onda 1 e Prévia 0: prontas e publicadas (`00368d1` fonte, `87e60d7` montagem em `previa/`).
-- Portão 1: plano A (Baía) adotado por padrão (`4acc370`). O dono pode trocar.
-- Onda 2: as quatro parcelas pararam no meio da implementação, sem revisão. Trabalho parcial no commit
-  "Jogo novo, onda 2 em andamento (pausada)". Base da onda para os revisores: `4acc370`.
-  - S1b: faltam os patamares nos cruzamentos em declive, os testes `vias` e `celulas`, as medidas.
-  - R1b: faltam a pirâmide de alturas, a conferência da luz, da hora dourada e da noite, a bancada.
-  - R3a: falta montar e abrir a cena rua pela primeira vez, o teste `geracao-vias`, as capturas.
-  - X2: falta a conferência visual da vitrine e da cena ferramentas.
-  Testes no estado pausado: 12 áreas verdes; falham `casca` (canteiro de prova) e `mundo` (Vila e rodovia),
-  provavelmente pelas mudanças parciais da S1b em `data/vias.js` e `sim/vias`. `previa/` e `app/` não foram tocados.
-  A linha "ONDE PAROU" no fim de cada `parcelas/<id>.txt` diz o ponto exato.
+- Onda 1 e Prévia 0: prontas e publicadas (`00368d1` fonte, `87e60d7` montagem em `previa/`). O site agora publica
+  `previa/` (`5c50624`, pages.yml).
+- Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
+- Onda 2: as quatro parcelas (S1b, R1b, R3a, X2) prontas e revisadas (`7ccca28`, `ed81c43`).
+- I1 (integração da Prévia 1): pausada no meio. O que ela fez está no commit "Prévia 1: integração em andamento
+  (pausada)"; a base dela é `7cc08c5`. Com isso, `simular --testes` passa nas 16 áreas e o jogo monta com 1.530 KB
+  (dentro do teto de 1.638 KB) e 120 KB sob demanda. Faltam: o roteiro automatizado no Chromium, as capturas de
+  aceite, a bancada, a montagem final em `previa/` e o relatório. A linha RETOMADA no fim de `parcelas/I1.txt` diz o
+  ponto exato.
+- `previa/` continua sendo a Prévia 0 publicada (a montagem parcial da I1 foi descartada, não estava conferida).
 
 ## Como retomar (integrador)
 1. Os textos usam o caminho do scratchpad. Se o contêiner foi reciclado, copie esta pasta para lá:
    `S=/tmp/claude-0/-home-user-diogo/f46543ed-2f24-59fc-a862-962bb146c549/scratchpad/cs2; mkdir -p $S && cp -r .claude/orquestracao/* $S/`
    (se o caminho do scratchpad mudou, troque o caminho antigo pelo novo em `onda.js`, `impl-ctx.txt` e `parcelas/*.txt`).
-2. Relance as duas duplas com o mesmo `onda.js`, sempre com `"base": "4acc370"`:
-   - `{"nome": "Onda 2 (a)", "base": "4acc370", "etapas": [[{"id": "S1b"}, {"id": "R1b"}]]}`
-   - `{"nome": "Onda 2 (b)", "base": "4acc370", "etapas": [[{"id": "R3a"}, {"id": "X2"}]]}`
-3. Nunca use `resumeFromRunId`: ele refaz tudo o que vem depois da primeira chamada que falhou. Se uma parcela
-   falhar de novo, relance só ela; se só a revisão faltar, passe o resultado pronto em `impl` para pular a
-   implementação.
-4. Faça um commit de segurança a cada parcela que terminar a revisão.
-5. Com as quatro revisadas, rode a I1 (`[[{"id": "I1", "revisar": false}]]`), acrescente em `parcelas/I1.txt` os
-   caminhos dos relatórios das duplas, commite a fonte e depois a montagem da Prévia 1 em `previa/`.
+   Os relatórios das parcelas (`tasks/*.output`) somem com o contêiner; nesse caso as notas de entrega no fim de cada
+   ficha do `docs/PROJETO.md` e a lista de pendências em `parcelas/I1.txt` bastam.
+2. Relance só a I1: `{"nome": "Prévia 1", "base": "7cc08c5", "etapas": [[{"id": "I1", "revisar": false}]]}`.
+3. Nunca use `resumeFromRunId`: ele refaz tudo o que vem depois da primeira chamada que falhou.
+4. No fim: conferir as capturas, commit da fonte, depois "Montagem da Prévia 1" com `previa/`, push, e conferir no
+   GitHub (actions) que o "Publicar no GitHub Pages" passou antes de mandar o link ao dono.
+5. Depois vem a onda 3 (S2a, S3a, R2b, R3b, R4b, R5, U1b, U2a, X1b, X3a) até o M1a; os textos dessas parcelas ainda não
+   foram escritos.

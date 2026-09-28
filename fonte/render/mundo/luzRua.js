@@ -14,11 +14,11 @@ import { brilhoDosPostes } from '../ambiente/luzNoite.js';
 /** A textura guarda a irradiância dividida por isto (o RGBA8 satura em 1 onde as poças se somam). */
 export const GANHO_LUZ_RUA = 4;
 
-/** Cores das lâmpadas (linear, com a intensidade relativa). */
+/** Cores das lâmpadas (linear, com a intensidade relativa): sódio de ~2.000 K e LED de ~4.000 K (desenho 2.9). */
 export const LAMPADAS = Object.freeze({
   sodio: [1.0, 0.52, 0.18, 1.0],
-  led: [0.86, 0.86, 0.82, 0.95],
-  ledForte: [0.95, 0.94, 0.9, 1.35],
+  led: [1.0, 0.8, 0.62, 0.95],
+  ledForte: [1.0, 0.82, 0.65, 1.35],
 });
 
 /**

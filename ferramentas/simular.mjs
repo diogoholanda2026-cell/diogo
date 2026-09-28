@@ -225,15 +225,31 @@ async function bancada(o) {
   const N = o.tiques ?? 600;
   const via = COMANDOS['via.construir']?.exemplo;
   sim.cmd('velocidade', { v: 3 });
-  const tempos = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
+  // aquece: a primeira obra monta os índices preguiçosos (prédios e células da sintética, gerada por fora da S1b), o
+  // que depois de carregar um save já sai na carga; fica fora da medida
+  const plano = (i) => ({ plano: { ...via.plano, pontos: [[2400, -2000 + i * 6], [2512, -2000 + i * 6]], sessao: `bancada.${i}` } });
+  let msAquece = 0;
+  if (via) {
     const a = agora();
-    // cenário do A5: o robô constrói uma via a cada 10 tiques (fora da cidade, para não colidir)
-    if (via && i % 10 === 0) sim.cmd('via.construir', { plano: { ...via.plano, pontos: [[2400, -2000 + i * 6], [2512, -2000 + i * 6]], sessao: 1 + i } });
+    sim.cmd('via.construir', plano(-40));
+    msAquece = agora() - a;
+  }
+  const tempos = new Float64Array(N);
+  const tCmd = [];
+  for (let i = 0; i < N; i++) {
+    // cenário do A5: o robô constrói uma via a cada 10 tiques (fora da cidade, para não colidir). O comando aplica
+    // entre dois tiques (D17) e é medido à parte; o tique mede o que a obra deixa para ele
+    if (via && i % 10 === 0) {
+      const c = agora();
+      sim.cmd('via.construir', plano(i));
+      tCmd.push(agora() - c);
+    }
+    const a = agora();
     sim.rodar(1, { sincrono: true });
     tempos[i] = agora() - a;
   }
   const v = [...tempos].sort((x, y) => x - y);
+  const vc = tCmd.sort((x, y) => x - y);
   const medir = (fn, n) => { const a = agora(); for (let i = 0; i < n; i++) fn(); return (agora() - a) / n; };
   const msBarra = medir(() => sim.q.barra(), 200);
   const msDesdeTudo = medir(() => sim.mudancas.desde(0), 20);
@@ -248,6 +264,7 @@ async function bancada(o) {
   if (meta.max && max > meta.max) falhas.push(`máximo ${max.toFixed(3)} ms (meta ${meta.max})`);
   if (memMB > 48) falhas.push(`memória ${memMB.toFixed(1)} MB (meta 48)`);
   console.log(`bancada do tique${o.estresse ? ' (estresse)' : ''}: ${resumo.predios} prédios, ${resumo.populacao} moradores, ${resumo.arestas} arestas, ${resumo.celulas?.total ?? 0} células; cidade gerada em ${(tGerar / 1000).toFixed(1)} s`);
+  if (vc.length) console.log(`  via.construir (${vc.length}, entre tiques): p50 ${pct(vc, 0.5).toFixed(3)} · p95 ${pct(vc, 0.95).toFixed(3)} · máximo ${vc[vc.length - 1].toFixed(3)} ms · primeira obra (índices) ${msAquece.toFixed(1)} ms`);
   console.log(`  tique (${N}, com via a cada 10): média ${(v.reduce((a, b) => a + b, 0) / N).toFixed(3)} ms · p50 ${pct(v, 0.5).toFixed(3)} · p95 ${p95.toFixed(3)} · p99 ${p99.toFixed(3)} · máximo ${max.toFixed(3)} ms`);
   console.log(`  q.barra ${msBarra.toFixed(3)} ms · desde(0) ${msDesdeTudo.toFixed(3)} ms · tique + desde(v) ${msDesde.toFixed(3)} ms · memória ${memMB.toFixed(1)} MB`);
   const sis = Object.entries(sim.medidas?.sistemas ?? {}).map(([k, x]) => [k, x.msTotal ?? x.ms ?? 0]).sort((a, b) => b[1] - a[1]).slice(0, 8);

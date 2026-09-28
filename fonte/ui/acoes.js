@@ -1,7 +1,8 @@
 // Ações da interface (D16, desenho da UI 12.4): a ÚNICA porta de saída da UI para a simulação. Todo comando devolve
 // uma Promise (mesmo resolvida na hora: se a simulação for para um worker no M4, nenhuma tela muda) e leva o id que a
-// UI gera, { sessao, seq }, usado no desfazer e para casar a resposta. Recusa vira frase por t('codigo.<código>')
-// e, se a ação não for silenciosa, um aviso na loja.
+// UI gera, idComando = { sessao, seq }, usado no desfazer e para casar a resposta. O `id` da resposta continua o do
+// contrato (a ref da coisa criada, Resposta.id). Recusa vira frase por t('codigo.<código>') e, se a ação não for
+// silenciosa, um aviso na loja.
 import { t } from './textos.js';
 import { avisar } from './loja.js';
 
@@ -34,11 +35,11 @@ export const frase = (r) => (r && !r.ok ? t(`codigo.${r.codigo}`, r.dados ?? nul
 
 /**
  * Manda um comando do contrato (fonte/contratos/comandos.js).
- * @returns {Promise<{ ok: boolean, codigo?: string, dados?: any, id: { sessao: string, seq: number } }>}
+ * @returns {Promise<{ ok: boolean, codigo?: string, dados?: any, id?: number, idComando: { sessao: string, seq: number } }>}
  * @example const r = await comando('emprestimo.tomar', { valor: 50000 });
  */
 export function comando(nome, args = {}, { silencioso = false } = {}) {
-  const id = { sessao: SESSAO, seq: ++seq };
+  const idComando = { sessao: SESSAO, seq: ++seq };
   const sim = obterSim();
   let r;
   if (!sim) r = { ok: false, codigo: 'erro' };
@@ -50,7 +51,7 @@ export function comando(nome, args = {}, { silencioso = false } = {}) {
       r = { ok: false, codigo: 'erro' };
     }
   }
-  const resposta = { ...r, id };
+  const resposta = { ...r, idComando };
   if (!resposta.ok && !silencioso) avisar({ texto: frase(resposta), gravidade: 'atencao', codigo: resposta.codigo });
   try {
     depois(nome, args, resposta);

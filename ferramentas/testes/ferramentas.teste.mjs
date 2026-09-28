@@ -25,6 +25,14 @@ test('guarda: three fora do render', () => {
   assert.deepEqual(regras("import { a } from './three-util.js'; // 'three'", ['three']), []);
 });
 
+test('guarda: o namespace do three só como THREE.Nome (A1)', () => {
+  const imp = "import * as THREE from 'three';\n";
+  assert.deepEqual(regras(imp + 'const m = new THREE.Mesh(); const c = ctx.THREE; const d = { THREE: sub };', ['threeValor']), []);
+  assert.deepEqual(regras(imp + 'f({ renderer, THREE });', ['threeValor']), ['threeValor']);
+  assert.deepEqual(regras(imp + 'ctx.THREE = THREE;', ['threeValor']), ['threeValor']);
+  assert.deepEqual(regras('const THREE = ctx.THREE; f(THREE);', ['threeValor']), [], 'sem o import, o THREE é o subconjunto do contexto');
+});
+
 test('guarda: mediump nos shaders', () => {
   assert.deepEqual(regras('const fs = `precision mediump float;`;', ['mediump']), ['mediump']);
   assert.deepEqual(regras('const fs = `precision highp float;`; // nada de mediump', ['mediump']), []);

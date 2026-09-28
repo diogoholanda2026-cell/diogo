@@ -801,7 +801,7 @@ test('sessão: Melhorar e Demolir vias mandam a sessão, e o Desfazer volta pela
   }
 });
 
-test('sessão: o Desfazer do Colocar só entra com a ref do prédio (o id do comando não serve)', async () => {
+test('sessão: o Desfazer do Colocar entra com a ref do prédio (Resposta.id ou dados.ref; o id do comando não serve)', async () => {
   assert.equal(sessao.refCriada({ ok: true, id: { sessao: 'abc', seq: 3 } }), null);
   assert.equal(sessao.refCriada({ ok: true, id: { sessao: 'abc', seq: 3 }, dados: { ref: 1048583 } }), 1048583);
   assert.equal(sessao.refCriada({ ok: true, ref: 9 }), 9);
@@ -809,7 +809,7 @@ test('sessão: o Desfazer do Colocar só entra com a ref do prédio (o id do com
   const { esp, no, aresta } = espelhoTeste();
   aresta(no(0, 0), no(112, 0));
   const cmds = [];
-  let resposta = { ok: true, id: 77 }; // acoes.js troca o id pelo do comando
+  let resposta = { ok: true }; // sem ref nenhuma
   const sim = { espelho: esp, q: {}, cmd: (nome, args) => (cmds.push([nome, args]), resposta) };
   const { R, soltar } = montarSessao(sim);
   try {
@@ -825,6 +825,11 @@ test('sessão: o Desfazer do Colocar só entra com a ref do prédio (o id do com
     assert.equal(sessao.sessao.value.desfazer, 1);
     await sessao.ferramentas.desfazer();
     assert.deepEqual(cmds.at(-1), ['demolir', { refs: [1048583] }]);
+    // ui/acoes.js deixa o Resposta.id do contrato intacto (o id do comando vai em idComando)
+    resposta = { ok: true, id: 77 };
+    await sessao.ferramentas.construir();
+    await sessao.ferramentas.desfazer();
+    assert.deepEqual(cmds.at(-1), ['demolir', { refs: [77] }]);
     sessao.ferramentas.fechar();
   } finally {
     soltar();

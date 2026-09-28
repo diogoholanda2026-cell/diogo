@@ -3,7 +3,7 @@
 // sim.cmd(nome, args) aplica na hora, entre dois tiques, e funciona pausado. Devolve Resposta. Os argumentos são JSON
 // puros (arrays tipados viram arrays comuns na cópia do livro). Todo comando com livro: true entra no livro como
 // [tique, seq, nome, args] e a reprodução o aplica quando sim.tique chega a `tique`. Na UI a resposta chega sempre como
-// Promise (ui/acoes.js), com o id (sessao, seq) gerado pela UI.
+// Promise (ui/acoes.js), com o idComando ({ sessao, seq }) gerado pela UI; o id da Resposta segue sendo o da simulação.
 //
 // Registro: sim.registrarComando(nome, fn, { substituto }) só aceita nomes desta tabela. `dono` é a parcela que
 // implementa; F0 marca o que o núcleo já faz.
@@ -23,13 +23,18 @@ export const COMANDOS = congelar({
     codigos: ['creditos', 'agua', 'vao', 'declive', 'angulo', 'curto', 'raio', 'ladrilho', 'gleba', 'colisao', 'marco'],
     exemplo: { plano: { modo: 'reta', tipo: 'rua', pontos: [[0, 0], [112, 0]], sessao: 1 } },
   },
-  'via.desfazer': { dono: 'S1b', args: '{ sessao }', codigos: ['nada', 'ocupado'], exemplo: { sessao: 1 } },
+  // sessao: a chave da sessão da ferramenta (a UI manda '<sessão da página>.<n>', D16 e D32); o desfazer só vale nela
+  'via.desfazer': {
+    dono: 'S1b', args: '{ sessao } (creditos: desfazer uma demolição sem caixa para pagar a devolução)',
+    codigos: ['nada', 'ocupado', 'creditos'], exemplo: { sessao: 'k3x9.1' },
+  },
   'via.melhorar': {
-    dono: 'S1b', args: '{ arestas: [ref], tipo }', codigos: ['creditos', 'marco', 'declive'],
-    exemplo: { arestas: [1048577], tipo: 'avenida' },
+    dono: 'S1b', args: '{ arestas: [ref], tipo, sessao? }', codigos: ['creditos', 'marco', 'declive'],
+    exemplo: { arestas: [1048577], tipo: 'avenida', sessao: 'k3x9.1' },
   },
   'via.demolir': {
-    dono: 'S1b', args: '{ arestas: [ref] }', codigos: ['arcologia', 'rodovia', 'inexistente'], exemplo: { arestas: [3] },
+    dono: 'S1b', args: '{ arestas: [ref], sessao? }', codigos: ['arcologia', 'rodovia', 'inexistente'],
+    exemplo: { arestas: [3], sessao: 'k3x9.1' },
   },
   'zona.pintar': {
     dono: 'S1b',

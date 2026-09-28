@@ -3,14 +3,14 @@
 // passar da guarda do Mali.
 //   node ferramentas/bancada.mjs [--cenas aberta,rua,horizonte] [--perfis leve,media,ultra] [--pasta previa]
 //        [--saida <pasta>] [--quadros 120] [--tam 1376x768] [--consulta "sintetica=1"] [--semClip] [--familias] [--voo]
-//        [--fontes] (grava o GLSL final de cada programa em <saida>/<cena>-<perfil>-glsl/)
+//        [--fontes] (grava o GLSL final de cada programa em <saida>/<cena>-<perfil>-glsl/) [--vel 1|2|4] (padrão 4x)
 // A cena 'jogo' abre o jogo sem ?cena= (a vista de depuração da F0). --familias confere os tetos por família em
 // qualquer cena (sem ela, só na 'aberta' do Média, onde a 4.8 os fixa). --voo também roda R.bancada() e guarda o
 // relatório do render.
 //
 // Orçamento e guarda do Mali vêm de fonte/contratos/render.js (ORCAMENTO, GUARDA_MALI).
 // Como mede: a página abre com ?cena=<nome>&q=<perfil>&pr=1&teste=1&bancada=1&sol=anda (a cena faz a hora andar), a
-// velocidade vai a 4x se houver simulação, e a cada quadro (requestAnimationFrame) lê window.__held.R.stats. O pior
+// velocidade vai a 4x (--vel troca) se houver simulação, e a cada quadro (requestAnimationFrame) lê window.__held.R.stats. O pior
 // quadro é o máximo de cada medida na janela. Os programas são capturados por um gancho no WebGL2 (shaderSource,
 // attachShader, linkProgram) e contados no GLSL final, depois do pré-processador (#define, #if, #ifdef): amostradores
 // por estágio, varyings (saídas do vértice), vetores de uniforme do fragmento e atributos (entradas do vértice), com a
@@ -23,6 +23,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ORCAMENTO, GUARDA_MALI } from '../fonte/contratos/render.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/** --vel (1x, 2x, 4x) para o comando velocidade (D7: v 1, 2 e 3). */
+const VELOCIDADES = Object.freeze({ 1: 1, 2: 2, 4: 3 });
 
 // ---------- orçamento (A6 e 4.8) e guarda do Mali (D44): uma fonte só, o contrato do render ----------
 export { ORCAMENTO };
@@ -237,10 +239,10 @@ const GANCHO = `(() => {
 })();`;
 
 // roda na página: amostra n quadros e devolve o pior e a média
-async function amostrarNaPagina(n) {
+async function amostrarNaPagina({ n, v }) {
   const R = window.__held?.R;
   const sim = window.__held?.sim;
-  try { sim?.cmd?.('velocidade', { v: 3 }); } catch (e) { /* sem simulação: a cena anda a hora sozinha */ }
+  try { sim?.cmd?.('velocidade', { v }); } catch (e) { /* sem simulação: a cena anda a hora sozinha */ }
   const quadro = () => new Promise((ok) => requestAnimationFrame(() => ok()));
   const lidos = [];
   for (let i = 0; i < n; i++) {
@@ -276,7 +278,7 @@ async function amostrarNaPagina(n) {
 
 function lerArgs(argv) {
   const o = { cenas: ['aberta', 'rua', 'horizonte'], perfis: ['leve', 'media', 'ultra'], pasta: 'previa', saida: join(tmpdir(), 'heldopolis-bancada'),
-    quadros: 120, tam: '1376x768', consulta: '', semClip: false, familias: false, voo: false, fontes: false, teto: 300 };
+    quadros: 120, tam: '1376x768', consulta: '', semClip: false, familias: false, voo: false, fontes: false, teto: 300, vel: 4 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = () => argv[++i];
     if (k === '--cenas') o.cenas = v().split(',');
@@ -291,8 +293,10 @@ function lerArgs(argv) {
     else if (k === '--voo') o.voo = true;
     else if (k === '--fontes') o.fontes = true;
     else if (k === '--teto') o.teto = +v();
+    else if (k === '--vel') o.vel = +v();
     else throw new Error(`opção desconhecida: ${k}`);
   }
+  if (!(o.vel in VELOCIDADES)) throw new Error(`--vel ${o.vel}: use 1, 2 ou 4`);
   return o;
 }
 
@@ -319,7 +323,7 @@ export async function rodarBancada(o) {
       await page.goto(`http://localhost:${srv.porta}/index.html?${q}`);
       let pronto = true;
       try { await page.waitForFunction(() => window.__pronto === true, null, { timeout: o.teto * 1000, polling: 250 }); } catch (e) { pronto = false; }
-      const med = pronto ? await page.evaluate(amostrarNaPagina, o.quadros) : null;
+      const med = pronto ? await page.evaluate(amostrarNaPagina, { n: o.quadros, v: VELOCIDADES[o.vel ?? 4] }) : null;
       let voo = null;
       if (pronto && o.voo) voo = await page.evaluate(async () => { try { return JSON.parse(JSON.stringify(await window.__held.R.bancada())); } catch (e) { return { erro: String(e) }; } });
       const base = `${cena}-${perfil}${o.semClip ? '-semClip' : ''}`;
@@ -347,7 +351,7 @@ export async function rodarBancada(o) {
       }
       const res = med?.resultado;
       if (res && (res.ok === false || res.falhas?.length)) falhas.push(...(res.falhas?.length ? res.falhas.map((x) => 'cena: ' + x) : ['cena: ok = false']));
-      const rel = { cena, perfil, semClip: o.semClip, ms: Date.now() - t0, quadros: med?.quadros || 0, pior: med?.pior || null, medio: med?.medio || null,
+      const rel = { cena, perfil, semClip: o.semClip, vel: o.vel ?? 4, ms: Date.now() - t0, quadros: med?.quadros || 0, pior: med?.pior || null, medio: med?.medio || null,
         orcamento: ORCAMENTO[perfil], stats: med?.stats || null, resultado: res || null, voo,
         programas: programas.map(({ nome, amostradores, varyings, varyingsF, uniformesV, uniformesF, atributos, atributosGl, link, falhas: fp }) => ({ nome, amostradores, varyings, varyingsF, uniformesV, uniformesF, atributos, atributosGl, link, falhas: fp })),
         falhas };

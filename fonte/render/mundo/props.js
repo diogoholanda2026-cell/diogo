@@ -169,7 +169,7 @@ function modeloCopa(lod) {
     return G.geometria();
   }
   G.cone(0, 0, 0, 3.2, 0.2, 0.14, 5, P.METAL, TRONCO);
-  G.cone(0, 3.0, 0, 4.2, 0.14, 0.05, 4, P.METAL, TRONCO);
+  G.cone(0, 0, 3.0, 4.2, 0.14, 0.05, 4, P.METAL, TRONCO);
   G.bola(0.3, 5.6, 0.2, 2.8, 2.2, 2.7, P.LAMPADA, FOLHA, 1);
   G.bola(-1.3, 5.0, -0.6, 2.1, 1.8, 2.2, P.LAMPADA, FOLHA.map((c) => c * 1.08), 2);
   G.bola(1.2, 4.9, -1.1, 2.0, 1.7, 2.0, P.LAMPADA, FOLHA.map((c) => c * 0.95), 5);
@@ -182,8 +182,8 @@ function modeloPalmeira(lod) {
   const h = 17;
   // estipe cinza-claro (albedo real ~0,2 linear), 45 cm na base, afinando até o palmito
   G.cone(0, 0, 0, h * 0.45, 0.23, 0.2, lod ? 3 : 6, P.CONCRETO, [0.2, 0.19, 0.17]);
-  G.cone(0, h * 0.45, 0, h, 0.2, 0.17, lod ? 3 : 6, P.CONCRETO, [0.22, 0.21, 0.19]);
-  if (!lod) G.cone(0, h, 0, h + 2, 0.2, 0.17, 6, P.LAMPADA, PALMITO);
+  G.cone(0, 0, h * 0.45, h, 0.2, 0.17, lod ? 3 : 6, P.CONCRETO, [0.22, 0.21, 0.19]);
+  if (!lod) G.cone(0, 0, h, h + 2, 0.2, 0.17, 6, P.LAMPADA, PALMITO);
   // folhas pinadas em arco: a raque sobe e cai, os folíolos pendem dos dois lados em V (uma face só: o material é de
   // dois lados), e a coroa fica com ~8 m de largura, como a da palmeira-imperial; os folíolos são recortados no shader
   // (aFolha: posição ao longo da folha e distância da raque), então a folha não é uma lâmina verde cheia

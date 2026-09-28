@@ -822,6 +822,14 @@ test('materiais via, carro e objetos montam sobre o MeshStandardMaterial do thre
   const { MODELOS_PROPS } = await import('../../fonte/render/mundo/props.js');
   const folha = MODELOS_PROPS.palmeira0().g.getAttribute('aFolha');
   assert.ok(folha && Array.from(folha.array).some((v) => v > 1), 'palmeira sem a coordenada das folhas');
+  // tronco no eixo y: cone(x, z, y0, y1) com a altura no lugar do z plantava um segundo tronco a 7,65 m e o palmito a
+  // 17 m da palmeira (os "pilares claros" da vista rasante, achados na I1); a árvore cabe na coroa, em volta do eixo
+  for (const nome of ['palmeira0', 'palmeira1', 'copa0', 'copa1']) {
+    const g = MODELOS_PROPS[nome]().g;
+    g.computeBoundingBox();
+    const b = g.boundingBox;
+    assert.ok(Math.max(-b.min.x, b.max.x, -b.min.z, b.max.z) < 5, `${nome}: peça fora da coroa (${b.min.z.toFixed(1)} a ${b.max.z.toFixed(1)} m em z)`);
+  }
 });
 
 test('chão da R2a: o gancho que apaga a pintura da via perto acha a leitura do uso do solo, com e sem o GLSL enxuto', async () => {

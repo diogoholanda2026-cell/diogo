@@ -937,7 +937,7 @@ function criarTerreno(ctx) {
   malha.frustumCulled = false;
   ctx.cena.add(malha);
 
-  const promessaCC0 = modo === 'proc' ? Promise.resolve(null) : carregarCC0({ renderer: ctx.renderer, THREE, montagem: ctx.montagem });
+  const promessaCC0 = modo === 'proc' ? Promise.resolve(null) : carregarCC0({ renderer: ctx.renderer, THREE: ctx.THREE, montagem: ctx.montagem });
   promessaCC0.then((tex) => {
     if (!tex) return;
     estado.camadasCC0 = tex;
@@ -1302,7 +1302,7 @@ function criarTerreno(ctx) {
         mat.needsUpdate = true;
         espelharB();
         if (estado.camadasCC0) usarCC0(estado.camadasCC0, true);
-        else carregarCC0({ renderer: ctx.renderer, THREE, montagem: ctx.montagem }).then((t) => t && ((estado.camadasCC0 = t), usarCC0(t, true)));
+        else carregarCC0({ renderer: ctx.renderer, THREE: ctx.THREE, montagem: ctx.montagem }).then((t) => t && ((estado.camadasCC0 = t), usarCC0(t, true)));
       }
     },
     /** Moldura de fora (serra e mar até 16 km): a R2b desliga quando o mundo de fora dela entrar. */

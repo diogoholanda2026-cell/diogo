@@ -6,7 +6,8 @@
 // minificar, sem os tetos de tamanho). Importável: montar({ saida, entrada, unico, dev, workers, tema }) para testes.
 //
 // O que sai na pasta:
-//   index.html (de fonte/web, com a carga em HTML e CSS antes do JS), jogo.<carimbo>.js (esbuild, JSX do Preact),
+//   index.html (de fonte/web, com a carga em HTML e CSS antes do JS), jogo.<carimbo>.js (esbuild, JSX do Preact) e os
+//   pedaços parte.<carimbo>.<hash>.js (os comuns, com modulepreload no index, e os que só vêm por import()),
 //   estilo.<carimbo>.css (fonte/ui/tema/*.css em ordem fixa), fontes/inter.<carimbo>.woff2 e OFL.txt,
 //   tarefas.<carimbo>.js e oficina.<carimbo>.js (workers clássicos em IIFE, com teto de tamanho), materiais/*.<carimbo>.ktx2
 //   (se houver arte/materiais) com o transcodificador Basis do three em basis/ (basis_transcoder.js e .wasm), icones/,
@@ -49,7 +50,7 @@ const MANIFESTO = {
   teste: { id: '/heldopolis-teste/', name: 'Arcologia de Held (teste)', short_name: 'Held teste' },
 };
 const PROIBIDAS = ['', 'fonte', 'ferramentas', 'antigo', 'docs', 'node_modules', '.git', '.claude', 'arte', 'jogo-antigo'];
-const GERADO = /^(jogo|tarefas|oficina|estilo)\.\d{14}\.(js|css)$/;
+const GERADO = /^(jogo|tarefas|oficina|estilo)\.\d{14}\.(js|css)$|^parte\.\d{14}\.[A-Z0-9]+\.js$/;
 
 export function carimboDe(d = new Date()) {
   return d.toISOString().slice(0, 19).replace(/[-:T]/g, '');
@@ -198,6 +199,26 @@ async function avisosDe(r, onde) {
   return lista;
 }
 
+/**
+ * Arquivos da montagem com divisão: o texto de cada um (pelo nome na pasta) e quais formam o JS principal (o jogo e os
+ * pedaços que ele importa de saída, em cadeia) e quais vêm sob demanda (só por import()).
+ */
+function divisaoDoJogo(r, pasta, nomeJogo) {
+  const arquivos = new Map();
+  for (const f of r.outputFiles) arquivos.set(relative(pasta, f.path).split('\\').join('/'), f.text);
+  const saidas = Object.fromEntries(Object.entries(r.metafile.outputs).map(([k, v]) => [basename(k), v]));
+  const principal = [];
+  const pilha = [nomeJogo];
+  while (pilha.length) {
+    const f = pilha.pop();
+    if (principal.includes(f)) continue;
+    principal.push(f);
+    for (const im of saidas[f]?.imports ?? []) if (im.kind === 'import-statement' && !im.external) pilha.push(basename(im.path));
+  }
+  const sobDemanda = [...arquivos.keys()].filter((f) => f.endsWith('.js') && !principal.includes(f)).sort();
+  return { arquivos, principal, sobDemanda };
+}
+
 function fonteInter(raiz) {
   const locais = [join(raiz, 'fonte/ui/fontes/inter-latin-wght-normal.woff2'), join(raiz, 'node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')];
   const woff2 = locais.find(existsSync);
@@ -237,12 +258,29 @@ export async function montar(opcoes = {}) {
     loader: { '.glsl': 'text' }, absWorkingDir: raiz, nodePaths: [join(raiz, 'node_modules')], charset: 'utf8',
     plugins: o.dev ? [] : [pluginGlsl(raiz)],
   };
+  // Com divisão: cada import() dinâmico (cenas, cidade sintética, simulação falsa da vitrine, KTX2) vira um pedaço
+  // parte.<carimbo>.<hash>.js carregado só quando pedido; o que o jogo e um pedaço dividem vai para um pedaço comum
+  // importado pelo jogo. O teto do A1 vale para o JS principal: o jogo mais os pedaços que ele importa de saída.
   let rjogo;
-  try { rjogo = await build({ ...base, entryPoints: [entrada], format: 'esm' }); } catch (e) { rjogo = e; }
+  try {
+    rjogo = await build({ ...base, entryPoints: [entrada], format: 'esm', splitting: true, metafile: true, outdir: pasta,
+      entryNames: `jogo.${carimbo}`, chunkNames: `parte.${carimbo}.[hash]` });
+  } catch (e) { rjogo = e; }
   problemas.push(...(await avisosDe(rjogo, 'jogo')));
   if (!rjogo.outputFiles) return { ok: false, log, problemas };
-  const js = rjogo.outputFiles[0].text;
-  if (!o.dev && Buffer.byteLength(js) > TETO_JS) problemas.push(`jogo: ${(Buffer.byteLength(js) / KB).toFixed(0)} KB passa do teto de ${(TETO_JS / KB).toFixed(0)} KB (A1)`);
+  const partes = divisaoDoJogo(rjogo, pasta, nomes.jogo);
+  const js = partes.arquivos.get(nomes.jogo);
+  const tamPrincipal = partes.principal.reduce((s, f) => s + Buffer.byteLength(partes.arquivos.get(f)), 0);
+  const tamSob = partes.sobDemanda.reduce((s, f) => s + Buffer.byteLength(partes.arquivos.get(f)), 0);
+  if (!o.dev && tamPrincipal > TETO_JS) problemas.push(`jogo: ${(tamPrincipal / KB).toFixed(0)} KB passa do teto de ${(TETO_JS / KB).toFixed(0)} KB (A1)`);
+  // o HTML único leva tudo num arquivo só (sem divisão)
+  let jsUnico = null;
+  if (ehApp || o.unico) {
+    let r;
+    try { r = await build({ ...base, entryPoints: [entrada], format: 'esm' }); } catch (e) { r = e; }
+    problemas.push(...(await avisosDe(r, 'jogo (HTML único)')));
+    if (r.outputFiles) jsUnico = r.outputFiles[0].text;
+  }
 
   // 3. workers clássicos (IIFE), com teto
   const workers = {};
@@ -312,9 +350,10 @@ export async function montar(opcoes = {}) {
       h = h.replace('/*WORKERS*/', () => blobs)
         .replace(/<link rel="preload"[^>]*>\n?/g, '')
         .replace(/<link rel="manifest"[^>]*>\n?/, '')
-        .replace('<script type="module" src="__JOGO__"></script>', () => `<script type="module">${emScript(js)}</script>`);
+        .replace('<script type="module" src="__JOGO__"></script>', () => `<script type="module">${emScript(jsUnico ?? js)}</script>`);
     } else {
-      h = h.replace('/*WORKERS*/', '').replace('__JOGO__', nomes.jogo);
+      const pre = partes.principal.filter((f) => f !== nomes.jogo).map((f) => `<link rel="modulepreload" href="${f}">\n`).join('');
+      h = h.replace('/*WORKERS*/', '').replace('<script type="module" src="__JOGO__">', () => `${pre}<script type="module" src="${nomes.jogo}">`);
     }
     return { html: h, css: cssFinal };
   };
@@ -326,7 +365,7 @@ export async function montar(opcoes = {}) {
   if (existsSync(join(pasta, 'materiais'))) for (const f of readdirSync(join(pasta, 'materiais'))) if (/\.\d{14}\.ktx2$/.test(f)) rmSync(join(pasta, 'materiais', f));
   const p = pagina(false);
   writeFileSync(join(pasta, 'index.html'), p.html);
-  writeFileSync(join(pasta, nomes.jogo), js);
+  for (const [f, txt] of partes.arquivos) writeFileSync(join(pasta, f), txt);
   if (p.css) writeFileSync(join(pasta, nomes.estilo), p.css);
   writeFileSync(join(pasta, nomes.fonte), woff2);
   if (inter.ofl) copyFileSync(inter.ofl, join(pasta, 'fontes/OFL.txt'));
@@ -343,7 +382,7 @@ export async function montar(opcoes = {}) {
   const man = JSON.parse(readFileSync(join(raiz, 'fonte/web/manifest.webmanifest'), 'utf8'));
   Object.assign(man, MANIFESTO[tipoApp]);
   writeFileSync(join(pasta, 'manifest.webmanifest'), JSON.stringify(man, null, 2) + '\n');
-  const lista = ['./', './index.html', `./${nomes.jogo}`, './manifest.webmanifest', `./${nomes.fonte}`,
+  const lista = ['./', './index.html', ...[...partes.arquivos.keys()].map((f) => `./${f}`), './manifest.webmanifest', `./${nomes.fonte}`,
     ...(p.css ? [`./${nomes.estilo}`] : []), ...Object.values(workers).map((w) => `./${w.arquivo}`),
     ...icones.map((f) => `./icones/${f}`), ...texturas.map((t) => `./${nomeTex(t)}`), ...basis.map((f) => `./basis/${f}`),
     ...(indiceCenas ? ['./cenas.html'] : [])];
@@ -364,12 +403,13 @@ export async function montar(opcoes = {}) {
   const gz = (s) => gzipSync(Buffer.from(s)).length;
   const onde = (f) => (relative(raiz, f).startsWith('..') ? f : relative(raiz, f));
   log.push(`montado em ${onde(pasta)} (${tipoApp}), versão ${versao}+${carimbo}`);
-  log.push(`  jogo ${kb(Buffer.byteLength(js))} (gzip ${kb(gz(js))}) · css ${kb(Buffer.byteLength(p.css))} (${arqsCss.length} arquivos) · inter ${kb(woff2.length)}`);
+  const gzPrincipal = partes.principal.reduce((t, f) => t + gz(partes.arquivos.get(f)), 0);
+  log.push(`  jogo ${kb(tamPrincipal)} (gzip ${kb(gzPrincipal)}; ${partes.principal.length} arquivo(s), teto ${(TETO_JS / KB).toFixed(0)} KB) · sob demanda ${kb(tamSob)} em ${partes.sobDemanda.length} pedaços · css ${kb(Buffer.byteLength(p.css))} (${arqsCss.length} arquivos) · inter ${kb(woff2.length)}`);
   for (const w of o.workers || WORKERS) if (workers[w.nome]) log.push(`  worker ${w.nome} ${kb(workers[w.nome].tam)} (teto ${w.teto / KB} KB)`);
   if (texturas.length) log.push(`  texturas ${texturas.length} (${(bytesTex / KB / KB).toFixed(1)} MB)`);
   log.push(`  sw.js: cache ${prefixo}${carimbo}, ${lista.length} arquivos`);
   if (unico) log.push(`  HTML único ${onde(unico)} ${kb(statSync(unico).size)}`);
-  return { ok: problemas.length === 0, log, problemas, pasta, carimbo, unico, workers: Object.keys(workers), tamJs: Buffer.byteLength(js) };
+  return { ok: problemas.length === 0, log, problemas, pasta, carimbo, unico, workers: Object.keys(workers), tamJs: tamPrincipal, tamSobDemanda: tamSob, partes: { principal: partes.principal, sobDemanda: partes.sobDemanda } };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

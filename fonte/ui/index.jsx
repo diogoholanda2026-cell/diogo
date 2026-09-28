@@ -223,7 +223,7 @@ export function criarUI(raiz, { sim, R = null, jogo = null } = {}) {
     const s = R.selecionar(x, y);
     const util = s && s.tipo !== 'terreno' && s.tipo !== 'agua' ? s : null;
     loja.selecao.value = util;
-    R.selecionado?.(util?.ref ?? null);
+    R.selecionado?.(util ? { tipo: util.tipo, ref: util.ref } : null);
   });
   const aoTecla = (ev) => {
     if (ev.key === 'Escape' && loja.tela.value) ui.fecharTela();

@@ -70,7 +70,7 @@ export const API_RENDER = congelar({
   'ferramenta.limpar': '()',
   'marcadores.atlas': '(canvas, mapa)',
   'marcadores.definir': '([{ idx, glifo, gravidade, prioridade }])',
-  selecionado: '(ref | null)',
+  selecionado: "({ tipo: 'predio' | 'colocavel' | 'aresta' | 'arcologia', ref } | ref | null) (só a ref vale como prédio)",
   'tempo.forcar': '({ fase } | null)',
   sempreDia: '(bool)',
   estado: "('livre' | 'coberto' | 'foto' | 'teste')",

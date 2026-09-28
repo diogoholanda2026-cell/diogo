@@ -335,9 +335,9 @@ na UI isso chega sempre como Promise (D16).
 |---|---|---|
 | `velocidade` | `{ v: 0..3 }` | `valor` |
 | `via.construir` | `{ plano }` (o de `q.via.previa`, conferido de novo) | `creditos`, `agua`, `vao`, `declive`, `angulo`, `curto`, `raio`, `ladrilho`, `gleba`, `colisao`, `marco` |
-| `via.desfazer` | `{ sessao }` | `nada`, `ocupado` |
-| `via.melhorar` | `{ arestas: [ref], tipo }` | `creditos`, `marco`, `declive` |
-| `via.demolir` | `{ arestas: [ref] }` | `arcologia`, `rodovia`, `inexistente` |
+| `via.desfazer` | `{ sessao }` | `nada`, `ocupado`, `creditos` (desfazer uma demolição sem caixa para a devolução) |
+| `via.melhorar` | `{ arestas: [ref], tipo, sessao? }` | `creditos`, `marco`, `declive` |
+| `via.demolir` | `{ arestas: [ref], sessao? }` | `arcologia`, `rodovia`, `inexistente` |
 | `zona.pintar` | `{ pincel: { modo: 'quadra' \| 'circulo' \| 'retangulo' \| 'celulas', x, z, raio?, x2?, z2?, celulas? }, zona /* 0 apaga */ }` | `marco`, `nada` |
 | `construir` | `{ tipo, x, z, rot }` (serviço ou prédio da Holding) | `creditos`, `marco`, `acesso`, `colisao`, `declive`, `agua`, `recurso`, `ladrilho`, `gleba` |
 | `demolir` | `{ refs: [ref] }` | `arcologia`, `inexistente`, `creditos` |
@@ -359,7 +359,9 @@ na UI isso chega sempre como Promise (D16).
 | `holding.identidade` | `{ nome, cor, modo: 'normal' \| 'livre' }` (nova partida) | `valor` |
 
 A lista fechada de códigos vive em `fonte/contratos/codigos.js`; um teste confere que todo código tem frase em
-`fonte/ui/textos/`. Salvar, carregar, exportar e importar são do app (seção 2.8).
+`fonte/ui/textos/`. A `sessao` das vias é a chave da sessão da ferramenta, `'<sessão da página>.<n>'` (D16 e D32): o
+desfazer e o reembolso integral valem só nela. Na UI a resposta chega com `idComando: { sessao, seq }`, e o `id` fica o
+da simulação (a ref da coisa criada). Salvar, carregar, exportar e importar são do app (seção 2.8).
 
 ### 2.6 Consultas e eventos
 
@@ -375,11 +377,17 @@ q.barra() → { creditos, saldoHora /* líquido, por hora de jogo */, populacao,
   decisoesPendentes, objetivos: [{ id, texto, quem, dominio: 'cidade' | 'holding' | 'arcologia', feito, total, alvo }] }
 
 q.retomar() → { objetivo, problema: { codigo, params, alvo } | null, desde /* tique do último save */ }
-q.via.previa({ modo: 'reta' | 'curva' | 'continua' | 'grade', tipo, pontos: [[x, z], ...], tolerancia /* m */, encaixe, sessao })
-  → { ok, segmentos: [{ p: [8], tipo, cotas: [y0, y1], ponte: bool, erros: [codigo] }], nosNovos, divisoes,
-      encaixes: [{ ponto, tipo: 'no' | 'aresta' | 'angulo' | 'prolongamento' | 'quadra' | 'passo' | 'comprimento', valor }],
+q.via.previa({ modo: 'reta' | 'curva' | 'continua' | 'grade' | 'melhorar' | 'demolir', tipo, pontos: [[x, z], ...],
+              tangente /* continua */, espacamento /* grade */, arestas: [ref] /* melhorar e demolir */,
+              tolerancia /* m */, encaixe, sessao })
+  → { ok, segmentos: [{ p: [8], tipo, cotas: [y0, y1], ponte: bool, erros: [codigo], declive }], nosNovos, divisoes,
+      novos: [[x, z]], dividir: [{ aresta, t, ponto }], pontos: [[x, z]] /* os encaixados */,
+      encaixes: [{ indice, ponto, tipo: 'no' | 'aresta' | 'angulo' | 'prolongamento' | 'quadra' | 'passo' | 'comprimento'
+                   | 'portao', valor, portao?, passo? }],
       guias: [{ tipo, a: [x, z], b: [x, z] }], demolir: { predios: [ref], custo }, comprimento, custo, manutencaoHora,
-      erros: [{ codigo, trecho }] }                           // até 1 ms por chamada (meta da UI)
+      declive, erros: [{ codigo, trecho /* -1: o plano inteiro */, dados? /* faltam em 'creditos' */ }],
+      arestas /* melhorar e demolir: um item por aresta pedida */, devolve /* demolir; custo = -devolve */ }
+                                                              // até 1 ms por chamada (meta da UI)
 q.zona.previa({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia /* bem-estar da cidade, D11 */ }
 q.construir.previa({ tipo, x, z, rot }) → { ok, codigo?, x, z, rot /* ajustados à frente da via */, custo, manutencaoHora,
   alcance, efeitos: [{ camada, delta }] }
@@ -434,7 +442,7 @@ R.ferramenta.via.previa(plano, 'normal' | 'invalido' | 'sugestao');  R.ferrament
 R.ferramenta.zona.celulas(Int32Array, zona);  R.ferramenta.pincel({ x, z, raio });  R.ferramenta.ladrilhos(bool)
 R.ferramenta.fantasma({ tipo, x, z, rot, alcance, ok });  R.ferramenta.demolir(refs);  R.ferramenta.limpar()
 R.marcadores.atlas(canvas, mapa);  R.marcadores.definir([{ idx, glifo, gravidade, prioridade }])
-R.selecionado(ref | null);  R.tempo.forcar({ fase } | null);  R.sempreDia(bool)
+R.selecionado({ tipo, ref } | ref | null);  R.tempo.forcar({ fase } | null);  R.sempreDia(bool)   // só a ref: prédio
 R.estado('livre' | 'coberto' | 'foto' | 'teste');  R.qualidade(id);  R.perfil() → { id, sugerido, capac }
 R.stats   // { calls, tris, callsSombra, trisSombra, passes, ms, qps, p95, gpuMs /* por fenceSync */, pr, msaa, perfil,
           //   familias: { terreno, predios, colocaveis, arvores, vias, vida, arcologia, sombra, resto } /* tris */, pxPorTri,
@@ -443,7 +451,8 @@ R.stats   // { calls, tris, callsSombra, trisSombra, passes, ms, qps, p95, gpuMs
           //   memoria: { geometriaMB, texturasMB, programas }, capac: { clipControl, multiDraw, timer, limites } }
 R.bancada() → Promise<{ perfil, sugerido, msMedio, p95, qps, calls, tris, pior, gpuMs, familias, programas: [{ nome,
   amostradores: { v, f }, varyings, uniformesF, atributos, msCompilar }], capac }>
-R.capa(640, 288) → Promise<Blob>;  R.foto({ w, h }) → Promise<Blob>;  R.voo(alvo) → Promise   // momentos de câmera
+R.capa(640, 288) → Promise<Blob>;  R.foto({ w, h }) → Promise<Blob>;  R.voo(alvo) → Promise   // momentos de câmera;
+                                  // o voo dura pelo comprimento do caminho de van Wijk e Nuij (0,8 a 4,5 s)
 ```
 
 A UI nunca toca em objetos do three. `?cena=<nome>` monta as cenas fixas da bancada (seção 4.3). `R.stats` soma
@@ -451,7 +460,11 @@ A UI nunca toca em objetos do three. `?cena=<nome>` monta as cenas fixas da banc
 céu, PMREM, campo de alturas, sombra de longe, luz da rua, cena, bloom e composição).
 
 Registros do render (D45), criados pela F0: `registrarTextura(nome, gerador)`, `registrarGeradorOficina(tipo,
-modulo)`, `registrarSelecionavel(dominio, fn)`, `registrarDominio`, `registrarCena`, `ganchos.definir`.
+modulo)`, `registrarSelecionavel(dominio, fn)`, `registrarDominio`, `registrarCena`, `ganchos.definir`. Desde a I1 as
+cenas vêm sob demanda (`carregarCena(nome)`, um pedaço do pacote por cena), e o `THREE` do contexto (dos geradores de
+textura, de `ctx.THREE` e da api dos registros) é o subconjunto `THREE_TEXTURAS` de `materiais/texturas.js`: o
+namespace do three passado como valor impedia a poda do three (177 KB, A1). Quem precisa de outra classe importa o three
+no próprio arquivo e usa só `THREE.Nome` (a guarda de texto confere).
 
 ### 2.8 UI, app e workers
 
@@ -670,11 +683,11 @@ cada arquivo depois da F0. **Uma parcela "b" ou "c" herda os arquivos da parcela
 
 | Ferramenta | Situação | O que faz no jogo novo |
 |---|---|---|
-| `montar.mjs` | reescrita (F0) | entrada `fonte/app/main.js`; JSX do Preact; CSS de `ui/tema/*.css`; Inter com carimbo (base64 no HTML único); workers `tarefas` e `oficina` com carimbo (Blob no HTML único) e **tamanho de cada um com teto**; texturas KTX2 com carimbo (fora do HTML único) e o transcodificador Basis do three em `basis/`; o GLSL marcado `/* glsl */` sai sem comentários nem espaço de sobra; `cenas.html` (índice das cenas da prévia, de `fonte/web/`); lista do `sw.js` gerada com o **prefixo do app**; **saída em `previa/`** até o M1 e em `app/` com `--saida app`; avisa chave duplicada; roda a `guarda-texto.mjs` |
-| `guarda-texto.mjs` | nova (F0) | falha se `fonte/sim/` ou `fonte/comum/` usar relógio ou `Math.random`, se `fonte/sim/`, `fonte/comum/` ou `render/geracao/` importar o three, se algum shader próprio usar `mediump`, ou se um texto de `ui/textos/` tiver travessão, "Aluguel", "/dia" ou a palavra "dia" |
+| `montar.mjs` | reescrita (F0) | entrada `fonte/app/main.js`; JSX do Preact; CSS de `ui/tema/*.css`; Inter com carimbo (base64 no HTML único); workers `tarefas` e `oficina` com carimbo (Blob no HTML único) e **tamanho de cada um com teto**; texturas KTX2 com carimbo (fora do HTML único) e o transcodificador Basis do three em `basis/`; o GLSL marcado `/* glsl */` sai sem comentários nem espaço de sobra; `cenas.html` (índice das cenas da prévia, de `fonte/web/`); **divisão do pacote** (desde a I1): cada `import()` vira um pedaço `parte.<carimbo>.<hash>.js` que só vem quando pedido, os pedaços comuns entram com `modulepreload` no `index.html`, e o teto do A1 vale para o `jogo` mais os pedaços que ele importa de saída (o HTML único leva tudo num arquivo); lista do `sw.js` gerada com o **prefixo do app** (com todos os pedaços); **saída em `previa/`** até o M1 e em `app/` com `--saida app`; avisa chave duplicada; roda a `guarda-texto.mjs` |
+| `guarda-texto.mjs` | nova (F0) | falha se `fonte/sim/` ou `fonte/comum/` usar relógio ou `Math.random`, se `fonte/sim/`, `fonte/comum/` ou `render/geracao/` importar o three, se um arquivo de `fonte/` com `import * as THREE` passar o namespace como valor (I1, A1), se algum shader próprio usar `mediump`, ou se um texto de `ui/textos/` tiver travessão, "Aluguel", "/dia" ou a palavra "dia" |
 | `testar.mjs` | fica, com `--pasta previa\|app`, `--webgpu` e `--semClip` opcionais | serve a pasta, captura, lê `R.stats` e `window.__resultado` |
-| `simular.mjs` | reescrita (F0) | `--testes` (roda todo `ferramentas/testes/*.teste.mjs` e a guarda de texto), `--determinismo`, `--robo [--horas h] [--semente s] [--comprarTempo]`, `--bancada [--estresse]` |
-| `bancada.mjs` | nova (F0; cenas das parcelas) | roda `?cena=` por perfil no Chromium, grava PNG e JSON, guarda o **pior quadro de 120** com o sol andando, **falha se passar do orçamento** (total e por família) ou se um programa passar da guarda do Mali (D44) |
+| `simular.mjs` | reescrita (F0) | `--testes` (roda todo `ferramentas/testes/*.teste.mjs` e a guarda de texto), `--determinismo`, `--robo [--horas h] [--semente s] [--comprarTempo]`, `--bancada [--estresse]` (o tique medido sozinho; a `via.construir` a cada 10 tiques é medida à parte, entre os tiques, depois de uma obra de aquecimento) |
+| `bancada.mjs` | nova (F0; cenas das parcelas) | roda `?cena=` por perfil no Chromium, grava PNG e JSON, guarda o **pior quadro de 120** com o sol andando, **falha se passar do orçamento** (total e por família) ou se um programa passar da guarda do Mali (D44); o sol anda em 4x e `--vel 1\|2` mede em 1x ou 2x (I1) |
 | `vitrine-ui.mjs` | reescrita (F0; cenas das parcelas) | interface com o render falso e a simulação falsa ou real, nos 4 tamanhos, com as medidas da UI (alvos, texto, contraste, transbordo, área do HUD, travessão, unidades) |
 | `cidade-sintetica.mjs` | nova (F0) | espelho sintético **gerado pelas APIs** (`addAresta` do `grafo.js`, `alocar()` das tabelas e um substituto de crescimento que põe o prédio de frente para a célula): 4 x 4 km, ruas e avenidas com curvas, cerca de 12 mil prédios de todas as zonas e níveis em lotes geminados (seis bairros cheios; a várzea, a lagoa e o pé dos morros a oeste ficam sem ruas), mata, mar, rio, a Torre; roda os invariantes do espelho; também `?sintetica=1` no navegador |
 | `mapa.mjs` | nova (S1a) | PNG do mapa autoral sem navegador; confere que a área inicial é um componente só de terra; `--assar` roda a erosão e grava `sim/mundo/relevo-assado.js` (arquivo gerado: assar de novo ao mudar o relevo, a costa, o rio, as lagoas, os córregos, a planície ou a rodovia do mapa, ou a conta do assador), `--conferir-assado` confere que ele sai igual |
@@ -795,7 +808,7 @@ Cada critério diz em que parte vale (M1a, M1b ou os dois). As prévias usam os 
 
 | # | Critério | Como medir | Meta |
 |---|---|---|---|
-| A1 | Montagem | `node ferramentas/montar.mjs --saida app` | sem avisos; JS principal até 1,6 MB minificado; worker `tarefas` até 150 KB e `oficina` até 250 KB; texturas KTX2 até 8 MB; primeiro quadro da carga em HTML e CSS antes do JS; guarda de texto verde |
+| A1 | Montagem | `node ferramentas/montar.mjs --saida app` | sem avisos; JS principal até 1,6 MB minificado (o `jogo` e os pedaços que ele importa de saída; as cenas, a cidade sintética, a simulação falsa e o KTX2 vêm por `import()` e ficam fora); worker `tarefas` até 150 KB e `oficina` até 250 KB; texturas KTX2 até 8 MB; primeiro quadro da carga em HTML e CSS antes do JS; guarda de texto verde |
 | A2 | Testes | `node ferramentas/simular.mjs --testes` | `testes ok`. **Regras do dono:** tarifa arredondada (30,4 dá 5; 30,5 dá 8; 60,4 dá 8; 60,5 dá 11); limite anual e dívida; 10% em um ano com erro abaixo de 0,1%; mora após 10 anos; Depósito a 150% do preço de catálogo, 100 por janela e virada; lote 0 e 11 recusados, lote de 10 leva 8 vezes o de 1; **caixa nunca negativo** (10 mil comandos aleatórios); **dívida igual à soma dos contratos**. **Economia e jogo:** demolir e reconstruir dá saldo negativo; robô que pula a Arcologia termina mais pobre; água, energia, praça e comércio dão bem-estar 60 ou menos, e com saúde e educação passa de 61; 20 mil moradores a 65 por 1 h dão de 600 a 1.200 de XP de bem-estar; cidade de nível 3 a 5 espera sem estoque e sem importação. **Mundo:** aplainar comutativo (A depois B igual a B depois A, bit a bit; salvar e carregar no meio; cava registrada); chão 5 cm abaixo da pista em toda a seção, com faixa plana de 8 m; área inicial num componente de terra. **Motor da simulação:** worker simulado com atraso aleatório dá o hash do Node; tabela que cresce no meio mantém o render de depuração certo; invariantes do espelho na sintética e no save do robô. **Render em Node:** juntas de cruzamento abaixo de 1 cm, sem NaN, LOD1 com a mesma caixa do LOD0, atributos quantizados com erro abaixo de 5 mm. **UI em Node:** gestos, formato das unidades (D42), glifos, contraste dos tokens; guarda de texto |
 | A3 | Determinismo | `--determinismo` | hashes iguais em 3 pontos, depois de salvar e carregar, e depois de matar a página no meio de um save e reproduzir o diário |
 | A4 | Ritmo e economia | `--robo --horas 12`, sem comprar tempo (e um segundo relatório com `--comprarTempo`) | marco 7 com `torre.e4` entre 5 e 7 h de jogo; 25 a 40 mil moradores; bem-estar médio 62 a 75; depois do marco 3, nunca mais de 1 mês abaixo de 61; marco 1 em 10 a 15 min e marco 3 em 40 a 70 min; seguindo os objetivos, o caixa não zera na primeira hora com no máximo um empréstimo; dívida sempre até 500 mil; até 50 mil tomados por ano; dívida em queda a partir do ano 3 e quitada antes do ano 6; vendas da Holding 15% a 35% das receitas no marco 5; sempre um objetivo aberto; atraso médio da frota até 20% do prazo de cada etapa; a partir de caixa 0 com saldo negativo, volta ao positivo em até 10 min de jogo só com ações do jogo; `erros []`. **M1b:** numa cidade de 25 mil, sem mexer nas vias, aparece ao menos um gargalo (v/c acima de 1) na ligação com a rodovia, e as ferramentas do M1 o resolvem |
@@ -1126,6 +1139,11 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   primeira `via.construir` (índices dos prédios e das células, uns 17 ms, e o JIT) e em coletas de 4 ms; encaixar o
   traço no passo de 8 m da via que ele cruza, para fechar também esse recorte; o cruzamento a menos do patamar de um nó
   de greide é recusado com `declive` até na planície (3 a 13% das posições ao longo de ruas com 2 a 3% de declive).
+  Na I1 o integrador ajustou o contrato ao que a S1b faz: `via.melhorar` e `via.demolir` com `sessao`, `via.desfazer`
+  com `creditos` e `q.via.previa` com os modos `melhorar` e `demolir` e os campos a mais (2.5 e 2.6, `contratos/`). A
+  bancada do tique mede a `via.construir` à parte, entre os tiques (D17), depois de uma obra que monta os índices
+  preguiçosos da sintética: A5 dentro (tique p99 0,15 ms e máximo 0,8 ms; obra p50 0,12 ms e máximo 2,2 ms; a primeira,
+  com os índices, 22 ms).
 
 #### R1b. Entrada completa, sombra de longe, HAO e noite (onda 2; 2 sessões)
 - **Arquivos:** `render/ambiente/{campoAlturas,sombraLonge,luzNoite}.js`; herda os de R1a.
@@ -1168,6 +1186,10 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   Pendente: o ms de GPU no Poco X7 (`?painel=1`); a cor do LED da R3a (0,86; 0,86; 0,82, uns 5.500 K, contra 4.000 K
   do desenho 2.9) e a parte de sódio (45% das quadras) deixam a rua mais branca que laranja na vista aberta; o campo na
   carga pelo worker `oficina` (o índice dele ainda não inclui o módulo); `R.voo` com duração pela distância.
+  Na I1: o worker `oficina` registra o `campoAlturas`, e o domínio manda o ladrilho de cada setor para ele quando o
+  worker existe (vale só a resposta do último pedido do setor e de antes de uma troca de qualidade; `preparar()` segue
+  na hora); `ctx.THREE` do domínio é o subconjunto `THREE_TEXTURAS`; `R.voo` dura pelo comprimento S do caminho (0,8 a
+  4,5 s); `bancada.mjs --vel 1|2|4`.
 
 #### R3a. Vias, cruzamentos e carros pela heurística (onda 2; 3 sessões)
 - **Arquivos:** `render/geracao/{perfilVia,malhaVia,cruzamento,veiculos}.js`, `render/mundo/{vias,luzRua,props,trafego}.js`,
@@ -1197,6 +1219,12 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   1,6 m da faixa de pedestres; folíolos recortados na palmeira; o gerador do setor sem relógio.
   Pendente: `R.selecionado(ref)` não diz o domínio (o realce da aresta existe, mas fica desligado); o JS montado passou
   do teto de 1,6 MB com a onda 2 inteira; a calçada de pedra portuguesa depende da área `orla` do mapa.
+  Na I1 o integrador achou os "pilares claros" da vista rasante: eram da R3a. Em `mundo/props.js` três chamadas de
+  `cone(x, z, y0, y1)` recebiam a altura no lugar do z, e cada palmeira-imperial plantava um segundo estipe a 7,65 m e
+  o palmito a 17 m dela, do chão para cima, girados com a instância (um caía na faixa, a 1 m do meio-fio); a copa ganhava
+  um galho solto a 3 m. Corrigido, com teste (a árvore cabe na coroa). O LED da luz da rua foi para ~4.000 K (1,0; 0,80;
+  0,62; o forte, 1,0; 0,82; 0,65), como no desenho 2.9. `R.selecionado` aceita `{ tipo, ref }` e o render emite
+  `selecao` com o domínio: o realce da aresta pode ligar (bit G da tabela), pendente para a R3b.
 
 #### X2. Ferramentas de construção de ponta a ponta (onda 2; 3 sessões)
 - **Arquivos:** `ui/ferramentas/*`, `ui/hud/{Construcao,Bandeja,BarraFerramenta}.jsx`, `ui/mundo/{Lupa,Cotas}.jsx`,
@@ -1230,6 +1258,8 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   `ui=1` traçando pela entrada). Com a S1b, `q.via.previa` responde no mesmo formato (conferido em Node na sintética).
   Pendente: o jogo montado passa do teto A1 (1.798 KB contra 1.638; a X2 soma cerca de 85 KB); a sintética das cenas
   roda sem os domínios, então a prévia ali é a local.
+  Na I1: `ui/acoes.js` devolve o id do comando em `idComando` e deixa o `Resposta.id` do contrato (a ref criada)
+  intacto; `refCriada()` continua lendo `id`, `ref` ou `dados.ref` e o teste do Colocar cobre o `id`.
 
 #### S2a. Cidade viva, núcleo (onda 3; 3 sessões)
 - **Arquivos:** `sim/zonas/{demanda,crescimento}.js`, `sim/{predios,cidadaos,bemestar,servicos,redes}.js`,

@@ -4,6 +4,25 @@
 //
 //   registrarTextura('asfalto', ({ renderer, THREE, perfil }) => textura)
 //   const t = textura('asfalto');
+//
+// O THREE do contexto (dos geradores, de ctx.THREE e da api dos registros) é THREE_TEXTURAS, um subconjunto: texturas,
+// alvos de render, o passe de tela cheia e as constantes. O namespace inteiro passado como valor impedia o esbuild de
+// podar o three (177 KB a mais no pacote, A1). Quem precisa de outra classe importa o three no próprio arquivo; o teste
+// da casca confere que todo THREE.X lido do contexto está aqui.
+import * as THREE from 'three';
+
+export const THREE_TEXTURAS = Object.freeze({
+  Texture: THREE.Texture, DataTexture: THREE.DataTexture, DataArrayTexture: THREE.DataArrayTexture, Data3DTexture: THREE.Data3DTexture,
+  CanvasTexture: THREE.CanvasTexture, WebGLRenderTarget: THREE.WebGLRenderTarget, WebGLArrayRenderTarget: THREE.WebGLArrayRenderTarget,
+  Scene: THREE.Scene, Mesh: THREE.Mesh, PlaneGeometry: THREE.PlaneGeometry, OrthographicCamera: THREE.OrthographicCamera,
+  ShaderMaterial: THREE.ShaderMaterial,
+  RedFormat: THREE.RedFormat, RGFormat: THREE.RGFormat, RGBAFormat: THREE.RGBAFormat,
+  UnsignedByteType: THREE.UnsignedByteType, HalfFloatType: THREE.HalfFloatType, FloatType: THREE.FloatType,
+  NearestFilter: THREE.NearestFilter, LinearFilter: THREE.LinearFilter, NearestMipmapNearestFilter: THREE.NearestMipmapNearestFilter,
+  LinearMipmapNearestFilter: THREE.LinearMipmapNearestFilter, LinearMipmapLinearFilter: THREE.LinearMipmapLinearFilter,
+  ClampToEdgeWrapping: THREE.ClampToEdgeWrapping, RepeatWrapping: THREE.RepeatWrapping, MirroredRepeatWrapping: THREE.MirroredRepeatWrapping,
+  NoColorSpace: THREE.NoColorSpace, SRGBColorSpace: THREE.SRGBColorSpace, LinearSRGBColorSpace: THREE.LinearSRGBColorSpace,
+});
 
 const geradores = new Map();
 const cache = new Map();

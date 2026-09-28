@@ -183,7 +183,7 @@ function criarPredios(ctx) {
   uniformesEdificio.gDetalhe.value = ctx.textura('fachadaDetalhe');
   // A/B dos materiais (D46): com ?materiais=cc0 a fachada usa o detalhe fotográfico quando a montagem o traz
   if (modoMateriais() === 'cc0') {
-    carregarDetalheCC0({ renderer: ctx.renderer, THREE }).then((t) => {
+    carregarDetalheCC0({ renderer: ctx.renderer, THREE: ctx.THREE }).then((t) => {
       if (t) uniformesEdificio.gDetalhe.value = t;
     });
   }
