@@ -159,7 +159,10 @@ vec3 gcCeu( vec3 d ) {
 #endif
   vec3 h = gNeblinaCorVista( vec3( d.x, 0.02, d.z ) );
 #ifdef CEU_IBL
-  if ( d.y < 0.0 ) return mix( h, uChao, smoothstep( 0.0, -0.1, d.y ) );
+  // a luz do céu (não o fundo) com a saturação medida de um céu limpo (render/ambiente/ceu.js, SAT_LUZ_CEU)
+  vec3 ceu = mix( h, L, smoothstep( 0.0, 0.035, d.y ) );
+  ceu = mix( vec3( dot( ceu, vec3( 0.2126, 0.7152, 0.0722 ) ) ), ceu, ${f(c.SAT_LUZ_CEU ?? 1)} );
+  return d.y < 0.0 ? mix( ceu, uChao, smoothstep( 0.0, -0.1, d.y ) ) : ceu;
 #endif
   return mix( h, L, smoothstep( 0.0, 0.035, d.y ) );
 }

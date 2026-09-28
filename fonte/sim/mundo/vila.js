@@ -1,14 +1,16 @@
-// Vila de Santa Cida e rodovia: o que já está construído no mapa no começo da partida (dona: S1a).
+// Vila de Santa Cida e rodovia: o que já está construído no mapa no começo da partida (dona: S1a, depois S1b).
 //
 //  - Rodovia (BR, 'rodovia', flag RODOVIA): de oeste a leste, com a ponte pronta sobre o Rio Held (flag PONTE, sem
 //    forma no aplainar), o acesso de 4 faixas até o nó de entrada (D52) e a junção da estrada de terra da Vila. O
 //    greide sai do relevo base: média móvel, meio a meio entre corte e aterro, declive máximo de 5,5%, folga sobre a
 //    várzea e vão livre sobre o rio.
 //  - Vila (D52): rua principal ('rua', com calçada e redes) e ruas de 'terra' na foz, a estrada de terra até a
-//    rodovia e uns 60 prédios de nível 1 e 2 (350 moradores) de frente para as ruas, em plataformas do aplainar.
+//    rodovia e uns 60 prédios de nível 1 e 2 (350 moradores) de frente para as ruas, em plataformas do aplainar. Nas
+//    ruas de terra as casas ficam atrás da calçada da rua que elas viram (melhorar não derruba nada) e a plataforma
+//    nunca fica acima do chão da rua em frente (o chão não sobe na borda da pista, S1b).
 //
-// Os prédios da Vila são prédios de zona sem células (a S1b cria células só nas vias que pintar). O que foi criado fica
-// em sim.json.mapa (refs), para as outras parcelas acharem a entrada, a Vila e a rodovia.
+// Os prédios da Vila são prédios de zona sem células: as células das ruas com calçada ficam inválidas sob eles. O que
+// foi criado fica em sim.json.mapa (refs), para as outras parcelas acharem a entrada, a Vila e a rodovia.
 import { addNo, addAresta } from '../vias/grafo.js';
 import { dividir as dividirBz, tabelaArco, tDoArco, ponto, direcao } from '../../comum/bezier.js';
 import { alturaEm } from '../../comum/altura.js';
@@ -21,7 +23,7 @@ import { VIAS } from '../../data/vias.js';
 import { PREDIOS, PREDIOS_ORDEM } from '../../data/predios.js';
 import { ZONAS_ORDEM } from '../../data/zonas.js';
 import { terrenoBase, densificar, trechosBezier, rioEm, costaEm, aguaEm } from './terreno.js';
-import { formaDaAresta, CHAO_ABAIXO_DA_PISTA } from './aplainar.js';
+import { formaDaAresta, pistaDaAresta, CHAO_ABAIXO_DA_PISTA } from './aplainar.js';
 
 // ------------------------------------------------------------------------------------------------ greide
 
@@ -308,7 +310,9 @@ function construirPredios(sim, mapa, base, ruas) {
     az1 = Math.max(az1, area[k + 1]);
   }
   const oc = new Ocupacao(ax0 - 40, az0 - 40, ax1 + 40, az1 + 40);
-  for (const rua of ruas) for (const e of rua.arestas) oc.aresta(A.p.subarray(8 * e, 8 * e + 8), VIAS[rua.tipo].largura / 2 + 1.5);
+  // a rua de terra reserva a largura da rua que ela vira quando o jogador melhora (D52): nada da Vila sai na obra
+  const faixa = (tipo) => Math.max(VIAS[tipo].largura / 2 + 1.5, tipo === 'terra' ? VIAS.rua.largura / 2 + 0.5 : 0);
+  for (const rua of ruas) for (const e of rua.arestas) oc.aresta(A.p.subarray(8 * e, 8 * e + 8), faixa(rua.tipo));
   const feitos = [];
   let moradores = 0;
   let comercio = 0;
@@ -339,14 +343,17 @@ function construirPredios(sim, mapa, base, ruas) {
             direcao(p, t, d);
             const lx = -d[1] * lado;
             const lz = d[0] * lado;
-            const recuo = 1.5 + rng.entre(0, 2.5);
+            // na rua de terra a casa fica atrás da calçada da rua que ela vira
+            const recuo = rua.tipo === 'terra' ? (VIAS.rua.largura - VIAS.terra.largura) / 2 + 0.5 + rng.entre(0, 1.5) : 1.5 + rng.entre(0, 2.5);
             const off = meia + recuo + dd / 2;
             const cx = q[0] + lx * off;
             const cz = q[1] + lz * off;
             const rot = atan2(-lx, -lz); // a frente olha para a via
             if (cabe(base, oc, area, cx, cz, rot, w, dd)) {
               const nivel = rng.chance(0.5) ? 2 : 1;
-              const i = criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d: dd, base, rng });
+              // a plataforma não fica acima do chão da rua em frente (senão o chão sobe na borda da pista)
+              const teto = pistaDaAresta(G, e, s + w / 2) - CHAO_ABAIXO_DA_PISTA;
+              const i = criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d: dd, base, rng, teto });
               oc.retangulo(cx, cz, rot, w, dd, 1, true);
               feitos.push(i);
               moradores += P.moradores[i];
@@ -383,13 +390,13 @@ function cabe(base, oc, area, cx, cz, rot, w, d) {
   return oc.retangulo(cx, cz, rot, w, d, 1, false);
 }
 
-function criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d, base, rng }) {
+function criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d, base, rng, teto = Infinity }) {
   const P = sim.tabelas.predios;
   const i = P.alocar();
   if (i < 0) throw new Error('mapa: teto de prédios');
   const def = PREDIOS[modelo];
   const nv = def.niveis[nivel - 1];
-  const cota = Math.round(alturaEm(base, cx, cz) * 100) / 100;
+  const cota = Math.floor(Math.min(alturaEm(base, cx, cz), teto) * 100) / 100;
   P.tipo[i] = TIPO_PREDIO.ZONA;
   P.modelo[i] = PREDIOS_ORDEM.indexOf(modelo);
   P.zona[i] = ZONAS_ORDEM.indexOf(def.zona);

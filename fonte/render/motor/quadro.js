@@ -1,6 +1,7 @@
 // Quadro do render (desenho do render 1.4): limite de quadros pelo estado da tela, tamanho da tela e a ordem dos
 // passes de um quadro:
-//   1. passes raros em fatias do ambiente (uma face do cubo do céu, um quadro-chave da luz do ambiente e a mistura);
+//   1. passes raros em fatias do ambiente (uma face do cubo do céu, um quadro-chave da luz do ambiente e a mistura) e
+//      os dos domínios em ctx.quadro.antes (o campo da sombra de longe e do HAO, o mapa de luz da rua): entram em R.stats;
 //   2. sombra própria (D43), só quando suja;
 //   3. a cena no alvo HDR com MSAA: fundo do céu (tela cheia, sem profundidade) e a cena por cima, numa faixa de
 //      profundidade (invertida) ou em duas (sem EXT_clip_control, motor/faixas.js);
@@ -43,6 +44,8 @@ export class Quadro {
     this.pos = new Pos(ctx);
     this.resolucao = new Resolucao(ctx);
     this.faixas = new Faixas(ctx);
+    // passes dos domínios antes da cena: fn(renderer, medidas, tMs), depois de medidas.inicio (contam no quadro)
+    this.antes = new Set();
     this._corLimpa = new THREE.Color(0, 0, 0);
     this._db = new THREE.Vector2();
     // mede a tela só quando ela muda (ler o layout a cada quadro força o navegador a refazê-lo depois da interface)
@@ -87,6 +90,13 @@ export class Quadro {
     medidas.inicio(tMs);
     const amb = ctx.ambiente ?? null;
     amb?.antes(renderer, medidas);
+    for (const fn of this.antes) {
+      try {
+        fn(renderer, medidas, tMs);
+      } catch (e) {
+        console.error('render: passe antes da cena falhou:', e);
+      }
+    }
     sombra.desenhar(renderer, medidas, ganchos.uniformes);
 
     const comPos = this.pos.ligado;

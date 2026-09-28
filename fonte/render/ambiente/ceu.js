@@ -44,6 +44,18 @@ export const CREPUSCULO = Object.freeze({
 });
 export const NOITE = Object.freeze({ zenite: [0.0019, 0.0026, 0.0046], horizonte: 1.8 });
 export const LUA = Object.freeze({ cor: [0.74, 0.82, 1.0], irradiancia: 0.05, ceu: [0.0013, 0.002, 0.0036] });
+/** Brilho da cidade no horizonte (radiância com o brilho 1, de noite): o laranja do sódio refletido no ar. */
+export const CIDADE = Object.freeze([0.02, 0.0105, 0.0042]);
+
+/**
+ * Saturação da LUZ do céu (a luz do ambiente e o chão refletido; o fundo do céu fica como está): o Preetham integrado
+ * no hemisfério dá uma luz de céu com o azul 6 vezes o vermelho, bem mais azul que a de um céu tropical limpo medido
+ * (de 1,6 a 2 vezes), e deixava a sombra e as paredes à sombra azuladas. Com 0,4 a razão cai para perto de 2.
+ */
+export const SAT_LUZ_CEU = 0.4;
+
+/** Dia do ano das cenas fixas (?cena=, sem ?dia=): o equinócio de março, com o pôr do sol perto das 18h10. */
+export const DIA_CENAS = 80;
 
 /** Amostras do anel do horizonte (azimute a partir do sol: pi · (i / 11)²). */
 export const ANEL = 12;
@@ -54,6 +66,13 @@ const suave = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 export const luma = (c) => LUMA[0] * c[0] + LUMA[1] * c[1] + LUMA[2] * c[2];
+
+/** A cor com a saturação k em volta da luminância (mesma conta do GLSL do céu no modo da luz do ambiente). */
+export function saturar(c, k, alvo = [0, 0, 0]) {
+  const l = luma(c);
+  for (let i = 0; i < 3; i++) alvo[i] = l + k * (c[i] - l);
+  return alvo;
+}
 
 /** Intensidade do sol do Preetham pelo cosseno do ângulo zenital (a "sombra da Terra" abaixo do horizonte). */
 export function intensidadeSol(cosZ) {
@@ -203,7 +222,7 @@ export function estadoCeu(ast, clima = {}, brilhoCidade = 0.6, alvo = {}) {
   const ar = parametrosAr(ast.sol.elevacao, clima);
   const noite = 1 - suave(-0.2, -0.02, ast.sol.elevacao);
   const kCid = brilhoCidade * noite;
-  const cidade = [0.011 * kCid, 0.0062 * kCid, 0.0028 * kCid];
+  const cidade = CIDADE.map((c) => c * kCid);
   const P = prepararCeu(ast.sol.dir, ar, { lua: ast.lua, cidade });
   alvo.P = P;
   alvo.ar = ar;
@@ -214,6 +233,7 @@ export function estadoCeu(ast, clima = {}, brilhoCidade = 0.6, alvo = {}) {
   const kLua = LUA.irradiancia * ast.lua.iluminada * luaAlta * noite;
   alvo.luaIrr = LUA.cor.map((c) => c * kLua);
   alvo.ceuIrr = irradianciaCeu(P, alvo.ceuIrr);
+  alvo.ceuIrrLuz = saturar(alvo.ceuIrr, SAT_LUZ_CEU, alvo.ceuIrrLuz);
   // anel do horizonte (12 azimutes contados a partir do sol, mais densos perto dele) e o alto: a neblina e o fundo
   // leem a mesma tabela, então o chão ao longe e o céu se encontram na mesma cor
   const hs = Math.hypot(ast.sol.dir[0], ast.sol.dir[2]);
@@ -261,7 +281,7 @@ export function corVista(d, est, alvo = [0, 0, 0]) {
 
 // ------------------------------------------------------------------------------------------------ material do céu
 
-const CEU_FRAGMENTO = fragmentoCeu({ K_CEU, CREPUSCULO, NOITE, LUA });
+const CEU_FRAGMENTO = fragmentoCeu({ K_CEU, CREPUSCULO, NOITE, LUA, SAT_LUZ_CEU });
 
 /**
  * Material do céu (ShaderMaterial de tela cheia): o mesmo programa desenha o fundo, as faces do cubo e o cubo da luz
@@ -338,13 +358,14 @@ export function aplicarEstado(mat, est, ast, extra = {}) {
   for (let i = 0; i < ANEL; i++) u.gNeblinaAnel.value[i].fromArray(est.anel, 3 * i);
   u.gNeblinaZenite.value.fromArray(est.zenite);
   u.gNeblinaSolDir.value.fromArray(P.sol);
-  // chão refletido (luz do ambiente de baixo): albedo médio de cidade e mata, 0,18, sob o sol e o céu
+  // chão refletido (luz do ambiente de baixo): albedo médio de cidade e mata, 0,18, sob o sol e a luz do céu
   const a = 0.18 / Math.PI;
   const sh = est.solH;
+  const ceu = est.ceuIrrLuz ?? est.ceuIrr;
   u.uChao.value.set(
-    a * (est.solIrr[0] * sh + est.luaIrr[0] * 0.3 + est.ceuIrr[0]) * 1.05,
-    a * (est.solIrr[1] * sh + est.luaIrr[1] * 0.3 + est.ceuIrr[1]),
-    a * (est.solIrr[2] * sh + est.luaIrr[2] * 0.3 + est.ceuIrr[2]) * 0.85,
+    a * (est.solIrr[0] * sh + est.luaIrr[0] * 0.3 + ceu[0]) * 1.05,
+    a * (est.solIrr[1] * sh + est.luaIrr[1] * 0.3 + ceu[1]),
+    a * (est.solIrr[2] * sh + est.luaIrr[2] * 0.3 + ceu[2]) * 0.85,
   );
   if (extra.nuvem) u.uNuvem.value.copy(extra.nuvem);
   if (extra.nuvemPasso) u.uNuvemPasso.value.copy(extra.nuvemPasso);
@@ -545,20 +566,34 @@ export class Ambiente {
     this.nuvens = new Nuvens(ctx);
     this.hora = 12;
     this.tAnt = 0;
+    // dia do ano forçado: ?dia=, ou o das cenas fixas (?cena=), onde a hora das capturas (17h30 dourada) precisa do sol
+    // de um dia conhecido; no jogo vale o da simulação (D9)
+    const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+    const dia = qs?.has('dia') ? Number(qs.get('dia')) : qs?.has('cena') ? DIA_CENAS : null;
+    this.diaForcado = Number.isFinite(dia) ? dia : null;
+    this._tempo = {};
+  }
+
+  /** O tempo do céu: o do espelho, com o dia do ano forçado quando houver. */
+  tempoCeu() {
+    const t = this.ctx.sim?.espelho?.tempo;
+    if (this.diaForcado === null) return t;
+    return Object.assign(this._tempo, t, { diaDoAno: this.diaForcado });
   }
 
   /** Estado do céu numa hora (a luz do ambiente assa quadros-chave em outras horas). */
   estadoNaHora(hora, alvo = {}) {
     const esp = this.ctx.sim?.espelho;
-    const ast = astros(hora, esp?.tempo, esp?.mapa);
-    const est = estadoCeu(ast, esp?.tempo?.clima, this.brilhoCidade, alvo);
+    const tempo = this.tempoCeu();
+    const ast = astros(hora, tempo, esp?.mapa);
+    const est = estadoCeu(ast, tempo?.clima, this.brilhoCidade, alvo);
     return { ast, est };
   }
 
   /** Nascer e pôr do sol do dia do ano atual. */
   nascerEPor() {
     const esp = this.ctx.sim?.espelho;
-    return nascerEPor(esp?.tempo?.diaDoAno ?? 0, esp?.mapa?.latitude ?? -23.5);
+    return nascerEPor(this.tempoCeu()?.diaDoAno ?? 0, esp?.mapa?.latitude ?? -23.5);
   }
 
   quadro(tMs) {
@@ -568,7 +603,8 @@ export class Ambiente {
     const dt = this.tAnt ? Math.min(0.25, Math.max(0, (tMs - this.tAnt) / 1000)) : 0;
     this.tAnt = tMs;
     this.hora = hora;
-    astros(hora, esp?.tempo, esp?.mapa, this.ast);
+    const tempo = this.tempoCeu();
+    astros(hora, tempo, esp?.mapa, this.ast);
     const clima = esp?.tempo?.clima ?? { nuvens: 0.3, vento: [3, 1] };
     estadoCeu(this.ast, clima, this.brilhoCidade, this.est);
     if (ctx.perfil !== this._perfil) {
@@ -580,7 +616,7 @@ export class Ambiente {
     }
     this.nuvens.atualizar(dt, clima, this.est, this.ceu);
     this.ceu.estrelas = this.est.noite * (1 - 0.6 * this.ast.lua.iluminada * Math.max(0, this.ast.lua.dir[1]));
-    giroEstrelas(hora, esp?.tempo?.diaDoAno ?? 0, esp?.mapa?.latitude ?? -23.5, this.ceu.giro);
+    giroEstrelas(hora, tempo?.diaDoAno ?? 0, esp?.mapa?.latitude ?? -23.5, this.ceu.giro);
     this.ceu.atualizar(this.est, this.ast);
     this.sol.atualizar(this.ast, this.est);
     this.exposicao.atualizar(this.est, dt);

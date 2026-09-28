@@ -1,1 +1,593 @@
-/* Estilos da lupa, das cotas e da barra da ferramenta. Esqueleto da F0 (dona: X2). */
+/* Ferramentas de construção (X2; desenho da UI 7.1, 8.4, 8.5, 8.10 e 9.2): barra de construção, bandeja, barra da
+   ferramenta ativa, e o que fica sobre o mundo (mira, fio, alças, cotas, chips de encaixe e a lupa). Vidro grafite sem
+   desfoque; alvos de 44 px no toque (o ::after estende o desenho); só transform e opacity animam. */
+
+/* ------------------------------------------------------------------ barra de construção */
+.construcao {
+  position: relative;
+  pointer-events: none;
+}
+.construcao-grupo {
+  display: flex;
+  align-items: stretch;
+  height: var(--alvo);
+  padding: 0 2px;
+  border-radius: var(--r2);
+  pointer-events: auto;
+}
+.construcao-holding .construcao-grupo {
+  height: 52px;
+}
+.cat-bt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 52px;
+  padding: 0 var(--e2);
+  border-radius: var(--r1);
+  color: var(--t2);
+}
+.cat-bt + .cat-bt {
+  margin-left: 2px;
+}
+.cat-rot {
+  font-size: var(--t12);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.cat-bt.aberta,
+.cat-bt[aria-pressed='true'] {
+  color: var(--t1);
+  background: var(--s3);
+  box-shadow: inset 0 -2px 0 var(--ac);
+}
+.cat-demolir[aria-pressed='true'] {
+  box-shadow: inset 0 -2px 0 var(--er);
+}
+.cat-arco {
+  min-width: 68px;
+  color: var(--t1);
+}
+.cat-arco-glifo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+}
+.cat-arco-glifo .glifo {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+.arco-anel {
+  position: absolute;
+  inset: -3px;
+  width: 36px;
+  height: 36px;
+}
+.arco-anel-fundo {
+  fill: none;
+  stroke: var(--fio2);
+  stroke-width: 2;
+}
+.arco-anel-cheio {
+  fill: none;
+  stroke: var(--ch);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.cat-selo {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ch);
+  box-shadow: 0 0 0 2px rgba(12, 16, 22, 0.9);
+}
+
+/* ------------------------------------------------------------------ bandeja */
+.bandeja {
+  position: absolute;
+  bottom: calc(100% + var(--e2));
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+  width: max-content;
+  max-width: min(560px, calc(100vw - 16px));
+  padding: var(--e2);
+  border-radius: var(--r3);
+  background-color: var(--s1);
+  box-shadow: var(--luz), var(--sombra2);
+  pointer-events: auto;
+  contain: layout paint style;
+  animation: x2-sobe var(--d3) var(--curva);
+}
+.bandeja-esquerda {
+  left: 0;
+}
+.bandeja-direita {
+  right: 0;
+}
+.bandeja-abas {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.bandeja-itens {
+  display: flex;
+  gap: var(--e2);
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.bandeja-itens::-webkit-scrollbar {
+  display: none;
+}
+.bandeja-vazia {
+  margin: 0;
+  padding: var(--e3) var(--e2);
+  font-size: var(--t13);
+  font-weight: 500;
+  color: var(--t2);
+}
+.item-cartao {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 88px;
+  height: 80px;
+  padding: 6px var(--e2) 6px;
+  border-radius: var(--r2);
+  background: var(--s2);
+  box-shadow: inset 0 0 0 1px var(--fio);
+  text-align: left;
+}
+.item-cartao.ativo {
+  background: var(--acF);
+  box-shadow: inset 0 0 0 2px var(--ac);
+}
+.item-cartao.trancado {
+  color: var(--t2);
+}
+.item-glifo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  color: var(--t1);
+}
+.item-amostra {
+  display: block;
+  width: 10px;
+  height: 24px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.item-amostra[data-densidade='2'],
+.bf-zona-cor[data-densidade='2'] {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.item-amostra[data-densidade='3'],
+.bf-zona-cor[data-densidade='3'] {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.item-nome {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--t12);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--t1);
+}
+.item-preco {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--t12);
+  font-weight: 600;
+  color: var(--ch);
+  white-space: nowrap;
+}
+.item-preco.falta {
+  color: var(--er);
+}
+.item-trancado {
+  color: var(--t2);
+}
+.bandeja-detalhe {
+  position: absolute;
+  left: var(--e2);
+  right: var(--e2);
+  bottom: calc(100% + var(--e1));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e2) var(--e3);
+  border-radius: var(--r2);
+  background: var(--s1);
+  box-shadow: var(--luz), var(--sombra2);
+  font-size: var(--t13);
+}
+.bandeja-detalhe b {
+  font-size: var(--t15);
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------------ barra da ferramenta */
+.barra-ferr-pilha {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  pointer-events: none;
+}
+.barra-ferr {
+  display: flex;
+  align-items: stretch;
+  gap: var(--e2);
+  min-height: 60px;
+  padding: 4px var(--e2);
+  border-radius: var(--r2);
+  pointer-events: auto;
+  contain: layout paint style;
+  animation: x2-sobe var(--d3) var(--curva);
+}
+.bf-esq,
+.bf-dir {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+}
+.bf-bt {
+  position: relative;
+}
+.bf-bt[aria-disabled='true'] {
+  opacity: 0.45;
+}
+.bf-n {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--rp);
+  background: var(--s3);
+  font-size: var(--t12);
+  font-weight: 650;
+  line-height: 16px;
+  color: var(--t1);
+}
+.bf-meio {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+.bf-opcoes {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  min-width: 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.bf-opcoes::-webkit-scrollbar {
+  display: none;
+}
+.bf-opcoes > * {
+  flex: none;
+}
+.bf-seg .seg {
+  padding: 0 var(--e2);
+}
+.bf-tipo {
+  gap: 6px;
+  padding: 0 var(--e2);
+  background: var(--s3);
+}
+.bf-tipo.aberta {
+  box-shadow: inset 0 0 0 1px var(--ac);
+}
+.bf-seta {
+  color: var(--t2);
+}
+.chip.ligado {
+  background: var(--acF);
+}
+.bf-zonas {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r2);
+  background: var(--s2);
+  box-shadow: inset 0 0 0 1px var(--fio);
+}
+.bf-zona {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 var(--e2);
+  border-radius: 8px;
+  font-size: var(--t12);
+  font-weight: 600;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.bf-zona::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: 0;
+  right: 0;
+}
+.bf-zona-glifo {
+  width: 44px;
+  justify-content: center;
+  padding: 0;
+}
+.bf-zona.ligado {
+  background: var(--s3);
+  color: var(--t1);
+  box-shadow: inset 0 -2px 0 var(--ac);
+}
+.bf-zona-cor {
+  display: block;
+  width: 12px;
+  height: 16px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.bf-tam {
+  gap: 6px;
+  min-width: 52px;
+}
+.bf-tam-disco {
+  display: block;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--t1);
+}
+.bf-tam-P { width: 6px; height: 6px; }
+.bf-tam-M { width: 10px; height: 10px; }
+.bf-tam-G { width: 14px; height: 14px; }
+/* a demanda R C I já está na barra de cima; aqui só quando sobra largura */
+@media (max-width: 1199px) {
+  .bf-demanda { display: none; }
+}
+.bf-demanda {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 36px;
+  padding: 0 var(--e1);
+}
+.bf-dem {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 2px;
+}
+.bf-dem b {
+  font-size: var(--t12);
+  font-weight: 650;
+  line-height: 1;
+  color: var(--t2);
+}
+.bf-dem i {
+  display: block;
+  width: 8px;
+  height: 18px;
+  border-radius: 2px;
+  transform-origin: 50% 100%;
+}
+.bf-dem-R i { background: var(--zR); }
+.bf-dem-C i { background: var(--zC); }
+.bf-dem-I i { background: var(--zI); }
+.bf-dem-E i { background: repeating-linear-gradient(45deg, var(--zC) 0 3px, rgba(57, 135, 229, 0.45) 3px 6px); }
+.bf-nome {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  min-width: 0;
+  font-size: var(--t15);
+  font-weight: 600;
+  color: var(--t1);
+}
+.bf-nome b {
+  font-weight: 650;
+  white-space: nowrap;
+}
+.bf-linha {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--t12);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--t2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bf-linha > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bf-linha.tx-er {
+  color: var(--er);
+}
+.bf-principal {
+  min-width: 108px;
+  max-width: 200px;
+  height: 52px;
+  font-size: var(--t15);
+  font-weight: 650;
+}
+.bf-principal-rot {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bf-principal.fraco {
+  opacity: 0.5;
+}
+/* demolir: o fio vermelho sem o fundo claro do secundário (o texto vermelho segura 4,5:1 sobre o vidro) */
+.bf-dir .bt-perigo {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ sobre o mundo */
+.mundo-marcas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.mira,
+.mira-fio,
+.marca,
+.lupa {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+.mira {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 3px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity var(--d1) linear;
+}
+.mira::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+.mira-fio {
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.4);
+  transform-origin: 0 50%;
+  opacity: 0;
+}
+.marca {
+  will-change: transform;
+}
+.alca {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(12, 16, 22, 0.35);
+  box-shadow: inset 0 0 0 2px var(--ac), 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.alca::after {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 17px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ac);
+}
+.alca-meio,
+.alca-fundo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(12, 16, 22, 0.5);
+}
+.alca-meio::after,
+.alca-fundo::after {
+  left: 13px;
+  top: 13px;
+  border-radius: 2px;
+}
+.alca.pega {
+  box-shadow: inset 0 0 0 2px var(--t1), 0 0 0 4px rgba(90, 176, 255, 0.35);
+}
+.cota {
+  padding: 4px 10px;
+  border-radius: var(--rp);
+  background: var(--s1);
+  box-shadow: var(--luz), var(--sombra1);
+  font-size: var(--t13);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--t1);
+  white-space: nowrap;
+}
+.cota-er {
+  color: var(--er);
+  box-shadow: inset 0 0 0 1px rgba(255, 123, 110, 0.55), var(--sombra1);
+}
+.cota-enc {
+  color: var(--t1);
+  box-shadow: inset 0 0 0 1px var(--ch), var(--sombra1);
+}
+.cota-area {
+  color: var(--ch);
+}
+.cota-area.sel {
+  background: var(--ch);
+  color: var(--tinv);
+}
+.lupa {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity var(--d1) linear;
+}
+
+@keyframes x2-sobe {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* PC (desenho da UI 7.4): a barra de construção numa linha só, centrada embaixo, como no CS2; a barra da ferramenta
+   também centrada, sem esticar pela tela larga */
+@media (pointer: fine) and (min-width: 1200px) {
+  .construcao-cidade {
+    margin-left: auto;
+  }
+  .construcao-holding {
+    margin-right: auto;
+  }
+  .barra-ferr-pilha {
+    flex: 0 1 1080px;
+    margin: 0 auto;
+  }
+}

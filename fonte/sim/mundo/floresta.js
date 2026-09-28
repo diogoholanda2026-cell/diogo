@@ -147,7 +147,7 @@ export function densidadeEm(F, x, z) {
   return F.dens[j * F.n + i] / 255;
 }
 
-const O = { d: 0, cota: 0 };
+const O = { d: 0, r: 0, cota: 0 };
 
 /**
  * Desmate sob as formas que tocam o retângulo: núcleo e 3 m em volta. Devolve quantas células mudaram (e marca o

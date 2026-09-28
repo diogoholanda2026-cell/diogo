@@ -1,8 +1,10 @@
-// Aplainar puro e comutativo sobre as formas de sim.formas (D5) e o chão do espelho sempre em dia (dona: S1a).
+// Aplainar puro e comutativo sobre as formas de sim.formas (D5) e o chão do espelho sempre em dia (dona: S1a, depois S1b).
 //
 // Cada amostra sai só da grade base (a do mapa) e das formas que a tocam: vale a de menor distância ao núcleo
-// (empate: tipo, depois ref, depois cota); até a faixa plana de 8 m vale a cota dela; depois a base volta por
-// smoothstep em 16 m. Como a escolha é uma ordem total, a ordem de registro não muda nenhum bit (A2).
+// (empate: tipo; entre duas vias, o eixo mais perto; depois ref, depois cota); até a faixa plana de 8 m vale a cota
+// dela; depois a base volta por smoothstep em 16 m. Como a escolha é uma ordem total, a ordem de registro não muda
+// nenhum bit (A2). O eixo mais perto entre vias (S1b) é o que põe o chão 0,15 m abaixo da pista também junto dos nós:
+// ali os núcleos de duas arestas se cobrem, e a de ref menor levava a cota do nó até a pista da vizinha em rampa.
 //
 // Ligação: o núcleo marca o retângulo sujo de cada forma registrada ou removida por sim.formas.marcarRet; este módulo
 // encadeia nessa função e refaz o retângulo na hora (a UI e a S1b leem alturaEm logo depois do comando, mesmo
@@ -25,10 +27,10 @@ export const CHAO_ABAIXO_DA_PISTA = 0.15;
 const SEG = { d: 0, t: 0 };
 
 /**
- * Distância de (x, z) ao núcleo de uma forma normalizada e a cota do núcleo no ponto mais perto (a mesma conta do
- * aplainar de referência da F0).
+ * Distância de (x, z) ao núcleo de uma forma normalizada (d), a distância ao eixo da via (r; nas outras formas, igual a
+ * d) e a cota do núcleo no ponto mais perto (a mesma conta do aplainar de referência da F0).
  */
-export function distanciaForma(f, x, z, out = { d: 0, cota: 0 }) {
+export function distanciaForma(f, x, z, out = { d: 0, r: 0, cota: 0 }) {
   if (f.tipo === 'via') {
     const e = f.eixo;
     let melhor = Infinity;
@@ -41,9 +43,11 @@ export function distanciaForma(f, x, z, out = { d: 0, cota: 0 }) {
       }
     }
     out.d = Math.max(0, melhor - f.meiaLargura);
+    out.r = melhor;
     out.cota = cota;
   } else {
     out.d = distPoligono(x, z, f.contorno);
+    out.r = out.d;
     out.cota = f.cota;
   }
   return out;
@@ -74,7 +78,7 @@ export function aplainar(base, formas, ret, saida) {
   const rz1 = oz + j1 * passo;
   const cand = [];
   for (const f of formas) if (tocaRet(f, rx0, rz0, rx1, rz1)) cand.push(f);
-  const o = { d: 0, cota: 0 };
+  const o = { d: 0, r: 0, cota: 0 };
   const alt = base.altura;
   for (let j = j0; j <= j1; j++) {
     const z = oz + j * passo;
@@ -85,6 +89,7 @@ export function aplainar(base, formas, ret, saida) {
       const k = j * n + i;
       let md = Infinity;
       let mt = 0;
+      let me = 0;
       let mr = 0;
       let mc = 0;
       for (const f of linha) {
@@ -93,9 +98,13 @@ export function aplainar(base, formas, ret, saida) {
         distanciaForma(f, x, z, o);
         if (o.d >= ALCANCE) continue;
         const t = FORMA.ordemTipo[f.tipo];
-        if (o.d < md || (o.d === md && (t < mt || (t === mt && (f.ref < mr || (f.ref === mr && o.cota < mc)))))) {
+        if (
+          o.d < md ||
+          (o.d === md && (t < mt || (t === mt && (o.r < me || (o.r === me && (f.ref < mr || (f.ref === mr && o.cota < mc)))))))
+        ) {
           md = o.d;
           mt = t;
+          me = o.r;
           mr = f.ref;
           mc = o.cota;
         }
@@ -133,8 +142,54 @@ export function aplainarTudo(base, formas, saida) {
 // ------------------------------------------------------------------------------------------------ formas das vias
 
 /**
- * Forma do aplainar de uma aresta do grafo: o eixo da Bézier a cada ~8 m, com a cota da pista linear no arco entre os
- * dois nós, menos 0,15 m, e a meia largura do tipo. Ponte (flag PONTE) não tem forma: o tabuleiro fica no alto.
+ * Patamar do cruzamento (S1b): na ponta de uma aresta que chega num nó de cruzamento (raio do nó > 0), a pista segue
+ * plana na cota do nó até o raio mais 8 m e só então sobe ou desce. Assim os braços de um cruzamento de vias em rampa
+ * se encontram na mesma cota e o chão entre eles não sobe na borda da pista. Pontas soltas e nós de grau 2 em linha reta
+ * (raio 0) não têm patamar.
+ */
+export const PATAMAR = 8;
+
+/** Comprimento do patamar numa ponta com raio r. */
+export const patamarDoRaio = (r) => (r > 0 ? r + PATAMAR : 0);
+
+/** Patamares [pa, pb] de uma aresta de comprimento comp (sobra ao menos 1 m de rampa no meio). */
+export function patamares(comp, ra, rb) {
+  let pa = patamarDoRaio(ra);
+  let pb = patamarDoRaio(rb);
+  const lim = Math.max(0, comp - 1);
+  if (pa + pb > lim) {
+    const k = lim / (pa + pb);
+    pa *= k;
+    pb *= k;
+  }
+  return [pa, pb];
+}
+
+/** Cota da pista no arco s: plana nos patamares, linear no arco entre eles. */
+export function cotaDaPista(y0, y1, comp, pa, pb, s) {
+  const m = comp - pa - pb;
+  if (!(m > 0)) return s < comp / 2 ? y0 : y1;
+  const f = (s - pa) / m;
+  return y0 + (y1 - y0) * (f < 0 ? 0 : f > 1 ? 1 : f);
+}
+
+/** Patamares da aresta e do grafo pelos raios dos nós. */
+export function patamaresDa(G, e) {
+  const A = G.arestas;
+  return patamares(A.arco[17 * e + 16], G.nos.raio[A.a[e]], G.nos.raio[A.b[e]]);
+}
+
+/** Cota da pista da aresta e no comprimento de arco s (com os patamares). */
+export function pistaDaAresta(G, e, s) {
+  const A = G.arestas;
+  const [pa, pb] = patamaresDa(G, e);
+  return cotaDaPista(A.y[2 * e], A.y[2 * e + 1], A.arco[17 * e + 16], pa, pb, s);
+}
+
+/**
+ * Forma do aplainar de uma aresta do grafo: o eixo da Bézier a cada ~8 m (e nas pontas dos patamares), com a cota da
+ * pista (pistaDaAresta) menos 0,15 m, e a meia largura do tipo. Ponte (flag PONTE) não tem forma: o tabuleiro fica
+ * no alto.
  */
 export function formaDaAresta(G, e, { abaixo = CHAO_ABAIXO_DA_PISTA } = {}) {
   const A = G.arestas;
@@ -142,18 +197,22 @@ export function formaDaAresta(G, e, { abaixo = CHAO_ABAIXO_DA_PISTA } = {}) {
   const p = A.p.subarray(8 * e, 8 * e + 8);
   const tab = tabelaArco(p);
   const comp = tab[16];
+  const [pa, pb] = patamaresDa(G, e);
   const m = Math.max(1, Math.ceil(comp / 8));
-  const eixo = new Float64Array((m + 1) * 3);
-  const y0 = A.y[2 * e] - abaixo;
-  const y1 = A.y[2 * e + 1] - abaixo;
+  const ss = [];
+  for (let k = 0; k <= m; k++) ss.push((comp * k) / m);
+  for (const x of [pa, comp - pb]) if (x > 0.05 && x < comp - 0.05 && !ss.some((v) => Math.abs(v - x) < 0.05)) ss.push(x);
+  ss.sort((a, b) => a - b);
+  const eixo = new Float64Array(ss.length * 3);
+  const y0 = A.y[2 * e];
+  const y1 = A.y[2 * e + 1];
   const q = [0, 0];
-  for (let k = 0; k <= m; k++) {
-    const s = (comp * k) / m;
-    ponto(p, tDoArco(tab, s), q);
+  ss.forEach((s, k) => {
+    ponto(p, k === 0 ? 0 : k === ss.length - 1 ? 1 : tDoArco(tab, s), q);
     eixo[3 * k] = q[0];
     eixo[3 * k + 1] = q[1];
-    eixo[3 * k + 2] = y0 + ((y1 - y0) * k) / m;
-  }
+    eixo[3 * k + 2] = cotaDaPista(y0, y1, comp, pa, pb, s) - abaixo;
+  });
   return { tipo: 'via', ref: refDe(e, A.ger[e]), eixo, meiaLargura: tipo.largura / 2 };
 }
 

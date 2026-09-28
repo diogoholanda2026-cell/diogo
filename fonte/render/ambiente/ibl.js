@@ -72,9 +72,9 @@ export class Ibl {
 
   /** Assinatura do que muda um quadro-chave além da hora (dia do ano, nuvens, brilho da cidade). */
   assinatura() {
-    const esp = this.ctx.sim?.espelho;
-    const dia = Math.round((esp?.tempo?.diaDoAno ?? 0) / 5);
-    const nuv = Math.round((esp?.tempo?.clima?.nuvens ?? 0.3) * 20);
+    const tempo = this.amb.tempoCeu?.() ?? this.ctx.sim?.espelho?.tempo;
+    const dia = Math.round((tempo?.diaDoAno ?? 0) / 5);
+    const nuv = Math.round((tempo?.clima?.nuvens ?? 0.3) * 20);
     const cid = Math.round(Math.log(Math.max(0.01, this.amb.brilhoCidade)) / Math.log(1.1));
     return `${dia}|${nuv}|${cid}|${this.tam}`;
   }

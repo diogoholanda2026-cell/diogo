@@ -1,8 +1,10 @@
 // Registro dos ganchos GLSL comuns (D14, D43, D45): todo GLSL próprio que entra nos materiais do three passa por aqui,
-// com nomes estáveis, para o porte ao WebGPU no M4 custar pouco. A R1a publica 'sombra' (sombra própria em cascatas
-// com PCF estável e a sombra das nuvens) e 'neblina' (altura e perspectiva aérea com a cor do horizonte do céu), com
-// os uniformes abaixo (nomes estáveis). 'sombraLonge', 'hao' e 'noite' são da R1b; 'camada', 'selecao' e 'mascara'
-// das parcelas donas: começam neutros e entram por ganchos.definir.
+// com nomes estáveis, para o porte ao WebGPU no M4 custar pouco. Publicados aqui, com os uniformes abaixo (nomes
+// estáveis): 'sombra' (sombra própria em cascatas com PCF estável, a sombra das nuvens e, fora das cascatas, a de
+// longe), 'neblina' (altura e perspectiva aérea com a cor do horizonte do céu), 'sombraLonge' e 'hao' (o campo de
+// alturas da cidade: sombra de longe em degraus do sol e oclusão do céu entre prédios) e 'noite' (luz da rua, luz das
+// janelas na rua). 'camada', 'selecao' e 'mascara' são das parcelas donas: começam neutros e entram por
+// ganchos.definir.
 //
 // Um gancho: { uniformes: { nome: { value } }, vertice: { pars, main }, fragmento: { pars, sol, indireta, fim } }
 //   uniformes   globais (um objeto só, compartilhado por todos os materiais: mudar o valor vale para todos)
@@ -14,8 +16,9 @@
 // Tudo em highp (a precisão do renderer); nenhum shader próprio usa a precisão média (D44, guarda de texto).
 import * as THREE from 'three';
 import { GANCHOS } from '../../contratos/render.js';
-import { SOMBRA_PARS, SOMBRA_SOL } from '../materiais/shaders/sombra.glsl.js';
+import { SOMBRA_PARS, SOMBRA_SOL, SOMBRA_LONGE_PARS, HAO_PARS, HAO_INDIRETA } from '../materiais/shaders/sombra.glsl.js';
 import { NEBLINA_PARS, NEBLINA_FIM } from '../materiais/shaders/neblina.glsl.js';
+import { NOITE_PARS, NOITE_INDIRETA } from '../ambiente/luzNoite.js';
 
 /** Ordem dos trechos 'fim' (a neblina cobre o que as outras pintaram; a máscara é a última). */
 const ORDEM_FIM = ['camada', 'selecao', 'noite', 'neblina', 'mascara'];
@@ -69,11 +72,61 @@ const NEBLINA = {
   fragmento: { pars: NEBLINA_PARS, sol: '', indireta: '', fim: NEBLINA_FIM },
 };
 
+// ------------------------------------------------------------------------------------------------ ganchos da R1b
+
+/** Texturas de partida (1 x 1) até o campo e o mapa de luz da rua existirem: sem sombra, céu aberto, rua escura. */
+function textura1(dados, tipo) {
+  const t = new THREE.DataTexture(dados, 1, 1, THREE.RGBAFormat, tipo);
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.needsUpdate = true;
+  return t;
+}
+export const CAMPO_VAZIO = textura1(new Float32Array([-1e4, -1e4, 1, -1e4]), THREE.FloatType);
+const RUA_VAZIA = textura1(new Uint8Array([0, 0, 0, 0]), THREE.UnsignedByteType);
+
+// uniformes do campo (render/ambiente/sombraLonge.js), comuns à sombra de longe, ao HAO e à noite
+const CAMPO = {
+  gCampoMapa: { value: CAMPO_VAZIO },
+  gCampoParams: { value: new THREE.Vector4(-4096, -4096, 1 / 8192, 8) },
+  gCampoLigado: { value: 0 },
+};
+
+// 'sombraLonge': a altura da sombra no degrau do sol e no seguinte (R e G do campo), misturadas por gCampoT; o trecho
+// que usa fica no 'sol' da 'sombra' (fora das cascatas de perto)
+const SOMBRA_LONGE = {
+  uniformes: { ...CAMPO, gCampoT: { value: 0 }, gCampoVies: { value: new THREE.Vector2(0.8, 1.2) } },
+  vertice: { pars: '', main: '' },
+  fragmento: { pars: SOMBRA_LONGE_PARS, sol: '', indireta: '', fim: '' },
+};
+
+// 'hao': a visibilidade do céu no chão da vizinhança (B do campo) na luz do ambiente
+const HAO = {
+  uniformes: { ...CAMPO, gHaoParams: { value: new THREE.Vector4(0.85, 0.3, 0.2, 1) } },
+  vertice: { pars: '', main: '' },
+  fragmento: { pars: HAO_PARS, sol: '', indireta: HAO_INDIRETA, fim: '' },
+};
+
+// 'noite': a luz da rua (mapa da R3a ou o substituto de ambiente/luzNoite.js) e a das janelas na rua
+const NOITE = {
+  uniformes: {
+    ...CAMPO,
+    gLuzRuaMapa: { value: RUA_VAZIA },
+    gLuzRuaParams: { value: new THREE.Vector4(-4096, -4096, 1 / 8192, 2) },
+    gNoiteParams: { value: new THREE.Vector4(0, 7, 9, 0) },
+    gNoiteJanelas: { value: new THREE.Vector3() },
+  },
+  vertice: { pars: '', main: '' },
+  fragmento: { pars: NOITE_PARS, sol: '', indireta: NOITE_INDIRETA, fim: '' },
+};
+
 // ------------------------------------------------------------------------------------------------ registro
 
 const definicoes = new Map(GANCHOS.map((n) => [n, vazio()]));
 definicoes.set('sombra', SOMBRA);
 definicoes.set('neblina', NEBLINA);
+definicoes.set('sombraLonge', SOMBRA_LONGE);
+definicoes.set('hao', HAO);
+definicoes.set('noite', NOITE);
 
 /** Uniformes globais de todos os ganchos (o mesmo objeto entra em todo material). */
 export const uniformes = {};

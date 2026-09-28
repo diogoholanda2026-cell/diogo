@@ -2,8 +2,12 @@
 // do nível da rua (10 m) à cidade inteira (9 km), guinada livre, inclinação de 3 graus (o horizonte à vista) a 88
 // (de cima), campo vertical de 40 graus. Movimento com inércia e amortecimento crítico: o arrasto é direto (o chão
 // fica sob o dedo) e, ao soltar, a vista desliza e para; o zoom vai suave na direção do cursor ou do meio da pinça.
-// Colisão: a câmera fica 2 m acima do chão (alturaEm, D4, ou a superfície do mar, espelho.mapa.nivelMar) e, com a
-// R1b, do campo de alturas da cidade (ctx.alturaCidade). O voo (irPara) sobe em arco quando a distância é grande.
+// Colisão: a câmera fica 2 m acima do chão (alturaEm, D4, ou a superfície do mar, espelho.mapa.nivelMar) e do campo de
+// alturas da cidade (ctx.alturaCidade, R1b, a grade da CPU: sem ler a GPU). Perto dos prédios a vista sobe pela órbita
+// (a inclinação efetiva cresce até a câmera sair de cima do telhado), sem pular de altura; o estado guarda a
+// inclinação pedida. O voo (irPara) segue o caminho ótimo de zoom e deslocamento de van Wijk e Nuij (2003): afasta o
+// bastante para os dois lugares caberem na vista, anda e aproxima, com a velocidade de tela constante e a partida e a
+// chegada suaves.
 // Plano próximo e distante: com a profundidade invertida em ponto flutuante (alvo HDR), perto de 0,1 m e longe de
 // 100 km; no canvas (Leve) e sem ela, o plano próximo cresce com a altura e, sem EXT_clip_control, valem as duas
 // faixas (motor/faixas.js). Guinada 0 olha para o norte (-z) e cresce no sentido horário visto de cima.
@@ -16,6 +20,36 @@ const RAD = Math.PI / 180;
 const CAMPOS = ['x', 'z', 'dist', 'guinada', 'inclinacao'];
 const suave = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
+
+/** Curvatura do voo (rho de van Wijk e Nuij): raiz de 2 é o ótimo medido pelos autores. */
+export const RHO_VOO = Math.SQRT2;
+
+/**
+ * Caminho ótimo de zoom e deslocamento (van Wijk e Nuij, 2003; a mesma conta do d3-interpolate): de uma vista de
+ * largura w0 a uma de largura w1, andando d no chão. Devolve S (o comprimento do caminho) e em(t), t de 0 a 1, com
+ * { u (fração do caminho no chão), w (largura) }.
+ */
+export function caminhoVoo(w0, w1, d, rho = RHO_VOO) {
+  const r2 = rho * rho;
+  const r4 = r2 * r2;
+  if (d < 1e-6 * Math.max(w0, w1, 1)) {
+    const S = Math.log(w1 / w0) / rho;
+    return { S: Math.abs(S), em: (t) => ({ u: t, w: w0 * Math.exp(rho * t * S) }) };
+  }
+  const b0 = (w1 * w1 - w0 * w0 + r4 * d * d) / (2 * w0 * r2 * d);
+  const b1 = (w1 * w1 - w0 * w0 - r4 * d * d) / (2 * w1 * r2 * d);
+  const q0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0);
+  const q1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1);
+  const S = (q1 - q0) / rho;
+  const ch = Math.cosh(q0);
+  return {
+    S,
+    em(t) {
+      const s = t * S;
+      return { u: (w0 / (r2 * d)) * (ch * Math.tanh(rho * s + q0) - Math.sinh(q0)), w: (w0 * ch) / Math.cosh(rho * s + q0) };
+    },
+  };
+}
 
 /** Constantes de tempo (s) da inércia e do zoom. */
 export const AMORTECE = Object.freeze({ pan: 0.32, giro: 0.22, zoom: 0.14, parado: 0.02 });
@@ -31,9 +65,15 @@ export function criarCamera(ctx, inicial = {}) {
   const zoom = { alvo: e.dist, ancora: null }; // distância desejada e o ponto do mundo que fica parado na tela
   let voo = null;
   let tAnt = 0;
+  let incEfetiva = e.inclinacao;
   const cam = ctx.camera;
   cam.fov = L.fov;
   const alvoV = new THREE.Vector3();
+  const posicionar = (a, inc) => {
+    const gu = e.guinada * RAD;
+    const ic = inc * RAD;
+    cam.position.set(a.x - e.dist * Math.cos(ic) * Math.sin(gu), a.y + e.dist * Math.sin(ic), a.z + e.dist * Math.cos(ic) * Math.cos(gu));
+  };
 
   const terreno = () => ctx.sim?.espelho?.terreno ?? null;
   // sobre o mar vale a superfície da água, não o fundo: o alvo fica na água e a câmera nunca mergulha
@@ -102,10 +142,9 @@ export function criarCamera(ctx, inicial = {}) {
         api.definir(para);
         return Promise.resolve();
       }
-      const dh = Math.hypot(para.x - de.x, para.z - de.z);
-      const arco = Math.min(4000, 0.35 * Math.max(0, dh - 0.5 * (de.dist + para.dist)));
+      const caminho = caminhoVoo(de.dist, para.dist, Math.hypot(para.x - de.x, para.z - de.z));
       return new Promise((ok) => {
-        voo = { t0: agora(), ms, de, para, arco, ok };
+        voo = { t0: agora(), ms, de, para, caminho, ok };
       });
     },
     /** Desloca o alvo no mundo (arrasto: direto, sem inércia). */
@@ -156,9 +195,17 @@ export function criarCamera(ctx, inicial = {}) {
       if (voo) {
         const k = Math.min(1, (tMs - voo.t0) / voo.ms);
         const s = suave(k);
-        for (const c of CAMPOS) e[c] = voo.de[c] + (voo.para[c] - voo.de[c]) * s;
-        e.dist += voo.arco * Math.sin(Math.PI * s);
-        if (k >= 1) encerrarVoo();
+        const { u, w } = voo.caminho.em(s);
+        const { de: a, para: b } = voo;
+        e.x = a.x + (b.x - a.x) * u;
+        e.z = a.z + (b.z - a.z) * u;
+        e.dist = Math.min(L.distMax, w);
+        e.guinada = a.guinada + (b.guinada - a.guinada) * s;
+        e.inclinacao = a.inclinacao + (b.inclinacao - a.inclinacao) * s;
+        if (k >= 1) {
+          for (const c of CAMPOS) e[c] = b[c];
+          encerrarVoo();
+        }
       } else if (dt > 0) {
         // inércia: velocidades que decaem; zoom que se aproxima do alvo com o ponto de âncora parado
         e.x += vel.x * dt;
@@ -188,12 +235,17 @@ export function criarCamera(ctx, inicial = {}) {
       }
       limitar();
       const a = api.alvo(alvoV);
-      const gu = e.guinada * RAD;
-      const inc = e.inclinacao * RAD;
-      cam.position.set(a.x - e.dist * Math.cos(inc) * Math.sin(gu), a.y + e.dist * Math.sin(inc), a.z + e.dist * Math.cos(inc) * Math.cos(gu));
-      // colisão: 2 m acima do chão onde a câmera está
-      const piso = chao(cam.position.x, cam.position.z) + 2;
+      posicionar(a, e.inclinacao);
+      // colisão: 2 m acima do chão e da cidade onde a câmera está; perto de prédio, a vista sobe pela órbita
+      let inc = e.inclinacao;
+      let piso = chao(cam.position.x, cam.position.z) + 2;
+      for (let k = 0; k < 40 && cam.position.y < piso && inc < L.incMax; k++) {
+        inc = Math.min(L.incMax, inc + 2);
+        posicionar(a, inc);
+        piso = chao(cam.position.x, cam.position.z) + 2;
+      }
       if (cam.position.y < piso) cam.position.y = piso;
+      incEfetiva = inc;
       cam.lookAt(a);
       const acima = Math.max(1, cam.position.y - chao(cam.position.x, cam.position.z));
       if (!profundidadeFina()) {
@@ -208,6 +260,10 @@ export function criarCamera(ctx, inicial = {}) {
     },
     get voando() {
       return !!voo;
+    },
+    /** Inclinação que a vista usa de fato (sobe perto de prédio para a câmera não entrar nele). */
+    get inclinacaoEfetiva() {
+      return incEfetiva;
     },
     get movendo() {
       return !!voo || vel.x !== 0 || vel.z !== 0 || vel.guinada !== 0 || vel.inclinacao !== 0 || zoom.ancora !== null || Math.abs(zoom.alvo - e.dist) > 1e-3;

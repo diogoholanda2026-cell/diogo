@@ -4,10 +4,18 @@
 // vem do mesmo modelo do céu (sol, lua e céu na horizontal); com o sol a 45 graus ela vale pi e a exposição vale a
 // chave (1,6): junto com o "look" do AgX (motor/pos.js), um chão de albedo 0,2 ao sol fica perto de 0,5 na tela, o
 // asfalto perto de 0,3, a sombra perto de 0,13 e um telhado claro perto de 0,7, a faixa de uma foto aérea.
+// Com o sol baixo a luz no chão horizontal é quase toda do céu, mas o fotógrafo mede pela fachada ao sol: a medida é a
+// maior entre a luz no chão e uma parte da luz direta do sol (solMedida), e a hora dourada fica mais escura e quente,
+// com as fachadas ao sol acesas e a sombra funda, em vez de a exposição subir e lavar a névoa.
 // A troca é suave (constante de 1 s real); um salto grande (cena nova, hora forçada) vai direto. Também dá o limiar
 // do bloom: 1,1 de dia (só o sol refletido e o céu estourado) e 0,8 de noite (janelas, postes, faróis).
 
-export const EXPOSICAO = Object.freeze({ referencia: Math.PI, chave: 1.6, gama: 0.75, minima: 0.5, maxima: 14, constante: 1 });
+export const EXPOSICAO = Object.freeze({ referencia: Math.PI, chave: 1.6, gama: 0.75, minima: 0.5, maxima: 14, constante: 1, solMedida: 0.55 });
+
+const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+/** Luz medida para a exposição: a do chão ou a parte da luz direta do sol, a maior. */
+export const luzMedida = (est, E = EXPOSICAO) => Math.max(est.eChao, est.solIrr ? E.solMedida * luma(est.solIrr) : 0);
 
 /**
  * Exposição alvo para uma luz no chão (luminância na horizontal, unidade do céu).
@@ -28,7 +36,7 @@ export class Exposicao {
 
   /** @param {{ eChao: number, noite: number }} est  estado do céu; dt em segundos reais (0: vai direto) */
   atualizar(est, dt) {
-    this.alvo = this.fixa ?? exposicaoAlvo(est.eChao);
+    this.alvo = this.fixa ?? exposicaoAlvo(luzMedida(est));
     const salto = Math.abs(Math.log2(this.alvo / this.valor));
     if (!(dt > 0) || salto > 1.5) this.valor = this.alvo;
     else this.valor *= (this.alvo / this.valor) ** (1 - Math.exp(-dt / EXPOSICAO.constante));
