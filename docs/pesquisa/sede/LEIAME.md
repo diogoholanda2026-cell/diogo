@@ -18,3 +18,10 @@ Não vieram do servidor (sobrecarregado): Amazon Spheres, Jewel Changi e o préd
 
 Fonte dos contornos: © colaboradores do OpenStreetMap, dados sob a licença ODbL (openstreetmap.org/copyright), baixados
 pela Overpass API. Os scripts `desenhar.py`, `costa.py` e `proposta.py` refazem as pranchas a partir do JSON da Overpass.
+
+## Versão 2 (decisões do dono, D63 a D66)
+
+- `proposta-sede-v2.png`: anel fechado como a Apple Park (481 m por fora, 4 andares), lago central com fontes e a
+  cachoeira caindo do vão entre as torres gêmeas (500 e 452 m), cúpula de vidro de 240 m na ponta oeste do eixo.
+- `elevacao-sede-v2.png`: a sede v2 vista do mar ao lado do Burj Khalifa, das Petronas, do Marina Bay Sands e da Apple
+  Park na mesma escala. A Apple Park medida no OpenStreetMap: 481 m de diâmetro por fora, 358 m por dentro, 30 m de altura.

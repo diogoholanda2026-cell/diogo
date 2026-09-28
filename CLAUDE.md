@@ -37,7 +37,8 @@ visão de longo prazo (Holding, rivais, 12 metrópoles).
 - Textos em `ui/textos/<parcela>.js`, português do Brasil, sem travessão, unidades da D42 ("/h" de jogo).
 - Entrega: `montar.mjs` sem avisos numa pasta temporária, `simular.mjs --testes` verde, cenas da parcela verdes,
   capturas só do que mudou. Commits só de fonte, mensagens em português; quem commita é o integrador.
-- Orçamento: Poco X7 em Média até 300 chamadas e 900 mil triângulos na vista aberta com a cidade grande, 30 qps;
-  PC Ultra até 1.500 chamadas e 5 milhões. Medir com a bancada, não estimar.
+- Orçamento (D66, PC primeiro): o PC do dono (i3 de 9ª geração, RX 550, 16 GB) em 1920 x 1080, 60 qps e piso de 30,
+  até 800 chamadas e 2,5 milhões de triângulos na vista aberta com a cidade grande (provisório até a bancada no PC dele).
+  O Poco X7 em Média (300 chamadas, 900 mil triângulos, 30 qps) volta depois. Medir com a bancada, não estimar.
 - Publicação: branch da sessão, `git push -u origin <branch>`; dois commits (fonte, depois "Montagem ..." com a pasta
   montada). O GitHub Pages publica o branch.
