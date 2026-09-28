@@ -32,6 +32,7 @@ export function registrar(registrarTextos) {
     'x2.bandeja.apagar': 'Apagar zona',
     'x2.bandeja.atende': 'atende {n}',
     'x2.bandeja.detalhe.custo': 'Custo',
+    'x2.bandeja.detalhe.faltam': 'Faltam',
     'x2.bandeja.detalhe.manutencao': 'Manutenção',
     'x2.bandeja.detalhe.alcance': 'Alcance',
     'x2.bandeja.detalhe.marco': 'Libera no marco',

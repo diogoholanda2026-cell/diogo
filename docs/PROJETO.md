@@ -1104,6 +1104,28 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   demolições; "melhorar" de `terra` para `rua`; desfazer (D32); blocos e células de 8 m com 6 de fundo e as regras de
   esquina; pincel (quadra, círculo, retângulo); o teste do chão 5 cm abaixo da pista em toda a seção.
 - **Testa sem as outras:** Node; a vista de depuração. **Depende de:** portão 1.
+- **Entregue em 28/09/2026** (S1b). Publicou `q.via.previa` (reta, curva, contínua, grade, melhorar e demolir),
+  `via.construir`, `via.melhorar`, `via.demolir`, `via.desfazer`, `zona.pintar`, `q.zona.previa` (a S2a liga o
+  `efeitoMedia` por `registrarEfeitoMedia` de `sim/zonas/pincel.js`), `q.aresta`, `q.viasPerto`, o custo `vias` em
+  `sim.custos`, as formas das vias no aplainar e as colunas próprias `arestas.fase`, `arestas.nomeVia` e
+  `celulas.motivo`. Diferente do plano: a pista é plana nos patamares dos cruzamentos (raio do nó + 8 m, mais com via
+  em ângulo agudo, até as pistas se separarem) e linear entre eles (`pistaDaAresta` em `sim/mundo/aplainar.js`); nas
+  dobras côncavas do greide a forma rebaixa o chão, porque a grade bilinear de 8 m passa até 2 vezes a mudança de
+  declive acima da dobra; o patamar cede ao declive do tipo e o cruzamento que ficaria desnivelado mais de 10 cm é
+  recusado com `declive`. Os cruzamentos saem da polilinha dos eixos (a subdivisão das cúbicas travava com vias quase
+  paralelas). As colunas das células seguem a fase da aresta (dividir não mexe nelas) e a via nova alinha as dela com
+  as linhas da primeira via que cruza; a via antiga fora desse passo deixa um recorte de meia célula na faixa de 4 m da
+  esquina. O começo sobre outra via anda até 4 m para o passo das células dela (o T fecha a esquina sem vão). A prévia
+  avisa também o prédio da coluna de células que o nó novo corta; desfazer a melhoria ou a demolição recusa com
+  `ocupado` se nasceu prédio ali depois. Vila: as casas das ruas de terra 1 m mais recuadas (66 prédios, 355
+  moradores) e a plataforma até 0,3 m abaixo do chão da rua. Medido: encaixe p95 0,06 ms; prévia p50 0,22 e p95 0,5 ms
+  na cidade sintética (1.121 arestas, 125 mil células, 12 mil prédios) e numa rede de 3.120 arestas; grade 2 x 2 em
+  1,2 ms; `via.construir` na rede grande p50 16 ms; chão de 5,9 a 47 cm abaixo da pista nas 121 arestas do teste; 18
+  testes em `vias` e `celulas`. Pendente:
+  o `jogo` montado passa do teto do A1 (1.813 KB; a S1b soma uns 75 KB); a bancada do tique (A5) passa da meta na
+  primeira `via.construir` (índices dos prédios e das células, uns 17 ms, e o JIT) e em coletas de 4 ms; encaixar o
+  traço no passo de 8 m da via que ele cruza, para fechar também esse recorte; o cruzamento a menos do patamar de um nó
+  de greide é recusado com `declive` até na planície (3 a 13% das posições ao longo de ruas com 2 a 3% de declive).
 
 #### R1b. Entrada completa, sombra de longe, HAO e noite (onda 2; 2 sessões)
 - **Arquivos:** `render/ambiente/{campoAlturas,sombraLonge,luzNoite}.js`; herda os de R1a.
@@ -1127,6 +1149,22 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   de profundidade proporcional à distância na faixa de troca; carros (6 modelos, frota brasileira, faróis) pela
   heurística por tipo de via, hora e zonas vizinhas; tetos por perfil (Média 120 carros).
 - **Testa sem as outras:** grafo da cidade sintética. **Depende de:** R1a, R2a.
+- **Entregue em 28/09/2026** (R3a). Publicou `gerarMalhaVia(aresta, perfil, { alturaEm })` pura (a X2 usa na prévia),
+  os domínios `vias` (setores de 256 m pela oficina, tipo `vias`, até o alcance do perfil: Média 560 m; tabela RGBA8
+  256² por `aId` com camada, realce e desgaste; `registrarSelecionavel('aresta')`), `luzRua` (`ctx.luzRua` no formato
+  do gancho `noite` da R1b: textura, origem, tam, ganho 4 e brilho), `props` (postes urbano, duplo e rural, semáforos,
+  oiti e palmeira-imperial em dois LODs) e `trafego` (6 modelos da frota com faróis e freio, heurística por tipo, hora
+  e zonas, semáforo de 40 s igual ao do shader, Média 120 carros andando e 160 parados). Perfis da D22 com meio-fio de
+  15 cm, abaulamento, sarjeta e marcas do CTB; cruzamentos com recorte, arco de meio-fio (raio nunca abaixo da calçada
+  mais 0,5 m), zebra e retenção; retorno redondo na ponta; a pintura da via no chão da R2a some perto da câmera por um
+  gancho no material (`ctx.chao`). Medido (Média, cena `rua`): rasante 54 a 71 chamadas, 259 mil triângulos, vias 24
+  mil; vista de 300 m 47 a 63 chamadas e 185 mil; guarda do Mali ok (a `via` usa 8 amostradores e 7 varyings); a
+  cidade sintética inteira tem 270 mil triângulos de via em 190 setores (pior setor 5 mil, 3 a 12 ms). 18 testes.
+  Revisão: faróis assentados no bico (antes ficavam dentro da carroceria) e acesos também no LOD1; fila pelo
+  comprimento do carro e entrada na faixa só com lugar; retorno na ponta da rua (a rodovia sai do mapa); retenção a
+  1,6 m da faixa de pedestres; folíolos recortados na palmeira; o gerador do setor sem relógio.
+  Pendente: `R.selecionado(ref)` não diz o domínio (o realce da aresta existe, mas fica desligado); o JS montado passou
+  do teto de 1,6 MB com a onda 2 inteira; a calçada de pedra portuguesa depende da área `orla` do mapa.
 
 #### X2. Ferramentas de construção de ponta a ponta (onda 2; 3 sessões)
 - **Arquivos:** `ui/ferramentas/*`, `ui/hud/{Construcao,Bandeja,BarraFerramenta}.jsx`, `ui/mundo/{Lupa,Cotas}.jsx`,
@@ -1144,6 +1182,22 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   toques para a Holding; Áreas (grade de ladrilhos com preço e desconto da Influência); teclado do PC.
 - **Testa sem as outras:** as máquinas em Node com sequências de ponteiros; a vitrine com a simulação falsa. **Depende
   de:** F0; a parte pura começa com a onda 2 e a integração quando S1b, R1b e R3a publicarem.
+- **Entregue em 28/09/2026** (X2). Publicou o domínio `ferramentas` do render (`R.ferramenta.via`, `zona`, `celulas`,
+  `pincel`, `fantasma`, `demolir`, `limpar`): a prévia da via pela `gerarMalhaVia` da R3a (a fita plana fica de
+  substituto), células de 8 m instanciadas só num raio de 400 m da mira (até 8 mil), fantasma com círculo de alcance e
+  contorno de demolir, de 1 a 4 chamadas. Máquinas puras em `ui/ferramentas` (via com mirando A, alças, curva pela alça
+  do meio, Reta, Curva, Contínua, Grade e Melhorar; zona com Preencher, Pincel P, M e G, Retângulo e Apagar; colocar
+  grudado na frente da via; demolir com dois toques para a Holding; Áreas com preço e desconto) e a sessão que as liga
+  a `R.entrada.aoFerramenta` (mira 56 px acima do dedo), às consultas `q.via.previa`, `q.zona.previa`,
+  `q.construir.previa` e `q.viasPerto` (com planejador, pincel e encaixe locais quando a consulta falta; a barra diz
+  "estimado"), aos comandos por `acoes.js`, ao Desfazer de 10 ações, à vibração, à rolagem pela borda e ao teclado do
+  PC (Enter, Esc, Ctrl+Z, Shift, vírgula e ponto). Contrato para as outras telas: `loja.ferramenta.value = { tipo,
+  ... }` abre a ferramenta e `null` fecha. HUD: barra de construção, bandeja com cartões e cadeados, barra da
+  ferramenta; no mundo, lupa esquemática em canvas 2D (foge da cota) e cotas, alças, chips de encaixe e os preços das
+  Áreas sem sobreposição. Textos `x2`, 41 testes, 13 cenas `x2-*` na vitrine e a cena `ferramentas` (sintética, com
+  `ui=1` traçando pela entrada). Com a S1b, `q.via.previa` responde no mesmo formato (conferido em Node na sintética).
+  Pendente: o jogo montado passa do teto A1 (1.798 KB contra 1.638; a X2 soma cerca de 85 KB); a sintética das cenas
+  roda sem os domínios, então a prévia ali é a local.
 
 #### S2a. Cidade viva, núcleo (onda 3; 3 sessões)
 - **Arquivos:** `sim/zonas/{demanda,crescimento}.js`, `sim/{predios,cidadaos,bemestar,servicos,redes}.js`,

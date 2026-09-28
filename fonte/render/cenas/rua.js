@@ -43,10 +43,12 @@ export function registrar(registrarCena) {
         resultado() {
           const s = ctx.stats;
           const mv = vias?.medidas?.() ?? null;
-          if (mv && !mv.visiveis) falhas.push('nenhum setor de via desenhado');
+          // a conferência roda a cada chamada, sem acumular na lista da montagem
+          const agora = [...falhas];
+          if (mv && !mv.visiveis) agora.push('nenhum setor de via desenhado');
           return {
-            ok: falhas.length === 0,
-            falhas: [...falhas],
+            ok: agora.length === 0,
+            falhas: agora,
             vista: nome,
             vias: mv,
             objetos: ctx.dominio('props')?.medidas?.() ?? null,

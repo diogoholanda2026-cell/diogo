@@ -18,8 +18,8 @@ import { analisarNo, gerarSetorVias } from '../geracao/cruzamento.js';
 import { perfilVia } from '../geracao/perfilVia.js';
 import { BITS, estacao, hashF } from '../geracao/malhaVia.js';
 import * as SH from '../materiais/shaders/via.glsl.js';
-import { alturaEm } from '../../comum/altura.js';
 import { tabelaArco, maisPerto } from '../../comum/bezier.js';
+import { ANO } from '../../comum/relogio.js';
 import { pontoNoPoligono } from '../../comum/vetor.js';
 import { ARESTA, AGUA, MAO } from '../../contratos/flags.js';
 import { refDe } from '../../contratos/espelho.js';
@@ -57,8 +57,6 @@ export function criarUniformesVia() {
   return {
     gViaTab: { value: null },
     gViaDetalhe: { value: null },
-    gLuzRua: { value: null },
-    gLuzRuaMapa: { value: new THREE.Vector4(-4096, -4096, 1 / 8192, 0) },
     gViaLonge: { value: new THREE.Vector4(300, 420, VIES.k1, VIES.k2) },
     gViaCamada: { value: new THREE.Vector4(0, 0, 0, 0) },
     gViaRampa: { value: Array.from({ length: 8 }, () => new THREE.Color()) },
@@ -157,7 +155,7 @@ export function geometriaDaMalha(m, { soltar = false } = {}) {
 /** Desgaste de uma aresta (0 nova a 1 gasta): as do mapa e da cidade de antes do jogo, pela semente; as novas, pela idade. */
 export function desgasteDe(idade, tique, e) {
   if (!idade) return 0.45 + 0.4 * hashF(e, 97);
-  const anos = Math.max(0, tique - idade) / 7200;
+  const anos = Math.max(0, tique - idade) / ANO;
   return Math.min(1, 0.08 + 0.3 * anos);
 }
 
@@ -184,7 +182,7 @@ function pedraEm(esp, x, z, flags) {
  * Estado da rede a partir do espelho: por aresta { tipo, p, tab, L, a, b, cIni, cFim, marcas, trechos: [[s0, s1,
  * setor]] }, por nó { tipo, setor, analise }. Refeita inteira (tudo) ou em volta das arestas e nós tocados.
  */
-class Rede {
+export class Rede {
   constructor(grade) {
     this.grade = grade;
     this.arestas = new Map();
@@ -336,6 +334,20 @@ class Rede {
 
 // ------------------------------------------------------------------------------------------------ chão
 
+/** A leitura do uso do solo no fragmento do chão (R2a), com ou sem os espaços que a montagem tira do GLSL. */
+export const ALVO_USO_CHAO = /vec4\s+tUso\s*=\s*texture\s*\(\s*uTerUso\s*,\s*tUVM\s*\)\s*;/;
+
+/**
+ * Fragmento do chão com o canal da via do uso do solo apagado perto da câmera (vTer.z é a distância à câmera), ou
+ * null se o chão não tem a leitura esperada.
+ */
+export function ligarChaoNoShader(fs) {
+  if (!ALVO_USO_CHAO.test(fs) || !fs.includes('#include <common>')) return null;
+  return fs
+    .replace('#include <common>', '#include <common>\nuniform vec2 uViaPerto;')
+    .replace(ALVO_USO_CHAO, (m) => `${m}\ntUso.r *= smoothstep( uViaPerto.x, uViaPerto.y, vTer.z );`);
+}
+
 /**
  * Perto da câmera a malha desenha a via: a pintura do asfalto no uso do solo (R2a, raster de 4 m que alarga a pista
  * uns 2 m) some ali. Gancho no material do chão por ctx.chao (sem editar o terreno): multiplica o canal da via do
@@ -346,17 +358,15 @@ function ligarChao(ctx) {
   if (!mat || mat.userData.viaLigada) return mat?.userData.viaUniformes ?? null;
   const U = { uViaPerto: { value: new THREE.Vector2(0, 1) } };
   const antes = mat.onBeforeCompile;
-  const alvo = 'vec4 tUso = texture( uTerUso, tUVM );';
   mat.onBeforeCompile = (shader, renderer) => {
     antes?.call(mat, shader, renderer);
-    if (!shader.fragmentShader.includes(alvo)) {
+    const fs = ligarChaoNoShader(shader.fragmentShader);
+    if (!fs) {
       console.warn('vias: o chão não tem o uso do solo esperado; a pintura da via fica perto da câmera');
       return;
     }
     Object.assign(shader.uniforms, U);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec2 uViaPerto;')
-      .replace(alvo, `${alvo}\ntUso.r *= smoothstep( uViaPerto.x, uViaPerto.y, vTer.z );`);
+    shader.fragmentShader = fs;
   };
   const chave = mat.customProgramCacheKey?.bind(mat);
   mat.customProgramCacheKey = () => `${chave ? chave() : ''}|viaPerto`;
@@ -364,6 +374,81 @@ function ligarChao(ctx) {
   mat.userData.viaUniformes = U;
   mat.needsUpdate = true;
   return U;
+}
+
+// ------------------------------------------------------------------------------------------------ pedidos
+
+const EST = { x: 0, z: 0, tx: 1, tz: 0, t: 0 };
+const agora = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+/** Retalho da grade do chão que cobre o retângulo (alinhado às amostras). */
+export function retalho(T, x0, z0, x1, z1) {
+  const i0 = Math.max(0, Math.floor((x0 - T.origem[0]) / T.passo));
+  const j0 = Math.max(0, Math.floor((z0 - T.origem[1]) / T.passo));
+  const i1 = Math.min(T.n - 1, Math.ceil((x1 - T.origem[0]) / T.passo));
+  const j1 = Math.min(T.n - 1, Math.ceil((z1 - T.origem[1]) / T.passo));
+  const n = Math.max(2, Math.max(i1 - i0, j1 - j0) + 1);
+  const altura = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) {
+    const jj = Math.min(T.n - 1, j0 + j);
+    for (let i = 0; i < n; i++) altura[j * n + i] = T.altura[jj * T.n + Math.min(T.n - 1, i0 + i)];
+  }
+  return { ox: T.origem[0] + i0 * T.passo, oz: T.origem[1] + j0 * T.passo, n, passo: T.passo, altura };
+}
+
+/**
+ * Pedido de um setor à oficina (tipo 'vias'): os trechos das arestas e os nós que caem nele e o retalho do chão que os
+ * cobre. Puro sobre a rede (a thread principal e os testes montam igual).
+ * @param {Rede} rede
+ * @param {{ s: number, x0: number, z0: number, versao: number }} st
+ * @returns {{ dados: object, transferir: ArrayBuffer[] }}
+ */
+export function pedidoDeSetor(rede, st, esp, vagas = 0) {
+  const arestas = [];
+  let x0 = st.x0;
+  let z0 = st.z0;
+  let x1 = st.x0 + LADO_SETOR;
+  let z1 = st.z0 + LADO_SETOR;
+  for (const ar of rede.arestas.values()) {
+    for (const [a, b, s] of ar.trechos) {
+      if (s !== st.s) continue;
+      arestas.push({
+        e: ar.e, tipo: ar.tipo, p: Array.from(ar.p), sIni: ar.cIni, sFim: ar.L - ar.cFim, s0: a, s1: b, marcas: ar.marcas, ponte: ar.ponte,
+        cotas: ar.cotas, tampaIni: ar.tampaIni, tampaFim: ar.tampaFim, mao: ar.mao,
+      });
+      // o chão do trecho (não da aresta inteira: uma rodovia de 2 km mandaria o retalho de 2 km a cada setor), pelas
+      // estações a cada 8 m e a meia largura com folga
+      const m = perfilVia(ar.tipo).meia + 4;
+      const n = Math.max(2, Math.ceil((b - a) / 8) + 1);
+      for (let k = 0; k < n; k++) {
+        estacao(ar.p, ar.tab, a + ((b - a) * k) / (n - 1), EST);
+        x0 = Math.min(x0, EST.x - m);
+        x1 = Math.max(x1, EST.x + m);
+        z0 = Math.min(z0, EST.z - m);
+        z1 = Math.max(z1, EST.z + m);
+      }
+    }
+  }
+  const nos = [];
+  for (const no of rede.nos.values()) {
+    if (no.setor !== st.s || no.tipo === 'reto') continue;
+    nos.push({
+      n: no.n, x: no.x, z: no.z, semaforos: no.semaforos,
+      bracos: no.analise.bracos.map((b) => ({ e: b.e, tipo: b.tipo, p: Array.from(b.p), inverte: b.inverte, marcas: b.marcas, ponte: b.ponte, cotas: b.cotas })),
+    });
+    // a peça do nó vai até o corte de cada braço mais a meia largura (a curva de avenida grande passa de 80 m)
+    const r = Math.max(60, ...no.analise.bracos.map((b) => b.corte + b.P.meia + 4));
+    x0 = Math.min(x0, no.x - r);
+    x1 = Math.max(x1, no.x + r);
+    z0 = Math.min(z0, no.z - r);
+    z1 = Math.max(z1, no.z + r);
+  }
+  const T = esp.terreno;
+  const chaoR = T ? retalho(T, x0 - 16, z0 - 16, x1 + 16, z1 + 16) : null;
+  return {
+    dados: { setor: st.s, versao: st.versao, ox: st.x0, oz: st.z0, chao: chaoR, arestas, nos, vagas },
+    transferir: chaoR ? [chaoR.altura.buffer] : [],
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ domínio
@@ -382,13 +467,10 @@ function criarVias(ctx) {
   tabela.generateMipmaps = false;
   tabela.name = 'vias:tabela';
   U.gViaTab.value = tabela;
-  const preto = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
-  preto.needsUpdate = true;
-  U.gLuzRua.value = preto;
   const mascara = typeof location !== 'undefined' && new URLSearchParams(location.search).get('passe') === 'mascara';
   U.gViaMascara.value = mascara ? 1 : 0;
   const material = criarMaterialVia(ctx.ganchos, U);
-  const chao = ligarChao(ctx);
+  let chao = ligarChao(ctx);
 
   const setores = new Map();
   const recebidos = [];
@@ -398,8 +480,9 @@ function criarVias(ctx) {
   let bytes = 0;
   let nMalhas = 0;
   let versaoObjetos = 0;
-  let msGerar = 0;
-  let nGerados = 0;
+  let msPedidos = 0;
+  let nPedidos = 0;
+  let mesTabela = null;
   const frustum = new THREE.Frustum();
   const mProj = new THREE.Matrix4();
   const caixa = new THREE.Box3();
@@ -438,6 +521,12 @@ function criarVias(ctx) {
       sujar(rede.tocar(esp, d.arestas ?? [], d.nos ?? []));
       for (const e of d.arestas ?? []) escreverTabela(esp, e);
     }
+    // o asfalto envelhece com o jogo (a idade da aresta): a coluna do desgaste é reescrita a cada mês de jogo
+    const mes = esp.tempo ? (esp.tempo.ano ?? 0) * 12 + (esp.tempo.mes ?? 0) : null;
+    if (mes !== mesTabela) {
+      if (mesTabela !== null && !tudo) for (const e of rede.arestas.keys()) escreverTabela(esp, e);
+      mesTabela = mes;
+    }
     // o chão mudou (aplainar de uma via nova, obra): os setores sobre o retângulo refazem as cotas
     const rets = pedeTudo(d, 'terreno') ? [[-1e9, -1e9, 1e9, 1e9]] : d.terreno ?? [];
     if (rets.length && !tudo) {
@@ -451,65 +540,7 @@ function criarVias(ctx) {
 
   // ---------------------------------------------------------------------------------------------- pedidos
 
-  /** Retalho da grade do chão que cobre o retângulo (alinhado às amostras). */
-  function retalho(T, x0, z0, x1, z1) {
-    const i0 = Math.max(0, Math.floor((x0 - T.origem[0]) / T.passo));
-    const j0 = Math.max(0, Math.floor((z0 - T.origem[1]) / T.passo));
-    const i1 = Math.min(T.n - 1, Math.ceil((x1 - T.origem[0]) / T.passo));
-    const j1 = Math.min(T.n - 1, Math.ceil((z1 - T.origem[1]) / T.passo));
-    const n = Math.max(2, Math.max(i1 - i0, j1 - j0) + 1);
-    const altura = new Float32Array(n * n);
-    for (let j = 0; j < n; j++) {
-      const jj = Math.min(T.n - 1, j0 + j);
-      for (let i = 0; i < n; i++) altura[j * n + i] = T.altura[jj * T.n + Math.min(T.n - 1, i0 + i)];
-    }
-    return { ox: T.origem[0] + i0 * T.passo, oz: T.origem[1] + j0 * T.passo, n, passo: T.passo, altura };
-  }
-
-  /** Monta o pedido de um setor: os trechos das arestas e os nós que caem nele, e o retalho do chão. */
-  function pedidoDoSetor(st) {
-    const esp = ctx.sim.espelho;
-    const arestas = [];
-    let x0 = st.x0;
-    let z0 = st.z0;
-    let x1 = st.x0 + LADO_SETOR;
-    let z1 = st.z0 + LADO_SETOR;
-    for (const ar of rede.arestas.values()) {
-      for (const [a, b, s] of ar.trechos) {
-        if (s !== st.s) continue;
-        arestas.push({
-          e: ar.e, tipo: ar.tipo, p: Array.from(ar.p), sIni: ar.cIni, sFim: ar.L - ar.cFim, s0: a, s1: b, marcas: ar.marcas, ponte: ar.ponte,
-          cotas: ar.cotas, tampaIni: ar.tampaIni, tampaFim: ar.tampaFim, mao: ar.mao,
-        });
-        const m = perfilVia(ar.tipo).meia + 4;
-        for (let k = 0; k < 4; k++) {
-          x0 = Math.min(x0, ar.p[2 * k] - m);
-          x1 = Math.max(x1, ar.p[2 * k] + m);
-          z0 = Math.min(z0, ar.p[2 * k + 1] - m);
-          z1 = Math.max(z1, ar.p[2 * k + 1] + m);
-        }
-      }
-    }
-    const nos = [];
-    for (const no of rede.nos.values()) {
-      if (no.setor !== st.s || no.tipo === 'reto') continue;
-      nos.push({
-        n: no.n, x: no.x, z: no.z, semaforos: no.semaforos,
-        bracos: no.analise.bracos.map((b) => ({ e: b.e, tipo: b.tipo, p: Array.from(b.p), inverte: b.inverte, marcas: b.marcas, ponte: b.ponte, cotas: b.cotas })),
-      });
-      const r = 60;
-      x0 = Math.min(x0, no.x - r);
-      x1 = Math.max(x1, no.x + r);
-      z0 = Math.min(z0, no.z - r);
-      z1 = Math.max(z1, no.z + r);
-    }
-    const T = esp.terreno;
-    const chaoR = T ? retalho(T, x0 - 16, z0 - 16, x1 + 16, z1 + 16) : null;
-    return {
-      dados: { setor: st.s, versao: st.versao, ox: st.x0, oz: st.z0, chao: chaoR, arestas, nos, vagas: perfil().vagas },
-      transferir: chaoR ? [chaoR.altura.buffer] : [],
-    };
-  }
+  const pedidoDoSetor = (st) => pedidoDeSetor(rede, st, ctx.sim.espelho, perfil().vagas);
 
   function pedir(st) {
     const versao = st.versao;
@@ -521,8 +552,12 @@ function criarVias(ctx) {
       recebidos.push({ st, r: { malhas: [], objetos: null, estacionados: [] }, versao });
       return;
     }
+    // o gerador não tem relógio (render/geracao): mede-se aqui, do pedido à resposta (com a fila do worker)
+    const t0 = agora();
     oficina.pedir('vias', dados, { chave: st.s, transferir }).then((r) => {
       pendentes--;
+      msPedidos += agora() - t0;
+      nPedidos++;
       recebidos.push({ st, r, versao });
     });
   }
@@ -541,7 +576,9 @@ function criarVias(ctx) {
     for (let k = 0; k < recebidos.length; ) {
       const { st, r, versao } = recebidos[k];
       if (r.erro) {
-        st.pedido = 0;
+        // o gerador falhou nesta versão: não pede de novo a cada quadro (a oficina já avisou no console); volta a
+        // pedir quando o setor mudar
+        st.erro = versao;
         recebidos.splice(k, 1);
         continue;
       }
@@ -550,10 +587,6 @@ function criarVias(ctx) {
       if (st.malha && st.malha.versao > versao) continue;
       soltarMalha(st);
       const m = r.malhas?.[0];
-      if (Number.isFinite(r.ms)) {
-        msGerar += r.ms;
-        nGerados++;
-      }
       st.objetos = r.objetos ?? null;
       st.estacionados = r.estacionados ?? [];
       versaoObjetos++;
@@ -603,7 +636,7 @@ function criarVias(ctx) {
       const c = st.caixa ?? [st.x0, st.ymin, st.z0, st.x0 + LADO_SETOR, st.ymax, st.z0 + LADO_SETOR];
       st.dist = distCaixa(cp.x, cp.y, cp.z, c[0], c[1], c[2], c[3], c[4], c[5]);
       const perto = st.dist < L.alcance;
-      if (perto && st.pedido !== st.versao && (!st.malha || st.malha.versao < st.versao)) cand.push(st);
+      if (perto && st.pedido !== st.versao && st.erro !== st.versao && (!st.malha || st.malha.versao < st.versao)) cand.push(st);
       if (st.malha) {
         caixa.min.set(c[0], c[1] - 1, c[2]);
         caixa.max.set(c[3], c[4] + 1, c[5]);
@@ -636,23 +669,20 @@ function criarVias(ctx) {
     return { vis, tris };
   }
 
-  /** Noite, luz da rua, distâncias de troca. */
-  function uniformes(c) {
+  /** Distâncias de troca com o chão pintado (a luz da rua à noite vem do gancho `noite`, luzRua.js). */
+  function uniformes() {
     const L = perfil();
-    const dia = c.sol?.dia ?? 1;
-    const noite = Math.min(1, Math.max(0, 1 - dia * 1.4));
-    const lr = c.luzRua;
-    if (lr?.textura) {
-      U.gLuzRua.value = lr.textura;
-      U.gLuzRuaMapa.value.set(lr.mapa.ox, lr.mapa.oz, 1 / lr.mapa.lado, noite * (lr.intensidade ?? 1));
-    } else U.gLuzRuaMapa.value.w = 0;
     const fim = L.alcance - L.faixa;
     U.gViaLonge.value.set(fim - 160, fim, VIES.k1, VIES.k2);
     if (chao) chao.uViaPerto.value.set(fim - 120, fim - 40);
   }
 
-  // camadas por aresta (X3a): o valor no canal R da tabela; qualquer camada deixa a via neutra
   const paraDesligar = [
+    // a troca de qualidade refaz o material do chão (terreno.js ouve antes): liga o gancho no novo
+    ctx.ouvir('qualidade', () => {
+      chao = ligarChao(ctx);
+    }),
+    // camadas por aresta (X3a): o valor no canal R da tabela; qualquer camada deixa a via neutra
     ctx.ouvir('camadas', (c) => {
       const A = ctx.sim.espelho.vias?.arestas;
       const liga = !!(c && c.fonte === 'arestas' && c.dados && A);
@@ -705,7 +735,7 @@ function criarVias(ctx) {
   function prontoAgora() {
     if (pendentes || recebidos.length) return false;
     const L = perfil();
-    for (const st of setores.values()) if (st.dist < L.alcance && (!st.malha || st.malha.versao < st.versao)) return false;
+    for (const st of setores.values()) if (st.dist < L.alcance && st.erro !== st.versao && (!st.malha || st.malha.versao < st.versao)) return false;
     return true;
   }
 
@@ -733,7 +763,6 @@ function criarVias(ctx) {
     },
     /** Para as cenas e capturas: lê o espelho e espera a oficina entregar os setores da vista. */
     async preparar({ teto = 120000 } = {}) {
-      const agora = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
       const t0 = agora();
       ctx.cameraApi?.atualizar?.(t0);
       if (!iniciado) aplicar(ctx.sim.mudancas.desde(-1), ctx.sim.espelho);
@@ -761,7 +790,7 @@ function criarVias(ctx) {
       }
       return {
         setores: setores.size, malhas: nMalhas, visiveis: vis, tris, memoriaMB: +(bytes / 1048576).toFixed(2),
-        arestas: rede.arestas.size, nos: rede.nos.size, msGerarMedio: nGerados ? +(msGerar / nGerados).toFixed(1) : 0,
+        arestas: rede.arestas.size, nos: rede.nos.size, msPedidoMedio: nPedidos ? +(msPedidos / nPedidos).toFixed(1) : 0,
       };
     },
     /** Gera um setor na hora, na thread principal (testes e depuração). */
@@ -772,7 +801,6 @@ function criarVias(ctx) {
       for (const f of paraDesligar) f?.();
       for (const st of setores.values()) soltarMalha(st);
       tabela.dispose();
-      preto.dispose();
       material.dispose();
     },
   };

@@ -6,11 +6,12 @@
 // asfalto perto de 0,3, a sombra perto de 0,13 e um telhado claro perto de 0,7, a faixa de uma foto aérea.
 // Com o sol baixo a luz no chão horizontal é quase toda do céu, mas o fotógrafo mede pela fachada ao sol: a medida é a
 // maior entre a luz no chão e uma parte da luz direta do sol (solMedida), e a hora dourada fica mais escura e quente,
-// com as fachadas ao sol acesas e a sombra funda, em vez de a exposição subir e lavar a névoa.
+// com as fachadas ao sol acesas e a sombra funda, em vez de a exposição subir e lavar a névoa. Com 0,42 as 17h30 do
+// equinócio (sol a 9 graus) expõem 9,8: a fachada ao sol perto de 0,7 na tela e o chão à sombra ainda legível.
 // A troca é suave (constante de 1 s real); um salto grande (cena nova, hora forçada) vai direto. Também dá o limiar
 // do bloom: 1,1 de dia (só o sol refletido e o céu estourado) e 0,8 de noite (janelas, postes, faróis).
 
-export const EXPOSICAO = Object.freeze({ referencia: Math.PI, chave: 1.6, gama: 0.75, minima: 0.5, maxima: 14, constante: 1, solMedida: 0.55 });
+export const EXPOSICAO = Object.freeze({ referencia: Math.PI, chave: 1.6, gama: 0.75, minima: 0.5, maxima: 14, constante: 1, solMedida: 0.42 });
 
 const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 

@@ -13,9 +13,10 @@ import { FORMA } from '../../contratos/interno.js';
 import { amostrasNoRetangulo } from '../../comum/altura.js';
 import { distSegmento, distPoligono } from '../../comum/vetor.js';
 import { smoothstep } from '../../comum/util.js';
-import { ponto, tabelaArco, tDoArco } from '../../comum/bezier.js';
+import { ponto, direcao, tabelaArco, tDoArco } from '../../comum/bezier.js';
 import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
 import { refDe } from '../../contratos/espelho.js';
+import { ARESTA } from '../../contratos/flags.js';
 import { terrenoBase } from './terreno.js';
 
 /** Alcance de uma forma além do núcleo: faixa plana de 8 m e transição de 16 m. */
@@ -143,24 +144,79 @@ export function aplainarTudo(base, formas, saida) {
 
 /**
  * Patamar do cruzamento (S1b): na ponta de uma aresta que chega num nó de cruzamento (raio do nó > 0), a pista segue
- * plana na cota do nó até o raio mais 8 m e só então sobe ou desce. Assim os braços de um cruzamento de vias em rampa
- * se encontram na mesma cota e o chão entre eles não sobe na borda da pista. Pontas soltas e nós de grau 2 em linha reta
- * (raio 0) não têm patamar.
+ * plana na cota do nó até o raio mais 8 m e só então sobe ou desce. Com outra via em ângulo agudo, o patamar vai até as
+ * duas pistas se separarem e mais 8 m medidos na perpendicular: onde as pistas se cobrem, as duas ficam na mesma cota.
+ * Pontas soltas e nós de grau 2 em linha reta (raio 0) não têm patamar.
  */
 export const PATAMAR = 8;
 
-/** Comprimento do patamar numa ponta com raio r. */
-export const patamarDoRaio = (r) => (r > 0 ? r + PATAMAR : 0);
+/** Teto do patamar (ângulo de 30 graus entre avenidas grandes). */
+export const PATAMAR_MAX = 64;
 
-/** Patamares [pa, pb] de uma aresta de comprimento comp (sobra ao menos 1 m de rampa no meio). */
-export function patamares(comp, ra, rb) {
-  let pa = patamarDoRaio(ra);
-  let pb = patamarDoRaio(rb);
-  const lim = Math.max(0, comp - 1);
+/**
+ * Comprimento do patamar de uma via de meia largura `meia` num nó de raio `raio`.
+ * @param {ArrayLike<number>} outras  pares [meia, cos] das outras vias do nó (cos do ângulo entre as saídas)
+ */
+export function comprimentoPatamar(raio, meia, outras = []) {
+  if (!(raio > 0)) return 0;
+  let p = raio + PATAMAR;
+  for (let k = 0; k + 1 < outras.length; k += 2) {
+    const mo = outras[k];
+    const c = outras[k + 1] < -1 ? -1 : outras[k + 1] > 1 ? 1 : outras[k + 1];
+    const sen = Math.sqrt(1 - c * c);
+    if (sen < 0.2) continue; // quase em linha: seguem juntas (grau 2) ou em sentidos opostos
+    // as bordas das duas pistas se cruzam a s1 desta via e s2 da outra (as duas positivas: as pistas se cobrem)
+    const s1 = (mo + meia * c) / sen;
+    const s2 = (meia + mo * c) / sen;
+    if (s1 <= 0 || s2 <= 0) continue;
+    const q = s1 + PATAMAR / sen;
+    if (q > p) p = q;
+  }
+  return p < PATAMAR_MAX ? p : PATAMAR_MAX;
+}
+
+const D1 = [0, 0];
+const D2 = [0, 0];
+
+/** Direção (unitária) com que a aresta e sai do nó n. */
+function saidaDe(A, e, n, out) {
+  if (A.a[e] === n) return direcao(A.p, 0, out, 8 * e);
+  direcao(A.p, 1, out, 8 * e);
+  out[0] = -out[0];
+  out[1] = -out[1];
+  return out;
+}
+
+const meiaDe = (A, e) => VIAS[VIAS_ORDEM[A.tipo[e]]].largura / 2;
+
+/** Patamar da aresta e na ponta do nó n: pelo raio do nó e pelos ângulos com as outras vias dele. */
+export function patamarNaPonta(G, e, n) {
+  const r = G.nos.raio[n];
+  if (!(r > 0)) return 0;
+  const A = G.arestas;
+  const L = G.nos.lig;
+  saidaDe(A, e, n, D1);
+  const outras = [];
+  for (let k = 0; k < 6; k++) {
+    const o = L[6 * n + k];
+    if (o < 0 || o === e || !A.viva[o]) continue;
+    saidaDe(A, o, n, D2);
+    outras.push(meiaDe(A, o), D1[0] * D2[0] + D1[1] * D2[1]);
+  }
+  return comprimentoPatamar(r, meiaDe(A, e), outras);
+}
+
+/**
+ * Patamares [pa, pb] de uma aresta de comprimento comp: sobra ao menos 1 m de rampa no meio e, com o desnível dy entre
+ * as pontas, a rampa não passa do declive gMax do tipo (o patamar encolhe; se o cruzamento ficar desnivelado demais, a
+ * ferramenta recusa com 'declive').
+ */
+export function patamares(comp, pa, pb, dy = 0, gMax = Infinity) {
+  let lim = Math.max(0, comp - 1);
+  if (dy !== 0 && gMax > 0 && gMax < Infinity) lim = Math.min(lim, Math.max(0, comp - Math.abs(dy) / gMax));
   if (pa + pb > lim) {
     const k = lim / (pa + pb);
-    pa *= k;
-    pb *= k;
+    return [pa * k, pb * k];
   }
   return [pa, pb];
 }
@@ -173,10 +229,11 @@ export function cotaDaPista(y0, y1, comp, pa, pb, s) {
   return y0 + (y1 - y0) * (f < 0 ? 0 : f > 1 ? 1 : f);
 }
 
-/** Patamares da aresta e do grafo pelos raios dos nós. */
+/** Patamares da aresta e (pelos nós do grafo, com o declive do tipo). */
 export function patamaresDa(G, e) {
   const A = G.arestas;
-  return patamares(A.arco[17 * e + 16], G.nos.raio[A.a[e]], G.nos.raio[A.b[e]]);
+  const dy = A.y[2 * e + 1] - A.y[2 * e];
+  return patamares(A.arco[17 * e + 16], patamarNaPonta(G, e, A.a[e]), patamarNaPonta(G, e, A.b[e]), dy, VIAS[VIAS_ORDEM[A.tipo[e]]].declive);
 }
 
 /** Cota da pista da aresta e no comprimento de arco s (com os patamares). */
@@ -186,10 +243,84 @@ export function pistaDaAresta(G, e, s) {
   return cotaDaPista(A.y[2 * e], A.y[2 * e + 1], A.arco[17 * e + 16], pa, pb, s);
 }
 
+/** Declive da rampa da aresta (sinal de a para b) e os patamares: { g, pa, pb, comp }. */
+export function rampaDa(G, e) {
+  const A = G.arestas;
+  const comp = A.arco[17 * e + 16];
+  const [pa, pb] = patamaresDa(G, e);
+  const m = comp - pa - pb;
+  return { g: m > 0 ? (A.y[2 * e + 1] - A.y[2 * e]) / m : 0, pa, pb, comp };
+}
+
+// Dobra côncava do greide (onde o declive aumenta: pé de rampa, fim de patamar, vale entre duas rampas): entre duas
+// amostras da grade de 8 m a interpolação bilinear passa acima da dobra em até 8/4 = 2 vezes a mudança de declive
+// (D4). A forma rebaixa o chão ali o que passa da folga, até 12 m da dobra (as amostras das células que ela cruza), e
+// volta ao normal nos 12 m seguintes: o chão fica ao menos 5 cm abaixo da pista em toda a seção.
+const PASSO_GRADE = 8;
+/** O chão fica ao menos isto abaixo da pista em toda a seção (m). */
+export const FOLGA_CHAO = 0.05;
+const ALCANCE_DOBRA = 12;
+const VOLTA_DOBRA = 12;
+
+/** Declive com que a outra aresta de um nó de grau 2 sem raio sai dele (0 numa ponta solta ou ponte). */
+function saidaDoGreide(G, e, n) {
+  const N = G.nos;
+  const A = G.arestas;
+  if (N.grau[n] !== 2 || N.raio[n] > 0) return 0;
+  for (let k = 0; k < 6; k++) {
+    const o = N.lig[6 * n + k];
+    if (o < 0 || o === e || !A.viva[o]) continue;
+    if (A.flags[o] & ARESTA.PONTE) return 0;
+    const { g } = rampaDa(G, o);
+    return A.a[o] === n ? g : -g;
+  }
+  return 0;
+}
+
 /**
- * Forma do aplainar de uma aresta do grafo: o eixo da Bézier a cada ~8 m (e nas pontas dos patamares), com a cota da
- * pista (pistaDaAresta) menos 0,15 m, e a meia largura do tipo. Ponte (flag PONTE) não tem forma: o tabuleiro fica
- * no alto.
+ * Dobras côncavas da pista da aresta: [{ s, rebaixo }] com o rebaixo do chão no arco s (m).
+ * @param {number} abaixo  o chão fica isto abaixo da pista fora das dobras
+ */
+export function dobrasDa(G, e, abaixo = CHAO_ABAIXO_DA_PISTA) {
+  const A = G.arestas;
+  const { g, pa, pb, comp } = rampaDa(G, e);
+  const folga = abaixo - FOLGA_CHAO;
+  const out = [];
+  const juntar = (s, delta) => {
+    const r = (PASSO_GRADE / 4) * delta - folga + 0.01;
+    if (r > 0) out.push({ s, rebaixo: r });
+  };
+  // na ponta a: fim do patamar, ou o nó (a outra via de um nó de grau 2 reto, ou o chão plano além da ponta)
+  if (pa > 0) juntar(pa, g);
+  else juntar(0, g + saidaDoGreide(G, e, A.a[e]));
+  if (pb > 0) juntar(comp - pb, -g);
+  else juntar(comp, -g + saidaDoGreide(G, e, A.b[e]));
+  // as dobras da vizinha de um nó de grau 2 sem raio até 24 m do nó: as amostras em volta do nó podem ser dela ou desta
+  const N = G.nos;
+  for (const [n, fora] of [[A.a[e], (x) => -x], [A.b[e], (x) => comp + x]]) {
+    if (N.grau[n] !== 2 || N.raio[n] > 0) continue;
+    for (let k = 0; k < 6; k++) {
+      const o = N.lig[6 * n + k];
+      if (o < 0 || o === e || !A.viva[o] || A.flags[o] & ARESTA.PONTE) continue;
+      const ro = rampaDa(G, o);
+      const doNo = (so) => (A.a[o] === n ? so : ro.comp - so);
+      const internas = [];
+      if (ro.pa > 0) internas.push([ro.pa, ro.g]);
+      if (ro.pb > 0) internas.push([ro.comp - ro.pb, -ro.g]);
+      for (const [so, delta] of internas) {
+        const dist = doNo(so);
+        const r = (PASSO_GRADE / 4) * delta - folga + 0.01;
+        if (r > 0 && dist < ALCANCE_DOBRA + VOLTA_DOBRA) out.push({ s: fora(dist), rebaixo: r });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Forma do aplainar de uma aresta do grafo: o eixo da Bézier a cada ~8 m (e nas pontas dos patamares e das dobras), com
+ * a cota da pista (pistaDaAresta) menos 0,15 m, rebaixada perto das dobras côncavas, e a meia largura do tipo. Ponte
+ * (flag PONTE) não tem forma: o tabuleiro fica no alto.
  */
 export function formaDaAresta(G, e, { abaixo = CHAO_ABAIXO_DA_PISTA } = {}) {
   const A = G.arestas;
@@ -198,10 +329,16 @@ export function formaDaAresta(G, e, { abaixo = CHAO_ABAIXO_DA_PISTA } = {}) {
   const tab = tabelaArco(p);
   const comp = tab[16];
   const [pa, pb] = patamaresDa(G, e);
+  const dobras = dobrasDa(G, e, abaixo);
   const m = Math.max(1, Math.ceil(comp / 8));
   const ss = [];
   for (let k = 0; k <= m; k++) ss.push((comp * k) / m);
-  for (const x of [pa, comp - pb]) if (x > 0.05 && x < comp - 0.05 && !ss.some((v) => Math.abs(v - x) < 0.05)) ss.push(x);
+  const extra = [pa, comp - pb];
+  for (const d of dobras) {
+    extra.push(d.s);
+    for (const u of [ALCANCE_DOBRA, ALCANCE_DOBRA + VOLTA_DOBRA]) extra.push(d.s - u, d.s + u);
+  }
+  for (const x of extra) if (x > 0.05 && x < comp - 0.05 && !ss.some((v) => Math.abs(v - x) < 0.05)) ss.push(x);
   ss.sort((a, b) => a - b);
   const eixo = new Float64Array(ss.length * 3);
   const y0 = A.y[2 * e];
@@ -209,9 +346,15 @@ export function formaDaAresta(G, e, { abaixo = CHAO_ABAIXO_DA_PISTA } = {}) {
   const q = [0, 0];
   ss.forEach((s, k) => {
     ponto(p, k === 0 ? 0 : k === ss.length - 1 ? 1 : tDoArco(tab, s), q);
+    let rb = 0;
+    for (const d of dobras) {
+      const dist = Math.abs(s - d.s);
+      const w = dist <= ALCANCE_DOBRA ? 1 : dist >= ALCANCE_DOBRA + VOLTA_DOBRA ? 0 : 1 - (dist - ALCANCE_DOBRA) / VOLTA_DOBRA;
+      if (d.rebaixo * w > rb) rb = d.rebaixo * w;
+    }
     eixo[3 * k] = q[0];
     eixo[3 * k + 1] = q[1];
-    eixo[3 * k + 2] = cotaDaPista(y0, y1, comp, pa, pb, s) - abaixo;
+    eixo[3 * k + 2] = cotaDaPista(y0, y1, comp, pa, pb, s) - abaixo - rb;
   });
   return { tipo: 'via', ref: refDe(e, A.ger[e]), eixo, meiaLargura: tipo.largura / 2 };
 }

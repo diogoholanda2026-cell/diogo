@@ -182,7 +182,8 @@ function celulasQueMudam(sim, pincel, zona) {
 const zonaValida = (z) => Number.isInteger(z) && z >= 0 && z < ZONAS_ORDEM.length;
 
 /** q.zona.previa({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia }. */
-export function previa(sim, { pincel, zona } = {}) {
+export function previa(sim, args) {
+  const { pincel, zona } = args ?? {};
   const C = sim.tabelas.celulas;
   const z = zonaValida(zona) ? zona : 0;
   const lista = celulasQueMudam(sim, pincel, z) ?? [];
@@ -199,7 +200,8 @@ export function previa(sim, { pincel, zona } = {}) {
 }
 
 /** zona.pintar: aplica o pincel. */
-export function pintar(sim, { pincel, zona } = {}) {
+export function pintar(sim, args) {
+  const { pincel, zona } = args ?? {};
   const C = sim.tabelas.celulas;
   const P = sim.tabelas.predios;
   if (!zonaValida(zona)) return { ok: false, codigo: 'valor' };

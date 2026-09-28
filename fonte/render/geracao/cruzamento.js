@@ -12,7 +12,7 @@
 // quantizada, e as posições dos postes, das árvores de rua, dos semáforos e dos carros estacionados.
 import { tabelaArco } from '../../comum/bezier.js';
 import { amostrar } from '../../comum/altura.js';
-import { perfilVia, MAT, ALTURA } from './perfilVia.js';
+import { perfilVia, MAT, ALTURA, alturaNaSecao } from './perfilVia.js';
 import {
   ConstrutorVia, estacao, pontosDaEstacao, gerarMalhaVia, quantizarVia, BITS, postesDaAresta, arvoresDaAresta,
   vagasDaAresta, hashF, hashI,
@@ -109,21 +109,30 @@ function esquina(A, C) {
     }
     return out;
   }
-  // linhas: N + rA * A.d + dA t  e  N + rC * C.e + dC t'
-  const rAx = -A.dz;
-  const rAz = A.dx;
-  const rCx = -C.dz;
-  const rCz = C.dx;
-  const wx = rCx * C.bE - rAx * A.bD;
-  const wz = rCz * C.bE - rAz * A.bD;
-  const det = -A.dx * C.dz + A.dz * C.dx;
-  if (Math.abs(det) < 1e-6) return out;
-  const t = (-wx * C.dz + wz * C.dx) / det;
-  const t2 = (A.dx * wz - A.dz * wx) / det;
-  const R = ((A.P.raioEsquina + C.P.raioEsquina) / 2) * Math.min(1, Math.max(0.4, beta / (Math.PI / 2)));
+  // linhas: N + rA * a + dA t  e  N + rC * c + dC t' (a e c: afastamentos laterais do eixo de cada braço)
+  const cruzar = (a, c) => {
+    const wx = -C.dz * c + A.dz * a;
+    const wz = C.dx * c - A.dx * a;
+    const det = -A.dx * C.dz + A.dz * C.dx;
+    if (Math.abs(det) < 1e-6) return null;
+    return [(-wx * C.dz + wz * C.dx) / det, (A.dx * wz - A.dz * wx) / det];
+  };
+  const pista = cruzar(A.bD, C.bE);
+  if (!pista) return out;
+  const [t, t2] = pista;
+  // o raio encolhe no ângulo agudo, mas nunca abaixo da calçada mais 0,5 m: a esquina de calçada dobra por dentro
+  // do arco e não pode se cruzar
+  const calcada = Math.max(A.P.meia - A.bD, C.P.meia + C.bE, 0);
+  const R = Math.max(((A.P.raioEsquina + C.P.raioEsquina) / 2) * Math.min(1, Math.max(0.4, beta / (Math.PI / 2))), calcada > 0.3 ? calcada + 0.5 : 0);
   const tl = R * Math.tan(virada / 2);
   out.cI = Math.max(0, t + tl);
   out.cJ = Math.max(0, t2 + tl);
+  // e as bocas ficam além de onde as bordas de fora se cruzam: as calçadas dos dois braços não se sobrepõem
+  const fora = cruzar(A.P.meia, -C.P.meia);
+  if (fora) {
+    out.cI = Math.max(out.cI, fora[0]);
+    out.cJ = Math.max(out.cJ, fora[1]);
+  }
   out.arco = true;
   out.R = R;
   return out;
@@ -517,12 +526,15 @@ function gerarPonta(no, K, op) {
   const secoes = [];
   const v = [];
   const raio = P.meia;
+  // a volta cresce da boca para o nó (o sentido contrário ao "para fora" do braço, que entra na aresta)
+  const fx = -bo.ox;
+  const fz = -bo.oz;
   for (let k = 0; k <= passos; k++) {
     const phi = (Math.PI * k) / passos;
     const c = Math.cos(phi);
     const sn = Math.sin(phi);
-    const dx = rx * c + bo.ox * sn;
-    const dz = rz * c + bo.oz * sn;
+    const dx = rx * c + fx * sn;
+    const dz = rz * c + fz * sn;
     const S = new Float64Array(tiras.length * 6);
     let o = 0;
     for (const t of tiras) {
@@ -537,8 +549,9 @@ function gerarPonta(no, K, op) {
     secoes.push(S);
     v.push(phi * raio);
   }
-  // o sentido da volta: de +r (direita da aresta) para fora e para -r; a normal sai para cima se r x fora aponta para cima
-  const vira = rx * bo.oz - rz * bo.ox > 0;
+  // o sentido da volta: de +r (direita da aresta) para o nó e para -r; a normal (lateral x avanço) sai para cima se
+  // r x f aponta para cima; senão a grade vira
+  const vira = rx * fz - rz * fx >= 0;
   emitirGrade(K, secoes, tiras, v, { ox, oz, id: b.e, tipo: P.idx, marcas: BITS.CRUZAMENTO | ((b.marcas ?? 0) & BITS.PEDRA), vira, total: Math.PI * raio });
   return K;
 }
@@ -671,6 +684,14 @@ function listaDe(itens) {
   return { mat, bytes, ids, n };
 }
 
+/**
+ * Semáforo de um braço: o grupo (0 os braços perto de leste-oeste, 1 os de norte-sul, pela direção do braço) e a
+ * defasagem do cruzamento (0 a 255). O foco no shader (via.glsl.js, objFase) e o tráfego (trafego.js,
+ * faseSemaforo) usam os mesmos dois números.
+ */
+export const grupoSemaforo = (theta) => Math.floor(((((theta % Math.PI) + Math.PI) % Math.PI) + Math.PI / 4) / (Math.PI / 2)) % 2;
+export const defasagemSemaforo = (n) => hashI(n, 0, 0) & 255;
+
 /** Rotação (convenção do three) que leva +z local para a direção (dx, dz). */
 const rotDe = (dx, dz) => Math.atan2(dx, dz);
 
@@ -680,10 +701,10 @@ const rotDe = (dx, dz) => Math.atan2(dx, dz);
  *   ponte, cotas, tampaIni, tampaFim, mao, objetos }], nos: [{ n, x, z, bracos: [{ e, tipo, p, inverte, marcas, ponte,
  *   cotas }], semaforos }], vagas: 0..1 }
  * Resposta: { setor, versao, malhas: [malha quantizada], objetos: { tipo: lista }, estacionados: [[modelo, lista]],
- *   tris, ms }. As posições dos objetos vêm em coordenadas do mundo (as instâncias não são relativas ao setor).
+ *   tris }. As posições dos objetos vêm em coordenadas do mundo (as instâncias não são relativas ao setor). Sem relógio
+ * (render/geracao é determinístico): quem pede mede o tempo.
  */
 export function gerarSetorVias(dados) {
-  const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
   const { ox = 0, oz = 0, chao } = dados;
   const alturaEm = chao ? (x, z) => amostrar(chao.altura, chao.n, chao.passo, chao.ox, chao.oz, x, z) : () => 0;
   const K = new ConstrutorVia(4096);
@@ -715,7 +736,7 @@ export function gerarSetorVias(dados) {
         const h = hashF(q.semente, 3);
         const modelo = porPeso(ESTACIONADOS, h);
         const cor = porPeso(FROTA_CORES.map(([c, w], k) => [k, w]), hashF(q.semente, 5));
-        carros.push({ modelo, x: q.x, y: alturaEm(q.x, q.z) + ALTURA.pista, z: q.z, rot: rotDe(q.dx, q.dz), id: a.e, b: [cor, 0, 0, 0] });
+        carros.push({ modelo, x: q.x, y: alturaEm(q.x, q.z) + alturaNaSecao(P, q.u), z: q.z, rot: rotDe(q.dx, q.dz), id: a.e, b: [cor, 0, 0, 0] });
       }
     }
   }
@@ -733,8 +754,7 @@ export function gerarSetorVias(dados) {
         const s = 1.5;
         const x = bo.est.x + rx * u + bo.ox * s;
         const z = bo.est.z + rz * u + bo.oz * s;
-        const grupo = Math.floor((((b.theta % Math.PI) + Math.PI) % Math.PI + Math.PI / 4) / (Math.PI / 2)) % 2;
-        obj.semaforo.push({ x, y: alturaEm(x, z) + ALTURA.calcada, z, rot: rotDe(rx, rz), sx: 1, sz: Math.min(1.4, Math.max(0.6, (b.bD - b.bE) / 14)), id: b.e, b: [grupo, hashI(nd.n) & 255, 0, 0] });
+        obj.semaforo.push({ x, y: alturaEm(x, z) + ALTURA.calcada, z, rot: rotDe(rx, rz), sx: 1, sz: Math.min(1.4, Math.max(0.6, (b.bD - b.bE) / 14)), id: b.e, b: [grupoSemaforo(b.theta), defasagemSemaforo(nd.n), 0, 0] });
       }
     }
   }
@@ -747,8 +767,7 @@ export function gerarSetorVias(dados) {
   }
   const estacionados = [...porModelo].map(([m, l]) => [m, listaDe(l)]);
   const malhas = K.nv ? [quantizarVia(K)] : [];
-  const ms = (typeof performance !== 'undefined' ? performance.now() : 0) - t0;
-  return { setor: dados.setor, versao: dados.versao, malhas, objetos, estacionados, tris: K.tris, ms };
+  return { setor: dados.setor, versao: dados.versao, malhas, objetos, estacionados, tris: K.tris };
 }
 
 /** Registra o gerador do setor de vias no worker `oficina` (D45). */

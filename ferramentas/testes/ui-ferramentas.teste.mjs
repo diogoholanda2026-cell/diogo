@@ -520,7 +520,32 @@ test('áreas: ladrilho do ponto, preço com o desconto da Influência, compráve
   assert.deepEqual(areas.passoAreas(e, { tipo: 'cancelar' }).efeitos, ['sair']);
 });
 
+test('áreas: os preços que se empilham na tela somem; fica o escolhido e o mais perto da câmera', () => {
+  const c = (x, y, pri = 0) => ({ x, y, w: 70, h: 26, pri });
+  // três em fila encostados (o do meio é o escolhido), um longe de todos
+  const fica = areas.rotulosSemSobrepor([c(100, 100), c(130, 104, 1), c(160, 108), c(400, 300)]);
+  assert.deepEqual(fica, [false, true, false, true]);
+  // sem escolhido: o mais embaixo (mais perto) ganha; lado a lado com folga ficam os dois
+  assert.deepEqual(areas.rotulosSemSobrepor([c(100, 100), c(110, 120)]), [false, true]);
+  assert.deepEqual(areas.rotulosSemSobrepor([c(100, 100), c(180, 100)]), [true, true]);
+  assert.deepEqual(areas.rotulosSemSobrepor([]), []);
+});
+
 // ------------------------------------------------------------------------------------------------ sessão (puras)
+
+test('rótulos do mundo: a cota sai de baixo do HUD (desce da barra de cima, sobe da de baixo) ou some', () => {
+  const hud = [
+    { l: 0, t: 8, r: 986, b: 48, cima: true }, // barra de cima
+    { l: 440, t: 56, r: 546, b: 80, cima: true }, // pílula de pausa
+    { l: 8, t: 365, r: 978, b: 435, cima: false }, // barra da ferramenta
+  ];
+  assert.equal(areas.fugirDoHud(300, 200, 120, 26, hud), 200, 'longe do HUD fica onde está');
+  assert.equal(areas.fugirDoHud(300, 40, 120, 26, hud), 48 + 4 + 13, 'desce da barra de cima');
+  assert.equal(areas.fugirDoHud(490, 60, 120, 26, hud), 80 + 4 + 13, 'desce da pílula também');
+  assert.equal(areas.fugirDoHud(300, 360, 120, 26, hud), 365 - 4 - 13, 'sobe da barra de baixo');
+  // sem lugar entre as barras: some
+  assert.equal(areas.fugirDoHud(300, 50, 120, 26, [{ l: 0, t: 0, r: 986, b: 60, cima: true }, { l: 0, t: 70, r: 986, b: 443, cima: false }]), null);
+});
 
 test('sessão: Desfazer guarda até 10 ações; borda, encaixe e catálogo', () => {
   const p = sessao.criarPilha();
@@ -560,12 +585,12 @@ function renderFalso() {
   const R = {
     log,
     entrada: { modo: (m) => log.push(['modo', m]), aoFerramenta: (fn) => (aoFerr = fn), opcoes: (o) => log.push(['opcoes', o]) },
-    enviar: (fase, x, y) => aoFerr({ fase, x, y, ponto: [x, 0, y], dedos: 1 }),
+    enviar: (fase, x, y, extra = {}) => aoFerr({ fase, x, y, ponto: [x, 0, y], dedos: 1, ...extra }),
     projetar: ([x, , z]) => ({ x, y: z, visivel: true, dist: 100 }),
     raio: (x, y) => [x, 0, y],
     selecionar: () => null,
     selecionado: () => {},
-    camera: { estado: () => ({ x: 0, z: 0, dist: 500, guinada: 0, inclinacao: 40 }), definir: () => {} },
+    camera: { estado: () => ({ x: 0, z: 0, dist: 500, guinada: 0, inclinacao: 40 }), definir: (e) => log.push(['camera', e]) },
     ferramenta: {
       via: { previa: (p, estilo) => log.push(['via', p, estilo]) },
       zona: { mostrar: (b) => log.push(['zona.mostrar', b]), celulas: (c, z) => log.push(['celulas', c, z]) },
@@ -617,11 +642,14 @@ test('sessão: via com o planejador substituto, Construir manda o plano com a se
     const [nome, args] = cmds.at(-1);
     assert.equal(nome, 'via.construir');
     assert.equal(args.plano.modo, 'reta');
-    assert.equal(args.plano.sessao, sessao.sessao.value.id);
+    // a sessão da simulação leva a da página (D16): recarregar a página não emenda a sessão nova na velha do save
+    assert.equal(args.plano.sessao, sessao.sessao.value.chave);
+    assert.equal(sessao.sessao.value.chave, sessao.chaveDaSessao(sessao.sessao.value.id));
+    assert.notEqual(sessao.chaveDaSessao(1, 'pagina1'), sessao.chaveDaSessao(1, 'pagina2'));
     assert.equal(sessao.sessao.value.desfazer, 1);
     assert.equal(sessao.sessao.value.maquina.fase, 'ocioso');
     await sessao.ferramentas.desfazer();
-    assert.deepEqual(cmds.at(-1), ['via.desfazer', { sessao: sessao.sessao.value.id }]);
+    assert.deepEqual(cmds.at(-1), ['via.desfazer', { sessao: sessao.sessao.value.chave }]);
     assert.equal(sessao.sessao.value.desfazer, 0);
     sessao.ferramentas.fechar();
     assert.equal(loja.ferramenta.value, null);
@@ -723,6 +751,188 @@ test('sessão: zonas pintam na hora e o Desfazer devolve a zona antiga de cada c
   }
 });
 
+test('sessão: Melhorar e Demolir vias mandam a sessão, e o Desfazer volta pela mesma sessão', async () => {
+  const { esp, no, aresta } = espelhoTeste();
+  const e0 = aresta(no(0, 0), no(112, 0), 'terra');
+  const e1 = aresta(no(0, 112), no(112, 112), 'rua');
+  const cmds = [];
+  const pedidos = [];
+  // a prévia do Melhorar da simulação (S1b): o formato de q.via.previa com modo 'melhorar'
+  const planoMelhorar = (a) => ({ ok: true, arestas: a.arestas.map((ref) => ({ ref, ok: true, erros: [] })), segmentos: [], comprimento: 112, custo: 900, manutencaoHora: 3, erros: [], demolir: { predios: [], custo: 0 } });
+  const sim = {
+    espelho: esp,
+    q: { via: { previa: (a) => (pedidos.push(a), a.modo === 'melhorar' ? planoMelhorar(a) : a.modo === 'demolir' ? { ok: true, arestas: [], segmentos: [], erros: [], devolve: 1234, custo: -1234 } : null) } },
+    cmd: (nome, args) => (cmds.push([nome, args]), { ok: true }),
+  };
+  const { R, soltar } = montarSessao(sim);
+  try {
+    sessao.ferramentas.abrir('via', { tipoVia: 'rua', modo: 'melhorar' });
+    R.enviar('inicio', 56, 0);
+    R.enviar('fim', 56, 0);
+    let s = sessao.sessao.value;
+    assert.deepEqual(s.maquina.selecao, [e0]);
+    assert.equal(pedidos.at(-1).modo, 'melhorar');
+    assert.equal(s.previa.custo, 900, 'a prévia do Melhorar é a da simulação');
+    assert.equal(s.previa.estimado, undefined);
+    assert.equal(s.valido, true);
+    await sessao.ferramentas.construir();
+    const [nome, args] = cmds.at(-1);
+    assert.equal(nome, 'via.melhorar');
+    assert.equal(args.sessao, sessao.sessao.value.chave, 'a melhoria entra na sessão para o via.desfazer achar');
+    await sessao.ferramentas.desfazer();
+    assert.deepEqual(cmds.at(-1), ['via.desfazer', { sessao: args.sessao }]);
+
+    sessao.ferramentas.abrir('demolir');
+    R.enviar('inicio', 56, 112);
+    R.enviar('fim', 56, 112);
+    s = sessao.sessao.value;
+    assert.equal(s.maquina.marcados.length, 1);
+    assert.equal(s.resumo.voltaVias, 1234, 'o que volta é o que a simulação diz');
+    await sessao.ferramentas.construir();
+    const dem = cmds.find(([n]) => n === 'via.demolir');
+    assert.deepEqual(dem[1].arestas, [e1]);
+    assert.equal(dem[1].sessao, sessao.sessao.value.chave);
+    assert.equal(sessao.sessao.value.desfazer, 1);
+    await sessao.ferramentas.desfazer();
+    assert.deepEqual(cmds.at(-1), ['via.desfazer', { sessao: dem[1].sessao }]);
+    sessao.ferramentas.fechar();
+  } finally {
+    soltar();
+  }
+});
+
+test('sessão: o Desfazer do Colocar só entra com a ref do prédio (o id do comando não serve)', async () => {
+  assert.equal(sessao.refCriada({ ok: true, id: { sessao: 'abc', seq: 3 } }), null);
+  assert.equal(sessao.refCriada({ ok: true, id: { sessao: 'abc', seq: 3 }, dados: { ref: 1048583 } }), 1048583);
+  assert.equal(sessao.refCriada({ ok: true, ref: 9 }), 9);
+  assert.equal(sessao.refCriada({ ok: false, codigo: 'creditos', dados: { ref: 9 } }), null);
+  const { esp, no, aresta } = espelhoTeste();
+  aresta(no(0, 0), no(112, 0));
+  const cmds = [];
+  let resposta = { ok: true, id: 77 }; // acoes.js troca o id pelo do comando
+  const sim = { espelho: esp, q: {}, cmd: (nome, args) => (cmds.push([nome, args]), resposta) };
+  const { R, soltar } = montarSessao(sim);
+  try {
+    const item = { tipo: 'clinica', nome: 'Clínica', custo: 1000, pegada: [24, 24] };
+    sessao.ferramentas.abrir('colocar', { item });
+    R.enviar('inicio', 50, 30);
+    R.enviar('fim', 50, 30);
+    assert.equal(sessao.sessao.value.valido, true);
+    await sessao.ferramentas.construir();
+    assert.equal(sessao.sessao.value.desfazer, 0, 'sem a ref do prédio, nada para desfazer');
+    resposta = { ok: true, dados: { ref: 1048583 } };
+    await sessao.ferramentas.construir();
+    assert.equal(sessao.sessao.value.desfazer, 1);
+    await sessao.ferramentas.desfazer();
+    assert.deepEqual(cmds.at(-1), ['demolir', { refs: [1048583] }]);
+    sessao.ferramentas.fechar();
+  } finally {
+    soltar();
+  }
+});
+
+test('sessão: o gesto que vira câmera (fim cancelado) não fixa ponto, não pinta nem escolhe', async () => {
+  const { esp, no, aresta } = espelhoTeste();
+  const e0 = aresta(no(0, 0), no(96, 0));
+  celulasTeste(esp, e0, 8);
+  const cmds = [];
+  const sim = { espelho: esp, q: {}, cmd: (nome, args) => (cmds.push([nome, args]), { ok: true }) };
+  const { R, soltar } = montarSessao(sim);
+  try {
+    sessao.ferramentas.abrir('via');
+    R.enviar('inicio', 300, 300);
+    R.enviar('fim', 300, 300);
+    assert.equal(sessao.sessao.value.maquina.fase, 'aFixo');
+    // o dedo apoia (mirando B) e um segundo dedo chega depois dos 80 ms: o gesto vira câmera
+    R.enviar('inicio', 400, 300, { tipo: 'toque' });
+    R.enviar('move', 420, 310, { tipo: 'toque' });
+    R.enviar('fim', 420, 310, { tipo: 'toque', cancelado: true });
+    let s = sessao.sessao.value;
+    assert.equal(s.maquina.fase, 'aFixo');
+    assert.equal(s.maquina.b, null);
+    assert.equal(s.dedo, false);
+    // Preencher: o toque cancelado não pinta a quadra
+    sessao.ferramentas.abrir('zona', { zona: 'resBaixa', modo: 'preencher' });
+    R.enviar('inicio', 20, 20, { tipo: 'toque' });
+    R.enviar('fim', 20, 20, { tipo: 'toque', cancelado: true });
+    await new Promise((ok) => setTimeout(ok, 0));
+    assert.equal(cmds.filter(([n]) => n === 'zona.pintar').length, 0);
+    s = sessao.sessao.value;
+    assert.equal(s.tipo, 'zona', 'a ferramenta continua aberta');
+    assert.equal(s.maquina.dedo, false);
+    // o mesmo toque sem cancelar pinta
+    R.enviar('inicio', 20, 20, { tipo: 'toque' });
+    R.enviar('fim', 20, 20, { tipo: 'toque' });
+    await new Promise((ok) => setTimeout(ok, 0));
+    assert.equal(cmds.filter(([n]) => n === 'zona.pintar').length, 1);
+    // Áreas: o toque cancelado não escolhe o ladrilho
+    sessao.ferramentas.abrir('areas');
+    R.enviar('inicio', 1400, -300, { tipo: 'toque' });
+    R.enviar('fim', 1400, -300, { tipo: 'toque', cancelado: true });
+    assert.equal(sessao.sessao.value.info, null);
+    sessao.ferramentas.fechar();
+  } finally {
+    soltar();
+  }
+});
+
+test('sessão: fechar no meio de um gesto não deixa a prévia desenhada (o fim cancelado do render chega depois)', () => {
+  const { esp } = espelhoTeste();
+  const sim = { espelho: esp, q: {}, cmd: () => ({ ok: true }) };
+  const { R, soltar } = montarSessao(sim);
+  try {
+    // como o render: trocar para a câmera com o dedo apoiado manda o 'fim' cancelado do gesto
+    let apoiado = null;
+    const modo = R.entrada.modo;
+    R.entrada.modo = (m) => {
+      modo(m);
+      if (m === 'camera' && apoiado) R.enviar('fim', apoiado[0], apoiado[1], { cancelado: true });
+    };
+    sessao.ferramentas.abrir('via');
+    R.enviar('inicio', 0, 0);
+    R.enviar('fim', 0, 0);
+    R.enviar('inicio', 150, 20);
+    R.enviar('fim', 150, 20);
+    assert.equal(sessao.sessao.value.maquina.fase, 'previa');
+    // pega a alça de B e arrasta; a ferramenta fecha com o dedo apoiado
+    const b = sessao.sessao.value.maquina.b;
+    apoiado = [b[0] + 10, b[1]];
+    R.enviar('inicio', b[0], b[1]);
+    R.enviar('move', b[0] + 10, b[1]);
+    assert.equal(sessao.sessao.value.maquina.fase, 'arrastando');
+    assert.ok(R.log.filter(([k, p]) => k === 'via' && p).length > 0);
+    sessao.ferramentas.fechar();
+    const ultLimpar = R.log.map(([k]) => k).lastIndexOf('limpar');
+    assert.ok(ultLimpar >= 0);
+    assert.equal(R.log.slice(ultLimpar).filter(([k, p]) => k === 'via' && p).length, 0, 'nada redesenha depois do limpar');
+    assert.equal(sessao.sessao.value, null);
+  } finally {
+    soltar();
+  }
+});
+
+test('sessão: o cursor parado do render (move sem dedo) é passar o mouse: não apoia nem rola a câmera pela borda', () => {
+  const { esp } = espelhoTeste();
+  const sim = { espelho: esp, q: {}, cmd: () => ({ ok: true }) };
+  const { R, soltar, quadros } = montarSessao(sim);
+  try {
+    sessao.ferramentas.abrir('via');
+    R.enviar('inicio', 300, 200, { tipo: 'mouse' });
+    R.enviar('fim', 300, 200, { tipo: 'mouse' });
+    // o mouse vai para perto da barra de cima: o render manda 'move' com dedos 0 a cada quadro
+    R.enviar('move', 400, 20, { tipo: 'mouse', dedos: 0 });
+    assert.equal(sessao.vivo.apoiado, false);
+    const s = sessao.sessao.value;
+    assert.equal(s.maquina.fase, 'aFixo');
+    assert.deepEqual(s.maquina.b, [400, 20], 'a prévia segue o cursor');
+    for (const [i, f] of quadros.entries()) f(1000 + i * 16), f(1016 + i * 16), f(1032 + i * 16);
+    assert.equal(R.log.filter(([k]) => k === 'camera').length, 0, 'a câmera não anda sozinha com o mouse parado');
+    sessao.ferramentas.fechar();
+  } finally {
+    soltar();
+  }
+});
+
 test('sessão: loja.ferramenta abre a ferramenta pedida por outra parcela e null fecha', () => {
   const { esp } = espelhoTeste();
   const sim = { espelho: esp, q: {}, cmd: () => ({ ok: true }) };
@@ -756,6 +966,70 @@ test('render: a fita segue a curva na largura do tipo, colada no chão; o círcu
   assert.ok(verde.g > verde.r && verde.g > verde.b);
   const inv = sob.corDaCelula(0, CELULA.INVALIDA);
   assert.ok(inv.r > inv.g && inv.r > inv.b);
+});
+
+test('render: a grade das células anda por célula tocada; pintar só troca as cores, sem refazer as instâncias', async () => {
+  const sob = await import('../../fonte/render/sobreposicoes/ferramentas.js');
+  const THREE = await import('three');
+  const { esp, no, aresta } = espelhoTeste();
+  const e0 = aresta(no(0, 0), no(96, 0));
+  const C = celulasTeste(esp, e0, 8);
+  // grade pura: cada célula uma vez, a que anda sai do balde velho, nada repetido
+  const G = sob.criarGradeCelulas(C);
+  for (let c = 0; c < C.n; c++) sob.porNaGrade(G, c);
+  const ver = (x, z, r) => {
+    const l = [];
+    sob.celulasNoRaio(G, x, z, r, (c) => l.push(c));
+    return l.sort((a, b) => a - b);
+  };
+  const todas = ver(50, 0, 200);
+  assert.equal(todas.length, C.n);
+  assert.equal(new Set(todas).size, C.n);
+  C.x[0] = 900;
+  C.z[0] = 900;
+  assert.equal(sob.porNaGrade(G, 0), true);
+  assert.equal(sob.porNaGrade(G, 0), false, 'no mesmo balde, nada muda');
+  assert.ok(!ver(50, 0, 200).includes(0));
+  assert.deepEqual(ver(900, 900, 10), [0]);
+  C.x[0] = 20; // volta: o balde velho ainda tem a célula, mas ela não aparece duas vezes
+  C.z[0] = 12;
+  sob.porNaGrade(G, 0);
+  assert.equal(ver(50, 0, 200).filter((c) => c === 0).length, 1);
+
+  // o domínio: com a zona ligada, pintar (o diário traz as células) troca a cor no lugar
+  const ouvintes = new Map();
+  const ctx = { cena: new THREE.Scene(), medidas: { familia: (o) => o }, sim: { espelho: esp }, ouvir: (n, f) => (ouvintes.set(n, f), () => {}), cameraApi: { alvo: (v) => v.set(50, 0, 0) } };
+  let criar = null;
+  sob.registrar({ registrarDominio: (n, f) => (criar = f) });
+  const dom = criar(ctx);
+  const cels = ctx.cena.getObjectByName('ferramentas:celulas');
+  ouvintes.get('ferramenta.zona')(true);
+  ouvintes.get('ferramenta.pincel')({ x: 50, z: 0, raio: 16 });
+  const n0 = dom.medidas().celulas;
+  assert.equal(n0, C.n);
+  let matrizes = 0;
+  const setMatrixAt = cels.setMatrixAt.bind(cels);
+  cels.setMatrixAt = (...a) => (matrizes++, setMatrixAt(...a));
+  const alvo = 5;
+  C.zona[alvo] = ZONAS_ORDEM.indexOf('comBaixa');
+  dom.aplicar({ celulas: Int32Array.of(alvo) });
+  assert.equal(matrizes, 0, 'pintar não refaz as instâncias');
+  const cor = new THREE.Color();
+  const k = [...Array(cels.count).keys()].find((i) => {
+    cels.getColorAt(i, cor);
+    return cor.b > cor.g && cor.b > cor.r; // comercial é azul
+  });
+  assert.ok(k !== undefined, 'a célula pintada ficou azul');
+  // a prévia do pincel acende e apaga sem refazer
+  ouvintes.get('ferramenta.celulas')({ celulas: Int32Array.of(1, 2), zona: 0 });
+  ouvintes.get('ferramenta.celulas')({ celulas: Int32Array.of(3), zona: 0 });
+  assert.equal(matrizes, 0);
+  // uma célula que morre sai do desenho (aí sim refaz)
+  C.viva[7] = 0;
+  dom.aplicar({ celulas: Int32Array.of(7) });
+  assert.ok(matrizes > 0);
+  assert.equal(dom.medidas().celulas, n0 - 1);
+  dom.descartar();
 });
 
 // ------------------------------------------------------------------------------------------------ textos, glifos, CSS

@@ -18,6 +18,7 @@ import { VIAS } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
+import { SESSAO } from '../acoes.js';
 
 /** Até quantas ações o Desfazer guarda por sessão (D32). */
 export const MAX_DESFAZER = 10;
@@ -131,6 +132,23 @@ export function escolherEncaixe(encaixes, ponto, raio = 40) {
   return melhor;
 }
 
+/**
+ * Chave da sessão da ferramenta para a simulação (via.construir, via.melhorar, via.demolir e via.desfazer). Leva a
+ * sessão da página (D16) além do contador: a simulação guarda a última sessão no save, e um contador que recomeça do
+ * 1 depois de recarregar a página emendaria a sessão nova na velha (desfazer e reembolso integral de vias antigas).
+ */
+export const chaveDaSessao = (n, pagina = SESSAO) => `${pagina}.${n}`;
+
+/**
+ * Ref da coisa criada por um comando (contrato: Resposta.id). ui/acoes.js põe o id do COMANDO ({ sessao, seq }) em
+ * `id`, então a ref pode chegar em `ref` ou em `dados.ref`; um `id` que não é número não serve. null se não veio.
+ */
+export function refCriada(r) {
+  if (!r?.ok) return null;
+  for (const v of [r.ref, r.dados?.ref, r.id]) if (Number.isInteger(v) && v >= 0) return v;
+  return null;
+}
+
 /** Primeiro erro da prévia: { codigo, trecho, dados }, ou null. */
 export function primeiroErro(previa) {
   const e = previa?.erros?.[0];
@@ -219,7 +237,11 @@ export function registrar(ui) {
   let rolagemPropria = true; // desliga se o render rolar pela borda sozinho
   let camUlt = null;
   let tUlt = 0;
+  let antesDoGesto = null; // a máquina antes do 'inicio' (volta a ela se o gesto virar câmera)
+  let renderPaira = false; // o render manda o cursor parado ('move' com dedos 0): a sessão não repete o 'hover'
+  let area = null; // área livre do mundo (sem a barra de cima e a da ferramenta), em px do canvas
   const ponteiro = { x: 0, y: 0, tipo: 'mouse' };
+  const chave = () => chaveDaSessao(id);
 
   const cota = (x, z) => {
     const T = esp()?.terreno;
@@ -279,6 +301,7 @@ export function registrar(ui) {
     sessao.value = {
       tipo,
       id,
+      chave: chave(),
       maquina: maq,
       previa,
       valido: valido(),
@@ -342,17 +365,24 @@ export function registrar(ui) {
 
   function fechar({ manterLoja = false } = {}) {
     if (!tipo) return;
-    R?.ferramenta?.limpar?.();
-    if (tipo === 'zona') R?.ferramenta?.zona?.mostrar?.(false);
-    if (tipo === 'areas') R?.ferramenta?.ladrilhos?.(false);
+    const era = tipo;
+    // a máquina sai antes de avisar o render: com um gesto em curso, trocar o modo manda um 'fim' cancelado, e ele não
+    // pode redesenhar a prévia depois do limpar
+    tipo = null;
+    maq = null;
+    previa = null;
+    antesDoGesto = null;
     R?.entrada?.modo?.('camera');
+    R?.ferramenta?.limpar?.();
+    if (era === 'zona') R?.ferramenta?.zona?.mostrar?.(false);
+    if (era === 'areas') R?.ferramenta?.ladrilhos?.(false);
+    // a área livre medida com a barra da ferramenta não vale mais (a rolagem pela borda do mouse usa a tela inteira)
+    if (area) R?.entrada?.opcoes?.({ area: null });
+    area = null;
     if (camadaAntes !== undefined) {
       loja.camada.value = camadaAntes;
       camadaAntes = undefined;
     }
-    tipo = null;
-    maq = null;
-    previa = null;
     vivo.apoiado = false;
     vivo.mira = null;
     batch(() => {
@@ -431,19 +461,23 @@ export function registrar(ui) {
     const m = maq;
     const e = esp();
     if (m.modo === 'melhorar') {
-      previa = via.previaMelhorar(e, m.selecao, m.tipo);
+      // a prévia da simulação (declive, colisão, marco, demolições e créditos); sem ela, a estimativa pelo espelho
+      const r = m.selecao.length ? consultar('via.previa', { modo: 'melhorar', tipo: m.tipo, arestas: [...m.selecao], sessao: chave() }) : null;
+      previa = r && Array.isArray(r.arestas) ? { ...r, segmentos: r.segmentos ?? [], erros: r.erros ?? [] } : via.previaMelhorar(e, m.selecao, m.tipo);
       const cred = loja.barra.value?.creditos ?? Infinity;
-      if (previa.custo > cred) previa.erros = [{ codigo: 'creditos', dados: { faltam: previa.custo - cred } }, ...previa.erros];
+      if (previa.custo > cred && !previa.erros.some((x) => (x.codigo ?? x) === 'creditos')) {
+        previa = { ...previa, ok: false, erros: [{ codigo: 'creditos', dados: { faltam: previa.custo - cred } }, ...previa.erros] };
+      }
       R?.ferramenta?.via?.previa?.(previa.segmentos.length ? previa : null, previa.ok ? 'normal' : 'invalido');
       return;
     }
     const tela = m.mira?.tela ?? null;
     const tol = toleranciaEmMetros(R, tela);
-    const args = via.argsPrevia(m, { tolerancia: tol, sessao: id, semEncaixe });
+    const args = via.argsPrevia(m, { tolerancia: tol, sessao: chave(), semEncaixe });
     if (!args) {
       argsUlt = null;
       if (m.a && (m.fase === 'mirandoA' || m.fase === 'aFixo')) {
-        const so = { modo: 'reta', tipo: m.tipo, pontos: [m.a], tolerancia: tol, encaixe: m.encaixe && !semEncaixe, sessao: id };
+        const so = { modo: 'reta', tipo: m.tipo, pontos: [m.a], tolerancia: tol, encaixe: m.encaixe && !semEncaixe, sessao: chave() };
         const r = consultar('via.previa', so);
         previa = r && Array.isArray(r.encaixes) ? { ...r, segmentos: [] } : via.planejarLocal(so, e);
       } else previa = null;
@@ -483,25 +517,31 @@ export function registrar(ui) {
   }
 
   async function construirVia() {
+    const aberta = id;
     if (maq.modo === 'melhorar') {
       if (!valido()) return recusar();
       const refs = previa.arestas.filter((a) => a.ok).map((a) => a.ref);
-      const r = await comando('via.melhorar', { arestas: refs, tipo: maq.tipo });
+      // com a sessão: a simulação guarda a melhoria para o via.desfazer desta sessão
+      const sid = chave();
+      const r = await comando('via.melhorar', { arestas: refs, tipo: maq.tipo, sessao: sid });
       if (!r.ok) return vibrar(VIBRA.erro);
       vibrar(VIBRA.confirmar);
-      const sid = id;
+      if (id !== aberta || !maq) return; // a ferramenta fechou ou trocou enquanto o comando corria
       empilhar(pilha, { tipo: 'via', desfazer: () => comando('via.desfazer', { sessao: sid }) });
       passo({ tipo: 'construido' });
       return;
     }
     if (!valido()) return recusar();
     const args = argsUlt;
-    const r = await comando('via.construir', { plano: args });
+    const plano = previa;
+    // o desfazer vai pela mesma sessão que o plano levou (a simulação guarda a ação com ela)
+    const sid = args.sessao ?? chave();
+    const r = await comando('via.construir', { plano: { ...args, sessao: sid } });
     if (!r.ok) return vibrar(VIBRA.erro);
     vibrar(VIBRA.confirmar);
-    const sid = id;
+    if (id !== aberta || !maq) return;
     empilhar(pilha, { tipo: 'via', desfazer: () => comando('via.desfazer', { sessao: sid }) });
-    const fim = via.fimDoPlano(previa);
+    const fim = via.fimDoPlano(plano);
     passo({ tipo: 'construido', ...(fim ?? {}) });
   }
 
@@ -609,10 +649,14 @@ export function registrar(ui) {
       if (previa?.codigo) avisar(t(`codigo.${previa.codigo}`));
       return;
     }
+    const aberta = id;
     const r = await comando('construir', { tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot });
     if (!r.ok) return vibrar(VIBRA.erro);
     vibrar(VIBRA.confirmar);
-    if (r.id !== undefined && r.id !== null) empilhar(pilha, { tipo: 'colocar', desfazer: () => comando('demolir', { refs: [r.id] }) });
+    if (id !== aberta || !maq) return;
+    // o Desfazer demole pela ref do prédio criado; sem ela na resposta, não há o que desfazer
+    const ref = refCriada(r);
+    if (ref !== null) empilhar(pilha, { tipo: 'colocar', desfazer: () => comando('demolir', { refs: [ref] }) });
     // a mesma planta de novo, para a prévia saber que ali agora tem um prédio
     passo({ tipo: 'hover', ponto: [previa.x, previa.z], tela: maq.mira?.tela ?? null });
   }
@@ -638,19 +682,25 @@ export function registrar(ui) {
     if (nome === 'marcas') {
       R?.ferramenta?.demolir?.(demolir.marcasParaRender(maq));
       resumo = demolir.resumoDemolir(esp(), maq);
+      // quanto as vias devolvem de verdade (a simulação sabe o que é da sessão); sem a consulta, a estimativa de 50%
+      const { arestas } = demolir.refsMarcadas(maq);
+      const r = arestas.length ? consultar('via.previa', { modo: 'demolir', arestas, sessao: chave() }) : null;
+      if (Number.isFinite(r?.devolve)) resumo = { ...resumo, voltaVias: Math.round(r.devolve) };
     }
   }
 
   async function confirmarDemolir() {
     if (!maq.marcados.length) return;
     const { predios, arestas } = demolir.refsMarcadas(maq);
+    const aberta = id;
     let algum = false;
     if (arestas.length) {
-      const r = await comando('via.demolir', { arestas });
+      // com a sessão: a simulação guarda a demolição para o via.desfazer desta sessão (sem ela o desfazer não acha)
+      const sid = chave();
+      const r = await comando('via.demolir', { arestas, sessao: sid });
       if (r.ok) {
         algum = true;
-        const sid = id;
-        empilhar(pilha, { tipo: 'via', desfazer: () => comando('via.desfazer', { sessao: sid }) });
+        if (id === aberta) empilhar(pilha, { tipo: 'via', desfazer: () => comando('via.desfazer', { sessao: sid }) });
       }
     }
     if (predios.length) {
@@ -658,7 +708,7 @@ export function registrar(ui) {
       if (r.ok) algum = true;
     }
     vibrar(algum ? VIBRA.confirmar : VIBRA.erro);
-    if (algum) passo({ tipo: 'feito' });
+    if (algum && id === aberta) passo({ tipo: 'feito' });
   }
 
   // ---------------- áreas
@@ -775,19 +825,77 @@ export function registrar(ui) {
 
   // ---------------------------------------------------------------- entrada
 
+  /** Área livre do mundo em px do canvas: abaixo da barra de cima e acima da barra da ferramenta (a rolagem pela borda). */
+  function medirArea() {
+    if (typeof document === 'undefined' || typeof innerWidth === 'undefined') return null;
+    const W = innerWidth;
+    const H = innerHeight;
+    const c = document.getElementById('mundo')?.getBoundingClientRect?.() ?? { left: 0, top: 0 };
+    let topo = 0;
+    let fundo = H;
+    for (const el of document.querySelectorAll('[data-hud^="cima"]')) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.bottom < H / 2) topo = Math.max(topo, r.bottom);
+    }
+    const barra = document.querySelector('[data-hud="ferramenta"]')?.getBoundingClientRect();
+    if (barra?.height > 0 && barra.top > H / 2) fundo = barra.top;
+    return { x: -c.left, y: topo - c.top, w: W, h: Math.max(1, fundo - topo) };
+  }
+
+  /**
+   * O gesto virou câmera (um segundo dedo chegou depois dos 80 ms: o render manda o 'fim' com cancelado): nada do que
+   * o primeiro dedo fez vale. Via e demolir voltam ao estado de antes do toque; Preencher e Retângulo não pintam; o
+   * traço do pincel já pintou e fecha como um fim normal (o Desfazer volta); Áreas não escolhe.
+   */
+  function cancelarGesto(ev) {
+    const antes = antesDoGesto;
+    antesDoGesto = null;
+    if (tipo === 'zona') {
+      if (maq.modo === 'pincel') passo(ev);
+      else if (maq.dedo) passo({ tipo: 'cancelar' });
+      return;
+    }
+    if (tipo === 'colocar') return passo(ev);
+    if (tipo === 'areas' || !antes) return;
+    maq = { ...antes, dedo: false, mira: maq.mira, efeitos: [] };
+    if (tipo === 'via') previaVia(null);
+    else if (tipo === 'demolir') efeitoDemolir('marcas');
+    publicar();
+  }
+
   const soltarEntrada = [];
   if (R?.entrada?.aoFerramenta) {
-    R.entrada.aoFerramenta(({ fase, x, y, ponto }) => {
+    R.entrada.aoFerramenta(({ fase, x, y, ponto, dedos, tipo: disp, dedoX, dedoY, cancelado }) => {
       if (!maq) return;
+      // o render diz o aparelho e onde está o dedo; sem isso (a entrada básica), o último ponteiro da página
+      if (disp) ponteiro.tipo = disp === 'toque' ? 'touch' : disp === 'caneta' ? 'pen' : 'mouse';
       const toque = ponteiro.tipo === 'touch' || ponteiro.tipo === 'pen';
-      const dedo = toque ? [ponteiro.x, ponteiro.y] : [x, y];
+      const dedo = Number.isFinite(dedoX) && Number.isFinite(dedoY) ? [dedoX, dedoY] : toque ? [ponteiro.x, ponteiro.y] : [x, y];
+      const chao = ponto ? [ponto[0], ponto[2]] : null;
+      // o cursor parado ('move' sem dedo nem botão) é passar o mouse: não apoia nada (nem lupa, nem rolagem pela borda)
+      if (fase === 'move' && dedos === 0) {
+        renderPaira = true;
+        vivo.mira = [x, y];
+        vivo.toque = false;
+        vivo.apoiado = false;
+        passo({ tipo: 'hover', ponto: chao, tela: [x, y], t: agora() });
+        return;
+      }
       vivo.mira = [x, y];
       vivo.dedo = dedo;
       vivo.toque = toque;
       vivo.apoiado = fase !== 'fim';
       vivo.mpp = metrosPorPixel(R, [x, y], vivo.mpp);
       if (fase === 'fim') camUlt = null;
-      passo({ tipo: fase, ponto: ponto ? [ponto[0], ponto[2]] : null, tela: [x, y], dedo, t: agora() });
+      if (fase === 'inicio') {
+        antesDoGesto = maq;
+        area = medirArea() ?? area;
+        if (area) R.entrada.opcoes?.({ area });
+      }
+      const ev = { tipo: fase, ponto: chao, tela: [x, y], dedo, t: agora() };
+      if (fase === 'fim' && cancelado) return cancelarGesto(ev);
+      if (fase === 'fim') antesDoGesto = null;
+      passo(ev);
     });
   }
   if (typeof addEventListener !== 'undefined') {
@@ -803,7 +911,7 @@ export function registrar(ui) {
       ponteiro.y = y;
       ponteiro.tipo = ev.pointerType || 'mouse';
       // mouse sem botão sobre o mundo: a prévia segue o cursor (clique em A e clique em B, como no CS2)
-      if (ev.type === 'pointermove' && maq && ev.pointerType === 'mouse' && !ev.buttons && ev.target === canvas() && R?.raio) {
+      if (ev.type === 'pointermove' && !renderPaira && maq && ev.pointerType === 'mouse' && !ev.buttons && ev.target === canvas() && R?.raio) {
         const p = R.raio(x, y);
         vivo.mira = [x, y];
         vivo.toque = false;
@@ -896,7 +1004,8 @@ export function registrar(ui) {
     if (!rolagemPropria) return;
     const W = typeof innerWidth !== 'undefined' ? innerWidth : 986;
     const H = typeof innerHeight !== 'undefined' ? innerHeight : 443;
-    const v = velocidadeBorda(vivo.dedo, { x0: 8, y0: 56, x1: W - 8, y1: H - 80 });
+    const livre = area ? { x0: area.x, y0: area.y, x1: area.x + area.w, y1: area.y + area.h } : { x0: 8, y0: 56, x1: W - 8, y1: H - 80 };
+    const v = velocidadeBorda(vivo.dedo, livre);
     if (!v) {
       camUlt = null;
       return;

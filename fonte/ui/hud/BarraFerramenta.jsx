@@ -38,7 +38,9 @@ export function linhaVia(s) {
     if (!m.selecao.length) return { texto: t('x2.via.dica.melhorar'), estado: null };
     if (!p?.ok) return { texto: s.motivo ?? t('x2.via.melhorarNada'), estado: 'er' };
     const n = p.arestas.filter((a) => a.ok).length;
-    return { texto: `${t(n === 1 ? 'x2.via.melhorar1' : 'x2.via.melhorar', { n, m: fmt.numero(p.comprimento), custo: fmt.creditos(p.custo) })} · ${t('x2.estimado')}`, estado: s.motivo ? 'er' : null };
+    const texto = t(n === 1 ? 'x2.via.melhorar1' : 'x2.via.melhorar', { n, m: fmt.numero(p.comprimento), custo: fmt.creditos(p.custo) });
+    // "estimado" só quando a conta é da interface (a prévia da simulação não é estimativa)
+    return { texto: p.estimado ? `${texto} · ${t('x2.estimado')}` : texto, estado: s.motivo ? 'er' : null };
   }
   if (p?.segmentos?.length && (m.fase === 'previa' || m.fase === 'arrastando' || m.fase === 'mirandoB' || (m.fase === 'aFixo' && m.b))) {
     const base = m.modo === 'grade'

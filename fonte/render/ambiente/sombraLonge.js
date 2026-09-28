@@ -11,7 +11,7 @@
 // o campo de alturas muda num retângulo (um prédio nasce), só o retângulo e a faixa da sombra dele contra o sol são
 // refeitos, nos dois campos.
 import * as THREE from 'three';
-import { CAMPO_PASSE, MARCHA, distanciaDaMarcha, nivelDoPasso } from '../materiais/shaders/sombra.glsl.js';
+import { CAMPO_PASSE, MARCHA, distanciaDaMarcha, PASSO_NIVEL1 } from '../materiais/shaders/sombra.glsl.js';
 import { posicaoSol, posicaoLua, mesAbsoluto } from './astro.js';
 
 /** Degrau do sol em horas de céu (15 graus por hora: 0,2 h = 3 graus). */
@@ -52,14 +52,17 @@ export function direcaoDoDegrau(chave, k, tempo, mapa, alvo = [0, 0, 0, 0]) {
 }
 
 /**
- * Altura da sombra na célula (i, j) pela mesma marcha do GLSL, sobre o campo da CPU (campoAlturas.js, Campo): o nível
- * 0 bilinear e, nos passos longos, o máximo da célula do nível do tamanho do passo (testes e conferência).
+ * Altura da sombra na célula (i, j) pela mesma marcha do GLSL, sobre o campo da CPU (campoAlturas.js, Campo): o campo
+ * bilinear no fim de cada passo e no meio dele e, nos passos longos, também a célula do nível 1 de cada amostra
+ * (testes e conferência).
  */
 export function alturaDaSombra(campo, i, j, dir) {
   if (!dir[3]) return -1e4;
-  const { passo, gx, gz } = campo;
+  const { passo, gx, gz, tam } = campo;
   const x = gx + (i + 0.5) * passo;
   const z = gz + (j + 0.5) * passo;
+  const c1 = 2 * passo;
+  const nivel1 = (a, b) => campo.maximo(1, Math.floor((a - gx) / c1), Math.floor((b - gz) / c1));
   let s = -1e4;
   let t = 0;
   for (let k = 0; k < MARCHA.passos; k++) {
@@ -68,9 +71,17 @@ export function alturaDaSombra(campo, i, j, dir) {
     t += p;
     const qx = x + dir[0] * t;
     const qz = z + dir[1] * t;
-    const L = nivelDoPasso(p, passo);
-    const h = L === 0 ? campo.altura(qx, qz) : campo.maximo(L, Math.floor((qx - gx) / (passo * 2 ** L)), Math.floor((qz - gz) / (passo * 2 ** L)));
-    s = Math.max(s, h - t * dir[2]);
+    if (qx < gx || qz < gz || qx > gx + tam || qz > gz + tam) break;
+    const tm = t - 0.5 * p;
+    const mx = x + dir[0] * tm;
+    const mz = z + dir[1] * tm;
+    let hq = campo.altura(qx, qz);
+    let hm = campo.altura(mx, mz);
+    if (p > PASSO_NIVEL1 * passo) {
+      hq = Math.max(hq, nivel1(qx, qz));
+      hm = Math.max(hm, nivel1(mx, mz));
+    }
+    s = Math.max(s, hq - t * dir[2], hm - tm * dir[2]);
   }
   return s;
 }
@@ -162,7 +173,8 @@ function criarDominio(ctx) {
     refazer: -1, // ladrilho do campo em uso sendo refeito em fatias (troca sol/lua), -1 nada
     dirs: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], // k, k + 1, k + 2
   };
-  const medida = { passes: 0, ladrilhos: 0, completos: 0, trocas: 0, retangulos: 0, texeis: 0 };
+  // atrasos: trocas em que o campo seguinte ainda não estava pronto (o resto dos ladrilhos saiu de uma vez)
+  const medida = { passes: 0, ladrilhos: 0, completos: 0, trocas: 0, atrasos: 0, retangulos: 0, texeis: 0 };
   ctx.medidas.stats.longe = medida;
 
   function criarAlvos(n) {
@@ -282,6 +294,7 @@ function criarDominio(ctx) {
         st.refazer = 0;
       } else if (dk === 1) {
         // o sol passou ao degrau seguinte: termina o campo seguinte (se atrasou) e troca
+        if (st.feitos < LADO_LADRILHOS * LADO_LADRILHOS) medida.atrasos++;
         while (st.feitos < LADO_LADRILHOS * LADO_LADRILHOS) ladrilhoSeguinte(medidas);
         trocar();
       } else if (dk !== 0) {

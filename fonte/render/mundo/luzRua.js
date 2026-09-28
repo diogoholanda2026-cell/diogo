@@ -1,13 +1,18 @@
 // Mapa de luz da rua (desenho do render 2.9): uma textura sobre a área jogável (2.048² a 4 m por texel; 1.024² no
-// Leve) onde cada poste é uma gaussiana aditiva (raio de 12 a 18 m), numa passada de instâncias refeita só quando a
+// Leve) onde cada poste é uma gaussiana aditiva (raio de 11 a 18 m), numa passada de instâncias refeita só quando a
 // rede de vias muda. Bairros antigos e a rodovia com vapor de sódio (âmbar), os novos com LED neutro, as avenidas com
 // LED mais forte (a cor sai de um hash por quadra de 600 m, então o bairro todo tem a mesma luz). Os postes vêm da
 // mesma conta do setor (malhaVia.postesDaAresta), para a rede inteira (não só perto da câmera).
-// Publica ctx.luzRua = { textura, mapa: { ox, oz, lado }, intensidade, versao }; o chão da via lê direto
-// (via.glsl.js), e o gancho `noite` da R1b lê pelos uniformes gLuzRua e gLuzRuaMapa quando existirem.
+// Publica ctx.luzRua = { textura, origem: [x, z], tam, ganho, brilho, luzes, versao }, o formato que o gancho `noite`
+// da R1b lê (ambiente/luzNoite.js): a textura guarda a irradiância dividida pelo ganho, e o brilho da cidade sai do
+// número de luzes pela mesma conta do substituto dela. O gancho acende o chão, a via, os lotes e o térreo.
 import * as THREE from 'three';
 import { postesDaAresta, hashF } from '../geracao/malhaVia.js';
 import { perfilVia } from '../geracao/perfilVia.js';
+import { brilhoDosPostes } from '../ambiente/luzNoite.js';
+
+/** A textura guarda a irradiância dividida por isto (o RGBA8 satura em 1 onde as poças se somam). */
+export const GANHO_LUZ_RUA = 4;
 
 /** Cores das lâmpadas (linear, com a intensidade relativa). */
 export const LAMPADAS = Object.freeze({
@@ -64,9 +69,9 @@ varying vec3 vCor;
 void main() {
   float d2 = dot( vQ, vQ );
   if ( d2 > 1.0 ) discard;
-  // gaussiana (sigma = raio / 2,5), guardada dividida por 4 (o chão multiplica de volta)
+  // gaussiana (sigma = raio / 2,5), guardada dividida pelo ganho (GANHO_LUZ_RUA; o gancho multiplica de volta)
   float g = exp( -d2 * 3.125 ) * ( 1.0 - d2 );
-  gl_FragColor = vec4( vCor * g * 0.25, 1.0 );
+  gl_FragColor = vec4( vCor * g * ${(1 / GANHO_LUZ_RUA).toFixed(4)}, 1.0 );
 }
 `;
 
@@ -102,50 +107,67 @@ function criarLuzRua(ctx) {
   malha.frustumCulled = false;
   const cena = new THREE.Scene();
   cena.add(malha);
-  const cam = new THREE.Camera();
-  const pub = { textura: alvo.texture, mapa, intensidade: 1, versao: 0, luzes: 0 };
-  ctx.luzRua = pub;
-  const u = ctx.ganchos.uniformes;
+  // câmera só para o three (o vértice escreve gl_Position direto); a ortográfica tem a projeção que ele atualiza
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const pub = { textura: alvo.texture, origem: [mapa.ox, mapa.oz], tam: mapa.lado, ganho: GANHO_LUZ_RUA, brilho: null, versao: 0, luzes: 0 };
   let versaoRede = -1;
   let tUltimo = -1e9;
 
-  function refazer(vias) {
+  // desenha o mapa entre os passes do quadro (conta em R.stats, motor/quadro.js)
+  function refazer(vias, renderer, medidas) {
     const { pos, cor, n } = luzesDaRede(vias.rede.arestas.values());
+    // os atributos trocam a cada mudança da rede: solta os buffers velhos na GPU antes (o dispose da geometria apaga os
+    // de todos os atributos; o quadrado volta a subir no próximo desenho, 48 bytes)
+    if (geo.getAttribute('aLuz')) geo.dispose();
     geo.setAttribute('aLuz', new THREE.InstancedBufferAttribute(pos, 4));
     geo.setAttribute('aCor', new THREE.InstancedBufferAttribute(cor, 3));
     geo.instanceCount = n;
-    const r = ctx.renderer;
+    const r = renderer;
     const antes = r.getRenderTarget();
+    const limpa = r.autoClear;
     const cor0 = r.getClearColor(new THREE.Color());
     const a0 = r.getClearAlpha();
     r.setRenderTarget(alvo);
     r.setClearColor(0x000000, 0);
     r.clear(true, false, false);
-    if (n) r.render(cena, cam);
+    r.autoClear = false;
+    const fazer = () => n && r.render(cena, cam);
+    if (medidas) medidas.passe(fazer);
+    else fazer();
+    r.autoClear = limpa;
     r.setRenderTarget(antes);
     r.setClearColor(cor0, a0);
     pub.versao++;
     pub.luzes = n;
+    pub.brilho = brilhoDosPostes(n);
+    // publica depois do primeiro desenho: até lá o gancho `noite` usa o substituto da R1b
+    ctx.luzRua = pub;
   }
+
+  let pendente = null;
+  const passe = (renderer, medidas) => {
+    if (!pendente) return;
+    const v = pendente;
+    pendente = null;
+    refazer(v, renderer, medidas);
+  };
+  ctx.quadro?.antes?.add(passe);
 
   return {
     nome: 'luzRua',
     quadro(tMs, c) {
       const vias = c.dominio('vias');
       if (!vias?.rede) return;
-      // a rede mudou: refaz (no máximo a cada 0,5 s, arrastando a ferramenta de via)
-      if (vias.rede.versao !== versaoRede && tMs - tUltimo > 500) {
+      // a rede mudou: refaz no próximo quadro desenhado (no máximo a cada 0,5 s, arrastando a ferramenta de via)
+      if (vias.rede.versao !== versaoRede && (versaoRede < 0 || tMs - tUltimo > 500)) {
         versaoRede = vias.rede.versao;
         tUltimo = tMs;
-        refazer(vias);
+        pendente = vias;
+        if (!ctx.quadro?.antes) passe(ctx.renderer, null);
       }
-      const dia = c.sol?.dia ?? 1;
-      const noite = Math.min(1, Math.max(0, 1 - dia * 1.4));
-      // para o gancho `noite` da R1b, se ele declarou os uniformes
-      if (u.gLuzRua) u.gLuzRua.value = alvo.texture;
-      if (u.gLuzRuaMapa) u.gLuzRuaMapa.value.set?.(mapa.ox, mapa.oz, 1 / mapa.lado, noite);
     },
     descartar() {
+      ctx.quadro?.antes?.delete(passe);
       alvo.dispose();
       geo.dispose();
       mat.dispose();

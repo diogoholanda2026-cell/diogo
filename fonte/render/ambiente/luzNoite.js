@@ -4,12 +4,13 @@
 //     das fachadas (cai com a altura acima do chão) e a água. O mapa é da R3a (render/mundo/luzRua.js, que o publica em
 //     ctx.luzRua = { textura, origem: [x, z], tam, ganho, brilho }); até ela publicar, este módulo desenha um
 //     substituto a partir das arestas do espelho: postes ao longo das vias, vapor de sódio âmbar nas ruas e LED neutro
-//     nas avenidas, cada um uma gaussiana somada numa passada de instâncias, refeita só quando as vias mudam;
+//     nas avenidas, cada um uma gaussiana somada numa passada de instâncias, refeita só quando as vias mudam. O gancho
+//     lê a luz que chega ao chão: o mapa suavizado (Suavizar, duas chamadas quando ele muda), com as poças emendadas;
 //   luz das janelas: a luz quente que sai das janelas acesas e cai na rua entre os prédios, pela oclusão do campo de
 //     alturas (onde o céu some atrás de fachadas, há janelas perto), com a agenda da hora;
 //   brilho da cidade: a soma das luzes vira o brilho alaranjado do céu e da neblina sobre a área construída
 //     (ctx.ambiente.brilhoCidade, que o céu e a luz do ambiente leem).
-// O gancho lê o campo (chão da vizinhança e oclusão) da sombra de longe: uma textura a mais só, a da luz da rua.
+// O gancho lê o campo (chão da vizinhança e oclusão) da sombra de longe: uma textura a mais só, a da luz no chão.
 import * as THREE from 'three';
 import { CAMPO_PARS } from '../materiais/shaders/sombra.glsl.js';
 import { ponto } from '../../comum/bezier.js';
@@ -17,20 +18,26 @@ import { VIAS_ORDEM, VIAS } from '../../data/vias.js';
 
 // ------------------------------------------------------------------------------------------------ GLSL do gancho
 
-/** Declarações do gancho 'noite'. gNoiteParams: força (0 de dia a 1 de noite), queda da luz da rua e das janelas (m). */
+/**
+ * Declarações do gancho 'noite'. gNoiteParams: força (0 de dia a 1 de noite), altura da lâmpada (m: a luz da rua
+ * acende o chão e a parede até ela e some acima), queda da luz das janelas (m). A luz do poste cai de cima: no prédio
+ * (EDIFICIO, predio = 1) a face de cima só acende até 3 m acima do chão da vizinhança (marquise, laje baixa), e o
+ * telhado fica escuro; no chão, na via e na água a face de cima acende inteira (a encosta não apaga a rua).
+ */
 export const NOITE_PARS = /* glsl */ `
 ${CAMPO_PARS}
 uniform sampler2D gLuzRuaMapa;
 uniform vec4 gLuzRuaParams; // origem x, origem z, 1 / lado, ganho
 uniform vec4 gNoiteParams;
 uniform vec3 gNoiteJanelas; // irradiância da luz das janelas na rua (cor e força pela hora)
-vec3 gNoiteLuz( vec3 nW ) {
+vec3 gNoiteLuz( vec3 nW, float predio ) {
   if ( gNoiteParams.x <= 0.0 ) return vec3( 0.0 );
   vec4 c = gCampo( vGPosMundo.xz + nW.xz * ( 0.6 * gCampoParams.w ) );
   float z = max( 0.0, vGPosMundo.y - c.a );
   vec3 rua = texture( gLuzRuaMapa, ( vGPosMundo.xz + nW.xz * 1.5 - gLuzRuaParams.xy ) * gLuzRuaParams.z ).rgb * gLuzRuaParams.w;
   float cima = clamp( nW.y, 0.0, 1.0 );
-  vec3 luz = rua * mix( 0.5, 1.0, cima ) * exp( - z / gNoiteParams.y );
+  float teto = mix( gNoiteParams.y, mix( 1.0e4, 3.0, predio ), smoothstep( 0.5, 0.8, cima ) );
+  vec3 luz = rua * mix( 0.5, 1.0, cima ) * ( 1.0 - smoothstep( 0.3 * teto, teto, z ) );
   float perto = 1.0 - c.b;
   luz += gNoiteJanelas * ( perto * perto ) * exp( - z / gNoiteParams.z ) * mix( 0.7, 1.0, cima );
   return luz * gNoiteParams.x;
@@ -40,14 +47,18 @@ vec3 gNoiteLuz( vec3 nW ) {
 /** Trecho 'indireta' (depois do HAO): a luz da noite entra como luz difusa, na cor do material. */
 export const NOITE_INDIRETA = /* glsl */ `
 #ifdef G_ILUMINADO
-reflectedLight.indirectDiffuse += gNoiteLuz( G_NORMAL_MUNDO ) * BRDF_Lambert( material.diffuseColor );
+#ifdef EDIFICIO
+reflectedLight.indirectDiffuse += gNoiteLuz( G_NORMAL_MUNDO, 1.0 ) * BRDF_Lambert( material.diffuseColor );
+#else
+reflectedLight.indirectDiffuse += gNoiteLuz( G_NORMAL_MUNDO, 0.0 ) * BRDF_Lambert( material.diffuseColor );
+#endif
 #endif
 `;
 
 // ------------------------------------------------------------------------------------------------ postes (puro)
 
-/** Cor linear (por unidade de irradiância) do vapor de sódio e do LED. */
-export const LUZES = Object.freeze({ sodio: [1.0, 0.52, 0.2], led: [0.95, 0.9, 0.8] });
+/** Cor linear (por unidade de irradiância) do vapor de sódio (2.000 K) e do LED de rua (4.000 K). */
+export const LUZES = Object.freeze({ sodio: [1.0, 0.48, 0.14], led: [1.0, 0.84, 0.64] });
 
 /**
  * Postes por tipo de via: espaçamento (m), lados (1 alterna, 2 os dois), força no centro da poça, raio da poça (m,
@@ -56,8 +67,8 @@ export const LUZES = Object.freeze({ sodio: [1.0, 0.52, 0.2], led: [0.95, 0.9, 0
 export const POSTES = Object.freeze({
   rua: { passo: 28, lados: 1, forca: 1.1, raio: 6, led: 0.3 },
   ruaMao: { passo: 28, lados: 1, forca: 1.1, raio: 6, led: 0.3 },
-  avenida: { passo: 32, lados: 2, forca: 1.3, raio: 7, led: 0.75 },
-  avenidaG: { passo: 32, lados: 2, forca: 1.45, raio: 8, led: 0.85 },
+  avenida: { passo: 32, lados: 2, forca: 1.3, raio: 7, led: 0.5 },
+  avenidaG: { passo: 32, lados: 2, forca: 1.45, raio: 8, led: 0.6 },
   rodovia: { passo: 60, lados: 1, forca: 0.8, raio: 8, led: 1 },
   terra: { passo: 44, lados: 1, forca: 0.7, raio: 6, led: 0 },
 });
@@ -188,6 +199,7 @@ class MapaSubstituto {
     this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.postes = 0;
     this.sujo = true;
+    this.vezes = 0; // desenhos feitos (a luz no chão refaz quando muda)
   }
 
   /** Refaz o mapa com os postes das vias do espelho (uma chamada). */
@@ -220,6 +232,7 @@ class MapaSubstituto {
     renderer.setClearColor(cc, ca);
     renderer.setRenderTarget(antes);
     this.sujo = false;
+    this.vezes++;
   }
 
   descartar() {
@@ -239,22 +252,132 @@ const suave = (a, b, x) => {
 /** Força da noite pela elevação do sol (rad): os postes acendem com o sol a ~3 graus e ficam cheios a ~3 abaixo. */
 export const forcaNoite = (elevacao) => 1 - suave(-0.06, 0.05, elevacao);
 
-/** Números da noite (queda com a altura em m, força das janelas na rua). */
-export const NOITE_LUZ = Object.freeze({ alturaRua: 7, alturaJanelas: 9, janelas: [1.0, 0.7, 0.42], forcaJanelas: 0.35 });
+/**
+ * Números da noite: altura da lâmpada e queda da luz das janelas com a altura (m), cor e força da luz das janelas na
+ * rua e a escala da luz da rua (vale para o mapa da R3a e para o substituto): com 0,5 o asfalto sob o poste fica perto
+ * de 0,4 na tela e a calçada perto de 0,65 na exposição mínima da noite (14), laranja sem estourar em branco.
+ */
+export const NOITE_LUZ = Object.freeze({ alturaRua: 9, alturaJanelas: 9, janelas: [1.0, 0.7, 0.42], forcaJanelas: 0.35, rua: 0.5 });
+
+// ------------------------------------------------------------------------------------------------ luz no chão
+
+/**
+ * A luz que chega ao chão (o mapa suavizado): cada poste do mapa é uma poça estreita (gaussiana de 6 a 7 m), mas a
+ * luz de uma lâmpada a 9 m de altura cai com o cosseno ao cubo e tem cauda longa (meia força a 7 m, 14% a 15 m), e as
+ * poças de postes a 30 m se emendam na rua inteira. Uma suavização separável (11 amostras a 4 m, desvio de 7 m) leva o
+ * mapa da R3a (ou o substituto) a uma textura de 1.024² (8 m) que o gancho lê: de perto ainda se vê poste a poste, de
+ * longe a rua vira uma linha de luz contínua, sem o colar de contas. Refeita só quando o mapa muda (duas chamadas).
+ */
+export const SUAVE = Object.freeze({ lado: 1024, amostras: 11, passo: 4, desvio: 7, ganho: 2 });
+
+/** Pesos da suavização (normalizados), os mesmos do GLSL. */
+export function pesosSuaves(S = SUAVE) {
+  const m = (S.amostras - 1) / 2;
+  const w = Array.from({ length: S.amostras }, (_, k) => Math.exp(-0.5 * (((k - m) * S.passo) / S.desvio) ** 2));
+  const t = w.reduce((a, b) => a + b, 0);
+  return w.map((x) => x / t);
+}
+
+const SUAVE_FRAGMENTO = /* glsl */ `
+uniform sampler2D uFonte;
+uniform vec2 uPasso;   // passo das amostras em uv da fonte
+uniform float uGanho;  // da fonte para a saída
+const float PESOS[ ${SUAVE.amostras} ] = float[]( ${pesosSuaves().map((x) => x.toFixed(6)).join(', ')} );
+void main() {
+  vec2 uv = gl_FragCoord.xy / ${SUAVE.lado}.0;
+  vec3 s = vec3( 0.0 );
+  for ( int k = 0; k < ${SUAVE.amostras}; k ++ ) s += texture( uFonte, uv + uPasso * float( k - ${(SUAVE.amostras - 1) / 2} ) ).rgb * PESOS[ k ];
+  gl_FragColor = vec4( s * uGanho, 1.0 );
+}
+`;
+
+class Suavizar {
+  constructor() {
+    const op = { type: THREE.UnsignedByteType, depthBuffer: false, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+    this.a = new THREE.WebGLRenderTarget(SUAVE.lado, SUAVE.lado, op);
+    this.b = new THREE.WebGLRenderTarget(SUAVE.lado, SUAVE.lado, op);
+    this.a.texture.name = 'noite:luzChaoMeia';
+    this.b.texture.name = 'noite:luzChao';
+    this.mat = new THREE.ShaderMaterial({
+      name: 'noite-suave',
+      uniforms: { uFonte: { value: null }, uPasso: { value: new THREE.Vector2() }, uGanho: { value: 1 } },
+      vertexShader: 'void main() { gl_Position = vec4( position.xy, 0.0, 1.0 ); }',
+      fragmentShader: SUAVE_FRAGMENTO,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+    const m = new THREE.Mesh(this.geo, this.mat);
+    m.frustumCulled = false;
+    this.cena = new THREE.Scene();
+    this.cena.add(m);
+    this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.versao = null; // versão da fonte já suavizada
+    this.vezes = 0;
+  }
+
+  get textura() {
+    return this.b.texture;
+  }
+
+  /** Suaviza a fonte { textura, tam, ganho }: horizontal para a, vertical para b (as duas chamadas contam em R.stats). */
+  refazer(renderer, medidas, fonte) {
+    const U = this.mat.uniforms;
+    const du = SUAVE.passo / fonte.tam;
+    const passe = (alvo, tex, dx, dy, ganho) => {
+      U.uFonte.value = tex;
+      U.uPasso.value.set(dx, dy);
+      U.uGanho.value = ganho;
+      renderer.setRenderTarget(alvo);
+      const fazer = () => renderer.render(this.cena, this.cam);
+      if (medidas) medidas.passe(fazer);
+      else fazer();
+    };
+    const antes = renderer.getRenderTarget();
+    const limpa = renderer.autoClear;
+    renderer.autoClear = false;
+    passe(this.a, fonte.textura, du, 0, fonte.ganho / SUAVE.ganho);
+    passe(this.b, this.a.texture, 0, du, 1);
+    renderer.autoClear = limpa;
+    renderer.setRenderTarget(antes);
+    this.versao = fonte.versao;
+    this.vezes++;
+  }
+
+  descartar() {
+    this.a.dispose();
+    this.b.dispose();
+    this.mat.dispose();
+    this.geo.dispose();
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ domínio
 
 function criarDominio(ctx) {
   const u = ctx.ganchos.uniformes;
   let subst = null;
-  let ultimoTempo = -Infinity;
+  let suave = null;
+  let fonte = null; // { textura, origem, tam, ganho, versao } do mapa em uso
+  let ultimoSubst = -Infinity;
+  let ultimoSuave = -Infinity;
   let brilho = null;
   let forca = 0;
-  // o substituto desenha entre os passes do quadro (conta em R.stats): no crepúsculo ou quando as vias mudam, no
-  // máximo a cada 2 s
+  // entre os passes do quadro (contam em R.stats), só com a noite chegando: o substituto quando as vias mudam (no
+  // máximo a cada 2 s) e a luz no chão quando o mapa muda (no máximo a cada 1 s)
   const passe = (renderer, medidas, tMs) => {
-    if (!subst?.sujo || forca <= 0 || tMs - ultimoTempo < 2000) return;
-    ultimoTempo = tMs;
-    subst.desenhar(renderer, medidas);
-    brilho = brilhoDosPostes(subst.postes);
+    if (forca <= 0) return;
+    if (subst?.sujo && fonte?.textura === subst.alvo.texture && tMs - ultimoSubst >= 2000) {
+      ultimoSubst = tMs;
+      subst.desenhar(renderer, medidas);
+      brilho = brilhoDosPostes(subst.postes);
+      fonte.versao = `s${subst.vezes}`;
+    }
+    if (fonte && suave && suave.versao !== fonte.versao && tMs - ultimoSuave >= 1000) {
+      ultimoSuave = tMs;
+      suave.refazer(renderer, medidas, fonte);
+    }
   };
   ctx.quadro?.antes?.add(passe);
   return {
@@ -268,40 +391,57 @@ function criarDominio(ctx) {
       u.gNoiteParams.value.set(forca, NOITE_LUZ.alturaRua, NOITE_LUZ.alturaJanelas, 0);
       const fj = forcaJanelas(amb?.hora ?? 12) * NOITE_LUZ.forcaJanelas;
       u.gNoiteJanelas.value.set(NOITE_LUZ.janelas[0] * fj, NOITE_LUZ.janelas[1] * fj, NOITE_LUZ.janelas[2] * fj);
-      // o mapa de luz da rua: o da R3a, se publicado; senão o substituto
+      // o mapa de luz da rua: o da R3a, se publicado (ela publica depois do primeiro desenho: com o domínio dela
+      // registrado, espera sem substituto); sem a R3a, o substituto
       const real = c.luzRua;
       if (real?.textura) {
-        const o = real.origem ?? [-4096, -4096];
-        u.gLuzRuaMapa.value = real.textura;
-        u.gLuzRuaParams.value.set(o[0], o[1], 1 / (real.tam ?? 8192), real.ganho ?? GANHO_RUA);
+        fonte = { textura: real.textura, origem: real.origem ?? [-4096, -4096], tam: real.tam ?? 8192, ganho: real.ganho ?? GANHO_RUA, versao: `r${real.versao ?? 0}` };
         if (Number.isFinite(real.brilho)) brilho = real.brilho;
         if (subst) {
           subst.descartar();
           subst = null;
         }
+      } else if (c.dominio?.('luzRua')) {
+        fonte = null;
       } else {
         subst ??= new MapaSubstituto(c);
-        u.gLuzRuaMapa.value = subst.alvo.texture;
-        u.gLuzRuaParams.value.set(subst.origem[0], subst.origem[1], 1 / subst.tam, GANHO_RUA);
+        const v = `s${subst.vezes}`;
+        if (fonte?.textura !== subst.alvo.texture || fonte.versao !== v) fonte = { textura: subst.alvo.texture, origem: subst.origem, tam: subst.tam, ganho: GANHO_RUA, versao: v };
       }
+      suave ??= new Suavizar();
+      u.gLuzRuaMapa.value = suave.textura;
+      if (fonte) u.gLuzRuaParams.value.set(fonte.origem[0], fonte.origem[1], 1 / fonte.tam, SUAVE.ganho * NOITE_LUZ.rua);
+      else u.gLuzRuaParams.value.w = 0;
       if (amb && Number.isFinite(brilho) && Math.abs(amb.brilhoCidade - brilho) > 0.02) amb.brilhoCidade = brilho;
     },
-    /** Desenha o substituto agora (cenas e capturas). */
+    /** Desenha o substituto e a luz no chão agora (cenas e capturas). */
     preparar() {
-      if (ctx.luzRua?.textura) return { postes: null };
-      subst ??= new MapaSubstituto(ctx);
-      subst.desenhar(ctx.renderer, null);
-      brilho = brilhoDosPostes(subst.postes);
-      if (ctx.ambiente) ctx.ambiente.brilhoCidade = brilho;
-      return { postes: subst.postes, brilho };
+      const real = ctx.luzRua;
+      if (real?.textura) fonte = { textura: real.textura, origem: real.origem ?? [-4096, -4096], tam: real.tam ?? 8192, ganho: real.ganho ?? GANHO_RUA, versao: `r${real.versao ?? 0}` };
+      else if (!ctx.dominio?.('luzRua')) {
+        subst ??= new MapaSubstituto(ctx);
+        subst.desenhar(ctx.renderer, null);
+        brilho = brilhoDosPostes(subst.postes);
+        if (ctx.ambiente) ctx.ambiente.brilhoCidade = brilho;
+        fonte = { textura: subst.alvo.texture, origem: subst.origem, tam: subst.tam, ganho: GANHO_RUA, versao: `s${subst.vezes}` };
+      }
+      suave ??= new Suavizar();
+      if (fonte) suave.refazer(ctx.renderer, null, fonte);
+      return { postes: subst?.postes ?? null, brilho };
     },
     get postes() {
       return subst?.postes ?? 0;
+    },
+    /** Estado para as cenas e os testes: fonte do mapa e quantas vezes a luz no chão foi refeita. */
+    get estado() {
+      return { fonte: fonte ? (fonte.textura === subst?.alvo.texture ? 'substituto' : 'R3a') : null, versao: fonte?.versao ?? null, suavizacoes: suave?.vezes ?? 0 };
     },
     descartar() {
       ctx.quadro?.antes?.delete(passe);
       subst?.descartar();
       subst = null;
+      suave?.descartar();
+      suave = null;
     },
   };
 }

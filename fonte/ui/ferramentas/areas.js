@@ -51,6 +51,40 @@ export function compraveis(tabela) {
   return l;
 }
 
+/**
+ * Rótulos de preço sem sobreposição (com a câmera longe, os ladrilhos vizinhos ficam pequenos na tela e os preços se
+ * empilham). Caixas [{ x, y, w, h, pri }] na tela (centro e tamanho em px); devolve quais ficam. Guloso: maior `pri`
+ * primeiro (o escolhido), depois o mais embaixo na tela (mais perto da câmera). O(n²) com n de umas dezenas.
+ */
+export function rotulosSemSobrepor(caixas, folga = 4) {
+  const ordem = caixas.map((_, i) => i).sort((a, b) => (caixas[b].pri ?? 0) - (caixas[a].pri ?? 0) || caixas[b].y - caixas[a].y || a - b);
+  const fica = new Array(caixas.length).fill(false);
+  const postas = [];
+  for (const i of ordem) {
+    const c = caixas[i];
+    const bate = postas.some((p) => Math.abs(p.x - c.x) * 2 < p.w + c.w + 2 * folga && Math.abs(p.y - c.y) * 2 < p.h + c.h + 2 * folga);
+    if (bate) continue;
+    fica[i] = true;
+    postas.push(c);
+  }
+  return fica;
+}
+
+/**
+ * Rótulo do mundo que cai sob o HUD (desenho da UI 8.10): devolve o y do centro que o tira de baixo de cada retângulo
+ * que ele cruza (desce abaixo dos de cima, sobe acima dos de baixo) ou null se não há como (o rótulo some). Caixa pelo
+ * centro [x, y] e tamanho [w, h] em px; `hud`: [{ l, t, r, b, cima }] (cima: preso ao topo da tela).
+ */
+export function fugirDoHud(x, y, w, h, hud, folga = 4) {
+  let yy = y;
+  for (let volta = 0; volta < 3; volta++) {
+    const bate = hud.find((q) => x + w / 2 > q.l && x - w / 2 < q.r && yy + h / 2 > q.t - folga && yy - h / 2 < q.b + folga);
+    if (!bate) return yy;
+    yy = bate.cima ? bate.b + folga + h / 2 : bate.t - folga - h / 2;
+  }
+  return null;
+}
+
 /** Estado novo. */
 export function criarAreas() {
   return { sel: null, mira: null, efeitos: [] };

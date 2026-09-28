@@ -1,11 +1,13 @@
 // Encaixe da via (D18), num lugar só (dona: S1b): nó existente, portão da gleba, ponto sobre aresta, ângulo (90, 45 e
 // múltiplos de 15 graus em relação à via de onde parte) e prolongamento dela, distância de quadra (paralela à via
-// vizinha a uma ou duas quadras de 6 células), passo de 15 graus sem outra referência e comprimento múltiplo de 8 m.
+// vizinha a uma ou duas quadras de 6 células), passo de 15 graus sem outra referência e comprimento múltiplo de 8 m. O
+// começo sobre uma aresta anda até 4 m ao longo dela para as linhas de células da via nova caírem nas colunas da que
+// já existe (a esquina fecha sem vão).
 // A UI manda os pontos em metros e a tolerância já convertida do polegar; o que volta é o ponto encaixado, a âncora
 // (nó, aresta ou portão) e a lista de encaixes e guias para os chips e as linhas tracejadas. Puro: não muda o estado.
-import { maisPerto, direcao } from '../../comum/bezier.js';
+import { maisPerto, direcao, ponto, arcoDoT, tDoArco } from '../../comum/bezier.js';
 import { atan2, cos, sen, hipot, clamp } from '../../comum/util.js';
-import { refDe } from '../../contratos/espelho.js';
+import { refDe, CELULA_M } from '../../contratos/espelho.js';
 import { REGRAS_VIAS, GRADE_EIXOS } from '../../data/vias.js';
 import { tipoVia, eixoDa, distEixo, arestaIntocavel, noLigavel, portaoPerto, saidaDoNo, MEIA_MAX } from './validar.js';
 
@@ -22,11 +24,30 @@ const embrulhar = (g) => {
 };
 
 /**
+ * Ponto da aresta e mais perto do parâmetro t em que as linhas de células de uma via nova de meia largura `meiaNova`,
+ * saindo dali na perpendicular, caem nas colunas da aresta (arco na fase dela mais a meia largura nova, em passos de
+ * 8 m). null se a aresta não tem blocos ou se o ponto cairia a menos de 8 m de um nó.
+ */
+export function passoNaAresta(sim, e, t, meiaNova) {
+  const A = sim.tabelas.arestas;
+  if (!tipoVia(A.tipo[e])?.zona) return null;
+  const tab = A.arco.subarray(17 * e, 17 * e + 17);
+  const f = (A.fase ? A.fase[e] : 0) + meiaNova;
+  const alvo = f + CELULA_M * Math.round((arcoDoT(tab, t) - f) / CELULA_M);
+  const lim = REGRAS_VIAS.noNoCruzamento;
+  if (alvo < lim || tab[16] - alvo < lim) return null;
+  const tt = tDoArco(tab, alvo);
+  const q = ponto(A.p, tt, [0, 0], 8 * e);
+  return { t: tt, x: q[0], z: q[1] };
+}
+
+/**
  * Âncora de um ponto: nó existente (ou portão) a menos de `tolNo`, senão ponto sobre uma aresta a menos de meia largura
  * mais `tol` do eixo. Arestas da rodovia, de ponte e da Arcologia não recebem vias; nós delas só os que noLigavel deixa.
+ * Com `meiaNova`, o ponto sobre a aresta anda para o passo das células dela (passoNaAresta).
  * @returns {{ x, z, ancora: { tipo: 'no', no } | { tipo: 'portao', id } | { tipo: 'aresta', e, t } | null, encaixe: object | null }}
  */
-export function ancorar(sim, x, z, { tol = REGRAS_VIAS.tolerancia, tolNo = tol } = {}) {
+export function ancorar(sim, x, z, { tol = REGRAS_VIAS.tolerancia, tolNo = tol, meiaNova = null } = {}) {
   const G = sim.grafo;
   const N = sim.tabelas.nos;
   const A = sim.tabelas.arestas;
@@ -72,7 +93,13 @@ export function ancorar(sim, x, z, { tol = REGRAS_VIAS.tolerancia, tolNo = tol }
       return { x: N.x[ponta], z: N.z[ponta], ancora: { tipo: 'no', no: ponta }, encaixe: { tipo: 'no', valor: refDe(ponta, N.ger[ponta]) } };
     }
     if (ponta < 0) {
-      return { x: mx, z: mz, ancora: { tipo: 'aresta', e: melhor, t: mt }, encaixe: { tipo: 'aresta', valor: refDe(melhor, A.ger[melhor]) } };
+      const p = Number.isFinite(meiaNova) ? passoNaAresta(sim, melhor, mt, meiaNova) : null;
+      if (p) {
+        mt = p.t;
+        mx = p.x;
+        mz = p.z;
+      }
+      return { x: mx, z: mz, ancora: { tipo: 'aresta', e: melhor, t: mt }, encaixe: { tipo: 'aresta', valor: refDe(melhor, A.ger[melhor]), ...(p ? { passo: true } : {}) } };
     }
   }
   return { x, z, ancora: null, encaixe: null };
@@ -243,10 +270,12 @@ export function encaixarTraco(sim, args) {
     if (r.encaixe) encaixes.push({ indice: i, ponto: [r.x, r.z], ...r.encaixe });
   };
   const opA = ligado ? { tol, tolNo: tol } : { tol: 0, tolNo: 2 };
-  regA(0, ancorar(sim, pts[0][0], pts[0][1], opA));
+  // só o começo anda para o passo das células: o fim fica onde o ângulo e o comprimento a partir de A mandam
+  regA(0, ancorar(sim, pts[0][0], pts[0][1], ligado ? { ...opA, meiaNova } : opA));
   const refsA = referencias(sim, ancoras[0]);
   if (ult === 0) return { pontos: pts, ancoras, encaixes, guias, refsA };
-  const b = ult;
+  // B: o último ponto; na grade [A, B, C] é o segundo (C, o canto oposto, só anda na perpendicular de AB)
+  const b = args.modo === 'grade' ? 1 : ult;
   const rb = ancorar(sim, pts[b][0], pts[b][1], opA);
   if (rb.ancora || !ligado || args.modo === 'curva' || args.modo === 'continua') {
     regA(b, rb);

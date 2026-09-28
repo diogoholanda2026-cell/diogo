@@ -9,7 +9,7 @@
 //             nas bocas; filtradas pela área do pixel (caixa integrada com fwidth), gastas com o desgaste
 //   calçada   concreto em placas com faixa de serviço, ou pedra portuguesa em ondas (bit PEDRA); meio-fio de
 //             concreto; sarjeta de concreto junto do meio-fio; canteiro de grama; barreira; talude; chão batido
-//   noite     a luz da rua (mapa de luz, render/mundo/luzRua.js) acende o chão
+//   noite     a luz da rua (o mapa de render/mundo/luzRua.js) entra pelo gancho `noite` da R1b, como em todo o chão
 //   camada    pinta a pista pelo valor da aresta (tabela por aId, X3a) e deixa a calçada neutra
 // O vértice leva a via um pouco para a câmera, proporcional à distância (viés de profundidade na faixa de troca com o
 // chão pintado, onde o CDLOD grosso pode passar da cota da pista).
@@ -122,8 +122,6 @@ export const VIA_FRAGMENTO_PARS = /* glsl */ `
 ${defs}
 ${tabelas()}
 uniform highp sampler2D gViaDetalhe;   // R agregado, G manchas, B fissuras, A pedras (periódica, 4 m)
-uniform highp sampler2D gLuzRua;       // luz da rua (RGB linear / 4), mapa inteiro
-uniform vec4 gLuzRuaMapa;              // ox, oz, 1 / lado, intensidade (0 de dia)
 uniform vec4 gViaLonge;
 uniform vec4 gViaCamada;               // ligada, n cores, categórica, livre
 uniform vec3 gViaRampa[ 8 ];
@@ -193,7 +191,8 @@ vec4 viaMarcas( int tipo, float u, float v, float vf, float marcas, float gasto,
       cor = mix( cor, k2, c );
       cob = max( cob, c );
     }
-    // faixa de pedestres (zebra, CTB: barras de 0,40 m a cada 1 m, 4 m de travessia) e retenção nas bocas
+    // faixa de pedestres (zebra, CTB: barras de 0,40 m a cada 1 m, 4 m de travessia) e a linha de retenção de 0,40 m,
+    // 1,60 m antes da faixa (a parada dos carros, trafego.js PARADA, conta com ela)
     vec4 R = VIA_RET[ tipo ];
     if ( viaBit( marcas, VB_ZEBRA_INI ) || viaBit( marcas, VB_ZEBRA_FIM ) ) {
       float zi = viaBit( marcas, VB_ZEBRA_INI ) ? viaFaixa( v, 0.8, 4.8 ) : 0.0;
@@ -201,8 +200,8 @@ vec4 viaMarcas( int tipo, float u, float v, float vf, float marcas, float gasto,
       float z = max( zi, zf ) * viaTraco( u + 0.2, 0.4, 1.0 );
       cor = mix( cor, VIA_BRANCA, z );
       cob = max( cob, z );
-      float ri = viaFaixa( v, 6.0, 6.4 ) * ( ( viaBit( marcas, VB_RET_INI_A ) ? viaFaixa( u, R.x, R.y ) : 0.0 ) + ( viaBit( marcas, VB_RET_INI_B ) ? viaFaixa( u, R.z, R.w ) : 0.0 ) );
-      float rf = viaFaixa( vf, 6.0, 6.4 ) * ( ( viaBit( marcas, VB_RET_FIM_A ) ? viaFaixa( u, R.x, R.y ) : 0.0 ) + ( viaBit( marcas, VB_RET_FIM_B ) ? viaFaixa( u, R.z, R.w ) : 0.0 ) );
+      float ri = viaFaixa( v, 6.4, 6.8 ) * ( ( viaBit( marcas, VB_RET_INI_A ) ? viaFaixa( u, R.x, R.y ) : 0.0 ) + ( viaBit( marcas, VB_RET_INI_B ) ? viaFaixa( u, R.z, R.w ) : 0.0 ) );
+      float rf = viaFaixa( vf, 6.4, 6.8 ) * ( ( viaBit( marcas, VB_RET_FIM_A ) ? viaFaixa( u, R.x, R.y ) : 0.0 ) + ( viaBit( marcas, VB_RET_FIM_B ) ? viaFaixa( u, R.z, R.w ) : 0.0 ) );
       float r = clamp( ri + rf, 0.0, 1.0 );
       cor = mix( cor, VIA_BRANCA, r );
       cob = max( cob, r );
@@ -245,9 +244,10 @@ vec3 viaAsfalto( vec2 w, vec2 uv, int tipo, float gasto, bool cruzamento, bool a
     float r = step( 0.12, fr.x ) * step( fr.x, 0.88 ) * step( 0.1, fr.y ) * step( fr.y, 0.9 );
     c = mix( c, VIA_ASF_NOVO * 1.1, r * 0.85 );
   }
-  // fissuras
-  float fis = smoothstep( 0.72, 0.9, d1.b ) * smoothstep( 0.3, 0.8, g );
-  c *= 1.0 - 0.45 * fis;
+  // fissuras finas, só nos trechos cansados do pavimento (manchas de ~30 m) e mais fortes na via gasta
+  vec4 d3 = texture( gViaDetalhe, w * ( 1.0 / 9.0 ) + 0.71 );
+  float fis = smoothstep( 0.86, 0.97, d3.b ) * smoothstep( 0.5, 0.78, d2.b ) * smoothstep( 0.35, 0.9, g );
+  c *= 1.0 - 0.3 * fis;
   // trilhas de pneu e óleo (só nas faixas de trânsito)
   if ( !cruzamento && !acostamento ) {
     vec2 to = viaTrilhas( tipo, uv.x );
@@ -376,18 +376,9 @@ export const VIA_FRAGMENTO_RUGOSIDADE = /* glsl */ `
 float roughnessFactor = gViaRug;
 `;
 
-/** Fragmento: a luz da rua e a seleção (depois do #include <emissivemap_fragment>). */
+/** Fragmento: o realce da aresta marcada na tabela (bit 0; depois do #include <emissivemap_fragment>). */
 export const VIA_FRAGMENTO_EMISSIVO = /* glsl */ `
-{
-  if ( gLuzRuaMapa.w > 0.0 ) {
-    vec2 luv = ( vGPosMundo.xz - gLuzRuaMapa.xy ) * gLuzRuaMapa.z;
-    if ( all( greaterThanEqual( luv, vec2( 0.0 ) ) ) && all( lessThanEqual( luv, vec2( 1.0 ) ) ) ) {
-      vec3 lr = texture( gLuzRua, luv ).rgb * 4.0;
-      totalEmissiveRadiance += diffuseColor.rgb * lr * gLuzRuaMapa.w;
-    }
-  }
-  if ( ( int( vIdent.y + 0.5 ) & 1 ) != 0 ) totalEmissiveRadiance += vec3( 0.25, 0.2, 0.08 ) * 0.6;
-}
+if ( ( int( vIdent.y + 0.5 ) & 1 ) != 0 ) totalEmissiveRadiance += vec3( 0.25, 0.2, 0.08 ) * 0.6;
 `;
 
 /** Fragmento: AO cozida (troca o #include <aomap_fragment>). */
@@ -411,14 +402,17 @@ attribute float aParte;     // PARTE de veiculos.js
 attribute vec4 aCarro;      // rgb da pintura (sRGB 0..255), luzes (bit 0 farol, bit 1 freio)
 flat varying vec4 vCarro;
 flat varying float vParte;
+varying vec2 vCarroLocal;   // x, y do modelo (os faróis desenhados na ponta do LOD1)
 `;
 export const CARRO_VERTICE_MAIN = /* glsl */ `
 vCarro = aCarro;
 vParte = aParte;
+vCarroLocal = position.xy;
 `;
 export const CARRO_FRAGMENTO_PARS = /* glsl */ `
 flat varying vec4 vCarro;
 flat varying float vParte;
+varying vec2 vCarroLocal;
 uniform float gCarroNoite;
 float gCarroRug = 0.35;
 float gCarroMetal = 0.0;
@@ -435,6 +429,7 @@ export const CARRO_FRAGMENTO_COR = /* glsl */ `
   else if ( p == 4 ) { c = vec3( 0.25, 0.01, 0.01 ); gCarroRug = 0.2; }
   else if ( p == 5 ) { c = vec3( 0.62, 0.62, 0.6 ); gCarroRug = 0.45; }
   else if ( p == 6 ) { c = vec3( 0.32, 0.32, 0.33 ); gCarroRug = 0.3; gCarroMetal = 0.8; }
+  else if ( p == 8 || p == 9 ) { c = min( carroLinear( vCarro.rgb ), vec3( 0.78 ) ); gCarroRug = 0.32; }
   else { c = vec3( 0.0 ); gCarroRug = 1.0; }
   diffuseColor.rgb = c;
 }
@@ -451,6 +446,13 @@ export const CARRO_FRAGMENTO_EMISSIVO = /* glsl */ `
   int luz = int( vCarro.a + 0.5 );
   if ( p == 3 && ( luz & 1 ) != 0 ) totalEmissiveRadiance += vec3( 1.0, 0.88, 0.7 ) * 9.0 * gCarroNoite;
   if ( p == 4 ) totalEmissiveRadiance += vec3( 1.0, 0.04, 0.02 ) * ( ( ( luz & 2 ) != 0 ? 5.0 : 0.0 ) + 2.5 * gCarroNoite * float( luz & 1 ) );
+  // LOD1: os dois faróis (lanternas) numa faixa da ponta, fora do meio (a grade e a placa)
+  if ( p == 8 || p == 9 ) {
+    float x = abs( vCarroLocal.x );
+    float par = step( 0.3, x ) * step( x, 1.15 ) * step( 0.55, vCarroLocal.y ) * step( vCarroLocal.y, 0.82 );
+    if ( p == 8 && ( luz & 1 ) != 0 ) totalEmissiveRadiance += vec3( 1.0, 0.88, 0.7 ) * 6.0 * gCarroNoite * par;
+    if ( p == 9 ) totalEmissiveRadiance += vec3( 1.0, 0.04, 0.02 ) * par * ( ( ( luz & 2 ) != 0 ? 4.0 : 0.0 ) + 1.8 * gCarroNoite * float( luz & 1 ) );
+  }
 }
 `;
 

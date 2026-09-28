@@ -171,7 +171,7 @@ function tDaColuna(A, e, k) {
  * Cria as células dos dois blocos da aresta (lado +1 primeiro, colunas e linhas em ordem), livres e sem zona; a
  * validação vem depois. Devolve os idx.
  */
-function gerar(sim, ix, e) {
+function gerarCelulas(sim, ix, e) {
   const A = sim.tabelas.arestas;
   const C = sim.tabelas.celulas;
   if (!temBlocos(sim, e)) return [];
@@ -559,7 +559,7 @@ export function refazerBlocos(sim, { gerar = [], registros = [], predios = [], c
   const C = sim.tabelas.celulas;
   const P = sim.tabelas.predios;
   const novas = [];
-  for (const e of gerar) for (const c of gerar1(sim, ix, e)) novas.push(c);
+  for (const e of gerar) for (const c of gerarCelulas(sim, ix, e)) novas.push(c);
   // caixa: a pedida mais a das células novas, com a vizinhança
   let [x0, z0, x1, z1] = caixa ?? [Infinity, Infinity, -Infinity, -Infinity];
   for (const c of novas) {
@@ -625,8 +625,6 @@ export function refazerBlocos(sim, { gerar = [], registros = [], predios = [], c
   return { demolidos, soltos, novas: novas.length };
 }
 
-const gerar1 = (sim, ix, e) => gerar(sim, ix, e);
-
 function passarPintura(sim, novas, registros) {
   const C = sim.tabelas.celulas;
   const R = REGRAS_CELULAS.transferencia;
@@ -645,7 +643,8 @@ function passarPintura(sim, novas, registros) {
     const bi = Math.floor(x / R);
     const bj = Math.floor(z / R);
     let melhor = -1;
-    let md = R;
+    // até 4 m inclusive (alargar a rua em 8 m afasta as células exatamente 4 m)
+    let md = R + 1e-3;
     for (let dj = -1; dj <= 1; dj++) {
       for (let di = -1; di <= 1; di++) {
         for (const k of baldes.get(chave(bi + di, bj + dj)) ?? []) {
@@ -690,5 +689,9 @@ export function registrar(sim) {
   indice(sim);
   // as vias do mapa com calçada (rua principal da Vila) já saem com os blocos
   gerarFaltantes(sim);
-  sim.aoCarregar(() => refazerIndice(sim));
+  // ao carregar, o índice das células sai na hora (a primeira prévia depois da carga fica leve)
+  sim.aoCarregar(() => {
+    refazerIndice(sim);
+    indice(sim);
+  });
 }

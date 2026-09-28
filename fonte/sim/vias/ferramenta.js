@@ -5,8 +5,9 @@
 // Um plano é feito de traços (a reta, a curva ou cada lado de quadra da grade) entre vértices (nó existente, ponto sobre
 // aresta que será dividida, portão da gleba ou ponto novo). Cada traço é cortado nos cruzamentos com as vias que existem
 // (dividindo as duas; perto de um nó, passa pelo nó) e ganha um greide que segue o chão com o declive do tipo; onde o
-// greide dobra entra um nó a mais, então cada aresta tem a pista linear (a forma do aplainar põe o chão 0,15 m abaixo
-// dela em toda a seção). Custo: comprimento x custo por metro x (1 + 2 x declive médio) mais as demolições.
+// greide dobra entra um nó a mais, então cada aresta tem a pista plana nos patamares dos cruzamentos e linear entre
+// eles (a forma do aplainar põe o chão ao menos 5 cm abaixo dela em toda a seção). Custo: comprimento x custo por metro
+// x (1 + 2 x declive médio) mais as demolições.
 //
 // Formato da prévia (contrato 2.6, com os acréscimos): { ok, segmentos: [{ p: [8] no sentido do traço, tipo,
 // cotas: [y0, y1], ponte, erros, declive }], nosNovos, divisoes (contagens), novos: [[x, z]], dividir: [{ aresta, t,
@@ -15,43 +16,53 @@
 // Modos: reta [A, B]; curva [A, C, B] (C: controle da quadrática); continua [A, C, B] com `tangente` em A; grade
 // [A, B, C] (C: canto oposto, `espacamento` opcional); melhorar { arestas: [ref], tipo }; demolir { arestas: [ref] }.
 import {
-  reta as retaBz, deQuadratica, dividir as dividirBz, cruzamentos, ponto, direcao, tangente, tabelaArco, tDoArco,
+  reta as retaBz, deQuadratica, dividir as dividirBz, ponto, direcao, tangente, tabelaArco, tDoArco,
   arcoDoT, caixa as caixaBz,
 } from '../../comum/bezier.js';
 import { hipot, clamp } from '../../comum/util.js';
 import { refDe } from '../../contratos/espelho.js';
 import { ARESTA, MAO } from '../../contratos/flags.js';
 import { VIAS, VIAS_ORDEM, REGRAS_VIAS, FOLGA_NO } from '../../data/vias.js';
-import { patamarDoRaio } from '../mundo/aplainar.js';
+import { comprimentoPatamar, patamarNaPonta, patamares, cotaDaPista, PATAMAR, FOLGA_CHAO } from '../mundo/aplainar.js';
 import { addNo, addAresta, dividir as dividirAresta, cortes, meiaDa, arestasDoNo } from './grafo.js';
 import { encaixarTraco, ancorar, espacamentoDe } from './encaixe.js';
 import {
   tipoVia, eixoDeCurva, distEixo, pistaNoT, amostrarCurva, trechosSobreAgua, foraDosLadrilhos, entraNaGleba, raioMinimo,
   greide, quebrasDoGreide, saidaDoNo, viasSobrepostas, prediosNaPista, predioDaCidade, arestaIntocavel, noLigavel,
-  COS_ANGULO_MIN, CHAO_ABAIXO_DA_PISTA, decliveDa, eixoDa,
+  COS_ANGULO_MIN, CHAO_ABAIXO_DA_PISTA, decliveDa, eixoDa, cruzamentosDeEixos,
 } from './validar.js';
 import {
-  custoDemolirPredio, custoAresta, manutencaoAresta, devolucaoAresta, registrarAcao, registrarForma, tirarForma,
-  fotoAresta, caixaDasArestas, reformarNos,
+  custoDemolirPredio, manutencaoAresta, devolucaoAresta, registrarAcao, registrarForma, tirarForma,
+  fotoAresta, caixaDasArestas, reformarNos, prediosNasCelulas,
 } from './demolir.js';
 import { nomearTraco, nomeDaAresta } from './nomes.js';
-import { recolherCelulas, refazerBlocos, removerPredio, celulasNaCaixa } from '../zonas/blocos.js';
+import { recolherCelulas, refazerBlocos, removerPredio, celulasNaCaixa, celulasDaAresta } from '../zonas/blocos.js';
 
 const MODOS = Object.freeze(['reta', 'curva', 'continua', 'grade', 'melhorar', 'demolir']);
 const PASSO_GREIDE = 8;
+/** Seno do ângulo abaixo do qual duas vias que se encontram correm juntas (sobreposição, não cruzamento): ~6 graus. */
+const SEN_PARALELAS = 0.1;
 const COS_15 = 0.9659258262890683;
 
 // ------------------------------------------------------------------------------------------------ argumentos
 
 const numero = (v) => typeof v === 'number' && Number.isFinite(v);
-const par = (p) => Array.isArray(p) && p.length >= 2 && numero(+p[0]) && numero(+p[1]);
+// só números: o comando chega pelo JSON do livro (NaN vira null, e +null seria 0), então a prévia recusa o mesmo ponto
+const par = (p) => Array.isArray(p) && p.length >= 2 && numero(p[0]) && numero(p[1]);
+
+/** Direção unitária de um par (a tangente da Contínua), ou null. */
+function unitaria(p) {
+  if (!par(p)) return null;
+  const L = hipot(p[0], p[1]);
+  return L > 1e-9 ? [p[0] / L, p[1] / L] : null;
+}
 
 /** Argumentos da prévia normalizados, ou null se o formato não serve. */
 function lerArgs(args) {
   if (!args || typeof args !== 'object') return null;
   const modo = MODOS.includes(args.modo) ? args.modo : 'reta';
-  const tipo = typeof args.tipo === 'string' && VIAS[args.tipo] ? args.tipo : 'rua';
-  const pontos = Array.isArray(args.pontos) ? args.pontos.filter(par).map((p) => [+p[0], +p[1]]) : [];
+  const tipo = typeof args.tipo === 'string' && Object.hasOwn(VIAS, args.tipo) ? args.tipo : 'rua';
+  const pontos = Array.isArray(args.pontos) ? args.pontos.filter(par).map((p) => [p[0], p[1]]) : [];
   return {
     modo,
     tipo,
@@ -59,7 +70,7 @@ function lerArgs(args) {
     tolerancia: numero(args.tolerancia) ? args.tolerancia : REGRAS_VIAS.tolerancia,
     encaixe: args.encaixe !== false,
     sessao: args.sessao ?? null,
-    tangente: par(args.tangente) ? [+args.tangente[0], +args.tangente[1]] : null,
+    tangente: unitaria(args.tangente),
     espacamento: args.espacamento,
     arestas: Array.isArray(args.arestas) ? args.arestas.filter((r) => Number.isInteger(r)) : [],
     mao: args.mao === -1 ? -1 : 1,
@@ -81,22 +92,33 @@ const caixa = (sim) => (sim.holding?.caixa ? sim.holding.caixa() : Infinity);
 
 // ------------------------------------------------------------------------------------------------ vértices e traços
 
+/** Meia largura da via com blocos de zona (0 sem blocos: terra, rodovia). */
+const meiaComBlocos = (ti) => {
+  const t = tipoVia(ti);
+  return t?.zona ? t.largura / 2 : 0;
+};
+
 function vertice(sim, plano, x, z, ancora) {
   const N = sim.tabelas.nos;
+  const A = sim.tabelas.arestas;
   if (ancora?.tipo === 'no') {
     const n = ancora.no;
     const k = plano.porNo.get(n);
     if (k !== undefined) return k;
-    plano.vertices.push({ x: N.x[n], z: N.z[n], no: n, e: -1, t: 0, portao: null, y: N.y[n], fixo: true });
+    // meia: a maior via com blocos que chega no nó (a fase das células de uma via que sai dali)
+    let meia = 0;
+    for (const e of arestasDoNo(sim.grafo, n)) meia = Math.max(meia, meiaComBlocos(A.tipo[e]));
+    plano.vertices.push({ x: N.x[n], z: N.z[n], no: n, e: -1, t: 0, portao: null, y: N.y[n], fixo: true, ancora: true, meia });
     plano.porNo.set(n, plano.vertices.length - 1);
     return plano.vertices.length - 1;
   }
   if (ancora?.tipo === 'aresta') {
-    plano.vertices.push({ x, z, no: -1, e: ancora.e, t: ancora.t, portao: null, y: pistaNoT(sim, ancora.e, ancora.t), fixo: true });
+    const meia = meiaComBlocos(A.tipo[ancora.e]);
+    plano.vertices.push({ x, z, no: -1, e: ancora.e, t: ancora.t, portao: null, y: pistaNoT(sim, ancora.e, ancora.t), fixo: true, ancora: true, meia });
     return plano.vertices.length - 1;
   }
   if (ancora?.tipo === 'portao') {
-    plano.vertices.push({ x, z, no: -1, e: -1, t: 0, portao: ancora.id, y: sim.alturaEm(x, z) + CHAO_ABAIXO_DA_PISTA, fixo: true });
+    plano.vertices.push({ x, z, no: -1, e: -1, t: 0, portao: ancora.id, y: sim.alturaEm(x, z) + CHAO_ABAIXO_DA_PISTA, fixo: true, ancora: true });
     return plano.vertices.length - 1;
   }
   plano.vertices.push({ x, z, no: -1, e: -1, t: 0, portao: null, y: NaN, fixo: false });
@@ -171,7 +193,11 @@ function refinarCruzamento(p, P, o, t, u) {
   return [t, u];
 }
 
-/** Cruzamentos do traço com as vias que existem: vértices em ordem de t (dividem a aresta ou passam pelo nó). */
+/**
+ * Cruzamentos do traço com as vias que existem: vértices em ordem de t (dividem a aresta ou passam pelo nó). Os
+ * vértices só nascem depois de juntar os achados repetidos (o mesmo cruzamento visto por dois segmentos da polilinha,
+ * ou por duas arestas no nó delas), para não sobrar vértice solto no plano.
+ */
 function cruzarTraco(sim, plano, tr) {
   const G = sim.grafo;
   const A = sim.tabelas.arestas;
@@ -179,15 +205,29 @@ function cruzarTraco(sim, plano, tr) {
   const va = V[tr.va];
   const vb = V[tr.vb];
   const bb = caixaBz(tr.p, 0, 1);
-  const ids = [...G.gradeArestas.consultar(bb[0], bb[1], bb[2], bb[3])];
+  const ids = [...G.gradeArestas.consultar(bb[0], bb[1], bb[2], bb[3])].sort((a, b) => a - b);
   const q = [0, 0];
   const achados = [];
   const lim = REGRAS_VIAS.noNoCruzamento;
+  const eixo = eixoDeCurva(tr.p);
+  const comp = eixo.comp;
   for (const e of ids) {
     if (!A.viva[e]) continue;
-    const xs = cruzamentos(tr.p, A.p, 0.05, 0, 8 * e);
-    for (const [t0, u0] of xs) {
-      const [t, u] = refinarCruzamento(tr.p, A.p, 8 * e, t0, u0);
+    const eo = eixoDa(sim, e);
+    const xs = cruzamentosDeEixos(eixo, eo).sort((x, y) => x[0] - y[0]);
+    let antes = -Infinity;
+    for (const [sa, sb, sen] of xs) {
+      // o mesmo cruzamento no vértice entre dois segmentos da polilinha
+      if (sa - antes < 1) continue;
+      antes = sa;
+      // nas pontas do traço não é cruzamento (é a ligação no nó ou na aresta)
+      if (sa < 1.5 || comp - sa < 1.5) continue;
+      // quase paralelas: não é cruzamento, as pistas se sobrepõem
+      if (sen < SEN_PARALELAS) {
+        tr.erros.add('colisao');
+        continue;
+      }
+      const [t, u] = refinarCruzamento(tr.p, A.p, 8 * e, tDoArco(eixo.tab, sa), tDoArco(eo.tab, sb));
       ponto(tr.p, t, q);
       if (hipot(q[0] - va.x, q[1] - va.z) < 1.5 || hipot(q[0] - vb.x, q[1] - vb.z) < 1.5) continue;
       if (arestaIntocavel(sim, e)) {
@@ -196,32 +236,33 @@ function cruzarTraco(sim, plano, tr) {
       }
       const tab = A.arco.subarray(17 * e, 17 * e + 17);
       const su = arcoDoT(tab, u);
-      const comp = tab[16];
-      let v;
-      if (su < lim || comp - su < lim) {
+      const ce = tab[16];
+      if (su < lim || ce - su < lim) {
         const n = su < lim ? A.a[e] : A.b[e];
         if (!noLigavel(sim, n)) {
           tr.erros.add('colisao');
           continue;
         }
-        v = vertice(sim, plano, 0, 0, { tipo: 'no', no: n });
+        if (plano.porNo.get(n) === tr.va || plano.porNo.get(n) === tr.vb) continue;
+        achados.push({ t, no: n, e: -1, u: 0, meia: tipoVia(A.tipo[e]).largura / 2 });
       } else {
-        ponto(A.p, u, q, 8 * e);
-        v = vertice(sim, plano, q[0], q[1], { tipo: 'aresta', e, t: u });
+        achados.push({ t, no: -1, e, u, meia: tipoVia(A.tipo[e]).largura / 2 });
       }
-      if (v === tr.va || v === tr.vb) continue;
-      achados.push({ t, v });
     }
   }
-  achados.sort((a, b) => a.t - b.t || a.v - b.v);
-  const comp = tabelaArco(tr.p)[16];
+  // em ordem ao longo do traço; o nó vem antes da aresta no mesmo ponto
+  achados.sort((a, b) => a.t - b.t || b.no - a.no || a.e - b.e);
   const cortes = [];
   for (const c of achados) {
     const ant = cortes[cortes.length - 1];
-    if (ant && (ant.v === c.v || (c.t - ant.t) * comp < 1)) continue;
+    if (ant && ((c.no >= 0 && ant.no === c.no) || (c.t - ant.t) * comp < 1)) continue;
     cortes.push(c);
   }
-  return cortes;
+  return cortes.map((c) => {
+    if (c.no >= 0) return { t: c.t, meia: c.meia, v: vertice(sim, plano, 0, 0, { tipo: 'no', no: c.no }) };
+    ponto(A.p, c.u, q, 8 * c.e);
+    return { t: c.t, meia: c.meia, v: vertice(sim, plano, q[0], q[1], { tipo: 'aresta', e: c.e, t: c.u }) };
+  });
 }
 
 // ------------------------------------------------------------------------------------------------ greide e peças
@@ -272,11 +313,18 @@ function pecasDoTraco(sim, plano, tr, ti) {
   const s = Float64Array.from(S);
   const alvo = new Float64Array(S.length);
   for (let i = 0; i < S.length; i++) alvo[i] = sim.alturaEm(X[i], Z[i]) + CHAO_ABAIXO_DA_PISTA;
-  // arco reduzido: a pista fica plana nos patamares dos cruzamentos (raio do nó + 8 m de cada lado)
+  // arco reduzido: a pista fica plana nos patamares dos cruzamentos (raio do nó + 8 m, mais com via em ângulo agudo)
   const zonas = [];
+  const dir = [0, 0];
   for (const [idx, vi] of deVertice) {
-    const P = patamarDoRaio(plano.raios[vi]);
-    if (P > 0) zonas.push([Math.max(0, S[idx] - P), Math.min(acum, S[idx] + P)]);
+    if (!(plano.raios[vi] > 0)) continue;
+    const k = ARC[idx];
+    const noInicio = SL[idx] === 0;
+    const a = arcos[k];
+    direcao(a.p, noInicio ? 0 : 1, dir);
+    const tras = idx > 0 ? patamarNoVertice(plano, vi, -dir[0], -dir[1], tipo.largura / 2) : 0;
+    const frente = idx < S.length - 1 ? patamarNoVertice(plano, vi, dir[0], dir[1], tipo.largura / 2) : 0;
+    if (tras > 0 || frente > 0) zonas.push([Math.max(0, S[idx] - tras), Math.min(acum, S[idx] + frente)]);
   }
   const sr = reduzir(s, zonas);
   const gr = greide(s, alvo, fixas, tipo.declive, REGRAS_VIAS.greideJanela, sr);
@@ -348,6 +396,7 @@ function calcularRaios(sim, plano, ti) {
       dirs[c.v].push({ d: [d[0], d[1]], tipo: ti }, { d: [-d[0], -d[1]], tipo: ti });
     }
   }
+  plano.dirs = dirs;
   plano.raios = dirs.map((l) => {
     if (l.length < 2) return 0;
     if (l.length === 2 && l[0].tipo === l[1].tipo && -(l[0].d[0] * l[1].d[0] + l[0].d[1] * l[1].d[1]) >= COS_15) return 0;
@@ -355,6 +404,30 @@ function calcularRaios(sim, plano, ti) {
     for (const x of l) m = Math.max(m, VIAS[VIAS_ORDEM[x.tipo]].largura / 2);
     return m + FOLGA_NO;
   });
+}
+
+/**
+ * Patamar que a via de meia largura `meia` que sai do vértice vi na direção (dx, dz) vai ter com o plano construído (a
+ * mesma conta de patamarNaPonta sobre o grafo pronto).
+ */
+function patamarNoVertice(plano, vi, dx, dz, meia) {
+  const r = plano.raios[vi];
+  if (!(r > 0)) return 0;
+  const l = plano.dirs[vi];
+  let propria = -1;
+  let melhor = 0.999;
+  for (let k = 0; k < l.length; k++) {
+    const c = l[k].d[0] * dx + l[k].d[1] * dz;
+    if (c > melhor) {
+      melhor = c;
+      propria = k;
+    }
+  }
+  const outras = [];
+  for (let k = 0; k < l.length; k++) {
+    if (k !== propria) outras.push(VIAS[VIAS_ORDEM[l[k].tipo]].largura / 2, l[k].d[0] * dx + l[k].d[1] * dz);
+  }
+  return comprimentoPatamar(r, meia, outras);
 }
 
 function novoNoDeGreide(plano, x, z, y) {
@@ -467,9 +540,12 @@ function validar(sim, plano, ti) {
         const mo = tipoVia(A.tipo[x.e]).largura / 2;
         const sin = Math.abs(d[0] * x.d[1] - d[1] * x.d[0]);
         const r = (meia + mo) / Math.max(sin, 0.5) + 2;
-        const l = excl.get(x.e);
-        if (l) l.push([v.x, v.z, r]);
-        else excl.set(x.e, [[v.x, v.z, r]]);
+        // a mesma via segue depois de um nó de grau 2 sem raio (quebra do greide): a junção vale para ela também
+        for (const o of [x.e, ...continuacoes(sim, x.e)]) {
+          const l = excl.get(o);
+          if (l) l.push([v.x, v.z, r]);
+          else excl.set(o, [[v.x, v.z, r]]);
+        }
       }
     }
     if (viasSobrepostas(sim, a, meia, excl).length) pc.erros.add('colisao');
@@ -490,7 +566,146 @@ function validar(sim, plano, ti) {
       }
     }
   });
+  // a coluna de células que o nó novo corta não cabe inteira em nenhuma das metades da aresta dividida: o prédio da
+  // cidade nela sai com a obra (refazerBlocos não acha as células dele), e a prévia avisa
+  for (const [e, lista] of porAresta) {
+    const cortadas = colunasCortadas(sim, plano, e, lista);
+    if (!cortadas.size) continue;
+    for (const c of celulasDaAresta(sim, e)) {
+      const i = C.predio[c];
+      if (i >= 0 && cortadas.has(C.coluna[c]) && predioDaCidade(sim, i)) demolir.add(i);
+    }
+  }
   plano.demolir = [...demolir].sort((a, b) => a - b);
+  decliveDasVizinhas(sim, plano, porVertice, porAresta);
+}
+
+/**
+ * Colunas de células da aresta e que a divisão nos vértices dados tira. A mesma conta de dividirNosVertices (divisões
+ * do fim para o começo, a fase de cada metade pelo comprimento da anterior, em Float32 como no grafo) e de gerar em
+ * blocos.js (só colunas inteiras a partir da fase).
+ */
+function colunasCortadas(sim, plano, e, lista) {
+  const A = sim.tabelas.arestas;
+  const V = plano.vertices;
+  const fase0 = A.fase ? A.fase[e] : 0;
+  const pecas = [];
+  let atual = Float64Array.from(A.p.subarray(8 * e, 8 * e + 8));
+  let uFim = 1;
+  for (const vi of [...lista].sort((a, b) => V[b].t - V[a].t)) {
+    const [h1, h2] = dividirBz(atual, clamp(V[vi].t / uFim, 1e-6, 1 - 1e-6));
+    pecas.unshift({ p: h2, fase: A.fase ? Math.fround(mod8(fase0 - tabelaArco(h1)[16])) : 0 });
+    atual = h1;
+    uFim = V[vi].t;
+  }
+  pecas.unshift({ p: atual, fase: fase0 });
+  const colunas = (comp, fase) => Math.max(0, Math.floor((comp - mod8(fase)) / 8 + 1e-6));
+  const total = colunas(A.arco[17 * e + 16], fase0);
+  const ficam = new Uint8Array(total);
+  let s = 0;
+  for (const pc of pecas) {
+    const comp = tabelaArco(pc.p)[16];
+    const k0 = Math.round((s + mod8(pc.fase) - mod8(fase0)) / 8);
+    const n = colunas(comp, pc.fase);
+    for (let k = Math.max(0, k0); k < Math.min(total, k0 + n); k++) ficam[k] = 1;
+    s += comp;
+  }
+  const out = new Set();
+  for (let k = 0; k < total; k++) if (!ficam[k]) out.add(k);
+  return out;
+}
+
+/**
+ * O patamar novo de um cruzamento encurta a rampa das vias que já existem (as metades de uma aresta dividida e as que
+ * chegam num nó que ganha via). O patamar cede para a rampa não passar do declive do tipo; se com isso o cruzamento
+ * ficar desnivelado (a pista sai mais de 10 cm da cota do nó antes de as pistas se separarem, e o chão passaria da
+ * folga sob a pista), ou se a rampa passar do declive do tipo, o trecho do plano que chega ali leva 'declive'.
+ */
+function decliveDasVizinhas(sim, plano, porVertice, porAresta) {
+  const G = sim.grafo;
+  const A = sim.tabelas.arestas;
+  const N = sim.tabelas.nos;
+  const V = plano.vertices;
+  const d = [0, 0];
+  const folga = CHAO_ABAIXO_DA_PISTA - FOLGA_CHAO;
+  const marcar = (vis) => {
+    for (const vi of vis) for (const k of porVertice.get(vi) ?? []) plano.pecas[k].erros.add('declive');
+  };
+  // trecho de comprimento comp da aresta e, de p (cota yp, patamar pp) a q; vp e vq: vértices do plano nas pontas
+  const conferir = (e, comp, yp, yq, pp, pq, vp, vq) => {
+    const tipo = tipoVia(A.tipo[e]);
+    const [a, b] = patamares(comp, pp, pq, yq - yp, tipo.declive);
+    const g = Math.abs(yq - yp) / Math.max(1, comp - a - b);
+    let ruim = g > tipo.declive + 1e-6 && g > decliveDa(sim, e) + 1e-6;
+    // desnível dentro do cruzamento: até onde o patamar pedido chegaria sem a folga de 8 m
+    for (const [vi, pedido, s] of [[vp, pp, (x) => x], [vq, pq, (x) => comp - x]]) {
+      if (vi === undefined || ruim) continue;
+      const D = Math.min(comp, Math.max(0, pedido - PATAMAR));
+      const y = cotaDaPista(yp, yq, comp, a, b, s(D));
+      if (Math.abs(y - V[vi].y) > folga) ruim = true;
+    }
+    if (ruim) marcar([vp, vq].filter((x) => x !== undefined));
+  };
+  // patamar da aresta e na ponta do nó n: o do plano, se o nó é vértice dele, senão o de agora
+  const patamarNo = (e, n) => {
+    const vi = plano.porNo.get(n);
+    if (vi === undefined) return patamarNaPonta(G, e, n);
+    saidaDoNo(sim, e, n, d);
+    return patamarNoVertice(plano, vi, d[0], d[1], tipoVia(A.tipo[e]).largura / 2);
+  };
+  // vias que chegam num nó que já existe
+  for (const [n] of plano.porNo) {
+    for (const e of arestasDoNo(G, n)) {
+      if (porAresta.has(e)) continue;
+      const a = A.a[e];
+      const b = A.b[e];
+      conferir(e, A.arco[17 * e + 16], N.y[a], N.y[b], patamarNo(e, a), patamarNo(e, b), plano.porNo.get(a), plano.porNo.get(b));
+    }
+  }
+  // metades das arestas divididas
+  for (const [e, lista] of porAresta) {
+    const tab = A.arco.subarray(17 * e, 17 * e + 17);
+    const pts = lista.map((vi) => ({ vi, s: arcoDoT(tab, V[vi].t), y: V[vi].y })).sort((x, y) => x.s - y.s);
+    const a = A.a[e];
+    const b = A.b[e];
+    const seq = [{ vi: plano.porNo.get(a), s: 0, y: N.y[a], pat: patamarNo(e, a) }, ...pts, { vi: plano.porNo.get(b), s: tab[16], y: N.y[b], pat: patamarNo(e, b) }];
+    const meia = tipoVia(A.tipo[e]).largura / 2;
+    for (let k = 0; k + 1 < seq.length; k++) {
+      const p = seq[k];
+      const q = seq[k + 1];
+      let pp = p.pat;
+      let pq = q.pat;
+      if (pp === undefined) {
+        direcao(A.p, V[p.vi].t, d, 8 * e);
+        pp = patamarNoVertice(plano, p.vi, d[0], d[1], meia);
+      }
+      if (pq === undefined) {
+        direcao(A.p, V[q.vi].t, d, 8 * e);
+        pq = patamarNoVertice(plano, q.vi, -d[0], -d[1], meia);
+      }
+      conferir(e, q.s - p.s, p.y, q.y, pp, pq, p.vi, q.vi);
+    }
+  }
+}
+
+/** Arestas que continuam a aresta e depois de nós de grau 2 sem raio (até dois nós adiante, dos dois lados). */
+function continuacoes(sim, e) {
+  const A = sim.tabelas.arestas;
+  const N = sim.tabelas.nos;
+  const out = [];
+  for (const n0 of [A.a[e], A.b[e]]) {
+    let atual = e;
+    let n = n0;
+    for (let passo = 0; passo < 2; passo++) {
+      if (N.grau[n] !== 2 || N.raio[n] > 0) break;
+      const prox = arestasDoNo(sim.grafo, n).find((o) => o !== atual);
+      if (prox === undefined || prox === e || out.includes(prox)) break;
+      out.push(prox);
+      n = A.a[prox] === n ? A.b[prox] : A.a[prox];
+      atual = prox;
+    }
+  }
+  return out;
 }
 
 const DEX = { d: 0, s: 0 };
@@ -665,7 +880,7 @@ function saidaDoPlano(sim, plano, args, enc) {
   });
   let custoDemolir = 0;
   for (const i of plano.demolir) custoDemolir += custoDemolirPredio(sim, i);
-  if (args.modo !== 'grade' && comprimento < REGRAS_VIAS.compMinTracado && !erros.some((e) => e.codigo === 'curto')) {
+  if ((!segmentos.length || (args.modo !== 'grade' && comprimento < REGRAS_VIAS.compMinTracado)) && !erros.some((e) => e.codigo === 'curto')) {
     erros.push({ codigo: 'curto', trecho: -1 });
   }
   if (!viaLiberada(sim, args.tipo)) erros.push({ codigo: 'marco', trecho: -1 });
@@ -745,8 +960,21 @@ function dividirNosVertices(sim, plano, e, lista) {
     uFim = v.t;
   }
   pecas.unshift(atual);
-  for (const x of pecas) registrarForma(sim, x);
+  // as formas das metades saem depois, com o grafo pronto (o patamar do nó novo depende das vias que chegam nele)
   return { original: foto, pecas: pecas.map((x) => refDe(x, A.ger[x])), idx: pecas };
+}
+
+/**
+ * Fase das células de um traço novo: saindo de uma via (nó ou ponto sobre ela), as colunas começam a meia largura dela
+ * mais 8 m x k do eixo, alinhadas com as linhas dela; saindo do nada, as colunas se alinham com as linhas da primeira via
+ * que o traço cruza (centro a meia largura dela + 4 m + 8 m x linha), para a esquina fechar sem vão.
+ */
+function faseDoTraco(plano, tr) {
+  const v = plano.vertices[tr.va];
+  if (v.ancora) return mod8(v.meia ?? 0);
+  if (!tr.cortes?.length) return 0;
+  const c = tr.cortes[0];
+  return mod8(arcoDoT(tabelaArco(tr.p), c.t) + c.meia);
 }
 
 /** Fase e nome herdados da via que o traço continua em linha reta a partir de um nó que já existe. */
@@ -835,7 +1063,7 @@ export function aplicar(sim, plano) {
     const pcs = (porTraco.get(tr.id) ?? []).filter((pc) => pc.e >= 0);
     if (!pcs.length) continue;
     const h = herancaNoInicio(sim, plano, tr, pcs[0]);
-    const fase0 = h?.fase ?? 0;
+    const fase0 = h?.fase ?? faseDoTraco(plano, tr);
     for (const pc of pcs) {
       if (A.fase) A.fase[pc.e] = mod8(fase0 - pc.s0);
     }
@@ -844,10 +1072,15 @@ export function aplicar(sim, plano) {
     nomePorLinha.set(tr.linha, nome);
     for (const pc of pcs) registrarForma(sim, pc.e);
   }
-  // os nós que já existiam mudaram de raio: os patamares das vias ligadas a eles mudam
+  // os nós do plano mudaram de raio e de ângulos: os patamares das vias ligadas a eles mudam (as metades das divididas
+  // ganham a forma aqui)
   const tocados = new Set();
   for (const v of V) if (v.no >= 0) tocados.add(v.no);
-  reformarNos(sim, tocados, new Set([...criadas, ...metades]));
+  for (const e of [...criadas, ...metades]) {
+    tocados.add(A.a[e]);
+    tocados.add(A.b[e]);
+  }
+  reformarNos(sim, tocados, new Set(criadas));
   juntarCaixa(caixaDasArestas(sim, [...criadas, ...metades]));
   const r = refazerBlocos(sim, { gerar: [...metades, ...criadas], registros: pool.registros, predios: pool.predios, caixa: cx, modo: 'demolir' });
   const todosDemolidos = [...demolidos, ...r.demolidos];
@@ -973,16 +1206,16 @@ function melhorar(sim, args) {
     A.marcar(e);
     nos.add(A.a[e]);
     nos.add(A.b[e]);
-    registrarForma(sim, e);
   }
   for (const n of nos) cortes(G, n);
   G.versao++;
-  reformarNos(sim, nos, interno.arestas);
+  // as formas saem com os raios novos (a largura mudou o raio dos nós e os patamares das vizinhas)
+  reformarNos(sim, nos);
   const k = caixaDasArestas(sim, interno.arestas);
   cx = [Math.min(cx[0], k[0]), Math.min(cx[1], k[1]), Math.max(cx[2], k[2]), Math.max(cx[3], k[3])];
   const rb = refazerBlocos(sim, { gerar: interno.arestas, registros: pool.registros, predios: pool.predios, caixa: cx, modo: 'demolir' });
   const todos = [...demolidos, ...rb.demolidos];
-  registrarAcao(sim, r.sessao, { tipo: 'melhorar', arestas: antes, custo: pago, predios: todos });
+  registrarAcao(sim, r.sessao, { tipo: 'melhorar', arestas: antes, custo: pago, predios: todos, ocupantes: prediosNasCelulas(sim, interno.arestas) });
   sim.emitir('construido', { tipo: 'via', refs: antes.map((x) => x.ref) });
   if (todos.length) sim.emitir('demolido', { tipo: 'predio', refs: todos.map((x) => x.ref) });
   return { ok: true, dados: { custo: pago, arestas: antes.map((x) => x.ref) } };

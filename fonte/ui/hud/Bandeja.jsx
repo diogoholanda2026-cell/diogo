@@ -22,13 +22,23 @@ const marcoAtual = computed(() => barra.value?.marco?.n ?? 0);
 /** Cor da família da zona (tokens da D23) para a amostra do cartão. */
 export const COR_FAMILIA = Object.freeze({ res: 'var(--zR)', com: 'var(--zC)', ind: 'var(--zI)', esc: 'var(--zC)' });
 
-/** Linha de preço de um cartão: { texto, falta } (falta: créditos que faltam, 0 se dá). */
+/**
+ * Linha de preço de um cartão: { texto, falta } (falta: créditos que faltam, 0 se dá). O cartão mostra sempre o preço
+ * (vermelho com o glifo quando falta, desenho da UI 8.4); quanto falta vai no rótulo e no detalhe, que têm espaço.
+ */
 export function precoDoCartao(c, creditos) {
   if (c.acao === 'via') return { texto: t('x2.bandeja.porMetro', { v: fmt.numero(c.porMetro ?? 0) }), falta: 0 };
   if (c.acao === 'zona') return { texto: c.dados?.apagar ? '' : t('x2.bandeja.gratis'), falta: 0 };
   const custo = c.custo ?? 0;
   const falta = Math.max(0, custo - (creditos ?? 0));
-  return { texto: falta ? t('x2.bandeja.faltam', { n: fmt.creditos(falta) }) : fmt.creditos(custo), falta };
+  return { texto: fmt.creditosBarra(custo), falta };
+}
+
+/** Rótulo acessível do cartão: nome, e o marco ou quanto falta. */
+function rotuloDoCartao(c, nome, preco) {
+  if (c.trancado) return `${nome}. ${t('x2.trancado', { n: c.marco })}`;
+  if (preco.falta) return `${nome}. ${t('x2.bandeja.faltam', { n: fmt.creditos(preco.falta) })}`;
+  return nome;
 }
 
 function Cartao({ c, ativo, aoDetalhe }) {
@@ -43,7 +53,7 @@ function Cartao({ c, ativo, aoDetalhe }) {
     <Botao
       a="item"
       k={c.id}
-      rotulo={c.trancado ? `${nome}. ${t('x2.trancado', { n: c.marco })}` : nome}
+      rotulo={rotuloDoCartao(c, nome, preco)}
       ativo={ativo}
       class={`item-cartao${c.trancado ? ' trancado' : ''}${ativo ? ' ativo' : ''}`}
       role="listitem"
@@ -70,7 +80,7 @@ function Cartao({ c, ativo, aoDetalhe }) {
     >
       <span class="item-glifo">
         {cor ? <i class="item-amostra" style={{ background: cor }} data-densidade={c.densidade} /> : null}
-        <Glifo n={c.trancado ? 'cadeado' : c.glifo} tam={c.trancado ? 22 : 28} />
+        <Glifo n={c.trancado ? 'cadeado' : c.glifo} tam={c.trancado ? 20 : 24} />
       </span>
       <span class="item-nome">{nome}</span>
       {c.trancado ? (
@@ -96,6 +106,8 @@ function Detalhe({ c, fechar }) {
   } else if (c.acao === 'colocar') {
     const x = c.dados.item;
     linhas.push([t('x2.bandeja.detalhe.custo'), fmt.creditos(x.custo ?? 0)]);
+    const { falta } = precoDoCartao(c, caixa.value);
+    if (falta) linhas.push([t('x2.bandeja.detalhe.faltam'), fmt.creditos(falta)]);
     if (x.manutencaoHora) linhas.push([t('x2.bandeja.detalhe.manutencao'), `${fmt.numero(x.manutencaoHora)}${t('unid.porHora')}`]);
     if (x.alcance) linhas.push([t('x2.bandeja.detalhe.alcance'), `${fmt.numero(x.alcance)} m`]);
   } else if (c.acao === 'zona' && ZONAS[c.id]) {

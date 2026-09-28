@@ -2,8 +2,9 @@
 // ângulo no nó, colisão com outras vias e com prédios; e os índices derivados que essas regras usam (o eixo de cada
 // aresta em polilinha e a grade dos prédios), refeitos sozinhos quando a tabela muda. Nada aqui muda o estado.
 //
-// Convenções: a pista de uma aresta é linear no comprimento de arco entre as cotas dos nós (a mesma conta de
-// formaDaAresta, que põe o chão 0,15 m abaixo dela); `lado = +1` é a direita de a para b, em (-dz, dx).
+// Convenções: a pista de uma aresta é plana nos patamares dos cruzamentos e linear no comprimento de arco entre eles
+// (pistaDaAresta, a mesma conta de formaDaAresta, que põe o chão 0,15 m abaixo dela e um pouco mais nas dobras
+// côncavas); `lado = +1` é a direita de a para b, em (-dz, dx).
 import { tabelaArco, tDoArco, ponto, direcao, tangente, arcoDoT } from '../../comum/bezier.js';
 import { distSegmento, pontoNoPoligono, distPoligono, cantosRetangulo, pontoNoRetangulo } from '../../comum/vetor.js';
 import { hipot, clamp } from '../../comum/util.js';
@@ -18,7 +19,10 @@ import { CHAO_ABAIXO_DA_PISTA, pistaDaAresta, patamaresDa } from '../mundo/aplai
 export { CHAO_ABAIXO_DA_PISTA };
 
 /** Tipo de via de um índice ou id. */
-export const tipoVia = (t) => VIAS[typeof t === 'number' ? VIAS_ORDEM[t] : t] ?? null;
+export const tipoVia = (t) => {
+  const id = typeof t === 'number' ? VIAS_ORDEM[t] : t;
+  return typeof id === 'string' && Object.hasOwn(VIAS, id) ? VIAS[id] : null;
+};
 
 /** Maior meia largura dos tipos (consultas de vizinhança). */
 export const MEIA_MAX = Math.max(...VIAS_ORDEM.map((k) => VIAS[k].largura / 2));
@@ -116,6 +120,50 @@ export function distEixo(c, x, z, out = { d: 0, s: 0 }, limite = Infinity) {
   }
   out.d = md;
   out.s = ms;
+  return out;
+}
+
+/**
+ * Cruzamentos de dois eixos em polilinha, segmento com segmento: [[sa, sb, sen]] com o arco em cada um e o seno do
+ * ângulo entre os dois ali (o chamador passa para t e refina na curva). Muito mais barato que subdividir as cúbicas
+ * quando as vias correm quase paralelas.
+ */
+export function cruzamentosDeEixos(a, b) {
+  const out = [];
+  const P = a.pts;
+  const Q = b.pts;
+  const cb = b.caixa;
+  for (let i = 0; i < a.n; i++) {
+    const ax = P[2 * i];
+    const az = P[2 * i + 1];
+    const bx = P[2 * i + 2];
+    const bz = P[2 * i + 3];
+    const x0 = ax < bx ? ax : bx;
+    const x1 = ax < bx ? bx : ax;
+    const z0 = az < bz ? az : bz;
+    const z1 = az < bz ? bz : az;
+    if (x1 < cb[0] || x0 > cb[2] || z1 < cb[1] || z0 > cb[3]) continue;
+    const rx = bx - ax;
+    const rz = bz - az;
+    for (let j = 0; j < b.n; j++) {
+      const cx = Q[2 * j];
+      const cz = Q[2 * j + 1];
+      const dx = Q[2 * j + 2];
+      const dz = Q[2 * j + 3];
+      if ((cx > dx ? cx : dx) < x0 || (cx < dx ? cx : dx) > x1 || (cz > dz ? cz : dz) < z0 || (cz < dz ? cz : dz) > z1) continue;
+      const sx = dx - cx;
+      const sz = dz - cz;
+      const den = rx * sz - rz * sx;
+      if (den === 0) continue;
+      const qx = cx - ax;
+      const qz = cz - az;
+      const ta = (qx * sz - qz * sx) / den;
+      const ub = (qx * rz - qz * rx) / den;
+      if (ta < 0 || ta > 1 || ub < 0 || ub > 1) continue;
+      const sen = Math.abs(den) / (hipot(rx, rz) * hipot(sx, sz) || 1);
+      out.push([a.s[i] + (a.s[i + 1] - a.s[i]) * ta, b.s[j] + (b.s[j + 1] - b.s[j]) * ub, sen]);
+    }
+  }
   return out;
 }
 
@@ -319,6 +367,23 @@ export function foraDosLadrilhos(sim, a, meia) {
  * chegar até o portão.
  */
 export function entraNaGleba(sim, a, meia) {
+  // longe da caixa da gleba não há o que conferir
+  const g = glebaDe(sim);
+  let gx0 = Infinity;
+  let gz0 = Infinity;
+  let gx1 = -Infinity;
+  let gz1 = -Infinity;
+  for (let k = 0; k < g.length; k += 2) {
+    if (g[k] < gx0) gx0 = g[k];
+    if (g[k] > gx1) gx1 = g[k];
+    if (g[k + 1] < gz0) gz0 = g[k + 1];
+    if (g[k + 1] > gz1) gz1 = g[k + 1];
+  }
+  let perto = false;
+  for (let k = 0; k <= a.n && !perto; k++) {
+    if (a.x[k] + meia >= gx0 && a.x[k] - meia <= gx1 && a.z[k] + meia >= gz0 && a.z[k] - meia <= gz1) perto = true;
+  }
+  if (!perto) return false;
   const portoes = portoesDe(sim);
   const raio = meia + 2;
   for (let k = 0; k <= a.n; k++) {
@@ -505,23 +570,6 @@ export function saidaDoNo(sim, e, n, out = [0, 0]) {
 /** Cosseno do ângulo mínimo entre vias no nó (30 graus). */
 export const COS_ANGULO_MIN = 0.8660254037844387;
 
-/**
- * true se a direção unitária (dx, dz) sai do nó n a pelo menos 30 graus de todas as arestas ligadas a ele (menos as
- * de `ignorar`).
- */
-export function anguloLivre(sim, n, dx, dz, ignorar = null) {
-  const A = sim.tabelas.arestas;
-  const L = sim.tabelas.nos.lig;
-  const d = [0, 0];
-  for (let k = 0; k < 6; k++) {
-    const e = L[6 * n + k];
-    if (e < 0 || !A.viva[e] || (ignorar && ignorar.has(e))) continue;
-    saidaDoNo(sim, e, n, d);
-    if (d[0] * dx + d[1] * dz > COS_ANGULO_MIN + 1e-9) return false;
-  }
-  return true;
-}
-
 // ------------------------------------------------------------------------------------------------ colisões
 
 const DE = { d: 0, s: 0 };
@@ -653,8 +701,10 @@ export function registrar(sim) {
   if (A && !A.specs.fase) A.novaColuna('fase', Float32Array);
   if (sim.tabelas.predios) {
     indicePredios(sim);
+    // ao carregar, o índice sai na hora (a carga já é o momento pesado; a primeira prévia depois dela fica leve)
     sim.aoCarregar(() => {
       refazerIndicePredios(sim);
+      indicePredios(sim);
       derivados(sim).eixos.clear();
     });
   }

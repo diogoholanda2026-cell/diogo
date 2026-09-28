@@ -140,10 +140,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
   width: 88px;
   height: 80px;
-  padding: 6px var(--e2) 6px;
+  padding: 6px var(--e2);
+  overflow: hidden;
   border-radius: var(--r2);
   background: var(--s2);
   box-shadow: inset 0 0 0 1px var(--fio);
@@ -156,18 +156,20 @@
 .item-cartao.trancado {
   color: var(--t2);
 }
+/* 24 + 2 linhas de 13,8 + 14,4 cabem nos 68 px de dentro do cartão */
 .item-glifo {
   position: relative;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 24px;
   color: var(--t1);
 }
 .item-amostra {
   display: block;
   width: 10px;
-  height: 24px;
+  height: 22px;
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
 }
@@ -185,19 +187,28 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: none;
+  max-width: 100%;
+  margin-top: 1px;
   font-size: var(--t12);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   color: var(--t1);
 }
 .item-preco {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex: none;
+  max-width: 100%;
+  margin-top: auto;
+  overflow: hidden;
   font-size: var(--t12);
   font-weight: 600;
+  line-height: 1.2;
   color: var(--ch);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .item-preco.falta {
   color: var(--er);

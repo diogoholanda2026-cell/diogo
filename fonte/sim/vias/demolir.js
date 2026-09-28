@@ -9,12 +9,12 @@ import { caixa as caixaBz } from '../../comum/bezier.js';
 import { hipot } from '../../comum/util.js';
 import { refDe, idxDaRef } from '../../contratos/espelho.js';
 import { ARESTA, TIPO_PREDIO } from '../../contratos/flags.js';
-import { VIAS, VIAS_ORDEM, REGRAS_VIAS } from '../../data/vias.js';
+import { VIAS, VIAS_ORDEM, REGRAS_VIAS, REGRAS_CELULAS } from '../../data/vias.js';
 import { PREDIOS, PREDIOS_ORDEM } from '../../data/predios.js';
 import { ITENS } from '../../data/holding.js';
 import { formaDaAresta } from '../mundo/aplainar.js';
 import { recolherCelulas, refazerBlocos, restaurarPredio, celulasDaAresta } from '../zonas/blocos.js';
-import { decliveDa, tipoVia } from './validar.js';
+import { decliveDa, tipoVia, amostrarCurva, prediosNaPista } from './validar.js';
 
 // ------------------------------------------------------------------------------------------------ custos
 
@@ -81,11 +81,50 @@ export function registrarAcao(sim, sessao, acao) {
   while (J.acoes.length > REGRAS_VIAS.desfazerMax) J.acoes.shift();
 }
 
-/** true se a aresta (ref) foi criada na sessão atual da ferramenta. */
+/**
+ * true se a aresta (ref) foi criada na sessão atual da ferramenta: uma das construídas ou um pedaço de uma delas que
+ * outra obra da sessão dividiu.
+ */
 function daSessao(sim, ref, sessao) {
   const J = sessoes(sim);
   if (!J || J.sessao === null || (sessao !== undefined && sessao !== null && sessao !== J.sessao)) return false;
-  return J.acoes.some((a) => a.tipo === 'construir' && a.arestas.includes(ref));
+  const minhas = new Set();
+  for (const a of J.acoes) {
+    if (a.tipo !== 'construir') continue;
+    for (const r of a.arestas) minhas.add(r);
+    for (const d of a.divisoes) if (minhas.has(d.original.ref)) for (const r of d.pecas) minhas.add(r);
+  }
+  return minhas.has(ref);
+}
+
+/**
+ * Troca a ref de uma aresta nas ações guardadas da sessão: ao desfazer, a aresta dividida ou demolida volta com outra
+ * ref, e as ações anteriores precisam achá-la para ser desfeitas também.
+ */
+function trocarRef(sim, velha, nova) {
+  const J = sessoes(sim);
+  if (!J || velha === nova) return;
+  const troca = (r) => (r === velha ? nova : r);
+  for (const a of J.acoes) {
+    if (a.tipo === 'construir') {
+      a.arestas = a.arestas.map(troca);
+      for (const d of a.divisoes) {
+        d.pecas = d.pecas.map(troca);
+        if (d.original.ref === velha) d.original.ref = nova;
+      }
+    } else if (a.tipo === 'melhorar') {
+      for (const x of a.arestas) x.ref = troca(x.ref);
+    } else if (a.tipo === 'demolir') {
+      for (const f of a.fotos) f.ref = troca(f.ref);
+    }
+  }
+}
+
+/** O prédio restaurado volta com outra ref: as listas de quem já estava ali (ocupantes) passam a achá-lo. */
+function trocarRefPredio(sim, velha, nova) {
+  const J = sessoes(sim);
+  if (!J || velha === nova) return;
+  for (const a of J.acoes) if (a.ocupantes) a.ocupantes = a.ocupantes.map((r) => (r === velha ? nova : r)).sort((x, y) => x - y);
 }
 
 /** Quanto demolir a aresta devolve: 50% do custo, 100% se ela é da sessão atual. */
@@ -108,22 +147,36 @@ export function registrarForma(sim, e) {
 export const tirarForma = (sim, ref) => sim.formas.removerRef('via', ref);
 
 /**
- * Refaz as formas das arestas ligadas aos nós (o raio do nó mudou e com ele os patamares da pista), menos as de `pular`
- * (que acabaram de ganhar a forma).
+ * Refaz as formas das arestas ligadas aos nós (o raio do nó e os ângulos mudaram e com eles os patamares da pista),
+ * menos as de `pular` (que acabaram de ganhar a forma com o grafo já pronto). A rampa de uma aresta refeita pode ter
+ * mudado, e com ela a dobra do greide no nó de grau 2 sem raio da outra ponta: a vizinha de lá também é refeita.
  */
 export function reformarNos(sim, nos, pular = null) {
   const A = sim.tabelas.arestas;
   const N = sim.tabelas.nos;
+  const G = sim.grafo;
   const feitas = new Set(pular ?? []);
+  const fazer = [];
+  const juntar = (e) => {
+    if (feitas.has(e)) return;
+    feitas.add(e);
+    fazer.push(e);
+  };
   for (const n of [...nos].sort((a, b) => a - b)) {
     if (n < 0 || n >= N.n || !N.viva[n]) continue;
-    for (const e of arestasDoNo(sim.grafo, n)) {
-      if (feitas.has(e)) continue;
-      feitas.add(e);
-      if (A.flags[e] & ARESTA.PONTE) continue;
-      tirarForma(sim, refDe(e, A.ger[e]));
-      registrarForma(sim, e);
+    for (const e of arestasDoNo(G, n)) juntar(e);
+  }
+  const diretas = fazer.length;
+  for (let k = 0; k < diretas; k++) {
+    const e = fazer[k];
+    for (const m of [A.a[e], A.b[e]]) {
+      if (N.grau[m] === 2 && !(N.raio[m] > 0)) for (const o of arestasDoNo(G, m)) juntar(o);
     }
+  }
+  for (const e of fazer) {
+    if (!A.viva[e] || A.flags[e] & ARESTA.PONTE) continue;
+    tirarForma(sim, refDe(e, A.ger[e]));
+    registrarForma(sim, e);
   }
 }
 
@@ -155,7 +208,10 @@ function noDaFoto(sim, f) {
   return addNo(sim.grafo, f.x, f.z, f.y);
 }
 
-/** Recria a aresta de uma foto (com a forma). Devolve o idx novo ou -1. */
+/**
+ * Recria a aresta de uma foto. Devolve o idx novo ou -1. Sem a forma: quem restaura chama reformarNos com o grafo
+ * pronto (os patamares dependem de todas as vias do nó).
+ */
 export function restaurarAresta(sim, f) {
   const G = sim.grafo;
   const A = sim.tabelas.arestas;
@@ -167,7 +223,6 @@ export function restaurarAresta(sim, f) {
   if (A.fase) A.fase[e] = f.fase;
   if (A.nomeVia) A.nomeVia[e] = f.nome;
   A.marcar(e);
-  registrarForma(sim, e);
   return e;
 }
 
@@ -192,6 +247,26 @@ function caixaDaFoto(f) {
   return k;
 }
 
+/**
+ * Prédios (refs em ordem) a menos de meia largura + 4 m da pista de uma aresta ou de uma foto: os que a via volta a
+ * cobrir ou a invalidar ao ser desfeita a demolição. Serve para saber se nasceu prédio ali depois (D32: 'ocupado').
+ */
+export function prediosNaFaixa(sim, f) {
+  const P = sim.tabelas.predios;
+  const meia = VIAS[VIAS_ORDEM[f.tipo]].largura / 2;
+  const a = amostrarCurva(Float64Array.from(f.p));
+  return prediosNaPista(sim, a, meia, REGRAS_CELULAS.folgaVia).map((i) => refDe(i, P.ger[i]));
+}
+
+/** Refs dos prédios nas células das arestas, em ordem (quem já estava ali ao fim de uma obra). */
+export function prediosNasCelulas(sim, es) {
+  const C = sim.tabelas.celulas;
+  const P = sim.tabelas.predios;
+  const out = new Set();
+  for (const e of es) for (const c of celulasDaAresta(sim, e)) if (C.predio[c] >= 0) out.add(refDe(C.predio[c], P.ger[C.predio[c]]));
+  return [...out].sort((a, b) => a - b);
+}
+
 // ------------------------------------------------------------------------------------------------ via.demolir
 
 function demolirVias(sim, { arestas, sessao } = {}) {
@@ -210,6 +285,8 @@ function demolirVias(sim, { arestas, sessao } = {}) {
   let devolvido = 0;
   for (const e of lista) devolvido += devolucaoAresta(sim, e, sessao);
   const fotos = lista.map((e) => fotoAresta(sim, e));
+  // quem já estava na faixa da via: desfazer a demolição recusa se nascer prédio ali depois
+  const ocupantes = [...new Set(fotos.flatMap((f) => prediosNaFaixa(sim, f)))].sort((a, b) => a - b);
   const caixa = caixaDasArestas(sim, lista);
   const { registros, predios } = recolherCelulas(sim, lista);
   const nos = new Set();
@@ -222,7 +299,7 @@ function demolirVias(sim, { arestas, sessao } = {}) {
   reformarNos(sim, nos);
   refazerBlocos(sim, { predios, caixa, modo: 'soltar' });
   if (devolvido > 0) sim.holding.receber(devolvido, 'vias');
-  registrarAcao(sim, sessao, { tipo: 'demolir', fotos, devolvido, registros });
+  registrarAcao(sim, sessao, { tipo: 'demolir', fotos, devolvido, registros, ocupantes });
   sim.emitir('demolido', { tipo: 'via', refs: fotos.map((f) => f.ref) });
   return { ok: true, dados: { devolvido } };
 }
@@ -259,17 +336,21 @@ function desfazerConstrucao(sim, acao) {
       removerAresta(G, e, { manterNos: true });
     }
     for (const n of meio) if (N.viva[n] && N.grau[n] === 0) removerNo(G, n);
+    const velha = d.original.ref;
     const e = restaurarAresta(sim, d.original);
     if (e >= 0) {
+      trocarRef(sim, velha, refDe(e, A.ger[e]));
       originais.push(e);
       nos.add(A.a[e]);
       nos.add(A.b[e]);
     }
   }
-  reformarNos(sim, nos, originais);
+  reformarNos(sim, nos);
   for (const reg of acao.predios ?? []) {
     const i = restaurarPredio(sim, reg);
-    if (i >= 0) predios.add(i);
+    if (i < 0) continue;
+    predios.add(i);
+    trocarRefPredio(sim, reg.ref, refDe(i, sim.tabelas.predios.ger[i]));
   }
   refazerBlocos(sim, { gerar: originais, registros, predios, caixa, modo: 'soltar' });
   if (acao.custo > 0) sim.holding.receber(acao.custo, 'vias');
@@ -281,6 +362,11 @@ function desfazerMelhoria(sim, acao) {
   const A = sim.tabelas.arestas;
   if (!acao.arestas.every((x) => A.vivaRef(x.ref))) return 'ocupado';
   const es = acao.arestas.map((x) => idxDaRef(x.ref));
+  // prédio que nasceu nas células da via depois da obra
+  if (acao.ocupantes) {
+    const antes = new Set(acao.ocupantes);
+    if (prediosNasCelulas(sim, es).some((r) => !antes.has(r))) return 'ocupado';
+  }
   let caixa = caixaDasArestas(sim, es);
   const { registros, predios } = recolherCelulas(sim, es);
   const nos = new Set();
@@ -294,14 +380,15 @@ function desfazerMelhoria(sim, acao) {
     A.marcar(e);
     nos.add(A.a[e]);
     nos.add(A.b[e]);
-    registrarForma(sim, e);
   });
   for (const n of nos) cortes(G, n);
   G.versao++;
-  reformarNos(sim, nos, es);
+  reformarNos(sim, nos);
   for (const reg of acao.predios ?? []) {
     const i = restaurarPredio(sim, reg);
-    if (i >= 0) predios.add(i);
+    if (i < 0) continue;
+    predios.add(i);
+    trocarRefPredio(sim, reg.ref, refDe(i, sim.tabelas.predios.ger[i]));
   }
   caixa = juntar(caixa, caixaDasArestas(sim, es));
   refazerBlocos(sim, { gerar: es, registros, predios, caixa, modo: 'soltar' });
@@ -310,20 +397,27 @@ function desfazerMelhoria(sim, acao) {
 }
 
 function desfazerDemolicao(sim, acao) {
+  // prédio que nasceu na faixa da via depois da demolição (a via voltaria por cima dele)
+  if (acao.ocupantes) {
+    const antes = new Set(acao.ocupantes);
+    for (const f of acao.fotos) if (prediosNaFaixa(sim, f).some((r) => !antes.has(r))) return 'ocupado';
+  }
   if (acao.devolvido > 0 && !sim.holding.pagar(acao.devolvido, 'vias')) return 'creditos';
   const novas = [];
   let caixa = [Infinity, Infinity, -Infinity, -Infinity];
   const nos = new Set();
   for (const f of acao.fotos) {
+    const velha = f.ref;
     const e = restaurarAresta(sim, f);
     if (e >= 0) {
+      trocarRef(sim, velha, refDe(e, sim.tabelas.arestas.ger[e]));
       novas.push(e);
       nos.add(sim.tabelas.arestas.a[e]);
       nos.add(sim.tabelas.arestas.b[e]);
     }
     caixa = juntar(caixa, caixaDaFoto(f));
   }
-  reformarNos(sim, nos, novas);
+  reformarNos(sim, nos);
   refazerBlocos(sim, { gerar: novas, registros: acao.registros ?? [], caixa, modo: 'soltar' });
   return null;
 }

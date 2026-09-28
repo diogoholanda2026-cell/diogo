@@ -236,13 +236,28 @@ export function criarCamera(ctx, inicial = {}) {
       limitar();
       const a = api.alvo(alvoV);
       posicionar(a, e.inclinacao);
-      // colisão: 2 m acima do chão e da cidade onde a câmera está; perto de prédio, a vista sobe pela órbita
+      // colisão: 2 m acima do chão e da cidade onde a câmera está; perto de prédio, a vista sobe pela órbita (em passos
+      // de 2 graus e depois por bissecção até 1/8 de grau, para a vista não andar aos saltos contornando uma torre)
       let inc = e.inclinacao;
       let piso = chao(cam.position.x, cam.position.z) + 2;
-      for (let k = 0; k < 40 && cam.position.y < piso && inc < L.incMax; k++) {
-        inc = Math.min(L.incMax, inc + 2);
-        posicionar(a, inc);
-        piso = chao(cam.position.x, cam.position.z) + 2;
+      if (cam.position.y < piso) {
+        let baixo = inc;
+        for (let k = 0; k < 44 && cam.position.y < piso && inc < L.incMax; k++) {
+          baixo = inc;
+          inc = Math.min(L.incMax, inc + 2);
+          posicionar(a, inc);
+          piso = chao(cam.position.x, cam.position.z) + 2;
+        }
+        if (cam.position.y >= piso) {
+          for (let k = 0; k < 4; k++) {
+            const meio = (baixo + inc) / 2;
+            posicionar(a, meio);
+            if (cam.position.y >= chao(cam.position.x, cam.position.z) + 2) inc = meio;
+            else baixo = meio;
+          }
+          posicionar(a, inc);
+          piso = chao(cam.position.x, cam.position.z) + 2;
+        }
       }
       if (cam.position.y < piso) cam.position.y = piso;
       incEfetiva = inc;

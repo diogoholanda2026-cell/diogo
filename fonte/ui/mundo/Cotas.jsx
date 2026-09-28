@@ -11,10 +11,31 @@ import { alturaEm } from '../../comum/altura.js';
 import { ponto as pontoBz } from '../../comum/bezier.js';
 import { sessao, vivo } from '../ferramentas/sessao.js';
 import { alcas } from '../ferramentas/via.js';
-import { centroLadrilho } from '../ferramentas/areas.js';
+import { centroLadrilho, rotulosSemSobrepor, fugirDoHud } from '../ferramentas/areas.js';
 
 const ESTALO_MS = 120;
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
+
+// HUD que os rótulos do mundo não podem cobrir: as barras de cima, a pílula de pausa e as barras de baixo
+const SELETOR_HUD = '[data-hud^="cima"], [data-hud="pausado"], [data-hud="ferramenta"], [data-hud^="construcao"], [data-hud="bandeja"]';
+const hudMedido = { t: -1e9, lista: [] };
+
+/**
+ * Retângulos do HUD na tela ([{ l, t, r, b, cima }]), medidos no máximo duas vezes por segundo (o HUD quase não anda e
+ * medir força o layout). cima: o retângulo está na metade de cima (o rótulo desce para fugir dele).
+ */
+export function retangulosHud(tMs = agora()) {
+  if (tMs - hudMedido.t < 500 || typeof document === 'undefined') return hudMedido.lista;
+  hudMedido.t = tMs;
+  const H = typeof innerHeight !== 'undefined' ? innerHeight : 443;
+  const lista = [];
+  for (const el of document.querySelectorAll(SELETOR_HUD)) {
+    const q = el.getBoundingClientRect();
+    if (q.width > 0 && q.height > 0) lista.push({ l: q.left, t: q.top, r: q.right, b: q.bottom, cima: q.top + q.height / 2 < H / 2 });
+  }
+  hudMedido.lista = lista;
+  return lista;
+}
 
 /** Ponto do meio do traçado (o segmento do meio em t = 0,5). */
 export function meioDoPlano(previa) {
@@ -61,7 +82,7 @@ export function montarMarcas(s) {
     const sel = s.info;
     for (const c of s.resumo?.compraveis ?? []) {
       const escolhido = sel && sel.i === c.i && sel.j === c.j;
-      l.push({ chave: `a${c.i}-${c.j}`, classe: `cota cota-area${escolhido ? ' sel' : ''}`, p: centroLadrilho(c.i, c.j), texto: fmt.creditos(c.preco) });
+      l.push({ chave: `a${c.i}-${c.j}`, classe: `cota cota-area${escolhido ? ' sel' : ''}`, p: centroLadrilho(c.i, c.j), texto: fmt.creditos(c.preco), area: true, sel: !!escolhido });
     }
   }
   return l;
@@ -70,6 +91,7 @@ export function montarMarcas(s) {
 function Cotas({ ui }) {
   const raiz = useRef(null);
   const marcasRef = useRef([]);
+  const larguras = useRef(new Map()); // largura em px de cada preço das Áreas (lida uma vez por texto)
   const s = sessao.value;
   const marcas = montarMarcas(s);
   marcasRef.current = marcas;
@@ -102,6 +124,8 @@ function Cotas({ ui }) {
           }
         }
         if (!R?.projetar) return;
+        const hud = retangulosHud();
+        const precos = [];
         for (const n of el.querySelectorAll('.marca')) {
           const m = marcasRef.current[Number(n.dataset.i)];
           if (!m?.p) continue;
@@ -112,8 +136,30 @@ function Cotas({ ui }) {
             n.style.visibility = 'hidden';
             continue;
           }
-          n.style.visibility = 'visible';
-          n.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y + (m.dy ?? 0)).toFixed(1)}px) translate(-50%, -50%)`;
+          let ty = q.y + (m.dy ?? 0);
+          if (m.area) {
+            const k = `${m.chave}:${m.texto}`;
+            let w = larguras.current.get(k);
+            if (!w) larguras.current.set(k, (w = n.offsetWidth || 80));
+            // o preço que cai sob o HUD some (o escolhido também: a barra da ferramenta diz o preço dele)
+            if (fugirDoHud(q.x, ty, w, 26, hud) !== ty) {
+              n.style.visibility = 'hidden';
+              continue;
+            }
+            precos.push({ n, x: q.x, y: ty, w, h: 26, pri: m.sel ? 1 : 0 });
+          } else if (m.texto) {
+            // a cota e o chip do encaixe saem de baixo do HUD (descem da barra de cima, sobem da de baixo)
+            const y = fugirDoHud(q.x, ty, 16 + 7.5 * m.texto.length, 26, hud);
+            n.style.visibility = y === null ? 'hidden' : 'visible';
+            if (y === null) continue;
+            ty = y;
+          } else n.style.visibility = 'visible';
+          n.style.transform = `translate(${q.x.toFixed(1)}px, ${ty.toFixed(1)}px) translate(-50%, -50%)`;
+        }
+        // com a câmera longe os preços das Áreas se empilham: fica o escolhido e os mais perto
+        if (precos.length) {
+          const fica = rotulosSemSobrepor(precos);
+          for (let i = 0; i < precos.length; i++) precos[i].n.style.visibility = fica[i] ? 'visible' : 'hidden';
         }
       }),
     [],

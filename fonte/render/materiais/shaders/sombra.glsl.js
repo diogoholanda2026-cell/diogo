@@ -200,12 +200,18 @@ export function distanciaDaMarcha(k) {
 /** Raios do HAO em células e as 8 direções (a mesma conta de haoNoCampo, em ambiente/sombraLonge.js). */
 export const RAIOS_HAO = Object.freeze([1, 2, 4, 8]);
 
-/** Nível da pirâmide de máximos para um passo da marcha (a célula do nível cobre o passo; 0 é o bilinear). */
-export const nivelDoPasso = (passo, passoCelula) => Math.max(0, Math.ceil(Math.log2(Math.max(1, passo / passoCelula)) - 1e-9));
+/**
+ * Nos passos maiores que isto (em células do campo), a marcha também lê a célula do nível 1 (o maior de 2 x 2
+ * células) em cada amostra: a torre fina entre duas amostras não some, e a sombra engorda no máximo uma célula do
+ * nível 1 (16 m no Média, 8 m no Alta), em vez de virar um borrão nos passos longos.
+ */
+export const PASSO_NIVEL1 = 2;
 
 /**
  * Passe do campo (uma chamada por ladrilho, com viewport e tesoura no alvo): cada texel é uma célula do mapa. A
- * marcha lê o nível da pirâmide de máximos do tamanho do passo (texelFetch; o nível 0, bilinear).
+ * marcha lê o campo bilinear no fim de cada passo e no meio dele e, nos passos longos, também a célula do nível 1 que
+ * contém cada uma dessas amostras (texelFetch): medido no campo da cidade sintética às 17h30, fica a menos de 1% da
+ * marcha fina de 2 m, e a torre de 8 m a 400 m não some.
  * uModo 0 (completo): R e G marcham para o sol nas duas direções, B é a visibilidade do céu no chão (o menor dos 9
  * vizinhos) e A esse chão. uModo 1 (passo do sol): R copia o G do campo anterior, G marcha para a direção nova, B e A
  * copiam. uDirA e uDirB: xy a direção do sol no chão (unitária), z a tangente da elevação, w 1 se há sol.
@@ -220,9 +226,10 @@ uniform vec4 uDirA;
 uniform vec4 uDirB;
 uniform float uModo;
 float gH( vec2 uv ) { return textureLod( uAlturas, uv, 0.0 ).r; }
-float gHmax( vec2 uv, int L ) {
-  ivec2 n = textureSize( uAlturas, L );
-  return texelFetch( uAlturas, clamp( ivec2( uv * vec2( n ) ), ivec2( 0 ), n - 1 ), L ).r;
+// a célula do nível 1 (o maior de 2 x 2 células) que contém o ponto
+float gH1( vec2 uv ) {
+  ivec2 n = textureSize( uAlturas, 1 );
+  return texelFetch( uAlturas, clamp( ivec2( uv * vec2( n ) ), ivec2( 0 ), n - 1 ), 1 ).r;
 }
 float marchar( vec2 uv, vec4 d ) {
   if ( d.w < 0.5 ) return -1.0e4;
@@ -235,8 +242,15 @@ float marchar( vec2 uv, vec4 d ) {
     t += p;
     vec2 q = uv + duv * t;
     if ( q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0 ) break;
-    int L = int( ceil( log2( max( 1.0, p / uPassoM ) ) - 1e-4 ) );
-    s = max( s, ( L == 0 ? gH( q ) : gHmax( q, L ) ) - t * d.z );
+    float tm = t - 0.5 * p;
+    vec2 m = uv + duv * tm;
+    float hq = gH( q );
+    float hm = gH( m );
+    if ( p > ${PASSO_NIVEL1}.0 * uPassoM ) {
+      hq = max( hq, gH1( q ) );
+      hm = max( hm, gH1( m ) );
+    }
+    s = max( s, max( hq - t * d.z, hm - tm * d.z ) );
   }
   return s;
 }

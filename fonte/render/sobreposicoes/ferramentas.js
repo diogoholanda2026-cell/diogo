@@ -148,6 +148,68 @@ export function corDaCelula(zona, estado, alvo = new THREE.Color()) {
   return alvo;
 }
 
+// ------------------------------------------------------------------------------------------------ grade das células (pura)
+
+/**
+ * Grade espacial das células em baldes de SOBRE.balde metros com chave numérica. `de[c]` é o balde em que a célula c
+ * foi posta (-1: em nenhum); um balde pode guardar células que já saíram dele (quem lê confere `de`), e a grade
+ * inteira é refeita quando a tabela troca de arrays.
+ */
+export function criarGradeCelulas(C, { origem = [-4096, -4096], tam = 8192, balde = SOBRE.balde } = {}) {
+  const lado = Math.ceil(tam / balde) + 2;
+  return {
+    viva: C.viva,
+    C,
+    B: balde,
+    ox: (origem?.[0] ?? -4096) - balde,
+    oz: (origem?.[1] ?? -4096) - balde,
+    lado,
+    baldes: new Map(),
+    de: new Int32Array(Math.max(C.n, C.viva?.length ?? 0)).fill(-1),
+    visto: new Uint32Array(Math.max(C.n, C.viva?.length ?? 0)),
+    selo: 0,
+  };
+}
+
+const indiceBalde = (G, v, o) => Math.max(0, Math.min(G.lado - 1, Math.floor((v - o) / G.B)));
+
+/** Põe (ou muda de balde) a célula c. Devolve true se ela entrou num balde novo (nasceu ou andou). */
+export function porNaGrade(G, c) {
+  const C = G.C;
+  if (!C.viva[c] || !Number.isFinite(C.x[c]) || !Number.isFinite(C.z[c])) return false;
+  const k = indiceBalde(G, C.z[c], G.oz) * G.lado + indiceBalde(G, C.x[c], G.ox);
+  if (G.de[c] === k) return false;
+  G.de[c] = k;
+  let l = G.baldes.get(k);
+  if (!l) G.baldes.set(k, (l = []));
+  l.push(c);
+  return true;
+}
+
+/** Chama fn(c, d2) para cada célula viva a até r metros de (x, z), uma vez cada. */
+export function celulasNoRaio(G, x, z, r, fn) {
+  const C = G.C;
+  const selo = (G.selo = (G.selo + 1) >>> 0 || 1);
+  const i0 = indiceBalde(G, x - r, G.ox);
+  const i1 = indiceBalde(G, x + r, G.ox);
+  const j0 = indiceBalde(G, z - r, G.oz);
+  const j1 = indiceBalde(G, z + r, G.oz);
+  const r2 = r * r;
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const k = j * G.lado + i;
+      const l = G.baldes.get(k);
+      if (!l) continue;
+      for (const c of l) {
+        if (G.de[c] !== k || G.visto[c] === selo || !C.viva[c]) continue;
+        G.visto[c] = selo;
+        const d2 = (C.x[c] - x) ** 2 + (C.z[c] - z) ** 2;
+        if (d2 <= r2) fn(c, d2);
+      }
+    }
+  }
+}
+
 // ------------------------------------------------------------------------------------------------ materiais
 
 const VERT_CELULA = /* glsl */ `
@@ -308,22 +370,20 @@ function criarFerramentas(ctx) {
   cels.count = 0;
   cels.visible = false;
   grupo.add(cels);
-  const zona = { ligada: false, centro: null, feito: null, previa: new Map(), baldes: null, sujo: true };
+  // grade: a grade espacial das células (refeita inteira só quando a tabela troca de arrays ou pede tudo; a pintura só
+  // toca as células pintadas); slot: a instância de cada célula no último desenho; lista: as células desenhadas
+  const zona = { ligada: false, centro: null, feito: null, previa: new Map(), grade: null, slot: new Int32Array(0), lista: [] };
 
-  function baldes(C) {
-    if (zona.baldes && !zona.sujo) return zona.baldes;
-    const m = new Map();
-    const B = SOBRE.balde;
-    for (let c = 0; c < C.n; c++) {
-      if (!C.viva[c]) continue;
-      const k = `${Math.floor(C.x[c] / B)},${Math.floor(C.z[c] / B)}`;
-      let l = m.get(k);
-      if (!l) m.set(k, (l = []));
-      l.push(c);
-    }
-    zona.baldes = m;
-    zona.sujo = false;
-    return m;
+  function gradeDe(C) {
+    const G = zona.grade;
+    if (G && G.viva === C.viva && G.de.length >= C.n) return G;
+    const mapa = esp()?.mapa;
+    const novo = criarGradeCelulas(C, { origem: mapa?.origem, tam: mapa?.tam });
+    for (let c = 0; c < C.n; c++) porNaGrade(novo, c);
+    zona.grade = novo;
+    zona.slot = new Int32Array(novo.de.length).fill(-1);
+    zona.lista = [];
+    return novo;
   }
 
   const m4 = new THREE.Matrix4();
@@ -332,30 +392,31 @@ function criarFerramentas(ctx) {
   const pv = new THREE.Vector3();
   const sv = new THREE.Vector3();
   const cc = new THREE.Color();
+  // a célula inválida não entra (como no CS2: onde não dá para zonear, não há grade), a não ser na prévia do pincel
+  const visivel = (C, c) => !!C.viva[c] && (C.estado[c] !== CELULA.INVALIDA || zona.previa.has(c));
+  const corDe = (C, c) => {
+    if (!zona.previa.has(c)) return corDaCelula(C.zona[c], C.estado[c], cc);
+    const zp = zona.previa.get(c);
+    return zp === 0 ? cc.copy(COR.apagar) : corDaCelula(zp, CELULA.LIVRE, cc).multiplyScalar(1.25);
+  };
+
   function montarCelulas() {
     const C = esp()?.celulas;
+    for (const c of zona.lista) if (c < zona.slot.length) zona.slot[c] = -1;
+    zona.lista = [];
     if (!zona.ligada || !C?.n || !zona.centro) {
       cels.count = 0;
       cels.visible = false;
+      zona.feito = null;
       return;
     }
     const [cx, cz] = zona.centro;
     const R = SOBRE.raioCelulas;
-    const B = SOBRE.balde;
-    const mapa = baldes(C);
+    const G = gradeDe(C);
     const lista = [];
-    for (let bj = Math.floor((cz - R) / B); bj <= Math.floor((cz + R) / B); bj++) {
-      for (let bi = Math.floor((cx - R) / B); bi <= Math.floor((cx + R) / B); bi++) {
-        const l = mapa.get(`${bi},${bj}`);
-        if (!l) continue;
-        for (const c of l) {
-          // a célula inválida não entra (como no CS2: onde não dá para zonear, não há grade)
-          if (!C.viva[c] || (C.estado[c] === CELULA.INVALIDA && !zona.previa.has(c))) continue;
-          const d2 = (C.x[c] - cx) ** 2 + (C.z[c] - cz) ** 2;
-          if (d2 <= R * R) lista.push([d2, c]);
-        }
-      }
-    }
+    celulasNoRaio(G, cx, cz, R, (c, d2) => {
+      if (visivel(C, c)) lista.push([d2, c]);
+    });
     // as mais perto da mira primeiro, até o teto
     if (lista.length > SOBRE.maxCelulas) lista.sort((a, b) => a[0] - b[0]);
     const n = Math.min(SOBRE.maxCelulas, lista.length);
@@ -368,18 +429,38 @@ function criarFerramentas(ctx) {
       pv.set(C.x[c], y, C.z[c]);
       m4.compose(pv, q, sv);
       cels.setMatrixAt(k, m4);
-      if (zona.previa.has(c)) {
-        const zp = zona.previa.get(c);
-        if (zp === 0) cc.copy(COR.apagar);
-        else corDaCelula(zp, CELULA.LIVRE, cc).multiplyScalar(1.25);
-      } else corDaCelula(C.zona[c], C.estado[c], cc);
-      cels.setColorAt(k, cc);
+      cels.setColorAt(k, corDe(C, c));
+      zona.slot[c] = k;
+      zona.lista.push(c);
     }
     cels.count = n;
     cels.instanceMatrix.needsUpdate = true;
     cels.instanceColor.needsUpdate = true;
     cels.visible = n > 0;
     zona.feito = [cx, cz];
+  }
+
+  /**
+   * Troca só a cor das células dadas (a pintura e a prévia do pincel mudam a zona, não o lugar). Devolve false se
+   * alguma precisa do desenho inteiro de novo: entrou ou saiu do conjunto desenhado (nasceu, morreu, ficou inválida).
+   */
+  function recolorir(celulas) {
+    const C = esp()?.celulas;
+    if (!zona.ligada || !C?.n || !zona.feito || !zona.grade) return false;
+    const [fx, fz] = zona.feito;
+    const R2 = SOBRE.raioCelulas ** 2;
+    let mudou = false;
+    for (const c of celulas) {
+      const k = c < zona.slot.length ? zona.slot[c] : -1;
+      const ver = c < C.n && visivel(C, c);
+      if (k >= 0) {
+        if (!ver) return false;
+        cels.setColorAt(k, corDe(C, c));
+        mudou = true;
+      } else if (ver && (C.x[c] - fx) ** 2 + (C.z[c] - fz) ** 2 <= R2) return false;
+    }
+    if (mudou) cels.instanceColor.needsUpdate = true;
+    return true;
   }
 
   // ---------------- fantasma e alcance
@@ -501,10 +582,12 @@ function criarFerramentas(ctx) {
       montarCelulas();
     }),
     ctx.ouvir('ferramenta.celulas', (c) => {
+      const antes = [...zona.previa.keys()];
       zona.previa.clear();
       const lista = c?.celulas ?? [];
       for (const i of lista) zona.previa.set(i, c.zona ?? 0);
-      if (zona.ligada) montarCelulas();
+      // a prévia anda com o dedo: troca as cores das que saíram e das que entraram; o desenho inteiro só se preciso
+      if (zona.ligada && !recolorir([...antes, ...lista])) montarCelulas();
     }),
     ctx.ouvir('ferramenta.pincel', (p) => {
       if (!p || !Number.isFinite(p.x)) return;
@@ -530,12 +613,18 @@ function criarFerramentas(ctx) {
   return {
     nome: 'ferramentas',
     aplicar(d) {
-      // células mudaram (pintura, via nova): refaz a grade espacial e as instâncias perto da mira
+      // células mudaram: com a tabela nova (tudo, realocado) refaz a grade espacial inteira; na pintura e na via nova
+      // só as tocadas entram na grade, e as que já estão desenhadas trocam de cor sem refazer as instâncias
+      const C = esp()?.celulas;
       const tudo = d?.tudo?.celulas || d?.realocado?.includes('celulas');
-      if (tudo || d?.celulas?.length) {
-        zona.sujo = true;
-        if (zona.ligada) montarCelulas();
-      }
+      if (tudo) zona.grade = null;
+      else if (d?.celulas?.length && C && zona.grade) {
+        const G = gradeDe(C);
+        let andou = false;
+        for (const c of d.celulas) if (c < G.de.length && porNaGrade(G, c)) andou = true;
+        if (zona.ligada && (andou || !recolorir(d.celulas))) montarCelulas();
+      } else if (d?.celulas?.length && zona.ligada) montarCelulas();
+      if (tudo && zona.ligada) montarCelulas();
       if (refsDem.length && (d?.predios?.length || d?.arestas?.length || d?.tudo?.predios || d?.tudo?.vias)) montarDemolir();
     },
     /** Medidas para a cena e os testes. */

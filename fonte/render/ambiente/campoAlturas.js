@@ -4,9 +4,9 @@
 // no Ultra. A grade vive na CPU (a colisão da câmera lê daqui, sem readPixels) e sobe para a GPU (R16F) por
 // texSubImage2D só nos retângulos sujos, onde a sombra de longe e o HAO (sombraLonge.js) a leem.
 //
-// A textura leva os níveis de uma pirâmide de máximos (cada célula do nível L é o maior das 4 do nível L - 1): a marcha
-// da sombra de longe, com passos que crescem até 48 m, lê o nível cuja célula é do tamanho do passo e não pula uma
-// torre fina.
+// A textura leva também o nível 1 de uma pirâmide de máximos (cada célula é o maior das 4 do nível 0): a marcha da
+// sombra de longe, com passos que crescem até 48 m, lê a célula do nível 1 de cada amostra nos passos longos e não
+// pula uma torre fina, sem engordar a sombra mais que uma célula do nível 1.
 //
 // Cada setor de 256 m tem o seu ladrilho: a grade das peças dos prédios dele, com a sobra das peças que passam da
 // borda. A grade da cidade é o máximo dos ladrilhos; um prédio que nasce refaz só o ladrilho do setor dele. O gerador
@@ -30,6 +30,8 @@ export const VAZIO = -1e4;
 export const DILATA = 0.3;
 /** Tamanho da grade por perfil (células por lado sobre o mapa). */
 export const LADO_CAMPO = Object.freeze({ ultra: 2048, alta: 2048, media: 1024, leve: 1024 });
+/** Níveis da pirâmide de máximos na grade e na textura (a marcha lê o 0 e o 1). */
+export const NIVEIS = 2;
 /** Na carga (ou num 'tudo'), até esta quantidade de prédios o campo sai inteiro no primeiro quadro. */
 const NA_CARGA = 20000;
 /** Teto de tempo por quadro (ms) para refazer ladrilhos depois da carga. */
@@ -271,9 +273,10 @@ export class Campo {
     this.chao = new Float32Array(N * N);
     this.alt = new Float32Array(N * N); // o maior entre o chão e a cidade (nível 0 da pirâmide)
     this.meia = new Uint16Array(N * N);
-    // pirâmide de máximos: nível L com N / 2^L células por lado, em float (para a conta) e em meia precisão (GPU)
+    // pirâmide de máximos (níveis 0 e 1): nível L com N / 2^L células por lado, em float (para a conta) e em meia
+    // precisão (GPU)
     this.niveis = [{ n: N, f: this.alt, h: this.meia }];
-    for (let n = N >> 1; n >= 1; n >>= 1) this.niveis.push({ n, f: new Float32Array(n * n), h: new Uint16Array(n * n) });
+    for (let L = 1, n = N >> 1; L < NIVEIS && n >= 1; L++, n >>= 1) this.niveis.push({ n, f: new Float32Array(n * n), h: new Uint16Array(n * n) });
     this.ladrilhos = new Map(); // chave -> ladrilho
     this.versao = 0;
     this.sujosNiveis = []; // [nível, retângulo] do último compor (para subir à GPU)
@@ -355,6 +358,7 @@ export class Campo {
     const b = Math.min(V.n - 1, Math.max(0, j));
     return V.f[b * V.n + a];
   }
+
 
   /** Célula (i, j) de um ponto do mundo. */
   celula(x, z) {

@@ -112,7 +112,7 @@ const NOITE = {
     ...CAMPO,
     gLuzRuaMapa: { value: RUA_VAZIA },
     gLuzRuaParams: { value: new THREE.Vector4(-4096, -4096, 1 / 8192, 2) },
-    gNoiteParams: { value: new THREE.Vector4(0, 7, 9, 0) },
+    gNoiteParams: { value: new THREE.Vector4(0, 9, 9, 0) },
     gNoiteJanelas: { value: new THREE.Vector3() },
   },
   vertice: { pars: '', main: '' },

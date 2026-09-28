@@ -307,6 +307,22 @@ export function faixasDoSentido(P, sentido, mao = 0) {
   });
 }
 
+/**
+ * Altura da superfície da seção acima do chão em u (m): a da tira de rodagem que contém u (pista, acostamento ou
+ * chão batido), com o abaulamento; fora delas, a da primeira tira não vertical. É onde a roda do carro encosta.
+ */
+export function alturaNaSecao(P, u) {
+  let achou = null;
+  for (const t of P.tiras) {
+    if (t.u1 - t.u0 < 1e-9 || u < t.u0 - 1e-9 || u > t.u1 + 1e-9) continue;
+    const f = (u - t.u0) / (t.u1 - t.u0);
+    const y = t.y0 + (t.y1 - t.y0) * f;
+    if (t.mat === MAT.PISTA || t.mat === MAT.ACOSTAMENTO || t.mat === MAT.TERRA) return y;
+    achou ??= y;
+  }
+  return achou ?? ALTURA.pista;
+}
+
 /** Tipos na ordem de VIAS_ORDEM (para as tabelas do shader). */
 export const PERFIS = Object.freeze(VIAS_ORDEM.map((id) => perfilVia(id)));
 

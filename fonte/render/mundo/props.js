@@ -29,6 +29,7 @@ class Geo {
     this.nor = [];
     this.parte = [];
     this.cor = [];
+    this.folha = [];
     this.idx = [];
   }
 
@@ -36,21 +37,23 @@ class Geo {
     return this.pos.length / 3;
   }
 
-  v(x, y, z, nx, ny, nz, parte, cor = [1, 1, 1]) {
+  /** Um vértice; folha = [1 + posição ao longo da folha (0 a 1), 0 na raque a 1 na borda] (0, 0 fora das folhas). */
+  v(x, y, z, nx, ny, nz, parte, cor = [1, 1, 1], folha = null) {
     this.pos.push(x, y, z);
     const c = Math.hypot(nx, ny, nz) || 1;
     this.nor.push(nx / c, ny / c, nz / c);
     this.parte.push(parte);
     this.cor.push(...cor);
+    this.folha.push(folha?.[0] ?? 0, folha?.[1] ?? 0);
     return this.nv - 1;
   }
 
-  /** Quadrilátero plano (anti-horário visto de fora). */
-  quad(a, b, c, d, parte, cor) {
+  /** Quadrilátero plano (anti-horário visto de fora); folhas: a coordenada da folha de cada canto (ou nada). */
+  quad(a, b, c, d, parte, cor, folhas = null) {
     const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     const w = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
     const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-    const i = [a, b, c, d].map((p) => this.v(p[0], p[1], p[2], n[0], n[1], n[2], parte, cor));
+    const i = [a, b, c, d].map((p, k) => this.v(p[0], p[1], p[2], n[0], n[1], n[2], parte, cor, folhas?.[k]));
     this.idx.push(i[0], i[1], i[2], i[0], i[2], i[3]);
   }
 
@@ -106,6 +109,7 @@ class Geo {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute('aParte', new THREE.Float32BufferAttribute(this.parte, 1));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.cor, 3));
+    g.setAttribute('aFolha', new THREE.Float32BufferAttribute(this.folha, 2));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return { g, tris: this.idx.length / 3 };
@@ -176,31 +180,39 @@ function modeloCopa(lod) {
 function modeloPalmeira(lod) {
   const G = new Geo();
   const h = 17;
-  G.cone(0, 0, 0, h * 0.45, 0.32, 0.27, lod ? 3 : 6, P.CONCRETO, [0.45, 0.43, 0.4]);
-  G.cone(0, h * 0.45, 0, h, 0.27, 0.22, lod ? 3 : 6, P.CONCRETO, [0.47, 0.45, 0.42]);
-  if (!lod) G.cone(0, h, 0, h + 2, 0.24, 0.2, 6, P.LAMPADA, PALMITO);
-  const n = lod ? 4 : 11;
+  // estipe cinza-claro (albedo real ~0,2 linear), 45 cm na base, afinando até o palmito
+  G.cone(0, 0, 0, h * 0.45, 0.23, 0.2, lod ? 3 : 6, P.CONCRETO, [0.2, 0.19, 0.17]);
+  G.cone(0, h * 0.45, 0, h, 0.2, 0.17, lod ? 3 : 6, P.CONCRETO, [0.22, 0.21, 0.19]);
+  if (!lod) G.cone(0, h, 0, h + 2, 0.2, 0.17, 6, P.LAMPADA, PALMITO);
+  // folhas pinadas em arco: a raque sobe e cai, os folíolos pendem dos dois lados em V (uma face só: o material é de
+  // dois lados), e a coroa fica com ~8 m de largura, como a da palmeira-imperial; os folíolos são recortados no shader
+  // (aFolha: posição ao longo da folha e distância da raque), então a folha não é uma lâmina verde cheia
+  const n = lod ? 6 : 12;
   for (let k = 0; k < n; k++) {
-    const a = (2 * Math.PI * k) / n + (k % 2) * 0.2;
+    const a = (2 * Math.PI * k) / n + (k % 2) * 0.25;
     const dx = Math.cos(a);
     const dz = Math.sin(a);
     const px = -dz;
     const pz = dx;
     const seg = lod ? 1 : 3;
-    const comp = 4.4;
-    const sobe = k % 3 === 0 ? 0.9 : 0.35;
+    const comp = 4.2;
+    const sobe = k % 3 === 0 ? 0.9 : 0.4;
+    const claro = FOLHA.map((c) => c * (1.05 + 0.1 * (k % 2)));
     let prev = null;
     for (let j = 0; j <= seg; j++) {
       const t = j / seg;
       const r = comp * t;
       const y = h + 2 + sobe * r * (1 - t) * 1.2 - 1.6 * t * t;
-      const w = 0.55 * (1 - 0.6 * t);
+      const w = 0.9 * (1 - 0.55 * t) + 0.08;
       const cx = dx * r;
       const cz = dz * r;
-      const cur = [[cx - px * w, y, cz - pz * w], [cx + px * w, y - 0.05, cz + pz * w]];
+      const cai = 0.45 * w;
+      const cur = [[cx + px * w, y - cai, cz + pz * w], [cx, y, cz], [cx - px * w, y - cai, cz - pz * w]];
       if (prev) {
-        G.quad(prev[0], prev[1], cur[1], cur[0], P.LAMPADA, FOLHA.map((c) => c * 1.15));
-        G.quad(prev[1], prev[0], cur[0], cur[1], P.LAMPADA, FOLHA.map((c) => c * 0.8));
+        const a0 = 1 + (j - 1) / seg;
+        const a1 = 1 + t;
+        G.quad(prev[1], prev[0], cur[0], cur[1], P.LAMPADA, claro, [[a0, 0], [a0, 1], [a1, 1], [a1, 0]]);
+        G.quad(prev[2], prev[1], cur[1], cur[2], P.LAMPADA, claro, [[a0, 1], [a0, 0], [a1, 0], [a1, 1]]);
       }
       prev = cur;
     }
@@ -242,7 +254,18 @@ export function criarMaterialArvore(ganchos, { duplo = false } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.82, metalness: 0, side: duplo ? THREE.DoubleSide : THREE.FrontSide });
   m.name = duplo ? 'arvore-rua-palma' : 'arvore-rua';
   m.onBeforeCompile = (s) => {
-    s.vertexShader = trocar(s.vertexShader, '#include <common>', '#include <common>\nattribute vec4 aObj;\nattribute float aParte;', 'arvore');
+    s.vertexShader = trocar(s.vertexShader, '#include <common>', '#include <common>\nattribute vec4 aObj;\nattribute float aParte;\nattribute vec2 aFolha;\nvarying vec2 vFolha;', 'arvore');
+    s.vertexShader = trocar(s.vertexShader, '#include <begin_vertex>', '#include <begin_vertex>\nvFolha = aFolha;', 'arvore');
+    // folíolos da palmeira: faixas oblíquas a partir da raque, recortadas; de longe (faixa menor que o pixel) a folha
+    // fica cheia, sem cintilar
+    s.fragmentShader = trocar(s.fragmentShader, '#include <common>', '#include <common>\nvarying vec2 vFolha;', 'arvore');
+    s.fragmentShader = trocar(s.fragmentShader, '#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+if ( vFolha.x > 0.5 ) {
+  float fT = vFolha.x - 1.0;
+  float fS = ( fT * 4.2 - vFolha.y * ( 0.98 - 0.5 * fT ) * 0.8 ) / 0.13;
+  float fPerto = 1.0 - smoothstep( 0.18, 0.45, fwidth( fS ) );
+  if ( vFolha.y > 0.06 && ( fract( fS ) > 1.0 - 0.5 * fPerto || vFolha.y > 0.97 - 0.25 * fT * fPerto * fract( fS * 0.37 ) ) ) discard;
+}`, 'arvore');
     // variação da copa por instância (tom e secura), sem mexer no tronco
     s.vertexShader = trocar(s.vertexShader, '#include <color_vertex>', `#include <color_vertex>
 if ( aParte > 1.5 ) vColor.rgb *= vec3( 0.85 + 0.3 * aObj.x / 255.0, 0.88 + 0.2 * aObj.y / 255.0, 0.9 );`, 'arvore');

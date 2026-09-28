@@ -346,9 +346,9 @@ function tampa(K, P, secao, est, sentido, ox, oz, id, marcas, v, vf) {
     while (k + 1 < tiras.length && tiras[k + 1].alto === alto) k++;
     const mat = alto === 'canteiro' ? MAT.MEIO_FIO : MAT.BARREIRA;
     const anel = [];
-    const pega = (o, ao) => anel.push(K.vert(secao[o] - ox, secao[o + 1], secao[o + 2] - oz, nx, 0, nz, 0, v, vf, 0, mat, P.idx, marcas, ao, id));
-    pega(j * 6, 0.7);
-    for (let q = j; q <= k; q++) pega(q * 6 + 3, q === k ? 0.7 : 0.95);
+    const pega = (o, u, ao) => anel.push(K.vert(secao[o] - ox, secao[o + 1], secao[o + 2] - oz, nx, 0, nz, u, v, vf, 0, mat, P.idx, marcas, ao, id));
+    pega(j * 6, tiras[j].u0, 0.7);
+    for (let q = j; q <= k; q++) pega(q * 6 + 3, tiras[q].u1, q === k ? 0.7 : 0.95);
     for (let q = 1; q + 1 < anel.length; q++) triVertical(K, anel[0], anel[q], anel[q + 1], nx, nz);
     j = k + 1;
   }
