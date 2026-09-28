@@ -227,11 +227,12 @@ export function criarEntrada(ctx, camera) {
       return;
     }
     if (n === 2) {
+      // com o mouse no meio (tela de toque no notebook) o segundo ponteiro não vira pinça nem corta o gesto do mouse
+      if (gesto?.tipo === 'girar' || [...dedos.values()].some((x) => x.tipo === 'mouse')) return;
       if (gesto?.tipo === 'ferramenta') {
         const f = dedos.get(gesto.id) ?? d;
         ferramenta('fim', f, 1, f.tipo, { cancelado: true });
       }
-      if (gesto?.tipo === 'girar' || [...dedos.values()].some((x) => x.tipo === 'mouse')) return;
       comecarDois(t);
     }
   }
@@ -310,7 +311,10 @@ export function criarEntrada(ctx, camera) {
       return;
     }
     if (g.tipo === 'dois') {
-      if (dedos.size === 1) {
+      if (dedos.size >= 2) {
+        // saiu um de três dedos: o gesto recomeça com o par que ficou (as medidas eram do par velho: a vista pulava)
+        comecarDois(t);
+      } else if (dedos.size === 1) {
         // sobrou um dedo: continua arrastando a câmera a partir dele (mesmo no modo ferramenta: o gesto era de câmera)
         const [r] = [...dedos.values()];
         r.x0 = r.x;

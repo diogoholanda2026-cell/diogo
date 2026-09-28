@@ -197,9 +197,6 @@ export function distanciaDaMarcha(k) {
   return t;
 }
 
-/** Raios do HAO em células e as 8 direções (a mesma conta de haoNoCampo, em ambiente/sombraLonge.js). */
-export const RAIOS_HAO = Object.freeze([1, 2, 4, 8]);
-
 /**
  * Nos passos maiores que isto (em células do campo), a marcha também lê a célula do nível 1 (o maior de 2 x 2
  * células) em cada amostra: a torre fina entre duas amostras não some, e a sombra engorda no máximo uma célula do
@@ -214,7 +211,9 @@ export const PASSO_NIVEL1 = 2;
  * marcha fina de 2 m, e a torre de 8 m a 400 m não some.
  * uModo 0 (completo): R e G marcham para o sol nas duas direções, B é a visibilidade do céu no chão (o menor dos 9
  * vizinhos) e A esse chão. uModo 1 (passo do sol): R copia o G do campo anterior, G marcha para a direção nova, B e A
- * copiam. uDirA e uDirB: xy a direção do sol no chão (unitária), z a tangente da elevação, w 1 se há sol.
+ * copiam. uDirA e uDirB: xy a direção do sol no chão (unitária), z a tangente da elevação, w 1 se há sol. uHMax: o
+ * maior do campo na região que a marcha alcança (com folga para a meia precisão); a marcha para quando nem ele, mais à
+ * frente, subiria a sombra (com o sol alto, antes da metade dos passos; o resultado é o mesmo).
  */
 export const CAMPO_PASSE = /* glsl */ `
 uniform sampler2D uAlturas;
@@ -225,6 +224,7 @@ uniform float uTam;
 uniform vec4 uDirA;
 uniform vec4 uDirB;
 uniform float uModo;
+uniform float uHMax;
 float gH( vec2 uv ) { return textureLod( uAlturas, uv, 0.0 ).r; }
 // a célula do nível 1 (o maior de 2 x 2 células) que contém o ponto
 float gH1( vec2 uv ) {
@@ -251,6 +251,7 @@ float marchar( vec2 uv, vec4 d ) {
       hm = max( hm, gH1( m ) );
     }
     s = max( s, max( hq - t * d.z, hm - tm * d.z ) );
+    if ( uHMax - t * d.z <= s ) break;
   }
   return s;
 }

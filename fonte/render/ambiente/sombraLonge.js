@@ -6,21 +6,38 @@
 // O sol anda em degraus de 3 graus de ângulo horário (0,2 h de céu). O campo em uso guarda os degraus k e k + 1 e a
 // sombra mistura os dois pela fração da hora (gCampoT): ela anda sem salto. Enquanto isso o campo seguinte (k + 1 e
 // k + 2) sai em 16 ladrilhos, um por quadro, copiando o que não muda; quando o sol passa ao degrau seguinte os dois
-// trocam. Em 1x o sol anda 3 graus em 5 s (16 ladrilhos em ~5 s); em 4x, em 1,25 s. Um salto de hora (cena, hora
-// forçada) refaz tudo de uma vez; a troca entre o sol e a lua refaz em ladrilhos (é no crepúsculo, sem luz). Quando
-// o campo de alturas muda num retângulo (um prédio nasce), só o retângulo e a faixa da sombra dele contra o sol são
-// refeitos, nos dois campos.
+// trocam. Em 1x o sol anda 3 graus em 5 s; em 4x, em 1,25 s (a 30 qps os 16 ladrilhos saem em 0,53 s). Com quadros
+// mais lentos que o sol saem até 4 por quadro, no ritmo que deixa o campo seguinte pronto com 85% do degrau, e a troca
+// não faz o resto de uma vez. Um salto de hora (cena, hora forçada) refaz tudo de uma vez; a troca entre o sol e a lua
+// refaz em ladrilhos (é no crepúsculo, sem luz). Quando o campo de alturas muda em retângulos (um prédio nasce), só
+// eles e a faixa da sombra deles contra o sol são refeitos, nos dois campos.
 import * as THREE from 'three';
 import { CAMPO_PASSE, MARCHA, distanciaDaMarcha, PASSO_NIVEL1 } from '../materiais/shaders/sombra.glsl.js';
 import { posicaoSol, posicaoLua, mesAbsoluto } from './astro.js';
+import { juntarRet } from './campoAlturas.js';
 
 /** Degrau do sol em horas de céu (15 graus por hora: 0,2 h = 3 graus). */
 export const DEGRAU_HORAS = 0.2;
 export const DEGRAUS_DIA = Math.round(24 / DEGRAU_HORAS);
 /** Ladrilhos por lado do campo (16 ao todo). */
 export const LADO_LADRILHOS = 4;
+const TOTAL = LADO_LADRILHOS * LADO_LADRILHOS;
+/**
+ * Um ladrilho por quadro; quando o sol anda mais rápido que isso (quadros lentos em 4x), até este número por quadro,
+ * no ritmo que deixa o campo seguinte pronto com 85% do degrau: a troca não faz o resto de uma vez.
+ */
+export const LADRILHOS_MAX = 4;
+
+/**
+ * Ladrilhos do campo seguinte que devem estar prontos na fração t do degrau, para um campo começado na fração t0 (o
+ * ritmo acima). Com o sol parado (jogo em pausa, cena de hora fixa) a meta não anda e sai um por quadro.
+ */
+export const metaLadrilhos = (t, t0 = 0) =>
+  Math.min(TOTAL, Math.ceil((TOTAL * Math.max(0, t - t0)) / Math.max(0.05, 0.85 - t0)));
 /** Alcance da marcha da sombra (m). */
 export const ALCANCE = distanciaDaMarcha(MARCHA.passos);
+/** Folga (m) do maior do campo passado à marcha: a meia precisão da textura erra até 0,25 m entre 512 e 1.024 m. */
+export const FOLGA_HMAX = 1;
 /** Tangente mínima da elevação da luz (o sol rente não estica a sombra além do alcance da marcha). */
 const TAN_MIN = 0.02;
 const TAN_MAX = 60;
@@ -53,10 +70,10 @@ export function direcaoDoDegrau(chave, k, tempo, mapa, alvo = [0, 0, 0, 0]) {
 
 /**
  * Altura da sombra na célula (i, j) pela mesma marcha do GLSL, sobre o campo da CPU (campoAlturas.js, Campo): o campo
- * bilinear no fim de cada passo e no meio dele e, nos passos longos, também a célula do nível 1 de cada amostra
- * (testes e conferência).
+ * bilinear no fim de cada passo e no meio dele e, nos passos longos, também a célula do nível 1 de cada amostra; com
+ * hMax (o maior do campo na região), para quando nada à frente subiria a sombra (testes e conferência).
  */
-export function alturaDaSombra(campo, i, j, dir) {
+export function alturaDaSombra(campo, i, j, dir, hMax = Infinity) {
   if (!dir[3]) return -1e4;
   const { passo, gx, gz, tam } = campo;
   const x = gx + (i + 0.5) * passo;
@@ -82,6 +99,7 @@ export function alturaDaSombra(campo, i, j, dir) {
       hm = Math.max(hm, nivel1(mx, mz));
     }
     s = Math.max(s, hq - t * dir[2], hm - tm * dir[2]);
+    if (hMax - t * dir[2] <= s) break;
   }
   return s;
 }
@@ -145,7 +163,7 @@ function criarDominio(ctx) {
     name: 'campo-passe',
     uniforms: {
       uAlturas: { value: null }, uAnterior: { value: null }, uN: { value: 1024 }, uPassoM: { value: 8 }, uTam: { value: 8192 },
-      uDirA: { value: new THREE.Vector4() }, uDirB: { value: new THREE.Vector4() }, uModo: { value: 0 },
+      uDirA: { value: new THREE.Vector4() }, uDirB: { value: new THREE.Vector4() }, uModo: { value: 0 }, uHMax: { value: 1e5 },
     },
     vertexShader: VERTICE,
     fragmentShader: CAMPO_PASSE,
@@ -169,12 +187,13 @@ function criarDominio(ctx) {
     k: -1,
     chave: 'sol',
     t: 0,
+    t0: 0, // fração do degrau em que o campo seguinte começou (o ritmo dos ladrilhos)
     feitos: 0, // ladrilhos prontos do campo seguinte
     refazer: -1, // ladrilho do campo em uso sendo refeito em fatias (troca sol/lua), -1 nada
     dirs: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], // k, k + 1, k + 2
   };
   // atrasos: trocas em que o campo seguinte ainda não estava pronto (o resto dos ladrilhos saiu de uma vez)
-  const medida = { passes: 0, ladrilhos: 0, completos: 0, trocas: 0, atrasos: 0, retangulos: 0, texeis: 0 };
+  const medida = { passes: 0, ladrilhos: 0, completos: 0, trocas: 0, atrasos: 0, retangulos: 0, texeis: 0, maxQuadro: 0 };
   ctx.medidas.stats.longe = medida;
 
   function criarAlvos(n) {
@@ -198,6 +217,10 @@ function criarDominio(ctx) {
     const w = i1 - i0 + 1;
     const h = j1 - j0 + 1;
     if (w <= 0 || h <= 0) return;
+    // o maior do campo onde a marcha destes texels chega (o retângulo mais o alcance e a folga do filtro)
+    const cp = ctx.campoAlturas?.campo;
+    const m = Math.ceil(ALCANCE / (ctx.campoAlturas?.passo || 8)) + 2;
+    U.uHMax.value = cp?.maximoNaRegiao ? cp.maximoNaRegiao(i0 - m, j0 - m, i1 + m, j1 + m) + FOLGA_HMAX : 1e5;
     alvo.viewport.set(i0, j0, w, h);
     alvo.scissor.set(i0, j0, w, h);
     alvo.scissorTest = true;
@@ -235,6 +258,7 @@ function criarDominio(ctx) {
     passe(alvos[st.atual], [0, 0, N - 1, N - 1], 0, st.dirs[0], st.dirs[1], null, medidas);
     st.valido = true;
     st.feitos = 0;
+    st.t0 = st.t;
     st.refazer = -1;
     medida.completos++;
   }
@@ -250,6 +274,7 @@ function criarDominio(ctx) {
     st.atual = 1 - st.atual;
     st.k = (st.k + 1) % DEGRAUS_DIA;
     st.feitos = 0;
+    st.t0 = st.t;
     direcoes(st.k);
     medida.trocas++;
   }
@@ -272,12 +297,14 @@ function criarDominio(ctx) {
     const rets = CA.retangulos.splice(0);
     const chave = amb.sol?.chave === 'lua' ? 'lua' : 'sol';
     const { k, t } = degrauDaHora(amb.hora);
+    st.t = t;
     if (!st.valido || versaoCampo < 0) {
       st.k = k;
       st.chave = chave;
       refazerTudo(medidas);
       rets.length = 0;
     } else {
+      let cheio = false; // já houve um passe do mapa inteiro neste quadro
       if (chave !== st.chave) {
         // a luz chave trocou (crepúsculo): refaz em ladrilhos, sem pico
         st.chave = chave;
@@ -288,33 +315,47 @@ function criarDominio(ctx) {
       }
       const dk = (k - st.k + DEGRAUS_DIA) % DEGRAUS_DIA;
       if (dk === 1 && st.refazer >= 0) {
-        // no meio de um refazer em fatias: recomeça no degrau novo
+        // no meio de um refazer em fatias: segue no degrau novo (os ladrilhos já feitos ficam um degrau atrás e se
+        // acertam nas trocas seguintes; recomeçar do zero nunca terminava com quadros lentos em 4x)
         st.k = k;
         direcoes(k);
-        st.refazer = 0;
       } else if (dk === 1) {
         // o sol passou ao degrau seguinte: termina o campo seguinte (se atrasou) e troca
-        if (st.feitos < LADO_LADRILHOS * LADO_LADRILHOS) medida.atrasos++;
-        while (st.feitos < LADO_LADRILHOS * LADO_LADRILHOS) ladrilhoSeguinte(medidas);
+        if (st.feitos < TOTAL) medida.atrasos++;
+        while (st.feitos < TOTAL) ladrilhoSeguinte(medidas);
         trocar();
       } else if (dk !== 0) {
         // salto (hora forçada, cena, carga): tudo de novo, agora
         st.k = k;
         refazerTudo(medidas);
+        cheio = true;
       }
-      for (const ret of rets) {
-        const a = retanguloAfetado(ret, st.dirs, CA.passo, N);
+      // os retângulos que mudaram, com a faixa da sombra deles (os vizinhos juntos, os distantes separados)
+      const afetados = [];
+      for (const ret of rets) juntarRet(afetados, retanguloAfetado(ret, st.dirs, CA.passo, N));
+      for (const a of afetados) {
         passe(alvos[st.atual], a, 0, st.dirs[0], st.dirs[1], null, medidas);
         if (st.feitos) passe(alvos[1 - st.atual], a, 0, st.dirs[1], st.dirs[2], null, medidas);
         medida.retangulos++;
       }
       if (st.refazer >= 0) {
         passe(alvos[st.atual], ladrilho(st.refazer), 0, st.dirs[0], st.dirs[1], null, medidas);
-        if (++st.refazer >= LADO_LADRILHOS * LADO_LADRILHOS) st.refazer = -1;
-      } else if (st.feitos < LADO_LADRILHOS * LADO_LADRILHOS) ladrilhoSeguinte(medidas);
+        if (++st.refazer >= TOTAL) {
+          st.refazer = -1;
+          st.t0 = st.t;
+        }
+      } else if (st.feitos < TOTAL) {
+        const meta = metaLadrilhos(t, st.t0);
+        const lim = cheio ? 1 : LADRILHOS_MAX;
+        let n = 0;
+        do {
+          ladrilhoSeguinte(medidas);
+          n++;
+        } while (st.feitos < meta && n < lim);
+        medida.maxQuadro = Math.max(medida.maxQuadro, n);
+      }
     }
     versaoCampo = CA.versao;
-    st.t = t;
     u.gCampoMapa.value = alvos[st.atual].texture;
     u.gCampoParams.value.set(CA.ox, CA.oz, 1 / CA.tam, CA.passo);
     u.gCampoT.value = st.refazer >= 0 ? 0 : t;

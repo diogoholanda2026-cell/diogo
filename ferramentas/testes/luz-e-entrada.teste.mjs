@@ -10,8 +10,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { Campo, VAZIO, DILATA, NIVEIS, paraMeia, rasterizarPeca, ladrilhoDasPecas, unirRet } from '../../fonte/render/ambiente/campoAlturas.js';
-import { alturaDaSombra, haoNoCampo, degrauDaHora, direcaoDoDegrau, retanguloAfetado, ALCANCE, DEGRAU_HORAS, DEGRAUS_DIA } from '../../fonte/render/ambiente/sombraLonge.js';
+import { Campo, VAZIO, DILATA, NIVEIS, paraMeia, rasterizarPeca, ladrilhoDasPecas, unirRet, juntarRet, areaRet } from '../../fonte/render/ambiente/campoAlturas.js';
+import { alturaDaSombra, haoNoCampo, degrauDaHora, direcaoDoDegrau, retanguloAfetado, ALCANCE, DEGRAU_HORAS, DEGRAUS_DIA, LADO_LADRILHOS, LADRILHOS_MAX, metaLadrilhos } from '../../fonte/render/ambiente/sombraLonge.js';
 import { postesDasVias, brilhoDosPostes, forcaNoite, forcaJanelas, POSTES, SUAVE, pesosSuaves, NOITE_LUZ } from '../../fonte/render/ambiente/luzNoite.js';
 import { MARCHA, PASSO_NIVEL1, distanciaDaMarcha } from '../../fonte/render/materiais/shaders/sombra.glsl.js';
 import { criarEntrada, GESTOS } from '../../fonte/render/camera/entrada.js';
@@ -308,6 +308,18 @@ test('voo: caminho ótimo de van Wijk e Nuij (afasta, anda, aproxima) e só zoom
   assert.ok(caminhoVoo(400, 400, 100).em(0.5).w < 600, 'perto, quase não afasta');
   const z = caminhoVoo(300, 2400, 0);
   assert.ok(Math.abs(z.em(1).w - 2400) < 1e-6 && Math.abs(z.em(0.5).w - Math.sqrt(300 * 2400)) < 1e-6, 'zoom puro: geométrico');
+  const zi = caminhoVoo(2400, 300, 0);
+  assert.ok(Math.abs(zi.em(1).w - 300) < 1e-6 && zi.S > 0, 'zoom puro para dentro');
+  // quase o mesmo lugar com zoom grande (a subtração do artigo dava NaN): as pontas batem em todo o leque
+  for (const w0 of [10, 300, 9000]) {
+    for (const w1 of [10, 300, 9000]) {
+      for (const d of [1e-5, 0.02, 0.1, 1, 100, 8000]) {
+        const c = caminhoVoo(w0, w1, d);
+        for (const t of [0, 0.5, 1]) assert.ok(Number.isFinite(c.em(t).u) && Number.isFinite(c.em(t).w) && Number.isFinite(c.S), `${w0} ${w1} ${d} ${t}`);
+        assert.ok(Math.abs(c.em(1).u - 1) * d < 1e-4 && Math.abs(c.em(1).w / w1 - 1) < 1e-6, `${w0} ${w1} ${d}: ${JSON.stringify(c.em(1))}`);
+      }
+    }
+  }
 });
 
 // ------------------------------------------------------------------------------------------------ entrada
@@ -501,4 +513,121 @@ test('entrada: rolagem pela borda com a ferramenta (a vista anda e a ferramenta 
   ev('pointerup', 9, 330, 240, t + 40, { pointerType: 'mouse' });
   assert.equal(eventos.at(-1).fase, 'fim');
   E.descartar();
+});
+
+test('entrada: o terceiro dedo que sai não faz a vista pular; o toque com o mouse em curso não corta a ferramenta', () => {
+  const { ev, est } = montarEntrada();
+  ev('pointerdown', 1, 300, 300, 1000);
+  ev('pointerdown', 2, 500, 300, 1010);
+  ev('pointermove', 1, 250, 300, 1030);
+  ev('pointermove', 2, 550, 300, 1030);
+  ev('pointermove', 1, 200, 300, 1060);
+  ev('pointermove', 2, 600, 300, 1060);
+  ev('pointerdown', 3, 400, 500, 1080);
+  const e0 = { ...est };
+  // sai o dedo 1: o par passa a ser 2 e 3, bem mais perto um do outro que 1 e 2; sem recomeçar, a pinça lia a
+  // distância nova contra a velha e a vista pulava
+  ev('pointerup', 1, 200, 300, 1100);
+  ev('pointermove', 2, 601, 300, 1120);
+  ev('pointermove', 3, 400, 501, 1120);
+  assert.ok(Math.abs(est.dist - e0.dist) < 0.05 * e0.dist, `sem salto de zoom: ${e0.dist} -> ${est.dist}`);
+  assert.ok(Math.abs(est.guinada - e0.guinada) < 1, `sem salto de giro: ${e0.guinada} -> ${est.guinada}`);
+  // mouse com a ferramenta e um toque na tela ao mesmo tempo: a ferramenta do mouse segue
+  const m = montarEntrada({ modo: 'ferramenta' });
+  m.ev('pointerdown', 9, 320, 240, 1000, { pointerType: 'mouse' });
+  m.ev('pointermove', 9, 340, 240, 1016, { pointerType: 'mouse' });
+  m.ev('pointerdown', 1, 500, 300, 1030);
+  assert.ok(!m.eventos.some((e) => e.cancelado), 'o toque não cancela a ferramenta do mouse');
+  assert.equal(m.E.gesto, 'ferramenta');
+  m.ev('pointermove', 9, 360, 240, 1048, { pointerType: 'mouse' });
+  m.ev('pointerup', 9, 360, 240, 1060, { pointerType: 'mouse' });
+  assert.deepEqual(m.eventos.map((e) => e.fase), ['inicio', 'move', 'move', 'fim']);
+});
+
+test('campo e sombra de longe: retângulos distantes ficam separados, vizinhos se juntam; o ritmo dos ladrilhos', () => {
+  const l = [];
+  juntarRet(l, [0, 0, 9, 9]);
+  juntarRet(l, [10, 0, 19, 9]);
+  assert.deepEqual(l, [[0, 0, 19, 9]], 'vizinhos viram um');
+  juntarRet(l, [500, 500, 509, 509]);
+  assert.equal(l.length, 2, 'o distante fica separado (a cidade entre eles não se refaz)');
+  juntarRet(l, [5, 5, 8, 8]);
+  assert.equal(l.length, 2, 'o de dentro some no que o contém');
+  const cheia = [];
+  for (let k = 0; k < 40; k++) juntarRet(cheia, [k * 100, 0, k * 100 + 2, 2], 16);
+  assert.ok(cheia.length <= 16, `a lista não cresce sem fim: ${cheia.length}`);
+  assert.deepEqual(cheia.reduce((a, b) => unirRet(a, b), null), [0, 0, 3902, 2], 'e cobre tudo');
+  assert.equal(areaRet([0, 0, 9, 4]), 50);
+  // ritmo: um ladrilho por quadro basta com quadros rápidos; atrasado, o campo fica pronto com 85% do degrau
+  assert.equal(metaLadrilhos(0), 0);
+  assert.equal(metaLadrilhos(0.05), 1);
+  assert.equal(metaLadrilhos(0.85), LADO_LADRILHOS * LADO_LADRILHOS);
+  assert.equal(metaLadrilhos(1), LADO_LADRILHOS * LADO_LADRILHOS);
+  assert.equal(metaLadrilhos(0.5, 0.5), 0, 'campo começado agora (salto, sol parado): um por quadro');
+  assert.equal(metaLadrilhos(0.95, 0.9), LADO_LADRILHOS * LADO_LADRILHOS, 'começado no fim do degrau: corre');
+  // 4x a 7 qps: 8,75 quadros por degrau; com até LADRILHOS_MAX por quadro o campo fica pronto antes da troca
+  let feitos = 0;
+  let pico = 0;
+  for (let q = 1; q <= 8; q++) {
+    const meta = metaLadrilhos(q / 8.75);
+    let n = 0;
+    do {
+      feitos++;
+      n++;
+    } while (feitos < meta && n < LADRILHOS_MAX && feitos < 16);
+    pico = Math.max(pico, n);
+    if (feitos >= 16) break;
+  }
+  assert.ok(feitos >= 16 && pico <= LADRILHOS_MAX, `pronto antes da troca: ${feitos} ladrilhos, pico ${pico}`);
+});
+
+test('sombra de longe: a marcha que para pelo maior da região dá a mesma sombra, com menos passos de sol alto', () => {
+  const c = campoPlano(512, 4096);
+  const pecas = [];
+  // uma cidade de torres de 10 a 180 m e uma torre de 450 m longe dali
+  for (let k = 0; k < 400; k++) {
+    const x = -900 + ((k * 97) % 1800);
+    const z = -900 + ((k * 61) % 1800);
+    pecas.push(caixa(x, z, 12 + (k % 5) * 6, 10 + (k % 7) * 4, 10 + ((k * 13) % 170)));
+  }
+  c.compor(c.trocarLadrilho('c', ladrilhoDasPecas(pecas, c.N, c.passo, c.gx, c.gz)));
+  c.compor(c.trocarLadrilho('t', ladrilhoDasPecas([caixa(1500, 1500, 20, 20, 450)], c.N, c.passo, c.gx, c.gz)));
+  // o maior grosso: por cima do maior de verdade em toda região, e a torre alta só onde ela está
+  const exato = (i0, j0, i1, j1) => {
+    let m = -Infinity;
+    for (let j = Math.max(0, j0); j <= Math.min(c.N - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(c.N - 1, i1); i++) m = Math.max(m, c.alt[j * c.N + i]);
+    return m;
+  };
+  for (const r of [[0, 0, 511, 511], [100, 100, 200, 200], [0, 300, 40, 511], [250, 250, 250, 250]]) {
+    assert.ok(c.maximoNaRegiao(...r) >= exato(...r), `bloco por cima: ${r}`);
+  }
+  assert.equal(c.maximoNaRegiao(0, 0, 511, 511), 450);
+  assert.ok(c.maximoNaRegiao(100, 100, 300, 300) < 200, 'longe da torre alta, o maior é o da cidade');
+  const m = Math.ceil(ALCANCE / c.passo) + 2;
+  let passos = [0, 0];
+  for (const tan of [0.15, 0.6, 2.5]) {
+    for (let k = 0; k < 120; k++) {
+      const i = 150 + ((k * 37) % 220);
+      const j = 150 + ((k * 53) % 220);
+      const a = (k * 29) % 360;
+      const dir = [Math.cos(a * RAD), Math.sin(a * RAD), tan, 1];
+      const hMax = c.maximoNaRegiao(i - m, j - m, i + m, j + m) + 1;
+      const s0 = alturaDaSombra(c, i, j, dir);
+      const s1 = alturaDaSombra(c, i, j, dir, hMax);
+      assert.equal(s1, s0, `igual: tan ${tan}, (${i}, ${j})`);
+      // quantos passos a marcha anda até parar (a mesma condição do GLSL)
+      let t = 0;
+      let n = 0;
+      for (let q = 0; q < MARCHA.passos; q++) {
+        const f = q / (MARCHA.passos - 1);
+        t += MARCHA.primeiro + (MARCHA.ultimo - MARCHA.primeiro) * f * f;
+        n++;
+        if (hMax - t * tan <= s0) break;
+      }
+      if (tan > 2) passos[0] += n;
+      else if (tan < 0.2) passos[1] += n;
+    }
+  }
+  assert.ok(passos[0] / 120 < 20, `sol alto: a marcha para cedo (${(passos[0] / 120).toFixed(1)} passos de 48)`);
+  assert.ok(passos[1] / 120 > 40, `sol baixo: quase inteira (${(passos[1] / 120).toFixed(1)})`);
 });

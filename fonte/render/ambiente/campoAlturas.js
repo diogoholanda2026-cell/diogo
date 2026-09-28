@@ -32,6 +32,12 @@ export const DILATA = 0.3;
 export const LADO_CAMPO = Object.freeze({ ultra: 2048, alta: 2048, media: 1024, leve: 1024 });
 /** Níveis da pirâmide de máximos na grade e na textura (a marcha lê o 0 e o 1). */
 export const NIVEIS = 2;
+/**
+ * Lado (células) dos blocos do máximo grosso, só na CPU: o maior do campo numa região sai lendo poucos blocos. A
+ * sombra de longe passa ao passe o maior da região que a marcha alcança, e a marcha para quando nada mais à frente
+ * pode subir a sombra (a conta é exata: o resultado não muda).
+ */
+export const BLOCO = 32;
 /** Na carga (ou num 'tudo'), até esta quantidade de prédios o campo sai inteiro no primeiro quadro. */
 const NA_CARGA = 20000;
 /** Teto de tempo por quadro (ms) para refazer ladrilhos depois da carga. */
@@ -255,6 +261,34 @@ export function unirRet(a, b) {
 
 const retDoLadrilho = (L) => (L && L.ni && L.nj ? [L.i0, L.j0, L.i0 + L.ni - 1, L.j0 + L.nj - 1] : null);
 
+/** Células de um retângulo [i0, j0, i1, j1]. */
+export const areaRet = (r) => (r[2] - r[0] + 1) * (r[3] - r[1] + 1);
+
+/**
+ * Junta o retângulo r à lista (muda a lista): funde com os que ele toca ou quase (a união até 1,25 vez a soma das
+ * áreas) e deixa os distantes separados, para dois setores longe um do outro no mesmo quadro não sujarem a cidade
+ * inteira entre eles. Acima de max retângulos, a lista vira a união de todos (não cresce sem quem a leia).
+ */
+export function juntarRet(lista, r, max = 16) {
+  if (!r) return lista;
+  let atual = r.slice();
+  for (let k = 0; k < lista.length; ) {
+    const u = unirRet(lista[k], atual);
+    if (areaRet(u) <= 1.25 * (areaRet(lista[k]) + areaRet(atual))) {
+      atual = u;
+      lista.splice(k, 1);
+      k = 0; // a união pode alcançar outro
+    } else k++;
+  }
+  lista.push(atual);
+  if (lista.length > max) {
+    const u = lista.reduce((a, b) => unirRet(a, b), null);
+    lista.length = 0;
+    lista.push(u);
+  }
+  return lista;
+}
+
 // ------------------------------------------------------------------------------------------------ o campo
 
 /**
@@ -277,6 +311,8 @@ export class Campo {
     // precisão (GPU)
     this.niveis = [{ n: N, f: this.alt, h: this.meia }];
     for (let L = 1, n = N >> 1; L < NIVEIS && n >= 1; L++, n >>= 1) this.niveis.push({ n, f: new Float32Array(n * n), h: new Uint16Array(n * n) });
+    this.nb = Math.ceil(N / BLOCO);
+    this.blocos = new Float32Array(this.nb * this.nb); // o maior do nível 0 em cada bloco (0 como o nível 0 antes de compor)
     this.ladrilhos = new Map(); // chave -> ladrilho
     this.versao = 0;
     this.sujosNiveis = []; // [nível, retângulo] do último compor (para subir à GPU)
@@ -348,7 +384,32 @@ export class Campo {
       }
       this.sujosNiveis.push([L, r]);
     }
+    // o máximo grosso dos blocos que o retângulo toca
+    const { nb, blocos } = this;
+    for (let bj = Math.floor(j0 / BLOCO); bj <= Math.floor(j1 / BLOCO); bj++) {
+      for (let bi = Math.floor(i0 / BLOCO); bi <= Math.floor(i1 / BLOCO); bi++) {
+        let m = VAZIO;
+        const a1 = Math.min(N, (bi + 1) * BLOCO);
+        const b1 = Math.min(N, (bj + 1) * BLOCO);
+        for (let j = bj * BLOCO; j < b1; j++) {
+          for (let k = j * N + bi * BLOCO, fim = j * N + a1; k < fim; k++) if (alt[k] > m) m = alt[k];
+        }
+        blocos[bj * nb + bi] = m;
+      }
+    }
     this.versao++;
+  }
+
+  /** O maior do campo (chão e cidade) nas células [i0..i1] x [j0..j1], pelos blocos que as cobrem (por cima). */
+  maximoNaRegiao(i0, j0, i1, j1) {
+    const { N, nb, blocos } = this;
+    const b0 = Math.floor(Math.max(0, i0) / BLOCO);
+    const b1 = Math.floor(Math.min(N - 1, i1) / BLOCO);
+    const c0 = Math.floor(Math.max(0, j0) / BLOCO);
+    const c1 = Math.floor(Math.min(N - 1, j1) / BLOCO);
+    let m = VAZIO;
+    for (let bj = c0; bj <= c1; bj++) for (let bi = b0; bi <= b1; bi++) if (blocos[bj * nb + bi] > m) m = blocos[bj * nb + bi];
+    return m;
   }
 
   /** Maior altura da célula (i, j) do nível L da pirâmide (a mesma leitura do texelFetch da GPU). */
@@ -456,10 +517,11 @@ function criarDominio(ctx) {
   const sujos = new Set();
   let chaoSujo = [];
   let carga = true;
-  let iniciado = false;
+  let iniciado = false; // o chão já foi feito inteiro
+  let comTerreno = false; // e com o terreno (sem ele, o chão é o nível do mar)
+  let comPredios = false; // a lista dos prédios já foi feita inteira (o espelho pode trazê-los depois do terreno)
   const malhas = new Map(); // fonte (Mesh que projeta) -> assinatura
-  let pendente = null; // retângulo a compor
-  let retTotal = 0; // células sujas somadas neste quadro (sobe tudo quando passa de 1/4)
+  let pendentes = []; // retângulos a compor (os distantes separados)
   const publicado = { retangulos: [], versao: 0 };
 
   function montar() {
@@ -476,6 +538,7 @@ function criarDominio(ctx) {
     textura.needsUpdate = true;
     for (const s of lista.keys()) sujos.add(s);
     malhas.clear();
+    pendentes = [];
     chaoSujo = [[0, 0, N - 1, N - 1]];
     carga = true;
     Object.assign(publicado, { N, passo: campo.passo, ox: campo.gx, oz: campo.gz, tam, textura, campo });
@@ -487,8 +550,7 @@ function criarDominio(ctx) {
   ctx.alturaCidade = (x, z) => campo.topo(x, z);
 
   const marcar = (r) => {
-    if (!r) return;
-    pendente = unirRet(pendente, r);
+    if (r) juntarRet(pendentes, r);
   };
 
   function crescer(cap) {
@@ -500,16 +562,15 @@ function criarDominio(ctx) {
 
   function aplicar(d, esp) {
     const T = esp.terreno;
-    if (!iniciado || pedeTudo(d, 'terreno')) chaoSujo = [[0, 0, campo.N - 1, campo.N - 1]];
+    if (!iniciado || pedeTudo(d, 'terreno') || (T && !comTerreno)) chaoSujo = [[0, 0, campo.N - 1, campo.N - 1]];
     else if (d.terreno?.length) for (const [x0, z0, x1, z1] of d.terreno) chaoSujo.push(campo.retDoMundo(x0, z0, x1, z1));
-    const P = esp.predios;
-    if (!P || !T) {
-      iniciado = true;
-      return;
-    }
-    crescer(P.cap);
-    const tudo = !iniciado || pedeTudo(d, 'predios');
     iniciado = true;
+    comTerreno ||= !!T;
+    const P = esp.predios;
+    if (!P || !T) return;
+    crescer(P.cap);
+    const tudo = !comPredios || pedeTudo(d, 'predios');
+    comPredios = true;
     if (tudo) {
       for (const s of lista.keys()) sujos.add(s);
       lista.clear();
@@ -618,13 +679,20 @@ function criarDominio(ctx) {
       if (!sujos.size) carga = false;
     }
     conferirMalhas();
-    if (!pendente) return;
-    const r = pendente;
-    pendente = null;
-    campo.compor(r);
-    retTotal = (r[2] - r[0] + 1) * (r[3] - r[1] + 1);
-    if (retTotal > campo.N * campo.N * 0.25 || !subirRetangulos(ctx.renderer, textura, campo.sujosNiveis)) textura.needsUpdate = true;
-    publicado.retangulos.push(r);
+    if (!pendentes.length) return;
+    const rets = pendentes;
+    pendentes = [];
+    // compõe cada retângulo (a pirâmide de um vizinho refeita depois lê o nível 0 já novo) e sobe os pedaços; acima
+    // de 1/4 do mapa sobe tudo de uma vez
+    const niveis = [];
+    let area = 0;
+    for (const r of rets) {
+      campo.compor(r);
+      niveis.push(...campo.sujosNiveis);
+      area += areaRet(r);
+      juntarRet(publicado.retangulos, r, 32);
+    }
+    if (area > campo.N * campo.N * 0.25 || !subirRetangulos(ctx.renderer, textura, niveis)) textura.needsUpdate = true;
     publicado.versao++;
   }
 

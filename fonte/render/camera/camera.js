@@ -38,8 +38,10 @@ export function caminhoVoo(w0, w1, d, rho = RHO_VOO) {
   }
   const b0 = (w1 * w1 - w0 * w0 + r4 * d * d) / (2 * w0 * r2 * d);
   const b1 = (w1 * w1 - w0 * w0 - r4 * d * d) / (2 * w1 * r2 * d);
-  const q0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0);
-  const q1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1);
+  // log(raiz(b² + 1) - b) é -asinh(b): a forma do artigo perde tudo na subtração quando b é grande (afastar muito
+  // saindo quase do mesmo lugar: de 10 m a 9 km andando 2 cm dava NaN, e a câmera ia para a origem no voo)
+  const q0 = -Math.asinh(b0);
+  const q1 = -Math.asinh(b1);
   const S = (q1 - q0) / rho;
   const ch = Math.cosh(q0);
   return {

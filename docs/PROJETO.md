@@ -1136,6 +1136,38 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   grade na CPU; sombra de longe em 16 ladrilhos com o sol em degraus de 3° e mistura; HAO; noite (exposição mínima,
   brilho da cidade, estrelas, lua); custo em regime medido em 1x e 4x.
 - **Testa sem as outras:** sintética e a bancada. **Depende de:** R1a.
+- **Entregue em 28/09/2026** (R1b). Publicou os ganchos `sombraLonge`, `hao` e `noite` completos em `motor/ganchos.js`
+  (uniformes `gCampo*`, `gHaoParams`, `gLuzRuaMapa`, `gLuzRuaParams`, `gNoiteParams`, `gNoiteJanelas`);
+  `ctx.alturaCidade(x, z)` e `ctx.campoAlturas` (grade da CPU a 8 m no Média e no Leve e a 4 m no Alta e no Ultra,
+  pelas peças LOD1 do `planoPredio` da R4a por setor e pelos volumes da Arcologia na cena de sombra, com o nível 1 de
+  uma pirâmide de máximos, subida por `texSubImage2D` só nos retângulos sujos; o gerador `alturasCidade` fica
+  registrado para a oficina); `ctx.quadro.antes` (passes dos domínios antes da cena, contados em `R.stats`; a R3a já
+  usa); `R.entrada` completo (`modo`, `aoFerramenta` com a mira 56 px acima do dedo e o ponto do chão, `opcoes` com
+  `deslocY` de 0 a 72, `bordaPx`, `bordaMouse` e `area`; árbitro de 80 ms que não deixa a pinça riscar a via; segundo
+  dedo e troca de modo cancelam a ferramenta; toque curto e longo; dois dedos que inclinam ou aproximam sem trocar no
+  meio; cursor parado do mouse; teclado); `R.voo` pelo caminho ótimo de van Wijk e Nuij (`caminhoVoo`); colisão da
+  câmera pela grade da CPU, subindo a vista pela órbita com bissecção (`inclinacaoEfetiva`; a inclinação mínima perto
+  do chão é essa). Sombra de longe: campo RGBA16F (R e G a altura da sombra em dois degraus de 3 graus misturados pela
+  hora, B a visibilidade do céu, A o chão), 16 ladrilhos por degrau; a marcha lê o campo no fim e no meio de cada passo
+  e, nos passos longos, a célula do nível 1: na cidade sintética às 17h30 fica a 1% da marcha fina de 2 m (a pirâmide
+  inteira engordava a sombra em 18% do bairro) e acha a torre de 8 m a 400 m; GPU e CPU batem a 0,12%. HAO no chão e no
+  pé das paredes. Noite: o mapa de luz da rua da R3a (sem ela, o substituto pelas arestas) suavizado numa textura de
+  1.024² (as poças emendam na rua, sem colar de contas), a luz até a altura da lâmpada (telhado escuro), a luz das
+  janelas no chão pela oclusão e o brilho da cidade pelo número de postes. Luz: exposição da hora dourada medida pela
+  fachada ao sol (`solMedida` 0,42), luz do céu com saturação 0,4 (a sombra deixa de sair azul), cenas fixas no
+  equinócio (`?dia=` troca). Medido na bancada (1376x768, 120 quadros, sol andando em 4x, cidade sintética): aberta no
+  Média 52 chamadas e 214 mil triângulos no pior quadro, no Alta 68 e 423 mil; noite no Média 52 e 214 mil, no Alta 56
+  e 425 mil; guarda do Mali sem falha. Custo em regime: um ladrilho por quadro (uma chamada; 65.536 texels no Média,
+  262.144 no Alta; até 143 leituras por texel com o sol baixo e de 37 a 87 com ele entre 25 e 60 graus, porque a marcha
+  para quando o maior da região não subiria mais a sombra, com o mesmo resultado) em 16 quadros por degrau; em 1x
+  (degrau de 5 s) sem atraso (60 quadros: no máximo 1 por quadro); em 4x (1,25 s), com quadros mais lentos que o sol,
+  até 4 por quadro no ritmo da hora (no SwiftShader a 5 quadros por degrau: no máximo 4 num quadro e 1 atraso em 10
+  trocas); prédios que nascem longe um do outro no mesmo quadro refazem retângulos separados; na CPU, zero sem mudança,
+  1 ms por prédio novo, 210 ms na carga da cidade de 12 mil prédios no Média (380 ms no Alta). Testes em
+  `ferramentas/testes/luz-e-entrada.teste.mjs`.
+  Pendente: o ms de GPU no Poco X7 (`?painel=1`); a cor do LED da R3a (0,86; 0,86; 0,82, uns 5.500 K, contra 4.000 K
+  do desenho 2.9) e a parte de sódio (45% das quadras) deixam a rua mais branca que laranja na vista aberta; o campo na
+  carga pelo worker `oficina` (o índice dele ainda não inclui o módulo); `R.voo` com duração pela distância.
 
 #### R3a. Vias, cruzamentos e carros pela heurística (onda 2; 3 sessões)
 - **Arquivos:** `render/geracao/{perfilVia,malhaVia,cruzamento,veiculos}.js`, `render/mundo/{vias,luzRua,props,trafego}.js`,

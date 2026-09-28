@@ -32,7 +32,9 @@ uniform vec4 gNoiteParams;
 uniform vec3 gNoiteJanelas; // irradiância da luz das janelas na rua (cor e força pela hora)
 vec3 gNoiteLuz( vec3 nW, float predio ) {
   if ( gNoiteParams.x <= 0.0 ) return vec3( 0.0 );
-  vec4 c = gCampo( vGPosMundo.xz + nW.xz * ( 0.6 * gCampoParams.w ) );
+  // sem o campo (GPU sem alvo em ponto flutuante): o chão e as paredes acendem, o telhado não, e sem a luz das janelas
+  vec4 c = gCampoLigado > 0.5 ? gCampo( vGPosMundo.xz + nW.xz * ( 0.6 * gCampoParams.w ) )
+    : vec4( 0.0, 0.0, 1.0, vGPosMundo.y - predio * step( 0.5, nW.y ) * 1.0e4 );
   float z = max( 0.0, vGPosMundo.y - c.a );
   vec3 rua = texture( gLuzRuaMapa, ( vGPosMundo.xz + nW.xz * 1.5 - gLuzRuaParams.xy ) * gLuzRuaParams.z ).rgb * gLuzRuaParams.w;
   float cima = clamp( nW.y, 0.0, 1.0 );
@@ -214,6 +216,8 @@ class MapaSubstituto {
       pos.set([p[6 * i], p[6 * i + 1], p[6 * i + 2]], 3 * i);
       cor.set([p[6 * i + 3], p[6 * i + 4], p[6 * i + 5]], 3 * i);
     }
+    // os atributos trocam a cada desenho: solta os buffers velhos na GPU antes (o quadrado volta a subir, 48 bytes)
+    if (this.geo.getAttribute('aPoste')) this.geo.dispose();
     this.geo.setAttribute('aPoste', new THREE.InstancedBufferAttribute(pos, 3));
     this.geo.setAttribute('aCor', new THREE.InstancedBufferAttribute(cor, 3));
     this.geo.instanceCount = n;
@@ -355,6 +359,11 @@ class Suavizar {
 
 // ------------------------------------------------------------------------------------------------ domínio
 
+/** A fonte da luz no chão a partir do mapa publicado pela R3a (ctx.luzRua). */
+const daR3a = (real) => ({
+  textura: real.textura, origem: real.origem ?? [-4096, -4096], tam: real.tam ?? 8192, ganho: real.ganho ?? GANHO_RUA, versao: `r${real.versao ?? 0}`,
+});
+
 function criarDominio(ctx) {
   const u = ctx.ganchos.uniformes;
   let subst = null;
@@ -395,7 +404,8 @@ function criarDominio(ctx) {
       // registrado, espera sem substituto); sem a R3a, o substituto
       const real = c.luzRua;
       if (real?.textura) {
-        fonte = { textura: real.textura, origem: real.origem ?? [-4096, -4096], tam: real.tam ?? 8192, ganho: real.ganho ?? GANHO_RUA, versao: `r${real.versao ?? 0}` };
+        // um objeto novo só quando o mapa muda (não um por quadro)
+        if (fonte?.textura !== real.textura || fonte.versao !== `r${real.versao ?? 0}`) fonte = daR3a(real);
         if (Number.isFinite(real.brilho)) brilho = real.brilho;
         if (subst) {
           subst.descartar();
@@ -417,7 +427,7 @@ function criarDominio(ctx) {
     /** Desenha o substituto e a luz no chão agora (cenas e capturas). */
     preparar() {
       const real = ctx.luzRua;
-      if (real?.textura) fonte = { textura: real.textura, origem: real.origem ?? [-4096, -4096], tam: real.tam ?? 8192, ganho: real.ganho ?? GANHO_RUA, versao: `r${real.versao ?? 0}` };
+      if (real?.textura) fonte = daR3a(real);
       else if (!ctx.dominio?.('luzRua')) {
         subst ??= new MapaSubstituto(ctx);
         subst.desenhar(ctx.renderer, null);
