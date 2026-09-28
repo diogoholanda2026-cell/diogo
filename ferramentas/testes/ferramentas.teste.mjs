@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { verificarConteudo, semComentarios } from '../guarda-texto.mjs';
-import { ordenarCss, carimboDe } from '../montar.mjs';
+import { ordenarCss, carimboDe, enxugarGlsl } from '../montar.mjs';
 import { avaliarSe, preprocessar, contarPrograma, conferirOrcamento, declaracoesGlobais } from '../bancada.mjs';
 
 const regras = (txt, r) => verificarConteudo(txt, r).map((f) => f.regra);
@@ -48,6 +48,25 @@ test('montar: CSS em ordem fixa e carimbo', () => {
   assert.deepEqual(ordenarCss(['telas.css', 'zeta.css', 'base.css', 'hud.css', 'tokens.css', 'alfa.css', 'mundo.css']),
     ['tokens.css', 'base.css', 'hud.css', 'telas.css', 'mundo.css', 'alfa.css', 'zeta.css']);
   assert.match(carimboDe(new Date(Date.UTC(2026, 8, 27, 6, 5, 4))), /^20260927060504$/);
+});
+
+test('montar: GLSL enxuto sem mexer nas diretivas nem nas expressões', () => {
+  const src = [
+    'const A = /* glsl */ `',
+    '  // comentário',
+    '  #define F( x ) ( x * 2.0 )',
+    '  uniform float a; /* bloco */ float b;',
+    '',
+    '  vec3 f( float c ) { return vec3( ${Y}, c = -a ); } // fim',
+    '`;',
+    "const B = `  // fora da marca  `;",
+    'const C = /* glsl */ `float c; // ${X}`;',
+  ].join('\n');
+  const e = enxugarGlsl(src);
+  assert.ok(e.includes('`\n#define F( x ) ( x * 2.0 )\nuniform float a;float b;\nvec3 f(float c){return vec3(${Y},c=-a);}\n`'), e);
+  assert.ok(e.includes('const B = `  // fora da marca  `;'), 'template sem a marca fica igual');
+  assert.ok(e.includes('const C = /* glsl */ `float c; // ${X}`;'), 'expressão dentro de comentário: fica igual');
+  assert.equal(enxugarGlsl('x = /* glsl */ `a ${`b ${1}`} // c`;'), 'x = /* glsl */ `a ${`b ${1}`}`;');
 });
 
 test('mali: #if do pré-processador', () => {

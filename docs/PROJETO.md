@@ -670,14 +670,14 @@ cada arquivo depois da F0. **Uma parcela "b" ou "c" herda os arquivos da parcela
 
 | Ferramenta | Situação | O que faz no jogo novo |
 |---|---|---|
-| `montar.mjs` | reescrita (F0) | entrada `fonte/app/main.js`; JSX do Preact; CSS de `ui/tema/*.css`; Inter com carimbo (base64 no HTML único); workers `tarefas` e `oficina` com carimbo (Blob no HTML único) e **tamanho de cada um com teto**; texturas KTX2 com carimbo (fora do HTML único); lista do `sw.js` gerada com o **prefixo do app**; **saída em `previa/`** até o M1 e em `app/` com `--saida app`; avisa chave duplicada; roda a `guarda-texto.mjs` |
+| `montar.mjs` | reescrita (F0) | entrada `fonte/app/main.js`; JSX do Preact; CSS de `ui/tema/*.css`; Inter com carimbo (base64 no HTML único); workers `tarefas` e `oficina` com carimbo (Blob no HTML único) e **tamanho de cada um com teto**; texturas KTX2 com carimbo (fora do HTML único) e o transcodificador Basis do three em `basis/`; o GLSL marcado `/* glsl */` sai sem comentários nem espaço de sobra; `cenas.html` (índice das cenas da prévia, de `fonte/web/`); lista do `sw.js` gerada com o **prefixo do app**; **saída em `previa/`** até o M1 e em `app/` com `--saida app`; avisa chave duplicada; roda a `guarda-texto.mjs` |
 | `guarda-texto.mjs` | nova (F0) | falha se `fonte/sim/` ou `fonte/comum/` usar relógio ou `Math.random`, se `fonte/sim/`, `fonte/comum/` ou `render/geracao/` importar o three, se algum shader próprio usar `mediump`, ou se um texto de `ui/textos/` tiver travessão, "Aluguel", "/dia" ou a palavra "dia" |
 | `testar.mjs` | fica, com `--pasta previa\|app`, `--webgpu` e `--semClip` opcionais | serve a pasta, captura, lê `R.stats` e `window.__resultado` |
 | `simular.mjs` | reescrita (F0) | `--testes` (roda todo `ferramentas/testes/*.teste.mjs` e a guarda de texto), `--determinismo`, `--robo [--horas h] [--semente s] [--comprarTempo]`, `--bancada [--estresse]` |
 | `bancada.mjs` | nova (F0; cenas das parcelas) | roda `?cena=` por perfil no Chromium, grava PNG e JSON, guarda o **pior quadro de 120** com o sol andando, **falha se passar do orçamento** (total e por família) ou se um programa passar da guarda do Mali (D44) |
 | `vitrine-ui.mjs` | reescrita (F0; cenas das parcelas) | interface com o render falso e a simulação falsa ou real, nos 4 tamanhos, com as medidas da UI (alvos, texto, contraste, transbordo, área do HUD, travessão, unidades) |
-| `cidade-sintetica.mjs` | nova (F0) | espelho sintético **gerado pelas APIs** (`addAresta` do `grafo.js`, `alocar()` das tabelas e um substituto de crescimento que põe o prédio de frente para a célula): 4 x 4 km, ruas e avenidas com curvas, 12 mil prédios de todas as zonas e níveis, mata, mar, rio, a Torre; roda os invariantes do espelho; também `?sintetica=1` no navegador |
-| `mapa.mjs` | nova (S1a) | PNG do mapa autoral sem navegador; confere que a área inicial é um componente só de terra |
+| `cidade-sintetica.mjs` | nova (F0) | espelho sintético **gerado pelas APIs** (`addAresta` do `grafo.js`, `alocar()` das tabelas e um substituto de crescimento que põe o prédio de frente para a célula): 4 x 4 km, ruas e avenidas com curvas, cerca de 12 mil prédios de todas as zonas e níveis em lotes geminados (seis bairros cheios; a várzea, a lagoa e o pé dos morros a oeste ficam sem ruas), mata, mar, rio, a Torre; roda os invariantes do espelho; também `?sintetica=1` no navegador |
+| `mapa.mjs` | nova (S1a) | PNG do mapa autoral sem navegador; confere que a área inicial é um componente só de terra; `--assar` roda a erosão e grava `sim/mundo/relevo-assado.js` (arquivo gerado: assar de novo ao mudar o relevo, a costa, o rio, as lagoas, os córregos, a planície ou a rodovia do mapa, ou a conta do assador), `--conferir-assado` confere que ele sai igual |
 | `codificar-texturas.mjs` | nova (R2a) | CC0 (PNG ou JPEG de 1K) para KTX2 com o codificador Basis em wasm, versão fixa; sem codificador confiável, WebP de 1K com teto de memória |
 | `sonda-gpu.mjs` | promovida (R1a) | limites, extensões e tempo de compilação de cada programa; a mesma sonda roda na página de teste da prévia |
 | `robo/robo-sim.mjs` | nova (S3a) | a estratégia do robô pelo mesmo `cmd()`; relatório de marcos, moradores, bem-estar, renda, caixa, dívida, fila da frota, objetivos, ms por tique (p95, p99 e máximo) |
@@ -910,6 +910,20 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   argila e a orla nobre fora do 4 x 4; áreas nomeadas; sugestões da primeira hora); grade 1025² em até 150 ms no Node;
   `mapa.mjs` com PNG e o teste do componente único de terra.
 - **Testa sem as outras:** Node; `mapa.mjs`; a vista de depuração da F0. **Depende de:** F0.
+- **Entregue em 27/09/2026** (S1a, revisada). Publicou `espelho.terreno` (1025² a 8 m; o rio da borda norte até a
+  foz, na linha da costa; 3 lagoas: Santa Cida e as duas marginais do meandro), `floresta`, `recursos` e a camada
+  Recursos, `ladrilhos` e `areas`; `aplainar` puro e comutativo; `ladrilho.comprar`; `q.ladrilhos` e `q.sugestoes`.
+  Diferente do plano: a forma fina dos maciços vem de erosão fluvial assada (`sim/mundo/erosao.js`, fora do pacote)
+  e gravada em `sim/mundo/relevo-assado.js` (arquivo gerado, ~38 KB no pacote) por `node ferramentas/mapa.mjs
+  --assar`. Quem mudar serras, morros, planaltos, costa, rio, lagoas, córregos, planície ou rodovia em
+  `data/mapa-heldopolis.js`, ou a conta do assador (subindo `VERSAO_ASSADO`), assa de novo: o teste do mundo acusa
+  pelo hash e reassa em memória. `rioEm` ganhou `v` (distância ao eixo liso da faixa de meandros): várzea é
+  `v < varzea`, leito é `a < hw`; o fundo do vale sobe com o rio no curso de cima. Medido: grade em 93 a 170 ms de CPU
+  aquecida (melhor de 6 abaixo de 150); fria, 0,6 a 0,7 s, e `criarSimulacao` fria 1,3 a 1,4 s no Node; Vila com 64
+  prédios e 351 moradores; 17 testes. Pendente: medir a abertura no Poco X7 (no worker pode passar de 3 s); pães
+  pequenos no mar com anel de paredão (virar morro ou perfil de ilha); as sugestões da primeira hora mudaram de lugar
+  (pedreira em (-480, -558), areal em (-1000, -240), olaria em (-998, 80)); a S1b herda `rios[0].pontos` desde a borda
+  norte (-2572, -4096) e a ponte da BR em x -1375 a -1225, z -1190.
 
 #### R1a. Motor, luz, sombra própria, câmera e sonda (onda 1; 3 sessões)
 - **Arquivos:** `render/motor/*` (a partir daqui), `render/ambiente/{astro,ceu,ibl,exposicao,neblina,sol,nuvens}.js`,
@@ -930,6 +944,28 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   estresse** (HDR com MSAA 2x, neblina, sombra, fachada aproximada em tela cheia, 300 chamadas e 900 mil triângulos) com
   ms de GPU por `fenceSync` e `clientWaitSync`; página de teste mínima da prévia, com "Copiar resultado".
 - **Testa sem as outras:** caixas e terreno sintético; `bancada.mjs`. **Depende de:** F0.
+- **Entregue em 27/09/2026** (R1a, revisada). Publicou os ganchos `sombra` e `neblina` com os uniformes em
+  `motor/ganchos.js`; perfis Ultra, Alta, Média e Leve com escolha automática (Mali-G6xx MC2 e Adreno 710 a 725 no
+  Média; o SwiftShader cai no Leve, então as capturas de teste usam `?q=media`); `definirCamera` (órbita à CS2, 10 m a 9
+  km, 3 a 88 graus, inércia, zoom com âncora, voo em arco), `definirEntrada` (arrasto com o chão sob o dedo, também no
+  céu da rasante; pinça, giro, roda, teclado), `definirRaio` e `projetarNaTela` (em `camera/raio.js`); domínios `ceu`
+  (astros, Preetham direto no PC e cubo 256 em duplo buffer no Média, PMREM por 8 quadros-chave, exposição, neblina de
+  altura, sombra das nuvens), `entrada` e `bancada` (`ctx.bancada`: resolução travada, ms de GPU por cerca e consulta,
+  programas contra a guarda do Mali; `?painel=1` é a página de teste com "Copiar resultado"); sombra própria D43 com
+  `ctx.sombra.regiao`; HDR R11G11B10 com MSAA, bloom, AgX com look (potência 1,45, saturação 1,05), CAS, resolução
+  dinâmica; duas faixas com `?semClip=1`; cenas `aberta`, `horizonte`, `noite`, `estresse` e `prova-sombra`;
+  `ferramentas/sonda-gpu.mjs`. Medido na entrega (Média, 1280x720): aberta 41 chamadas e 252 mil triângulos; estresse
+  284 e 897 mil; horizonte com semClip 52 e 553 mil. Na I0 o integrador ligou `R.bancada` a `ctx.bancada`, `R.projetar`
+  a `projetarNaTela`, `R.descartar` ao quadro (resize e pós) e à entrada, e pôs os textos da página de teste em
+  `ui/textos/r1.js`; bancada da Prévia 0 (1376x768, 120 quadros, sol andando, cidade sintética de 12.113 prédios):
+  aberta no Média 42 chamadas e 235 mil triângulos no pior quadro (sombra 5 e 33 mil; prédios 137 mil de 240 mil), no
+  Alta 51 e 444 mil (sombra 10 e 126 mil); estresse no Média 285 e 897 mil, no Alta 290 e 901 mil; guarda do Mali sem
+  falha (29 programas na aberta); o ms do SwiftShader (~850 a 1.000 por quadro) não vale como medida de aparelho.
+  Pendente para a R1b: `ctx.alturaCidade` na colisão da câmera (na I0 a câmera de uma vista do `bairro` caía dentro de
+  uma torre), ganchos `sombraLonge`, `hao` e `noite` (hoje neutros), entrada completa (arbitragem de 80 ms, mira
+  deslocada, borda), voo completo, inclinação mínima perto do chão; exportar o corte das faixas (a R4a repete a conta em
+  `limiteFaixas`); luz de dia fria e chapada (pouco contraste entre face ao sol e à sombra); às 17h30 a neblina contra o
+  sol deixa a mata a 3 a 5 km bege; para a prancha em luz dourada, a hora desce para perto das 18h.
 
 #### R2a. Chão, mar e lagoa; A/B de materiais (onda 1; 2 sessões)
 - **Arquivos:** `render/mundo/{terreno,agua}.js`, `render/geracao/ruido.js`, `render/materiais/texturas-chao.js`,
@@ -946,6 +982,24 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   em duas versões, procedural e CC0 em KTX2, trocadas por `?materiais=proc|cc0` (D46); copa da mata no terreno; mar e
   lagoa com profundidade lida da grade, "refração" pelo mapa de cor e espuma simples; até 12 amostradores (D44).
 - **Testa sem as outras:** cidade sintética e o mapa de S1a quando publicar. **Depende de:** F0.
+- **Entregue em 27/09/2026** (R2a, revisada). Publicou, pelo registro: domínios `terreno` (CDLOD 16 x 16 por nó, uma
+  chamada; na costa 86 nós e 44 mil triângulos) e `agua` (mar, rio e lagoa numa chamada); texturas `chao.ruido`,
+  `chao.ondas` (espectro direcional de 128 componentes), `chao.camadas` e `chao.cc0`; `ctx.chao` (uniformes, malha,
+  `usoSolo` 2048² a 4 m, `materiais()`, `ab()`, `fora()`, `copaPerto()` para a R2b, `reassar()`); sobreposições no
+  chão sem chamada extra pelos eventos `camadas`, `ferramenta.zona` (células a 4 m), `ferramenta.ladrilhos`,
+  `ferramenta.pincel` e `ferramenta.limpar`; mapa de cor assado; `?materiais=proc|cc0|ab` e `?passe=mascara`; cenas
+  `costa` (paridade da altura do GLSL com `alturaEm`: 0,27 mm em 64 pontos) e `materiais` (A/B com a divisa). Arte:
+  `arte/materiais/chao-camadas.ktx2` (8 fatias de 1024 em ETC1S, 3,1 MB), `fontes.json` com sha256 e
+  `arte/LICENCAS.md`; `ferramentas/codificar-texturas.mjs` com ktx2-encoder 0.6.0 (nas devDependencies desde a I0,
+  que também passou a levar o transcodificador Basis do three para `<saída>/basis/`). Guarda do Mali: terreno com 10
+  amostradores no fragmento (11 com o A/B), água com 9. Medido (Média): costa 33 chamadas e 93 mil triângulos;
+  materiais 33 e 66 mil; 24 testes. Pendente: os 8 CC0 vieram de espelhos no GitHub (conferir na ambientCG e na Poly
+  Haven quando houver rede); pontos escuros de 1 a 3 px na ponta dos dedos de pedra do costão; a faixa média do chão
+  vai até 1,2 a 2 km no Média (baixar `copaRelevo` para ~900 m se o Poco X7 não der); as vias pintadas no uso do solo
+  alargam o asfalto ~2 m (a R3a apaga a pintura perto); a R2b troca jundu, moitas e copa pintados por árvores com
+  `copaPerto`, liga espuma e correnteza do rio e desliga a moldura com `fora(false)`; o rio de 18 a 30 m na grade de
+  8 m serrilha nas encostas em V (borda úmida); o mar raso em volta das ilhas é lido em resolução grossa; a água do rio
+  sai cinza.
 
 #### R4a. Gerador de prédios, primeiro corte (onda 1; 3 sessões)
 - **Arquivos:** `render/geracao/{planoPredio,malhaPredio,fundir,quantizar}.js`,
@@ -963,6 +1017,21 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   mesma silhueta; fachada filtrada por `fwidth`, vidro com normal inclinada por painel, desgaste e mapa de detalhe
   fotográfico (A/B da D46); cache LRU de 12 a 16 setores no Média; teto de memória de geometria (64 MB no Média).
 - **Testa sem as outras:** lotes da cidade sintética. **Depende de:** F0.
+- **Entregue em 27/09/2026** (R4a, revisada). Publicou o material `edificio` (`criarMaterialEdificio`,
+  `uniformesEdificio`) com variantes LOD0 fundida e LOD1 instanciada; a tabela de prédios na GPU (RGBA8 512²) e a de
+  obra (RG32F 512²) em `ctx.dominio('predios').tabela` e `.obra`; caixas LOD1 que a sombra própria compartilha;
+  geradores `setor` e `anexo` na oficina (`fundir.js`); `gMascaraTelhado` (`?passe=mascara`);
+  `registrarSelecionavel('predios')`; `limiteFaixas`, `sombraAlcanca` e `faixaDaCaixa` em `mundo/predios.js`
+  (projetores pela `ctx.sombra.regiao` varridos pelo sol; com `?semClip=1`, listas por faixa pela profundidade no eixo
+  da câmera); janelas nas medidas das plantas brasileiras e agenda da noite (moradia até 42%, escritório 9% depois das
+  20h30); paleta de reboco mais quente em `data/estilos.js`; cena `bairro` com `?vista=` rua, 50, 200, lod1, lod2,
+  torres, escritorios, industria e orla. Medido (Média): aberta 42 chamadas e 251 mil triângulos (prédios 141 mil de
+  240 mil); bairro 44 e 100 mil; lod1 17 e 184 mil (12.410 instâncias); lod2 com semClip 24 e 330 mil; 0 pixels pretos
+  depois da correção do kA; programa `edificio` com 5 amostradores, 7 varyings e 66 uniformes; 11 testes. Na I0 a
+  cidade sintética passou a lotes geminados em seis bairros cheios, e a vista `200` do `bairro` virou para a guinada
+  75 (na 20 a câmera caía dentro de uma lâmina de escritórios). Pendente para a R4b: o lote inteiro (piso, muro,
+  árvores, carros), a obra por fases e o anexo do setor (ANEXO_REFUSAO de 5 s, fila medida em 4x); janela de fundo da
+  loja térrea alta demais (1,9 m); conferir com a R3a a sombra dos prédios no chão da vista `rua`.
 
 #### X1a. Torre Lâmina e planos diretores, render (onda 1; 3 sessões)
 - **Arquivos:** `render/arcologia/{torre,planos,partes,lago,fantasma}.js`, `cenas/{torre,planos}.js`,
@@ -978,6 +1047,22 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   no Média e de 40 a 80 mil no Alta e no Ultra, LOD1 de 3 a 5 mil, a Arcologia inteira em LOD1 perto de 25 mil, até 45
   chamadas no Média.
 - **Testa sem as outras:** cenas `torre` e `planos` com a sintética. **Depende de:** F0.
+- **Entregue em 27/09/2026** (X1a, revisada). Publicou o domínio `arcologia` com a Torre Lâmina da D27 (LOD0 com
+  12.104 triângulos no Média e 40 a 80 mil no Alta e no Ultra; LOD1 com 3.116; volume de sombra com 104), as silhuetas
+  LOD1 das partes (Sede com as Torres do Conselho, Anel com juntas de vidro, Biblioteca, Vida com Supertrees, Escola,
+  Universidade, Física, pódio e barragem), o reservatório com a cava, o fantasma em holograma champanhe,
+  `registrarSelecionavel('arcologia')` (idx pela `PARTES_ORDEM`), `dominio('arcologia').vitrine({ modo, plano })` e
+  `torre.corte(h)`; em `data/arcologia-plano.js`: `TORRE_LAMINA`, `HELIPONTO_LOCAL`, `PLANOS.A/B/C`, `PARTES_ORDEM`,
+  `PLANO_PADRAO` 'A', `TORRE_POSICAO` e `POUSO` provisórios, `CAMERA_ARCOLOGIA` e `cavaDoPlano(id)`; a classe de luz
+  `LUZ.reflexo`; a noite pelo `ctx.sol.dia` da cidade; cenas `torre` (`?prancha=1`, `__cenaTorre.prancha({ hora })`
+  e `.foto()`) e `planos` (`?plano=A|B|C`, `__cenaPlanos.mostrar()`). Usa materiais próprios (`arcologia:vidro` e
+  `arcologia:opaco`), não o `edificio` da R4a. Medido (Média): torre 39 chamadas e 131 mil triângulos; planos 35 e 106
+  mil; Arcologia em LOD1: A 23,1 mil, B 20,4 mil e C 17,2 mil; 24 testes. Pendente: o integrador grava o plano
+  escolhido no portão 1; a X1b registra `cavaDoPlano` em `sim.formas` e usa `torre.corte(h)` e `POUSO`; árvores em
+  tufo de icosaedro até as espécies da R2b; reservatórios do A e do C leem como piscina (borda irregular, à
+  Barangaroo); parques em tapete de borda dura; cobertura solar da Sede listrada de perto; monograma H ilegível;
+  Supertrees à noite como funis claros; `CeuReserva` e `AmbienteReserva` inertes (tirar); na vista aberta das 21h o
+  fantasma do plano estoura em bege sobre a cidade escura (baixar a emissão dele à noite).
 
 #### U1a. Pele da interface (onda 1; 2 sessões)
 - **Arquivos:** `ui/comp/*`, `ui/glifos/glifos.js` (a partir daqui), `ui/hud/BarraCima.jsx`, `ui/selecao/Cartao.jsx`,
@@ -991,6 +1076,20 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   de serviço; tela Economia (orçamento com a linha da regra "Contribuição: 12.480 x 11 = 137.280/h", empréstimo com as
   regras escritas, caixa, "não pago"); vitrine nos 4 tamanhos.
 - **Testa sem as outras:** `sim-falsa.js` e `render-falso.js`. **Depende de:** F0.
+- **Entregue em 27/09/2026** (U1a, revisada). Publicou 19 primitivas em `ui/comp` (Interruptor, Segmentado,
+  Deslizante, Quantidade de 1 a 10, DoisToques, Barra, Chip, Linha, Tabela, Abas, Popover e Ancora, Dica, Folha, Tela
+  e Secao, Modal, Aviso, Vazio, Grafico em SVG, Indicador) e `botaoDoPasso` (o toque no limite avisa por
+  `loja.avisar`); 148 glifos de traço 1,75 (`glifoBemEstar`, `registrarGlifos`); a barra de cima em
+  `registrarHud('cima')`, que aperta em 4 níveis no PC; o cartão em `registrarHud('folha')` (residencial, serviço
+  pelo tipo do catálogo com `categoriaServico`, obra e Holding) com `registrarAcaoAviso` e `folhaAberta`; a tela
+  `economia` (Orçamento com a linha da regra e os 12 meses, Empréstimo com as regras de `REGRAS_DONO`); Esc fecha só a
+  camada de cima; textos `u1`; 16 cenas `u1-*` na vitrine; 13 testes. Medido: HUD em repouso com 8,4% da tela a
+  986x443 e 8,8% a 915x412. Na I0 o integrador aplicou o patch da `sim-falsa` (saldo igual a receitas menos
+  despesas, 134.280/h; juros por hora; serviços pelo tipo) e marca `data-vidro='1'` no PC em Alta e Ultra
+  (`app/controle.js`). Pendente: glifos `pedestre` e `seguir` (M2); com `q.predio` nulo na primeira leitura o render
+  destaca sem cartão (decidir na U1b); a U1b troca o menu provisório pela tela `menu`, registra as seções (o botão
+  Detalhes aparece) e as telas Holding, Cidade, Progresso e Conselho; o aviso do limite só aparece com
+  `hud/Avisos.jsx`.
 
 #### S1b. Rede viária, células e pincel (onda 2; 3 sessões)
 - **Arquivos:** `sim/vias/{ferramenta,encaixe,validar,demolir,nomes}.js`, `sim/zonas/{blocos,pincel}.js`,

@@ -269,7 +269,9 @@ test('cidade sintética pelas APIs: 12 mil prédios de todas as zonas e níveis,
   const t0 = performance.now();
   const { sim, resumo } = gerarCidadeSintetica({ cronometro: () => performance.now() });
   const ms = performance.now() - t0;
-  assert.equal(resumo.predios, SINTETICA.predios);
+  // a cidade cheia: cerca de 12 mil prédios, as quadras dos bairros sem sobra
+  assert.ok(Math.abs(resumo.predios - SINTETICA.predios) <= 0.1 * SINTETICA.predios, `${resumo.predios} prédios`);
+  assert.ok(resumo.celulas.quadrasPorOcupar === 0, `${resumo.celulas.quadrasPorOcupar} quadras por ocupar`);
   assert.equal(Object.keys(resumo.porZona).length, 7, JSON.stringify(resumo.porZona));
   assert.ok(resumo.porNivel.every((n) => n > 0));
   assert.ok(Object.keys(resumo.porTipo).length >= 5, JSON.stringify(resumo.porTipo));
@@ -296,7 +298,7 @@ test('cidade sintética pelas APIs: 12 mil prédios de todas as zonas e níveis,
     const desvio = (k) => Math.abs((A.p[o + k] - A.p[o]) * dz - (A.p[o + k + 1] - A.p[o + 1]) * dx) / L;
     if (Math.max(desvio(2), desvio(4)) > 1) curvas++;
   }
-  assert.ok(arcologia >= 4 && rodovia >= 4 && curvas > 500, `${arcologia} ${rodovia} ${curvas}`);
+  assert.ok(arcologia >= 4 && rodovia >= 4 && curvas > 250, `${arcologia} ${rodovia} ${curvas}`); // seis bairros de ruas (três ficam vazios)
   // prédios em obra e abandonados para o render
   const P = esp.predios;
   let obras = 0;

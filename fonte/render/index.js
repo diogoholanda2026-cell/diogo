@@ -323,7 +323,6 @@ export async function criarRender(canvas, opcoes = {}) {
     medidas.stats.memoria.texturasMB = +memoriaTexturasMB().toFixed(1);
     return desenhou;
   }
-  const vProj = new THREE.Vector3();
 
   const R = {
     /** Lê o diário e desenha um quadro (o laço do app chama a cada requestAnimationFrame). */
@@ -346,15 +345,8 @@ export async function criarRender(canvas, opcoes = {}) {
       const r = depuracao.raioDaTela(cam, quadro.w, quadro.h, x, y);
       return selecionarPorRaio({ ...r, xTela: x, yTela: y }, ctx);
     },
-    projetar(p) {
-      const v = vProj.set(p[0], p[1], p[2]);
-      const dist = v.distanceTo(cam.position);
-      v.project(cam);
-      const x = ((v.x + 1) / 2) * quadro.w;
-      const y = ((1 - v.y) / 2) * quadro.h;
-      const frente = v.z > -1 && v.z < 1;
-      return { x, y, visivel: frente && x >= 0 && x <= quadro.w && y >= 0 && y <= quadro.h, dist };
-    },
+    // "na frente" decidido no espaço da câmera (R1a): com a profundidade invertida, o z da tela não serve
+    projetar: (p) => raio.projetarNaTela(cam, quadro.w, quadro.h, p),
     raio: (x, y) => ctx.raio(x, y),
     ancoras: (lista) => lista.map((p) => R.projetar(p)),
     camadas: {
@@ -415,8 +407,13 @@ export async function criarRender(canvas, opcoes = {}) {
     get stats() {
       return medidas.stats;
     },
-    /** Teste de desempenho (primeira versão): mede n quadros parados na vista atual. A R1a faz o voo e os programas. */
-    async bancada({ quadros = 120 } = {}) {
+    /**
+     * Teste de desempenho: o domínio 'bancada' da R1a (ctx.bancada: resolução travada, ms de GPU, programas contados
+     * contra a guarda do Mali); sem ele, a primeira versão da F0 mede n quadros parados na vista atual.
+     */
+    async bancada(op = {}) {
+      if (ctx.bancada) return ctx.bancada(op);
+      const { quadros = 120 } = op;
       const esperar = () => new Promise((ok) => requestAnimationFrame(ok));
       const ms = [];
       let t = performance.now();
@@ -461,9 +458,13 @@ export async function criarRender(canvas, opcoes = {}) {
     /** Nomes dos domínios ativos (substitutos marcados). */
     dominios: () => [...instancias.values()].map((d) => (registrados.find((r) => r.nome === d.nome)?.substituto ? `${d.nome} (substituto)` : d.nome)),
     descartar() {
+      if (descartado) return;
       descartado = true;
       for (const d of doms()) d.descartar?.();
       instCena?.descartar?.();
+      // a entrada solta os ouvintes mesmo quando a cena exclui o domínio 'entrada'; o quadro solta o resize e o pós
+      entradaApi.descartar?.();
+      quadro.descartar();
       sombra.descartar();
       rz.renderer.dispose();
     },

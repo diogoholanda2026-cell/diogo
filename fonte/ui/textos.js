@@ -2,6 +2,7 @@
 // Cada parcela escreve as suas em fonte/ui/textos/<parcela>.js (registrar(registrarTextos)); este índice é fixo.
 // t(chave, params) troca {nome} pelos parâmetros; chave sem texto aparece como '??chave' (a vitrine acusa).
 import * as f0 from './textos/f0.js';
+import * as r1 from './textos/r1.js';
 import * as s1 from './textos/s1.js';
 import * as s2 from './textos/s2.js';
 import * as s3 from './textos/s3.js';
@@ -11,7 +12,7 @@ import * as x1 from './textos/x1.js';
 import * as x2 from './textos/x2.js';
 import * as x3 from './textos/x3.js';
 
-const MODULOS = [f0, s1, s2, s3, u1, u2, x1, x2, x3];
+const MODULOS = [f0, r1, s1, s2, s3, u1, u2, x1, x2, x3];
 
 const textos = new Map();
 const donos = new Map();

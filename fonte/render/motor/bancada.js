@@ -4,41 +4,17 @@
 // GPU, famílias, programas contados contra a guarda do Mali com o tempo de compilação, capacidades e a sonda).
 // Com ?painel=1 abre a página de teste mínima da prévia sobre a cena: a sonda (limites, extensões, precisão), a
 // bancada da cena, os programas acima da guarda e "Copiar resultado", que junta as cenas medidas nesta aba (aberta e
-// estresse) num texto para o dono mandar. Os textos da página ficam aqui (português do Brasil, sem travessão) até o
-// integrador pôr ui/textos/r1.js no índice fixo de ui/textos.js (o teste de índices recusa arquivo fora dele).
+// estresse) num texto para o dono mandar. Os textos da página ficam em ui/textos/r1.js.
 import { programasContados } from './capacidades.js';
+import { t as texto } from '../../ui/textos.js';
 import { sugerirPerfil } from './perfis.js';
 
-const TXT = Object.freeze({
-  titulo: 'Página de teste',
-  aparelho: 'Aparelho',
-  perfil: 'Perfil',
-  sugerido: 'sugerido',
-  resolucao: 'Resolução',
-  capacidades: 'Capacidades',
-  limites: 'Limites',
-  bancada: 'Bancada',
-  medindo: 'Medindo {n} quadros...',
-  msMedio: 'ms médio',
-  p95: 'p95',
-  qps: 'qps',
-  gpu: 'GPU (cerca)',
-  gpuTimer: 'GPU (consulta)',
-  chamadas: 'chamadas',
-  triangulos: 'triângulos',
-  sombra: 'sombra',
-  programas: 'Programas',
-  acima: 'acima da guarda',
-  compilacao: 'compilação',
-  nenhum: 'nenhum',
-  medir: 'Medir de novo',
-  copiar: 'Copiar resultado',
-  copiado: 'Copiado',
-  semCopiar: 'Selecione e copie o texto abaixo',
-  cena: 'Cena {nome}',
-  sim: 'sim',
-  nao: 'não',
-});
+// os textos da página ficam em ui/textos/r1.js (chaves r1.teste.*)
+const TXT = Object.freeze(Object.fromEntries([
+  'titulo', 'aparelho', 'perfil', 'sugerido', 'resolucao', 'capacidades', 'limites', 'bancada', 'medindo', 'msMedio',
+  'p95', 'qps', 'gpu', 'gpuTimer', 'chamadas', 'triangulos', 'sombra', 'programas', 'acima', 'compilacao', 'nenhum',
+  'medir', 'copiar', 'copiado', 'semCopiar', 'cena', 'sim', 'nao',
+].map((k) => [k, texto(`r1.teste.${k}`)])));
 const t = (k, p = {}) => TXT[k].replace(/\{(\w+)\}/g, (_, x) => String(p[x] ?? ''));
 
 const CHAVE_SESSAO = 'heldopolis.bancada';

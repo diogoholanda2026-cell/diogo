@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B0F14">
+<meta name="color-scheme" content="dark">
+<title>Prévia do jogo novo</title>
+<link rel="icon" href="icones/icone-192.png">
+<!-- Índice da prévia (PROJETO 4.6): as cenas fixas e a página de teste, para o dono abrir no celular e no PC.
+     O montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo (index.html) com ?cena=. -->
+<style>
+:root{--fundo:#0B0F14;--vidro:#121821;--borda:rgba(255,255,255,.10);--texto:#EEF2F6;--fraco:#A7B1BD;--ouro:#D9BD84;--azul:#5AB0FF}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--fundo);color:var(--texto);-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.45;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 32px max(16px,env(safe-area-inset-left))}
+main{max-width:980px;margin:0 auto}
+header{display:flex;align-items:center;gap:14px;margin:4px 0 18px}
+header svg{width:40px;height:40px;flex:none}
+h1{font-size:20px;font-weight:650;letter-spacing:.06em;margin:0}
+header p{margin:2px 0 0;color:var(--fraco);font-size:13px}
+.perfil{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 20px;font-size:13px;color:var(--fraco)}
+.perfil button{min-height:40px;padding:0 14px;border-radius:8px;border:1px solid var(--borda);background:var(--vidro);color:var(--texto);font:inherit;font-weight:600;cursor:pointer}
+.perfil button[aria-pressed="true"]{border-color:var(--azul);background:#16263A}
+section{margin:0 0 22px}
+h2{font-size:12px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--ouro);margin:0 0 8px}
+h2 small{font-weight:500;letter-spacing:0;text-transform:none;color:var(--fraco)}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+a.c{display:block;min-height:56px;padding:10px 14px;border-radius:10px;border:1px solid var(--borda);background:var(--vidro);color:var(--texto);text-decoration:none}
+a.c:hover,a.c:focus-visible{border-color:var(--azul);outline:none}
+a.c b{display:block;font-size:15px;font-weight:600}
+a.c span{display:block;font-size:12px;color:var(--fraco)}
+a.c.pri{border-color:rgba(90,176,255,.45)}
+footer{color:var(--fraco);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="#D9BD84" stroke-width="3"/><path fill="#D9BD84" d="M34 30h7v17h18V30h7v40h-7V53H41v17h-7z"/></svg>
+  <div><h1>Prévia 0: vitrine visual</h1><p>Heldópolis e a Torre Lâmina, sem jogar. Cada cartão abre uma cena.</p></div>
+</header>
+
+<div class="perfil" role="group" aria-label="Perfil gráfico">
+  <span>Perfil:</span>
+  <button type="button" data-q="">Automático</button>
+  <button type="button" data-q="leve">Leve</button>
+  <button type="button" data-q="media">Média</button>
+  <button type="button" data-q="alta">Alta</button>
+  <button type="button" data-q="ultra">Ultra</button>
+</div>
+
+<section>
+  <h2>Torre Lâmina <small>(prancha de 4 azimutes e 2 closes)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=torre&amp;prancha=1&amp;hora=17.5"><b>Prancha às 17h30</b><span>fim de tarde</span></a>
+    <a class="c pri" href="index.html?cena=torre&amp;prancha=1&amp;hora=21"><b>Prancha às 21h</b><span>noite: lanterna, andares de vento, heliponto</span></a>
+    <a class="c" href="index.html?cena=torre"><b>Vista livre</b><span>a Torre no platô, a 1 km</span></a>
+    <a class="c" href="index.html?cena=torre&amp;hora=10"><b>Vista livre às 10h</b><span>luz da manhã</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Planos diretores <small>(escolha um no portão 1)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=planos&amp;plano=A"><b>A. Baía</b><span>vista aérea às 17h30</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;plano=B"><b>B. Parque-canal</b><span>vista aérea às 17h30</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;plano=C"><b>C. Orla</b><span>vista aérea às 17h30</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Cidade <small>(a cidade sintética de 12 mil prédios)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=aberta&amp;hora=10"><b>Vista aberta às 10h</b><span>céu, neblina, sombra própria</span></a>
+    <a class="c pri" href="index.html?cena=aberta&amp;hora=17.5"><b>Vista aberta às 17h30</b><span>sol baixo</span></a>
+    <a class="c pri" href="index.html?cena=noite"><b>Noite</b><span>21h, janelas acesas</span></a>
+    <a class="c pri" href="index.html?cena=bairro&amp;hora=10"><b>Bairro às 10h</b><span>fachadas no shader, LOD0 e LOD1</span></a>
+    <a class="c pri" href="index.html?cena=bairro&amp;hora=17.5"><b>Bairro às 17h30</b><span>a mesma vista no fim de tarde</span></a>
+    <a class="c" href="index.html?cena=bairro&amp;vista=rua"><b>Bairro: nível da rua</b><span>a 30 m</span></a>
+    <a class="c" href="index.html?cena=bairro&amp;vista=50"><b>Bairro: 50 m</b><span>telhados e quintais</span></a>
+    <a class="c" href="index.html?cena=bairro&amp;vista=200"><b>Bairro: 200 m</b><span>quadras</span></a>
+    <a class="c" href="index.html?cena=bairro&amp;vista=torres"><b>Bairro: torres do Centro</b><span>residencial alto</span></a>
+    <a class="c" href="index.html?cena=bairro&amp;vista=lod1"><b>Bairro: LOD1 a 1,1 km</b><span>instâncias de forma</span></a>
+    <a class="c" href="index.html?cena=horizonte"><b>Horizonte rasante</b><span>a 3 graus, às 17h30</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Chão e materiais</h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=materiais"><b>Materiais A/B</b><span>procedural à esquerda, CC0 à direita</span></a>
+    <a class="c" href="index.html?cena=costa"><b>Costa</b><span>mar, praia, costão e mata</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Interface</h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=aberta&amp;ui=vitrine"><b>Pele da interface</b><span>barra de cima e cartão sobre a cidade</span></a>
+    <a class="c" href="index.html?cena=aberta&amp;ui=vitrine&amp;tela=economia"><b>Tela Economia</b><span>orçamento e empréstimo</span></a>
+    <a class="c" href="index.html?cena=aberta&amp;ui=vitrine&amp;cenario=inicio"><b>Partida nova</b><span>a barra no começo do jogo</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Página de teste <small>(mande o print ou o texto de "Copiar resultado")</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=aberta&amp;painel=1"><b>Sonda e bancada: aberta</b><span>mede sozinha ao abrir</span></a>
+    <a class="c pri" href="index.html?cena=estresse&amp;painel=1"><b>Sonda e bancada: estresse</b><span>300 chamadas e 900 mil triângulos</span></a>
+  </div>
+</section>
+
+<footer>Abra as duas páginas de teste na mesma aba: "Copiar resultado" junta as duas cenas. O perfil escolhido acima vale para todos os links.</footer>
+</main>
+<script>
+/* Perfil gráfico nos links (?q=); lembrado neste aparelho. */
+(function () {
+  var q = '';
+  try { q = localStorage.getItem('heldopolis.previa.q') || ''; } catch (e) { /* sem armazenamento: automático */ }
+  var botoes = document.querySelectorAll('.perfil button');
+  var links = document.querySelectorAll('a.c');
+  for (var i = 0; i < links.length; i++) links[i].setAttribute('data-base', links[i].getAttribute('href'));
+  function aplicar() {
+    for (var i = 0; i < botoes.length; i++) botoes[i].setAttribute('aria-pressed', botoes[i].getAttribute('data-q') === q ? 'true' : 'false');
+    for (var j = 0; j < links.length; j++) {
+      var base = links[j].getAttribute('data-base');
+      links[j].setAttribute('href', q ? base + '&q=' + q : base);
+    }
+  }
+  for (var k = 0; k < botoes.length; k++) {
+    botoes[k].addEventListener('click', function () {
+      q = this.getAttribute('data-q');
+      try { localStorage.setItem('heldopolis.previa.q', q); } catch (e) { /* sem armazenamento */ }
+      aplicar();
+    });
+  }
+  aplicar();
+})();
+</script>
+</body>
+</html>

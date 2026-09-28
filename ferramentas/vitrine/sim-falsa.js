@@ -109,7 +109,26 @@ export function criarSimFalsa({ cenario = 'meio', semente = 7 } = {}) {
 
   const alertas = () => (E.creditos <= 0 ? [{ id: 'caixa', gravidade: 'grave', glifo: 'caixa', codigo: 'caixaZerado', params: {}, alvo: { tela: 'economia' } }] : cenario === 'meio'
     ? [{ id: 'agua', gravidade: 'atencao', glifo: 'agua', codigo: 'semAgua', params: { n: 14 }, alvo: { x: 120, z: -80 } }] : []);
-  const saldoHora = () => Math.round(E.populacao * tarifa() - 21500);
+  // o saldo por hora é receitas menos despesas (a tela Economia mostra a conta ao lado do saldo)
+  const receitas = () => ({ moradores: E.populacao * tarifa(), cidade: cenario === 'meio' ? 18400 : 0, deposito: cenario === 'meio' ? 2100 : 0, marcos: 0 });
+  // juros por hora de jogo: 10% ao ano e o ano tem 2 h (TIQUES_ANO / 3.600), então 5% da dívida por hora
+  const despesas = () => ({ servicos: 14200, vias: 3100, ligacao: 1200, salarios: 2400, juros: Math.round((E.divida * 0.1 * 3600) / TIQUES_ANO), importacao: 0, importacaoCidade: 600 });
+  const soma = (o) => Object.values(o).reduce((a, v) => a + v, 0);
+  const saldoHora = () => Math.round(soma(receitas()) - soma(despesas()));
+  // serviço de mentira para o cartão (um em cada 9 prédios), no formato de q.predio: o tipo é o id do catálogo
+  // (data/servicos.js, seção 8.1 do desenho da simulação), sem campo de categoria
+  const SERVICOS_FALSOS = [['clinica', 'Clínica da Família', 800, 1200, 700], ['escolaF', 'Escola Municipal', 600, 1500, 900], ['delegacia', 'Base Comunitária', 10000, 1500, 800], ['bombeiros', 'Posto de Bombeiros', 12000, 1800, 900]];
+  const servicoDe = (ref, i) => {
+    const [tipo, nome, capacidade, alcance, manutencaoHora] = SERVICOS_FALSOS[Math.floor(i / 9) % SERVICOS_FALSOS.length];
+    return {
+      ref, tipo, modelo: 0, nome: E.nomes.get(ref) || `${nome} Santa Cida`, zona: 0, nivel: 1, estado: 'ok', obra: null, moradia: null, trabalho: null, nivelProx: null,
+      servicos: { agua: 'ok', esgoto: 'ok', energia: 'ok', saude: 1, educacao: 1, seguranca: 1, bombeiros: 1, lazer: 0 },
+      servico: { capacidade, uso: Math.round(capacidade * 0.78), eficiencia: 0.74, alcance, manutencaoHora },
+      holding: null, cor: E.cores.get(ref) || 0, via: { ref: 2, nome: 'Rua da Matriz' },
+      avisos: [{ codigo: 'semTrabalhadores', gravidade: 'atencao', desde: E.tique - 240, acao: null }],
+      faz: `atende quem mora a até ${alcance} m`,
+    };
+  };
 
   const q = {
     barra: () => {
@@ -132,8 +151,11 @@ export function criarSimFalsa({ cenario = 'meio', semente = 7 } = {}) {
     },
     retomar: () => ({ objetivo: q.barra().objetivos[2], problema: alertas()[0] ? { codigo: alertas()[0].codigo, params: alertas()[0].params, alvo: alertas()[0].alvo } : null, desde: E.tique - 1800 }),
     predio: (ref) => {
-      const i = idxDe(ref);
-      if (!(i < predios.n)) return null;
+      // com o render de verdade (?ui=vitrine) o índice vem da cidade sintética, maior que a da mentira: vale qualquer um
+      const i0 = idxDe(ref);
+      if (!predios.n) return null;
+      if (i0 % 9 === 4) return servicoDe(ref, i0);
+      const i = i0 % predios.n;
       const res = predios.zona[i] <= 2;
       return {
         ref, tipo: 'zona', modelo: predios.modelo[i], nome: E.nomes.get(ref) || (res ? 'Edifício Aurora' : 'Galpão Horizonte'), zona: predios.zona[i], nivel: predios.nivel[i],
@@ -149,8 +171,8 @@ export function criarSimFalsa({ cenario = 'meio', semente = 7 } = {}) {
     deposito: () => ({ janela: { fimTique: E.tique + 9000, vendidas: E.vendidas, max: 100 }, itens: ITENS_FALSOS.map((it) => ({ item: it.item, estoque: E.estoque[it.item], reserva: 0, precoBase: it.precoBase, precoVenda: Math.round(it.precoBase * 1.5), vendeCidade: true, auto: null })) }),
     emprestimo: () => ({ disponivelAno: 50000 - E.tomadoAno, tomadoAno: E.tomadoAno, limiteAno: 50000, divida: E.divida, dividaMax: 500000, taxa: 0.1, jurosDevidos: Math.round(E.divida * 0.1 / 12), contratos: E.contratos.map((x) => ({ ...x })) }),
     orcamento: () => ({
-      receitas: { moradores: E.populacao * tarifa(), cidade: 18400, deposito: 2100, marcos: 0 },
-      despesas: { servicos: 14200, vias: 3100, ligacao: 1200, salarios: 2400, juros: Math.round(E.divida * 0.1 / 12), importacao: 0, importacaoCidade: 600 },
+      receitas: receitas(),
+      despesas: despesas(),
       naoPago: { servicos: 0, salarios: 0 }, saldoHora: saldoHora(), caixa: E.creditos,
       serie: Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, caixa: 60000 + i * 11000, receitas: 90000 + i * 5000, despesas: 70000 + i * 2500, moradores: 4000 + i * 700, bemEstar: 58 + i * 0.5, desemprego: 0.06 })),
     }),

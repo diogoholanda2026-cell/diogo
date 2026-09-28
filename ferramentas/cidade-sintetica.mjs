@@ -1,6 +1,7 @@
 // Cidade sintética: espelho gerado PELAS APIS da simulação (addAresta do grafo, alocar() das tabelas, o substituto de
 // células da S1b e o de crescimento da S2a, que põe o prédio de frente para a célula). 4 x 4 km com ruas e avenidas em
-// curva, 12 mil prédios de todas as zonas e níveis, mata, mar, rio, lagoa e a Torre. Serve ao render e à UI antes da
+// curva, 12 mil prédios de todas as zonas e níveis em lotes geminados (cada bairro cheio do centro para a borda, com
+// quintais e loteamentos por ocupar na vegetação), mata, mar, rio, lagoa e a Torre. Serve ao render e à UI antes da
 // cidade de verdade existir (?sintetica=1 no navegador) e aos testes dos invariantes do espelho.
 //
 // No navegador:  import { gerarCidadeSintetica } from '../../ferramentas/cidade-sintetica.mjs';
@@ -23,6 +24,7 @@ import { PREDIOS, modelosDaZona } from '../fonte/data/predios.js';
 import { ZONAS_ORDEM } from '../fonte/data/zonas.js';
 import { VIAS } from '../fonte/data/vias.js';
 
+// predios: a cidade cheia dá cerca de 12 mil (o gerador enche os bairros de ruas; o número exato sai no resumo)
 export const SINTETICA = Object.freeze({ lado: 4096, predios: 12000, semente: 'sintetica-1' });
 
 const MEIO = SINTETICA.lado / 2; // a cidade ocupa [-2048, 2048] nos dois eixos
@@ -166,17 +168,19 @@ function torcer(x, z, ondula = 0) {
 
 // bairros: centro, rotação, passo da grade e mistura de zonas
 // [resBaixa, resMedia, resAlta, comBaixa, comAlta, escritorio, industria]. Cada bairro fica com a sua célula de Voronoi
-// (menos uma faixa de 50 m na divisa, onde correm as avenidas grandes).
+// (menos uma faixa de 50 m na divisa, onde correm as avenidas grandes). Os `vazio` não têm ruas (a várzea do rio, a
+// lagoa e o pé dos morros): cerca de 12 mil prédios enchem os seis bairros de ruas em vez de espalhar em nove. Com um
+// teto de prédios menor (--predios), `cresce` abaixo de 1 adianta o bairro na ordem de crescimento.
 const BAIRROS = [
-  { nome: 'Centro', c: [-230, -470], rot: 0, passo: [224, 112], mistura: [0, 2, 3, 1, 3, 3, 0] },
+  { nome: 'Centro', c: [-230, -470], rot: 0, passo: [224, 128], mistura: [0, 2, 3, 1, 3, 3, 0], cresce: 0.5 },
   { nome: 'Norte', ondula: 8, c: [700, -1300], rot: 0.18, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
-  { nome: 'Noroeste', ondula: 8, c: [-700, -1450], rot: -0.09, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
+  { nome: 'Noroeste', vazio: true, c: [-700, -1450], rot: -0.09, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
   { nome: 'Leste', c: [1400, -350], rot: -0.12, passo: [128, 208], mistura: [0, 1, 0, 1, 0, 0, 5] },
   { nome: 'Sudeste', c: [1250, 520], rot: 0.03, passo: [88, 88], mistura: [2, 3, 1, 3, 1, 1, 0] },
-  { nome: 'Orla', c: [1050, 1400], rot: 0.34, passo: [208, 112], mistura: [0, 2, 4, 1, 2, 1, 0] },
-  { nome: 'Sudoeste', ondula: 8, c: [-620, 780], rot: 0.05, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
+  { nome: 'Orla', c: [1050, 1400], rot: 0.34, passo: [208, 128], mistura: [0, 2, 4, 1, 2, 1, 0], cresce: 0.6 },
+  { nome: 'Sudoeste', vazio: true, ondula: 8, c: [-620, 780], rot: 0.05, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
   { nome: 'Poente', c: [-1650, -620], rot: -0.2, passo: [88, 88], mistura: [5, 1, 0, 3, 0, 0, 1] },
-  { nome: 'Lagoa', ondula: 8, c: [-1700, 500], rot: 0.12, passo: [88, 88], mistura: [5, 2, 0, 2, 0, 0, 0] },
+  { nome: 'Lagoa', vazio: true, ondula: 8, c: [-1700, 500], rot: 0.12, passo: [88, 88], mistura: [5, 2, 0, 2, 0, 0, 0] },
 ];
 const FAIXA_DIVISA = 40;
 
@@ -311,6 +315,10 @@ function gerarVias(sim, T, rng) {
   };
   for (const b of BAIRROS) {
     const d = dono++;
+    if (b.vazio) {
+      bairros.push({ ...b, dono: d, nos: [], arestas: [] });
+      continue;
+    }
     const c = cos(b.rot);
     const s = sen(b.rot);
     const [px, pz] = b.passo;
@@ -534,6 +542,12 @@ function gerarCelulas(sim, T) {
 const ZONA_IDX = (id) => ZONAS_ORDEM.indexOf(id);
 const ZONAS_MISTURA = ['resBaixa', 'resMedia', 'resAlta', 'comBaixa', 'comAlta', 'escritorio', 'industria'];
 
+// uma zona cabe no bloco quando algum modelo dela cabe no fundo das colunas mais fundas (o quartil de cima) e no
+// comprimento do bloco; a coluna rasa demais para a zona recebe um prédio da zona de baixo (RECUO_ZONA)
+function zonaCabe(zonaId, fundo, ncol) {
+  return modelosDaZona(zonaId).some((m) => PREDIOS[m].planta[1] <= fundo && PREDIOS[m].planta[0] <= ncol);
+}
+
 function zonear(sim, blocos, bairros, rng) {
   const G = sim.grafo;
   const C = sim.tabelas.celulas;
@@ -542,12 +556,21 @@ function zonear(sim, blocos, bairros, rng) {
   for (const bl of blocos) {
     const b = donoDaAresta.get(bl.e);
     const tipo = tipoDa(G, bl.e);
-    let z;
-    if (!b || tipo === VIAS.avenidaG) z = ZONAS_MISTURA[rng.escolher([0, 1, 3, 1, 3, 3, 0])];
-    else z = ZONAS_MISTURA[rng.escolher(b.mistura)];
-    if (tipo === VIAS.avenida && rng.chance(0.4)) z = rng.chance(0.5) ? 'comBaixa' : 'comAlta';
+    let pesos = !b || tipo === VIAS.avenidaG ? [0, 1, 3, 1, 3, 3, 0] : b.mistura;
+    if (tipo === VIAS.avenida && rng.chance(0.4)) pesos = rng.chance(0.5) ? [0, 0, 0, 1, 0, 0, 0] : [0, 0, 0, 0, 1, 0, 0];
     if (rng.chance(0.02)) continue; // quadras sem zona
-    const zi = ZONA_IDX(z);
+    // fundo livre típico do bloco: a zona sorteada tem de caber nele (torre em quadra rasa deixava a quadra vazia)
+    const fundos = bl.colunas.map((col) => {
+      let r = 0;
+      while (r < col.length && C.estado[col[r]] === CELULA.LIVRE) r++;
+      return r;
+    }).sort((u, v) => u - v);
+    const fundo = fundos[Math.floor(fundos.length * 0.75)] ?? 0;
+    const cabe = ZONAS_MISTURA.map((z) => zonaCabe(z, fundo, bl.colunas.length));
+    let p = pesos.map((w, i) => (cabe[i] ? w : 0));
+    if (!p.some((w) => w > 0)) p = [3, 1, 0, 2, 0, 0, 0].map((w, i) => (cabe[i] ? w : 0));
+    if (!p.some((w) => w > 0)) continue;
+    const zi = ZONA_IDX(ZONAS_MISTURA[rng.escolher(p)]);
     for (const col of bl.colunas) {
       for (const c of col) {
         if (C.estado[c] !== CELULA.LIVRE) continue;
@@ -559,9 +582,13 @@ function zonear(sim, blocos, bairros, rng) {
   }
 }
 
+const RECUO_ZONA = { resAlta: 'resMedia', resMedia: 'resBaixa', comAlta: 'comBaixa', escritorio: 'comAlta', industria: 'comBaixa' };
+
+// Cresce as quadras como numa cidade brasileira: lotes geminados, um encostado no outro, e cada prédio com a
+// profundidade que a quadra dá (o fundo do lote é quintal, não gramado de maquete). Numa coluna, entre os modelos que
+// cabem, ficam os que chegam a até uma linha do fundo livre; entre eles, o sorteio pende para os estreitos.
 function crescer(sim, blocos, alvo, rng) {
   const C = sim.tabelas.celulas;
-  const P = sim.tabelas.predios;
   let feitos = 0;
   const tique = sim.tique;
   const pesosNivel = [30, 25, 20, 15, 10];
@@ -571,37 +598,47 @@ function crescer(sim, blocos, alvo, rng) {
     const zonaId = ZONAS_ORDEM[bl.zona];
     const modelos = modelosDaZona(zonaId);
     const cols = bl.colunas;
+    // fundo livre de cada coluna: células livres da zona desde a rua
+    const fundo = cols.map((col) => {
+      let r = 0;
+      while (r < col.length && col[r] !== undefined && C.estado[col[r]] === CELULA.LIVRE && C.zona[col[r]] === bl.zona) r++;
+      return r;
+    });
     let c = 0;
     while (c < cols.length && feitos < alvo) {
-      const frente = cols[c][0];
-      if (C.estado[frente] !== CELULA.LIVRE || C.zona[frente] !== bl.zona) {
+      if (!fundo[c]) {
         c++;
         continue;
       }
-      // sorteio ponderado sem repetição: modelos estreitos saem mais (mais prédios por quadra)
-      // os de uma linha só de fundo ficam por último (pontas de quadra)
-      const ordem = modelos
-        .map((m) => [m, pot(rng.f(), PREDIOS[m].planta[0] / 6) - (PREDIOS[m].planta[1] === 1 ? 2 : 0)])
+      const cabe = (m) => {
+        const [w, d] = PREDIOS[m].planta;
+        if (c + w > cols.length) return false;
+        for (let i = c; i < c + w; i++) if (fundo[i] < d) return false;
+        return true;
+      };
+      let zonaAqui = zonaId;
+      let cabem = modelos.filter(cabe);
+      while (!cabem.length && RECUO_ZONA[zonaAqui]) {
+        zonaAqui = RECUO_ZONA[zonaAqui];
+        cabem = modelosDaZona(zonaAqui).filter(cabe);
+      }
+      const dMax = cabem.reduce((a, m) => Math.max(a, PREDIOS[m].planta[1]), 0);
+      const ordem = cabem
+        .map((m) => [m, pot(rng.f(), PREDIOS[m].planta[0] / 4) + (PREDIOS[m].planta[1] >= dMax - 1 ? 2 : 0)])
         .sort((u, v) => v[1] - u[1])
         .map((u) => u[0]);
       let feito = -1;
       let largura = 1;
       for (const m of ordem) {
         const [w, d] = PREDIOS[m].planta;
-        if (c + w > cols.length) continue;
         const lista = [];
-        let ok = true;
-        for (let i = c; i < c + w && ok; i++) {
-          for (let r = 0; r < d; r++) {
-            const cel = cols[i][r];
-            if (cel === undefined || C.estado[cel] !== CELULA.LIVRE || C.zona[cel] !== bl.zona) {
-              ok = false;
-              break;
-            }
-            lista.push(cel);
+        for (let i = c; i < c + w; i++) for (let r = 0; r < d; r++) lista.push(cols[i][r]);
+        if (zonaAqui !== zonaId) {
+          for (const cel of lista) {
+            C.zona[cel] = ZONA_IDX(zonaAqui);
+            C.marcar(cel);
           }
         }
-        if (!ok) continue;
         const nivel = rng.escolher(pesosNivel) + 1;
         const r = rng.f();
         let flags = 0;
@@ -621,6 +658,7 @@ function crescer(sim, blocos, alvo, rng) {
           largura = w;
           break;
         }
+        if (zonaAqui !== zonaId) for (const cel of lista) C.zona[cel] = bl.zona;
       }
       if (feito >= 0) {
         feitos++;
@@ -631,6 +669,57 @@ function crescer(sim, blocos, alvo, rng) {
     }
   }
   return feitos;
+}
+
+// Ordem de crescimento: cada bairro cresce do seu centro para a borda, na mesma fração (quem não cabe no teto de
+// prédios fica na borda de todos, como loteamento ainda por ocupar, e não espalhado em quadras vazias pelo meio).
+function ordenarBlocos(sim, blocos, bairros, rng) {
+  const C = sim.tabelas.celulas;
+  const donoDaAresta = new Map();
+  for (const b of bairros) for (const e of b.arestas) donoDaAresta.set(e, b);
+  const grupos = new Map();
+  for (const bl of blocos) {
+    const col = bl.colunas[Math.floor(bl.colunas.length / 2)];
+    const x = C.x[col[0]];
+    const z = C.z[col[0]];
+    let b = donoDaAresta.get(bl.e);
+    if (!b) b = bairros.filter((o) => !o.vazio).reduce((m, o) => (hipot(x - o.c[0], z - o.c[1]) < hipot(x - m.c[0], z - m.c[1]) ? o : m), bairros[0]);
+    const l = grupos.get(b) ?? [];
+    l.push([hipot(x - b.c[0], z - b.c[1]), bl]);
+    grupos.set(b, l);
+  }
+  const chaves = [];
+  for (const [b, l] of grupos) {
+    l.sort((u, v) => u[0] - v[0]);
+    const k = b.cresce ?? 1;
+    l.forEach(([, bl], i) => chaves.push([(i / l.length) * k + 0.06 * rng.f(), bl]));
+  }
+  return chaves.sort((u, v) => u[0] - v[0]).map((u) => u[1]);
+}
+
+// Depois do crescimento: a quadra que ficou sem prédio perde a zona (loteamento por ocupar) e o fundo livre dos lotes
+// também (quintal); as duas ganham vegetação em gerarFloresta, em vez de gramado liso ou terra batida de maquete.
+function soltarSobras(sim, blocos) {
+  const C = sim.tabelas.celulas;
+  let quadras = 0;
+  let quintais = 0;
+  for (const bl of blocos) {
+    if (!bl.zona) continue;
+    const vazia = !bl.colunas.some((col) => col.some((c) => C.estado[c] === CELULA.OCUPADA));
+    for (const col of bl.colunas) {
+      for (const c of col) {
+        if (C.estado[c] !== CELULA.LIVRE || !C.zona[c]) continue;
+        C.zona[c] = 0;
+        C.marcar(c);
+        if (!vazia) quintais++;
+      }
+    }
+    if (vazia) {
+      bl.vazia = true;
+      quadras++;
+    }
+  }
+  return { quadras, quintais };
 }
 
 // ------------------------------------------------------------------------------------------------ o resto do espelho
@@ -656,7 +745,17 @@ function gerarFloresta(sim, T, s) {
     for (const [x, z] of amostrasDaCurva(p, 8)) marca(x, z, meiaDa(G, e) + 6);
   }
   const C = sim.tabelas.celulas;
-  for (let c = 0; c < C.n; c++) if (C.viva[c] && C.zona[c]) marca(C.x[c], C.z[c], 6);
+  for (let c = 0; c < C.n; c++) if (C.viva[c] && (C.zona[c] || C.estado[c] === CELULA.OCUPADA)) marca(C.x[c], C.z[c], 6);
+  // quintais e quadras por ocupar (células livres sem zona): árvores de quintal e capoeira, sem virar mata fechada
+  const base = new Uint8Array(n * n);
+  for (let c = 0; c < C.n; c++) {
+    if (!C.viva[c] || C.zona[c] || C.estado[c] !== CELULA.LIVRE) continue;
+    const i = Math.floor((C.x[c] - origem[0]) / passo);
+    const j = Math.floor((C.z[c] - origem[1]) / passo);
+    if (i < 0 || j < 0 || i >= n || j >= n) continue;
+    const f = fbm(C.x[c] / 60, C.z[c] / 60, s + 53, 3);
+    base[j * n + i] = Math.round(clamp(0.18 + 0.12 * C.linha[c] + (f - 0.5) * 0.9, 0, 0.62) * 255);
+  }
   for (let j = 0; j < n; j++) {
     const z = origem[1] + (j + 0.5) * passo;
     for (let i = 0; i < n; i++) {
@@ -667,7 +766,7 @@ function gerarFloresta(sim, T, s) {
       const h = alturaEm(T, x, z);
       const f = fbm(x / 300, z / 300, s + 31);
       const v = clamp((h - 18) / 50, 0, 1) * 0.8 + (f > 0.58 ? (f - 0.58) * 3 : 0);
-      dens[k] = Math.round(clamp(v, 0, 1) * 255);
+      dens[k] = Math.max(base[k], Math.round(clamp(v, 0, 1) * 255));
     }
   }
   sim.espelho.floresta = { n, passo, origem, dens };
@@ -798,10 +897,11 @@ function gerarVidaEArcologia(sim, rng) {
 /**
  * Gera a cidade sintética. Sem `sim`, cria uma simulação só da F0 (sem os domínios, que não devem mexer nela); com
  * `sim` (criada por criarSimulacao), escreve nela: prefira { dominios: false } se ela for rodar tiques.
- * @param {{ semente?: string, predios?: number, sim?: object, cronometro?: () => number }} op
+ * @param {{ semente?: string, predios?: number, sim?: object, cronometro?: () => number }} op  predios: teto (padrão:
+ *   encher os bairros, cerca de SINTETICA.predios)
  * @returns {{ sim: object, resumo: object }}
  */
-export function gerarCidadeSintetica({ semente = SINTETICA.semente, predios = SINTETICA.predios, sim = null, cronometro = null } = {}) {
+export function gerarCidadeSintetica({ semente = SINTETICA.semente, predios = Infinity, sim = null, cronometro = null } = {}) {
   const agora = cronometro ?? (() => 0);
   const t0 = agora();
   sim = sim ?? criarSimulacao({ semente, dominios: false });
@@ -815,8 +915,9 @@ export function gerarCidadeSintetica({ semente = SINTETICA.semente, predios = SI
   const { blocos, invalidasEsquina } = gerarCelulas(sim, T);
   zonear(sim, blocos, bairros, rng);
   const tCelulas = agora();
-  // quadras em ordem sorteada: o teto de prédios não deixa um bairro inteiro vazio
-  const feitos = crescer(sim, rng.embaralhar([...blocos]), predios, rng);
+  // cada bairro cresce do centro para a borda: o teto de prédios não deixa quadras vazias pelo meio
+  const feitos = crescer(sim, ordenarBlocos(sim, blocos, bairros, rng), predios, rng);
+  const sobras = soltarSobras(sim, blocos);
   const tPredios = agora();
   gerarFloresta(sim, T, s);
   gerarRecursos(sim, T, s);
@@ -854,7 +955,7 @@ export function gerarCidadeSintetica({ semente = SINTETICA.semente, predios = SI
     arestas: A.vivos,
     porTipo,
     ligacoes: ligacoes.length,
-    celulas: { total: C.vivos, validas, zoneadas, ocupadas, invalidasEsquina },
+    celulas: { total: C.vivos, validas, zoneadas, ocupadas, invalidasEsquina, quadrasPorOcupar: sobras.quadras, quintais: sobras.quintais },
     populacao: sim.agregados.populacao,
     ms: cronometro
       ? {
@@ -889,7 +990,7 @@ async function principal() {
     const i = process.argv.indexOf(nome);
     return i > 0 ? Number(process.argv[i + 1]) : padrao;
   };
-  const alvo = arg('--predios', SINTETICA.predios);
+  const alvo = arg('--predios', Infinity);
   const { sim, resumo } = gerarCidadeSintetica({ predios: alvo, cronometro: () => performance.now() });
   console.log('cidade sintética:', JSON.stringify(resumo, null, 1));
   const erros = conferirSintetica(sim);
@@ -923,7 +1024,7 @@ async function principal() {
       versao: v0,
     }),
   );
-  const ok = !erros.length && !validar.length && resumo.predios === alvo;
+  const ok = !erros.length && !validar.length && (alvo === Infinity ? Math.abs(resumo.predios - SINTETICA.predios) <= 0.1 * SINTETICA.predios : resumo.predios === alvo);
   if (!ok) console.log('cidade sintética: FALHOU');
   process.exit(ok ? 0 : 1);
 }

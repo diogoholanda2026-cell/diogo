@@ -131,6 +131,14 @@ export async function criarSimDoTipo(tipo, { semente = SEMENTE_PADRAO, holding =
 
 const nada = async () => ({ ok: false, codigo: 'nada' });
 
+/** Vidro com desfoque na barra de cima (ui.md 3.2): só no PC com o perfil Alta ou Ultra (marca data-vidro na raiz). */
+export function marcarVidro(R) {
+  if (typeof document === 'undefined') return;
+  const movel = typeof navigator !== 'undefined' && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+  const id = R.perfil?.().id;
+  document.documentElement.dataset.vidro = !movel && (id === 'alta' || id === 'ultra') ? '1' : '0';
+}
+
 /**
  * Monta o jogo.
  * @param {{ canvas: HTMLCanvasElement, raizUI: HTMLElement, qs: URLSearchParams, carga: { fase(chave, pct), sair() } }} op
@@ -181,6 +189,7 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
     depuracao: qs.get('depuracao') === '1',
   });
   if (prefs.sempreDia) R.sempreDia(true);
+  marcarVidro(R);
 
   const eventos = new Map();
   let laco = null;
@@ -203,7 +212,10 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
       Object.assign(prefs, p);
       aplicarPrefs(prefs);
       if ('sempreDia' in p) R.sempreDia(!!prefs.sempreDia);
-      if ('qualidade' in p && !qs.get('q')) R.qualidade(prefs.qualidade);
+      if ('qualidade' in p && !qs.get('q')) {
+        R.qualidade(prefs.qualidade);
+        marcarVidro(R);
+      }
       if (ui && !app.simUIFalsa) ui.ui.loja.prefs.value = { ...prefs };
       return gravarPrefs(prefs);
     },

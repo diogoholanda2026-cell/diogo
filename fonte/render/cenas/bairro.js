@@ -13,7 +13,7 @@ export const VISTAS = Object.freeze({
   rua: { dist: 30, inclinacao: 4, x: 1543, z: 1570, guinada: 110 },
   // rua de casas e lojas de um bairro popular denso, e um bairro misto com prédios médios
   50: { dist: 55, inclinacao: 16, x: 386, z: -958, guinada: 40 },
-  200: { dist: 200, inclinacao: 30, x: 330, z: -880, guinada: 20 },
+  200: { dist: 200, inclinacao: 30, x: 330, z: -880, guinada: 75 },
   lod1: { dist: 1100, inclinacao: 30 },
   lod2: { dist: 3200, inclinacao: 24 },
   // de perto, por tipologia: torres residenciais sobre pódio, escritórios, galpões e prédios médios da orla

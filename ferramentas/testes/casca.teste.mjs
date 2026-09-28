@@ -163,7 +163,8 @@ test('perfis: a regra do Poco X7 (D33) e a escolha automática', async () => {
 
 test('oficina: despachante (D45) com a caixa de prova, tipo desconhecido e registro fora do contrato', async () => {
   const { criarDespachante } = await import('../../fonte/render/mundo/oficina.worker.js');
-  const d = criarDespachante();
+  // sem módulos: desde a R4a o 'setor' tem gerador registrado, e o teste confere o registro fora dele
+  const d = criarDespachante([]);
   const { resposta, transferir } = d.responder({ id: 7, tipo: 'prova', chave: 's1', dados: { w: 4, h: 2, d: 6 } });
   assert.equal(resposta.id, 7);
   assert.equal(resposta.chave, 's1');
@@ -383,16 +384,18 @@ test('canteiro de prova: ruas e prédios pelas APIs, invariantes do espelho, det
   const { criarSimulacao } = await import('../../fonte/sim/estado.js');
   const { conferirEspelho } = await import('../../fonte/contratos/espelho.js');
   const { semearCanteiro } = await importarControle();
-  const a = criarSimulacao({ semente: 'canteiro-teste' });
+  // o canteiro semeia num mundo vazio (só a F0); com o mapa da S1a (Vila e rodovia) ele não roda
+  assert.equal(semearCanteiro(criarSimulacao({ semente: 'canteiro-teste' })), 0, 'com o mapa da S1a o canteiro não roda');
+  const a = criarSimulacao({ semente: 'canteiro-teste', dominios: false });
   const n = semearCanteiro(a);
   assert.ok(n > 80, `${n} prédios`);
   assert.deepEqual(conferirEspelho(a.espelho, { alturaEm: (x, z) => a.alturaEm(x, z) }), []);
   assert.deepEqual(a.validar(), []);
   assert.ok(a.agregados.populacao > 0);
-  const b = criarSimulacao({ semente: 'canteiro-teste' });
+  const b = criarSimulacao({ semente: 'canteiro-teste', dominios: false });
   semearCanteiro(b);
   assert.equal(a.hash(), b.hash());
-  assert.equal(semearCanteiro(a), 0, 'com o mundo ocupado (o mapa da S1a) o canteiro não roda');
+  assert.equal(semearCanteiro(a), 0, 'com o mundo ocupado o canteiro não roda de novo');
 });
 
 // ------------------------------------------------------------------------------------------------ índices fixos
