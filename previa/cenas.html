@@ -7,8 +7,9 @@
 <meta name="color-scheme" content="dark">
 <title>Prévia do jogo novo</title>
 <link rel="icon" href="icones/icone-192.png">
-<!-- Índice da prévia (PROJETO 4.6): as cenas fixas e a página de teste, para o dono abrir no celular e no PC.
-     O montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo (index.html) com ?cena=. -->
+<!-- Índice da prévia (PROJETO 4.6 e 5.3): o jogo, o roteiro de 5 min, as cenas fixas e a página de teste, para o dono
+     abrir no celular e no PC. O montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo
+     (index.html), sem nada ou com ?cena=. -->
 <style>
 :root{--fundo:#0B0F14;--vidro:#121821;--borda:rgba(255,255,255,.10);--texto:#EEF2F6;--fraco:#A7B1BD;--ouro:#D9BD84;--azul:#5AB0FF}
 *{box-sizing:border-box}
@@ -31,6 +32,12 @@ a.c:hover,a.c:focus-visible{border-color:var(--azul);outline:none}
 a.c b{display:block;font-size:15px;font-weight:600}
 a.c span{display:block;font-size:12px;color:var(--fraco)}
 a.c.pri{border-color:rgba(90,176,255,.45)}
+a.c.jogo{min-height:84px;padding:14px 16px;border-color:var(--ouro);background:linear-gradient(180deg,#1A2230,#121821)}
+a.c.jogo b{font-size:18px}
+ol.roteiro{margin:0;padding:12px 16px 12px 36px;border:1px solid var(--borda);border-radius:10px;background:var(--vidro);font-size:14px}
+ol.roteiro li{margin:6px 0}
+ol.roteiro li span{color:var(--fraco)}
+.anterior{margin-top:30px;padding-top:18px;border-top:1px solid var(--borda)}
 footer{color:var(--fraco);font-size:12px;margin-top:8px}
 </style>
 </head>
@@ -38,7 +45,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 <main>
 <header>
   <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="#D9BD84" stroke-width="3"/><path fill="#D9BD84" d="M34 30h7v17h18V30h7v40h-7V53H41v17h-7z"/></svg>
-  <div><h1>Prévia 0: vitrine visual</h1><p>Heldópolis e a Torre Lâmina, sem jogar. Cada cartão abre uma cena.</p></div>
+  <div><h1>Prévia 1: via no polegar</h1><p>Heldópolis no mapa de verdade: trace vias, zoneie quadras e veja o trânsito.</p></div>
 </header>
 
 <div class="perfil" role="group" aria-label="Perfil gráfico">
@@ -51,6 +58,44 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 </div>
 
 <section>
+  <h2>Jogar</h2>
+  <div class="grade">
+    <a class="c pri jogo" href="index.html"><b>Abrir o jogo</b><span>o mapa autoral: relevo, Rio Held, Vila de Santa Cida e a rodovia</span></a>
+    <a class="c" href="index.html?painel=1"><b>Jogo com a página de teste</b><span>sonda e bancada sobre o jogo</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Roteiro de 5 minutos <small>(depois mande o print)</small></h2>
+  <ol class="roteiro">
+    <li>Abra <b>Sonda e bancada: aberta</b> e depois <b>estresse</b> (lá embaixo) e toque em <b>Copiar resultado</b>. <span>O Teste de desempenho nas Configurações chega no M1a.</span></li>
+    <li>Abra o jogo, toque em <b>4x</b> e deixe correr 5 minutos. <span>No 4x o sol dá uma volta inteira em 2,5 minutos: dá para ver a tarde e a noite.</span></li>
+    <li><b>Vias &gt; Avenida</b>: toque no começo, toque no fim e arraste a alça do meio para curvar; toque em <b>Construir</b>. <span>A mira fica acima do dedo e a lupa mostra o encaixe.</span></li>
+    <li>Cruze a avenida com uma <b>Rua</b>, melhore uma rua de terra da Vila (<b>Melhorar</b>) e experimente <b>Demolir</b> e <b>Desfazer</b>.</li>
+    <li><b>Zonas &gt; Residencial baixa</b>, modo <b>Preencher</b>: toque em duas quadras ao lado da avenida. <span>As células aparecem; os prédios nascem no M1a.</span></li>
+    <li>Olhe a noite: a luz da rua, os faróis e as janelas da Vila.</li>
+    <li>Mande o print da página de teste e um do jogo. Se o celular esquentar, repita a página de teste depois de 15 minutos.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Vias e trânsito <small>(na cidade sintética)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=rua&amp;hora=17.5"><b>Rua às 17h30</b><span>avenida com palmeiras, carros e o sol baixo às costas</span></a>
+    <a class="c pri" href="index.html?cena=rua&amp;vista=cruzamento"><b>Cruzamento de perto</b><span>meio-fio, faixas de pedestre e semáforo</span></a>
+    <a class="c pri" href="index.html?cena=rua&amp;vista=300&amp;hora=21"><b>Rua à noite</b><span>luz da rua e faróis, a 300 m</span></a>
+    <a class="c" href="index.html?cena=rua"><b>Rua às 16h</b><span>no nível da calçada</span></a>
+    <a class="c" href="index.html?cena=rua&amp;vista=300"><b>Bairro a 300 m</b><span>vias, postes e carros</span></a>
+    <a class="c" href="index.html?cena=ferramentas&amp;ui=1"><b>Ferramenta de via</b><span>a avenida em curva traçada pela interface</span></a>
+  </div>
+</section>
+
+<div class="anterior">
+<header>
+  <div><h1>Prévia 0: vitrine visual</h1><p>Continua valendo: a Torre, os planos, a cidade sintética e os materiais.</p></div>
+</header>
+
+<section>
   <h2>Torre Lâmina <small>(prancha de 4 azimutes e 2 closes)</small></h2>
   <div class="grade">
     <a class="c pri" href="index.html?cena=torre&amp;prancha=1&amp;hora=17.5"><b>Prancha às 17h30</b><span>fim de tarde</span></a>
@@ -61,7 +106,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 </section>
 
 <section>
-  <h2>Planos diretores <small>(escolha um no portão 1)</small></h2>
+  <h2>Planos diretores <small>(o A, Baía, foi adotado no portão 1; os três seguem para comparar)</small></h2>
   <div class="grade">
     <a class="c pri" href="index.html?cena=planos&amp;plano=A"><b>A. Baía</b><span>vista aérea às 17h30</span></a>
     <a class="c pri" href="index.html?cena=planos&amp;plano=B"><b>B. Parque-canal</b><span>vista aérea às 17h30</span></a>
@@ -103,6 +148,8 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
   </div>
 </section>
 
+</div>
+
 <section>
   <h2>Página de teste <small>(mande o print ou o texto de "Copiar resultado")</small></h2>
   <div class="grade">
@@ -125,7 +172,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
     for (var i = 0; i < botoes.length; i++) botoes[i].setAttribute('aria-pressed', botoes[i].getAttribute('data-q') === q ? 'true' : 'false');
     for (var j = 0; j < links.length; j++) {
       var base = links[j].getAttribute('data-base');
-      links[j].setAttribute('href', q ? base + '&q=' + q : base);
+      links[j].setAttribute('href', q ? base + (base.indexOf('?') < 0 ? '?' : '&') + 'q=' + q : base);
     }
   }
   for (var k = 0; k < botoes.length; k++) {
