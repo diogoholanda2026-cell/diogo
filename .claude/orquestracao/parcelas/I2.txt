@@ -1,0 +1,5 @@
+PARCELA I2: integração da SEDE2 e da PC1 e a Prévia 1b (você é o integrador). As duas acabaram de ser feitas e revisadas, no mesmo repositório.
+1. Rode node ferramentas/simular.mjs --testes, a guarda-texto e node ferramentas/montar.mjs (saída padrão previa/). Corrija conflitos de integração com a menor mudança possível, no arquivo de quem for o problema, e anote cada correção. Resolva as pendências de contrato que as duas deixaram (fonte/contratos só você muda).
+2. Monte a Prévia 1b em previa/: no índice cenas.html, em destaque, "Sede v2" com as vistas aerea, eixo, mar e noite, a prancha das torres, e a página de teste com os campos novos (tempo por passe, resolução interna, perfil escolhido, compilações depois de pronto); mantenha a Prévia 1 e a Prévia 0 abaixo.
+3. No Chromium de teste: todas as páginas do índice abrem sem erro; a vigia mostra zero compilações depois de pronto nas cenas da sede; capturas (no máximo 4, 1376x768): aerea, eixo, mar, noite. Bancada nas cenas aberta e estresse no perfil 'pc' e no Alta, só para regressão.
+4. Relate: o que cada parcela entregou, as correções, os números, as capturas e o que fica para a onda 3. Não faça commit.

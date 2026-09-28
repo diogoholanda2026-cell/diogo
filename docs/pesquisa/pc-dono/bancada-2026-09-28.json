@@ -1,0 +1,10 @@
+{
+  "quando": "2026-09-28",
+  "maquina": { "cpu": "Intel Core i3-9100F, 4 núcleos e 4 linhas, 3,6 GHz", "gpu": "AMD Radeon RX 550, 4 GB", "ram": "16 GB", "disco_livre": "64 GB (SSD)", "navegador": "Chromium no Windows, ANGLE Direct3D11" },
+  "sonda": { "gpu": "ANGLE (AMD, Radeon RX 550 Series (0x000067FF) Direct3D11 vs_5_0 ps_5_0, D3D11)", "clipControl": true, "multiDraw": true, "timer": true, "floatRT": true, "halfRT": true, "paralelo": true, "bptc_s3tc_rgtc": true, "astc": false, "etc": false, "textura": 16384, "amostras": 8, "varyings": 30, "uniformesF": 1024 },
+  "cenas": [
+    { "cena": "aberta", "perfil": "alta (escolha automática; a sugestão dizia ultra)", "pr": 1.5, "msaa": 4, "alvo": "r11g11b10", "msMedio": 37.22, "p95": 50.1, "qps": 26.9, "chamadas": 25, "triangulos": 302807, "piorQuadroMs": 166.7, "gpuMsTimer": 32.23, "familias": { "terreno": 32768, "predios": 248156, "arcologia": 18992, "vida": 1430 }, "programaMaisLento": ["arcologia:vidro", "162,5 ms de compilação, segunda vez do mesmo programa: é o soluço de 166 ms"] },
+    { "cena": "estresse", "perfil": "alta", "pr": 1.5, "msaa": 4, "msMedio": 18.89, "p95": 33.3, "qps": 52.9, "chamadas": 268, "triangulos": 894221, "piorQuadroMs": 33.4, "gpuMsTimer": 16.44 }
+  ],
+  "leitura": "pr 1,5 é a escala de 150% do Windows: a tela é 1080p nativa. Na vista aberta a placa leva 32 ms por quadro com MSAA 4x (27 qps): o custo é de pixel (sombreadores do terreno, das fachadas, da água e do céu), não de triângulo; o estresse com 894 mil triângulos simples cabe em 16 ms. O pior quadro de 166 ms é uma recompilação do vidro da Arcologia em tempo de jogo."
+}
