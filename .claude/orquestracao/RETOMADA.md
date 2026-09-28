@@ -1,8 +1,8 @@
 # Estado do jogo novo (28/09/2026)
 
-Rodando: frentes SEDE2 (sede v2) e PC1 (perfil do PC do dono), base `3ff31ea`, textos em `parcelas/`.
-Se parar: relance só a frente que faltar com `{"nome": "Sede v2 e PC do dono", "base": "3ff31ea", "etapas": [[{"id": "SEDE2"}, {"id": "PC1"}]]}`
-(tirando a que já terminou), depois a I2 com `[[{"id": "I2", "revisar": false}]]`.
+Rodando: I2 (integração da SEDE2 e da PC1, Prévia 1b), base `62e864d`. SEDE2 e PC1 prontas e revisadas (`62e864d`).
+Se parar: relance a I2 com `{"nome": "Prévia 1b", "base": "62e864d", "etapas": [[{"id": "I2", "revisar": false}]]}`
+(acrescente em `parcelas/I2.txt` uma linha RETOMADA com o ponto onde parou).
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
