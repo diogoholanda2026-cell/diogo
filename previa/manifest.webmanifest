@@ -1,0 +1,41 @@
+{
+  "id": "/diogo/previa/",
+  "name": "Arcologia de Held (prévia)",
+  "short_name": "Held prévia",
+  "description": "Planeje Heldópolis, produza os materiais da cidade e erga a Arcologia de Held.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "orientation": "landscape",
+  "background_color": "#0B0F14",
+  "theme_color": "#0B0F14",
+  "categories": [
+    "games"
+  ],
+  "icons": [
+    {
+      "src": "icones/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icones/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icones/icone-mascaravel-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
