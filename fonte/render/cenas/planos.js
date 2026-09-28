@@ -14,6 +14,7 @@ import { PLANOS, PLANO_PADRAO, GLEBA_ENVELOPE } from '../../data/arcologia-plano
 import { alturaEm } from '../../comum/altura.js';
 import { cavarPlanoNaCena, descavar } from '../arcologia/lago.js';
 import { tirarAnelSintetico, simDaCena, assentarHora } from './torre.js';
+import { TETO_ARCOLOGIA } from '../../contratos/render.js';
 
 const qs = () => (typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams());
 
@@ -30,8 +31,8 @@ export const VISTAS_SEDE = Object.freeze({
   noite: { hora: 21, de: [228, 4, 722], alvo: [250, 108, 572], fov: 68, chao: true },
 });
 
-/** Teto da família 'arcologia' no quadro, por perfil, de perto e na vista aberta (D66, tetos provisórios). */
-export const TETO_ARCOLOGIA = Object.freeze({ perto: { media: 90000, alta: 250000, ultra: 250000, pc: 250000 }, aberta: 40000 });
+/** Teto da família 'arcologia' no quadro, por perfil, de perto e na vista aberta (D66): o do contrato. */
+export { TETO_ARCOLOGIA };
 
 export function registrar(registrarCena) {
   const q = qs();

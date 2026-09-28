@@ -32,6 +32,7 @@ export function registrar(registrarTextos) {
     'carga.cidade': 'Cidade',
     'carga.ceu': 'Céu e sombras',
     'carga.pronto': 'Pronto',
+    'carga.graficos': 'Preparando os gráficos',
     'carga.erro': 'Não foi possível abrir o jogo. Recarregue a página.',
     'app.emBreve': 'Ainda não disponível nesta versão.',
     'app.segundoPlano': 'Jogo pausado em segundo plano.',

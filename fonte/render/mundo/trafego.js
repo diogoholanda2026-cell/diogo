@@ -14,6 +14,7 @@ import * as SH from '../materiais/shaders/via.glsl.js';
 import { alturaEm } from '../../comum/altura.js';
 import { CELULA } from '../../contratos/flags.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
+import { porPerfil } from '../motor/perfis.js';
 
 /** Tetos e alcances por perfil (desenho do render 2.10): carros andando, estacionados, raio da amostra e do LOD0. */
 export const PERFIL_TRAFEGO = Object.freeze({
@@ -111,7 +112,7 @@ function criarTrafego(ctx) {
   const { cena, medidas } = ctx;
   const U = { gCarroNoite: { value: 0 } };
   const material = criarMaterialCarro(ctx.ganchos, U);
-  const perfil = () => PERFIL_TRAFEGO[ctx.perfil.id] ?? PERFIL_TRAFEGO.media;
+  const perfil = () => porPerfil(PERFIL_TRAFEGO, ctx.perfil);
   // uma InstancedMesh por modelo e LOD, com a cor e as luzes por instância
   const malhas = [];
   function montarMalhas() {
@@ -306,17 +307,19 @@ function criarTrafego(ctx) {
   const pB = { x: 0, z: 0, hx: 1, hz: 0 };
 
   function andar(vias, dt, tempo) {
-    // fila por faixa: o carro da frente limita a velocidade
+    // fila por faixa: o carro da frente limita a velocidade. Quem está na curva já entra na fila da faixa de destino,
+    // atrás da boca pelo que falta da curva: dois carros que convergem para a mesma faixa não saem um dentro do outro
     const filas = new Map();
     for (const c of carros) {
       c.lider = null;
-      if (c.curva) continue;
-      const k = `${c.e}:${c.u}:${c.sentido}`;
+      const px = c.curva?.prox;
+      const k = px ? `${px.ar.e}:${px.u}:${px.sentido}` : `${c.e}:${c.u}:${c.sentido}`;
+      c.naFila = px ? px.s * px.sentido - (1 - c.curva.t) * c.curva.L : c.s * c.sentido;
       if (!filas.has(k)) filas.set(k, []);
       filas.get(k).push(c);
     }
     for (const fila of filas.values()) {
-      fila.sort((a, b) => a.s * a.sentido - b.s * b.sentido);
+      fila.sort((a, b) => a.naFila - b.naFila || !!b.curva - !!a.curva);
       for (let i = 0; i < fila.length; i++) fila[i].lider = fila[i + 1] ?? null;
     }
     for (let i = carros.length - 1; i >= 0; i--) {
@@ -328,8 +331,11 @@ function criarTrafego(ctx) {
       }
       if (c.curva) {
         const cv = c.curva;
-        cv.t += (c.v * dt) / Math.max(1, cv.L);
-        c.v = Math.min(c.vMax * 0.6, c.v + 2 * dt);
+        // na curva o da frente também segura: o passo não passa da distância de fila
+        const folga = c.lider ? c.lider.naFila - c.naFila - distanciaNaFila(c.mi, c.lider.mi) : Infinity;
+        const passo = Math.min(c.v * dt, Math.max(0, folga));
+        cv.t += passo / Math.max(1, cv.L);
+        c.v = passo < c.v * dt ? passo / dt : Math.min(c.vMax * 0.6, c.v + 2 * dt);
         if (cv.t >= 1) {
           c.e = cv.prox.ar.e;
           c.u = cv.prox.u;
@@ -361,7 +367,7 @@ function criarTrafego(ctx) {
       let vAlvo = c.vMax;
       // o da frente: para-choque a para-choque (um ônibus de 12 m pede mais fila que um hatch)
       if (c.lider) {
-        const gap = (c.lider.s - c.s) * c.sentido - distanciaNaFila(c.mi, c.lider.mi);
+        const gap = c.lider.naFila - c.naFila - distanciaNaFila(c.mi, c.lider.mi);
         vAlvo = Math.min(vAlvo, Math.max(0, gap * 0.9));
       }
       // semáforo: a frente para antes da retenção; quem já passou da linha no amarelo segue

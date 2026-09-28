@@ -100,3 +100,29 @@ test('árvore 3.1: as ferramentas existem; um esqueleto diz a dona', () => {
     if (/Esqueleto da F0/.test(txt)) assert.match(txt, new RegExp(`dona: ${dona}\\b`), `ferramentas/${f}: esqueleto sem a dona ${dona}`);
   }
 });
+
+test("perfil 'pc' (D66, I2): está no contrato e as tabelas dos domínios dão a ele o que dão ao Alta", async () => {
+  const { PERFIS: IDS, ORCAMENTO, TETO_ARCOLOGIA, FAMILIAS } = await import('../../fonte/contratos/render.js');
+  const { PERFIS, porPerfil, orcamentoDoPerfil } = await import('../../fonte/render/motor/perfis.js');
+  assert.deepEqual([...IDS].sort(), Object.keys(PERFIS).sort(), 'os ids do contrato são os perfis do motor');
+  assert.equal(orcamentoDoPerfil('pc'), ORCAMENTO.pc);
+  assert.equal(PERFIS.pc.orcamento, ORCAMENTO.pc, 'uma fonte só para o orçamento do PC');
+  assert.deepEqual(Object.keys(ORCAMENTO.pc.familias).sort(), [...FAMILIAS].sort());
+  assert.equal(ORCAMENTO.pc.familias.arcologia.teto, TETO_ARCOLOGIA.aberta);
+  for (const id of IDS.filter((i) => i !== 'leve')) assert.ok(TETO_ARCOLOGIA.perto[id] > 0, `teto de perto da Arcologia no ${id}`);
+  const tabelas = {
+    LADO_CAMPO: (await import('../../fonte/render/ambiente/campoAlturas.js')).LADO_CAMPO,
+    PERFIL_PROPS: (await import('../../fonte/render/mundo/props.js')).PERFIL_PROPS,
+    PERFIL_TRAFEGO: (await import('../../fonte/render/mundo/trafego.js')).PERFIL_TRAFEGO,
+    PERFIL_TERRENO: (await import('../../fonte/render/mundo/terreno.js')).PERFIL_TERRENO,
+    PERFIL_VIAS: (await import('../../fonte/render/mundo/vias.js')).PERFIL_VIAS,
+    LOD_PREDIOS: (await import('../../fonte/data/estilos.js')).LOD_PREDIOS,
+    LADO_DETALHE: (await import('../../fonte/render/materiais/texturas-chao.js')).LADO_DETALHE,
+  };
+  for (const [nome, T] of Object.entries(tabelas)) assert.deepEqual(porPerfil(T, PERFIS.pc), T.alta, nome);
+  // e ninguém mais lê essas tabelas pelo id (o 'pc' cairia no Média)
+  const leitura = /\b(LADO_CAMPO|PERFIL_PROPS|PERFIL_TRAFEGO|PERFIL_TERRENO|PERFIL_VIAS|LOD_PREDIOS|LADO_DETALHE)\[[^\]]*perfil/;
+  for (const arq of ['ambiente/campoAlturas.js', 'mundo/props.js', 'mundo/trafego.js', 'mundo/terreno.js', 'mundo/vias.js', 'mundo/predios.js', 'materiais/texturas-chao.js']) {
+    assert.ok(!leitura.test(readFileSync(join(RAIZ, 'fonte/render', arq), 'utf8')), arq);
+  }
+});

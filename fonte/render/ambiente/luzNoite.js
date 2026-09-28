@@ -389,6 +389,10 @@ function criarDominio(ctx) {
     }
   };
   ctx.quadro?.antes?.add(passe);
+  // a suavização só desenha com a noite chegando: o programa dela compila na carga (aquecimento, D66), não na primeira
+  // noite do jogo
+  const aquecer = () => suave?.cena;
+  ctx.quadro?.aquecer?.add(aquecer);
   return {
     nome: 'luzNoite',
     aplicar(d) {
@@ -448,6 +452,7 @@ function criarDominio(ctx) {
     },
     descartar() {
       ctx.quadro?.antes?.delete(passe);
+      ctx.quadro?.aquecer?.delete(aquecer);
       subst?.descartar();
       subst = null;
       suave?.descartar();

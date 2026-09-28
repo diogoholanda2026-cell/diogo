@@ -25,6 +25,7 @@ import { pedeTudo } from '../ponte.js';
 import { carregarDetalheCC0 } from '../materiais/texturas-predio.js';
 import { modoMateriais } from '../materiais/texturas-chao.js';
 import { CAMADA_LONGE } from '../motor/faixas.js';
+import { porPerfil } from '../motor/perfis.js';
 
 /** Lado das tabelas de prédios na GPU (262.144 vagas, D19). */
 export const LADO_TABELA = 512;
@@ -476,7 +477,7 @@ function criarPredios(ctx) {
 
   // ---------------------------------------------------------------------------------------------- quadro
 
-  const perfilLod = () => ({ lod0: ctx.perfil.lod0, ...(LOD_PREDIOS[ctx.perfil.id] ?? LOD_PREDIOS.media) });
+  const perfilLod = () => ({ lod0: ctx.perfil.lod0, ...(porPerfil(LOD_PREDIOS, ctx.perfil)) });
 
   /**
    * Escolhe o LOD de cada setor, faz os pedidos e monta as listas visíveis e de sombra. O LOD1 é leve (só o plano e as

@@ -276,7 +276,7 @@ test('declive por tipo (greide seguindo o chão), água sem travessia, gleba com
   assert.ok(!codigos(pp).includes('agua') && pp.segmentos.some((s) => s.ponte), JSON.stringify(pp.erros));
   // gleba: não entra, mas chega ao portão
   assert.ok(codigos(via(sim, 'rua', [[0, 100], [0, 400]], { construir: false }).p).includes('gleba'));
-  const portao = via(sim, 'rua', [[240, 20], [240, 180]], { construir: false });
+  const portao = via(sim, 'rua', [[250, 20], [250, 180]], { construir: false });
   assert.ok(!codigos(portao.p).includes('gleba'), JSON.stringify(portao.p.erros));
   assert.ok(portao.p.encaixes.some((x) => x.portao === 'norte'));
   // fora dos ladrilhos da Holding

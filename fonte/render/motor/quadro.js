@@ -207,7 +207,9 @@ export class Aquecimento {
         renderer.setRenderTarget(alvo?.alvo ?? null);
         if (alvo?.tom !== undefined) renderer.toneMapping = alvo.tom;
         for (const filho of [...cena.children]) compilar(nomeDoGrupo(filho), filho, camera, cena);
-        for (const f of this.fontes) for (const o of objetosDa(f)) compilar(nomeDoGrupo(o), o, camera, cena);
+        // uma cena à parte (um passe fora da cena principal, como a suavização da luz da noite) compila com as luzes
+        // dela: o número de luzes entra na chave do programa, e com as da cena principal ele compilaria de novo no uso
+        for (const f of this.fontes) for (const o of objetosDa(f)) compilar(nomeDoGrupo(o), o, camera, o.isScene ? o : cena);
       } finally {
         renderer.setRenderTarget(antesAlvo);
         renderer.toneMapping = antesTom;

@@ -1577,6 +1577,19 @@ Onda 4   S1c  S2b  S3b  X4  R6  X3b  U2b                        → C2: M1 em ap
     no Média 285 e 897 mil, no Alta 290 e 901 mil; guarda do Mali sem falha. JS principal de 1.530 KB (teto 1.638) e
     120 KB sob demanda em 21 pedaços. Na integração, a barra de construção da X2 passou a sumir sob as telas de gestão
     (aparecia pelo vidro da tela Economia).
+- **Prévia 1b, "sede v2 e o PC do dono"** (SEDE2 e PC1, D63 a D66; **montada na I2 em 28/09/2026** em `previa/`): o
+  índice abre em destaque a sede v2 (aérea, eixo norte, do mar e noite; a prancha das torres às 17h30 e às 21h) e a
+  página de teste do PC (perfil escolhido e o motivo, resolução interna, resolução dinâmica, tempo de placa por passe,
+  aquecimento e compilações depois de pronto), que abre sem `?q=` para a escolha automática valer; o seletor ganhou o
+  PC; a Prévia 1 e a Prévia 0 continuam abaixo. Na integração: o 'pc' entrou no contrato (`PERFIS`, `ORCAMENTO.pc` e
+  `TETO_ARCOLOGIA`, 250 mil de perto e 40 mil na vista aberta no PC e no Alta), `R.aquecido()` e a carga do jogo que
+  espera o aquecimento (até 20 s); os domínios leem as tabelas por `porPerfil` (o PC com as do Alta); a suavização da
+  luz da noite entra no aquecimento (uma cena à parte compila com as luzes dela); os carros que convergem para a mesma
+  faixa já fazem fila na curva. No Chromium (SwiftShader, perfil PC): as 38 páginas do índice abrem sem erro; 0
+  compilações depois de pronto nas cenas da sede, também trocando eixo, noite, plano B ao meio-dia, aérea e mar na mesma
+  página. Bancada (1376 x 768, pior de 120 quadros, 4x): `aberta` no PC 57 chamadas e 430 mil triângulos (sombra 10 e
+  127 mil; Arcologia 26 mil), no Alta 60 e 430 mil; `estresse` no PC e no Alta 290 e 901 mil; 0 compilações depois de
+  pronto. JS principal de 1.587 KB (teto 1.638).
 - **M1a** (depois da onda 3, montado por C1 em `previa/`): jogável do minuto 0 ao marco 7, com a Torre, a economia, a
   Holding e as 6 camadas. O robô em Node roda desde o começo da onda 3 (S3a), com as metas A4 parciais (marco 1 e marco
   3) antes da calibração. O dono joga e decide seguir para o M1b. Custo até aqui: 57 de 72 (79%).

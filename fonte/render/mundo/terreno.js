@@ -18,6 +18,7 @@ import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { pedeTudo } from '../ponte.js';
 import { CELULA_M } from '../../contratos/espelho.js';
+import { porPerfil } from '../motor/perfis.js';
 
 // ------------------------------------------------------------------------------------------------ parâmetros
 
@@ -884,7 +885,7 @@ export const estacaoSeca = (diaDoAno) => 0.5 + 0.5 * Math.cos((2 * Math.PI * ((d
 
 function criarTerreno(ctx) {
   const U = criarUniformes();
-  let pt = PERFIL_TERRENO[ctx.perfil.id] ?? PERFIL_TERRENO.media;
+  let pt = porPerfil(PERFIL_TERRENO, ctx.perfil);
   const modo = modoMateriais();
   const estado = {
     T: null, F: null, dist: null, dados: null, P: null, uso: null, mapa: null, texAlt: null, texDados: null, texUso: null,
@@ -899,7 +900,7 @@ function criarTerreno(ctx) {
   U.uTerMascara.value = lerPasse() === 'mascara' ? 1 : 0;
 
   function ligarDetalhe() {
-    pt = PERFIL_TERRENO[ctx.perfil.id] ?? PERFIL_TERRENO.media;
+    pt = porPerfil(PERFIL_TERRENO, ctx.perfil);
     U.uTerDetalhe.value.set(pt.detalhe, pt.faixa, 1, pt.copaRelevo);
     estado.faixas = faixasCDLOD(pt.r0);
     estado.faixas.forEach((r, l) => U.uTerMorph.value[l].set(MORPH.inicio * r, 1 / ((MORPH.fim - MORPH.inicio) * r)));

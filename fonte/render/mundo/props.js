@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { ListaCompactada } from './instancias.js';
 import { OBJETOS } from '../geracao/cruzamento.js';
 import * as SH from '../materiais/shaders/via.glsl.js';
+import { porPerfil } from '../motor/perfis.js';
 
 /** Alcance dos objetos por perfil (m do setor) e a troca de LOD das árvores. */
 export const PERFIL_PROPS = Object.freeze({
@@ -317,7 +318,7 @@ function criarProps(ctx) {
   let tAnt = null;
 
   function compactar(vias) {
-    const Pp = PERFIL_PROPS[ctx.perfil.id] ?? PERFIL_PROPS.media;
+    const Pp = porPerfil(PERFIL_PROPS, ctx.perfil);
     let h = Math.imul(vias.versaoObjetos + 1, 0x01000193);
     const perto = [];
     for (const st of vias.setoresPerto(Math.max(Pp.postes, Pp.arvores))) {

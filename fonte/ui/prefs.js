@@ -5,7 +5,7 @@
 export const CHAVE_PREFS = 'heldopolis.prefs';
 
 export const PREFS_PADRAO = Object.freeze({
-  qualidade: 'auto', // 'auto' | 'ultra' | 'alta' | 'media' | 'leve'
+  qualidade: 'auto', // 'auto' | 'ultra' | 'alta' | 'pc' | 'media' | 'leve' (o 'pc', nome 'PC', é o PC do dono, D66)
   som: 0.8,
   musica: 0.5,
   vibrar: true,

@@ -9,9 +9,9 @@
 // qualquer cena (sem ela, só na 'aberta' do Média e do 'pc', onde a 4.8 e a D66 os fixam). --voo também roda
 // R.bancada() e guarda o relatório do render (com o tempo de placa por passe, a memória e as compilações).
 //
-// Orçamento e guarda do Mali vêm de fonte/contratos/render.js (ORCAMENTO, GUARDA_MALI); o do 'pc' (PC do dono, D66:
-// 800 chamadas, 2,5 milhões de triângulos, 2,5 GB de vídeo) vem do próprio perfil (motor/perfis.js) até entrar no
-// contrato. A medida espera o aquecimento dos programas (motor/quadro.js) e conta as compilações depois de pronto.
+// Orçamento e guarda do Mali vêm de fonte/contratos/render.js (ORCAMENTO, GUARDA_MALI), também o do 'pc' (PC do dono,
+// D66: 800 chamadas, 2,5 milhões de triângulos, 2,5 GB de vídeo). A medida espera o aquecimento dos programas
+// (motor/quadro.js) e conta as compilações depois de pronto.
 // Como mede: a página abre com ?cena=<nome>&q=<perfil>&pr=1&teste=1&bancada=1&sol=anda (a cena faz a hora andar), a
 // velocidade vai a 4x (--vel troca) se houver simulação, e a cada quadro (requestAnimationFrame) lê window.__held.R.stats. O pior
 // quadro é o máximo de cada medida na janela. Os programas são capturados por um gancho no WebGL2 (shaderSource,

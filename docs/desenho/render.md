@@ -294,31 +294,34 @@ Redução dupla a 1/4, 5 níveis no PC e 4 no Média, limiar 1,1 de dia (só sol
 Custos em ms são **estimativas** para o Poco X7 no Média (0,64 MP, 30 qps) pela conta de banda e leituras de textura do
 Mali; a bancada no aparelho (seção 15) troca pelo número medido.
 
-| Recurso | Ultra (PC) | Alta (PC médio) | Média (Poco X7) | Leve | Custo no Média |
-|---|---|---|---|---|---|
-| Resolução interna (x CSS) | 1,5 a 2,0 | 1,0 a 1,5 | 0,85 a 1,3 | 0,7 a 1,0 | |
-| Antisserrilhado | MSAA 4x | MSAA 4x | MSAA 2x | nenhum, CAS | ~0,3 ms |
-| Céu | `Sky` direto + nuvens | `Sky` direto + nuvens | cubo 128, 1 face por quadro | cubo 64 sem nuvens | 0,1 ms |
-| PMREM | 256 | 128 | 64 | 32 | pico raro 1 a 3 ms |
-| Tons e pós | AgX, bloom 5, CAS | idem | AgX, bloom 4, CAS | AgX no renderer, sem pós | 0,9 ms |
-| Neblina | altura + aérea + sol | idem | idem | exponencial simples | 0,1 ms |
-| Sombra de perto | 2 cascatas de 2048, 1,5 km | 2 de 1024, 900 m | 1 mapa 1024 estável | não | 0,3 ms leitura; refazer 1 a 2 ms raro |
-| Sombra de longe e HAO | 2048² | 2048² | 1024² | 1024² | 0,1 ms + ~1 ms a cada 2 s |
-| AO | tela inteira + HAO + vértice (M2) | tela meia + HAO + vértice (M2) | HAO + vértice | vértice | 0 |
-| Terreno, detalhe até | 600 m, normal de detalhe, triplanar na rocha | 400 m | 150 m, sem normal de detalhe | só mapa de cor | 1,5 a 2,5 ms |
-| Prédios LOD0 até | 900 m | 600 m | 350 m | 200 m | 2 a 4 ms |
-| Fachada | janelas + interior falso (M2) + relevo de perto | janelas + interior falso de perto (M2) | janelas procedurais | janelas simplificadas | incluído acima |
-| Árvores LOD0 / LOD1 / impostor | 200 m / 700 m / 4 km | 150 / 500 m / 3 km | 100 / 400 m / 2,5 km | 60 / 250 m / 1,5 km | 1,5 a 3 ms |
-| Carros / pessoas visíveis | 400 / 1.600 | 240 / 900 | 120 / 420 | 50 / 150 | 0,5 ms |
-| Água | Fresnel, espuma, ondas no vértice, planar do lago (M2) | sem planar | ondas por normal | Fresnel sem espuma | 0,5 ms |
-| Noite | tudo | tudo | tudo | janelas e postes | 0,1 ms |
-| GI assada | sondas na Arcologia (M3) | não | não | não | |
-| Teto de memória de textura | 700 MB | 400 MB | 250 MB | 150 MB | |
-| **Meta: chamadas / triângulos / qps** | **1.500 / 5 mi / 60** | **800 / 2,5 mi / 60** | **300 / 900 mil / 30** | **200 / 500 mil / 30** | total estimado 12 a 18 ms |
+| Recurso | Ultra (PC) | Alta (PC médio) | PC do dono (RX 550, D66) | Média (Poco X7) | Leve | Custo no Média |
+|---|---|---|---|---|---|---|
+| Resolução interna (x CSS) | 1,5 a 2,0 | 1,0 a 1,5 | 1080p nativo; dinâmica de 70% a 100% da nativa pelo cronômetro da placa (alvo 15,5 ms) | 0,85 a 1,3 | 0,7 a 1,0 | |
+| Antisserrilhado | MSAA 4x | MSAA 4x | MSAA 2x, CAS | MSAA 2x | nenhum, CAS | ~0,3 ms |
+| Céu | `Sky` direto + nuvens | `Sky` direto + nuvens | `Sky` direto + nuvens | cubo 128, 1 face por quadro | cubo 64 sem nuvens | 0,1 ms |
+| PMREM | 256 | 128 | 128 | 64 | 32 | pico raro 1 a 3 ms |
+| Tons e pós | AgX, bloom 5, CAS | idem | AgX, bloom 5, CAS | AgX, bloom 4, CAS | AgX no renderer, sem pós | 0,9 ms |
+| Neblina | altura + aérea + sol | idem | idem | idem | exponencial simples | 0,1 ms |
+| Sombra de perto | 2 cascatas de 2048, 1,5 km | 2 de 1024, 900 m | como o Alta | 1 mapa 1024 estável | não | 0,3 ms leitura; refazer 1 a 2 ms raro |
+| Sombra de longe e HAO | 2048² | 2048² | 2048² | 1024² | 1024² | 0,1 ms + ~1 ms a cada 2 s |
+| AO | tela inteira + HAO + vértice (M2) | tela meia + HAO + vértice (M2) | como o Alta | HAO + vértice | vértice | 0 |
+| Terreno, detalhe até | 600 m, normal de detalhe, triplanar na rocha | 400 m | como o Alta | 150 m, sem normal de detalhe | só mapa de cor | 1,5 a 2,5 ms |
+| Prédios LOD0 até | 900 m | 600 m | 600 m | 350 m | 200 m | 2 a 4 ms |
+| Fachada | janelas + interior falso (M2) + relevo de perto | janelas + interior falso de perto (M2) | como o Alta | janelas procedurais | janelas simplificadas | incluído acima |
+| Árvores LOD0 / LOD1 / impostor | 200 m / 700 m / 4 km | 150 / 500 m / 3 km | como o Alta | 100 / 400 m / 2,5 km | 60 / 250 m / 1,5 km | 1,5 a 3 ms |
+| Carros / pessoas visíveis | 400 / 1.600 | 240 / 900 | 240 / 900 | 120 / 420 | 50 / 150 | 0,5 ms |
+| Água | Fresnel, espuma, ondas no vértice, planar do lago (M2) | sem planar | como o Alta | ondas por normal | Fresnel sem espuma | 0,5 ms |
+| Noite | tudo | tudo | tudo | tudo | janelas e postes | 0,1 ms |
+| GI assada | sondas na Arcologia (M3) | não | não | não | não | |
+| Teto de memória de textura | 700 MB | 400 MB | 2,5 GB de vídeo no total | 250 MB | 150 MB | |
+| **Meta: chamadas / triângulos / qps** | **1.500 / 5 mi / 60** | **800 / 2,5 mi / 60** | **800 / 2,5 mi / 60 (piso 30)** | **300 / 900 mil / 30** | **200 / 500 mil / 30** | total estimado 12 a 18 ms |
 
-**Escolha automática:** PC sem GPU de software → Ultra (Alta se a bancada mostrar menos de 60 qps); celular com
-`Mali-G6xx MC2` ou Adreno 6xx → **Média** (o jogo atual escolhe Alta para o Poco X7 por uma regex larga: corrigir);
-Mali ou Adreno de ponta → Alta; resto → Leve. A bancada pode trocar o perfil sugerido.
+**Escolha automática** (D66, `escolherPerfil` em `render/motor/perfis.js`, pelo nome da placa): placas de entrada do PC
+(RX 460 a 560, GTX 750 a 1050, GT 1030, MX, Vega e Radeon integradas, Iris Xe) e placa de PC desconhecida → **PC do
+dono**; GTX 1060 a 1660, RTX 3050, RX 470 a 590, RX 5500 e 6500, Apple M → Alta; RTX 2060 ou maior, RX 5700 ou maior →
+Ultra; Intel HD e UHD, `Mali-G6xx MC2` e Adreno 6xx a 725 (Poco X7) → **Média**; Mali ou Adreno de ponta → Alta;
+SwiftShader e celular desconhecido → Leve. O 'pc' herda do Alta as tabelas dos domínios (`porPerfil`); o orçamento dele
+está em `contratos/render.js` (ORCAMENTO.pc). A bancada pode trocar o perfil sugerido.
 
 ---
 

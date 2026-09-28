@@ -103,7 +103,7 @@ export function registrar(api) {
     t.magFilter = THREE.LinearFilter;
     t.minFilter = THREE.LinearMipmapLinearFilter;
     t.generateMipmaps = true;
-    t.anisotropy = perfil?.id === 'ultra' || perfil?.id === 'alta' ? 8 : 4;
+    t.anisotropy = ['ultra', 'alta'].includes(perfil?.base ?? perfil?.id) ? 8 : 4; // o 'pc' herda do Alta
     t.colorSpace = THREE.NoColorSpace;
     t.name = 'via.detalhe';
     t.needsUpdate = true;

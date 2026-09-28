@@ -12,7 +12,7 @@ const SOMBRA_ALTA = { tam: 1024, cascatas: 2, raioMax: 1400, degrau: 1, pcf: 8, 
  * máximo, degrau do sol em graus, amostras e raio do PCF), alcance do LOD0 dos prédios, níveis do bloom, céu (direto
  * por pixel ou cubo assado, D9), tamanho do PMREM, pós ligado, vinheta, o qps alvo e, nos perfis de PC, o alvo em ms
  * de placa da resolução dinâmica pelo cronômetro (alvoGpu). `base`: o perfil de quem o 'pc' herda as tabelas dos
- * domínios (porPerfil). Teto do orçamento em fonte/contratos/render.js (ORCAMENTO) ou, no 'pc', em `orcamento`.
+ * domínios (porPerfil). Teto do orçamento em fonte/contratos/render.js (ORCAMENTO; no 'pc', também em `orcamento`).
  */
 export const PERFIS = congelar({
   ultra: {
@@ -33,26 +33,8 @@ export const PERFIS = congelar({
     msaa: 2, lod0: 600, bloom: 5, ibl: 128, pos: true, vinheta: 0.1, qps: 60, qpsPiso: 30, tetoQps: 60, alvoGpu: 15.5,
     sombra: SOMBRA_ALTA,
     ceu: { modo: 'direto', cubo: 0, nuvens: true },
-    // tetos da vista aberta com a cidade grande (D66), por família como a 4.8 faz no Média; provisórios até a bancada
-    // no PC do dono (calibrar): a soma dos tetos cabe nos 2,5 milhões
-    orcamento: {
-      calls: 800,
-      tris: 2500000,
-      alvoTris: 1790000,
-      videoMB: 2560,
-      geometriaMB: 512,
-      familias: {
-        terreno: { calls: [1, 3], alvo: 200000, teto: 240000 },
-        predios: { calls: [40, 90], alvo: 750000, teto: 950000, nota: 'LOD0 até 600 m, anexos, LOD1 e LOD2' },
-        colocaveis: { calls: [8, 20], alvo: 60000, teto: 90000 },
-        arvores: { calls: [14, 24], alvo: 220000, teto: 300000 },
-        vias: { calls: [30, 60], alvo: 150000, teto: 200000 },
-        vida: { calls: [10, 16], alvo: 50000, teto: 80000 },
-        arcologia: { calls: [20, 40], alvo: 100000, teto: 160000, nota: 'torres gêmeas, cúpula e sede (D63 a D65)' },
-        sombra: { calls: [20, 60], alvo: 200000, teto: 300000, nota: 'callsSombra e trisSombra, 2 cascatas' },
-        resto: { calls: [30, 50], alvo: 60000, teto: 110000, nota: 'água, props, obras e marcadores; chamadas com céu e pós' },
-      },
-    },
+    // tetos da vista aberta com a cidade grande (D66), por família como a 4.8 faz no Média: no contrato
+    orcamento: ORCAMENTO.pc,
   },
   media: {
     id: 'media', nome: 'Média', prMin: 0.85, prMax: 1.3, msaa: 2, lod0: 350, bloom: 4, ibl: 64, pos: true, vinheta: 0.1, qps: 30,
@@ -78,7 +60,7 @@ export function porPerfil(tabela, perfil, padrao = 'media') {
   return tabela?.[perfil?.id] ?? tabela?.[perfil?.base] ?? tabela?.[padrao];
 }
 
-/** Orçamento gráfico do perfil: o do contrato (ORCAMENTO) ou, no 'pc', o do próprio perfil. */
+/** Orçamento gráfico do perfil: o do contrato (ORCAMENTO) ou o do próprio perfil. */
 export function orcamentoDoPerfil(id) {
   return ORCAMENTO[id] ?? PERFIS[id]?.orcamento ?? null;
 }

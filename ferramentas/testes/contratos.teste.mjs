@@ -228,16 +228,16 @@ test('zonas e prédios: 4 + 3 zonas, catálogo com 5 níveis por modelo (D20, D2
   }
 });
 
-test('Torre Lâmina (D27): as contas das cotas fecham', () => {
+test('Torre Lâmina (D27, D64): as contas das cotas fecham', () => {
   const T = TORRE_LAMINA;
   assert.deepEqual([T.planta.largura, T.planta.comprimento], [36, 50]);
   assert.equal(T.laminas.reduce((s, l) => s + l.fundo, 0), 50);
-  assert.deepEqual(T.laminas.map((l) => l.topo), [301, 238, 163]);
+  assert.deepEqual(T.laminas.map((l) => l.topo), [456.4, 351.4, 247]);
   const alturaCorpo = T.pavimentos.n * T.pavimentos.altura + T.andaresDeVento.reduce((s, a) => s + a.altura, 0);
-  assert.ok(Math.abs(T.podio.altura + alturaCorpo - 301) < 1e-9);
+  assert.ok(Math.abs(T.podio.altura + alturaCorpo - T.laminas[0].topo) < 1e-9);
   assert.equal(T.coroa.base + T.coroa.altura, T.heliponto.cota);
-  assert.equal(T.heliponto.cota, 330);
-  assert.equal(T.mastro.topo, 350);
+  assert.equal(T.heliponto.cota, 500);
+  assert.equal(T.mastro.topo, 520);
   // os andares de vento ficam no topo das lâminas 3 e 2
   assert.equal(T.andaresDeVento[0].base, T.laminas[2].topo);
   assert.equal(T.andaresDeVento[1].base + T.andaresDeVento[1].altura, T.laminas[1].topo);

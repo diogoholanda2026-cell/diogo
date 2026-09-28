@@ -25,6 +25,7 @@ import { ARESTA, AGUA, MAO } from '../../contratos/flags.js';
 import { refDe } from '../../contratos/espelho.js';
 import { pedeTudo } from '../ponte.js';
 import { PRIORIDADE } from '../camera/selecao.js';
+import { porPerfil } from '../motor/perfis.js';
 
 /**
  * Parâmetros por perfil: alcance da malha (m do setor), faixa de troca com o chão pintado, cache de setores, envios
@@ -487,7 +488,7 @@ function criarVias(ctx) {
   const mProj = new THREE.Matrix4();
   const caixa = new THREE.Box3();
 
-  const perfil = () => PERFIL_VIAS[ctx.perfil.id] ?? PERFIL_VIAS.media;
+  const perfil = () => porPerfil(PERFIL_VIAS, ctx.perfil);
   const setorPara = (s) => {
     let st = setores.get(s);
     if (!st) {

@@ -23,6 +23,7 @@ import { INT, NUM } from '../geracao/fundir.js';
 import { amostrar } from '../../comum/altura.js';
 import { TIPO_PREDIO } from '../../contratos/flags.js';
 import { pedeTudo } from '../ponte.js';
+import { porPerfil } from '../motor/perfis.js';
 
 /** Valor da célula sem prédio. */
 export const VAZIO = -1e4;
@@ -531,7 +532,7 @@ function criarDominio(ctx) {
 
   function montar() {
     geracao++;
-    const N = LADO_CAMPO[ctx.perfil?.id] ?? 1024;
+    const N = porPerfil(LADO_CAMPO, ctx.perfil) ?? 1024;
     campo = new Campo({ N, tam, origem });
     textura?.dispose();
     textura = new THREE.DataTexture(campo.meia, N, N, THREE.RedFormat, THREE.HalfFloatType);
@@ -720,7 +721,7 @@ function criarDominio(ctx) {
   }
 
   const desligar = ctx.ouvir?.('qualidade', () => {
-    if ((LADO_CAMPO[ctx.perfil?.id] ?? 1024) !== campo.N) montar();
+    if ((porPerfil(LADO_CAMPO, ctx.perfil) ?? 1024) !== campo.N) montar();
   });
 
   return {

@@ -173,7 +173,7 @@ export async function criarRender(canvas, opcoes = {}) {
   const cam = new THREE.PerspectiveCamera(40, 1, 0.5, 20000);
   const medidas = new Medidas(rz.renderer, { perfil: perfil.id, capac: rz.capac });
   medidas.stats.msaa = rz.gl.getParameter(rz.gl.SAMPLES) || 0; // o MSAA do canvas (a R1a leva para o alvo HDR)
-  const sombra = new SombraPropria({ tam: perfil.sombra.tam, degrauGraus: perfil.id === 'ultra' || perfil.id === 'alta' ? 1 : 1.5 });
+  const sombra = new SombraPropria({ tam: perfil.sombra.tam, degrauGraus: perfil.sombra.degrau });
   const ouvintes = new Map();
   const tempoForcado = { hora: null, anda: false, hora0: 0, sempreDia: false };
 
@@ -407,11 +407,16 @@ export async function criarRender(canvas, opcoes = {}) {
       medidas.stats.perfil = novo.id;
       ligarTexturas({ renderer: rz.renderer, THREE: THREE_TEXTURAS, perfil: novo });
       sombra.redimensionar(novo.sombra.tam);
-      sombra.degrau = (novo.id === 'ultra' || novo.id === 'alta' ? 1 : 1.5) * (Math.PI / 180);
+      sombra.degrau = novo.sombra.degrau * (Math.PI / 180);
       ctx.emitir('qualidade', novo);
       // o MSAA do canvas só muda num contexto novo: a R1a leva o MSAA para o alvo HDR (troca na hora)
     },
     perfil: () => ({ id: perfil.id, sugerido, capac: rz.capac, gpu: rz.gpu }),
+    /**
+     * Promessa do aquecimento dos programas (D66, motor/quadro.js): resolve com o relatório quando a rodada final
+     * termina, de 2,5 a 12 s depois do primeiro quadro. O app segura a tela de carga até ela.
+     */
+    aquecido: () => quadro.aquecimento?.promessa ?? Promise.resolve(null),
     get stats() {
       return medidas.stats;
     },

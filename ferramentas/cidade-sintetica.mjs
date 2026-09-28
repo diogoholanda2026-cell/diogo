@@ -19,7 +19,7 @@ import { smoothstep, clamp, cos, hipot, pot, sen } from '../fonte/comum/util.js'
 import { hashCoordF } from '../fonte/comum/hash.js';
 import { ponto, maisPerto, caixa as caixaBz, tabelaArco, tDoArco } from '../fonte/comum/bezier.js';
 import { aEstrela } from '../fonte/comum/caminhos.js';
-import { GLEBA_ENVELOPE, TORRE_POSICAO } from '../fonte/data/arcologia-plano.js';
+import { GLEBA_ENVELOPE, PLANOS, PLANO_ESCOLHIDO } from '../fonte/data/arcologia-plano.js';
 import { PREDIOS, modelosDaZona } from '../fonte/data/predios.js';
 import { ZONAS_ORDEM } from '../fonte/data/zonas.js';
 import { VIAS } from '../fonte/data/vias.js';
@@ -420,11 +420,11 @@ function gerarVias(sim, T, rng) {
       }
     }
   }
-  // vias internas da Arcologia: anel em volta da Torre
+  // vias internas da Arcologia: o anel viário do plano A (D63), em volta do centro do par de torres
   const anel = [];
-  const cx = TORRE_POSICAO.x;
-  const cz = TORRE_POSICAO.z - 40;
-  const raio = 200;
+  const cx = PLANOS[PLANO_ESCOLHIDO].torre.x;
+  const cz = PLANOS[PLANO_ESCOLHIDO].torre.z;
+  const raio = 281;
   for (let k = 0; k < 4; k++) {
     const a = (k / 4) * Math.PI * 2;
     anel.push(addNo(G, cx + cos(a) * raio, cz + sen(a) * raio, GLEBA_ENVELOPE.cota));

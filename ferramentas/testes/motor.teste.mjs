@@ -1143,8 +1143,12 @@ test('aquecimento: compila domínio por domínio no alvo de cada cena e marca pr
   // um domínio pede o que ainda não está na cena (a etapa seguinte da Arcologia)
   ctx.quadro.aquecer = a;
   a.add(() => [obj('arcologia:etapa2')]);
+  // e um passe numa cena à parte (a suavização da luz da noite): compila com as luzes dela, não com as da principal
+  const cenaSuave = { isObject3D: true, isScene: true, name: 'noite-suave', userData: {} };
+  a.add(() => cenaSuave);
   assert.equal(a.quadro(AQUECER.esperaMs + 200, alvo), true, 'rodada final');
-  assert.ok(chamadas.some((c) => c.nome === 'arcologia:etapa2' && c.alvo === 'alvoHdr'));
+  assert.ok(chamadas.some((c) => c.nome === 'arcologia:etapa2' && c.alvo === 'alvoHdr' && c.destino === cena));
+  assert.ok(chamadas.some((c) => c.nome === 'noite-suave' && c.destino === cenaSuave), 'cena à parte com as luzes dela');
   assert.equal(vigia.pronto, false, 'só depois de a rodada terminar');
   await a._pendente;
   assert.equal(a.estado, 'pronto');

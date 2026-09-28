@@ -4,7 +4,7 @@
 //   ?sintetica=1     a cidade sintética de 12 mil prédios em vez da partida
 //   ?ui=vitrine      a pele da interface sobre a cena, com a simulação falsa (&cenario=inicio|meio, &tela=<id>)
 //   ?ui=0            sem interface
-//   ?q=ultra|alta|media|leve   perfil (padrão: o sugerido pelo aparelho, D33); ?pr=1 fixa a razão de pixels
+//   ?q=ultra|alta|pc|media|leve   perfil (padrão: o sugerido pelo aparelho, D33 e D66); ?pr=1 fixa a razão de pixels
 //   ?hora=17.5 &sol=anda       hora do céu fixa e, com sol=anda, andando a partir dela
 //   ?semClip=1  ?depuracao=1   duas faixas de profundidade; mantém a vista de depuração da F0
 //   ?semente=<texto>           semente da partida
@@ -41,6 +41,17 @@ const carga = {
 
 const quadro = () => new Promise((ok) => requestAnimationFrame(() => ok()));
 
+/** Teto da espera pelo aquecimento: uma placa lenta não prende a carga (a rodada final vem de 2,5 a 12 s). */
+const TETO_AQUECER_MS = 20000;
+
+/** Espera os programas da placa compilados (R.aquecido, D66), com teto; o laço continua desenhando por trás da carga. */
+function esperarAquecimento(R) {
+  const p = R.aquecido?.();
+  if (!p) return Promise.resolve();
+  carga.fase('carga.graficos', 100);
+  return Promise.race([p, new Promise((ok) => setTimeout(ok, TETO_AQUECER_MS))]);
+}
+
 async function iniciar() {
   carga.fase('carga.codigo', 8);
   try {
@@ -67,6 +78,10 @@ async function iniciar() {
         window.__resultado = { ok: false, falhas: [`a cena falhou ao conferir: ${e?.message ?? e}`] };
         console.error(e);
       }
+    } else {
+      // no jogo a carga fica até o aquecimento: nada compila (e engasga) no primeiro minuto. As cenas fixas saem logo
+      // (a bancada e a página de teste esperam o aquecimento por conta própria)
+      await esperarAquecimento(app.R);
     }
     carga.sair();
     window.__pronto = true;

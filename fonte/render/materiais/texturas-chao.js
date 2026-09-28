@@ -8,6 +8,7 @@
 // ?materiais=proc|cc0 escolhe o que o chão usa (padrão proc; o HTML único é sempre procedural).
 import { texturaOndas } from '../geracao/ruido.js';
 import { GLSL_GERAR_CAMADAS, GLSL_GERAR_RUIDO, GLSL_MEDIA_FATIA, N_CAMADAS } from './shaders/terreno.glsl.js';
+import { porPerfil } from '../motor/perfis.js';
 
 /** Lado do detalhe por perfil (desenho do render 9.3: 512 no Leve, 1024 no Média e 2048 no PC; aqui 512 no Média). */
 export const LADO_DETALHE = Object.freeze({ ultra: 1024, alta: 1024, media: 512, leve: 0 });
@@ -48,7 +49,7 @@ export function soltarComAlvo(tex, alvo) {
   tex.addEventListener('dispose', () => alvo.dispose());
 }
 
-const anisoDe = (perfil) => ({ ultra: 8, alta: 8, media: 4, leve: 1 })[perfil?.id] ?? 4;
+const anisoDe = (perfil) => porPerfil({ ultra: 8, alta: 8, media: 4, leve: 1 }, perfil) ?? 4;
 
 // Os passes de geração ficam guardados (um por tipo): a troca de qualidade refaz as texturas com o mesmo programa, e a
 // bancada confere o programa ligado até o fim (um programa apagado lê como "não ligou").
@@ -109,7 +110,7 @@ export function medirGanhos(renderer, THREE, tex, lado, fatias = N_CAMADAS) {
 
 /** Detalhe procedural das camadas, gerado na GPU (um passe por fatia) com mipmaps; devolve a textura. */
 function gerarCamadas({ renderer, THREE, perfil }) {
-  const lado = LADO_DETALHE[perfil?.id] ?? 512;
+  const lado = porPerfil(LADO_DETALHE, perfil) ?? 512;
   if (!lado) return null;
   const alvo = new THREE.WebGLArrayRenderTarget(lado, lado, N_CAMADAS, { depthBuffer: false });
   const tex = alvo.texture;

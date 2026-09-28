@@ -40,6 +40,18 @@ import { congelar } from '../comum/util.js';
  * @property {{ predios: number, arvores: number, carros: number, pessoas: number, marcadores: number }} instancias
  * @property {{ geometriaMB: number, texturasMB: number, programas: number }} memoria
  * @property {{ clipControl: boolean, multiDraw: boolean, timer: boolean, limites: object }} capac
+ * Campos do motor (R1a e PC1, D66), fora do statsVazio (o render falso não precisa deles):
+ * @property {number} [gpuMsTimer]   ms de placa pelo cronômetro (EXT_disjoint_timer_query_webgl2)
+ * @property {Record<string, number>} [gpuPasses]  ms médios de placa por passe (sombra, preparo, ceu, terreno, agua,
+ *   predios, colocaveis, arvores, vias, vida, arcologia, resto, pos, outros)
+ * @property {number} [gpuQuadros]    quadros na média de gpuPasses
+ * @property {{ programas: number, depois: number, nomes: string[] }} [compilacoes]  depois: compilados depois do
+ *   aquecimento (soluço no jogo)
+ * @property {{ estado: 'espera' | 'aquecendo' | 'pronto', rodadas: number, ms: number, msThread: number,
+ *   programas: number, fontes: number, grupos: object[] } | null} [aquecimento]
+ * @property {{ w: number, h: number, pr: number, nominal: number, escala: number, nativa: number,
+ *   modo: 'fixa' | 'cronometro' | 'quadro', alvoGpu: number, cas: boolean, trocas: number, ultimaTroca: object } | null} [resolucao]
+ * memoria também traz videoMB, texturasGpuMB, alvosMB, buffersMB e telaMB (estimados pelo que o WebGL aloca).
  */
 
 /**
@@ -76,8 +88,9 @@ export const API_RENDER = congelar({
   estado: "('livre' | 'coberto' | 'foto' | 'teste')",
   qualidade: '(id)',
   perfil: '() → { id, sugerido, capac }',
+  aquecido: '() → Promise<relatório do aquecimento> (os programas compilados na carga, D66; o app segura a tela de carga até ela)',
   stats: 'StatsRender (propriedade)',
-  bancada: '() → Promise<{ perfil, sugerido, msMedio, p95, qps, calls, tris, pior, gpuMs, familias, programas: [{ nome, amostradores: { v, f }, varyings, uniformesF, atributos, msCompilar }], capac }>',
+  bancada: '() → Promise<{ perfil, sugerido, motivo, msMedio, p95, qps, calls, tris, pior, gpuMs, gpuPasses, gpuQuadros, familias, resolucao, memoria, aquecimento, compilacoes, programas: [{ nome, amostradores: { v, f }, varyings, uniformesF, atributos, msCompilar, msBloqueio }], capac }>',
   capa: '(640, 288) → Promise<Blob>',
   foto: '({ w, h }) → Promise<Blob>',
   voo: '(alvo) → Promise',
@@ -108,19 +121,50 @@ export const MENSAGENS_OFICINA = congelar({
   resposta: '{ id, chave, malhas: [{ material, atributos /* quantizados: posição Int16, normal 2 x Int8, uv Half, aId Uint32, AO Uint8 */, indices }] } | { id, chave, grade: Float32Array } (alturasCidade)',
 });
 
-/** Perfis de qualidade (D33): o Poco X7 cai no Média pela regra Mali-G6xx MC2. */
-export const PERFIS = congelar(['ultra', 'alta', 'media', 'leve']);
+/**
+ * Perfis de qualidade (D33, D66), do mais pesado ao mais leve. O 'pc' é o PC do dono (Radeon RX 550 em 1080p nativo,
+ * resolução dinâmica pelo cronômetro da placa) e herda do Alta as tabelas dos domínios (porPerfil); o Poco X7 cai no
+ * Média pela regra Mali-G6xx MC2.
+ */
+export const PERFIS = congelar(['ultra', 'alta', 'pc', 'media', 'leve']);
 
 /** Famílias de R.stats.familias. */
 export const FAMILIAS = congelar(['terreno', 'predios', 'colocaveis', 'arvores', 'vias', 'vida', 'arcologia', 'sombra', 'resto']);
 
 /**
- * Orçamento gráfico do pior quadro de 120 (A6 e 4.8). Os tetos por família valem no Média (bancada aberta); resto =
- * água, props, obras e marcadores. O Alta usa os números do Ultra até a R1a medir.
+ * Teto da família 'arcologia' no quadro (D63 a D66): de perto (cenas torre e planos, a sede v2 inteira no LOD0), por
+ * perfil, e na vista aberta (tudo no LOD1), no Alta e no 'pc'. No Média a vista aberta segue a 4.8 (60 mil); de perto
+ * dá cerca de 75 mil (medido pela SEDE2).
+ */
+export const TETO_ARCOLOGIA = congelar({ perto: { ultra: 250000, alta: 250000, pc: 250000, media: 90000 }, aberta: 40000 });
+
+/**
+ * Orçamento gráfico do pior quadro de 120 (A6 e 4.8). Os tetos por família valem no Média e no 'pc' (bancada aberta);
+ * resto = água, props, obras e marcadores. O Alta usa os números do Ultra até a R1a medir. O 'pc' (D66, PC do dono):
+ * 800 chamadas e 2,5 milhões de triângulos na vista aberta com a cidade grande, 2,5 GB de vídeo; tetos por família
+ * provisórios até a bancada no PC dele (calibrar), com a soma dentro dos 2,5 milhões.
  */
 export const ORCAMENTO = congelar({
   ultra: { calls: 1500, tris: 5000000 },
   alta: { calls: 1500, tris: 5000000 },
+  pc: {
+    calls: 800,
+    tris: 2500000,
+    alvoTris: 1720000,
+    videoMB: 2560,
+    geometriaMB: 512,
+    familias: {
+      terreno: { calls: [1, 3], alvo: 200000, teto: 240000 },
+      predios: { calls: [40, 90], alvo: 750000, teto: 950000, nota: 'LOD0 até 600 m, anexos, LOD1 e LOD2' },
+      colocaveis: { calls: [8, 20], alvo: 60000, teto: 90000 },
+      arvores: { calls: [14, 24], alvo: 220000, teto: 300000 },
+      vias: { calls: [30, 60], alvo: 150000, teto: 200000 },
+      vida: { calls: [10, 16], alvo: 50000, teto: 80000 },
+      arcologia: { calls: [20, 40], alvo: 30000, teto: 40000, nota: 'LOD1 na vista aberta; de perto até 250 mil (TETO_ARCOLOGIA)' },
+      sombra: { calls: [20, 60], alvo: 200000, teto: 300000, nota: 'callsSombra e trisSombra, 2 cascatas' },
+      resto: { calls: [30, 50], alvo: 60000, teto: 110000, nota: 'água, props, obras e marcadores; chamadas com céu e pós' },
+    },
+  },
   media: {
     calls: 300,
     tris: 900000,
@@ -133,7 +177,7 @@ export const ORCAMENTO = congelar({
       arvores: { calls: [10, 13], alvo: 80000, teto: 110000 },
       vias: { calls: [15, 25], alvo: 70000, teto: 90000 },
       vida: { calls: [8, 10], alvo: 25000, teto: 40000 },
-      arcologia: { calls: [10, 15], alvo: 25000, teto: 60000, nota: '40 mil em LOD1 e até 20 mil do LOD0 da Torre de perto' },
+      arcologia: { calls: [10, 15], alvo: 25000, teto: 60000, nota: '40 mil em LOD1 e até 20 mil do LOD0 da Torre de perto; de perto até 90 mil (TETO_ARCOLOGIA)' },
       sombra: { calls: [8, 15], alvo: 40000, teto: 60000, nota: 'callsSombra e trisSombra' },
       resto: { calls: [23, 28], alvo: 39000, teto: 85000, nota: 'água 20 mil, props 30 mil, obras 15 mil, marcadores 20 mil; chamadas com céu e pós' },
     },

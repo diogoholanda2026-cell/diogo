@@ -300,6 +300,7 @@ export async function criarRenderFalso(canvas, opcoes = {}) {
     estado(e) { estado.estadoR = e; },
     qualidade(id) { estado.qualidade = id; },
     perfil: () => ({ id: estado.qualidade, sugerido: 'media', capac: { clipControl: true, multiDraw: true, timer: false, limites: { amostradores: 16, varyings: 15 } } }),
+    aquecido: () => Promise.resolve(null),
     // números de mentira no formato do contrato (perto do alvo da 4.8 no Média)
     stats: Object.assign(statsVazio(), {
       calls: 128, tris: 612000, callsSombra: 11, trisSombra: 41000, passes: 6, ms: 16.4, qps: 60, p95: 18.2, gpuMs: 9.1, pr: 1, msaa: 0, perfil: 'media',
