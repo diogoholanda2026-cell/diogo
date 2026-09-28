@@ -225,7 +225,7 @@ test('planos: Torre, portões e vias dentro da gleba; portões na borda; a Torre
   }
 });
 
-test('planos: margens de água macias (Chaikin): nenhuma quina de polígono nos reservatórios (a mais viva, na barragem)', () => {
+test('planos: margens de água macias (Chaikin e pontas redondas): nenhuma quina de polígono nos reservatórios', () => {
   const quina = (P, i) => {
     const n = P.length / 2;
     const a = [P[2 * i] - P[2 * ((i + n - 1) % n)], P[2 * i + 1] - P[2 * ((i + n - 1) % n) + 1]];
@@ -233,7 +233,8 @@ test('planos: margens de água macias (Chaikin): nenhuma quina de polígono nos 
     const c = (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b) || 1);
     return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
   };
-  for (const id of ['A', 'C']) {
+  // o canal do B também: as pontas fecham em meia volta, não no corte reto de uma vala
+  for (const id of ['A', 'B', 'C']) {
     const r = PLANOS[id].partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
     let pior = 0;
     for (let i = 0; i < r.contorno.length / 2; i++) pior = Math.max(pior, quina(r.contorno, i));
@@ -246,6 +247,20 @@ test('planos: margens de água macias (Chaikin): nenhuma quina de polígono nos 
   assert.equal(valores.length, pontos.length / 2);
   assert.equal(valores[0], 10);
   assert.equal(valores[valores.length - 1], 30);
+});
+
+test('planos: as peças pousam em terra (o centro de cada uma fora da cava do reservatório)', () => {
+  // com o centro na cava, chao() devolve o leito e a peça afunda com a água em volta (a Vida do B na cabeceira do canal)
+  for (const [id, P] of Object.entries(PLANOS)) {
+    const res = P.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
+    for (const parte of P.partes) {
+      for (const p of parte.pecas) {
+        if (p.x === undefined) continue;
+        const folga = p.tipo === 'vida' ? p.diametro / 2 : 0;
+        assert.ok(!pontoNoPoligono(p.x, p.z, res.contorno) && (distPoligono(p.x, p.z, res.contorno) > folga), `${id}: ${p.tipo} em ${p.x}, ${p.z} dentro da água`);
+      }
+    }
+  }
 });
 
 test('planos: a cava do reservatório como forma do aplainar (D5)', () => {

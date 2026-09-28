@@ -1399,8 +1399,9 @@ void gVidroPainel( float col, float fl, float fv, float sem, float esp, float ca
   corLuz = mix( corLuz, vec3( 0.72, 0.84, 1.0 ), step( 0.9, gH1( vec2( un * 2.3, fl * 1.1 ) + 1.7 ) ) * ( 1.0 - longe ) );
   float teto = mix( 0.45 + 0.55 * smoothstep( 0.15, 0.78, fv ), 0.8, longe );
   fEmi = corLuz * acesa * uNoite * G_LUZ_JANELA * teto * ( 1.0 - emPers * 0.45 );
-  // à noite o vidro apagado quase não reflete: o interior escuro vence o reflexo do céu da cidade
-  fTint *= mix( 1.0, 0.4, uNoite );
+  // à noite o vidro apagado quase não reflete: o interior escuro vence o reflexo do céu da cidade. O pouco que sobra
+  // puxa para o azul do céu noturno: o brilho alaranjado do ambiente no vidro deixava a fachada cor de tijolo
+  fTint *= mix( vec3( 1.0 ), vec3( 0.3, 0.36, 0.46 ), uNoite );
 }
 void gFachada() {
   float tipo = floor( vC.x + 0.5 );

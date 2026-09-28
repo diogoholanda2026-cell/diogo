@@ -1,8 +1,8 @@
 // Reservatório da Arcologia (lago.e1): o espelho d'água na cota do plano e a borda de cada plano: 'degraus' (degraus
 // de pedra até a água, Cheonggyecheon e a Ópera de Oslo), 'cais' (muro de cais com pedra de coroamento, as margens do
 // canal de Songdo) ou 'pedra' (blocos de arenito desencontrados, o promontório de Barangaroo), sempre com o passeio
-// em volta, que cobre a transição do chão cavado. A água tem material próprio: escura, com o reflexo do céu e
-// ondulação fina no shader.
+// em volta (calçada de pedra e gramado), que cobre a transição do chão cavado. A água tem material próprio: escura,
+// com o reflexo do céu e ondulação fina no shader.
 //
 // A cava entra no chão pelo aplainar (sim.formas, D5): a X1b registra cavaDoPlano() quando lago.e1 começa. As cenas da
 // X1a cavam o relevo da própria simulação de prova com cavarTerreno(), do mesmo jeito que o aplainar faria.
@@ -19,10 +19,15 @@ const K = {
   piso: acab('#948b7e', { rugo: 0.8, padrao: PADRAO.piso }),
   concreto: acab('#9b968d', { rugo: 0.8 }),
   fundo: acab('#3b4540', { rugo: 0.9 }),
+  // o gramado da margem no tom dos parques do plano (planos.js)
+  grama: acab('#5b6a3a', { rugo: 0.95, padrao: PADRAO.grama }),
 };
 
 /** Passeio em volta do reservatório (m, do fio d'água para fora), largo o bastante para cobrir a borda da cava. */
 export const PASSEIO = 26;
+
+/** Calçada de pedra junto da borda; o resto do passeio é gramado. */
+const CALCADA = 9;
 
 /** Paredes verticais ao longo de um contorno (normal para dentro da água quando agua = true). */
 function muro(m, poly, y0, y1, k, paraAgua = true) {
@@ -37,6 +42,16 @@ function muro(m, poly, y0, y1, k, paraAgua = true) {
     if (paraAgua) nn = nn.map((v) => -v);
     m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], nn, [0, y0], [l, y0], [l, y1], [0, y1], k);
   }
+}
+
+/**
+ * Margem: a calçada de pedra junto da água (de ant, a d0 metros do fio, até d0 + CALCADA) e o gramado até o fim do
+ * passeio. Os 26 m todos em pedra clara liam, do alto, como a borda de uma piscina ou de uma vala de concreto.
+ */
+function margem(opaco, C, ant, d0, topo) {
+  const meio = deslocar(C, d0 + CALCADA);
+  faixaEntre(opaco, ant, meio, topo, K.piso, true);
+  faixaEntre(opaco, meio, deslocar(C, PASSEIO), topo, K.grama, true);
 }
 
 /**
@@ -67,13 +82,13 @@ export function montarReservatorio(peca, { opaco, agua, cota }) {
       ant = R;
       yAnt = y;
     }
-    faixaEntre(opaco, ant, deslocar(C, PASSEIO), topo, K.piso, true);
+    margem(opaco, C, ant, 1.6 * n, topo);
   } else if (peca.borda === 'cais') {
     muro(opaco, C, fundo, topo + 0.35, K.granito);
     const cor = deslocar(C, 0.9);
     faixaEntre(opaco, C, cor, topo + 0.35, K.granito, true);
     muro(opaco, cor, topo, topo + 0.35, K.granito, false);
-    faixaEntre(opaco, cor, deslocar(C, PASSEIO), topo, K.piso, true);
+    margem(opaco, C, cor, 0.9, topo);
   } else {
     // pedra: blocos de arenito de alturas desencontradas em 3 fiadas (o promontório de Barangaroo)
     let ant = C;
@@ -97,7 +112,7 @@ export function montarReservatorio(peca, { opaco, agua, cota }) {
       ant = R;
       yAnt = yBase;
     }
-    faixaEntre(opaco, ant, deslocar(C, PASSEIO), topo, K.piso, true);
+    margem(opaco, C, ant, 2.6 * 3, topo);
   }
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (let i = 0; i < C.length; i += 2) {

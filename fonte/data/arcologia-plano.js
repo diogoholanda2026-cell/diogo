@@ -129,11 +129,16 @@ export function suavizar(pontos, { voltas = 3, fechado = true, valores = null } 
   return valores ? { pontos: P, valores: W } : P;
 }
 
-/** Contorno (pares) de um canal: eixo em pontos [x, z, ...] e meia largura por ponto. Sentido: um lado e volta. */
-export function contornoDoCanal(eixo, larguras) {
+/**
+ * Contorno (pares) de um canal: eixo em pontos [x, z, ...] e largura por ponto. Sentido: um lado, a ponta de baixo, o
+ * outro lado e a cabeceira. As pontas fecham em meia volta (bacia redonda, como a cabeceira e a foz de um canal de
+ * parque), não no corte reto de uma vala. Trigonometria de comum/util.js: a cava vai para a simulação (D5).
+ */
+export function contornoDoCanal(eixo, larguras, { passosPonta = 6 } = {}) {
   const n = eixo.length / 2;
   const esq = [];
   const dir = [];
+  const tan = [];
   for (let i = 0; i < n; i++) {
     const a = Math.max(0, i - 1);
     const b = Math.min(n - 1, i + 1);
@@ -142,13 +147,29 @@ export function contornoDoCanal(eixo, larguras) {
     const t = Math.sqrt(tx * tx + tz * tz) || 1;
     tx /= t;
     tz /= t;
+    tan.push(tx, tz);
     const m = larguras[i] / 2;
     esq.push(eixo[2 * i] - tz * m, eixo[2 * i + 1] + tx * m);
     dir.push(eixo[2 * i] + tz * m, eixo[2 * i + 1] - tx * m);
   }
+  // meia volta em torno da ponta i, do lado lx, lz para o oposto, passando por fx, fz (a frente da ponta)
+  const ponta = (i, lx, lz, fx, fz) => {
+    const out = [];
+    const m = larguras[i] / 2;
+    for (let k = 1; k < passosPonta; k++) {
+      const th = (k / passosPonta) * Math.PI;
+      const c = cos(th);
+      const s = sen(th);
+      out.push(Math.round((eixo[2 * i] + m * (c * lx + s * fx)) * 100) / 100, Math.round((eixo[2 * i + 1] + m * (c * lz + s * fz)) * 100) / 100);
+    }
+    return out;
+  };
+  const u = n - 1;
+  const fim = ponta(u, -tan[2 * u + 1], tan[2 * u], tan[2 * u], tan[2 * u + 1]);
   const volta = [];
   for (let i = n - 1; i >= 0; i--) volta.push(dir[2 * i], dir[2 * i + 1]);
-  return [...esq, ...volta];
+  const cabeceira = ponta(0, tan[1], -tan[0], -tan[0], -tan[1]);
+  return [...esq, ...fim, ...volta, ...cabeceira];
 }
 
 // ------------------------------------------------------------------------------------------------ os três planos
@@ -273,11 +294,12 @@ const PLANO_A = {
 // acompanha a margem sudoeste em blocos que sobem para o noroeste; a Vida marca a cabeceira do canal; a Escola e a
 // Universidade ficam nas margens, com o parque na porta.
 // o eixo corre da cabeceira (noroeste) à foz (sudeste) em S suave, com 25 m de amplitude, e alarga no lago do meio
+// a cabeceira fica a ~25 m da casca da Vida, em terra (a Vida marca o começo do canal, não pousa dentro da cava)
 const CANAL_B0 = [
-  -290, 250, -211.3, 326.8, -129.3, 399, -41.8, 464, 51.2, 521.8, 147.5, 575, 243.8, 628.2, 336.8, 686, 424.3, 751,
-  506.3, 823.2, 585, 900,
+  -211.3, 326.8, -129.3, 399, -41.8, 464, 51.2, 521.8, 147.5, 575, 243.8, 628.2, 336.8, 686, 424.3, 751, 506.3, 823.2,
+  585, 900,
 ];
-const LARG_B0 = [44, 48, 56, 92, 132, 124, 72, 56, 56, 60, 64];
+const LARG_B0 = [48, 56, 92, 132, 124, 72, 56, 56, 60, 64];
 const { pontos: CANAL_B, valores: LARG_B } = suavizar(CANAL_B0, { voltas: 3, fechado: false, valores: LARG_B0 });
 const PLANO_B = {
   id: 'B',
