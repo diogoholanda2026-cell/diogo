@@ -470,20 +470,20 @@ export const PLANOS = congelar({ A: PLANO_A, B: PLANO_B, C: PLANO_C });
 /** Ordem das partes (o idx da seleção 'arcologia' é a posição aqui). */
 export const PARTES_ORDEM = congelar(['torre', 'lago', 'sede', 'anel', 'biblioteca', 'vida', 'escola', 'universidade', 'fisica']);
 
-/** Plano escolhido ('A' | 'B' | 'C'); null até o portão 1. */
-export const PLANO_ESCOLHIDO = null;
+/** Plano escolhido no portão 1 ('A' | 'B' | 'C'): o A (Baía) por padrão, até o dono decidir outro. */
+export const PLANO_ESCOLHIDO = 'A';
 
 /** Plano que o jogo mostra enquanto nenhum foi escolhido (a cidade sintética também usa este). */
 export const PLANO_PADRAO = 'A';
 
 /**
- * Posição provisória da Torre (até o integrador gravar o plano): a do plano padrão.
+ * Posição da Torre no plano escolhido.
  * rot na convenção do three; com rot = 0 a frente (lado das penas) olha para +z (sul, a baía).
  */
-export const TORRE_POSICAO = congelar({ ...PLANO_A.torre, provisoria: true });
+export const TORRE_POSICAO = congelar({ ...PLANOS[PLANO_ESCOLHIDO].torre });
 
 /** Ponto de pouso do helicóptero da Holding (D61): o centro do heliponto; y acima da plataforma da Torre. */
-export const POUSO = congelar({ ...torreParaMundo(TORRE_POSICAO, HELIPONTO_LOCAL.x, HELIPONTO_LOCAL.y, HELIPONTO_LOCAL.z), provisorio: true });
+export const POUSO = congelar({ ...torreParaMundo(TORRE_POSICAO, HELIPONTO_LOCAL.x, HELIPONTO_LOCAL.y, HELIPONTO_LOCAL.z) });
 
 /** Câmera da Arcologia (voos e o botão da barra). Ângulos em graus (contratos/render.js). */
 export const CAMERA_ARCOLOGIA = congelar({ x: 170, z: 640, dist: 1300, guinada: 28, inclinacao: 20 });
