@@ -1,18 +1,22 @@
-// Torre Lâmina (D27), render: LOD0 por perfil, LOD1, o volume que projeta a sombra própria (D43) e os materiais da
-// Arcologia. Também guarda o kit de malhas que as partes, o lago e os planos usam (Malha e as formas básicas).
+// Torres da Holding (D27 e D64), render: a Torre Lâmina de 500 m e a irmã de 452 m pelo mesmo gerador (a altura vem
+// da especificação, data/arcologia-plano.js), o par com a fenda, a ponte, os dutos e a cachoeira, os LODs, o volume que
+// projeta a sombra própria (D43) e os materiais da Arcologia. Também guarda o kit de malhas que as partes, o lago e os
+// planos usam (Malha e as formas básicas).
 //
 // Referências: 111 West 57th (lâminas que recuam em penas numa face só, face oposta lisa), One Vanderbilt (volumes
 // verticais encaixados, base que conversa com a rua), 432 Park Avenue (andares de vento que cortam a altura sem faixa
-// escura) e 30 Hudson Yards (plataforma em balanço no alto). Medidas de data/arcologia-plano.js (TORRE_LAMINA).
+// escura), 30 Hudson Yards (plataforma em balanço no alto) e as Petronas (o par com a ponte).
 //
-// Espaço local da Torre: origem no centro da planta, no chão da plataforma; x ao longo dos 36 m; z ao longo dos 50 m,
-// da face lisa (z = -25) para as penas (z = +25), que olham para a água (frente, +z com rot = 0).
+// Espaço local de uma torre: origem no centro da planta, no chão da plataforma; x ao longo dos 36 m; z ao longo dos
+// 50 m, da face lisa (z = -25) para as penas (z = +25), a frente (+z com rot = 0). No par, as faces lisas dão para a
+// fenda de 10 m e as penas para fora (espelhadas).
 //
-// Materiais (poucas chamadas): 'vidro' (toda a pele de vidro, o desenho da fachada no shader pelo tipo de cada
-// vértice) e 'opaco' (pedra, bronze, laca, ouro, jardim e as luzes, com cor, rugosidade, metal, luz e padrão por
-// vértice). A Torre inteira sai em 2 chamadas no LOD0, 2 no LOD1 e 1 na sombra.
+// Materiais (poucas chamadas e um programa só por material, D66): 'vidro' (toda a pele de vidro, o desenho da fachada
+// no shader pelo tipo de cada vértice), 'opaco' (pedra, bronze, laca, ouro, jardim e as luzes, com cor, rugosidade,
+// metal, luz e padrão por vértice), 'claro' (o vidro transparente da cúpula), 'cascata' (a água que cai e sobe) e
+// 'jato' (as fontes). O par sai em 2 chamadas no LOD0, 2 no LOD1, 1 dos efeitos e 1 na sombra.
 import * as THREE from 'three';
-import { TORRE_LAMINA as TL, HELIPONTO_LOCAL } from '../../data/arcologia-plano.js';
+import { TORRE_LAMINA, GEMEAS, torresGemeas } from '../../data/arcologia-plano.js';
 import { direcaoDoSol } from '../depuracao.js';
 import { GANCHOS_COMUNS } from '../materiais/biblioteca.js';
 
@@ -46,11 +50,11 @@ export function acab(hex, { rugo = 0.8, metal = 0, luz = 0, padrao = 0 } = {}) {
 /** Tipos de fachada do material vidro (o shader desenha cada um). */
 export const VIDRO = Object.freeze({
   cortina: 0, costura: 1, vento: 2, saguao: 3, lanterna: 4, parapeito: 5, escritorio: 6, moradia: 7, cupula: 8,
-  biblioteca: 9, laboratorio: 10, podio: 11, torreLod1: 12,
+  biblioteca: 9, laboratorio: 10, podio: 11, torreLod1: 12, sede: 13,
 });
 
-/** Dado do vértice de vidro: [tipo, semente, face com aletas (0 ou 1), 0]. */
-export const vid = (tipo, semente = 0, aletas = 0) => [tipo, semente, aletas, 0];
+/** Dado do vértice de vidro: [tipo, semente, face com aletas (0 ou 1), marca (1: a lanterna de uma coroa)]. */
+export const vid = (tipo, semente = 0, aletas = 0, marca = 0) => [tipo, semente, aletas, marca];
 
 /**
  * Malha em arranjos simples (sem three): posição, normal, coordenadas em metros (u ao longo da face, v de altura; nas
@@ -225,22 +229,27 @@ export function tampa(m, poly, y, k, cima = true) {
   for (let t = 0; t < indices.length; t += 3) m.tri(base + indices[t], base + indices[t + 1], base + indices[t + 2]);
 }
 
-/** Parede vertical de (ax, az) a (bx, bz), normal para fora (à direita de a→b no sentido positivo). */
-export function parede(m, ax, az, bx, bz, y0, y1, k, ua = 0, ub = null) {
+/**
+ * Parede vertical de (ax, az) a (bx, bz), normal para fora (à direita de a→b no sentido positivo). O v das
+ * coordenadas conta de vBase (o shader das torres conta os andares a partir da base de cada trecho).
+ */
+export function parede(m, ax, az, bx, bz, y0, y1, k, ua = 0, ub = null, vBase = 0) {
   const dx = bx - ax;
   const dz = bz - az;
   const l = Math.hypot(dx, dz);
   if (l < 1e-6 || y1 - y0 < 1e-6) return;
   const n = [dz / l, 0, -dx / l];
   const u1 = ub ?? ua + l;
-  m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], n, [ua, y0], [u1, y0], [u1, y1], [ua, y1], k);
+  const v0 = y0 - vBase;
+  const v1 = y1 - vBase;
+  m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], n, [ua, v0], [u1, v0], [u1, v1], [ua, v1], k);
 }
 
 /**
  * Prisma vertical de um polígono: paredes (k ou fn(i, ax, az, bx, bz) → k | null), tampa de cima e de baixo.
- * uFn(i, ax, az, bx, bz) → [ua, ub] dá o u de cada parede (padrão: perímetro corrido).
+ * uFn(i, ax, az, bx, bz) → [ua, ub] dá o u de cada parede (padrão: perímetro corrido); o v conta de vBase.
  */
-export function prisma(m, poly, y0, y1, { paredes = null, topo = null, base = null, uFn = null } = {}) {
+export function prisma(m, poly, y0, y1, { paredes = null, topo = null, base = null, uFn = null, vBase = 0 } = {}) {
   const P = orientar(poly);
   const n = P.length / 2;
   let u = 0;
@@ -253,7 +262,7 @@ export function prisma(m, poly, y0, y1, { paredes = null, topo = null, base = nu
     const k = typeof paredes === 'function' ? paredes(i, ax, az, bx, bz) : paredes;
     if (k) {
       const [ua, ub] = uFn ? uFn(i, ax, az, bx, bz) : [u, u + l];
-      parede(m, ax, az, bx, bz, y0, y1, k, ua, ub);
+      parede(m, ax, az, bx, bz, y0, y1, k, ua, ub, vBase);
     }
     u += l;
   }
@@ -402,26 +411,40 @@ export function arvore(m, x, y, z, { altura = 8, raio = 3, semente = 0, tipo = '
   const h = hashF(semente, 7);
   const folha = acab(FOLHAS[Math.floor(h * FOLHAS.length) % FOLHAS.length], { rugo: 0.85, padrao: PADRAO.folha });
   if (tipo === 'palmeira') {
+    // palmeira-imperial: estipe liso e claro, o palmito verde no alto e as folhas em arco que sobem e caem; cada folha
+    // tem as duas faces (vista de baixo, da calçada, não some)
     const tr = Math.max(0.18, altura * 0.012);
-    cilindro(m, x, z, y, y + altura, tr * 1.25, tr, detalhe >= 2 ? 6 : 4, acab('#8b8579', { rugo: 0.8 }), { topo: false });
-    const nf = detalhe >= 2 ? 9 : 6;
+    const topoTr = y + altura - 2.6;
+    cilindro(m, x, z, y, topoTr, tr * 1.3, tr, detalhe >= 2 ? 7 : 5, acab('#9a948a', { rugo: 0.8 }), { topo: false });
+    cilindro(m, x, z, topoTr, y + altura + 0.3, tr * 1.25, tr * 1.05, detalhe >= 2 ? 7 : 5, acab('#5b6a3a', { rugo: 0.7 }), { topo: true });
+    const nf = detalhe >= 2 ? 14 : detalhe >= 1 ? 11 : 8;
+    const k = acab(FOLHAS[Math.floor(h * FOLHAS.length) % FOLHAS.length], { rugo: 0.8, padrao: PADRAO.folha });
+    const face = (A, B, C, D, n) => {
+      m.quad(A, B, C, D, n, [0, 0], [1, 0], [1, 1], [0, 1], k);
+      m.quad(A, B, C, D, [-n[0], -n[1], -n[2]], [0, 0], [1, 0], [1, 1], [0, 1], k);
+    };
     for (let f = 0; f < nf; f++) {
-      const a = (f / nf) * Math.PI * 2 + h * 3;
+      const a = (f / nf) * Math.PI * 2 + h * 3 + 0.4 * hashF(semente, f, 2);
       const ca = Math.cos(a);
       const sa = Math.sin(a);
-      const L = raio * (0.9 + 0.2 * hashF(semente, f));
-      const topo = [x, y + altura + 0.4, z];
-      const meio = [x + ca * L * 0.55, y + altura + 0.9, z + sa * L * 0.55];
-      const ponta = [x + ca * L, y + altura - 1.4, z + sa * L];
-      const px = -sa * 0.55;
-      const pz = ca * 0.55;
-      const n1 = [ca * 0.3, 0.95, sa * 0.3];
-      m.quad([topo[0] + px * 0.3, topo[1], topo[2] + pz * 0.3], [meio[0] + px, meio[1], meio[2] + pz], [meio[0] - px, meio[1], meio[2] - pz], [topo[0] - px * 0.3, topo[1], topo[2] - pz * 0.3], n1, [0, 0], [1, 0], [1, 1], [0, 1], folha);
-      const n2 = [ca * 0.6, 0.8, sa * 0.6];
-      const i0 = m.v(meio[0] + px, meio[1], meio[2] + pz, ...n2, 0, 0, folha);
-      const i1 = m.v(meio[0] - px, meio[1], meio[2] - pz, ...n2, 1, 0, folha);
-      const i2 = m.v(ponta[0], ponta[1], ponta[2], ...n2, 0.5, 1, folha);
-      m.tri(i0, i1, i2);
+      const L = raio * (0.95 + 0.3 * hashF(semente, f));
+      const cai = 0.4 + 0.9 * hashF(semente, f, 3); // as de baixo caem mais que as novas do alto
+      const y0 = y + altura + 0.2;
+      const P = [0, 0.3, 0.62, 1].map((t, i) => {
+        const r = L * t;
+        const yy = y0 + L * (0.55 * t - cai * t * t) + (i === 0 ? 0 : 0.2);
+        return [x + ca * r, yy, z + sa * r];
+      });
+      const larg = [0.15, 0.75, 0.55, 0];
+      const px = -sa;
+      const pz = ca;
+      const n = [ca * 0.2, 0.96, sa * 0.2];
+      for (let s = 0; s < 3; s++) {
+        const [a0, a1] = [P[s], P[s + 1]];
+        const [w0, w1] = [larg[s], larg[s + 1]];
+        // leve dobra em V ao longo da nervura (os folíolos caem dos dois lados)
+        face([a0[0] + px * w0, a0[1] - w0 * 0.3, a0[2] + pz * w0], [a1[0] + px * w1, a1[1] - w1 * 0.3, a1[2] + pz * w1], [a1[0] - px * w1, a1[1] - w1 * 0.3, a1[2] - pz * w1], [a0[0] - px * w0, a0[1] - w0 * 0.3, a0[2] - pz * w0], n);
+      }
     }
     return;
   }
@@ -463,15 +486,15 @@ function tufo(m, cx, cy, cz, r, ry, k, semente) {
   for (const [a, b, c] of ICO.t) m.tri(base + a, base + b, base + c);
 }
 
-// ================================================================================================ a Torre
+// ================================================================================================ as torres
 
 /** Nível de detalhe do LOD0 por perfil. */
-export const NIVEL = Object.freeze({ leve: 0, media: 1, alta: 2, ultra: 3 });
+export const NIVEL = Object.freeze({ leve: 0, media: 1, alta: 2, ultra: 3, pc: 2 });
 
 // bronze champanhe das aletas e montantes (anodizado acetinado: reflete ~50%, claro ao sol, nunca marrom)
 const BRONZE = '#cbbb9d';
 
-// acabamentos da Torre (albedo real: nada acima de 0,80)
+// acabamentos das torres (albedo real: nada acima de 0,80)
 const K = {
   travertino: acab('#c9bda6', { rugo: 0.72, padrao: PADRAO.pedra }),
   granito: acab('#625d57', { rugo: 0.55, padrao: PADRAO.pedra }),
@@ -502,36 +525,66 @@ const K = {
 const V = {
   cortina: vid(VIDRO.cortina, 0.11),
   costura: vid(VIDRO.costura, 0.37),
+  // entalhes das quinas e fendas entre lâminas: o vidro da costura, com a luz da noite mais baixa (vC.z = 1)
+  quina: vid(VIDRO.costura, 0.37, 1),
   vento: vid(VIDRO.vento, 0.53),
   saguao: vid(VIDRO.saguao, 0.71),
-  lanterna: vid(VIDRO.lanterna, 0.29),
+  // a lanterna da coroa leva 1 no último número (o shader a distingue da esfera da Biblioteca)
+  lanterna: [VIDRO.lanterna, 0.29, 0, 1],
   parapeito: vid(VIDRO.parapeito, 0.83),
 };
 
-// medidas derivadas (TL manda)
+// medidas da planta, iguais nas duas torres (D64: 36 x 50 m cada)
+const TL = TORRE_LAMINA;
 const X = TL.planta.largura / 2; // 18
 const Z0 = -TL.planta.comprimento / 2; // -25, face lisa
 const ZF = TL.planta.comprimento / 2; // 25, penas
 const Z1 = Z0 + TL.laminas[0].fundo; // +1: lâmina 1 | lâmina 2
 const Z2 = Z1 + TL.laminas[1].fundo; // +15: lâmina 2 | lâmina 3
-const TOPO = TL.laminas.map((l) => l.topo); // [301, 238, 163]
-const PODIO = TL.podio.altura; // 16
 const PE = TL.pavimentos.altura; // 4.2
-const [VENTO1, VENTO2] = TL.andaresDeVento; // { base, altura, recuo }
 const LAJE = 0.8; // laje de cima de cada andar de vento (o vão livre é altura - LAJE)
 const ENT = 1.5; // entalhe das quinas
 const COST = { meia: TL.faceLisa.costura / 2, fundo: TL.faceLisa.recuoCostura }; // costura da face lisa
 const REV = { meia: 1.2, fundo: 2.5 }; // fenda entre lâminas nas faces laterais (cada lâmina lê como uma placa)
-const COROA = { x: X - ENT, z0: Z0, z1: Z0 + TL.coroa.fundo, y0: TL.coroa.base, yVidro: TL.coroa.base + TL.coroa.altura - TL.coroa.oca, y1: TL.heliponto.cota - TL.heliponto.espessura };
-const HELI = { x: HELIPONTO_LOCAL.x, z: HELIPONTO_LOCAL.z, r: TL.heliponto.diametro / 2, y1: TL.heliponto.cota, y0: TL.heliponto.cota - TL.heliponto.espessura };
-const MASTRO = { x: 0, z: TL.mastro.z, r: TL.mastro.raio, topo: TL.mastro.topo };
 const PASSO = TL.aletas.passo; // 1,5
 const AL = { fundo: TL.aletas.fundo, meia: TL.aletas.espessura / 2 };
 const MT = { fundo: TL.montantes.fundo, meia: TL.montantes.espessura / 2 };
-const PD = TL.podio;
-const PODIO_X = PD.largura / 2; // 26
-const PODIO_Z0 = Z0 - PD.tras; // -31
-const PODIO_Z1 = ZF + PD.frente; // +39
+
+/**
+ * Medidas de uma torre derivadas da especificação (data/arcologia-plano.js, especTorre): cotas das lâminas, andares
+ * de vento, coroa, heliponto, mastro e o pódio. gemea: a torre do par (D64), com a face lisa na fenda: o pódio não
+ * passa da face lisa e a marquise da entrada sai.
+ */
+export function medidasTorre(spec = TORRE_LAMINA, { gemea = false } = {}) {
+  const TOPO = spec.laminas.map((l) => l.topo);
+  const [VENTO1, VENTO2] = spec.andaresDeVento;
+  const PODIO = spec.podio.altura;
+  const h = spec.heliponto;
+  const COROA = {
+    x: X - ENT, z0: Z0, z1: Z0 + spec.coroa.fundo, y0: spec.coroa.base, yVidro: spec.coroa.base + spec.coroa.altura - spec.coroa.oca,
+    y1: h ? h.cota - h.espessura : spec.altura,
+  };
+  const HELI = h ? { x: 0, z: Z0 + spec.coroa.fundo + h.balanco - h.diametro / 2, r: h.diametro / 2, y1: h.cota, y0: h.cota - h.espessura } : null;
+  const MASTRO = spec.mastro ? { x: 0, z: spec.mastro.z, r: spec.mastro.raio, topo: spec.mastro.topo } : null;
+  const PD = gemea ? { ...spec.podio, tras: 0, marquise: 0 } : spec.podio;
+  return {
+    spec, gemea, TOPO, VENTO1, VENTO2, PODIO, COROA, HELI, MASTRO, PD,
+    PODIO_X: PD.largura / 2,
+    PODIO_Z0: Z0 - PD.tras,
+    PODIO_Z1: ZF + PD.frente,
+    // lâmina de cada z (0, 1 ou 2) e o trecho z dela na face lateral (sem fendas nem entalhes)
+    LAMINAS_Z: [
+      { z0: Z0 + ENT, z1: Z1 - REV.meia, topo: TOPO[0] },
+      { z0: Z1 + REV.meia, z1: Z2 - REV.meia, topo: TOPO[1] },
+      { z0: Z2 + REV.meia, z1: ZF - ENT, topo: TOPO[2] },
+    ],
+    // base do pavimento de cada trecho do corpo (o shader conta os andares a partir dela)
+    bases: [PODIO, VENTO1.base + VENTO1.altura, VENTO2.base + VENTO2.altura],
+    topo: MASTRO ? MASTRO.topo : spec.altura,
+  };
+}
+
+const M_LAMINA = medidasTorre(TORRE_LAMINA);
 
 /** u das paredes da Torre: x + 18 nas faces que olham para z, z + 25 nas que olham para x (grade de 1,5 m). */
 const uTorre = (i, ax, az, bx, bz) => (Math.abs(bx - ax) >= Math.abs(bz - az) ? [ax + X, bx + X] : [az - Z0, bz - Z0]);
@@ -598,18 +651,24 @@ export function contornoTrecho({ x = X, z0 = Z0, z1 = ZF, entalhe = ENT, costura
   return { poly: Q, papel: pq };
 }
 
-/** Trechos do corpo, de baixo para cima (o andar de vento recua 2 m; a laje de cima fecha cada um). */
-export function trechosCorpo() {
+/**
+ * Trechos do corpo, de baixo para cima (o andar de vento recua 2 m; a laje de cima fecha cada um). base: a cota de
+ * onde o shader conta os andares do trecho (o v das paredes sai dela).
+ */
+export function trechosCorpo(M = M_LAMINA) {
+  const { VENTO1, VENTO2, PODIO, TOPO } = M;
   const r1 = VENTO1.recuo;
   const r2 = VENTO2.recuo;
+  const t1 = VENTO1.base + VENTO1.altura;
+  const t2 = VENTO2.base + VENTO2.altura;
   return [
-    { nome: 'l123', y0: PODIO, y1: VENTO1.base, z1: ZF, fendas: [Z1, Z2] },
-    { nome: 'vento1', y0: VENTO1.base, y1: VENTO1.base + VENTO1.altura - LAJE, x: X - r1, z0: Z0 + r1, z1: Z2 - r1, entalhe: 0, costura: false, vento: true },
-    { nome: 'laje1', y0: VENTO1.base + VENTO1.altura - LAJE, y1: VENTO1.base + VENTO1.altura, z1: Z2, fendas: [Z1], laje: true },
-    { nome: 'l12', y0: VENTO1.base + VENTO1.altura, y1: VENTO2.base, z1: Z2, fendas: [Z1] },
-    { nome: 'vento2', y0: VENTO2.base, y1: VENTO2.base + VENTO2.altura - LAJE, x: X - r2, z0: Z0 + r2, z1: Z2 - r2, entalhe: 0, costura: false, vento: true },
-    { nome: 'laje2', y0: VENTO2.base + VENTO2.altura - LAJE, y1: VENTO2.base + VENTO2.altura, z1: Z2, fendas: [Z1], laje: true },
-    { nome: 'l1', y0: VENTO2.base + VENTO2.altura, y1: TOPO[0], z1: Z1, fendas: [] },
+    { nome: 'l123', y0: PODIO, y1: VENTO1.base, z1: ZF, fendas: [Z1, Z2], base: PODIO },
+    { nome: 'vento1', y0: VENTO1.base, y1: t1 - LAJE, x: X - r1, z0: Z0 + r1, z1: Z2 - r1, entalhe: 0, costura: false, vento: true, base: VENTO1.base },
+    { nome: 'laje1', y0: t1 - LAJE, y1: t1, z1: Z2, fendas: [Z1], laje: true },
+    { nome: 'l12', y0: t1, y1: VENTO2.base, z1: Z2, fendas: [Z1], base: t1 },
+    { nome: 'vento2', y0: VENTO2.base, y1: t2 - LAJE, x: X - r2, z0: Z0 + r2, z1: Z2 - r2, entalhe: 0, costura: false, vento: true, base: VENTO2.base },
+    { nome: 'laje2', y0: t2 - LAJE, y1: t2, z1: Z2, fendas: [Z1], laje: true },
+    { nome: 'l1', y0: t2, y1: TOPO[0], z1: Z1, fendas: [], base: t2 },
   ];
 }
 
@@ -622,26 +681,38 @@ function linhas(a, b, origem, passo = PASSO, folga = 0.15) {
   return out;
 }
 
-/** Lâmina de cada z (0, 1 ou 2) e o trecho z dela na face lateral (sem fendas nem entalhes). */
-const LAMINAS_Z = [
-  { z0: Z0 + ENT, z1: Z1 - REV.meia, topo: TOPO[0] },
-  { z0: Z1 + REV.meia, z1: Z2 - REV.meia, topo: TOPO[1] },
-  { z0: Z2 + REV.meia, z1: ZF - ENT, topo: TOPO[2] },
-];
-
 /** Pena: quanto a aleta passa do terraço (de 2,5 andares no fundo a quase 1 na frente): o topo de cada lâmina se desfia. */
 const pena = (t) => PE * (2.5 - 1.6 * t);
 
 /**
- * LOD0 da Torre por nível de detalhe (0 leve, 1 média, 2 alta, 3 ultra).
+ * Leva o v das peças acesas da coroa (LUZ.coroa) à fração da altura dela, de 0 a 30: o brilho que sobe para o alto no
+ * shader não depende da cota (as duas torres têm coroas em cotas diferentes).
+ */
+function coroaRelativa(m, M) {
+  const { y0 } = M.COROA;
+  const y1 = M.HELI ? M.HELI.y1 : M.spec.altura;
+  for (let i = 0; i < m.c.length / 4; i++) {
+    const pk = Math.round(m.c[4 * i + 3]);
+    if (((pk >> 4) & 15) !== LUZ.coroa) continue;
+    const y = m.p[3 * i + 1];
+    m.uv[2 * i + 1] = Math.max(0, Math.min(1, (y - y0) / Math.max(1, y1 - y0))) * 30;
+  }
+  return m;
+}
+
+/**
+ * LOD0 de uma torre por nível de detalhe (0 leve, 1 média, 2 alta, 3 ultra).
+ * @param {{ nivel?: number, comEsplanada?: boolean, spec?: object, gemea?: boolean }} op
  * @returns {{ vidro: Malha, opaco: Malha }}
  */
-export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
+export function malhasTorre({ nivel = 1, comEsplanada = false, spec = TORRE_LAMINA, gemea = false } = {}) {
+  const M = medidasTorre(spec, { gemea });
+  const { COROA, TOPO, PODIO, VENTO1, VENTO2, LAMINAS_Z } = M;
   const vidro = new Malha('vidro');
   const opaco = new Malha('opaco');
 
   // ---------- corpo: vidro por trecho, lajes e tampas ----------
-  for (const t of trechosCorpo()) {
+  for (const t of trechosCorpo(M)) {
     const { poly, papel } = contornoTrecho({ x: t.x ?? X, z0: t.z0 ?? Z0, z1: t.z1, entalhe: t.entalhe ?? ENT, costura: t.costura ?? true, fendas: t.fendas ?? [] });
     if (t.laje) {
       // laje do andar de vento: faixa champanhe (clara), forro aceso por baixo, piso por cima
@@ -649,21 +720,21 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
       continue;
     }
     if (t.vento) {
-      prisma(vidro, poly, t.y0, t.y1, { paredes: V.vento, uFn: uTorre });
+      prisma(vidro, poly, t.y0, t.y1, { paredes: V.vento, uFn: uTorre, vBase: t.base });
       continue;
     }
-    prisma(vidro, poly, t.y0, t.y1, { paredes: (i) => (papel[i] === 'face' ? V.cortina : V.costura), uFn: uTorre });
+    prisma(vidro, poly, t.y0, t.y1, { paredes: (i) => (papel[i] === 'face' ? V.cortina : papel[i] === 'costura' ? V.costura : V.quina), uFn: uTorre, vBase: t.base });
     // tampa de cima (terraço da lâmina que acaba aqui e o piso da borda do recuo)
     tampa(opaco, poly, t.y1, K.piso, true);
   }
 
-  // ---------- coroa-lanterna: vidro até 318, gaiola aberta de aletas até o heliponto ----------
+  // ---------- coroa-lanterna: vidro até a parte oca, gaiola aberta de aletas até o topo ----------
   {
     const { poly, papel } = contornoTrecho({ x: COROA.x, z0: COROA.z0, z1: COROA.z1, entalhe: 0, costura: true, fendas: [] });
-    prisma(vidro, poly, COROA.y0, COROA.yVidro, { paredes: (i) => (papel[i] === 'costura' ? V.costura : V.lanterna), uFn: uTorre });
+    prisma(vidro, poly, COROA.y0, COROA.yVidro, { paredes: (i) => (papel[i] === 'costura' ? V.costura : V.lanterna), uFn: uTorre, vBase: COROA.y0 });
     tampa(opaco, poly, COROA.yVidro, K.cobertura, true);
-    // núcleo que segura o heliponto dentro da gaiola
-    bloco(opaco, -4.5, COROA.yVidro, COROA.z0 + 6, 4.5, COROA.y1, COROA.z1 - 5, K.metalEscuro);
+    // núcleo dentro da gaiola: segura o heliponto na maior; na irmã fica baixo, e a gaiola lê oca contra o céu
+    bloco(opaco, -4.5, COROA.yVidro, COROA.z0 + 6, 4.5, M.HELI ? COROA.y1 : COROA.yVidro + (COROA.y1 - COROA.yVidro) * 0.35, COROA.z1 - 5, K.metalEscuro);
     // montantes finos do vidro-lanterna, entre as aletas (a partir da média)
     if (nivel >= 1) {
       for (const x of linhas(-COROA.x, COROA.x, -X + PASSO / 2)) bloco(opaco, x - 0.06, COROA.y0, COROA.z1, x + 0.06, COROA.yVidro, COROA.z1 + 0.18, K.bronze, { topo: false });
@@ -671,6 +742,7 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
     }
     // aro fino que amarra o topo das aletas
     anelRet(opaco, -(X + AL.fundo), COROA.z0 - MT.fundo, X + AL.fundo, COROA.z1 + AL.fundo, COROA.y1 - 0.5, COROA.y1, 0.45, K.coroa);
+    if (!M.HELI) luzesObstaculo(opaco, COROA);
   }
 
   // ---------- aletas de bronze das faces laterais (com penas no alto de cada lâmina) ----------
@@ -684,9 +756,7 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
   for (const lado of [-1, 1]) {
     for (let b = 0; b < 3; b++) {
       const L = LAMINAS_Z[b];
-      for (const z of linhas(L.z0, L.z1, Z0)) {
-        aleta(opaco, lado, z, PODIO, alturaAleta(b, z), nivel);
-      }
+      for (const z of linhas(L.z0, L.z1, Z0)) aleta(opaco, lado, z, PODIO, alturaAleta(b, z), nivel, M);
     }
   }
 
@@ -703,9 +773,9 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
   }
   // frentes das penas: lâmina 3 (z = 25), 2 (z = 15) e 1 (z = 1), cada uma de onde nasce até o parapeito
   const frentes = [
-    { z: ZF, y0: PODIO, y1: TOPO[2] + TL.parapeito },
-    { z: Z2, y0: TOPO[2], y1: TOPO[1] + TL.parapeito },
-    { z: Z1, y0: TOPO[1], y1: TOPO[0] + TL.parapeito },
+    { z: ZF, y0: PODIO, y1: TOPO[2] + M.spec.parapeito },
+    { z: Z2, y0: TOPO[2], y1: TOPO[1] + M.spec.parapeito },
+    { z: Z1, y0: TOPO[1], y1: TOPO[0] + M.spec.parapeito },
   ];
   for (const f of frentes) for (const x of linhas(-X + ENT, X - ENT, -X)) montante(x, f.z, 1, f.y0, f.y1);
 
@@ -733,7 +803,7 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
     bloco(opaco, x - AL.meia, COROA.y0, COROA.z1, x + AL.meia, COROA.y1 - 0.5, COROA.z1 + AL.fundo, K.coroa);
   }
   // a coroa-lanterna tem as aletas duas vezes mais densas que o corpo: uma mais fina entre cada par, na frente e nos
-  // lados, do terraço de 301 m ao aro (de perto a lanterna lê como uma peça de joalheria, de longe como um véu)
+  // lados, do terraço da lâmina 1 ao aro (de perto a lanterna lê como uma peça de joalheria, de longe como um véu)
   if (nivel >= 1) {
     const fina = AL.meia * 0.7;
     const fundo = AL.fundo * 0.8;
@@ -748,7 +818,7 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
   }
 
   // ---------- costura da face lisa: aletas densas do pódio à coroa ----------
-  const passoC = TL.faceLisa.passoCostura;
+  const passoC = M.spec.faceLisa.passoCostura;
   for (const x of linhas(-COST.meia, COST.meia, -COST.meia + passoC / 2, passoC, 0.05)) {
     bloco(opaco, x - 0.12, PODIO, Z0 - 0.35, x + 0.12, COROA.y1 - 0.5, Z0 + COST.fundo, nivel >= 1 ? K.champanhe : K.bronze);
   }
@@ -775,8 +845,8 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
   terracos.forEach((t, it) => {
     const xp = X - ENT - 0.3;
     // parapeito de vidro na frente e nos lados
-    bloco(vidro, -xp, t.y, t.z1 - 0.35, xp, t.y + TL.parapeito, t.z1 - 0.3, V.parapeito, { topo: false });
-    for (const s of [-1, 1]) bloco(vidro, s * (X - 0.35) - 0.03, t.y, t.z0 + 0.3, s * (X - 0.35) + 0.03, t.y + TL.parapeito, t.z1 - 1.8, V.parapeito, { topo: false });
+    bloco(vidro, -xp, t.y, t.z1 - 0.35, xp, t.y + M.spec.parapeito, t.z1 - 0.3, V.parapeito, { topo: false });
+    for (const s of [-1, 1]) bloco(vidro, s * (X - 0.35) - 0.03, t.y, t.z0 + 0.3, s * (X - 0.35) + 0.03, t.y + M.spec.parapeito, t.z1 - 1.8, V.parapeito, { topo: false });
     // jardineira corrida na frente e nos lados
     bloco(opaco, -xp + 0.2, t.y, t.z1 - 1.9, xp - 0.2, t.y + 0.9, t.z1 - 0.5, K.jardineira, { topo: false });
     bloco(opaco, -xp + 0.25, t.y + 0.88, t.z1 - 1.85, xp - 0.25, t.y + 0.92, t.z1 - 0.55, K.jardim);
@@ -795,16 +865,29 @@ export function malhasTorre({ nivel = 1, comEsplanada = false } = {}) {
   });
 
   // ---------- pódio (travertino, colunata, saguão de vidro, marquise em balanço) ----------
-  podio(vidro, opaco, nivel);
+  podio(vidro, opaco, nivel, M);
 
-  // ---------- heliponto a 330 m, mastro a 350 m ----------
-  heliponto(opaco, nivel);
-  if (comEsplanada) esplanada(opaco, nivel);
+  // ---------- heliponto e mastro (só na maior) ----------
+  if (M.HELI) heliponto(opaco, nivel, M);
+  if (comEsplanada) esplanada(opaco, nivel, M);
+  coroaRelativa(opaco, M);
   return { vidro, opaco };
 }
 
-/** Aleta de bronze da face lateral (lado -1 ou +1, no z dado). */
-function aleta(m, lado, z, y0, y1, nivel, k = K.bronze) {
+/** Luzes de obstáculo nas quinas do aro da coroa (a torre sem mastro). */
+function luzesObstaculo(m, COROA) {
+  for (const sx of [-1, 1]) for (const z of [COROA.z0 + 0.6, COROA.z1 - 0.6]) {
+    const x = sx * (X - 0.4);
+    bloco(m, x - 0.35, COROA.y1, z - 0.35, x + 0.35, COROA.y1 + 0.7, z + 0.35, K.obstaculo);
+  }
+}
+
+/**
+ * Aleta de bronze da face lateral (lado -1 ou +1, no z dado). Do Alta para cima o corpo sai em painéis com junta de
+ * 12 cm, de um andar até o terraço da lâmina 3 e de dois andares acima dele (na torre de 500 m o painel de um andar
+ * em toda a altura passava do teto de 70 mil triângulos, D66; lá no alto a junta de dois andares lê igual).
+ */
+function aleta(m, lado, z, y0, y1, nivel, M, k = K.bronze) {
   const x0 = lado * X;
   const x1 = lado * (X + AL.fundo);
   const xm = x0 + lado * AL.fundo * 0.62;
@@ -813,11 +896,12 @@ function aleta(m, lado, z, y0, y1, nivel, k = K.bronze) {
     // nariz mais fino e mais claro, contínuo do pé ao topo (a linha que o olho segue)
     bloco(m, Math.min(xm, x1), y0, z - AL.meia * 0.42, Math.max(xm, x1), y1 + 0.3, z + AL.meia * 0.42, K.champanhe);
     if (nivel >= 2) {
-      // corpo em painéis de um andar, com junta de 12 cm (a escala do andar de perto, como a terracota da 111 W 57th)
+      const [b0, b1, b2] = M.bases;
       let y = y0;
       while (y < y1 - 0.2) {
-        const base = y < 163 ? 16 : y < 232 ? 169 : 238;
-        const prox = Math.min(y1, base + Math.floor((y - base) / PE + 1 + 1e-6) * PE);
+        const base = y < M.VENTO1.base ? b0 : y < M.VENTO2.base ? b1 : b2;
+        const passo = y < M.VENTO1.base ? PE : 2 * PE;
+        const prox = Math.min(y1, base + Math.floor((y - base) / passo + 1 + 1e-6) * passo);
         corpo(y, Math.max(y + 0.1, prox - 0.12));
         y = prox;
       }
@@ -830,11 +914,11 @@ function aleta(m, lado, z, y0, y1, nivel, k = K.bronze) {
 }
 
 /** Contorno do pódio com as quinas chanfradas (afastado d para fora). */
-export function contornoPodio(d = 0) {
-  const x = PODIO_X + d;
-  const z0 = PODIO_Z0 - d;
-  const z1 = PODIO_Z1 + d;
-  const c = PD.chanfro + d * 0.41;
+export function contornoPodio(d = 0, M = M_LAMINA) {
+  const x = M.PODIO_X + d;
+  const z0 = M.PODIO_Z0 - d;
+  const z1 = M.PODIO_Z1 + d;
+  const c = M.PD.chanfro + d * 0.41;
   return [-x + c, z0, x - c, z0, x, z0 + c, x, z1 - c, x - c, z1, -x + c, z1, -x, z1 - c, -x, z0 + c];
 }
 
@@ -858,17 +942,18 @@ function aoLongo(poly, passo, folga = 1.2) {
   return out;
 }
 
-function podio(vidro, opaco, nivel) {
+function podio(vidro, opaco, nivel, M) {
+  const { PD, PODIO_X, PODIO_Z0, PODIO_Z1 } = M;
   const y0 = -3; // a base entra no chão (a plataforma do aplainar é plana, mas o relevo de prova não)
   const ye = PD.embasamento;
   const ys = PD.marquiseCota; // topo do saguão
   const yt = PD.altura;
   // embasamento de granito, 1 m para fora, e o piso da esplanada coberta
-  prisma(opaco, contornoPodio(1.0), y0, ye, { paredes: K.granito, topo: K.pisoEscuro });
+  prisma(opaco, contornoPodio(1.0, M), y0, ye, { paredes: K.granito, topo: K.pisoEscuro });
   // saguão de vidro recuado atrás da colunata
-  prisma(vidro, contornoPodio(-1.8), ye, ys, { paredes: V.saguao });
+  prisma(vidro, contornoPodio(-1.8, M), ye, ys, { paredes: V.saguao });
   // colunata de travertino a cada 6 m
-  for (const p of aoLongo(contornoPodio(-0.7), PD.passoPilares)) {
+  for (const p of aoLongo(contornoPodio(-0.7, M), PD.passoPilares)) {
     caixa(opaco, p.x, p.z, PD.pilar / 2, PD.pilar / 2, ye, ys, K.travertino, { ux: p.ux, uz: p.uz, topo: false });
     if (nivel >= 1) {
       // base e capitel de bronze escurecido
@@ -877,40 +962,42 @@ function podio(vidro, opaco, nivel) {
     }
   }
   // ático de travertino com o forro aceso por baixo (entre a colunata e o vidro)
-  prisma(opaco, contornoPodio(0), ys, yt - 0.4, { paredes: K.travertino, base: K.forroMarquise });
+  prisma(opaco, contornoPodio(0, M), ys, yt - 0.4, { paredes: K.travertino, base: K.forroMarquise });
   // pingadeira de bronze e o piso do terraço do pódio
-  prisma(opaco, contornoPodio(0.25), yt - 0.4, yt, { paredes: K.bronze, topo: K.piso });
+  prisma(opaco, contornoPodio(0.25, M), yt - 0.4, yt, { paredes: K.bronze, topo: K.piso });
   // parapeito de vidro do terraço do pódio
-  const par = orientar(contornoPodio(-0.4));
+  const par = orientar(contornoPodio(-0.4, M));
   for (let i = 0; i < par.length / 2; i++) {
     const j = (i + 1) % (par.length / 2);
     const ax = par[2 * i], az = par[2 * i + 1], bx = par[2 * j], bz = par[2 * j + 1];
     const l = Math.hypot(bx - ax, bz - az);
     caixa(vidro, (ax + bx) / 2, (az + bz) / 2, l / 2, 0.03, yt, yt + 1.1, V.parapeito, { ux: (bx - ax) / l, uz: (bz - az) / l, topo: false });
   }
-  // marquise de 12 m em balanço sobre a entrada (face lisa), com borda de bronze e forro aceso
-  const mz1 = PODIO_Z0;
-  const mz0 = PODIO_Z0 - PD.marquise;
-  const mx = PD.marquiseLargura / 2;
-  bloco(opaco, -mx, ys - PD.marquiseEspessura, mz0, mx, ys, mz1, K.bronze, { base: false });
-  bloco(opaco, -mx + 0.3, ys - PD.marquiseEspessura - 0.02, mz0 + 0.3, mx - 0.3, ys - PD.marquiseEspessura + 0.01, mz1, K.forroMarquise, { topo: false, base: true, lados: false });
-  // degraus de granito da entrada, do chão ao piso do embasamento
-  for (let d = 0; d < 3; d++) bloco(opaco, -mx + 2 + d, y0, mz1 - 1 - (3 - d) * 0.8, mx - 2 - d, ((d + 1) * ye) / 3, mz1 - 1, K.granito);
-  if (nivel >= 1) {
-    // três portas giratórias de vidro com a coroa de bronze, no eixo da marquise
-    const zp = PODIO_Z0 + 1.2;
-    for (const x of [-6, 0, 6]) {
-      cilindro(vidro, x, zp, ye, ye + 3.2, 1.6, 1.6, 12, V.saguao, { topo: false });
-      cilindro(opaco, x, zp, ye + 3.2, ye + 3.6, 1.75, 1.75, 12, K.bronze, { topo: true, base: true });
-      cilindro(opaco, x, zp, ye, ye + 3.2, 0.09, 0.09, 4, K.bronze, { topo: false });
+  if (PD.marquise > 0) {
+    // marquise de 12 m em balanço sobre a entrada (face lisa), com borda de bronze e forro aceso
+    const mz1 = PODIO_Z0;
+    const mz0 = PODIO_Z0 - PD.marquise;
+    const mx = PD.marquiseLargura / 2;
+    bloco(opaco, -mx, ys - PD.marquiseEspessura, mz0, mx, ys, mz1, K.bronze, { base: false });
+    bloco(opaco, -mx + 0.3, ys - PD.marquiseEspessura - 0.02, mz0 + 0.3, mx - 0.3, ys - PD.marquiseEspessura + 0.01, mz1, K.forroMarquise, { topo: false, base: true, lados: false });
+    // degraus de granito da entrada, do chão ao piso do embasamento
+    for (let d = 0; d < 3; d++) bloco(opaco, -mx + 2 + d, y0, mz1 - 1 - (3 - d) * 0.8, mx - 2 - d, ((d + 1) * ye) / 3, mz1 - 1, K.granito);
+    if (nivel >= 1) {
+      // três portas giratórias de vidro com a coroa de bronze, no eixo da marquise
+      const zp = PODIO_Z0 + 1.2;
+      for (const x of [-6, 0, 6]) {
+        cilindro(vidro, x, zp, ye, ye + 3.2, 1.6, 1.6, 12, V.saguao, { topo: false });
+        cilindro(opaco, x, zp, ye + 3.2, ye + 3.6, 1.75, 1.75, 12, K.bronze, { topo: true, base: true });
+        cilindro(opaco, x, zp, ye, ye + 3.2, 0.09, 0.09, 4, K.bronze, { topo: false });
+      }
+      // o monograma H da Holding, em champanhe, no ático de travertino sobre a marquise
+      const zh = PODIO_Z0 - 0.14;
+      bloco(opaco, -1.45, ys + 1.2, zh, -0.85, ys + 4.4, PODIO_Z0, K.champanhe, { base: true });
+      bloco(opaco, 0.85, ys + 1.2, zh, 1.45, ys + 4.4, PODIO_Z0, K.champanhe, { base: true });
+      bloco(opaco, -0.85, ys + 2.55, zh, 0.85, ys + 3.05, PODIO_Z0, K.champanhe, { base: true });
     }
-    // o monograma H da Holding, em champanhe, no ático de travertino sobre a marquise
-    const zh = PODIO_Z0 - 0.14;
-    bloco(opaco, -1.45, ys + 1.2, zh, -0.85, ys + 4.4, PODIO_Z0, K.champanhe, { base: true });
-    bloco(opaco, 0.85, ys + 1.2, zh, 1.45, ys + 4.4, PODIO_Z0, K.champanhe, { base: true });
-    bloco(opaco, -0.85, ys + 2.55, zh, 0.85, ys + 3.05, PODIO_Z0, K.champanhe, { base: true });
   }
-  // piscina de borda infinita virada para a água, no terraço da frente
+  // piscina de borda infinita virada para fora, no terraço da frente
   bloco(opaco, -15, yt - 0.3, ZF + 3, 15, yt + 0.02, PODIO_Z1 - 1.5, K.piscina, { lados: K.travertino });
   // jardineiras e árvores no terraço do pódio (lados e fundo)
   const nArv = [6, 12, 16, 22][nivel];
@@ -927,13 +1014,14 @@ function podio(vidro, opaco, nivel) {
 
 /**
  * Contorno do tabuleiro do heliponto (pares x, z): retângulo sobre a coroa e uma proa em meia elipse que avança o
- * balanço sobre a água, apontada para o mesmo lado das penas. d afasta (positivo) ou recua o contorno.
+ * balanço, apontada para o mesmo lado das penas. d afasta (positivo) ou recua o contorno.
  */
-export function contornoHeliponto(d = 0, seg = 16) {
+export function contornoHeliponto(d = 0, seg = 16, M = M_LAMINA) {
+  const { COROA } = M;
   const xa = COROA.x + 0.5 + d;
   const z0 = COROA.z0 + 0.6 - d;
   const zf = COROA.z1; // de onde nasce a proa
-  const ponta = COROA.z1 + TL.heliponto.balanco + d;
+  const ponta = COROA.z1 + M.spec.heliponto.balanco + d;
   const P = [-xa, z0, xa, z0];
   for (let s = 0; s <= seg; s++) {
     const t = (s / seg) * Math.PI;
@@ -1017,16 +1105,17 @@ function cunha(m, poly, yBase, zr, zPonta, h, k) {
   }
 }
 
-function heliponto(m, nivel) {
+function heliponto(m, nivel, M) {
+  const { HELI, COROA, MASTRO } = M;
   const seg = [8, 20, 24, 28][nivel];
   const { y0, y1 } = HELI;
-  const deck = contornoHeliponto(0, seg);
+  const deck = contornoHeliponto(0, seg, M);
   // tabuleiro: borda champanhe fina, topo em laca preta e a face de baixo em cunha (grossa na coroa, fina na proa)
   prisma(m, deck, y0, y1 - 0.35, { paredes: K.metalEscuro });
-  prisma(m, contornoHeliponto(0.05, seg), y1 - 0.35, y1, { paredes: K.coroa, topo: K.laca });
-  cunha(m, deck, y0, COROA.z1, COROA.z1 + TL.heliponto.balanco, 3.2, K.forroHeli);
+  prisma(m, contornoHeliponto(0.05, seg, M), y1 - 0.35, y1, { paredes: K.coroa, topo: K.laca });
+  cunha(m, deck, y0, COROA.z1, COROA.z1 + M.spec.heliponto.balanco, 3.2, K.forroHeli);
   // rede de proteção inclinada para fora, dos dois lados
-  const Pd = orientar(contornoHeliponto(0.05, seg));
+  const Pd = orientar(contornoHeliponto(0.05, seg, M));
   const n = Pd.length / 2;
   for (let i = 0; i < n; i++) {
     const ax = Pd[2 * i], az = Pd[2 * i + 1];
@@ -1040,8 +1129,8 @@ function heliponto(m, nivel) {
       m.quad(fora(ax, az, 0, y1 - 0.3 + dy), fora(bx, bz, 0, y1 - 0.3 + dy), fora(bx, bz, 1.6, y1 - 0.95 + dy), fora(ax, az, 1.6, y1 - 0.95 + dy), [0, sy, 0], [0, 0], [1, 0], [1, 1], [0, 1], K.metalEscuro);
     }
   }
-  // aro de luz no perímetro, o círculo de toque e o H dourado (lido de quem chega pela água)
-  faixaContorno(m, contornoHeliponto(0, seg), y1 + 0.02, 0.5, 0.35, K.aro);
+  // aro de luz no perímetro, o círculo de toque e o H dourado (lido de quem chega pelo ar)
+  faixaContorno(m, contornoHeliponto(0, seg, M), y1 + 0.02, 0.5, 0.35, K.aro);
   anelPlano(m, HELI.x, y1 + 0.02, HELI.z, HELI.r * 0.62, HELI.r * 0.62 + 0.45, [24, 40, 56, 64][nivel], K.ouro);
   const hh = 4.5;
   const hw = 2.6;
@@ -1054,18 +1143,21 @@ function heliponto(m, nivel) {
     const r = HELI.r * 0.62 - 0.6;
     bloco(m, HELI.x + Math.cos(a) * r - 0.2, y1, HELI.z + Math.sin(a) * r - 0.2, HELI.x + Math.cos(a) * r + 0.2, y1 + 0.2, HELI.z + Math.sin(a) * r + 0.2, K.aro);
   }
-  // mastro de 350 m com a luz de obstáculo
-  cilindro(m, MASTRO.x, MASTRO.z, COROA.yVidro, MASTRO.topo - 1, MASTRO.r, MASTRO.r * 0.45, nivel >= 2 ? 10 : 6, K.champanhe, { topo: true });
-  cilindro(m, MASTRO.x, MASTRO.z, MASTRO.topo - 1, MASTRO.topo, 0.5, 0.35, 6, K.obstaculo, { topo: true });
+  // mastro com a luz de obstáculo
+  if (MASTRO) {
+    cilindro(m, MASTRO.x, MASTRO.z, COROA.yVidro, MASTRO.topo - 1, MASTRO.r, MASTRO.r * 0.45, nivel >= 2 ? 10 : 6, K.champanhe, { topo: true });
+    cilindro(m, MASTRO.x, MASTRO.z, MASTRO.topo - 1, MASTRO.topo, 0.5, 0.35, 6, K.obstaculo, { topo: true });
+  }
 }
 
 /**
- * Esplanada da Torre: piso de granito em volta do pódio (24 m), espelho d'água na frente das penas (a Torre refletida,
- * Marina Bay), gramados com palmeiras-imperiais nos lados e a pedra portuguesa em ondas na chegada (Aterro do
- * Flamengo). Laje rasa que assenta no relevo.
+ * Esplanada da Torre sozinha (planos B e C): piso de granito em volta do pódio (24 m), espelho d'água na frente das
+ * penas (a Torre refletida, Marina Bay), gramados com palmeiras-imperiais nos lados e a pedra portuguesa em ondas na
+ * chegada (Aterro do Flamengo). Laje rasa que assenta no relevo.
  */
-export function esplanada(opaco, nivel = 1) {
-  const ext = contornoPodio(24);
+export function esplanada(opaco, nivel = 1, M = M_LAMINA) {
+  const { PD, PODIO_X, PODIO_Z0, PODIO_Z1 } = M;
+  const ext = contornoPodio(24, M);
   prisma(opaco, ext, -1.2, 0.08, { paredes: K.granito, topo: K.piso });
   // chegada em pedra portuguesa (face lisa)
   bloco(opaco, -34, 0.08, PODIO_Z0 - 22, 34, 0.1, PODIO_Z0 - 1.5, K.portuguesa, { lados: false });
@@ -1073,7 +1165,7 @@ export function esplanada(opaco, nivel = 1) {
   bloco(opaco, -32, 0.08, PODIO_Z1 + 3, 32, 0.45, PODIO_Z1 + 21, K.granito, { topo: false });
   bloco(opaco, -31.4, 0.08, PODIO_Z1 + 3.6, 31.4, 0.3, PODIO_Z1 + 20.4, K.espelho, { lados: false });
   // chegada: balizadores de granito na borda da marquise, postes finos de bronze e floreiras com um oiti de cada lado
-  if (nivel >= 1) {
+  if (nivel >= 1 && PD.marquise > 0) {
     const mx = PD.marquiseLargura / 2;
     const mz0 = PODIO_Z0 - PD.marquise;
     const zb = mz0 - 1.2;
@@ -1108,28 +1200,31 @@ export function esplanada(opaco, nivel = 1) {
 }
 
 /**
- * LOD1 da Torre (vista da cidade): os mesmos volumes, as aletas no shader (faixas de bronze nas faces laterais) e o
- * que faz a silhueta (penas, coroa em gaiola, heliponto e mastro). Mesma caixa limite do LOD0.
+ * LOD1 de uma torre (vista da cidade): os mesmos volumes, as aletas no shader (faixas de bronze nas faces laterais) e
+ * o que faz a silhueta (penas, coroa em gaiola, heliponto e mastro). Mesma caixa limite do LOD0.
  */
-export function malhasTorreLod1({ comEsplanada = false } = {}) {
+export function malhasTorreLod1({ comEsplanada = false, spec = TORRE_LAMINA, gemea = false } = {}) {
+  const M = medidasTorre(spec, { gemea });
+  const { COROA, TOPO, PODIO, VENTO1, VENTO2, LAMINAS_Z, PD, PODIO_Z0, PODIO_Z1, HELI, MASTRO } = M;
   const vidro = new Malha('vidro');
   const opaco = new Malha('opaco');
   const k12 = (aletas) => vid(VIDRO.torreLod1, 0.11, aletas);
   // faces laterais (as de 50 m, ao longo de z) levam as aletas no shader; frentes e face lisa, os montantes
   const lateral = (ax, az, bx, bz) => Math.abs(bz - az) > Math.abs(bx - ax);
-  for (const t of trechosCorpo()) {
+  for (const t of trechosCorpo(M)) {
     const { poly, papel } = contornoTrecho({ x: t.x ?? X, z0: t.z0 ?? Z0, z1: t.z1, entalhe: t.entalhe ?? ENT, costura: t.costura ?? true, fendas: t.fendas ?? [] });
     if (t.laje) {
       prisma(opaco, poly, t.y0, t.y1, { paredes: K.laje, uFn: uTorre, base: K.forro, topo: K.piso });
       continue;
     }
     if (t.vento) {
-      prisma(vidro, poly, t.y0, t.y1, { paredes: (i, ax, az, bx, bz) => vid(VIDRO.vento, 0.53, lateral(ax, az, bx, bz) ? 1 : 0), uFn: uTorre });
+      prisma(vidro, poly, t.y0, t.y1, { paredes: (i, ax, az, bx, bz) => vid(VIDRO.vento, 0.53, lateral(ax, az, bx, bz) ? 1 : 0), uFn: uTorre, vBase: t.base });
       continue;
     }
     prisma(vidro, poly, t.y0, t.y1, {
-      paredes: (i, ax, az, bx, bz) => (papel[i] !== 'face' ? V.costura : k12(lateral(ax, az, bx, bz) ? 1 : 0)),
+      paredes: (i, ax, az, bx, bz) => (papel[i] === 'costura' ? V.costura : papel[i] !== 'face' ? V.quina : k12(lateral(ax, az, bx, bz) ? 1 : 0)),
       uFn: uTorre,
+      vBase: t.base,
     });
     tampa(opaco, poly, t.y1, K.piso, true);
   }
@@ -1155,22 +1250,23 @@ export function malhasTorreLod1({ comEsplanada = false } = {}) {
   // coroa: vidro-lanterna e a gaiola aberta de aletas a cada 3 m
   {
     const { poly, papel } = contornoTrecho({ x: COROA.x, z0: COROA.z0, z1: COROA.z1, entalhe: 0, costura: true, fendas: [] });
-    prisma(vidro, poly, COROA.y0, COROA.yVidro, { paredes: (i) => (papel[i] === 'costura' ? V.costura : V.lanterna), uFn: uTorre });
+    prisma(vidro, poly, COROA.y0, COROA.yVidro, { paredes: (i) => (papel[i] === 'costura' ? V.costura : V.lanterna), uFn: uTorre, vBase: COROA.y0 });
     tampa(opaco, poly, COROA.yVidro, K.cobertura, true);
-    bloco(opaco, -4.5, COROA.yVidro, COROA.z0 + 6, 4.5, COROA.y1, COROA.z1 - 5, K.metalEscuro);
+    bloco(opaco, -4.5, COROA.yVidro, COROA.z0 + 6, 4.5, HELI ? COROA.y1 : COROA.yVidro + (COROA.y1 - COROA.yVidro) * 0.35, COROA.z1 - 5, K.metalEscuro);
     for (const x of linhas(-COROA.x, COROA.x, -X, PASSO)) bloco(opaco, x - AL.meia, COROA.y0, COROA.z1, x + AL.meia, COROA.y1, COROA.z1 + AL.fundo, K.coroa);
     for (const x of linhas(-COROA.x, COROA.x, -X, PASSO * 2)) bloco(opaco, x - 0.3, COROA.yVidro, Z0 - MT.fundo, x + 0.3, COROA.y1, Z0, K.coroa);
     anelRet(opaco, -(X + AL.fundo), COROA.z0 - MT.fundo, X + AL.fundo, COROA.z1 + AL.fundo, COROA.y1 - 0.5, COROA.y1, 0.45, K.coroa);
+    if (!HELI) luzesObstaculo(opaco, COROA);
   }
   // costura em relevo (as aletas densas viram 3 lâminas)
   for (const x of [-2, 0, 2]) bloco(opaco, x - 0.3, PODIO, Z0 - 0.35, x + 0.3, COROA.y1 - 0.5, Z0 + COST.fundo, K.champanhe);
   // pódio
-  prisma(opaco, contornoPodio(1.0), -3, PD.embasamento, { paredes: K.granito, topo: K.pisoEscuro });
-  prisma(vidro, contornoPodio(-1.8), PD.embasamento, PD.marquiseCota, { paredes: V.saguao });
-  for (const p of aoLongo(contornoPodio(-0.7), PD.passoPilares)) caixa(opaco, p.x, p.z, PD.pilar / 2, PD.pilar / 2, PD.embasamento, PD.marquiseCota, K.travertino, { ux: p.ux, uz: p.uz, topo: false });
-  prisma(opaco, contornoPodio(0), PD.marquiseCota, PD.altura - 0.4, { paredes: K.travertino, base: K.forroMarquise });
-  prisma(opaco, contornoPodio(0.25), PD.altura - 0.4, PD.altura, { paredes: K.bronze, topo: K.piso });
-  bloco(opaco, -PD.marquiseLargura / 2, PD.marquiseCota - PD.marquiseEspessura, PODIO_Z0 - PD.marquise, PD.marquiseLargura / 2, PD.marquiseCota, PODIO_Z0, K.bronze, { base: true });
+  prisma(opaco, contornoPodio(1.0, M), -3, PD.embasamento, { paredes: K.granito, topo: K.pisoEscuro });
+  prisma(vidro, contornoPodio(-1.8, M), PD.embasamento, PD.marquiseCota, { paredes: V.saguao });
+  for (const p of aoLongo(contornoPodio(-0.7, M), PD.passoPilares)) caixa(opaco, p.x, p.z, PD.pilar / 2, PD.pilar / 2, PD.embasamento, PD.marquiseCota, K.travertino, { ux: p.ux, uz: p.uz, topo: false });
+  prisma(opaco, contornoPodio(0, M), PD.marquiseCota, PD.altura - 0.4, { paredes: K.travertino, base: K.forroMarquise });
+  prisma(opaco, contornoPodio(0.25, M), PD.altura - 0.4, PD.altura, { paredes: K.bronze, topo: K.piso });
+  if (PD.marquise > 0) bloco(opaco, -PD.marquiseLargura / 2, PD.marquiseCota - PD.marquiseEspessura, PODIO_Z0 - PD.marquise, PD.marquiseLargura / 2, PD.marquiseCota, PODIO_Z0, K.bronze, { base: true });
   bloco(opaco, -15, PD.altura - 0.3, ZF + 3, 15, PD.altura + 0.02, PODIO_Z1 - 1.5, K.piscina, { lados: K.travertino });
   // terraços: só a faixa verde baixa atrás do parapeito. De longe, copas soltas no alto de cada lâmina liam como
   // enfeite de bolo; o jardim aparece inteiro de perto, no LOD0
@@ -1190,19 +1286,24 @@ export function malhasTorreLod1({ comEsplanada = false } = {}) {
   // parapeitos de vidro dos terraços (a linha fina que fecha cada lâmina contra o céu)
   for (const t of [{ y: TOPO[2], z0: Z2, z1: ZF }, { y: TOPO[1], z0: Z1, z1: Z2 }, { y: TOPO[0], z0: COROA.z1, z1: Z1 }]) {
     const xp = X - ENT - 0.3;
-    bloco(vidro, -xp, t.y, t.z1 - 0.35, xp, t.y + TL.parapeito, t.z1 - 0.3, V.parapeito, { topo: false });
-    for (const sx of [-1, 1]) bloco(vidro, sx * (X - 0.35) - 0.03, t.y, t.z0 + 0.3, sx * (X - 0.35) + 0.03, t.y + TL.parapeito, t.z1 - 1.8, V.parapeito, { topo: false });
+    bloco(vidro, -xp, t.y, t.z1 - 0.35, xp, t.y + M.spec.parapeito, t.z1 - 0.3, V.parapeito, { topo: false });
+    for (const sx of [-1, 1]) bloco(vidro, sx * (X - 0.35) - 0.03, t.y, t.z0 + 0.3, sx * (X - 0.35) + 0.03, t.y + M.spec.parapeito, t.z1 - 1.8, V.parapeito, { topo: false });
   }
-  // heliponto em proa (a curva é silhueta contra o céu: segmentos como no LOD0 da Média) e mastro
-  const segH = 20;
-  prisma(opaco, contornoHeliponto(0, segH), HELI.y0, HELI.y1 - 0.35, { paredes: K.metalEscuro });
-  prisma(opaco, contornoHeliponto(0.05, segH), HELI.y1 - 0.35, HELI.y1, { paredes: K.coroa, topo: K.laca });
-  cunha(opaco, contornoHeliponto(0, segH), HELI.y0, COROA.z1, COROA.z1 + TL.heliponto.balanco, 3.2, K.forroHeli);
-  faixaContorno(opaco, contornoHeliponto(0, segH), HELI.y1 + 0.02, 0.5, 0.4, K.aro);
-  anelPlano(opaco, HELI.x, HELI.y1 + 0.02, HELI.z, HELI.r * 0.62, HELI.r * 0.62 + 0.5, 24, K.ouro);
-  cilindro(opaco, MASTRO.x, MASTRO.z, COROA.yVidro, MASTRO.topo - 1, MASTRO.r, MASTRO.r * 0.45, 6, K.champanhe);
-  cilindro(opaco, MASTRO.x, MASTRO.z, MASTRO.topo - 1, MASTRO.topo, 0.5, 0.35, 6, K.obstaculo);
-  if (comEsplanada) esplanada(opaco, 0);
+  if (HELI) {
+    // heliponto em proa (a curva é silhueta contra o céu: segmentos como no LOD0 da Média) e mastro
+    const segH = 20;
+    prisma(opaco, contornoHeliponto(0, segH, M), HELI.y0, HELI.y1 - 0.35, { paredes: K.metalEscuro });
+    prisma(opaco, contornoHeliponto(0.05, segH, M), HELI.y1 - 0.35, HELI.y1, { paredes: K.coroa, topo: K.laca });
+    cunha(opaco, contornoHeliponto(0, segH, M), HELI.y0, COROA.z1, COROA.z1 + M.spec.heliponto.balanco, 3.2, K.forroHeli);
+    faixaContorno(opaco, contornoHeliponto(0, segH, M), HELI.y1 + 0.02, 0.5, 0.4, K.aro);
+    anelPlano(opaco, HELI.x, HELI.y1 + 0.02, HELI.z, HELI.r * 0.62, HELI.r * 0.62 + 0.5, 24, K.ouro);
+  }
+  if (MASTRO) {
+    cilindro(opaco, MASTRO.x, MASTRO.z, COROA.yVidro, MASTRO.topo - 1, MASTRO.r, MASTRO.r * 0.45, 6, K.champanhe);
+    cilindro(opaco, MASTRO.x, MASTRO.z, MASTRO.topo - 1, MASTRO.topo, 0.5, 0.35, 6, K.obstaculo);
+  }
+  if (comEsplanada) esplanada(opaco, 0, M);
+  coroaRelativa(opaco, M);
   return { vidro, opaco };
 }
 
@@ -1211,7 +1312,9 @@ export function malhasTorreLod1({ comEsplanada = false } = {}) {
  * vidro (as aletas e os andares de vento recuados ficam fora do volume e não se sombreiam por engano), o heliponto e
  * o mastro. Uma chamada.
  */
-export function malhaSombraTorre() {
+export function malhaSombraTorre({ spec = TORRE_LAMINA, gemea = false } = {}) {
+  const M = medidasTorre(spec, { gemea });
+  const { TOPO, PODIO, COROA, HELI, MASTRO, PD } = M;
   const m = new Malha('opaco');
   const k = K.cobertura;
   const d = 2.5;
@@ -1219,22 +1322,155 @@ export function malhaSombraTorre() {
   prisma(m, rect(X - d, Z0 + d, ZF - d), PODIO, TOPO[2], { paredes: k, topo: k });
   prisma(m, rect(X - d, Z0 + d, Z2 - d), TOPO[2], TOPO[1], { paredes: k, topo: k });
   prisma(m, rect(X - d, Z0 + d, Z1 - d), TOPO[1], TOPO[0], { paredes: k, topo: k });
-  prisma(m, rect(COROA.x - d, COROA.z0 + d, COROA.z1 - d), TOPO[0], COROA.y1, { paredes: k, topo: k });
-  prisma(m, contornoHeliponto(-1.5, 6), HELI.y0 + 0.2, HELI.y1 - 0.2, { paredes: k, topo: k, base: k });
-  prisma(m, contornoPodio(-1.0), 0, PD.altura - 0.5, { paredes: k, topo: k });
-  cilindro(m, MASTRO.x, MASTRO.z, TOPO[0], MASTRO.topo - 2, MASTRO.r * 0.6, 0.2, 4, k);
+  prisma(m, rect(COROA.x - d, COROA.z0 + d, COROA.z1 - d), TOPO[0], HELI ? COROA.y1 : COROA.yVidro, { paredes: k, topo: k });
+  if (HELI) prisma(m, contornoHeliponto(-1.5, 6, M), HELI.y0 + 0.2, HELI.y1 - 0.2, { paredes: k, topo: k, base: k });
+  prisma(m, contornoPodio(-1.0, M), 0, PD.altura - 0.5, { paredes: k, topo: k });
+  if (MASTRO) cilindro(m, MASTRO.x, MASTRO.z, TOPO[0], MASTRO.topo - 2, MASTRO.r * 0.6, 0.2, 4, k);
   return m;
 }
 
-/** Pontos de interesse no espaço local (câmeras da prancha, pouso). */
-export const PONTOS_TORRE = Object.freeze({
-  centro: [0, (TL.heliponto.cota + PODIO) / 2, 0],
-  heliponto: [HELI.x, HELI.y1, HELI.z],
-  entrada: [0, PD.marquiseCota / 2, PODIO_Z0 - PD.marquise / 2],
-  coroa: [0, (COROA.y0 + COROA.y1) / 2, (COROA.z0 + COROA.z1) / 2],
-  topo: MASTRO.topo,
-  podio: { x: PODIO_X, z0: PODIO_Z0, z1: PODIO_Z1 },
-});
+/** Pontos de interesse no espaço local de uma torre (câmeras da prancha, pouso). */
+export function pontosTorre(M = M_LAMINA) {
+  const { COROA, HELI, PD, PODIO, PODIO_X, PODIO_Z0, PODIO_Z1 } = M;
+  return Object.freeze({
+    centro: [0, (M.spec.altura + PODIO) / 2, 0],
+    heliponto: HELI ? [HELI.x, HELI.y1, HELI.z] : null,
+    entrada: [0, PD.marquiseCota / 2, PODIO_Z0 - PD.marquise / 2],
+    coroa: [0, (COROA.y0 + COROA.y1) / 2, (COROA.z0 + COROA.z1) / 2],
+    topo: M.topo,
+    podio: { x: PODIO_X, z0: PODIO_Z0, z1: PODIO_Z1 },
+  });
+}
+
+/** Pontos da Torre Lâmina sozinha. */
+export const PONTOS_TORRE = pontosTorre(M_LAMINA);
+
+// ------------------------------------------------------------------------------------------------ o par (D64)
+
+const KP = {
+  bronze: K.bronze,
+  granito: K.granito,
+  forro: K.forro,
+  piso: K.piso,
+  aro: K.aro,
+  // fundo de pedra escura do poço e da escada d'água (a água clara lê por cima)
+  fundo: acab('#2f3a38', { rugo: 0.6, padrao: PADRAO.pedra }),
+  colar: acab(BRONZE, { rugo: 0.4, metal: 0.8, padrao: PADRAO.metal }),
+};
+
+/** Modo de cada peça de água do material 'cascata' (o shader desenha cada um). */
+export const CASCATA = Object.freeze({ lamina: 0, duto: 1, nevoa: 2, espuma: 3, escada: 4, vortice: 5 });
+
+/**
+ * Lâmina de água que cai de (x0..x1, y0, z0) até o poço em yFim, afastando-se da borda como uma parábola (sai com
+ * 1,2 m/s: 3,6 m em 45 m de queda). dz: +1 cai para o sul, -1 para o norte. uv = (x, metros caídos).
+ */
+export function laminaDeAgua(m, x0, x1, y0, yFim, z0, dz, linhas = 12) {
+  const H = y0 - yFim;
+  const k = [CASCATA.lamina, 0, 0, 0];
+  const n = [0, 0, dz];
+  const base = m.vertices;
+  for (let i = 0; i <= linhas; i++) {
+    const q = i / linhas;
+    const queda = H * q;
+    const t = Math.sqrt((2 * queda) / 9.8);
+    const z = z0 + dz * (1.2 * t + 0.02 * queda);
+    // a lâmina afina e abre um pouco nas bordas enquanto cai
+    const abre = 0.35 * q;
+    m.v(x0 - abre, y0 - queda, z, ...n, x0 - abre, queda, k);
+    m.v(x1 + abre, y0 - queda, z, ...n, x1 + abre, queda, k);
+  }
+  for (let i = 0; i < linhas; i++) {
+    const a = base + 2 * i;
+    m.tri(a, a + 1, a + 3);
+    m.tri(a, a + 3, a + 2);
+  }
+}
+
+/** Casca cilíndrica vertical de um efeito (duto de água, névoa, vórtice): uv = (volta em metros, altura). */
+export function cascaEfeito(m, cx, cz, y0, y1, r0, r1, seg, modo, linhas = 1, fase = 0) {
+  const k = [modo, fase, 0, 0];
+  const base = m.vertices;
+  for (let j = 0; j <= linhas; j++) {
+    const t = j / linhas;
+    const y = y0 + (y1 - y0) * t;
+    const r = r0 + (r1 - r0) * t;
+    for (let s = 0; s <= seg; s++) {
+      const a = (s / seg) * Math.PI * 2;
+      m.v(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r, Math.cos(a), 0, Math.sin(a), a * Math.max(r0, r1), y - y0, k);
+    }
+  }
+  const L = seg + 1;
+  for (let j = 0; j < linhas; j++) for (let s = 0; s < seg; s++) {
+    const a = base + j * L + s;
+    m.tri(a, a + 1, a + L + 1);
+    m.tri(a, a + L + 1, a + L);
+  }
+}
+
+/**
+ * O par de torres (D64) no espaço do par: as duas torres (LOD0 do nível, ou LOD1), a ponte de 45 m na fenda com o
+ * forro aceso, os dutos de vidro colados às faces lisas (colares de bronze a cada 4,2 m no LOD0) e os efeitos de água
+ * (as duas lâminas da cachoeira, a água subindo nos dutos, a névoa na queda e a espuma no poço).
+ * @param {{ nivel?: number, lod?: 0 | 1 }} op
+ * @returns {{ vidro: Malha, opaco: Malha, efeitos: Malha }}
+ */
+export function malhasPar({ nivel = 1, lod = 0 } = {}) {
+  const vidro = new Malha('vidro');
+  const opaco = new Malha('opaco');
+  const efeitos = new Malha('cascata');
+  for (const t of torresGemeas({ x: 0, z: 0, rot: 0 })) {
+    const m = lod === 0 ? malhasTorre({ nivel, spec: t.spec, gemea: true }) : malhasTorreLod1({ spec: t.spec, gemea: true });
+    m.vidro.transformar(t.x, 0, t.z, t.rot);
+    m.opaco.transformar(t.x, 0, t.z, t.rot);
+    vidro.juntar(m.vidro);
+    opaco.juntar(m.opaco);
+  }
+  const G = GEMEAS;
+  const xf = G.fenda / 2 - MT.fundo - 0.05; // a face dos montantes, dentro da fenda
+  const { cota, z0: pz0, z1: pz1, espessura } = G.ponte;
+  const yb = cota - espessura;
+  // ponte: bronze por fora, forro aceso por baixo, o canal de água por cima com o guarda-corpo de vidro
+  bloco(opaco, -xf, yb, pz0, xf, cota, pz1, KP.bronze, { base: false });
+  bloco(opaco, -xf + 0.2, yb - 0.02, pz0 + 0.2, xf - 0.2, yb + 0.01, pz1 - 0.2, KP.forro, { topo: false, base: true, lados: false });
+  for (const s of [-1, 1]) bloco(vidro, -xf, cota, s > 0 ? pz1 - 0.1 : pz0, xf, cota + 1.2, s > 0 ? pz1 : pz0 + 0.1, V.parapeito, { topo: false });
+  // a lâmina da cachoeira cai das duas bordas da ponte (vista do portão e do lago)
+  const xl = xf - 0.6;
+  const yPoco = G.poco.nivel; // a água do poço
+  laminaDeAgua(efeitos, -xl, xl, cota - 0.3, yPoco, pz1 + 0.15, 1, lod === 0 ? 14 : 6);
+  laminaDeAgua(efeitos, -xl, xl, cota - 0.3, yPoco, pz0 - 0.15, -1, lod === 0 ? 14 : 6);
+  // névoa onde a água bate e a espuma no poço
+  const zq = pz1 + 3.6;
+  for (const s of [-1, 1]) {
+    cascaEfeito(efeitos, 0, s * zq, yPoco, yPoco + 14, 5.5, 8.5, lod === 0 ? 16 : 8, CASCATA.nevoa, 3, s > 0 ? 0.3 : 0.7);
+    const zc = s * zq;
+    const r = 7;
+    efeitos.quad([-xf + 0.3, yPoco + 0.05, zc - r], [xf - 0.3, yPoco + 0.05, zc - r], [xf - 0.3, yPoco + 0.05, zc + r], [-xf + 0.3, yPoco + 0.05, zc + r], [0, 1, 0], [-xf, -r], [xf, -r], [xf, r], [-xf, r], [CASCATA.espuma, s > 0 ? 0.2 : 0.6, 0, 0]);
+  }
+  // dutos de vidro nas duas faces: do poço à ponte, com a água subindo por dentro
+  const rD = G.dutos.raio;
+  for (const lado of [-1, 1]) {
+    const xd = lado * (G.fenda / 2 - G.dutos.afasta);
+    G.dutos.zs.forEach((zd, i) => {
+      cascaEfeito(efeitos, xd, zd, yPoco, yb, rD, rD, lod === 0 ? 10 : 6, CASCATA.duto, 1, i * 0.23 + (lado > 0 ? 0.5 : 0));
+      if (lod === 0) {
+        for (let y = yPoco + 3.2; y < yb - 1; y += 3 * PE) cilindro(opaco, xd, zd, y, y + 0.35, rD + 0.12, rD + 0.12, 10, KP.colar, { topo: true, base: true });
+        // braçadeira que prende o duto à face
+        for (let y = yPoco + 6; y < yb - 1; y += 3 * PE) bloco(opaco, Math.min(xd, lado * xf), y, zd - 0.15, Math.max(xd, lado * xf), y + 0.3, zd + 0.15, KP.colar);
+      }
+    });
+  }
+  return { vidro, opaco, efeitos };
+}
+
+/** Volume de sombra do par: as duas torres e a ponte. */
+export function malhaSombraPar() {
+  const m = new Malha('opaco');
+  for (const t of torresGemeas({ x: 0, z: 0, rot: 0 })) m.juntar(malhaSombraTorre({ spec: t.spec, gemea: true }).transformar(t.x, 0, t.z, t.rot));
+  const { cota, z0, z1, espessura } = GEMEAS.ponte;
+  bloco(m, -GEMEAS.fenda / 2, cota - espessura, z0, GEMEAS.fenda / 2, cota, z1, K.cobertura);
+  return m;
+}
 
 // ================================================================================================ three
 
@@ -1341,7 +1577,6 @@ float gAcesasCasa( float h ) {
   return f + 0.12 * smoothstep( 4.5, 6.0, h ) * ( 1.0 - smoothstep( 6.5, 7.5, h ) );
 }
 // base do andar da Torre (16, 169 e 238) e pé-direito
-float gBaseTorre( float y ) { return y < 163.0 ? 16.0 : ( y < 232.0 ? 169.0 : 238.0 ); }
 // LOD1: aletas (faces laterais, vC.z = 1) e montantes a cada 1,5 m pintados por cima do vidro. De lado a aleta cobre
 // o vidro entre ela e a vizinha, então a largura aparente cresce com a tangente do ângulo de vista (como no LOD0)
 void gAletasLod1( float u ) {
@@ -1410,6 +1645,45 @@ void gVidroPainel( float col, float fl, float fv, float sem, float esp, float ca
   // escuro ainda lê como vidro, não como um recorte preto no céu
   fTint *= mix( vec3( 1.0 ), vec3( 0.5, 0.58, 0.75 ), uNoite );
 }
+// Sede em anel (Apple Park): vidro curvo do chão ao teto, juntas finas a cada 3,2 m, o forro claro de cada andar visto
+// através dele e, à noite, os escritórios acesos. No LOD1 as marquises brancas de cada laje saem daqui: a faixa cobre
+// o vidro de cima para baixo quanto mais do alto se olha (a marquise tem 3,2 m de balanço) e de baixo para cima quando
+// se olha de baixo
+void gVidroSede( float u, float y, float sem ) {
+  float pe = 7.5;
+  float yy = y / pe;
+  float fl = floor( yy );
+  float fv = fract( yy );
+  float col = floor( u / 3.2 );
+  gVidroPainel( col, fl, fv, sem, 0.0, 0.0 );
+  // à noite o forro de cada andar aceso pelo vidro, quase contínuo (a Apple Park à noite): trechos de 4 painéis
+  // apagados aqui e ali, nunca o xadrez de janelas de escritório
+  float grupo = floor( col / 4.0 );
+  float acesa = step( gH1( vec2( grupo * 1.3, fl * 2.1 ) + sem * 5.0 ), max( 0.5, gAcesas( uHora ) ) );
+  float forca = 0.55 + 0.45 * gH1( vec2( grupo * 0.7, fl * 1.3 ) + 4.1 );
+  fEmi = vec3( 1.0, 0.84, 0.64 ) * uNoite * G_LUZ_JANELA * 0.38 * forca * ( 0.08 + 0.92 * smoothstep( 0.5, 0.97, fv ) ) * mix( 0.08, 1.0, acesa );
+  // vidro extraclaro: menos prata, mais do interior; o forro branco perto do teto de cada andar
+  fTint = vec3( 0.34, 0.37, 0.38 );
+  fAlb = mix( vec3( 0.03, 0.032, 0.03 ), vec3( 0.26, 0.25, 0.23 ), smoothstep( 0.8, 0.97, fv ) );
+  float junta = gLinha( u / 3.2, 0.012 );
+  fTint = mix( fTint, vec3( 0.5, 0.5, 0.48 ), junta );
+  fAlb = mix( fAlb, vec3( 0.0 ), junta );
+  if ( uLinhas > 0.5 && y < 28.0 ) {
+    vec3 vd = normalize( cameraPosition - vGPosMundo );
+    float tg = clamp( vd.y / max( 0.12, length( vd.xz ) ), -4.0, 4.0 ) * 3.2;
+    float dy = y - ( fl + step( 0.5, fv ) ) * pe; // distância à laje mais perto (negativa abaixo dela)
+    float abaixo = max( tg, 0.0 ) + 0.25;
+    float acima = max( -tg, 0.0 ) + 0.25;
+    float fw = max( fwidth( y ), 1e-3 );
+    float m = ( 1.0 - smoothstep( acima - fw, acima + fw, dy ) ) * ( 1.0 - smoothstep( abaixo - fw, abaixo + fw, -dy ) );
+    m *= step( 3.0, y );
+    fTint = mix( fTint, vec3( 0.03 ), m );
+    fMet = mix( fMet, 0.0, m );
+    fRug = mix( fRug, 0.6, m );
+    fAlb = mix( fAlb, vec3( 0.74, 0.73, 0.70 ), m );
+    fEmi = mix( fEmi, vec3( 1.0, 0.9, 0.75 ) * uNoite * 0.05, m );
+  }
+}
 void gFachada() {
   float tipo = floor( vC.x + 0.5 );
   float sem = vC.y;
@@ -1417,11 +1691,10 @@ void gFachada() {
   float y = vUvM.y;
   fEmi = vec3( 0.0 );
   fInc = vec2( 0.0 );
-  if ( tipo < 0.5 || tipo > 11.5 ) {
-    // cortina da Torre (e o LOD1, com as aletas pintadas nas faces laterais)
-    float base = gBaseTorre( y );
-    float yy = ( y - base ) / 4.2;
-    float fl = floor( yy ) + base;
+  if ( tipo < 0.5 || ( tipo > 11.5 && tipo < 12.5 ) ) {
+    // cortina das torres (e o LOD1, com as aletas pintadas nas faces laterais); o v conta da base do trecho
+    float yy = y / 4.2;
+    float fl = floor( yy );
     float fv = fract( yy );
     float col = floor( u / 1.5 );
     float esp = step( 0.8, fv );
@@ -1429,7 +1702,7 @@ void gFachada() {
     if ( tipo > 11.5 ) gAletasLod1( u );
   } else if ( tipo < 1.5 ) {
     // costura: vidro mais escuro, painéis de 0,75
-    float yy = ( y - gBaseTorre( y ) ) / 4.2;
+    float yy = y / 4.2;
     float col = floor( u / 0.75 );
     float fv = fract( yy );
     gVidroPainel( col, floor( yy ), fv, sem, step( 0.82, fv ), 0.0 );
@@ -1437,12 +1710,12 @@ void gFachada() {
     fMet = min( 1.0, fMet + 0.12 );
     // à noite a costura é a espinha acesa da face lisa, do pódio à coroa (Lotte World Tower): uma linha vertical
     // contínua de luz quente atrás das aletas densas, que puxa o olho para o alto
-    fEmi = vec3( 1.0, 0.78, 0.52 ) * uNoite * G_LUZ_JANELA * ( 0.75 + 0.25 * fv );
+    // (as quinas e as fendas entre lâminas, vC.z = 1, com um terço da luz: a espinha é uma só)
+    fEmi = vec3( 1.0, 0.78, 0.52 ) * uNoite * G_LUZ_JANELA * ( 0.75 + 0.25 * fv ) * mix( 1.0, 0.12, vC.z );
   } else if ( tipo < 2.5 ) {
     // andar de vento: vidro claro, forro claro iluminado, nunca mais escuro que o corpo; de longe, só um pouco mais
     // claro (a leitura é vertical: as aletas e os montantes passam direto)
-    float base = y < 200.0 ? 163.0 : 232.0;
-    float fv = clamp( ( y - base ) / 4.8, 0.0, 1.0 );
+    float fv = clamp( y / 4.8, 0.0, 1.0 );
     fTint = vec3( 0.30 );
     fMet = 0.08;
     fRug = 0.05;
@@ -1467,14 +1740,14 @@ void gFachada() {
     fEmi *= 1.0 - m;
   } else if ( tipo < 4.5 ) {
     // lanterna da coroa: vidro champanhe translúcido, gradiente âmbar para branco quente à noite
-    float t = clamp( ( y - 301.0 ) / 17.0, 0.0, 1.0 );
+    float t = clamp( y / 17.0, 0.0, 1.0 ) * vC.w;
     fTint = vec3( 0.5, 0.46, 0.39 );
     fMet = 0.34;
     fRug = 0.08;
     fAlb = vec3( 0.15, 0.13, 0.1 );
     fEmi = mix( vec3( 1.0, 0.52, 0.18 ), vec3( 1.0, 0.86, 0.62 ), t ) * mix( 0.012, G_LUZ_LANTERNA, uNoite ) * ( 0.65 + 0.35 * t );
-    // fora da coroa (a esfera da Biblioteca) o mesmo vidro brilha baixo: um globo morno, não um sol
-    fEmi *= mix( 0.22, 1.0, step( 290.0, y ) );
+    // fora da coroa (vC.w = 0: a esfera da Biblioteca) o mesmo vidro brilha baixo: um globo morno, não um sol
+    fEmi *= mix( 0.22, 1.0, vC.w );
     float m = gLinha( u / 0.75, 0.12 );
     fTint = mix( fTint, vec3( 0.26, 0.17, 0.09 ), m );
     fMet = mix( fMet, 1.0, m );
@@ -1486,6 +1759,8 @@ void gFachada() {
     fMet = 0.2;
     fRug = 0.03;
     fAlb = vec3( 0.05, 0.06, 0.06 );
+  } else if ( tipo > 12.5 ) {
+    gVidroSede( u, y, sem );
   } else {
     // prédios das partes (LOD1): pé-direito e grade por tipo
     float pe = 4.2; float larg = 1.5;
@@ -1519,6 +1794,13 @@ void gFachada() {
       fAlb = mix( fAlb, vec3( 0.40, 0.37, 0.33 ), parede * 0.8 * ( 1.0 - laje ) );
       // à noite as janelas da moradia seguem a agenda da casa (gVidroPainel); laje e parede cega apagam
       fEmi *= ( 1.0 - laje ) * ( 1.0 - parede );
+      // floreira corrida a cada quatro andares (o verde das varandas de Marina One): a fachada não lê como escritório
+      float flor = step( 2.5, mod( fl, 4.0 ) ) * smoothstep( 0.72, 0.8, fv ) * ( 1.0 - smoothstep( 0.97, 1.0, fv ) );
+      fTint = mix( fTint, vec3( 0.03 ), flor );
+      fMet = mix( fMet, 0.0, flor );
+      fRug = mix( fRug, 0.9, flor );
+      fAlb = mix( fAlb, vec3( 0.13, 0.17, 0.08 ) * ( 0.8 + 0.4 * gRuidoF( vec2( u * 0.7, fl ) ) ), flor );
+      fEmi *= 1.0 - flor;
     } else if ( tipo < 8.5 ) {
       // casca de vidro em malha de losangos (Jewel, Gardens by the Bay)
       float m = max( gLinha( ( u + y ) / 4.2, 0.06 ), gLinha( ( u - y ) / 4.2, 0.06 ) );
@@ -1585,9 +1867,10 @@ void gOpaco() {
   } else if ( oPad > 3.5 && oPad < 4.5 ) {
     oCor *= 1.0;
   } else if ( oPad > 4.5 && oPad < 5.5 ) {
-    // ondas da pedra portuguesa (Copacabana, Aterro do Flamengo): preto e branco em faixas onduladas
-    // de longe (a fase anda mais de meia onda por pixel) o desenho vira o cinza médio: sem ziguezague de serrilhado
-    float fase = ( p.y + 3.2 * sin( p.x / 4.6 ) ) * 0.62;
+    // ondas da pedra portuguesa (Copacabana, Aterro do Flamengo): preto e branco em faixas onduladas na escala real
+    // (faixas de 1,5 m que ondulam a cada 9 m; com faixas de 5 m e ondas de 29 m o calçadão lia, do alto, como um
+    // ziguezague de maquete). De longe (a fase anda mais de meia onda por pixel) o desenho vira o cinza médio
+    float fase = ( p.y + 1.4 * sin( p.x / 1.45 ) ) * 2.1;
     float o = sin( fase );
     float fw = fwidth( o ) + 1e-3;
     float b = mix( smoothstep( -fw, fw, o ), 0.5, smoothstep( 0.7, 1.8, fwidth( fase ) ) );
@@ -1609,7 +1892,7 @@ void gOpaco() {
   else if ( cls > 1.5 && cls < 2.5 ) oEmi = vec3( 1.0, 0.06, 0.03 ) * ( 0.4 + 2.5 * uNoite ) * step( 0.5, fract( uTempo * 0.66 ) );
   else if ( cls > 2.5 && cls < 3.5 ) oEmi = vec3( 1.0, 0.87, 0.68 ) * mix( 0.02, G_LUZ_FORRO, uNoite );
   else if ( cls > 3.5 && cls < 4.5 ) oEmi = vec3( 0.25, 0.62, 0.72 ) * uNoite * 0.2;
-  else if ( cls > 4.5 && cls < 5.5 ) oEmi = vec3( 1.0, 0.74, 0.45 ) * uNoite * 0.2 * smoothstep( 300.0, 330.0, vUvM.y );
+  else if ( cls > 4.5 && cls < 5.5 ) oEmi = vec3( 1.0, 0.74, 0.45 ) * uNoite * 0.2 * smoothstep( 0.0, 30.0, vUvM.y ); // v da coroa: 0 a 30 (coroaRelativa)
   else if ( cls > 5.5 && cls < 6.5 ) oEmi = vec3( 1.0, 0.76, 0.48 ) * uNoite * G_LUZ_JANELA * step( 0.45, gH1( floor( p / vec2( 1.5, 3.2 ) ) ) );
   else if ( cls > 6.5 && cls < 7.5 ) oEmi = vec3( 1.0, 0.88, 0.7 ) * mix( 0.01, 0.45, uNoite );
   // copa das Supertrees: pontos de luz na treliça, com a cor de cada trecho. Com 0,3 a copa inteira estourava em branco
@@ -1627,9 +1910,18 @@ function ligarComum(shader, extras) {
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvC = aC;\nvUvM = aUvM;');
 }
 
+
+/**
+ * Chave de programa dos materiais da Arcologia: fixa por material (nada de dia, noite, LOD ou fantasma na chave). O
+ * que muda entre as variantes são uniformes (uLinhas, uCorte, uNoite): um programa só por material, compilado na carga.
+ */
+export const CHAVES = Object.freeze({
+  vidro: 'arcologia-vidro-2', opaco: 'arcologia-opaco-2', claro: 'arcologia-claro-1', cascata: 'arcologia-cascata-1', jato: 'arcologia-jato-1',
+});
+
 /**
  * Material de vidro da Arcologia: MeshStandardMaterial com a fachada no shader (tipo por vértice) e os ganchos
- * comuns. uLinhas desenha montantes onde não há geometria (LOD1).
+ * comuns. uLinhas desenha montantes e marquises onde não há geometria (LOD1).
  */
 export function materialVidro(ganchos, { linhas = 0, corte = 1e6 } = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.4, envMapIntensity: 1.0 });
@@ -1647,7 +1939,7 @@ export function materialVidro(ganchos, { linhas = 0, corte = 1e6 } = {}) {
     fs = fs.replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.diffuseContribution = fAlb;');
     shader.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => 'arcologia-vidro-1';
+  mat.customProgramCacheKey = () => CHAVES.vidro;
   mat.name = 'arcologia:vidro';
   return ganchos.aplicar(mat, GANCHOS_COMUNS);
 }
@@ -1667,350 +1959,546 @@ export function materialOpaco(ganchos, { corte = 1e6 } = {}) {
     fs = fs.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += oEmi;');
     shader.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => 'arcologia-opaco-1';
+  mat.customProgramCacheKey = () => CHAVES.opaco;
   mat.name = 'arcologia:opaco';
   return ganchos.aplicar(mat, GANCHOS_COMUNS);
 }
 
+// vidro claro da cúpula (D65): uv = (u, s) na malha diagonal principal (as barras correm em u - s e u + s inteiros);
+// vC.x = tamanho da célula principal em metros ali (as barras têm largura constante em metros). O vidro deixa ver a
+// floresta de dentro: transparente de frente, espelho de lado (Fresnel), com os caixilhos finos (a malha secundária,
+// quatro por célula) e, no LOD1 (uLinhas), as barras da principal
+const FRAG_CLARO = /* glsl */ `
+vec3 cAlb; float cAlfa; float cRug; float cMet; vec3 cEmi;
+float fCosV = 1.0;
+uniform float uLinhas;
+void gClaro() {
+  vec2 p = vUvM;
+  float cel = max( vC.x, 0.5 );
+  float prim = max( gLinha( p.x - p.y, 1.2 / cel ), gLinha( p.x + p.y, 1.2 / cel ) ) * uLinhas;
+  float sec = max( gLinha( ( p.x - p.y ) * 4.0, 0.72 / cel ), gLinha( ( p.x + p.y ) * 4.0, 0.72 / cel ) ) * 0.85;
+  float l = max( prim, sec );
+  float fr = pow( 1.0 - fCosV, 5.0 );
+  cAlfa = mix( mix( 0.1, 0.92, fr ), 1.0, l );
+  cAlb = mix( vec3( 0.012, 0.016, 0.016 ), vec3( 0.7, 0.7, 0.68 ), l );
+  cRug = mix( 0.04, 0.4, l );
+  cMet = mix( 0.0, 0.7, l );
+  // à noite a floresta de dentro acesa em luz morna aparece pelo vidro; as barras apagam
+  cEmi = vec3( 1.0, 0.86, 0.62 ) * uNoite * 0.006 * ( 1.0 - l );
+  cAlb *= mix( 1.0, 0.25, uNoite * l );
+}
+`;
+
+/** Vidro claro da cúpula de vidro (transparente, com a malha diagonal). linhas: as barras principais no shader (LOD1). */
+export function materialClaro(ganchos, { linhas = 0 } = {}) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0, transparent: true, depthWrite: false, envMapIntensity: 1.0 });
+  const extras = { uLinhas: { value: linhas }, uCorte: { value: 1e6 } };
+  mat.userData.uniformes = extras;
+  mat.onBeforeCompile = (shader) => {
+    ligarComum(shader, extras);
+    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${GLSL_COMUM}\n${FRAG_CLARO}`);
+    fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\nfCosV = abs( dot( normalize( vNormal ), normalize( vViewPosition ) ) );\ngClaro();\ndiffuseColor = vec4( cAlb, cAlfa );');
+    fs = fs.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = cRug;');
+    fs = fs.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = cMet;');
+    fs = fs.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += cEmi;');
+    shader.fragmentShader = fs;
+  };
+  mat.customProgramCacheKey = () => CHAVES.claro;
+  mat.name = 'arcologia:claro';
+  return ganchos.aplicar(mat, ['sombra', 'neblina']);
+}
+
+// água que cai, sobe e espirra (tudo no sombreador, sem simulação): modo em vC.x (CASCATA), fase em vC.y
+const FRAG_CASCATA = /* glsl */ `
+vec3 wAlb; float wAlfa; float wRug; vec3 wEmi;
+float wQueda( float x, float y, float t ) {
+  // a fase anda com a raiz da altura caída: os fios aceleram na queda, como a água de verdade
+  float q = sqrt( max( y, 0.0 ) * 0.204 );
+  return gRuidoF( vec2( x * 1.4, ( q - t ) * 3.2 ) ) * 0.6 + gRuidoF( vec2( x * 3.7 + 7.0, ( q - t ) * 7.5 ) ) * 0.4;
+}
+void gCascata() {
+  float modo = floor( vC.x + 0.5 );
+  float fase = vC.y;
+  vec2 p = vUvM;
+  float t = uTempo;
+  wRug = 0.25;
+  wEmi = vec3( 0.0 );
+  if ( modo < 0.5 || modo > 4.5 ) {
+    // lâmina da cachoeira (e o vórtice da cúpula): clara no alto, branca de ar embaixo, com a borda desfiada
+    float fio = wQueda( p.x, p.y, t + fase * 3.0 );
+    // cortinas de fios separados (colunas de ~0,7 m), que se juntam e se abrem na queda
+    float cordas = gRuidoF( vec2( p.x * 1.5 + 0.35 * sin( p.y * 0.21 ), 3.1 + fase * 7.0 ) );
+    float ar = smoothstep( 2.0, 30.0, p.y );
+    float esp = smoothstep( 0.46 - 0.2 * ar, 0.78, fio );
+    wAlb = mix( vec3( 0.36, 0.46, 0.48 ), vec3( 0.86, 0.88, 0.88 ), max( esp, 0.25 + ar * 0.6 ) );
+    wAlfa = clamp( ( 0.4 + 0.55 * fio + 0.25 * ar ) * mix( 0.45, 1.0, smoothstep( 0.25, 0.6, cordas ) ), 0.0, 0.96 );
+    // à noite, acesa por baixo: a espuma branca brilha, a água clara quase apaga
+    wEmi = mix( vec3( 0.55, 0.75, 1.0 ), vec3( 1.0, 0.97, 0.92 ), esp ) * uNoite * ( 0.015 + 0.13 * esp ) * ( 0.45 + 0.55 * ar );
+  } else if ( modo < 1.5 ) {
+    // duto de vidro: a água sobe com bolhas (a volta da cachoeira), vidro verde-azulado
+    float sobe = gRuidoF( vec2( p.x * 1.1 + fase * 13.0, ( p.y - t * 2.4 ) * 0.8 ) );
+    float bolha = smoothstep( 0.6, 0.82, gRuidoF( vec2( p.x * 3.3 + fase * 7.0, ( p.y - t * 3.6 ) * 2.2 ) ) );
+    wAlb = mix( vec3( 0.07, 0.2, 0.23 ), vec3( 0.72, 0.84, 0.86 ), bolha * 0.8 );
+    wAlfa = 0.38 + 0.22 * sobe + 0.3 * bolha;
+    wRug = 0.06;
+    // à noite, um fio de luz subindo com as bolhas: a volta da água, mais discreta que a queda
+    wEmi = vec3( 0.55, 0.82, 1.0 ) * uNoite * ( 0.006 + 0.03 * bolha );
+  } else if ( modo < 2.5 ) {
+    // névoa onde a água bate: sobe, espalha e some com a altura
+    float n = gRuidoF( vec2( p.x * 0.3 + t * 0.25, p.y * 0.22 - t * 0.55 + fase * 9.0 ) ) * 0.6 + gRuidoF( vec2( p.x * 0.8 - t * 0.4, p.y * 0.5 - t * 1.0 ) ) * 0.4;
+    float alt = 1.0 - smoothstep( 1.0, 13.0, p.y );
+    wAlb = vec3( 0.84, 0.86, 0.87 );
+    wAlfa = smoothstep( 0.35, 0.85, n ) * alt * 0.5;
+    wRug = 1.0;
+    wEmi = vec3( 0.75, 0.88, 1.0 ) * uNoite * 0.03 * wAlfa;
+  } else if ( modo < 3.5 ) {
+    // espuma no poço, em volta de onde a lâmina bate (uv relativo a esse ponto)
+    float n = gRuidoF( p * 0.8 + vec2( t * 0.35, -t * 0.6 ) ) * 0.6 + gRuidoF( p * 2.2 - vec2( t * 0.8, t * 0.25 ) ) * 0.4;
+    float perto = 1.0 - smoothstep( 0.8, 7.0, length( vec2( p.x * 0.7, p.y ) ) );
+    wAlb = vec3( 0.82, 0.84, 0.84 );
+    wAlfa = smoothstep( 0.32, 0.7, n ) * perto * 0.92;
+    wRug = 0.5;
+    wEmi = vec3( 0.7, 0.86, 1.0 ) * uNoite * 0.04 * wAlfa;
+  } else {
+    // escada d'água: película que desce (v em degraus), com espuma na quina de cada um
+    float fl = gRuidoF( vec2( p.x * 1.4, ( p.y - t * 1.5 ) * 3.0 ) );
+    float quina = smoothstep( 0.72, 1.0, fract( p.y ) );
+    wAlb = mix( vec3( 0.2, 0.3, 0.31 ), vec3( 0.8, 0.82, 0.82 ), max( quina * 0.9, smoothstep( 0.62, 0.9, fl ) ) );
+    wAlfa = 0.42 + 0.45 * quina + 0.13 * fl;
+    wRug = 0.15;
+    wEmi = vec3( 0.7, 0.86, 1.0 ) * uNoite * 0.04 * quina;
+  }
+}
+`;
+
+/** Material dos efeitos de água (cachoeira, dutos, névoa, espuma, escada d'água): transparente, animado no shader. */
+export function materialCascata(ganchos) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.9 });
+  // os dois lados numa passada só: o three desenharia um transparente de dois lados em duas chamadas, trocando o lado
+  // com needsUpdate a cada quadro (lâminas, névoa e espuma finas não pedem a ordem de trás para frente)
+  mat.forceSinglePass = true;
+  const extras = { uCorte: { value: 1e6 } };
+  mat.userData.uniformes = extras;
+  mat.onBeforeCompile = (shader) => {
+    ligarComum(shader, extras);
+    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${GLSL_COMUM}\n${FRAG_CASCATA}`);
+    fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\ngCascata();\ndiffuseColor = vec4( wAlb, wAlfa );');
+    fs = fs.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = wRug;');
+    fs = fs.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += wEmi;');
+    shader.fragmentShader = fs;
+  };
+  mat.customProgramCacheKey = () => CHAVES.cascata;
+  mat.name = 'arcologia:cascata';
+  return ganchos.aplicar(mat, ['neblina']);
+}
+
+/** Altura máxima de um jato das fontes (m) e o ciclo do espetáculo (s). */
+export const FONTES = Object.freeze({ altura: 72, ciclo: 48 });
+
+// fontes dançantes (Dubai Fountain): cada jato é uma instância da coluna unitária (dois planos cruzados de 1 m de
+// altura); o vértice estica a coluna na altura do momento, abre o leque no alto e balança, tudo pela fração do jato
+// ao longo do arco (aJato.x), o tipo (aJato.y: 0 os grandes, 1 os pequenos) e o tempo. Quatro atos de 12 s: a onda
+// que corre o arco, o pulso de todos, pares e ímpares alternados e o leque do meio para as pontas
+const JATO_VERT = /* glsl */ `
+attribute vec2 aJato;
+varying vec3 vJ;
+float jAto( float a, float f, float t ) {
+  if ( a < 0.5 ) return 0.5 + 0.5 * sin( 6.2832 * ( t / 4.0 - f * 2.5 ) );
+  if ( a < 1.5 ) return pow( 0.5 + 0.5 * sin( 6.2832 * t / 2.4 ), 2.0 );
+  if ( a < 2.5 ) return 0.5 + 0.5 * sin( 6.2832 * t / 3.0 + 3.1416 * mod( floor( f * 63.0 + 0.5 ), 2.0 ) );
+  float c = fract( t / 6.0 );
+  return smoothstep( 0.0, 0.2, c * 1.3 - abs( f - 0.5 ) ) * ( 1.0 - smoothstep( 0.65, 1.0, c ) );
+}
+float jAltura( float f, float tp, float t ) {
+  float ciclo = mod( t, ${FONTES.ciclo.toFixed(1)} );
+  float a = floor( ciclo / 12.0 );
+  float s = fract( ciclo / 12.0 );
+  float h = mix( jAto( a, f, t ), jAto( mod( a + 1.0, 4.0 ), f, t ), smoothstep( 0.82, 1.0, s ) );
+  // o meio do arco sobe mais, e cada jato tem a sua força (nenhuma fileira de canos iguais)
+  float teto = mix( 1.0, 0.4, tp ) * ( 0.55 + 0.45 * sin( 3.1416 * f ) ) * ( 0.62 + 0.38 * fract( sin( f * 91.7 + tp * 13.1 ) * 437.5 ) );
+  return max( 0.015, h ) * teto * ${FONTES.altura.toFixed(1)};
+}
+`;
+
+const JATO_FRAG = /* glsl */ `
+varying vec3 vJ;
+vec3 jAlb; float jAlfa; vec3 jEmi;
+void gJato() {
+  float v = vJ.y;
+  // fios que sobem, o miolo mais denso e o leque do alto em névoa (a coluna nunca é um cano branco)
+  float fio = gRuidoF( vec2( vJ.x * 7.0, v * vJ.z * 0.3 - uTempo * 5.0 ) ) * 0.65 + gRuidoF( vec2( vJ.x * 17.0 + 3.0, v * vJ.z * 0.9 - uTempo * 7.0 ) ) * 0.35;
+  float miolo = 1.0 - smoothstep( 0.04, 0.5, abs( vJ.x ) * ( 1.0 + 1.5 * ( 1.0 - v ) ) );
+  float topo = 1.0 - smoothstep( 0.72, 1.0, v );
+  float nevoa = mix( 1.0, 0.45, smoothstep( 0.55, 0.95, v ) );
+  jAlfa = smoothstep( 0.15, 0.75, fio ) * miolo * topo * nevoa * 0.8 * smoothstep( 0.0, 0.04, v ) * smoothstep( 1.0, 4.0, vJ.z );
+  jAlb = mix( vec3( 0.62, 0.7, 0.72 ), vec3( 0.86, 0.88, 0.88 ), v );
+  // à noite as fontes acesas de baixo: branco-azulado no pé, apagando para o alto
+  jEmi = vec3( 0.85, 0.92, 1.0 ) * uNoite * 0.14 * ( 1.0 - 0.7 * v ) * ( 0.35 + 0.65 * fio );
+}
+`;
+
+/** Material dos jatos das fontes (instanciado, transparente, com a coreografia no sombreador de vértice). */
+export function materialJato(ganchos) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.8 });
+  mat.forceSinglePass = true; // os planos cruzados dos jatos numa chamada só (veja materialCascata)
+  const extras = { uCorte: { value: 1e6 } };
+  mat.userData.uniformes = extras;
+  mat.onBeforeCompile = (shader) => {
+    ligarComum(shader, extras);
+    let vs = shader.vertexShader.replace('#include <common>', `#include <common>\nuniform float uTempo;\n${JATO_VERT}`);
+    vs = vs.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+{
+  float H = jAltura( aJato.x, aJato.y, uTempo );
+  float v = position.y;
+  float larg = 1.2 + 4.6 * pow( v, 2.2 ) * ( 0.25 + 0.75 * H / ${FONTES.altura.toFixed(1)} );
+  transformed = vec3( position.x * larg, v * H, position.z * larg );
+  // os jatos balançam e se inclinam em leque (os robôs da Dubai Fountain), para o lado de fora do arco
+  float leque = ( aJato.x - 0.5 ) * 0.5 * ( 0.5 + 0.5 * sin( uTempo * 0.35 ) );
+  transformed.x += ( sin( uTempo * 0.7 + aJato.x * 9.0 ) * 0.07 * v + leque ) * H * v;
+  vJ = vec3( position.x + position.z, v, H );
+}`,
+    );
+    shader.vertexShader = vs;
+    let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${GLSL_COMUM}\n${JATO_FRAG}`);
+    fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\ngJato();\ndiffuseColor = vec4( jAlb, jAlfa );');
+    fs = fs.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += jEmi;');
+    shader.fragmentShader = fs;
+  };
+  mat.customProgramCacheKey = () => CHAVES.jato;
+  mat.name = 'arcologia:jato';
+  return ganchos.aplicar(mat, ['neblina']);
+}
+
+/** Coluna unitária de um jato: dois planos cruzados de 1 m, em 8 fatias (a altura e a largura saem do vértice). */
+export function malhaJato() {
+  const m = new Malha('jato');
+  const k = [0, 0, 0, 0];
+  for (const [ax, az] of [[1, 0], [0, 1]]) {
+    const base = m.vertices;
+    const n = [az, 0, -ax];
+    for (let j = 0; j <= 8; j++) {
+      const v = j / 8;
+      m.v(-0.5 * ax, v, -0.5 * az, ...n, -0.5, v, k);
+      m.v(0.5 * ax, v, 0.5 * az, ...n, 0.5, v, k);
+    }
+    for (let j = 0; j < 8; j++) {
+      const a = base + 2 * j;
+      m.i.push(a, a + 1, a + 3, a, a + 3, a + 2);
+    }
+  }
+  return m;
+}
+
 /**
- * Materiais da Arcologia de um render (criados uma vez, compartilhados pelas partes e pelos planos). A Torre tem os
- * seus (mesmo programa, uniformes próprios: o corte da obra não mexe no resto). `lista` guarda todos para o reflexo.
+ * Jatos das fontes num InstancedMesh: posições (pares x, z), a cota da água e a fração de cada um no arco. A caixa
+ * limite vai à altura máxima (o vértice estica a coluna).
+ */
+export function criarJatos(ctx, jatos, y, material) {
+  const g = geometriaDe(malhaJato());
+  const n = jatos.length;
+  const dados = new Float32Array(2 * n);
+  jatos.forEach((j, i) => {
+    dados[2 * i] = j.f;
+    dados[2 * i + 1] = j.tipo;
+  });
+  g.setAttribute('aJato', new THREE.InstancedBufferAttribute(dados, 2));
+  const o = new THREE.InstancedMesh(g, material, Math.max(1, n));
+  const mtx = new THREE.Matrix4();
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  jatos.forEach((j, i) => {
+    o.setMatrixAt(i, mtx.makeTranslation(j.x, y, j.z));
+    x0 = Math.min(x0, j.x);
+    x1 = Math.max(x1, j.x);
+    z0 = Math.min(z0, j.z);
+    z1 = Math.max(z1, j.z);
+  });
+  o.count = n;
+  o.instanceMatrix.needsUpdate = true;
+  // o three calcula a caixa das instâncias pela da coluna unitária: a coluna esticada passa dela
+  g.boundingBox = new THREE.Box3(new THREE.Vector3(-6, 0, -6), new THREE.Vector3(6, FONTES.altura + 2, 6));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, FONTES.altura / 2, 0), FONTES.altura);
+  // a esfera do arco inteiro (com a altura e o leque dos jatos) no lugar da que o three calcularia pela coluna unitária:
+  // com ela o arco sai do quadro quando a câmera olha para outro lado
+  o.frustumCulled = n > 0;
+  if (n) o.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, y + FONTES.altura / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, z1 - z0) / 2 + FONTES.altura);
+  o.name = 'arcologia:fontes';
+  o.renderOrder = 12;
+  ctx.medidas?.familia(o, 'arcologia');
+  return o;
+}
+
+/**
+ * Materiais da Arcologia de um render: um conjunto FIXO, criado de uma vez na carga e compartilhado por tudo (a Torre,
+ * as partes, os planos, o fantasma e as cenas). Nenhum material novo nasce em tempo de jogo e nada troca de programa:
+ * o dia e a noite, o LOD e o corte da obra são uniformes (D66: o soluço de 166 ms era o 'arcologia:vidro' compilado
+ * de novo, veja atualizarArcologia). As torres têm os seus (mesmo programa, o uCorte próprio).
  */
 const materiaisPorCtx = new WeakMap();
 export function materiais(ctx) {
   let m = materiaisPorCtx.get(ctx);
   if (!m) {
-    const lista = new Set();
+    const g = ctx.ganchos;
     m = {
-      lista,
-      ambiente: new AmbienteReserva(ctx),
-      novoVidro(op) {
-        const x = materialVidro(ctx.ganchos, op);
-        lista.add(x);
-        x.addEventListener('dispose', () => lista.delete(x));
-        return x;
-      },
-      novoOpaco(op) {
-        const x = materialOpaco(ctx.ganchos, op);
-        lista.add(x);
-        x.addEventListener('dispose', () => lista.delete(x));
-        return x;
-      },
+      vidro: materialVidro(g),
+      vidroLod1: materialVidro(g, { linhas: 1 }),
+      opaco: materialOpaco(g),
+      claro: materialClaro(g),
+      claroLod1: materialClaro(g, { linhas: 1 }),
+      cascata: materialCascata(g),
+      jato: materialJato(g),
+      torreVidro: materialVidro(g),
+      torreVidroLod1: materialVidro(g, { linhas: 1 }),
+      torreOpaco: materialOpaco(g),
     };
-    m.vidro = m.novoVidro();
-    m.vidroLod1 = m.novoVidro({ linhas: 1 });
-    m.opaco = m.novoOpaco();
+    m.lista = new Set(Object.values(m));
     materiaisPorCtx.set(ctx, m);
   }
   return m;
 }
 
-/** Solta os materiais compartilhados e o reflexo de reserva de um render (o domínio chama ao descartar). */
+/** Solta os materiais da Arcologia de um render (o domínio chama ao descartar). */
 export function descartarMateriais(ctx) {
   const m = materiaisPorCtx.get(ctx);
   if (!m) return;
-  for (const x of [m.vidro, m.vidroLod1, m.opaco]) x.dispose();
-  m.ambiente.descartar();
+  for (const x of m.lista) x.dispose();
+  m.lista.clear();
   materiaisPorCtx.delete(ctx);
 }
 
-// ------------------------------------------------------------------------------------------------ céu e reflexo
-
-const CEU_VERT = /* glsl */ `
-varying vec3 vDir;
-void main() {
-  vDir = position;
-  vec4 p = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-  gl_Position = p.xyww;
-}
-`;
-const CEU_FRAG = /* glsl */ `
-uniform vec3 uSol;
-uniform vec3 uZenite;
-uniform vec3 uHorizonte;
-uniform vec3 uChao;
-uniform vec3 uCorSol;
-uniform float uDisco;
-varying vec3 vDir;
-void main() {
-  vec3 d = normalize( vDir );
-  float y = d.y;
-  vec3 c = mix( uHorizonte, uZenite, pow( clamp( y, 0.0, 1.0 ), 0.38 ) );
-  c = mix( c, uChao, smoothstep( 0.0, -0.1, y ) );
-  float mu = max( dot( d, normalize( uSol ) ), 0.0 );
-  float perto = smoothstep( -0.2, 0.05, y );
-  c += uCorSol * ( 0.5 * pow( mu, 10.0 ) + 0.18 * pow( mu, 3.0 ) ) * perto;
-  c += uCorSol * smoothstep( 0.99955, 0.9998, mu ) * uDisco;
-  gl_FragColor = vec4( c, 1.0 );
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;
-
-/** Material do céu de reserva (gradiente com o halo e o disco do sol). */
-function materialCeu() {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uSol: { value: new THREE.Vector3(0, 1, 0) },
-      uZenite: { value: new THREE.Color() },
-      uHorizonte: { value: new THREE.Color() },
-      uChao: { value: new THREE.Color() },
-      uCorSol: { value: new THREE.Color() },
-      uDisco: { value: 30 },
+/**
+ * Aquecimento: um triângulo degenerado por material (o dos jatos num InstancedMesh, que é outro programa), desenhado
+ * nos primeiros quadros depois que a luz do ambiente existe. Assim todo programa da Arcologia compila na carga, no
+ * passe de verdade (o mesmo alvo HDR, a mesma luz), e nada compila quando a Torre fica pronta ou a câmera chega perto.
+ * Depois fica escondido na cena (o compileAsync da carga também o acha).
+ * @returns {{ grupo: THREE.Group, quadro(): boolean, feito: boolean, descartar(): void }}
+ */
+export function criarAquecimento(ctx, lista) {
+  const grupo = new THREE.Group();
+  grupo.name = 'arcologia:aquecer';
+  const m = new Malha('aquecer');
+  const k = [0, 0, 0, 0];
+  m.v(0, -1000, 0, 0, 1, 0, 0, 0, k);
+  m.v(0, -1000, 0, 0, 1, 0, 0, 0, k);
+  m.v(0, -1000, 0, 0, 1, 0, 0, 0, k);
+  m.i.push(0, 1, 2);
+  const geo = geometriaDe(m);
+  for (const mat of lista) {
+    let o;
+    if (mat.name === 'arcologia:jato') {
+      const gj = geometriaDe(m);
+      gj.setAttribute('aJato', new THREE.InstancedBufferAttribute(new Float32Array(2), 2));
+      o = new THREE.InstancedMesh(gj, mat, 1);
+    } else o = new THREE.Mesh(geo, mat);
+    o.frustumCulled = false;
+    o.name = `aquecer:${mat.name}`;
+    grupo.add(o);
+  }
+  let quadros = 0;
+  const api = {
+    grupo,
+    feito: false,
+    /** Chame a cada quadro: liga o grupo por 2 quadros depois que a luz do ambiente existe. Devolve true se desenha. */
+    quadro() {
+      if (api.feito) return false;
+      const pronto = !!ctx.cena?.environment;
+      grupo.visible = pronto;
+      if (pronto && ++quadros > 2) {
+        grupo.visible = false;
+        api.feito = true;
+      }
+      return grupo.visible;
     },
-    vertexShader: CEU_VERT,
-    fragmentShader: CEU_FRAG,
-    side: THREE.BackSide,
-    depthWrite: false,
-    depthTest: false,
-  });
+    descartar() {
+      grupo.parent?.remove(grupo);
+      for (const o of grupo.children) {
+        if (o.geometry !== geo) o.geometry.dispose();
+        if (o.isInstancedMesh) o.dispose();
+      }
+      geo.dispose();
+    },
+  };
+  grupo.visible = false;
+  return api;
 }
 
-const RAD = Math.PI / 180;
+// ------------------------------------------------------------------------------------------------ céu
+
 const tmpDir = new THREE.Vector3();
 
-/** Estado do céu pela hora: direção do sol, noite (0 a 1) e as cores do céu de reserva. */
+/** Estado do céu pela hora: direção do sol, noite (0 a 1) e quão baixo o sol está. */
 export function estadoDoCeu(ctx, alvo = {}) {
   const hora = ctx.horaDoCeu();
   const t = ctx.sim?.espelho?.tempo;
-  const dir = direcaoDoSol(hora, t?.diaDoAno ?? 15, ctx.sim?.espelho?.mapa?.latitude ?? -23.5, alvo.dir ?? new THREE.Vector3());
+  const dir = direcaoDoSol(hora, t?.diaDoAno ?? 15, ctx.sim?.espelho?.mapa?.latitude ?? -23.5, alvo.dir ?? tmpDir.clone());
   const dia = THREE.MathUtils.smoothstep(dir.y, -0.1, 0.1);
   alvo.dir = dir;
   alvo.hora = hora;
-  // a noite pelo fator de dia do render (ctx.sol.dia, da R1a ou do substituto) e na mesma conta das janelas da cidade
-  // (R4a): a Arcologia acende junto com a cidade no anoitecer, não antes nem depois
+  // a noite pelo fator de dia do render (ctx.sol.dia, da R1a) e na mesma conta das janelas da cidade (R4a): a
+  // Arcologia acende junto com a cidade no anoitecer, não antes nem depois
   const diaRender = ctx.sol?.dia;
   alvo.noite = Number.isFinite(diaRender) ? Math.min(1, Math.max(0, 1 - 1.25 * diaRender)) : 1 - dia;
   alvo.baixo = 1 - THREE.MathUtils.smoothstep(dir.y, 0.02, 0.4);
   return alvo;
 }
 
-function pintarCeu(mat, estado, ganchos) {
-  const u = mat.uniforms;
-  const { dir, noite, baixo } = estado;
-  const dia = 1 - noite;
-  u.uSol.value.copy(dir);
-  const neb = ganchos.uniformes.gNeblinaCor?.value;
-  u.uHorizonte.value.setRGB(0.62, 0.7, 0.8);
-  if (neb) u.uHorizonte.value.copy(neb);
-  u.uHorizonte.value.lerp(tmpCor.setRGB(0.55, 0.68, 0.86), 0.35 * dia).lerp(tmpCor.setRGB(0.98, 0.66, 0.4), 0.3 * baixo * dia);
-  u.uZenite.value.setRGB(0.06, 0.17, 0.52).lerp(tmpCor.setRGB(0.12, 0.18, 0.4), 0.45 * baixo).multiplyScalar(dia).add(tmpCor.setRGB(0.004, 0.006, 0.014).multiplyScalar(noite));
-  u.uChao.value.copy(u.uHorizonte.value).multiplyScalar(0.55);
-  u.uCorSol.value.setRGB(1.0, 0.86 - 0.3 * baixo, 0.68 - 0.45 * baixo).multiplyScalar(dia * 1.4);
-  u.uDisco.value = 26 * dia;
-}
-const tmpCor = new THREE.Color();
-
-/**
- * Reflexo de reserva para o vidro e o bronze enquanto o céu de verdade (R1a) não publica o ambiente: um PMREM do
- * céu em gradiente, refeito quando o sol anda 4 graus. Sai sozinho quando cena.environment existe.
- */
-export class AmbienteReserva {
-  constructor(ctx) {
-    this.ctx = ctx;
-    this.textura = null;
-    this._pmrem = null;
-    this._rt = null;
-    this._dir = new THREE.Vector3(0, -2, 0);
-    this._noite = -1;
-    this._cena = null;
-    this._mat = null;
-  }
-
-  /** Mapa de ambiente para os materiais neste quadro (null quando a cena já tem o seu). */
-  quadro(estado) {
-    const { ctx } = this;
-    if (ctx.cena.environment) return null;
-    if (this.textura && this._dir.angleTo(estado.dir) < 4 * RAD && Math.abs(this._noite - estado.noite) < 0.08) return this.textura;
-    if (!this._pmrem) {
-      this._pmrem = new THREE.PMREMGenerator(ctx.renderer);
-      this._cena = new THREE.Scene();
-      this._mat = materialCeu();
-      this._mat.depthTest = false;
-      const esfera = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), this._mat);
-      this._cena.add(esfera);
-    }
-    pintarCeu(this._mat, estado, ctx.ganchos);
-    this._mat.uniforms.uDisco.value *= 0.25; // o disco inteiro no reflexo estoura o vidro
-    const alvoAntes = ctx.renderer.getRenderTarget();
-    const rt = this._pmrem.fromScene(this._cena, 0.02, 0.1, 100);
-    ctx.renderer.setRenderTarget(alvoAntes);
-    this._rt?.dispose();
-    this._rt = rt;
-    this.textura = rt.texture;
-    this._dir.copy(estado.dir);
-    this._noite = estado.noite;
-    return this.textura;
-  }
-
-  descartar() {
-    this._rt?.dispose();
-    this._pmrem?.dispose();
-    this._mat?.dispose();
-    this._cena?.traverse((o) => o.geometry?.dispose());
-    this._rt = this._pmrem = this._mat = this._cena = this.textura = null;
-  }
-}
-
-/**
- * Céu de reserva das cenas da Arcologia (torre, planos) enquanto o céu da F0 é o substituto de cor lisa: uma esfera
- * de fundo com o gradiente, o halo e o disco do sol. Some quando a R1a registra o céu de verdade.
- */
-export class CeuReserva {
-  constructor(ctx) {
-    this.ctx = ctx;
-    this.mat = materialCeu();
-    this.malha = new THREE.Mesh(new THREE.SphereGeometry(1000, 48, 24), this.mat);
-    this.malha.name = 'arcologia:ceu-reserva';
-    this.malha.frustumCulled = false;
-    this.malha.renderOrder = -1000;
-    ctx.cena.add(this.malha);
-  }
-
-  get ativo() {
-    return !!this.ctx.dominio?.('ceu')?.substituto;
-  }
-
-  quadro(estado) {
-    this.malha.visible = this.ativo;
-    if (!this.malha.visible) return;
-    const cam = this.ctx.camera;
-    this.malha.position.copy(cam.position);
-    this.malha.scale.setScalar(Math.max(1, cam.far * 0.9) / 1000);
-    pintarCeu(this.mat, estado, this.ctx.ganchos);
-  }
-
-  descartar() {
-    this.ctx.cena.remove(this.malha);
-    this.mat.dispose();
-    this.malha.geometry.dispose();
-  }
-}
-
-// ------------------------------------------------------------------------------------------------ a Torre no render
+// ------------------------------------------------------------------------------------------------ as torres no render
 
 /**
  * Distância (m) em que a Torre troca o LOD1 pelo LOD0, por perfil: o LOD0 tem aletas de 0,26 m e montantes de 0,14 m
  * em geometria, que só ficam firmes enquanto cobrem perto de meio pixel (além disso fazem moiré); de longe, o LOD1
  * desenha as mesmas linhas no shader, filtradas.
  */
-export const DIST_LOD0 = Object.freeze({ leve: 380, media: 650, alta: 950, ultra: 1300 });
+export const DIST_LOD0 = Object.freeze({ leve: 380, media: 650, alta: 950, ultra: 1300, pc: 950 });
+
+/** Distância além da qual os efeitos de água (cachoeira, fontes) somem: menores que um pixel. */
+export const DIST_EFEITOS = 2600;
 
 const malhaThree = (ctx, m, mat, familia = 'arcologia', nome = '') => {
   const o = new THREE.Mesh(geometriaDe(m), mat);
   o.name = nome;
-  ctx.medidas.familia(o, familia);
+  ctx.medidas?.familia(o, familia);
   return o;
 };
 
+const caixaDe = (...ms) => {
+  const bs = ms.map((m) => m.caixa()).filter(Boolean);
+  return [0, 1, 2].map((e) => Math.min(...bs.map((b) => b[e]))).concat([3, 4, 5].map((e) => Math.max(...bs.map((b) => b[e]))));
+};
+
 /**
- * A Torre num render: grupo com o LOD0 do perfil, o LOD1 e o gêmeo de sombra. Posicione com posicionar(x, y, z, rot)
- * e chame quadro() a cada quadro (escolhe o LOD pela distância da câmera).
- * @returns {{ grupo: THREE.Group, posicionar(x, y, z, rot): void, quadro(): void, lod: number, forcarLod: number | null,
- *   mostrar(b): void, corte(h): void, caixa: number[], triangulos: { lod0: number, lod1: number, sombra: number },
- *   descartar(): void }}
+ * Um modelo de torre no render (a Torre sozinha ou o par): LOD0, LOD1, o gêmeo de sombra e, no par, os efeitos de
+ * água. Usa os materiais fixos das torres (materiais(ctx)): trocar de perfil refaz a geometria, nunca o programa.
  */
-export function criarTorre(ctx, { perfil = ctx.perfil, comEsplanada = true } = {}) {
+function criarModelo(ctx, { nome, m0, m1, ms, efeitos = null, yCentro, topo }) {
   const mats = materiais(ctx);
-  const nivel = NIVEL[perfil?.id] ?? 1;
-  const m0 = malhasTorre({ nivel, comEsplanada });
-  const m1 = malhasTorreLod1({ comEsplanada });
-  const ms = malhaSombraTorre();
   const grupo = new THREE.Group();
-  grupo.name = 'arcologia:torre';
+  grupo.name = nome;
   const lod0 = new THREE.Group();
   const lod1 = new THREE.Group();
-  const matVidro0 = mats.novoVidro();
-  const matVidro1 = mats.novoVidro({ linhas: 1 });
-  const matOpaco = mats.novoOpaco();
-  lod0.add(malhaThree(ctx, m0.vidro, matVidro0, 'arcologia', 'torre:lod0:vidro'), malhaThree(ctx, m0.opaco, matOpaco, 'arcologia', 'torre:lod0:opaco'));
-  lod1.add(malhaThree(ctx, m1.vidro, matVidro1, 'arcologia', 'torre:lod1:vidro'), malhaThree(ctx, m1.opaco, matOpaco, 'arcologia', 'torre:lod1:opaco'));
-  const volSombra = new THREE.Mesh(geometriaDe(ms), matOpaco);
+  lod0.add(malhaThree(ctx, m0.vidro, mats.torreVidro, 'arcologia', `${nome}:lod0:vidro`), malhaThree(ctx, m0.opaco, mats.torreOpaco, 'arcologia', `${nome}:lod0:opaco`));
+  lod1.add(malhaThree(ctx, m1.vidro, mats.torreVidroLod1, 'arcologia', `${nome}:lod1:vidro`), malhaThree(ctx, m1.opaco, mats.torreOpaco, 'arcologia', `${nome}:lod1:opaco`));
+  const fx = efeitos?.triangulos ? malhaThree(ctx, efeitos, mats.cascata, 'arcologia', `${nome}:efeitos`) : null;
+  if (fx) fx.renderOrder = 11;
+  const volSombra = new THREE.Mesh(geometriaDe(ms), mats.torreOpaco);
   volSombra.visible = false;
-  volSombra.name = 'torre:sombra';
+  volSombra.name = `${nome}:sombra`;
   grupo.add(lod0, lod1, volSombra);
+  if (fx) grupo.add(fx);
   // o gêmeo da sombra projeta mesmo com a fonte escondida: quem esconde a Torre (fantasma, obra) solta o projetor
   let projetando = false;
   const projetar = (b) => {
-    if (b && !projetando) ctx.medidas.familia(ctx.sombra.projetor(volSombra), 'sombra');
+    if (!ctx.sombra) return;
+    if (b && !projetando) ctx.medidas?.familia(ctx.sombra.projetor(volSombra), 'sombra');
     else if (!b && projetando) ctx.sombra.soltar(volSombra);
     projetando = b;
   };
   projetar(true);
   let lod = 0;
+  let corte = 1e6;
   const centro = new THREE.Vector3();
   const api = {
     grupo,
     get lod() {
       return lod;
     },
-    triangulos: { lod0: m0.vidro.triangulos + m0.opaco.triangulos, lod1: m1.vidro.triangulos + m1.opaco.triangulos, sombra: ms.triangulos },
-    caixa: (() => {
-      const a = m0.vidro.caixa();
-      const b = m0.opaco.caixa();
-      return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[3], b[3]), Math.max(a[4], b[4]), Math.max(a[5], b[5])];
-    })(),
+    triangulos: { lod0: m0.vidro.triangulos + m0.opaco.triangulos, lod1: m1.vidro.triangulos + m1.opaco.triangulos, sombra: ms.triangulos, efeitos: efeitos?.triangulos ?? 0 },
+    caixa: caixaDe(m0.vidro, m0.opaco),
     posicionar(x, y, z, rot) {
       grupo.position.set(x, y, z);
       grupo.rotation.set(0, rot, 0);
       grupo.updateMatrixWorld(true);
-      ctx.sombra.marcar();
+      ctx.sombra?.marcar();
     },
     /** Força um LOD (0 ou 1) ou volta ao automático (null). */
     forcarLod: null,
     quadro() {
-      centro.set(0, PONTOS_TORRE.centro[1], 0).applyMatrix4(grupo.matrixWorld);
+      centro.set(0, yCentro, 0).applyMatrix4(grupo.matrixWorld);
       const d = ctx.camera.position.distanceTo(centro);
       // histerese de 5%: a câmera parada perto do limite (o zoom com inércia, o tremor do toque) não pisca de LOD
       const limite = (DIST_LOD0[ctx.perfil?.id] ?? 1700) * (lod === 0 ? 1.05 : 0.95);
       lod = api.forcarLod ?? (d < limite ? 0 : 1);
       lod0.visible = lod === 0 && grupo.visible;
       lod1.visible = lod === 1 && grupo.visible;
+      if (fx) fx.visible = grupo.visible && corte >= topo && d < DIST_EFEITOS;
     },
     /** Mostra a Torre pronta ou a esconde (antes da torre.e4 quem aparece é o fantasma, que não faz sombra). */
     mostrar(b) {
       grupo.visible = !!b;
       projetar(!!b);
-      ctx.sombra.marcar();
+      ctx.sombra?.marcar();
     },
     /**
      * Corte por altura (obra da X1b): esconde o que passa de h metros acima da plataforma. O volume da sombra encolhe
-     * junto (achatado até h: a sombra da obra tem a altura dela, não a dos 350 m).
+     * junto (achatado até h: a sombra da obra tem a altura dela). A água só corre com as torres prontas.
      */
     corte(h = 1e6) {
-      for (const m of [matVidro0, matVidro1, matOpaco]) m.userData.uniformes.uCorte.value = grupo.position.y + h;
-      volSombra.scale.y = Math.min(1, Math.max(1e-3, h / TL.mastro.topo));
+      corte = h;
+      for (const m of [mats.torreVidro, mats.torreVidroLod1, mats.torreOpaco]) m.userData.uniformes.uCorte.value = grupo.position.y + h;
+      volSombra.scale.y = Math.min(1, Math.max(1e-3, h / topo));
       volSombra.updateMatrixWorld(true);
-      ctx.sombra.marcar();
+      ctx.sombra?.marcar();
     },
     descartar() {
       projetar(false);
       grupo.parent?.remove(grupo);
-      for (const g of [lod0, lod1]) for (const o of g.children) o.geometry.dispose();
-      volSombra.geometry.dispose();
-      for (const m of [matVidro0, matVidro1, matOpaco]) m.dispose();
+      grupo.traverse((o) => o.geometry?.dispose());
+      // os materiais são do conjunto fixo (materiais(ctx)): ficam para a próxima montagem, sem compilar de novo
     },
   };
   return api;
 }
 
 /**
- * Atualiza os uniformes da Arcologia (noite, hora e tempo) e o reflexo de reserva. Chame uma vez por quadro.
- * O reflexo não muda de força à noite por aqui: com a luz do ambiente da R1a (cena.environment e envMap nulo) o three
- * troca o envMapIntensity do material pelo scene.environmentIntensity, e a mesma queda escureceria também a luz
- * difusa da pedra, do gramado e das árvores. Quem escurece o vidro e o bronze à noite é o shader (fTint e oCor).
+ * Uma torre sozinha num render (planos B e C, a cena da Torre): LOD0 do perfil, LOD1 e o gêmeo de sombra. Posicione
+ * com posicionar(x, y, z, rot) e chame quadro() a cada quadro (escolhe o LOD pela distância da câmera).
+ */
+export function criarTorre(ctx, { perfil = ctx.perfil, comEsplanada = true, spec = TORRE_LAMINA } = {}) {
+  const nivel = NIVEL[perfil?.id] ?? 1;
+  const M = medidasTorre(spec);
+  return criarModelo(ctx, {
+    nome: 'arcologia:torre',
+    m0: malhasTorre({ nivel, comEsplanada, spec }),
+    m1: malhasTorreLod1({ comEsplanada, spec }),
+    ms: malhaSombraTorre({ spec }),
+    yCentro: (spec.altura + M.PODIO) / 2,
+    topo: M.topo,
+  });
+}
+
+/**
+ * As torres gêmeas num render (D64): o par com a ponte, os dutos e a cachoeira, na mesma API da Torre. posicionar()
+ * recebe o centro do par (o meio da fenda).
+ */
+export function criarPar(ctx, { perfil = ctx.perfil } = {}) {
+  const nivel = NIVEL[perfil?.id] ?? 1;
+  const m0 = malhasPar({ nivel, lod: 0 });
+  const m1 = malhasPar({ lod: 1 });
+  const api = criarModelo(ctx, {
+    nome: 'arcologia:gemeas',
+    m0,
+    m1,
+    ms: malhaSombraPar(),
+    efeitos: m0.efeitos,
+    yCentro: TORRE_LAMINA.altura / 2,
+    topo: medidasTorre(TORRE_LAMINA).topo,
+  });
+  api.gemeas = true;
+  return api;
+}
+
+/**
+ * Atualiza os uniformes da Arcologia (noite, hora e tempo). Chame uma vez por quadro. Não mexe em material nenhum:
+ * o 'arcologia:vidro' compilava duas vezes porque o reflexo de reserva punha um envMap próprio enquanto a luz do
+ * ambiente (IBL) não existia e o tirava no quadro seguinte (needsUpdate: programa novo, 162 ms); o reflexo agora é
+ * sempre o da cena (cena.environment) e o dia e a noite são só uniformes.
  */
 export function atualizarArcologia(ctx, tMs, estado = estadoDoCeu(ctx)) {
-  const m = materiais(ctx);
   UNIFORMES.uNoite.value = estado.noite;
   UNIFORMES.uHora.value = estado.hora;
-  UNIFORMES.uTempo.value = tMs / 1000;
-  const env = m.ambiente.quadro(estado);
-  for (const mat of m.lista) {
-    if (mat.envMap !== env) {
-      mat.envMap = env;
-      mat.needsUpdate = true;
-    }
-  }
+  // volta de 2 h: o float guarda a fase das animações sem saltos visíveis
+  UNIFORMES.uTempo.value = (tMs / 1000) % 7200;
   return estado;
 }
+

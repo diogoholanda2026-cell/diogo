@@ -6,6 +6,9 @@
 // memória no jogo. A mesma sonda roda no Chromium de teste (ferramentas/sonda-gpu.mjs) e na página de teste da prévia.
 // A guarda do Mali (GUARDA_MALI do contrato) acusa os programas acima de 12 amostradores por estágio, 12 varyings,
 // 200 vetores de uniforme no fragmento ou 14 atributos, e qualquer precisão média.
+// Desde a PC1 (D66): o vigia mede o bloqueio da thread principal em cada ligação e, depois do aquecimento (quadro.js,
+// marcarPronto), conta cada programa novo como compilação depois de pronto; e a memória de vídeo sai estimada pelo que
+// o jogo aloca no WebGL (texturas com os níveis, alvos com o MSAA, buffers).
 import { GUARDA_MALI } from '../../contratos/render.js';
 
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
@@ -91,14 +94,36 @@ export function nomeDoPrograma(vs, fs) {
 /** A página guarda as fontes dos programas? (páginas de teste) */
 export const paginaDeTeste = () => typeof location !== 'undefined' && /[?&](painel|bancada|sonda|teste)=/.test(location.search || '');
 
+/** COMPLETION_STATUS_KHR (KHR_parallel_shader_compile): lido sem esperar a compilação. */
+const COMPLETION_STATUS_KHR = 0x91b1;
+
 /**
- * Vigia os programas do contexto: tempo de compilação (do linkProgram até o estado da ligação ser lido) e, numa
- * página de teste, as fontes finais. Instala uma vez por contexto.
- * @returns {{ lista: Array<{ nome: string, msCompilar: number | null, link: boolean | null, vs?: string, fs?: string }> }}
+ * Marca o fim do aquecimento (motor/quadro.js): daqui em diante todo programa ligado é uma compilação depois de pronto
+ * (um soluço no jogo, como o do vidro da Arcologia medido no PC do dono) e vai para vigia.depois.
+ */
+export function marcarPronto(vigia, quadro = 0) {
+  if (!vigia || vigia.pronto) return;
+  vigia.pronto = true;
+  vigia.quadroPronto = quadro;
+  vigia.antes = vigia.lista.length;
+}
+
+/** Volta ao aquecimento (troca de perfil: os programas novos dela não contam como soluço). */
+export function desmarcarPronto(vigia) {
+  if (vigia) vigia.pronto = false;
+}
+
+/**
+ * Vigia os programas do contexto: tempo de compilação, quanto a thread principal ficou parada esperando a ligação
+ * (msBloqueio: o soluço que o jogador vê; perto de 0 quando o programa ficou pronto em paralelo, pelo
+ * KHR_parallel_shader_compile) e, numa página de teste, as fontes finais. Depois de marcarPronto, cada programa novo
+ * entra também em `depois`, com o quadro. Instala uma vez por contexto.
+ * @returns {{ lista: Array<{ nome: string, msCompilar: number | null, msBloqueio: number | null, link: boolean | null,
+ *   depois?: boolean, quadro?: number, vs?: string, fs?: string }>, depois: object[], pronto: boolean, quadro: number }}
  */
 export function vigiarProgramas(gl, { fontes = paginaDeTeste() } = {}) {
   if (gl.__vigia) return gl.__vigia;
-  const vigia = { lista: [], fontes };
+  const vigia = { lista: [], depois: [], pronto: false, quadro: 0, quadroPronto: null, antes: 0, fontes };
   const tipos = new WeakMap();
   const src = new WeakMap();
   const anexos = new WeakMap();
@@ -128,27 +153,244 @@ export function vigiarProgramas(gl, { fontes = paginaDeTeste() } = {}) {
     const vs = src.get(sh.find((s) => tipos.get(s) === gl.VERTEX_SHADER)) ?? '';
     const fs = src.get(sh.find((s) => tipos.get(s) === gl.FRAGMENT_SHADER)) ?? '';
     const nome = nomeDoPrograma(vs, fs);
-    const reg = { nome, msCompilar: null, link: null, t0: agora() };
+    const reg = { nome, msCompilar: null, msBloqueio: null, link: null, t0: agora() };
     if (vigia.fontes) {
       reg.vs = vs;
       reg.fs = fs;
     }
     vigia.lista.push(reg);
-    porPrograma.set(p, reg);
-    return lk(p);
-  };
-  // a primeira leitura do estado da ligação espera a compilação terminar: é aí que o tempo fecha
-  gl.getProgramParameter = (p, k) => {
-    const r = gp(p, k);
-    const reg = porPrograma.get(p);
-    if (reg && reg.msCompilar === null && k === gl.LINK_STATUS) {
-      reg.msCompilar = +(agora() - reg.t0).toFixed(2);
-      reg.link = !!r;
+    if (vigia.pronto) {
+      reg.depois = true;
+      reg.quadro = vigia.quadro;
+      vigia.depois.push(reg);
+      console.warn(`render: programa compilado depois de pronto: ${nome} (quadro ${vigia.quadro})`);
     }
+    porPrograma.set(p, reg);
+    const r = lk(p);
+    reg.msLink = agora() - reg.t0; // um driver que compila dentro do linkProgram para a thread aqui
     return r;
   };
+  // a primeira leitura que espera a ligação (o three lê o registro do programa antes do LINK_STATUS; sem a checagem
+  // de erros, os uniformes ativos): o tempo parado nela, mais o do próprio linkProgram, é o bloqueio
+  const bloqueio = (reg, t, t1) => {
+    if (reg.msBloqueio !== null) return;
+    reg.msBloqueio = +(t1 - t + (reg.msLink ?? 0)).toFixed(2);
+    if (reg.msCompilar === null) reg.msCompilar = +(t1 - reg.t0).toFixed(2);
+  };
+  // pronto em paralelo (COMPLETION_STATUS_KHR, sem esperar): o tempo de compilação fecha aí
+  gl.getProgramParameter = (p, k) => {
+    const reg = porPrograma.get(p);
+    if (!reg || (reg.msBloqueio !== null && (k !== gl.LINK_STATUS || reg.link !== null))) return gp(p, k);
+    const t = agora();
+    const r = gp(p, k);
+    const t1 = agora();
+    if (k === COMPLETION_STATUS_KHR) {
+      if (r && reg.msCompilar === null) reg.msCompilar = +(t1 - reg.t0).toFixed(2);
+      return r;
+    }
+    bloqueio(reg, t, t1);
+    if (k === gl.LINK_STATUS) reg.link = !!r;
+    return r;
+  };
+  if (typeof gl.getProgramInfoLog === 'function') {
+    const gl0 = gl.getProgramInfoLog.bind(gl);
+    gl.getProgramInfoLog = (p) => {
+      const reg = porPrograma.get(p);
+      if (!reg || reg.msBloqueio !== null) return gl0(p);
+      const t = agora();
+      const r = gl0(p);
+      bloqueio(reg, t, agora());
+      return r;
+    };
+  }
   gl.__vigia = vigia;
   return vigia;
+}
+
+/** Compilações depois de pronto, para o relatório: nome, bloqueio, compilação e quadro. */
+export function compilacoesDepois(vigia) {
+  return (vigia?.depois ?? []).map((p) => ({ nome: p.nome, msBloqueio: p.msBloqueio, msCompilar: p.msCompilar, quadro: p.quadro }));
+}
+
+// ------------------------------------------------------------------------------------------------ memória de vídeo
+
+const MB = 1048576;
+
+/** Bytes por texel dos formatos com tamanho (WebGL2). Os RGB sem alfa contam como 4 (o Direct3D do ANGLE completa). */
+const BYTES_FORMATO = new Map([
+  [0x8229, 1], [0x8f94, 1], [0x822b, 2], [0x8f95, 2], [0x8051, 4], [0x8f96, 4], [0x8058, 4], [0x8f97, 4], [0x8c41, 4],
+  [0x8c43, 4], [0x8d62, 2], [0x8056, 2], [0x8057, 2], [0x8059, 4], [0x906f, 4], [0x822d, 2], [0x822f, 4], [0x881b, 8],
+  [0x881a, 8], [0x822e, 4], [0x8230, 8], [0x8815, 16], [0x8814, 16], [0x8c3a, 4], [0x8c3d, 4], [0x8231, 1], [0x8232, 1],
+  [0x8233, 2], [0x8234, 2], [0x8235, 4], [0x8236, 4], [0x8237, 2], [0x8238, 2], [0x8239, 4], [0x823a, 4], [0x823b, 8],
+  [0x823c, 8], [0x8d8e, 4], [0x8d7c, 4], [0x8d88, 8], [0x8d76, 8], [0x8d82, 16], [0x8d70, 16], [0x81a5, 2], [0x81a6, 4],
+  [0x8cac, 4], [0x88f0, 4], [0x8cad, 8], [0x8d48, 1],
+]);
+/** Canais dos formatos sem tamanho (RGBA, RGB, LUMINANCE_ALPHA, LUMINANCE, ALPHA, DEPTH_COMPONENT, DEPTH_STENCIL). */
+const CANAIS = new Map([[0x1908, 4], [0x1907, 3], [0x190a, 2], [0x1909, 1], [0x1906, 1], [0x1902, 1], [0x84f9, 1]]);
+/** Bytes por canal do tipo (ou do texel inteiro, nos tipos empacotados). */
+const BYTES_TIPO = new Map([[0x1401, 1], [0x1400, 1], [0x1403, 2], [0x1402, 2], [0x1405, 4], [0x1404, 4], [0x1406, 4], [0x140b, 2], [0x8d61, 2]]);
+const TIPO_EMPACOTADO = new Map([[0x8363, 2], [0x8033, 2], [0x8034, 2], [0x84fa, 4], [0x8c3b, 4], [0x8368, 4], [0x8c3e, 4], [0x8dad, 8]]);
+/** Formatos comprimidos: [largura do bloco, altura, bytes por bloco] (S3TC, RGTC, BPTC, ETC2 e ASTC 4x4). */
+const COMPRIMIDOS = new Map([
+  [0x83f0, [4, 4, 8]], [0x83f1, [4, 4, 8]], [0x8c4c, [4, 4, 8]], [0x8c4d, [4, 4, 8]], [0x83f2, [4, 4, 16]], [0x83f3, [4, 4, 16]],
+  [0x8c4e, [4, 4, 16]], [0x8c4f, [4, 4, 16]], [0x8dbb, [4, 4, 8]], [0x8dbc, [4, 4, 8]], [0x8dbd, [4, 4, 16]], [0x8dbe, [4, 4, 16]],
+  [0x8e8c, [4, 4, 16]], [0x8e8d, [4, 4, 16]], [0x8e8e, [4, 4, 16]], [0x8e8f, [4, 4, 16]], [0x9274, [4, 4, 8]], [0x9275, [4, 4, 8]],
+  [0x9276, [4, 4, 8]], [0x9277, [4, 4, 8]], [0x9278, [4, 4, 16]], [0x9279, [4, 4, 16]], [0x93b0, [4, 4, 16]], [0x93d0, [4, 4, 16]],
+]);
+
+/** Bytes de um nível de textura (w x h x d) no formato interno (com o formato e o tipo quando não tem tamanho). */
+export function bytesDoNivel(formatoInterno, w, h, d = 1, formato = 0, tipo = 0) {
+  const c = COMPRIMIDOS.get(formatoInterno);
+  if (c) return Math.ceil(w / c[0]) * Math.ceil(h / c[1]) * c[2] * d;
+  let b = BYTES_FORMATO.get(formatoInterno);
+  if (b === undefined) {
+    const emp = TIPO_EMPACOTADO.get(tipo);
+    b = emp ?? (CANAIS.get(formato || formatoInterno) ?? 4) * (BYTES_TIPO.get(tipo) ?? 1);
+    if ((formato || formatoInterno) === 0x1907 && !emp) b = 4 * (BYTES_TIPO.get(tipo) ?? 1); // RGB completa para RGBA
+  }
+  return w * h * d * b;
+}
+
+/** Bytes de uma textura imutável (texStorage) com n níveis; `camadas` não encolhe (arranjo 2D), `profundo` sim (3D). */
+export function bytesDoArmazenamento(formatoInterno, niveis, w, h, { camadas = 1, faces = 1, profundo = 1 } = {}) {
+  let b = 0;
+  for (let l = 0; l < niveis; l++) {
+    b += bytesDoNivel(formatoInterno, Math.max(1, w >> l), Math.max(1, h >> l), Math.max(1, profundo >> l) * camadas);
+  }
+  return b * faces;
+}
+
+/**
+ * Vigia a memória de vídeo que o jogo pede ao WebGL (estimada pelo que foi alocado: texturas com os níveis, alvos de
+ * desenho com as amostras do MSAA e buffers de geometria), para a página de teste e o teto do perfil (2,5 GB no
+ * 'pc', D66). Custa só nas chamadas de alocação, que são raras. Instala uma vez por contexto.
+ * @returns {{ texturas: number, alvos: number, buffers: number, mb(): object }}
+ */
+export function vigiarMemoria(gl) {
+  if (gl.__memoria) return gl.__memoria;
+  const m = {
+    texturas: 0,
+    alvos: 0,
+    buffers: 0,
+    /** Em MB, com a tela (cor em dois buffers e profundidade). */
+    mb() {
+      const tela = (gl.drawingBufferWidth || 0) * (gl.drawingBufferHeight || 0) * 12;
+      const r = (x) => +(x / MB).toFixed(1);
+      return { videoMB: r(m.texturas + m.alvos + m.buffers + tela), texturasMB: r(m.texturas), alvosMB: r(m.alvos), buffersMB: r(m.buffers), telaMB: r(tela) };
+    },
+  };
+  const tex = new WeakMap(); // textura → { niveis: Map, total }
+  const rb = new WeakMap(); // renderbuffer → bytes
+  const buf = new WeakMap(); // buffer → bytes
+  const LIGACAO_TEX = new Map([[gl.TEXTURE_2D, gl.TEXTURE_BINDING_2D], [gl.TEXTURE_CUBE_MAP, gl.TEXTURE_BINDING_CUBE_MAP], [gl.TEXTURE_3D, gl.TEXTURE_BINDING_3D], [gl.TEXTURE_2D_ARRAY, gl.TEXTURE_BINDING_2D_ARRAY]]);
+  const LIGACAO_BUF = new Map([
+    [gl.ARRAY_BUFFER, gl.ARRAY_BUFFER_BINDING], [gl.ELEMENT_ARRAY_BUFFER, gl.ELEMENT_ARRAY_BUFFER_BINDING], [gl.UNIFORM_BUFFER, gl.UNIFORM_BUFFER_BINDING],
+    [gl.COPY_READ_BUFFER, gl.COPY_READ_BUFFER_BINDING], [gl.COPY_WRITE_BUFFER, gl.COPY_WRITE_BUFFER_BINDING], [gl.PIXEL_PACK_BUFFER, gl.PIXEL_PACK_BUFFER_BINDING],
+    [gl.PIXEL_UNPACK_BUFFER, gl.PIXEL_UNPACK_BUFFER_BINDING], [gl.TRANSFORM_FEEDBACK_BUFFER, gl.TRANSFORM_FEEDBACK_BUFFER_BINDING],
+  ]);
+  const face = (alvo) => (alvo >= gl.TEXTURE_CUBE_MAP_POSITIVE_X && alvo <= gl.TEXTURE_CUBE_MAP_NEGATIVE_Z ? gl.TEXTURE_CUBE_MAP : alvo);
+  // só ligações conhecidas: um getParameter com enum errado deixaria um erro do GL para quem lê getError depois
+  const ligada = (alvo) => {
+    const p = LIGACAO_TEX.get(face(alvo));
+    return p ? gl.getParameter(p) : null;
+  };
+  const registroTex = (t) => {
+    let r = tex.get(t);
+    if (!r) tex.set(t, (r = { niveis: new Map(), total: 0 }));
+    return r;
+  };
+  const porNivel = (alvo, nivel, bytes) => {
+    const t = ligada(alvo);
+    if (!t) return;
+    const r = registroTex(t);
+    const k = `${alvo}:${nivel}`;
+    const velho = r.niveis.get(k) ?? 0;
+    r.niveis.set(k, bytes);
+    r.total += bytes - velho;
+    m.texturas += bytes - velho;
+  };
+  const inteira = (alvo, bytes) => {
+    const t = ligada(alvo);
+    if (!t) return;
+    const r = registroTex(t);
+    m.texturas += bytes - r.total;
+    r.niveis.clear();
+    r.niveis.set('armazenamento', bytes);
+    r.total = bytes;
+  };
+  const tamFonte = (s) => [s?.videoWidth || s?.naturalWidth || s?.displayWidth || s?.width || 0, s?.videoHeight || s?.naturalHeight || s?.displayHeight || s?.height || 0];
+  const embrulhar = (nome, depois) => {
+    const f = gl[nome];
+    if (typeof f !== 'function') return;
+    const orig = f.bind(gl);
+    gl[nome] = (...a) => {
+      const r = orig(...a);
+      try {
+        depois(a);
+      } catch (e) {
+        // a estimativa nunca derruba o desenho
+      }
+      return r;
+    };
+  };
+  embrulhar('texStorage2D', ([alvo, niveis, fi, w, h]) => inteira(alvo, bytesDoArmazenamento(fi, niveis, w, h, { faces: alvo === gl.TEXTURE_CUBE_MAP ? 6 : 1 })));
+  embrulhar('texStorage3D', ([alvo, niveis, fi, w, h, d]) => inteira(alvo, bytesDoArmazenamento(fi, niveis, w, h, alvo === gl.TEXTURE_3D ? { profundo: d } : { camadas: d })));
+  embrulhar('texImage2D', (a) => {
+    const [alvo, nivel, fi] = a;
+    if (a.length >= 8 && typeof a[3] === 'number') porNivel(alvo, nivel, bytesDoNivel(fi, a[3], a[4], 1, a[6], a[7]));
+    else if (a.length === 6) {
+      const [w, h] = tamFonte(a[5]);
+      porNivel(alvo, nivel, bytesDoNivel(fi, w, h, 1, a[3], a[4]));
+    }
+  });
+  embrulhar('texImage3D', ([alvo, nivel, fi, w, h, d, , formato, tipo]) => porNivel(alvo, nivel, bytesDoNivel(fi, w, h, d, formato, tipo)));
+  embrulhar('compressedTexImage2D', (a) => {
+    const [alvo, nivel, fi, w, h] = a;
+    porNivel(alvo, nivel, typeof a[6] === 'number' ? a[6] : (a[6]?.byteLength ?? bytesDoNivel(fi, w, h)));
+  });
+  embrulhar('generateMipmap', ([alvo]) => {
+    const t = ligada(alvo);
+    const r = t && tex.get(t);
+    if (!r || r.niveis.has('armazenamento')) return;
+    let base = 0;
+    for (const [k, b] of r.niveis) if (k.endsWith(':0')) base += b;
+    porNivel(alvo, 'mip', Math.round(base / 3));
+  });
+  embrulhar('deleteTexture', ([t]) => {
+    const r = t && tex.get(t);
+    if (!r) return;
+    m.texturas -= r.total;
+    tex.delete(t);
+  });
+  const armazenarRb = (fi, w, h, amostras) => {
+    const r = gl.getParameter(gl.RENDERBUFFER_BINDING);
+    if (!r) return;
+    const b = bytesDoNivel(fi, w, h) * Math.max(1, amostras);
+    m.alvos += b - (rb.get(r) ?? 0);
+    rb.set(r, b);
+  };
+  embrulhar('renderbufferStorage', ([, fi, w, h]) => armazenarRb(fi, w, h, 1));
+  embrulhar('renderbufferStorageMultisample', ([, amostras, fi, w, h]) => armazenarRb(fi, w, h, amostras));
+  embrulhar('deleteRenderbuffer', ([r]) => {
+    if (!r || !rb.has(r)) return;
+    m.alvos -= rb.get(r);
+    rb.delete(r);
+  });
+  embrulhar('bufferData', ([alvo, dados, , inicio = 0, n = 0]) => {
+    const p = LIGACAO_BUF.get(alvo);
+    const b = p ? gl.getParameter(p) : null;
+    if (!b) return;
+    const tam = typeof dados === 'number' ? dados : n ? n * (dados?.BYTES_PER_ELEMENT || 1) : (dados?.byteLength ?? 0) - inicio * (dados?.BYTES_PER_ELEMENT || 1);
+    m.buffers += tam - (buf.get(b) ?? 0);
+    buf.set(b, tam);
+  });
+  embrulhar('deleteBuffer', ([b]) => {
+    if (!b || !buf.has(b)) return;
+    m.buffers -= buf.get(b);
+    buf.delete(b);
+  });
+  gl.__memoria = m;
+  return m;
 }
 
 // ------------------------------------------------------------------------------------------------ contagem do GLSL
@@ -334,7 +576,7 @@ export function contarPrograma(vs, fs, guarda = GUARDA_MALI) {
 /** Os programas vigiados, contados (sem as fontes, que ficam fora do relatório). */
 export function programasContados(vigia) {
   return (vigia?.lista ?? []).map((p) => {
-    const base = { nome: p.nome, msCompilar: p.msCompilar, link: p.link };
+    const base = { nome: p.nome, msCompilar: p.msCompilar, msBloqueio: p.msBloqueio ?? null, link: p.link, ...(p.depois ? { depois: true } : {}) };
     if (!p.vs || !p.fs) return { ...base, amostradores: null, varyings: null, uniformesF: null, atributos: null, falhas: [] };
     try {
       const c = contarPrograma(p.vs, p.fs);

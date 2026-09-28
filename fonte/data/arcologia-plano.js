@@ -1,10 +1,12 @@
-// Plano da Arcologia. A F0 grava o ENVELOPE da gleba no platô, a Torre Lâmina da D27 e a câmera; o integrador grava o
-// plano escolhido no portão 1 (gleba, portões, vias internas, posição e orientação da Torre, D59); X1a e X1b detalham.
+// Plano da Arcologia. A F0 grava o ENVELOPE da gleba no platô, a Torre e a câmera; o integrador grava o plano escolhido
+// no portão 1 (gleba, portões, vias internas, posição e orientação da Torre, D59); X1a, SEDE2 e X1b detalham.
 // mapa-heldopolis.js (S1a) importa a gleba daqui e assenta o platô em volta dela. Metros; x leste, z sul.
 //
-// X1a detalha a Torre (medidas de cada peça do modelo) e os três planos candidatos da D59 como dados: posição e
-// orientação de cada parte, contornos, portões candidatos, vias internas e a cava do reservatório como forma do
-// aplainar. Ângulos dos arcos em graus, no plano x-z: 0 = leste, 90 = sul, 180 = oeste, 270 = norte.
+// As torres da Holding (D27 e D64) saem de especTorre(altura): a Torre Lâmina de 500 m e a irmã de 452 m, lado a lado
+// na fenda de 10 m (GEMEAS). Os três planos candidatos da D59 como dados: posição e orientação de cada parte,
+// contornos, portões, vias internas e a cava do reservatório como forma do aplainar. O A é a sede v2 (D63 a D65): o
+// anel fechado, o lago com as gêmeas e as fontes, a cúpula de vidro. Ângulos dos arcos em graus, no plano x-z:
+// 0 = leste, 90 = sul, 180 = oeste, 270 = norte.
 import { congelar, sen, cos, atan2 } from '../comum/util.js';
 import { girar } from '../comum/vetor.js';
 
@@ -22,57 +24,124 @@ export const GLEBA_ENVELOPE = congelar({
 });
 
 /**
- * Torre Lâmina (D27): planta de 36 x 50 m com o lado estreito (36 m) para a baía; três lâminas verticais coladas pelo
- * lado comprido, a mais alta na face lisa e a mais baixa do lado das penas (terraços para a baía). Cotas em metros.
- * Conta das alturas: pódio 16 + 35 pavimentos até 163 (terraço da lâmina 3) + andar de vento 1 (163 a 169)
- * + 15 pavimentos até 232 + andar de vento 2 (232 a 238, terraço da lâmina 2) + 15 pavimentos até 301 = 65 pavimentos.
+ * Torres da Holding (D27 e D64): planta de 36 x 50 m, três lâminas verticais coladas pelo lado comprido, a mais alta
+ * na face lisa e a mais baixa do lado das penas. As cotas saem da altura: os recuos ficam a 49%, 70% e 91% dela
+ * (arredondados ao pavimento de 4,2 m), com os andares de vento de 6 m no terraço da lâmina 3 e logo abaixo do da
+ * lâmina 2, e a coroa-lanterna do terraço da lâmina 1 até o topo. A D27 (330 m) tinha os recuos a 49%, 72% e 91%.
  *
  * Espaço local do modelo (render/arcologia/torre.js): origem no centro da planta, no chão da plataforma; x ao longo dos
- * 36 m; z ao longo dos 50 m, da face lisa (z = -25) para as penas (z = +25), que olham para a baía (frente, +z com
- * rot = 0). A lâmina 1 vai de z = -25 a +1, a 2 de +1 a +15 e a 3 de +15 a +25.
+ * 36 m; z ao longo dos 50 m, da face lisa (z = -25) para as penas (z = +25), a frente (+z com rot = 0). A lâmina 1 vai
+ * de z = -25 a +1, a 2 de +1 a +15 e a 3 de +15 a +25.
  */
-export const TORRE_LAMINA = congelar({
-  planta: { largura: 36, comprimento: 50, ladoEstreitoPara: 'baia' },
-  // pódio de pedra (travertino) com saguão de vidro claro atrás de uma colunata; chanfro nas quinas; passa 8 m dos
-  // lados da Torre, 6 m atrás e 14 m na frente (o terraço com a piscina virada para a água); a marquise de 12 m em
-  // balanço fica na face lisa, sobre a entrada, onde a costura desce
-  podio: {
-    altura: 16, marquise: 12, largura: 52, tras: 6, frente: 14, chanfro: 6, passoPilares: 6, pilar: 1.4,
-    marquiseLargura: 30, marquiseCota: 10.4, marquiseEspessura: 0.9, embasamento: 1.2,
-  },
-  // da face lisa para as penas: fundo de cada lâmina ao longo dos 50 m e cota do terraço-jardim que a fecha
-  laminas: [
-    { largura: 36, fundo: 26, topo: 301 },
-    { largura: 36, fundo: 14, topo: 238 },
-    { largura: 36, fundo: 10, topo: 163 },
-  ],
-  pavimentos: { n: 65, altura: 4.2 },
-  andaresDeVento: [
-    { base: 163, altura: 6, recuo: 2 },
-    { base: 232, altura: 6, recuo: 2 },
-  ],
-  // andares de vento com vidro claro, forro claro iluminado e montantes contínuos: nunca mais escuros que o corpo
-  faceLisa: { costura: 6, vidro: 'escuro', aletas: 'densas', passoCostura: 0.75, recuoCostura: 0.8 },
-  // aletas de bronze champanhe nas faces laterais (as de 50 m, que mostram as penas): lâminas de 0,45 m de fundo e 0,26
-  // de espessura (a 45 graus ainda se vê metade de vidro entre elas: a torre lê como vidro com filetes, não como metal)
-  aletas: { passo: 1.5, material: 'bronze', faces: 'laterais', fundo: 0.45, espessura: 0.26 },
-  // montantes das faces de frente e da face lisa (geometria no LOD0; no shader no LOD1)
-  montantes: { passo: 1.5, fundo: 0.35, espessura: 0.14 },
-  // lanterna de vidro de 301 a 318 sobre os 18 m de trás da lâmina 1 (na frente, o terraço-jardim de 301), aletas a
-  // cada 0,75 m e os últimos 12 m ocos, só aletas contra o céu e o aro que segura o heliponto
-  coroa: { base: 301, altura: 29, oca: 12, fundo: 18, passoAletas: 0.75 },
-  // heliponto em laca preta com aro de luz e o H dourado: tabuleiro sobre a coroa com uma proa em meia elipse que
-  // avança 16 m além da frente dela, sobre a água (Edge, 30 Hudson Yards); diametro é o círculo de toque
-  heliponto: { cota: 330, balanco: 16, diametro: 28, espessura: 1.2 },
-  mastro: { topo: 350, raio: 0.7, z: -22 },
-  parapeito: 1.2, // guarda-corpo de vidro dos terraços
-  triangulos: {
-    lod0: { media: [12000, 20000], alta: [40000, 80000], ultra: [40000, 80000] },
-    lod1: [3000, 5000],
-  },
+const PE_TORRE = 4.2;
+const PODIO_TORRE = 16;
+const VENTO_TORRE = 6;
+/** Frações da altura em que cada lâmina recua (D64: as mesmas da D27). */
+export const RECUOS = congelar([0.49, 0.7, 0.91]);
+const cm = (v) => Math.round(v * 100) / 100;
+
+/**
+ * Medidas de uma torre de altura dada (cota do topo: o heliponto, na que tem, ou o aro da coroa).
+ * @param {number} altura  metros
+ * @param {{ nome?: string, heliponto?: boolean }} op  heliponto e mastro só na maior (D64)
+ */
+export function especTorre(altura, { nome = 'Torre Lâmina', heliponto = true } = {}) {
+  const n = (base, alvo) => Math.max(1, Math.round((alvo - base) / PE_TORRE));
+  const n3 = n(PODIO_TORRE, RECUOS[0] * altura);
+  const topo3 = cm(PODIO_TORRE + n3 * PE_TORRE);
+  const n2 = n(topo3 + VENTO_TORRE, RECUOS[1] * altura - VENTO_TORRE);
+  const base2 = cm(topo3 + VENTO_TORRE + n2 * PE_TORRE);
+  const topo2 = cm(base2 + VENTO_TORRE);
+  const n1 = n(topo2, RECUOS[2] * altura);
+  const topo1 = cm(topo2 + n1 * PE_TORRE);
+  const coroa = cm(altura - topo1);
+  return congelar({
+    nome,
+    altura,
+    planta: { largura: 36, comprimento: 50, ladoEstreitoPara: 'baia' },
+    // pódio de pedra (travertino) com saguão de vidro claro atrás de uma colunata; chanfro nas quinas; passa 8 m dos
+    // lados da Torre, 6 m atrás e 14 m na frente (o terraço com a piscina virada para a água); a marquise de 12 m em
+    // balanço fica na face lisa, sobre a entrada, onde a costura desce (no par, D64, a face lisa dá para a fenda: o
+    // pódio não passa dela e a marquise sai, render/arcologia/torre.js)
+    podio: {
+      altura: PODIO_TORRE, marquise: 12, largura: 52, tras: 6, frente: 14, chanfro: 6, passoPilares: 6, pilar: 1.4,
+      marquiseLargura: 30, marquiseCota: 10.4, marquiseEspessura: 0.9, embasamento: 1.2,
+    },
+    // da face lisa para as penas: fundo de cada lâmina ao longo dos 50 m e cota do terraço-jardim que a fecha
+    laminas: [
+      { largura: 36, fundo: 26, topo: topo1 },
+      { largura: 36, fundo: 14, topo: topo2 },
+      { largura: 36, fundo: 10, topo: topo3 },
+    ],
+    pavimentos: { n: n1 + n2 + n3, altura: PE_TORRE },
+    andaresDeVento: [
+      { base: topo3, altura: VENTO_TORRE, recuo: 2 },
+      { base: base2, altura: VENTO_TORRE, recuo: 2 },
+    ],
+    // andares de vento com vidro claro, forro claro iluminado e montantes contínuos: nunca mais escuros que o corpo
+    faceLisa: { costura: 6, vidro: 'escuro', aletas: 'densas', passoCostura: 0.75, recuoCostura: 0.8 },
+    // aletas de bronze champanhe nas faces laterais (as de 50 m, que mostram as penas): lâminas de 0,45 m de fundo e 0,26
+    // de espessura (a 45 graus ainda se vê metade de vidro entre elas: a torre lê como vidro com filetes, não como metal)
+    aletas: { passo: 1.5, material: 'bronze', faces: 'laterais', fundo: 0.45, espessura: 0.26 },
+    // montantes das faces de frente e da face lisa (geometria no LOD0; no shader no LOD1)
+    montantes: { passo: 1.5, fundo: 0.35, espessura: 0.14 },
+    // lanterna de vidro sobre os 18 m de trás da lâmina 1 (na frente, o terraço-jardim), aletas a cada 0,75 m e os
+    // últimos 41% ocos, só aletas contra o céu e o aro que segura o heliponto (ou que fecha a coroa, sem ele)
+    coroa: { base: topo1, altura: coroa, oca: Math.round(coroa * 0.414), fundo: 18, passoAletas: 0.75 },
+    // heliponto em laca preta com aro de luz e o H dourado: tabuleiro sobre a coroa com uma proa em meia elipse que
+    // avança 16 m além da frente dela (Edge, 30 Hudson Yards); diametro é o círculo de toque
+    heliponto: heliponto ? { cota: altura, balanco: 16, diametro: 28, espessura: 1.2 } : null,
+    mastro: heliponto ? { topo: altura + 20, raio: 0.7, z: -22 } : null,
+    parapeito: 1.2, // guarda-corpo de vidro dos terraços
+    triangulos: {
+      lod0: { media: [8000, 26000], alta: [40000, 70000], ultra: [40000, 70000], pc: [40000, 70000] },
+      lod1: [2000, 5000],
+    },
+  });
+}
+
+/** Torre Lâmina (D64): 500 m no heliponto, o mastro a 520 m. */
+export const TORRE_LAMINA = especTorre(500, { nome: 'Torre Lâmina', heliponto: true });
+
+/** A irmã (D64): 452 m no aro da coroa, sem heliponto. */
+export const TORRE_IRMA = especTorre(452, { nome: 'Torre Irmã', heliponto: false });
+
+/**
+ * Torres gêmeas (D64): lado a lado, quase encostadas, com as faces lisas de frente uma para a outra através da fenda
+ * de 10 m no eixo norte-sul; as lâminas recuam para fora, espelhadas (a Lâmina a leste, a irmã a oeste), e o par lê
+ * como uma peça só aberta ao meio (as Petronas, o Burj Khalifa nos recuos). No espaço do par: origem no meio da
+ * fenda, x através dela (leste com rot = 0), z ao longo dela (sul).
+ * A cachoeira em ciclo contínuo: a água cai de uma ponte a 45 m dentro da fenda num poço na base, que transborda por
+ * uma escada d'água até o lago; e volta por dutos de vidro nas duas faces da fenda, subindo do poço à ponte.
+ */
+export const GEMEAS = congelar({
+  fenda: 10,
+  // ponte de bronze e vidro entre as faces lisas, com a borda de onde a lâmina de água cai (z do par)
+  ponte: { cota: 45, z0: -4, z1: 4, espessura: 3.2 },
+  // o poço entre os pódios, na base da fenda, e a escada d'água que leva o transbordo ao lago (para o sul)
+  poco: { x: 5, z0: -26, z1: 27, nivel: -0.6, fundo: -1.6 },
+  escada: { z0: 27, z1: 61, degraus: 7 },
+  // dutos de vidro na frente da costura de cada face lisa, atrás das lâminas de água: a água sobe do poço à ponte e
+  // se vê pelo véu da cachoeira (x a partir da face, z do par)
+  dutos: { raio: 0.75, afasta: 1.15, zs: [-2.1, 2.1] },
 });
 
-/** Centro do heliponto no espaço local da Torre (z da frente da coroa mais o balanço, menos o raio). */
+/**
+ * As duas torres no mundo a partir do centro do par { x, z, rot } (rot 0: fenda norte-sul).
+ * @returns {{ spec: object, lado: number, x: number, z: number, rot: number }[]}  a Lâmina primeiro
+ */
+export function torresGemeas(par) {
+  const d = GEMEAS.fenda / 2 + TORRE_LAMINA.planta.comprimento / 2;
+  return [
+    { spec: TORRE_LAMINA, lado: 1 },
+    { spec: TORRE_IRMA, lado: -1 },
+  ].map(({ spec, lado }) => {
+    const [dx, dz] = girar(lado * d, 0, par.rot ?? 0);
+    return { spec, lado, x: par.x + dx, z: par.z + dz, rot: (par.rot ?? 0) + (lado * Math.PI) / 2 };
+  });
+}
+
+/** Centro do heliponto no espaço local da Torre Lâmina (z da frente da coroa mais o balanço, menos o raio). */
 export const HELIPONTO_LOCAL = congelar({
   x: 0,
   y: TORRE_LAMINA.heliponto.cota,
@@ -195,97 +264,177 @@ export function contornoDoCanal(eixo, larguras, { passosPonta = 6 } = {}) {
  *   fisica { arco, raioTubo, altura }                      dois tubos de aço sobre pilares em V e ondas de terra
  */
 
-// ---------- A "Baía": Marina Bay, Gardens by the Bay e Marina Barrage ----------
-// A água no meio e o skyline em volta. O reservatório é a baía interna, fechada para o mar por uma barragem com teto
-// verde; a Torre ocupa a ponta de terra da margem norte e vira a lâmina estreita para a barragem e o mar; o Anel sobe
-// da margem oeste para o norte como a plateia de um anfiteatro; a Sede e as Torres do Conselho fecham a margem
-// nordeste; a Biblioteca pousa na margem leste, sobre a água; a Vida e as Supertrees ficam no oeste, junto da lagoa,
-// como os jardins da baía.
-const A_CENTRO = [240, 770];
+/** Pontos (pares x, z) de um arco de círculo em graus (0 leste, 90 sul), de `de` a `ate`, a cada ~passo metros. */
+export function pontosDoArco(cx, cz, r, de, ate, passo = 12) {
+  const n = Math.max(2, Math.ceil((Math.abs(ate - de) * Math.PI * r) / 180 / passo));
+  const P = [];
+  for (let i = 0; i <= n; i++) {
+    const [x, z] = pontoDoArco(cx, cz, r, de + ((ate - de) * i) / n);
+    P.push(cm(x), cm(z));
+  }
+  return P;
+}
+
+/**
+ * Contorno (pares) de um lago circular com uma ilha elíptica no meio, como um polígono só: o círculo de fora e a
+ * elipse da ilha ligados por uma fresta de 0,4 m a leste (a cava do aplainar não tem furo; a fresta fica abaixo da
+ * água e a transição de 8 m a cobre). Pontos no lago dão dentro; na ilha, fora. canal { x, z0 } (opcional) abre na
+ * ilha o poço e a escada d'água das torres, do sul da ilha até z0 (relativo ao centro), com meia largura x: fazem
+ * parte da cava (o terreno desce sob eles).
+ */
+export function contornoLagoComIlha(cx, cz, raio, rx, rz, n = 96, canal = null) {
+  const P = [];
+  const e0 = 0.2 / raio;
+  const e1 = 0.2 / Math.max(rx, rz);
+  for (let i = 0; i <= n; i++) {
+    const a = e0 + ((2 * Math.PI - 2 * e0) * i) / n;
+    P.push(cm(cx + raio * cos(a)), cm(cz + raio * sen(a)));
+  }
+  // a ilha no sentido contrário; no sul (seno positivo), onde a elipse passa de x = +canal.x a -canal.x, o contorno
+  // sobe pelo canal até o fundo do poço e volta
+  // (a trigonometria de comum/util.js: o contorno vai para a simulação, D5)
+  const q = canal ? Math.min(1, canal.x / rx) : 0;
+  const tc = atan2(q, Math.sqrt(1 - q * q));
+  let noCanal = false;
+  for (let i = 0; i <= n; i++) {
+    const a = 2 * Math.PI - e1 - ((2 * Math.PI - 2 * e1) * i) / n;
+    if (canal && a < Math.PI / 2 + tc && a > Math.PI / 2 - tc) {
+      if (!noCanal) {
+        noCanal = true;
+        const zb = cm(cz + rz * cos(tc));
+        // o ângulo desce: chega pelo oeste (x < 0) e sai pelo leste
+        P.push(cm(cx - canal.x), zb, cm(cx - canal.x), cm(cz + canal.z0), cm(cx + canal.x), cm(cz + canal.z0), cm(cx + canal.x), zb);
+      }
+      continue;
+    }
+    P.push(cm(cx + rx * cos(a)), cm(cz + rz * sen(a)));
+  }
+  return P;
+}
+
+// ---------- A "Baía" v2 (D63 a D65): a sede em anel fechado ----------
+// Uma figura só, como a Apple Park e a McLaren: o anel da Sede (481 m por fora, 358 m por dentro, 4 andares) abraça o
+// pátio, um parque com bosque em volta de um lago circular de 270 m; no meio do lago, numa ilha de pedra, as torres
+// gêmeas de 500 e 452 m com a cachoeira na fenda (o Burj Khalifa na ponta do lago, as Petronas no par), e as fontes
+// dançantes em arco no lado sul. Dois eixos cruzam o centro: norte-sul, do portão à praia, e leste-oeste, da cúpula de
+// vidro (Jewel, Eden) à Biblioteca; a Universidade, a Escola e a Física ficam nos raios de 45 graus (os braços de
+// Daxing); a moradia em arcos fora do anel viário, abertos nos eixos e nos raios. Coordenadas da planta
+// docs/pesquisa/sede/proposta-sede-v2.png (proposta2.py).
+const A_CENTRO = [250, 570];
+const [ACX, ACZ] = A_CENTRO;
+const A_RAIO_VIA = 281; // eixo do anel viário (18 m, de 272 a 290)
+// entroncamento da avenida do portão leste no anel viário: no vão entre o arco de moradia de 320 a 338 graus e o eixo
+// leste (a 330 graus, no meio da planta, a avenida atravessava a moradia)
+const A_ANG_LESTE = 347;
 const PLANO_A = {
   id: 'A',
   nome: 'Baía',
-  referencias: ['Marina Bay', 'Gardens by the Bay', 'Marina Barrage', 'Marina Bay Sands'],
-  ideia: 'a água no meio, o skyline em volta e a barragem para o mar',
+  versao: 2,
+  referencias: ['Apple Park', 'McLaren Technology Centre', 'Burj Khalifa e o lago', 'Torres Petronas', 'Jewel Changi', 'Gardens by the Bay', 'Aeroporto de Daxing'],
+  ideia: 'o anel da Sede abraça o lago e as torres gêmeas; dois eixos, do portão à praia e da cúpula à Biblioteca',
   gleba: [-340, 180, 660, 180, 660, 940, -340, 940],
-  torre: { x: 150, z: 566, rot: 0.62 },
+  // centro do par de torres (a fenda no eixo norte-sul); as duas torres saem de torresGemeas()
+  torre: { x: ACX, z: ACZ, rot: 0, gemeas: true },
+  centro: A_CENTRO,
   partes: [
-    { id: 'torre', nome: 'Torre Lâmina', pecas: [{ tipo: 'torre' }] },
+    { id: 'torre', nome: 'Torres gêmeas', pecas: [{ tipo: 'torre' }] },
     {
-      id: 'lago', nome: 'Reservatório',
+      id: 'lago', nome: 'Lago e fontes',
       pecas: [
         {
-          tipo: 'reservatorio', nivel: -2, fundo: -8, borda: 'degraus',
-          // margens macias (Chaikin): a baía interna tem a curva de uma enseada, não a de um polígono
-          contorno: suavizar([
-            -60, 760, -30, 700, 30, 655, 105, 632, 190, 618, 270, 614, 345, 628, 420, 660, 490, 706, 555, 752, 612, 790,
-            640, 808, 528, 922, 440, 918, 340, 908, 240, 892, 140, 866, 60, 836, -10, 804,
-          ]),
+          // lago de 270 m com a ilha das torres: borda de pedra em degraus na ilha, margem natural no parque
+          tipo: 'reservatorio', forma: 'circulo', cx: ACX, cz: ACZ, raio: 135, ilha: { rx: 96, rz: 60 },
+          nivel: -2, fundo: -6, borda: 'natural', bordaIlha: 'degraus',
+          contorno: contornoLagoComIlha(ACX, ACZ, 135, 96, 60, 96, { x: GEMEAS.poco.x, z0: GEMEAS.poco.z0 }),
         },
-        { tipo: 'barragem', de: [648, 800], ate: [520, 930], largura: 26 },
+        // fontes dançantes em arco no lado sul do lago (Dubai Fountain), entre a ilha e a margem
+        { tipo: 'fontes', cx: ACX, cz: ACZ, r: 110, de: 28, ate: 152, n: 64 },
       ],
     },
     {
-      id: 'sede', nome: 'Sede e Torres do Conselho',
+      id: 'sede', nome: 'Sede',
+      pecas: [{ tipo: 'sedeAnel', cx: ACX, cz: ACZ, rFora: 240.5, rDentro: 179, andares: 4, altura: 30, portais: [270, 0, 90, 180], vao: 40, pe: 18 }],
+    },
+    {
+      id: 'anel', nome: 'Moradia',
+      // quatro arcos fora do anel viário, abertos no eixo norte e nos raios de 45 graus; sobem para o eixo
       pecas: [
-        { tipo: 'sede', arco: { cx: A_CENTRO[0], cz: A_CENTRO[1], r: 340, de: 284, ate: 318 }, fundo: 26, altura: 33 },
-        { tipo: 'conselho', x: 316, z: 408, altura: 150, olhar: A_CENTRO },
-        { tipo: 'conselho', x: 520, z: 520, altura: 126, olhar: A_CENTRO },
+        { tipo: 'anel', arco: { cx: ACX, cz: ACZ, r: 321.5, de: 202, ate: 220 }, fundo: 30, alturas: [44, 48], continuo: true },
+        { tipo: 'anel', arco: { cx: ACX, cz: ACZ, r: 321.5, de: 238, ate: 264 }, fundo: 30, alturas: [50, 54], continuo: true },
+        { tipo: 'anel', arco: { cx: ACX, cz: ACZ, r: 321.5, de: 276, ate: 302 }, fundo: 30, alturas: [54, 50], continuo: true },
+        { tipo: 'anel', arco: { cx: ACX, cz: ACZ, r: 321.5, de: 320, ate: 338 }, fundo: 30, alturas: [48, 44], continuo: true },
       ],
     },
+    { id: 'biblioteca', nome: 'Biblioteca', pecas: [{ tipo: 'biblioteca', x: 600, z: ACZ, olhar: A_CENTRO, lado: 64 }] },
     {
-      id: 'anel', nome: 'Anel de moradia',
-      pecas: [{ tipo: 'anel', arco: { cx: A_CENTRO[0], cz: A_CENTRO[1], r: 372, de: 168, ate: 262 }, fundo: 28, alturas: [34, 66] }],
-    },
-    { id: 'biblioteca', nome: 'Biblioteca', pecas: [{ tipo: 'biblioteca', x: 590, z: 640, olhar: A_CENTRO }] },
-    {
-      id: 'vida', nome: 'Vida',
+      id: 'vida', nome: 'Cúpula de vidro',
       pecas: [
-        { tipo: 'vida', x: -236, z: 812, rot: 0.9, diametro: 96, altura: 70 },
-        { tipo: 'supertree', x: -150, z: 900, altura: 50 },
-        { tipo: 'supertree', x: -118, z: 872, altura: 42 },
-        { tipo: 'supertree', x: -96, z: 910, altura: 36 },
-        { tipo: 'supertree', x: -62, z: 884, altura: 46 },
-        { tipo: 'supertree', x: -30, z: 916, altura: 30 },
-        { tipo: 'supertree', x: -176, z: 872, altura: 34 },
+        // D65: 240 m de diâmetro e 80 de altura, malha diagonal, floresta em terraços por dentro
+        { tipo: 'cupula', x: -175, z: ACZ, diametro: 240, altura: 80, oculo: 14 },
+        // o bosque das Supertrees ao sul da cúpula (Gardens by the Bay)
+        { tipo: 'supertree', x: -265, z: 800, altura: 40 },
+        { tipo: 'supertree', x: -220, z: 795, altura: 50 },
+        { tipo: 'supertree', x: -175, z: 805, altura: 46 },
+        { tipo: 'supertree', x: -130, z: 815, altura: 36 },
+        { tipo: 'supertree', x: -245, z: 845, altura: 32 },
+        { tipo: 'supertree', x: -200, z: 850, altura: 48 },
+        { tipo: 'supertree', x: -155, z: 860, altura: 38 },
+        { tipo: 'supertree', x: -110, z: 865, altura: 28 },
+        { tipo: 'supertree', x: -220, z: 890, altura: 34 },
       ],
     },
-    { id: 'escola', nome: 'Escola', pecas: [{ tipo: 'escola', x: -218, z: 420, rot: 0.75 }] },
-    { id: 'universidade', nome: 'Universidade', pecas: [{ tipo: 'universidade', x: 20, z: 280, rot: 0.12 }] },
-    { id: 'fisica', nome: 'Centro de Física', pecas: [{ tipo: 'fisica', arco: { cx: A_CENTRO[0], cz: A_CENTRO[1], r: 548, de: 272, ate: 302 }, raioTubo: 7, altura: 9 }] },
+    // nos raios de 45 graus: a Escola ao longo do raio nordeste, a Universidade de través no noroeste (os laboratórios
+    // para o sudoeste), a Física em anel (síncrotron) no sudeste
+    { id: 'escola', nome: 'Escola', pecas: [{ tipo: 'escola', x: cm(ACX + 410 * Math.SQRT1_2), z: cm(ACZ - 410 * Math.SQRT1_2), rot: (-3 * Math.PI) / 4 }] },
+    { id: 'universidade', nome: 'Universidade', pecas: [{ tipo: 'universidade', x: cm(ACX - 395 * Math.SQRT1_2), z: cm(ACZ - 395 * Math.SQRT1_2), rot: (-3 * Math.PI) / 4 }] },
+    { id: 'fisica', nome: 'Centro de Física', pecas: [{ tipo: 'fisica', arco: { cx: 529, cz: 849, r: 44, de: 0, ate: 360 }, raioTubo: 6, altura: 7, ondasLargura: 14 }] },
   ],
   paisagem: {
-    // anfiteatro verde entre o Anel e a água; parque dos jardins no oeste; orla de pedra em volta do reservatório
+    // o jardim das Supertrees e a clareira em volta da cúpula
     parques: [
-      [-120, 640, -40, 560, 60, 520, 160, 480, 90, 600, 20, 650, -30, 700, -70, 760, -110, 820, -200, 760],
-      [-320, 700, -250, 690, -160, 760, -100, 830, -20, 860, 60, 880, 140, 900, 200, 930, -320, 935],
-      [380, 470, 470, 510, 540, 600, 560, 700, 500, 690, 430, 640, 360, 610, 300, 590, 330, 520],
-      [-330, 240, -120, 200, 140, 200, 340, 250, 340, 330, 160, 400, -60, 420, -250, 330],
+      [-300, 770, -150, 770, -60, 820, -80, 900, -220, 915, -310, 860],
     ],
-    // a praça da Torre é a esplanada dela (torre.js); esta é a do Conselho
+    // praça de chegada no portão norte
     pracas: [
-      [420, 420, 520, 450, 500, 520, 400, 490],
+      [195, 186, 305, 186, 305, 246, 195, 246],
     ],
+    // os eixos em pedra (24 m) e o calçadão da praia
     passeios: [
-      { caminho: [-60, 770, -20, 690, 60, 640, 180, 612, 300, 612, 420, 650, 520, 718, 630, 796], largura: 14 },
-      { caminho: [240, 190, 240, 330, 225, 450, 190, 540], largura: 18 },
+      { caminho: [ACX, 298, ACX, 432], largura: 24, eixo: true },
+      { caminho: [ACX, 708, ACX, 937], largura: 24, eixo: true },
+      { caminho: [388, ACZ, 552, ACZ], largura: 24, eixo: true },
+      { caminho: [112, ACZ, -52, ACZ], largura: 24, eixo: true },
+      // o calçadão da praia em pedra portuguesa (Copacabana), com palmeiras
+      { caminho: [-336, 930, 656, 930], largura: 12, portuguesa: true },
     ],
+    // mata dos dois lados da praça do portão
     bosques: [
-      { contorno: [-330, 480, -270, 470, -240, 600, -330, 640], densidade: 0.006 },
-      { contorno: [560, 200, 650, 200, 650, 420, 580, 440], densidade: 0.005 },
+      { contorno: [35, 186, 185, 186, 185, 246, 35, 246], densidade: 0.008 },
+      { contorno: [315, 186, 465, 186, 465, 246, 315, 246], densidade: 0.008 },
+    ],
+    // anéis: o bosque em volta do lago, o cinturão de mata em volta da Sede (a Apple Park) e a clareira da cúpula
+    aneis: [
+      { cx: ACX, cz: ACZ, r0: 161, r1: 176, tipo: 'bosque', densidade: 0.006 },
+      { cx: ACX, cz: ACZ, r0: 248, r1: 270, tipo: 'bosque', densidade: 0.007 },
+      { cx: -175, cz: ACZ, r0: 128, r1: 150, tipo: 'parque' },
     ],
   },
   vias: [
-    { tipo: 'avenida', pontos: [240, 180, 240, 320, 232, 420, 210, 480] },
-    { tipo: 'avenida', pontos: [-340, 560, -250, 540, -150, 470, -40, 440, 90, 470] },
-    { tipo: 'avenida', pontos: [660, 430, 590, 440, 530, 470, 440, 470, 360, 460] },
+    { tipo: 'avenida', largura: 24, pontos: [ACX, 180, ACX, cm(ACZ - A_RAIO_VIA)] },
+    // o anel viário partido nos entroncamentos (norte, leste e oeste)
+    { tipo: 'avenida', largura: 18, pontos: pontosDoArco(ACX, ACZ, A_RAIO_VIA, 270, A_ANG_LESTE) },
+    { tipo: 'avenida', largura: 18, pontos: pontosDoArco(ACX, ACZ, A_RAIO_VIA, A_ANG_LESTE, 510) },
+    { tipo: 'avenida', largura: 18, pontos: pontosDoArco(ACX, ACZ, A_RAIO_VIA, 150, 270) },
+    { tipo: 'avenida', largura: 18, pontos: [-340, 745, -150, 745, -60, 738, ...pontoDoArco(ACX, ACZ, A_RAIO_VIA, 150).map(cm)] },
+    // do portão leste: entra reta (de frente para a borda) e desce em diagonal até o anel
+    { tipo: 'avenida', largura: 18, pontos: [660, 430, 615, 430, ...pontoDoArco(ACX, ACZ, A_RAIO_VIA, A_ANG_LESTE).map(cm)] },
   ],
   portoes: [
-    { id: 'norte', x: 240, z: 180 },
-    { id: 'oeste', x: -340, z: 560 },
+    { id: 'norte', x: ACX, z: 180 },
+    { id: 'oeste', x: -340, z: 745 },
     { id: 'leste', x: 660, z: 430 },
   ],
-  camera: { x: 200, z: 640, dist: 1150, guinada: 18, inclinacao: 27 },
+  camera: { x: ACX, z: 600, dist: 1500, guinada: 20, inclinacao: 30 },
 };
 
 // ---------- B "Parque-canal": Songdo Central Park com o pódio de Hudson Yards ----------
@@ -477,16 +626,27 @@ export const PLANO_ESCOLHIDO = 'A';
 export const PLANO_PADRAO = 'A';
 
 /**
- * Posição da Torre no plano escolhido.
- * rot na convenção do three; com rot = 0 a frente (lado das penas) olha para +z (sul, a baía).
+ * Posição da Torre Lâmina no plano escolhido (a do par, D64, quando o plano tem as gêmeas).
+ * rot na convenção do three; com rot = 0 a frente (lado das penas) olha para +z (sul); no par a Lâmina olha para
+ * leste (rot = 90 graus), com a face lisa na fenda.
  */
-export const TORRE_POSICAO = congelar({ ...PLANOS[PLANO_ESCOLHIDO].torre });
+export function torreDoPlano(id) {
+  const t = PLANOS[id].torre;
+  if (!t.gemeas) return { x: t.x, z: t.z, rot: t.rot };
+  const { x, z, rot } = torresGemeas(t)[0];
+  return { x: cm(x), z: cm(z), rot };
+}
 
-/** Ponto de pouso do helicóptero da Holding (D61): o centro do heliponto; y acima da plataforma da Torre. */
+export const TORRE_POSICAO = congelar(torreDoPlano(PLANO_ESCOLHIDO));
+
+/** Ponto de pouso do helicóptero da Holding (D61): o centro do heliponto da Lâmina; y acima da plataforma da Torre. */
 export const POUSO = congelar({ ...torreParaMundo(TORRE_POSICAO, HELIPONTO_LOCAL.x, HELIPONTO_LOCAL.y, HELIPONTO_LOCAL.z) });
 
-/** Câmera da Arcologia (voos e o botão da barra). Ângulos em graus (contratos/render.js). */
-export const CAMERA_ARCOLOGIA = congelar({ x: 170, z: 640, dist: 1300, guinada: 28, inclinacao: 20 });
+/**
+ * Câmera da Arcologia (voos e o botão da barra): o anel inteiro com as torres de lado, do sul-sudoeste. Ângulos em
+ * graus (contratos/render.js).
+ */
+export const CAMERA_ARCOLOGIA = congelar({ x: 250, z: 600, dist: 1500, guinada: 20, inclinacao: 26 });
 
 /**
  * A cava do reservatório de um plano como forma do aplainar (D5; X1b registra quando lago.e1 começa). A cota é a do

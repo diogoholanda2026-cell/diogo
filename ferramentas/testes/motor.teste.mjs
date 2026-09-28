@@ -5,7 +5,10 @@
 // âncora, colisão, voo em arco); o raio contra o terreno; a sombra própria (encaixe no texel nas duas cascatas, a
 // profundidade invertida, a cascata encolhida pelo sol baixo, a cidade instanciada compactada na cascata e o foco
 // puxado para a câmera nas vistas rasantes); a contagem do GLSL contra a guarda do Mali; perfis e resolução
-// dinâmica; quadros-chave da luz do ambiente; ruído das nuvens; e os ganchos publicados. Roda sozinho:
+// dinâmica; quadros-chave da luz do ambiente; ruído das nuvens; e os ganchos publicados. Da PC1 (D66): a escolha do
+// perfil pelo nome da placa (a RX 550 do dono no 'pc'), o perfil 'pc' e os tetos dele, o controle da resolução pelo
+// cronômetro da placa (desce, sobe, não oscila, trava a subida desfeita), o teto de 60 qps, o cronômetro por passe, a
+// memória de vídeo estimada, o aquecimento dos programas e a vigia das compilações depois de pronto. Roda sozinho:
 //   node --test ferramentas/testes/motor.teste.mjs (o simular --testes descobre)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,14 +22,23 @@ import { horasChave, trecho } from '../../fonte/render/ambiente/ibl.js';
 import { criarCamera, LIMITES_CAMERA } from '../../fonte/render/camera/camera.js';
 import { raioNoTerreno, raioDaTela, projetarNaTela } from '../../fonte/render/camera/raio.js';
 import { SombraPropria, COMPACTAR_ACIMA } from '../../fonte/render/sombra/mapa.js';
-import { contarPrograma, preprocessar } from '../../fonte/render/motor/capacidades.js';
-import { PERFIS, degrausDoPerfil } from '../../fonte/render/motor/perfis.js';
-import { Resolucao } from '../../fonte/render/motor/resolucao.js';
+import {
+  contarPrograma, preprocessar, vigiarProgramas, marcarPronto, desmarcarPronto, compilacoesDepois, bytesDoNivel,
+  bytesDoArmazenamento, vigiarMemoria,
+} from '../../fonte/render/motor/capacidades.js';
+import {
+  PERFIS, degrausDoPerfil, escolherPerfil, sugerirPerfil, nomeDaPlaca, razaoDePixels, porPerfil, orcamentoDoPerfil,
+  ORDEM_PERFIS,
+} from '../../fonte/render/motor/perfis.js';
+import { Resolucao, ControleResolucao } from '../../fonte/render/motor/resolucao.js';
+import { Aquecimento, Ritmo, AQUECER } from '../../fonte/render/motor/quadro.js';
+import { Cronometro, Medidas, classeDoDesenho, PASSES_GPU } from '../../fonte/render/motor/medidas.js';
+import { FAMILIAS } from '../../fonte/contratos/render.js';
 import { lookNoAgxDoThree } from '../../fonte/render/motor/renderizador.js';
 import { LOOK } from '../../fonte/render/motor/pos.js';
 import { ehDeLonge, Faixas, CAMADA_LONGE } from '../../fonte/render/motor/faixas.js';
 import { Sol } from '../../fonte/render/ambiente/sol.js';
-import { registrar as registrarBancada } from '../../fonte/render/motor/bancada.js';
+import { registrar as registrarBancada, ligacao } from '../../fonte/render/motor/bancada.js';
 import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { ALBEDOS, ALBEDO_MAXIMO, luminanciaAlbedo } from '../../fonte/render/materiais/biblioteca.js';
 import { fragmentoCeu } from '../../fonte/render/materiais/shaders/ceu.glsl.js';
@@ -649,7 +661,11 @@ test('bancada: a medida trava a resolução só enquanto mede e devolve o relat�
   assert.equal(ctx.quadro.resolucao.fixa, false, 'a resolução dinâmica volta depois da medida');
   assert.equal(ctx.medirGpu, false);
   for (const k of ['perfil', 'sugerido', 'msMedio', 'p95', 'qps', 'calls', 'tris', 'pior', 'gpuMs', 'familias', 'programas', 'capac']) assert.ok(k in rel, k);
+  // o que a PC1 acrescentou para a medida no PC do dono
+  for (const k of ['motivo', 'resolucao', 'gpuPasses', 'memoria', 'aquecimento', 'compilacoes']) assert.ok(k in rel, k);
   assert.equal(rel.sugerido, 'media');
+  assert.match(rel.motivo, /Mali-G615 MC2/);
+  assert.deepEqual(rel.compilacoes.depois, []);
   assert.equal(rel.pior.calls, 120);
   dom.descartar();
   assert.equal(ctx.bancada, undefined);
@@ -663,4 +679,605 @@ test('biblioteca: albedos reais, nada acima de 0,80, grama oliva', () => {
   const g = ALBEDOS.grama.cor;
   assert.ok(luminanciaAlbedo(g) < 0.2 && g[1] > g[0] && g[0] > g[2], 'grama escura e oliva');
   assert.ok(luminanciaAlbedo(ALBEDOS.asfaltoNovo.cor) > 0.03, 'asfalto nunca preto');
+});
+
+// ------------------------------------------------------------------------------------------------ PC do dono (PC1)
+
+test('perfis: a escolha pelo nome da placa põe a RX 550 do dono no PC, não no Ultra', () => {
+  const casos = [
+    ['ANGLE (AMD, Radeon RX 550 Series (0x000067FF) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'pc'],
+    ['ANGLE (AMD, AMD Radeon RX 550 / 550 Series (polaris12, LLVM 15.0.7, DRM 3.49, 6.1.0), OpenGL 4.6)', 'pc'],
+    ['ANGLE (NVIDIA, NVIDIA GeForce GTX 1050 Ti (0x00001C82) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'pc'],
+    ['ANGLE (NVIDIA, NVIDIA GeForce GTX 750 Ti (0x00001380) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'pc'],
+    ['ANGLE (AMD, Radeon RX 560 Series (0x000067EF) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'pc'],
+    ['ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 (0x00001F82) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'alta'],
+    ['ANGLE (AMD, Radeon RX 580 Series (0x000067DF) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'alta'],
+    ['ANGLE (AMD, AMD Radeon RX 5500 XT (0x00007340) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'alta'],
+    ['ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'ultra'],
+    ['ANGLE (Intel, Intel(R) UHD Graphics 630 (0x00003E92) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'media'],
+    ['ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'pc'],
+    ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', 'leve'],
+    ['ANGLE (Unknown, Placa Qualquer 9000)', 'pc'],
+  ];
+  for (const [gpu, id] of casos) assert.equal(sugerirPerfil({ gpu }), id, gpu);
+  // o celular do dono continua no Média (D33), no celular e fora dele; um celular desconhecido cai no Leve
+  assert.equal(sugerirPerfil({ gpu: 'Mali-G615 MC2', movel: true }), 'media');
+  assert.equal(sugerirPerfil({ gpu: 'ANGLE (ARM, Mali-G615 MC2, OpenGL ES 3.2)', movel: true }), 'media');
+  assert.equal(sugerirPerfil({ gpu: 'Mali-G78 MP14', movel: true }), 'alta');
+  assert.equal(sugerirPerfil({ gpu: 'PowerVR Rogue GE8320', movel: true }), 'leve');
+  const e = escolherPerfil({ gpu: casos[0][0] });
+  assert.equal(e.placa, 'Radeon RX 550 Series');
+  assert.match(e.motivo, /^Radeon RX 550 Series: placa de entrada do PC/);
+  assert.equal(nomeDaPlaca('ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)'), 'Apple M1');
+  assert.equal(nomeDaPlaca('Mali-G615 MC2'), 'Mali-G615 MC2');
+  assert.equal(nomeDaPlaca('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)'), 'SwiftShader');
+  assert.deepEqual(ORDEM_PERFIS, ['leve', 'media', 'pc', 'alta', 'ultra']);
+});
+
+test('perfis: o PC em 1080p nativo com MSAA 2x, sombra e céu do Alta, alvo de 15,5 ms e teto de 60 qps', () => {
+  const P = PERFIS.pc;
+  assert.equal(P.msaa, 2);
+  assert.deepEqual(P.sombra, PERFIS.alta.sombra, 'sombra como no Alta');
+  assert.deepEqual(P.ceu, PERFIS.alta.ceu);
+  assert.equal(P.ibl, PERFIS.alta.ibl);
+  assert.equal(P.lod0, PERFIS.alta.lod0);
+  assert.equal(P.alvoGpu, 15.5);
+  assert.deepEqual([P.qps, P.qpsPiso, P.tetoQps], [60, 30, 60]);
+  // Windows com escala de 150%: 1280 x 720 CSS com dpr 1,5 é a tela de 1080p nativa
+  const tela = { w: 1280, h: 720 };
+  assert.equal(razaoDePixels(P, 1.5, 0, tela), 1.5);
+  assert.deepEqual(degrausDoPerfil(P, 1.5, tela), [1.05, 1.2, 1.35, 1.5], '70% a 100% da nativa');
+  // numa tela de 4K fica o teto de pixels de 1080p
+  const pr4k = razaoDePixels(P, 1.5, 0, { w: 2560, h: 1440 });
+  assert.equal(Math.round(2560 * pr4k) * Math.round(1440 * pr4k), 1920 * 1080);
+  assert.equal(razaoDePixels(P, 1.5, 1, tela), 1, '?pr= fixa manda');
+  // os perfis antigos seguem, e o nominal é sempre um degrau (o Alta a 1,5 não cai para 1,45)
+  assert.deepEqual(degrausDoPerfil(PERFIS.alta, 1.5), [1, 1.15, 1.3, 1.5]);
+  assert.deepEqual(degrausDoPerfil(PERFIS.media, 2.75), [0.85, 1, 1.15, 1.3]);
+  // as tabelas dos domínios dão ao PC o que dão ao Alta (HAO, LOD) até ganharem a linha dele
+  assert.equal(porPerfil({ ultra: 2048, alta: 2048, media: 1024 }, P), 2048);
+  assert.equal(porPerfil({ pc: 3, alta: 2, media: 1 }, P), 3);
+  assert.equal(porPerfil({ alta: 2, media: 1 }, PERFIS.leve), 1);
+});
+
+test('perfis: tetos do PC (800 chamadas, 2,5 milhões de triângulos, 2,5 GB de vídeo) com as famílias somando dentro', () => {
+  const O = orcamentoDoPerfil('pc');
+  assert.deepEqual([O.calls, O.tris, O.videoMB], [800, 2500000, 2560]);
+  assert.deepEqual(Object.keys(O.familias).sort(), [...FAMILIAS].sort());
+  const soma = (k) => Object.values(O.familias).reduce((s, f) => s + f[k], 0);
+  assert.ok(soma('teto') <= O.tris, `tetos ${soma('teto')}`);
+  assert.equal(soma('alvo'), O.alvoTris);
+  assert.ok(Object.values(O.familias).reduce((s, f) => s + f.calls[1], 0) <= O.calls);
+  assert.equal(orcamentoDoPerfil('media').calls, 300, 'o Média segue no contrato');
+});
+
+// o custo medido no PC do dono é de pixel: ms = fixo + pixel x escala²; ruído determinístico de ±8%
+function placa({ fixo, pixel, ruido = 0.08, semente = 7 }) {
+  let x = semente;
+  return (escala) => {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    return (fixo + pixel * escala * escala) * (1 + ruido * (2 * (x / 2147483648) - 1));
+  };
+}
+
+test('resolução pelo cronômetro: desce direto ao degrau que cabe no alvo de 15,5 ms', () => {
+  const E = [0.7, 0.8, 0.9, 1];
+  const c = new ControleResolucao({ escalas: E, alvo: 15.5 });
+  const ms = placa({ fixo: 4, pixel: 20, ruido: 0 }); // 24 ms na nativa, como o Alta no PC do dono
+  const trocas = [];
+  for (let t = 0; t < 3000; t += 16.7) {
+    const j = c.amostra(ms(E[c.i]), t);
+    if (j >= 0) trocas.push([Math.round(t), j]);
+  }
+  // 2 janelas lentas: pula de 100% para 80% (24 x 0,64 cabe), mede 16,8 e desce a 70% (13,8 ms)
+  assert.deepEqual(trocas.map(([, j]) => j), [1, 0]);
+  assert.ok(trocas[0][0] < 700, 'na segunda janela');
+  assert.equal(c.i, 0);
+  // e fica: a previsão de 80% (18 ms) não cabe com a folga
+  for (let t = 3000; t < 60000; t += 16.7) assert.equal(c.amostra(ms(E[c.i]), t), -1);
+});
+
+test('resolução pelo cronômetro: sobe um degrau por vez com folga, 3 janelas e 3 s depois de descer', () => {
+  const E = [0.7, 0.8, 0.9, 1];
+  const c = new ControleResolucao({ escalas: E, alvo: 15.5 });
+  c.definir(0);
+  const ms = placa({ fixo: 2, pixel: 10 }); // placa folgada: 12 ms na nativa
+  const trocas = [];
+  for (let t = 0; t < 10000; t += 16.7) {
+    const j = c.amostra(ms(E[c.i]), t);
+    if (j >= 0) trocas.push([t, j]);
+  }
+  assert.deepEqual(trocas.map(([, j]) => j), [1, 2, 3]);
+  for (let k = 1; k < trocas.length; k++) assert.ok(trocas[k][0] - trocas[k - 1][0] >= 3 * 20 * 16.7 - 1, 'três janelas por degrau');
+  // depois de uma descida, espera 3 s para subir
+  const d = new ControleResolucao({ escalas: E, alvo: 15.5 });
+  d.decidir(30, 0);
+  assert.equal(d.decidir(30, 100), 0, 'desce (ao menor que cabe)');
+  for (let k = 0; k < 3; k++) assert.equal(d.decidir(6, 200 + k * 100), -1, 'antes de 3 s não sobe');
+  assert.equal(d.decidir(6, 3200), 1);
+});
+
+test('resolução pelo cronômetro: com ruído na beira do alvo não oscila em 10 minutos', () => {
+  const E = [0.7, 0.8, 0.9, 1];
+  for (const [fixo, pixel] of [[4, 13], [3, 12.6], [5, 14], [2, 17.5], [4, 9]]) {
+    const c = new ControleResolucao({ escalas: E, alvo: 15.5 });
+    const ms = placa({ fixo, pixel, semente: fixo * 100 + pixel });
+    let trocas = 0;
+    let depoisDe20s = 0;
+    for (let t = 0; t < 600000; t += 16.7) {
+      if (c.amostra(ms(E[c.i]), t) >= 0) {
+        trocas++;
+        if (t > 20000) depoisDe20s++;
+      }
+    }
+    assert.ok(trocas <= 3, `${fixo} + ${pixel}: ${trocas} trocas`);
+    assert.equal(depoisDe20s, 0, `${fixo} + ${pixel}: trocou depois de assentar`);
+    // o degrau em que assentou cabe no alvo
+    assert.ok(fixo + pixel * E[c.i] ** 2 <= 15.5 * 1.06 || c.i === 0, `${fixo} + ${pixel} no degrau ${c.i}`);
+  }
+});
+
+test('resolução pelo cronômetro: uma subida desfeita duas vezes trava o degrau de cima por 1 min', () => {
+  const c = new ControleResolucao({ escalas: [0.7, 0.8, 0.9, 1], alvo: 15.5 });
+  c.definir(2);
+  const sobe = (t0) => {
+    let j = -1;
+    for (let k = 0; k < 3; k++) j = Math.max(j, c.decidir(10, t0 + k * 100));
+    return j;
+  };
+  const desce = (t0) => (c.decidir(17, t0), c.decidir(17, t0 + 100));
+  assert.equal(sobe(0), 3);
+  assert.equal(desce(1000), 2, 'a cena ficou pesada logo depois: desfaz');
+  assert.equal(sobe(4200), 3);
+  assert.equal(desce(5500), 2, 'desfaz de novo: trava');
+  assert.equal(sobe(9000), -1, 'travado');
+  assert.equal(sobe(40000), -1, 'ainda travado');
+  assert.equal(sobe(66000), 3, 'passou 1 min');
+});
+
+test('resolução: o PC acerta os degraus pela tela, começa na nativa e troca pelo cronômetro com o CAS', () => {
+  const ctx = { perfil: PERFIS.pc, pr: 1.5, tela: { w: 1280, h: 720 } };
+  const r = new Resolucao(ctx, { fixa: false });
+  Object.defineProperty(r, 'dpr', { value: 1.5 });
+  r.conferir();
+  assert.equal(ctx.pr, 1.5);
+  // a tela de 4K: o mesmo degrau (o nominal), com o teto de 1080p
+  ctx.tela = { w: 2560, h: 1440 };
+  assert.equal(r.conferir(), true);
+  assert.equal(ctx.pr, 0.75);
+  ctx.tela = { w: 1280, h: 720 };
+  r.conferir();
+  assert.equal(ctx.pr, 1.5);
+  // nos 3 primeiros segundos não mexe (compilação); depois 24 ms na nativa descem a 80% (1,2)
+  let t = 0;
+  for (; t < 3000; t += 16.7) assert.equal(r.amostraGpu(24, 1.5, t), false);
+  let trocou = false;
+  for (let k = 0; k < 60 && !trocou; k++, t += 16.7) trocou = r.amostraGpu(24, 1.5, t);
+  assert.ok(trocou);
+  assert.equal(ctx.pr, 1.2);
+  assert.equal(r.ultimaTroca.modo, 'cronometro');
+  assert.ok(r.cas > 0.5, 'CAS abaixo da nativa');
+  // amostra de um quadro de antes da troca não vale
+  assert.equal(r.amostraGpu(40, 1.5, t), false);
+  // com o cronômetro vivo, o tempo de quadro não manda (a CPU lenta não derruba a resolução à toa)
+  for (let k = 0; k < 200; k++, t += 40) {
+    assert.equal(r.amostraGpu(12, 1.2, t), false);
+    assert.equal(r.medir(t, 'livre'), false);
+    assert.equal(r.modo, 'cronometro');
+  }
+  assert.equal(ctx.pr, 1.2);
+  // 30 quadros sem resultado do cronômetro: o tempo de quadro assume
+  let pelaCpu = false;
+  for (let k = 0; k < 150 && !pelaCpu; k++, t += 40) pelaCpu = r.medir(t, 'livre');
+  assert.ok(pelaCpu);
+  assert.equal(r.ultimaTroca.modo, 'quadro');
+  // estado 'teste' e ?pr= travam
+  assert.equal(r.amostraGpu(40, 1.2, t + 9000, 'teste'), false);
+  const fixa = new Resolucao({ perfil: PERFIS.pc, pr: 1, tela: { w: 1280, h: 720 } }, { fixa: true });
+  fixa.conferir();
+  assert.equal(fixa.ctx.pr, 1);
+});
+
+test('teto de qps: 60 na média num monitor de 144 Hz; a 60 Hz nunca pula um quadro', () => {
+  const contar = (hz, s, teto, jitter = 0) => {
+    const r = new Ritmo();
+    let n = 0;
+    for (let k = 0; k < hz * s; k++) {
+      const t = (k * 1000) / hz + (k % 2 ? jitter : -jitter);
+      if (r.vez(t, teto)) {
+        r.desenhou(t, teto);
+        n++;
+      }
+    }
+    return n;
+  };
+  assert.ok(Math.abs(contar(144, 10, 60) - 600) <= 12, `${contar(144, 10, 60)} quadros em 10 s a 144 Hz`);
+  assert.ok(Math.abs(contar(120, 10, 60) - 600) <= 2);
+  assert.equal(contar(60, 10, 60, 0.4), 600, '60 Hz com o rAF oscilando');
+  assert.equal(contar(60.6, 10, 60), 606, 'monitor um pouco acima de 60 Hz');
+  assert.equal(contar(144, 10, 0), 1440, 'sem teto');
+  assert.ok(Math.abs(contar(60, 10, 10) - 100) <= 2, 'tela coberta a 10 qps');
+});
+
+test('cronômetro: trechos por passe (a água pelo nome, o resto pela família) e o quadro inteiro para a resolução', () => {
+  // placa falsa: cada consulta dura o que o rótulo dela manda
+  const ms = { outros: 0.2, ceu: 1, sombra: 2, terreno: 3, agua: 4, predios: 5, pos: 1.5 };
+  const ext = { TIME_ELAPSED_EXT: 0x88bf, GPU_DISJOINT_EXT: 0x8fbb };
+  let ativa = null;
+  let criadas = 0;
+  const gl = {
+    QUERY_RESULT: 0x8866, QUERY_RESULT_AVAILABLE: 0x8867,
+    rotulo: '',
+    createQuery: () => ({ id: ++criadas }),
+    deleteQuery() {},
+    beginQuery(alvo, q) {
+      assert.equal(ativa, null, 'uma consulta por vez');
+      ativa = q;
+      q.ns = ms[gl.rotulo] * 1e6;
+    },
+    endQuery() {
+      ativa = null;
+    },
+    getQueryParameter: (q, k) => (k === gl.QUERY_RESULT_AVAILABLE ? true : q.ns),
+    getParameter: () => false,
+  };
+  const c = new Cronometro(gl, ext);
+  const marcar = (r) => ((gl.rotulo = r), c.marcar(r));
+  gl.rotulo = 'outros';
+  c.comecar({ pr: 1.2, tMs: 0 });
+  for (const r of ['ceu', 'sombra', 'terreno', 'agua', 'terreno', 'predios', 'pos']) marcar(r);
+  c.terminar();
+  const [q] = c.colher();
+  assert.equal(q.info.pr, 1.2);
+  assert.deepEqual(q.porRotulo, { outros: 0.2, ceu: 1, sombra: 2, terreno: 6, agua: 4, predios: 5, pos: 1.5 });
+  assert.ok(Math.abs(q.total - 19.7) < 1e-9);
+  assert.equal(c.livres.length, criadas, 'as consultas voltam para o reuso');
+  // um GPU_DISJOINT joga fora o que estava no ar
+  c.comecar({ pr: 1, tMs: 16 });
+  c.terminar();
+  gl.getParameter = () => true;
+  assert.deepEqual(c.colher(), []);
+  // classificação dos desenhos
+  const grupo = { userData: { familia: 'predios' }, parent: null };
+  assert.equal(classeDoDesenho({ name: '', userData: {}, parent: grupo }, { name: 'edificio' }), 'predios');
+  assert.equal(classeDoDesenho({ name: 'agua', userData: { familia: 'resto' } }, { name: 'agua' }), 'agua');
+  assert.equal(classeDoDesenho({ userData: { familia: 'arcologia' } }, { name: 'arcologia:agua' }), 'agua');
+  assert.equal(classeDoDesenho({ userData: { familia: 'arcologia' } }, { name: 'arcologia:vidro' }), 'arcologia');
+  assert.equal(classeDoDesenho({ name: 'aguape', userData: {} }, { name: 'folha' }), 'resto');
+  assert.ok(PASSES_GPU.includes('agua') && PASSES_GPU.includes('pos') && PASSES_GPU.includes('sombra'));
+});
+
+test('medidas: com o cronômetro ligado, o tempo por passe entra em R.stats e o do quadro vai para a resolução', () => {
+  const ext = { TIME_ELAPSED_EXT: 0x88bf, GPU_DISJOINT_EXT: 0x8fbb };
+  const gl = {
+    QUERY_RESULT: 0x8866, QUERY_RESULT_AVAILABLE: 0x8867, rotulo: 'outros',
+    createQuery: () => ({}), deleteQuery() {}, beginQuery(a, q) { q.ns = (gl.rotulo === 'terreno' ? 3 : 1) * 1e6; }, endQuery() {},
+    getQueryParameter: (q, k) => (k === gl.QUERY_RESULT_AVAILABLE ? true : q.ns), getParameter: () => false,
+  };
+  const renderer = {
+    info: { render: { calls: 0, triangles: 0 }, memory: { textures: 0, geometries: 0 }, programs: [], reset() {} },
+    extensions: { get: (n) => (n === 'EXT_disjoint_timer_query_webgl2' ? ext : null) },
+    getContext: () => gl,
+    getPixelRatio: () => 1.35,
+  };
+  const m = new Medidas(renderer, { perfil: 'pc', capac: { programas: { lista: [{}, {}], depois: [{ nome: 'arcologia:vidro' }] } } });
+  const recebidos = [];
+  m.aoCronometro = (ms, info) => recebidos.push([ms, info.pr]);
+  m.cronometrar = true;
+  m.porPasse = true;
+  for (let k = 0; k < 3; k++) {
+    m.inicio(k * 16);
+    gl.rotulo = 'terreno';
+    m.marcar('terreno');
+    gl.rotulo = 'pos';
+    m.marcar('pos');
+    m.fim(k * 16 + 10);
+  }
+  assert.equal(recebidos.length, 3);
+  assert.deepEqual(recebidos[0], [5, 1.35], 'outros 1 + terreno 3 + pós 1');
+  assert.equal(m.stats.gpuMsTimer, 5);
+  assert.deepEqual(m.stats.gpuPasses, { terreno: 3, pos: 1, outros: 1 });
+  assert.equal(m.stats.gpuQuadros, 3);
+  assert.deepEqual(m.stats.compilacoes, { programas: 2, depois: 1, nomes: ['arcologia:vidro'] });
+  // sem cronômetro nem página de teste, nada de consulta
+  const n = new Medidas({ ...renderer, extensions: { get: () => null } }, {});
+  n.cronometrar = true;
+  n.inicio(0);
+  n.fim(16);
+  assert.equal(n.stats.gpuMsTimer, 0);
+});
+
+test('memória de vídeo: bytes por formato e o que o jogo aloca e solta no WebGL', () => {
+  const RGBA8 = 0x8058;
+  assert.equal(bytesDoNivel(RGBA8, 4, 4), 64);
+  assert.equal(bytesDoNivel(0x8c3a, 1920, 1080), 1920 * 1080 * 4, 'R11F_G11F_B10F');
+  assert.equal(bytesDoNivel(0x881a, 2, 2), 32, 'RGBA16F');
+  assert.equal(bytesDoNivel(0x83f0, 5, 5), 32, 'DXT1 em blocos de 4');
+  assert.equal(bytesDoNivel(0x1908, 2, 2, 1, 0x1908, 0x1401), 16, 'RGBA sem tamanho, byte');
+  assert.equal(bytesDoNivel(0x1907, 2, 2, 1, 0x1907, 0x1401), 16, 'RGB completa para RGBA');
+  assert.equal(bytesDoNivel(0x1908, 2, 2, 1, 0x1908, 0x140b), 32, 'RGBA em meia precisão');
+  assert.equal(bytesDoArmazenamento(RGBA8, 3, 4, 4), 64 + 16 + 4);
+  assert.equal(bytesDoArmazenamento(RGBA8, 1, 4, 4, { faces: 6 }), 6 * 64);
+  assert.equal(bytesDoArmazenamento(RGBA8, 1, 4, 4, { camadas: 3 }), 3 * 64);
+  const lig = {};
+  const gl = {
+    TEXTURE_2D: 0x0de1, TEXTURE_CUBE_MAP: 0x8513, TEXTURE_3D: 0x806f, TEXTURE_2D_ARRAY: 0x8c1a,
+    TEXTURE_BINDING_2D: 0x8069, TEXTURE_BINDING_CUBE_MAP: 0x8514, TEXTURE_BINDING_3D: 0x806a, TEXTURE_BINDING_2D_ARRAY: 0x8c1d,
+    TEXTURE_CUBE_MAP_POSITIVE_X: 0x8515, TEXTURE_CUBE_MAP_NEGATIVE_Z: 0x851a, RENDERBUFFER_BINDING: 0x8ca7,
+    ARRAY_BUFFER: 0x8892, ARRAY_BUFFER_BINDING: 0x8894, ELEMENT_ARRAY_BUFFER: 0x8893, ELEMENT_ARRAY_BUFFER_BINDING: 0x8895,
+    drawingBufferWidth: 100, drawingBufferHeight: 50,
+    getParameter: (p) => {
+      assert.ok(p !== undefined, 'nunca um enum desconhecido (deixaria erro do GL)');
+      return lig[p] ?? null;
+    },
+    texStorage2D() {}, texImage2D() {}, generateMipmap() {}, deleteTexture() {},
+    renderbufferStorageMultisample() {}, deleteRenderbuffer() {}, bufferData() {}, deleteBuffer() {},
+  };
+  const m = vigiarMemoria(gl);
+  assert.equal(vigiarMemoria(gl), m, 'uma vez por contexto');
+  const tex = {};
+  lig[gl.TEXTURE_BINDING_2D] = tex;
+  gl.texStorage2D(gl.TEXTURE_2D, 1, 0x8c3a, 1024, 1024);
+  assert.equal(m.texturas, 4 * 1048576);
+  const img = {};
+  lig[gl.TEXTURE_BINDING_2D] = img;
+  gl.texImage2D(gl.TEXTURE_2D, 0, 0x1908, 0x1908, 0x1401, { width: 256, height: 256 });
+  gl.generateMipmap(gl.TEXTURE_2D);
+  assert.equal(m.texturas, 4 * 1048576 + Math.round((256 * 256 * 4 * 4) / 3));
+  const rb = {};
+  lig[gl.RENDERBUFFER_BINDING] = rb;
+  gl.renderbufferStorageMultisample(0x8d41, 2, 0x8c3a, 1920, 1080);
+  assert.equal(m.alvos, 1920 * 1080 * 4 * 2, 'MSAA 2x');
+  const buf = {};
+  lig[gl.ARRAY_BUFFER_BINDING] = buf;
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(1000), 0x88e4);
+  gl.bufferData(gl.ARRAY_BUFFER, 8000, 0x88e4);
+  assert.equal(m.buffers, 8000, 'o mesmo buffer realocado não soma duas vezes');
+  gl.bufferData(0x8a11, 64, 0x88e4); // um alvo sem ligação conhecida (UNIFORM_BUFFER aqui) não conta
+  assert.equal(m.mb().telaMB, +((100 * 50 * 12) / 1048576).toFixed(1));
+  gl.deleteTexture(tex);
+  gl.deleteTexture(img);
+  gl.deleteRenderbuffer(rb);
+  gl.deleteBuffer(buf);
+  assert.deepEqual([m.texturas, m.alvos, m.buffers], [0, 0, 0]);
+});
+
+// contexto falso do WebGL só com o que o vigia dos programas usa
+function glDeProgramas() {
+  const gl = {
+    VERTEX_SHADER: 0x8b31, FRAGMENT_SHADER: 0x8b30, LINK_STATUS: 0x8b82,
+    createShader: (t) => ({ t }), shaderSource() {}, attachShader() {}, linkProgram() {},
+    getProgramParameter: () => true,
+  };
+  const ligar = (nome) => {
+    const p = {};
+    for (const t of [gl.VERTEX_SHADER, gl.FRAGMENT_SHADER]) {
+      const sh = gl.createShader(t);
+      gl.shaderSource(sh, `#define SHADER_NAME ${nome}\nvoid main() {}`);
+      gl.attachShader(p, sh);
+    }
+    gl.linkProgram(p);
+    return p;
+  };
+  return { gl, ligar };
+}
+
+test('vigia: conta e registra cada programa compilado depois de pronto, com o bloqueio da thread', () => {
+  const { gl, ligar } = glDeProgramas();
+  const v = vigiarProgramas(gl, { fontes: false });
+  const avisos = [];
+  const warn = console.warn;
+  console.warn = (m) => avisos.push(String(m));
+  try {
+    for (const n of ['terreno', 'agua']) gl.getProgramParameter(ligar(n), gl.LINK_STATUS);
+    assert.equal(v.depois.length, 0);
+    // pronto em paralelo (KHR_parallel_shader_compile): a compilação fecha sem bloqueio; a ligação lida depois bloqueia ~0
+    const p = ligar('fachada');
+    assert.equal(gl.getProgramParameter(p, 0x91b1), true);
+    const reg = v.lista.at(-1);
+    assert.ok(reg.msCompilar >= 0 && reg.msBloqueio === null);
+    gl.getProgramParameter(p, gl.LINK_STATUS);
+    assert.ok(reg.msBloqueio >= 0 && reg.link === true);
+    v.quadro = 812;
+    marcarPronto(v, 800);
+    assert.deepEqual([v.pronto, v.quadroPronto, v.antes], [true, 800, 3]);
+    gl.getProgramParameter(ligar('arcologia:vidro'), gl.LINK_STATUS);
+    assert.equal(v.depois.length, 1);
+    assert.deepEqual(compilacoesDepois(v).map((d) => [d.nome, d.quadro]), [['arcologia:vidro', 812]]);
+    assert.ok(Number.isFinite(compilacoesDepois(v)[0].msBloqueio));
+    assert.match(avisos[0], /depois de pronto: arcologia:vidro/);
+    // troca de perfil: volta a aquecer e não conta
+    desmarcarPronto(v);
+    ligar('terreno');
+    assert.equal(v.depois.length, 1);
+    assert.equal(vigiarProgramas(gl), v, 'uma vez por contexto');
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test('aquecimento: compila domínio por domínio no alvo de cada cena e marca pronto depois da rodada final', async () => {
+  const { gl, ligar } = glDeProgramas();
+  const vigia = vigiarProgramas(gl, { fontes: false });
+  const chamadas = [];
+  const renderer = {
+    alvo: null,
+    toneMapping: 'agx',
+    getRenderTarget() {
+      return this.alvo;
+    },
+    setRenderTarget(a) {
+      this.alvo = a;
+    },
+    compileAsync(obj, cam, destino) {
+      chamadas.push({ nome: obj.name, alvo: this.alvo, tom: this.toneMapping, cam, destino });
+      ligar(obj.name);
+      return Promise.resolve(obj);
+    },
+  };
+  const obj = (name) => ({ isObject3D: true, name, userData: {} });
+  const cena = { isObject3D: true, children: [obj('terreno'), obj('predios'), obj('arcologia')] };
+  let prontos = false;
+  const emitidos = [];
+  const ctx = {
+    renderer, cena, camera: 'camera', perfil: PERFIS.pc, capac: { programas: vigia }, medidas: { stats: {} },
+    sombra: { cena: obj('sombra'), alvo: 'alvoSombra', cams: ['camSombra'], ligada: true },
+    dominio: (n) => (n === 'predios' || n === 'vias' ? { pronto: () => prontos } : null),
+    emitir: (n) => emitidos.push(n),
+    quadro: { desenhados: 57 },
+  };
+  const a = new Aquecimento(ctx);
+  const alvo = { alvo: 'alvoHdr', tom: 'nenhum' };
+  assert.equal(a.quadro(0, alvo), true, 'primeira rodada no primeiro quadro');
+  assert.deepEqual(chamadas.map((c) => [c.nome, c.alvo, c.tom]), [
+    ['sombra', 'alvoSombra', 'agx'], ['terreno', 'alvoHdr', 'nenhum'], ['predios', 'alvoHdr', 'nenhum'], ['arcologia', 'alvoHdr', 'nenhum'],
+  ]);
+  assert.equal(chamadas[0].cam, 'camSombra');
+  assert.ok(chamadas.slice(1).every((c) => c.destino === cena), 'luzes da cena inteira');
+  assert.deepEqual([renderer.alvo, renderer.toneMapping], [null, 'agx'], 'o estado do renderer volta');
+  await a._pendente;
+  assert.equal(a.estado, 'aquecendo');
+  assert.equal(a.quadro(1000, alvo), false);
+  assert.equal(a.quadro(AQUECER.esperaMs + 100, alvo), false, 'prédios e vias ainda carregando');
+  prontos = true;
+  // um domínio pede o que ainda não está na cena (a etapa seguinte da Arcologia)
+  ctx.quadro.aquecer = a;
+  a.add(() => [obj('arcologia:etapa2')]);
+  assert.equal(a.quadro(AQUECER.esperaMs + 200, alvo), true, 'rodada final');
+  assert.ok(chamadas.some((c) => c.nome === 'arcologia:etapa2' && c.alvo === 'alvoHdr'));
+  assert.equal(vigia.pronto, false, 'só depois de a rodada terminar');
+  await a._pendente;
+  assert.equal(a.estado, 'pronto');
+  assert.equal(vigia.pronto, true);
+  assert.equal(vigia.quadroPronto, 57);
+  assert.deepEqual(emitidos, ['aquecido']);
+  assert.equal(ctx.medidas.stats.aquecimento.estado, 'pronto');
+  assert.ok(ctx.medidas.stats.aquecimento.programas >= 9);
+  assert.equal((await a.promessa).estado, 'pronto');
+  // fonte nova depois de pronto: uma rodada a mais (o que ligar aí conta como depois de pronto)
+  const n = chamadas.length;
+  a.add(obj('obra'));
+  assert.equal(a.quadro(20000, alvo), true);
+  assert.ok(chamadas.slice(n).some((c) => c.nome === 'obra'));
+  await a._pendente;
+  // troca de perfil: aquece de novo sem contar
+  ctx.perfil = PERFIS.alta;
+  a.quadro(21000, alvo);
+  assert.equal(vigia.pronto, false);
+  assert.equal(a.estado, 'aquecendo');
+  // sem compileAsync (render falso) fica pronto na rodada final, sem quebrar
+  const b = new Aquecimento({ ...ctx, renderer: {}, perfil: PERFIS.pc, capac: {} }, { esperaMs: 0 });
+  b.quadro(0, alvo);
+  await b._pendente;
+  b.quadro(10, alvo);
+  await b._pendente;
+  assert.equal(b.estado, 'pronto');
+});
+
+test('vigia: o bloqueio sai da primeira leitura que espera a ligação (o three lê o registro antes do LINK_STATUS)', () => {
+  const { gl, ligar } = glDeProgramas();
+  // um driver sem compilação em paralelo: a primeira leitura do programa espera a compilação inteira
+  const espera = (ms) => {
+    const t = performance.now();
+    while (performance.now() - t < ms);
+  };
+  const esperando = new Set();
+  const gp = gl.getProgramParameter;
+  gl.linkProgram = (p) => esperando.add(p);
+  gl.getProgramInfoLog = (p) => (esperando.delete(p) && espera(6), '');
+  gl.getProgramParameter = (p, k) => (k !== 0x91b1 && esperando.delete(p) && espera(6), gp(p, k));
+  const v = vigiarProgramas(gl, { fontes: false });
+  // a ordem do onFirstUse do three r186: registro do programa, registros dos shaders, LINK_STATUS
+  const p = ligar('arcologia:vidro');
+  gl.getProgramInfoLog(p);
+  gl.getProgramParameter(p, gl.LINK_STATUS);
+  const reg = v.lista.at(-1);
+  assert.ok(reg.msBloqueio >= 5, `bloqueio ${reg.msBloqueio} ms`);
+  assert.equal(reg.link, true);
+  // sem a checagem de erros do three, a primeira leitura é a dos uniformes ativos (0x8b86)
+  const q = ligar('fachada');
+  gl.getProgramParameter(q, 0x8b86);
+  gl.getProgramParameter(q, gl.LINK_STATUS);
+  assert.ok(v.lista.at(-1).msBloqueio >= 5);
+  assert.equal(v.lista.at(-1).link, true);
+  // pronto em paralelo antes do primeiro uso: bloqueio perto de zero
+  const r = ligar('terreno');
+  esperando.delete(r);
+  assert.equal(gl.getProgramParameter(r, 0x91b1), true);
+  gl.getProgramInfoLog(r);
+  assert.ok(v.lista.at(-1).msBloqueio < 5 && v.lista.at(-1).msCompilar !== null);
+});
+
+test('aquecimento: trocar o perfil no meio da rodada final não marca pronto com os programas do perfil de antes', async () => {
+  const { gl, ligar } = glDeProgramas();
+  const vigia = vigiarProgramas(gl, { fontes: false });
+  const soltar = [];
+  const renderer = {
+    getRenderTarget: () => null,
+    setRenderTarget() {},
+    toneMapping: 0,
+    // a compilação só termina quando o teste solta
+    compileAsync(obj) {
+      ligar(obj.name);
+      return new Promise((ok) => soltar.push(ok));
+    },
+  };
+  const obj = (name) => ({ isObject3D: true, name, userData: {} });
+  const ctx = { renderer, cena: { isObject3D: true, children: [obj('predios')] }, camera: {}, perfil: PERFIS.pc, capac: { programas: vigia }, medidas: { stats: {} } };
+  const a = new Aquecimento(ctx, { esperaMs: 0 });
+  const promessa = a.promessa;
+  a.quadro(0, {});
+  soltar.splice(0).forEach((ok) => ok());
+  await a._pendente;
+  assert.equal(a.quadro(10, {}), true, 'rodada final no ar');
+  const velha = a._pendente;
+  // R.qualidade no meio da rodada final
+  ctx.perfil = PERFIS.alta;
+  a.quadro(20, {});
+  soltar.splice(0).forEach((ok) => ok());
+  await velha;
+  assert.equal(vigia.pronto, false, 'a rodada velha não marca pronto');
+  assert.notEqual(a.estado, 'pronto');
+  // o aquecimento do perfil novo termina e resolve a promessa que o app já esperava
+  await a._pendente;
+  a.quadro(30, {});
+  soltar.splice(0).forEach((ok) => ok());
+  await a._pendente;
+  assert.equal(a.estado, 'pronto');
+  assert.equal(vigia.pronto, true);
+  assert.equal(a.promessa, promessa, 'a promessa de antes da troca é a mesma');
+  assert.equal((await promessa).estado, 'pronto');
+  assert.ok(Number.isFinite(a.relatorio().msThread));
+});
+
+test('resolução: a troca de perfil recomeça a espera de 3 s e o controle acompanha os degraus da tela', () => {
+  const ctx = { perfil: PERFIS.alta, pr: 1.5, tela: { w: 1280, h: 720 } };
+  const r = new Resolucao(ctx, { fixa: false });
+  let dpr = 1.5;
+  Object.defineProperty(r, 'dpr', { get: () => dpr });
+  r.conferir();
+  let t = 0;
+  for (; t < 4000; t += 16.7) r.amostraGpu(10, ctx.pr, t);
+  assert.deepEqual(r.controle.escalas.map((e) => +e.toFixed(3)), [0.667, 0.767, 0.867, 1]);
+  // o dpr muda (zoom, outro monitor): os degraus relativos do Alta mudam (o mesmo número deles) e o controle recomeça
+  dpr = 1.45;
+  ctx.tela = { w: 1281, h: 720 };
+  r.conferir();
+  r.amostraGpu(10, ctx.pr, t);
+  assert.deepEqual(r.controle.escalas.map((e) => +e.toFixed(3)), [0.69, 0.793, 0.897, 1]);
+  // troca para o 'pc': os primeiros 3 s depois dela não mexem (a compilação do perfil novo)
+  ctx.perfil = PERFIS.pc;
+  r.conferir();
+  const t0 = t + 100;
+  for (let k = 0; k < 150; k++) assert.equal(r.amostraGpu(40, ctx.pr, t0 + k * 16.7), false, 'dentro dos 3 s');
+  let trocou = false;
+  for (let k = 0; k < 60 && !trocou; k++) trocou = r.amostraGpu(40, ctx.pr, t0 + 3100 + k * 16.7);
+  assert.ok(trocou, 'depois dos 3 s desce');
+});
+
+test('página de teste: as ligações entre as cenas medem no mesmo perfil (a estresse fixa o Média sem ?q=)', () => {
+  const p = (l) => Object.fromEntries(new URLSearchParams(l.slice(1)));
+  assert.deepEqual(p(ligacao('estresse', 'pc', '?cena=aberta&painel=1')), { cena: 'estresse', painel: '1', q: 'pc' });
+  assert.deepEqual(p(ligacao('aberta', 'pc', '?cena=estresse&painel=1&q=alta&quadros=30')), { cena: 'aberta', painel: '1', q: 'alta', quadros: '30' });
+  assert.deepEqual(p(ligacao('aberta', null, '')), { cena: 'aberta', painel: '1' });
 });

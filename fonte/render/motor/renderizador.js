@@ -2,11 +2,13 @@
 // perda do contexto. O antisserrilhado sai do alvo HDR com MSAA (motor/pos.js), não do canvas. Profundidade
 // invertida (reversedDepthBuffer) quando o aparelho tem EXT_clip_control: plano próximo de 10 cm e distante de 100 km
 // num alvo de 32 bits em ponto flutuante; sem ela (ou com ?semClip=1, que o quadro desliga) valem as duas faixas de
-// profundidade (motor/faixas.js). O vigia dos programas entra antes do primeiro programa (tempo de compilação e, na
-// página de teste, as fontes para a guarda do Mali, D44). O AgX do three (só no Leve, que desenha sem pós) ganha o
-// mesmo look da composição (lookNoAgxDoThree).
+// profundidade (motor/faixas.js). O vigia dos programas entra antes do primeiro programa (tempo de compilação, o
+// bloqueio de cada ligação, as compilações depois de pronto e, na página de teste, as fontes para a guarda do Mali,
+// D44), junto com o vigia da memória de vídeo (D66). O KHR_parallel_shader_compile fica ligado quando existe: o
+// aquecimento (motor/quadro.js) compila na carga sem parar a thread. O AgX do three (só no Leve, que desenha sem pós)
+// ganha o mesmo look da composição (lookNoAgxDoThree).
 import * as THREE from 'three';
-import { sondar, vigiarProgramas } from './capacidades.js';
+import { sondar, vigiarProgramas, vigiarMemoria } from './capacidades.js';
 import { LOOK } from './pos.js';
 
 const MARCA_LOOK = '// look da Holding';
@@ -80,6 +82,7 @@ export function criarRenderizador(canvas, { msaa = 2, pr = 1 } = {}) {
   renderer.setPixelRatio(pr);
   const gl = renderer.getContext();
   const vigia = vigiarProgramas(gl);
+  const memoria = vigiarMemoria(gl);
   const tem = (n) => renderer.extensions.has(n);
   const sonda = sondar(gl);
   const capac = {
@@ -93,6 +96,7 @@ export function criarRenderizador(canvas, { msaa = 2, pr = 1 } = {}) {
     limites: lerLimites(gl),
     sonda,
     programas: vigia,
+    memoria,
   };
   const gpu = sonda.gpu;
   const movel = typeof navigator !== 'undefined' && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');

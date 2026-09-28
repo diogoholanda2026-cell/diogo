@@ -4,11 +4,14 @@
 //   node ferramentas/bancada.mjs [--cenas aberta,rua,horizonte] [--perfis leve,media,ultra] [--pasta previa]
 //        [--saida <pasta>] [--quadros 120] [--tam 1376x768] [--consulta "sintetica=1"] [--semClip] [--familias] [--voo]
 //        [--fontes] (grava o GLSL final de cada programa em <saida>/<cena>-<perfil>-glsl/) [--vel 1|2|4] (padrão 4x)
+//        [--compilacoes] (falha com programa compilado depois de pronto; sem ela, só avisa)
 // A cena 'jogo' abre o jogo sem ?cena= (a vista de depuração da F0). --familias confere os tetos por família em
-// qualquer cena (sem ela, só na 'aberta' do Média, onde a 4.8 os fixa). --voo também roda R.bancada() e guarda o
-// relatório do render.
+// qualquer cena (sem ela, só na 'aberta' do Média e do 'pc', onde a 4.8 e a D66 os fixam). --voo também roda
+// R.bancada() e guarda o relatório do render (com o tempo de placa por passe, a memória e as compilações).
 //
-// Orçamento e guarda do Mali vêm de fonte/contratos/render.js (ORCAMENTO, GUARDA_MALI).
+// Orçamento e guarda do Mali vêm de fonte/contratos/render.js (ORCAMENTO, GUARDA_MALI); o do 'pc' (PC do dono, D66:
+// 800 chamadas, 2,5 milhões de triângulos, 2,5 GB de vídeo) vem do próprio perfil (motor/perfis.js) até entrar no
+// contrato. A medida espera o aquecimento dos programas (motor/quadro.js) e conta as compilações depois de pronto.
 // Como mede: a página abre com ?cena=<nome>&q=<perfil>&pr=1&teste=1&bancada=1&sol=anda (a cena faz a hora andar), a
 // velocidade vai a 4x (--vel troca) se houver simulação, e a cada quadro (requestAnimationFrame) lê window.__held.R.stats. O pior
 // quadro é o máximo de cada medida na janela. Os programas são capturados por um gancho no WebGL2 (shaderSource,
@@ -21,6 +24,7 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ORCAMENTO, GUARDA_MALI } from '../fonte/contratos/render.js';
+import { orcamentoDoPerfil } from '../fonte/render/motor/perfis.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /** --vel (1x, 2x, 4x) para o comando velocidade (D7: v 1, 2 e 3). */
@@ -200,14 +204,16 @@ export function contarPrograma(vs, fs) {
   return r;
 }
 
-// confere o pior quadro contra o orçamento do perfil (e os tetos por família do Média); devolve a lista de falhas
+// confere o pior quadro contra o orçamento do perfil (e os tetos por família do Média e do 'pc'); devolve a lista de
+// falhas
 export function conferirOrcamento(pior, perfil, { familias = false, memoria = null } = {}) {
-  const lim = ORCAMENTO[perfil];
+  const lim = orcamentoDoPerfil(perfil);
   const f = [];
   if (!lim) return [`perfil desconhecido: ${perfil}`];
   if (pior.calls > lim.calls) f.push(`${pior.calls} chamadas (teto ${lim.calls})`);
   if (pior.tris > lim.tris) f.push(`${pior.tris} triângulos (teto ${lim.tris})`);
   if (lim.geometriaMB && memoria?.geometriaMB > lim.geometriaMB) f.push(`${memoria.geometriaMB.toFixed(1)} MB de geometria (teto ${lim.geometriaMB})`);
+  if (lim.videoMB && memoria?.videoMB > lim.videoMB) f.push(`${Math.round(memoria.videoMB)} MB de vídeo estimados (teto ${lim.videoMB})`);
   if (familias && lim.familias) {
     const fam = { ...(pior.familias || {}) };
     if (pior.trisSombra != null) fam.sombra = Math.max(fam.sombra || 0, pior.trisSombra);
@@ -238,12 +244,15 @@ const GANCHO = `(() => {
   };
 })();`;
 
-// roda na página: amostra n quadros e devolve o pior e a média
-async function amostrarNaPagina({ n, v }) {
+// roda na página: espera o aquecimento dos programas, amostra n quadros e devolve o pior e a média
+async function amostrarNaPagina({ n, v, esperaAquecer }) {
   const R = window.__held?.R;
   const sim = window.__held?.sim;
-  try { sim?.cmd?.('velocidade', { v }); } catch (e) { /* sem simulação: a cena anda a hora sozinha */ }
   const quadro = () => new Promise((ok) => requestAnimationFrame(() => ok()));
+  const t0 = performance.now();
+  while (R?.stats?.aquecimento && R.stats.aquecimento.estado !== 'pronto' && performance.now() - t0 < esperaAquecer) await quadro();
+  const aquecido = R?.stats?.aquecimento?.estado === 'pronto';
+  try { sim?.cmd?.('velocidade', { v }); } catch (e) { /* sem simulação: a cena anda a hora sozinha */ }
   const lidos = [];
   for (let i = 0; i < n; i++) {
     await quadro();
@@ -270,15 +279,17 @@ async function amostrarNaPagina({ n, v }) {
     const gl = pr.gl;
     programas.push({ vs: pr.vs, fs: pr.fs, link: !!gl.getProgramParameter(pr.p, gl.LINK_STATUS), atributosGl: gl.getProgramParameter(pr.p, gl.ACTIVE_ATTRIBUTES) });
   }
+  const vigia = R?._ctx?.capac?.programas;
+  const depois = (vigia?.depois || []).map((p) => ({ nome: p.nome, msBloqueio: p.msBloqueio, msCompilar: p.msCompilar, quadro: p.quadro }));
   return {
     quadros: lidos.length, pior, medio: lidos.length ? { calls: Math.round(soma.calls / lidos.length), tris: Math.round(soma.tris / lidos.length) } : null,
-    stats: limpo(R?.stats), resultado: limpo(window.__resultado), programas, temR: !!R,
+    stats: limpo(R?.stats), resultado: limpo(window.__resultado), programas, temR: !!R, aquecido, depois,
   };
 }
 
 function lerArgs(argv) {
-  const o = { cenas: ['aberta', 'rua', 'horizonte'], perfis: ['leve', 'media', 'ultra'], pasta: 'previa', saida: join(tmpdir(), 'heldopolis-bancada'),
-    quadros: 120, tam: '1376x768', consulta: '', semClip: false, familias: false, voo: false, fontes: false, teto: 300, vel: 4 };
+  const o = { cenas: ['aberta', 'rua', 'horizonte'], perfis: ['leve', 'media', 'pc'], pasta: 'previa', saida: join(tmpdir(), 'heldopolis-bancada'),
+    quadros: 120, tam: '1376x768', consulta: '', semClip: false, familias: false, voo: false, fontes: false, teto: 300, vel: 4, compilacoes: false, aquecer: 60 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = () => argv[++i];
     if (k === '--cenas') o.cenas = v().split(',');
@@ -294,6 +305,8 @@ function lerArgs(argv) {
     else if (k === '--fontes') o.fontes = true;
     else if (k === '--teto') o.teto = +v();
     else if (k === '--vel') o.vel = +v();
+    else if (k === '--compilacoes') o.compilacoes = true;
+    else if (k === '--aquecer') o.aquecer = +v();
     else throw new Error(`opção desconhecida: ${k}`);
   }
   if (!(o.vel in VELOCIDADES)) throw new Error(`--vel ${o.vel}: use 1, 2 ou 4`);
@@ -323,7 +336,7 @@ export async function rodarBancada(o) {
       await page.goto(`http://localhost:${srv.porta}/index.html?${q}`);
       let pronto = true;
       try { await page.waitForFunction(() => window.__pronto === true, null, { timeout: o.teto * 1000, polling: 250 }); } catch (e) { pronto = false; }
-      const med = pronto ? await page.evaluate(amostrarNaPagina, { n: o.quadros, v: VELOCIDADES[o.vel ?? 4] }) : null;
+      const med = pronto ? await page.evaluate(amostrarNaPagina, { n: o.quadros, v: VELOCIDADES[o.vel ?? 4], esperaAquecer: (o.aquecer ?? 60) * 1000 }) : null;
       let voo = null;
       if (pronto && o.voo) voo = await page.evaluate(async () => { try { return JSON.parse(JSON.stringify(await window.__held.R.bancada())); } catch (e) { return { erro: String(e) }; } });
       const base = `${cena}-${perfil}${o.semClip ? '-semClip' : ''}`;
@@ -346,13 +359,18 @@ export async function rodarBancada(o) {
         for (const x of p.falhas) falhas.push(`guarda do Mali: ${p.nome}: ${x}`);
       }
       if (med?.quadros) {
-        const familias = o.familias || (cena === 'aberta' && perfil === 'media');
+        const familias = o.familias || (cena === 'aberta' && (perfil === 'media' || perfil === 'pc'));
         falhas.push(...conferirOrcamento(med.pior, perfil, { familias, memoria: med.stats?.memoria }));
       }
+      // nenhuma compilação depois de pronto (D66): aviso, ou falha com --compilacoes
+      const avisos = [];
+      if (med && med.aquecido === false && med.stats?.aquecimento) avisos.push(`o aquecimento não terminou em ${o.aquecer ?? 60} s`);
+      for (const d of med?.depois || []) avisos.push(`programa compilado depois de pronto: ${d.nome} (bloqueio ${d.msBloqueio ?? '?'} ms, quadro ${d.quadro})`);
+      if (o.compilacoes) falhas.push(...avisos.filter((a) => a.startsWith('programa')));
       const res = med?.resultado;
       if (res && (res.ok === false || res.falhas?.length)) falhas.push(...(res.falhas?.length ? res.falhas.map((x) => 'cena: ' + x) : ['cena: ok = false']));
       const rel = { cena, perfil, semClip: o.semClip, vel: o.vel ?? 4, ms: Date.now() - t0, quadros: med?.quadros || 0, pior: med?.pior || null, medio: med?.medio || null,
-        orcamento: ORCAMENTO[perfil], stats: med?.stats || null, resultado: res || null, voo,
+        orcamento: orcamentoDoPerfil(perfil), stats: med?.stats || null, resultado: res || null, voo, compilacoesDepois: med?.depois || [], avisos,
         programas: programas.map(({ nome, amostradores, varyings, varyingsF, uniformesV, uniformesF, atributos, atributosGl, link, falhas: fp }) => ({ nome, amostradores, varyings, varyingsF, uniformesV, uniformesF, atributos, atributosGl, link, falhas: fp })),
         falhas };
       writeFileSync(join(o.saida, base + '.json'), JSON.stringify(rel, null, 1));
@@ -360,8 +378,10 @@ export async function rodarBancada(o) {
       if (falhas.length) falhou = true;
       const p = rel.pior;
       const mil = (n) => (n / 1000).toFixed(0) + ' mil';
-      console.log(`${base.padEnd(22)} ${p ? `pior ${p.calls} chamadas, ${mil(p.tris)} tri (sombra ${p.callsSombra} / ${mil(p.trisSombra)})` : 'sem medida'} · ${rel.quadros} quadros · ${programas.length} programas · ${falhas.length ? 'FALHOU' : 'ok'}`);
+      const mem = rel.stats?.memoria?.videoMB;
+      console.log(`${base.padEnd(22)} ${p ? `pior ${p.calls} chamadas, ${mil(p.tris)} tri (sombra ${p.callsSombra} / ${mil(p.trisSombra)})` : 'sem medida'} · ${rel.quadros} quadros · ${programas.length} programas${mem ? ` · ${Math.round(mem)} MB de vídeo` : ''} · ${(med?.depois || []).length} depois de pronto · ${falhas.length ? 'FALHOU' : 'ok'}`);
       for (const f of falhas) console.log('    ' + f);
+      for (const a of avisos) if (!falhas.includes(a)) console.log('    aviso: ' + a);
     }
   } finally {
     await browser.close();

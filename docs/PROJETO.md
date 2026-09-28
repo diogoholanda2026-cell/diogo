@@ -983,6 +983,21 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   deslocada, borda), voo completo, inclinação mínima perto do chão; exportar o corte das faixas (a R4a repete a conta em
   `limiteFaixas`); luz de dia fria e chapada (pouco contraste entre face ao sol e à sombra); às 17h30 a neblina contra o
   sol deixa a mata a 3 a 5 km bege; para a prancha em luz dourada, a hora desce para perto das 18h.
+- **Entregue em 28/09/2026 (PC1, perfil do PC do dono, D66, revisada).** Perfil `pc` em `motor/perfis.js`: 1080p nativo
+  (teto de pixels de 1080p), MSAA 2x, sombra, céu, PMREM e LOD do Alta (`base: 'alta'`, lida pelos domínios com
+  `porPerfil`), alvo de 60 qps, piso de 30 e teto de 60; tetos por família (800 chamadas, 2,5 milhões de triângulos,
+  2,5 GB de vídeo, provisórios). Escolha automática por faixas de nome de placa (`escolherPerfil`, com o motivo): RX
+  460 a 560, GTX 750 a 1050 e integradas boas (e placa de PC desconhecida) no `pc`; Alta e Ultra para as maiores;
+  Intel HD e UHD no Média. Resolução dinâmica pelo cronômetro da placa (`ControleResolucao`, puro): mira 15,5 ms,
+  degraus de 70% a 100% da nativa, desce direto ao degrau que cabe, sobe pela previsão com folga, trava a subida
+  desfeita, CAS abaixo da nativa; o tempo de quadro fica para o Média e para quem não tem o cronômetro. Aquecimento em
+  `motor/quadro.js` (`compileAsync` domínio por domínio no primeiro quadro e numa rodada final depois da carga;
+  `ctx.quadro.aquecer` para o que ainda não está na cena) e o vigia conta cada programa ligado depois de pronto, com
+  o bloqueio da thread. Página de teste: perfil e motivo, resolução interna em pixels, tempo de placa por passe (sombra,
+  preparo, céu, terreno, água, prédios, vias, Arcologia, pós), memória de vídeo estimada pelo que o WebGL aloca,
+  aquecimento e compilações depois de pronto, tudo no "Copiar resultado" (`?quadros=` troca os 120 quadros).
+  `bancada.mjs` mede o `pc` por padrão, espera o aquecimento e avisa as compilações depois de pronto. No SwiftShader
+  os números não valem: o de verdade vem da página de teste no PC do dono.
 
 #### R2a. Chão, mar e lagoa; A/B de materiais (onda 1; 2 sessões)
 - **Arquivos:** `render/mundo/{terreno,agua}.js`, `render/geracao/ruido.js`, `render/materiais/texturas-chao.js`,
@@ -1080,6 +1095,29 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   Barangaroo); parques em tapete de borda dura; cobertura solar da Sede listrada de perto; monograma H ilegível;
   Supertrees à noite como funis claros; `CeuReserva` e `AmbienteReserva` inertes (tirar); na vista aberta das 21h o
   fantasma do plano estoura em bege sobre a cidade escura (baixar a emissão dele à noite).
+- **Entregue em 28/09/2026** (SEDE2, D63 a D66, revisada). O plano A virou a sede v2 em `data/arcologia-plano.js` (a mesma
+  gleba; portões norte em x 250, oeste e leste; o anel viário de 18 m em três arcos e as avenidas; os eixos e a posição
+  de cada parte) e a Torre saiu de `especTorre(altura)`: `TORRE_LAMINA` de 500 m e `TORRE_IRMA` de 452 m pelo mesmo
+  gerador, `GEMEAS` e `torresGemeas()` (fenda de 10 m no eixo norte-sul, as faces lisas para a fenda, as lâminas
+  espelhadas para fora), `TORRE_POSICAO` e `POUSO` na Lâmina, `CAMERA_ARCOLOGIA` nova e `cavaDoPlano('A')` com o lago
+  circular, a ilha, o poço e a escada d'água num polígono só. No render: o par com a ponte a 45 m, a cachoeira nas duas
+  bordas, os dutos com a água subindo atrás do véu, a névoa e a espuma (material `arcologia:cascata`); a Sede em anel de
+  481 por 358 m, 4 andares em 30 m, marquises brancas (geometria no LOD0, shader no LOD1), cobertura solar e os quatro
+  pórticos de 40 por 18 m; o lago de 270 m com a ilha em degraus, a margem natural, o poço e a escada d'água; as fontes
+  em arco instanciadas (`arcologia:jato`, coreografia no vértice, acesas à noite); a cúpula de 240 por 80 m com a malha
+  diagonal (barras no LOD0, shader no LOD1) e a floresta em terraços vista pelo vidro (`arcologia:claro`); a moradia em
+  arcos contínuos, a Biblioteca, a Escola, a Universidade e a Física reposicionadas; o LOD das partes pela distância ao
+  centro. O soluço de 166 ms era o reflexo de reserva: punha um envMap no vidro enquanto a luz do ambiente não existia e
+  o tirava no quadro seguinte (programa novo); saiu com o `CeuReserva`. Os materiais da Arcologia são agora um conjunto
+  fixo criado na carga, nada muda de programa entre dia, noite, LOD e fantasma, e `criarAquecimento` desenha cada um nos
+  primeiros quadros (0 compilações depois de pronto nas cenas). Medido (Alta): as torres em LOD0 com 60 e 55 mil
+  triângulos, a Arcologia de perto 170 mil e na vista aberta 28 mil (construída) e 23 mil (fantasma do jogo); 33 testes.
+  Cenas: `torre` (prancha do par) e `planos` com `?vista=aerea|eixo|mar|noite` e `?olhar=`. Pendente (integrador): o
+  contrato da Torre em `contratos.teste.mjs` (301, 238, 163, 330, 350), o portão norte em `vias.teste.mjs` (x 240) e o
+  tráfego da sintética, que muda com o anel em volta da `TORRE_POSICAO`. Na revisão: a avenida do portão leste entra
+  pelo vão entre a moradia e o eixo leste (atravessava o arco de 320 a 338 graus), as caixas de seleção da Sede seguem
+  o anel (as de um quarto cobriam o lago), os jatos soltam o InstancedMesh ao remontar, a cachoeira e os jatos numa
+  passada só, a pedra portuguesa na escala real e a vista `mar` no eixo; 35 testes.
 
 #### U1a. Pele da interface (onda 1; 2 sessões)
 - **Arquivos:** `ui/comp/*`, `ui/glifos/glifos.js` (a partir daqui), `ui/hud/BarraCima.jsx`, `ui/selecao/Cartao.jsx`,

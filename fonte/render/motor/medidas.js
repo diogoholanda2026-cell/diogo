@@ -2,21 +2,154 @@
 // e zerado no começo do quadro: sombra própria, faces do céu, PMREM, cena, bloom e composição), a sombra própria à
 // parte (callsSombra, trisSombra), triângulos por família, tempo de quadro (média, p95 e pior da janela de 120) e
 // memória. O ms de GPU sai de uma cerca (fenceSync) no fim do quadro: pelo WebGL2 o estado dela só muda entre
-// tarefas, então a espera é por mensagens (MessageChannel) e o valor é o tempo até a GPU terminar o quadro; com
-// EXT_disjoint_timer_query_webgl2 também sai o tempo de GPU medido pela própria GPU (gpuMsTimer). As duas medidas só
-// correm quando pedidas (R.estado('teste'), a bancada e a página de teste), para não pesar no jogo.
+// tarefas, então a espera é por mensagens (MessageChannel) e o valor é o tempo até a GPU terminar o quadro. Com
+// EXT_disjoint_timer_query_webgl2 sai também o tempo de placa medido pela própria placa (o Cronometro): o quadro
+// inteiro (gpuMsTimer, que alimenta a resolução dinâmica dos perfis de PC) e, na página de teste, por passe
+// (gpuPasses: sombra, preparo, céu, terreno, água, prédios, vias, Arcologia, pós...), com cada desenho da cena
+// classificado pelo material e pela família do objeto. A cerca só corre quando pedida (R.estado('teste'), a bancada,
+// a página de teste); o cronômetro também nos perfis com resolução dinâmica pela placa (uma consulta por quadro).
+// Desde a PC1 (D66) também: a memória de vídeo estimada (capacidades.js, vigiarMemoria), as compilações depois de
+// pronto (vigiarProgramas) e o aquecimento (quadro.js).
 import { statsVazio, FAMILIAS } from '../../contratos/render.js';
 
 const JANELA = 120;
+/** Quadros da média por passe do cronômetro. */
+const JANELA_PASSES = 60;
+/** Trechos por quadro no máximo (um quadro patológico não esgota as consultas). */
+const TRECHOS_MAX = 256;
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
+
+/** Passes do quadro no cronômetro da placa, na ordem da página de teste. */
+export const PASSES_GPU = Object.freeze(['sombra', 'preparo', 'ceu', 'terreno', 'agua', 'predios', 'colocaveis', 'arvores', 'vias', 'vida', 'arcologia', 'resto', 'pos', 'outros']);
+
+const AGUA = /(?:^|[:_\s-])agua(?:$|[:_\s-])/i;
+
+/**
+ * Passe de um desenho da cena: a água pelo nome do material ou do objeto (o mar, a lagoa e o lago da Arcologia pesam
+ * por pixel), senão a família marcada por medidas.familia no objeto ou num ancestral, senão 'resto'.
+ */
+export function classeDoDesenho(obj, mat) {
+  if (AGUA.test(mat?.name || '') || AGUA.test(obj?.name || '')) return 'agua';
+  for (let o = obj; o; o = o.parent) {
+    const f = o.userData?.familia;
+    if (f) return f === 'sombra' ? 'resto' : f;
+  }
+  return 'resto';
+}
+
+/**
+ * Cronômetro da placa (EXT_disjoint_timer_query_webgl2): cada quadro vira trechos com rótulo (uma consulta
+ * TIME_ELAPSED por trecho, sem aninhar), colhidos uns quadros depois, quando a placa termina. Um GPU_DISJOINT (troca
+ * de frequência, outra aba) joga fora o que estava no ar.
+ */
+export class Cronometro {
+  /** @param {WebGL2RenderingContext} gl  @param {object} ext  a extensão */
+  constructor(gl, ext) {
+    this.gl = gl;
+    this.ext = ext;
+    this.livres = [];
+    this.pendentes = [];
+    this.quadro = null;
+    this.aberto = null;
+    this.rotulo = null;
+  }
+
+  /** Começo de um quadro (info vai junto no resultado: a razão de pixels e o tempo). */
+  comecar(info) {
+    if (this.quadro) this.terminar();
+    this.quadro = { info, trechos: [] };
+    this._abrir('outros');
+  }
+
+  /** Troca o trecho aberto (sem efeito se o rótulo é o mesmo). */
+  marcar(rotulo) {
+    if (!this.quadro || rotulo === this.rotulo || this.quadro.trechos.length >= TRECHOS_MAX) return;
+    this._fechar();
+    this._abrir(rotulo);
+  }
+
+  terminar() {
+    if (!this.quadro) return;
+    this._fechar();
+    this.pendentes.push(this.quadro);
+    this.quadro = null;
+    // resultados que não chegam (aba escondida): recicla os mais velhos
+    while (this.pendentes.length > 10) this._reciclar(this.pendentes.shift());
+  }
+
+  /**
+   * Quadros prontos, em ordem: [{ info, total, porRotulo: { rotulo: ms } }]. Chame fora de um quadro aberto.
+   */
+  colher() {
+    const { gl, ext } = this;
+    const prontos = [];
+    if (!this.pendentes.length) return prontos;
+    if (gl.getParameter(ext.GPU_DISJOINT_EXT)) {
+      for (const q of this.pendentes) this._reciclar(q);
+      this.pendentes.length = 0;
+      return prontos;
+    }
+    while (this.pendentes.length) {
+      const q = this.pendentes[0];
+      const ultimo = q.trechos[q.trechos.length - 1]?.[1];
+      if (ultimo && !gl.getQueryParameter(ultimo, gl.QUERY_RESULT_AVAILABLE)) break;
+      this.pendentes.shift();
+      const porRotulo = {};
+      let total = 0;
+      for (const [r, c] of q.trechos) {
+        const ms = gl.getQueryParameter(c, gl.QUERY_RESULT) / 1e6;
+        porRotulo[r] = (porRotulo[r] ?? 0) + ms;
+        total += ms;
+      }
+      this._reciclar(q);
+      prontos.push({ info: q.info, total, porRotulo });
+    }
+    return prontos;
+  }
+
+  descartar() {
+    if (this.quadro) this.terminar();
+    for (const q of this.pendentes) this._reciclar(q);
+    this.pendentes.length = 0;
+    for (const c of this.livres) this.gl.deleteQuery(c);
+    this.livres.length = 0;
+  }
+
+  _abrir(rotulo) {
+    const c = this.livres.pop() ?? this.gl.createQuery();
+    this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, c);
+    this.aberto = c;
+    this.rotulo = rotulo;
+  }
+
+  _fechar() {
+    if (!this.aberto) return;
+    this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
+    this.quadro.trechos.push([this.rotulo, this.aberto]);
+    this.aberto = null;
+    this.rotulo = null;
+  }
+
+  _reciclar(q) {
+    for (const [, c] of q.trechos) this.livres.push(c);
+    q.trechos.length = 0;
+  }
+}
 
 export class Medidas {
   /** @param {import('three').WebGLRenderer} renderer */
   constructor(renderer, { perfil = 'media', capac = null } = {}) {
     this.renderer = renderer;
+    this.capac = capac;
     this.stats = statsVazio();
     this.stats.perfil = perfil;
     this.stats.gpuMsTimer = 0;
+    this.stats.gpuPasses = {};
+    this.stats.gpuQuadros = 0;
+    this.stats.compilacoes = { programas: 0, depois: 0, nomes: [] };
+    this.stats.aquecimento = null;
+    this.stats.resolucao = null;
+    Object.assign(this.stats.memoria, { videoMB: 0, texturasGpuMB: 0, alvosMB: 0, buffersMB: 0, telaMB: 0 });
     if (capac) this.stats.capac = { clipControl: capac.clipControl, multiDraw: capac.multiDraw, timer: capac.timer, limites: capac.limites };
     this._janela = []; // { calls, tris, ms }
     this._fam = Object.fromEntries(FAMILIAS.map((f) => [f, 0]));
@@ -24,11 +157,20 @@ export class Medidas {
     this._sombra = { calls: 0, tris: 0 };
     this._contaMemoria = 0;
     this._passes = 0;
-    this.gpu = false; // medir o ms de GPU (cerca e consulta de tempo)
+    this.gpu = false; // cerca e cronômetro (teste, bancada, página de teste)
+    this.cronometrar = false; // só o cronômetro (resolução dinâmica dos perfis de PC)
+    this.porPasse = false; // trechos por passe no cronômetro (página de teste)
+    /** fn(ms, info) a cada quadro que o cronômetro devolve (info: { pr, tMs } do quadro medido). */
+    this.aoCronometro = null;
+    this._cron = undefined; // Cronometro | null (sem a extensão)
+    this._cronAtivo = false;
+    this._classificar = false;
+    this._embrulhado = false;
     this._cercas = [];
-    this._consultas = [];
     this._gpuMs = [];
     this._gpuTimer = [];
+    this._passesJanela = [];
+    this._passesSoma = {};
     this._laco = null;
   }
 
@@ -46,7 +188,20 @@ export class Medidas {
     this._passes = 0;
     this._t0 = tMs;
     this._c0 = agora();
-    if (this.gpu) this._comecarConsulta();
+    const cron = this.gpu || this.cronometrar ? this._cronometro() : null;
+    this._cronAtivo = !!cron;
+    if (cron) cron.comecar({ pr: this.renderer.getPixelRatio?.() ?? 1, tMs });
+  }
+
+  /** Rótulo do trecho seguinte no cronômetro por passe (PASSES_GPU); sem efeito fora da página de teste. */
+  marcar(rotulo) {
+    if (this.porPasse && this._cronAtivo) this._cron.marcar(rotulo);
+  }
+
+  /** Liga (true) ou desliga a classificação de cada desenho da cena pelo passe (só com o cronômetro por passe). */
+  classificar(ligado) {
+    this._classificar = !!ligado && this.porPasse && this._cronAtivo;
+    if (this._classificar && !this._embrulhado) this._embrulhar();
   }
 
   /** Mede um passe: fn() desenha; `sombra: true` conta em callsSombra e trisSombra (e na família 'sombra'). */
@@ -89,10 +244,11 @@ export class Medidas {
   fim(tMs, { pr = 1, largura = 1, altura = 1, cenas = [] } = {}) {
     const s = this.stats;
     const r = this.renderer.info.render;
-    if (this.gpu) {
-      this._terminarConsulta();
-      this._cerca();
-    }
+    if (this._cronAtivo) this._cron.terminar();
+    this._cronAtivo = false;
+    this._classificar = false;
+    if (this._cron) this._colher();
+    if (this.gpu) this._cerca();
     s.calls = r.calls;
     s.tris = r.triangles;
     s.callsSombra = this._sombra.calls;
@@ -124,7 +280,30 @@ export class Medidas {
     s.memoria.programas = this.renderer.info.programs?.length ?? 0;
     s.memoria.texturas = mem.textures;
     s.memoria.geometrias = mem.geometries;
-    if (this._contaMemoria++ % 60 === 0) s.memoria.geometriaMB = +(bytesDeGeometria(cenas) / 1048576).toFixed(2);
+    if (this._contaMemoria++ % 60 === 0) {
+      s.memoria.geometriaMB = +(bytesDeGeometria(cenas) / 1048576).toFixed(2);
+      const v = this.capac?.memoria?.mb?.();
+      if (v) Object.assign(s.memoria, { videoMB: v.videoMB, texturasGpuMB: v.texturasMB, alvosMB: v.alvosMB, buffersMB: v.buffersMB, telaMB: v.telaMB });
+    }
+    this._contarCompilacoes();
+  }
+
+  /** Descarta as consultas do cronômetro. */
+  descartar() {
+    this._cron?.descartar();
+    this._cron = null;
+  }
+
+  // ---------------------------------------------------------------------------------------- compilações
+
+  _contarCompilacoes() {
+    const v = this.capac?.programas;
+    const c = this.stats.compilacoes;
+    const depois = v?.depois?.length ?? 0;
+    if (!v || (v.lista.length === c.programas && depois === c.depois)) return;
+    c.programas = v.lista.length;
+    c.depois = depois;
+    c.nomes = (v.depois ?? []).map((p) => p.nome);
   }
 
   // ---------------------------------------------------------------------------------------- ms de GPU
@@ -133,34 +312,52 @@ export class Medidas {
     return this.renderer.getContext();
   }
 
-  _comecarConsulta() {
-    const gl = this._gl();
-    const ext = this._extTimer ?? (this._extTimer = this.renderer.extensions.get('EXT_disjoint_timer_query_webgl2') || false);
-    if (!ext || this._consultaAberta) return;
-    const q = gl.createQuery();
-    gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
-    this._consultaAberta = q;
+  _cronometro() {
+    if (this._cron === undefined) {
+      const ext = this.renderer.extensions?.get?.('EXT_disjoint_timer_query_webgl2') || null;
+      this._cron = ext ? new Cronometro(this._gl(), ext) : null;
+    }
+    return this._cron;
   }
 
-  _terminarConsulta() {
-    const gl = this._gl();
-    const ext = this._extTimer;
-    if (ext && this._consultaAberta) {
-      gl.endQuery(ext.TIME_ELAPSED_EXT);
-      this._consultas.push(this._consultaAberta);
-      this._consultaAberta = null;
+  // cada desenho da cena troca o trecho pelo passe dele (a água, a família); só enquanto classificar estiver ligado
+  _embrulhar() {
+    const r = this.renderer;
+    const orig = r.renderBufferDirect;
+    if (typeof orig !== 'function') return;
+    this._embrulhado = true;
+    const med = this;
+    r.renderBufferDirect = function (camera, scene, geometry, material, object, group) {
+      if (med._classificar && med._cronAtivo) med._cron.marcar(classeDoDesenho(object, material));
+      return orig.call(this, camera, scene, geometry, material, object, group);
+    };
+  }
+
+  _colher() {
+    for (const q of this._cron.colher()) {
+      this._empurrar(this._gpuTimer, q.total, 'gpuMsTimer');
+      if (this.porPasse) this._somarPasses(q.porRotulo);
+      if (this.aoCronometro) {
+        try {
+          this.aoCronometro(q.total, q.info);
+        } catch (e) {
+          console.error('render: resolução pelo cronômetro falhou:', e);
+        }
+      }
     }
-    // resultados prontos de quadros anteriores
-    while (this._consultas.length) {
-      const q = this._consultas[0];
-      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
-      const disjunto = ext && gl.getParameter(ext.GPU_DISJOINT_EXT);
-      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
-      gl.deleteQuery(q);
-      this._consultas.shift();
-      if (!disjunto) this._empurrar(this._gpuTimer, ns / 1e6, 'gpuMsTimer');
-    }
-    if (this._consultas.length > 8) this._consultas.splice(0, this._consultas.length - 8).forEach((q) => gl.deleteQuery(q));
+  }
+
+  // média por quadro de cada passe na janela (um passe que não houve no quadro conta 0: a sombra refeita às vezes)
+  _somarPasses(porRotulo) {
+    const J = this._passesJanela;
+    const S = this._passesSoma;
+    J.push(porRotulo);
+    for (const [k, ms] of Object.entries(porRotulo)) S[k] = (S[k] ?? 0) + ms;
+    if (J.length > JANELA_PASSES) for (const [k, ms] of Object.entries(J.shift())) S[k] -= ms;
+    const g = {};
+    for (const k of PASSES_GPU) if (S[k] > 1e-6) g[k] = +(S[k] / J.length).toFixed(3);
+    this.stats.gpuPasses = g;
+    this.stats.gpuQuadros = J.length;
   }
 
   _cerca() {
