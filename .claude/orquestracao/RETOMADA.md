@@ -1,11 +1,17 @@
-# Estado do jogo novo (28/09/2026, 14:53 UTC)
+# Estado do jogo novo (28/09/2026)
 
-Nada rodando.
+Rodando: frentes SEDE2 (sede v2) e PC1 (perfil do PC do dono), base `3ff31ea`, textos em `parcelas/`.
+Se parar: relance só a frente que faltar com `{"nome": "Sede v2 e PC do dono", "base": "3ff31ea", "etapas": [[{"id": "SEDE2"}, {"id": "PC1"}]]}`
+(tirando a que já terminou), depois a I2 com `[[{"id": "I2", "revisar": false}]]`.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
 - Onda 2 (S1b, R1b, R3a, X2) revisada (`7ccca28`, `ed81c43`) e integrada pela I1 (`424d396`, `2f82e7f`).
 - Prévia 1 "via no polegar" montada e publicada em `previa/` (`cc8856d`); o site publica `previa/` (`5c50624`).
+
+## Decisões novas do dono (D63 a D66)
+- Sede em anel como a Apple Park, lago central com fontes e cachoeira em ciclo, torres de 500 e 452 m quase encostadas,
+  cúpula de vidro de 240 m; PC primeiro (RX 550, medido em `docs/pesquisa/pc-dono/`).
 
 ## Próximo passo
 - Portão 2: o dono roda o roteiro de 5 min da Prévia 1 (previa/cenas.html) e aprova o gesto e o desempenho.
