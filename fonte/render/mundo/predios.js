@@ -46,6 +46,19 @@ const SOMBRA_MAX = 600;
  */
 export const limiteFaixas = (dist) => Math.max(3000, dist * 1.6);
 
+/**
+ * Faixa de profundidade da caixa [x0, x1] x [y0, y1] x [z0, z1] (bits: 1 perto, 2 longe) pela profundidade no eixo
+ * da câmera (posição c, direção f unitária): os planos das faixas são perpendiculares a esse eixo, e a distância em
+ * linha reta passa da profundidade nos cantos da tela (até 25% a 40 graus), o que tirava da faixa de perto um setor
+ * que ainda estava nela, com um buraco nos cantos. A de perto vai até 1,02 vez o corte e a de longe começa em 0,9
+ * vez (Faixas.desenhar): a caixa na emenda vai nas duas.
+ */
+export function faixaDaCaixa(cx, cy, cz, fx, fy, fz, x0, y0, z0, x1, y1, z1, lim) {
+  const meio = fx * ((x0 + x1) / 2 - cx) + fy * ((y0 + y1) / 2 - cy) + fz * ((z0 + z1) / 2 - cz);
+  const ext = (Math.abs(fx) * (x1 - x0) + Math.abs(fy) * (y1 - y0) + Math.abs(fz) * (z1 - z0)) / 2;
+  return (meio - ext < lim * 1.02 ? 1 : 0) | (meio + ext > lim * 0.9 ? 2 : 0);
+}
+
 /** Distância do ponto (px, pz) ao retângulo [x0, x1] x [z0, z1] no chão (0 dentro). */
 function distRet(px, pz, x0, z0, x1, z1) {
   const dx = px < x0 ? x0 - px : px > x1 ? px - x1 : 0;
@@ -228,6 +241,7 @@ function criarPredios(ctx) {
   const mProj = new THREE.Matrix4();
   const caixa = new THREE.Box3();
   const alvo = new THREE.Vector3();
+  const frente = new THREE.Vector3();
 
   const novoSetor = (s) => {
     const [x0, z0] = grade.canto(s);
@@ -484,7 +498,9 @@ function criarPredios(ctx) {
     const vis = [];
     let quer0 = 0;
     let lod0Vis = 0;
-    const lim = duasFaixas ? limiteFaixas(ctx.cameraApi?.estado?.().dist ?? cp.length()) : Infinity;
+    // o corte com a mesma distância (e a mesma reserva sem câmera) que Faixas.desenhar usa neste quadro
+    const lim = duasFaixas ? limiteFaixas(ctx.cameraApi?.estado?.().dist ?? 1000) : Infinity;
+    if (duasFaixas) cam.getWorldDirection(frente);
     // carga: o LOD1 que falta sai aqui mesmo, sem a oficina
     if (carga) {
       carga = false;
@@ -526,14 +542,8 @@ function criarPredios(ctx) {
       if (mostra0 && st.vis) lod0Vis++;
       if (st.vis && st.lod1 && !mostra0) {
         // faixa de profundidade: perto se algo do setor fica antes do corte da de perto, longe se algo passa do
-        // começo da de longe (o setor na emenda vai nas duas)
-        let fx = 1;
-        if (duasFaixas) {
-          const ex = Math.max(Math.abs(cp.x - st.x0), Math.abs(cp.x - st.x0 - LADO_SETOR));
-          const ey = Math.max(Math.abs(cp.y - st.ymin), Math.abs(cp.y - st.ymax));
-          const ez = Math.max(Math.abs(cp.z - st.z0), Math.abs(cp.z - st.z0 - LADO_SETOR));
-          fx = (d < lim * 1.02 ? 1 : 0) | (Math.sqrt(ex * ex + ey * ey + ez * ez) > lim * 0.9 ? 2 : 0);
-        }
+        // começo da de longe (o setor na emenda vai nas duas); a caixa é a do descarte, com a folga dos lotes
+        const fx = duasFaixas ? faixaDaCaixa(cp.x, cp.y, cp.z, frente.x, frente.y, frente.z, caixa.min.x, caixa.min.y, caixa.min.z, caixa.max.x, caixa.max.y, caixa.max.z, lim) : 1;
         st.faixa = fx;
         vis.push(st);
         hv = Math.imul(hv ^ st.s, 0x01000193);

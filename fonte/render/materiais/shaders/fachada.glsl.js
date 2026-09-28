@@ -155,9 +155,10 @@ vec3 gLin( vec3 c ) { return pow( c, vec3( 2.2 ) ); }
 float gLum( vec3 c ) { return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) ); }
 // integral do pulso [a, b] repetido a cada 1; o pulso filtrado é a média na área do pixel (de longe vira b - a)
 float gInt( float x, float a, float b ) { return floor( x ) * ( b - a ) + clamp( fract( x ), a, b ) - a; }
+// (vale com 0 <= a < b <= 1; a média fica em [0, 1] mesmo com o arredondamento de x grande)
 float gPulso( float x, float a, float b, float dx ) {
   float w = max( dx, 1e-4 );
-  return ( gInt( x + 0.5 * w, a, b ) - gInt( x - 0.5 * w, a, b ) ) / w;
+  return clamp( ( gInt( x + 0.5 * w, a, b ) - gInt( x - 0.5 * w, a, b ) ) / w, 0.0, 1.0 );
 }
 // retângulo [r.x, r.y] x [r.z, r.w] repetido na célula, filtrado
 float gRet( vec2 p, vec4 r, vec2 d ) { return gPulso( p.x, r.x, r.y, d.x ) * gPulso( p.y, r.z, r.w, d.y ); }
@@ -270,17 +271,23 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
   float esc = 0.9 + 0.07 * mod( vari, 4.0 );
   w *= esc;
   if ( casa ) { y0 = max( y0, 0.95 ); }
-  if ( uso > 1.5 ) { w = vao * 0.78; y0 = 0.8; y1 = andar - 0.35; }
-  if ( uso > 2.5 ) { w = vao * 0.7; y0 = andar * 0.62; y1 = andar - 0.25; }
+  // as medidas da moradia crescem com o pé-direito; as de escritório e de indústria já são frações do andar (escalar
+  // de novo punha o peitoril acima da verga na indústria de andar alto, e o pulso invertido saía de [0, 1]: rugosidade
+  // e metal fora da faixa, pixels pretos e brancos na fachada)
   float kA = max( andar / 2.9, 0.8 );
   y0 *= kA;
   y1 = min( y1 * kA, andar - 0.28 );
+  if ( uso > 1.5 ) { w = vao * 0.78; y0 = 0.8; y1 = andar - 0.35; }
+  if ( uso > 2.5 ) { w = vao * 0.7; y0 = andar * 0.62; y1 = andar - 0.25; }
   if ( fita ) { w = vao; y0 = 0.95; y1 = andar - 0.42; }
   w = min( w, fita ? vao : vao - 0.45 );
+  // janela de menos de 25 cm não é janela (e o caixilho de 5 cm de cada lado inverteria o pano)
+  if ( w < 0.25 ) w = 0.0;
   float x0 = 0.5 - 0.5 * w / vao;
   float x1 = 0.5 + 0.5 * w / vao;
-  float yy0 = y0 / andar;
-  float yy1 = y1 / andar;
+  // peitoril antes da verga, os dois dentro do andar: o pulso filtrado só vale com 0 <= a < b <= 1
+  float yy0 = clamp( y0 / andar, 0.02, 0.9 );
+  float yy1 = clamp( y1 / andar, yy0 + 0.06, 0.98 );
   vec4 R = vec4( x0, x1, yy0, yy1 );
   // abertura na parede e o que do plano do vidro aparece por ela (a janela fica recuada: paralaxe)
   float dep = tv > 3.5 && tv < 4.5 ? 0.06 : 0.14 + 0.08 * mod( vari, 2.0 );
@@ -294,7 +301,7 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
   // peitoril de pedra e o escorrido embaixo (desgaste), antes da abertura por cima
   float fy = fract( fv );
   if ( !fita && w > 0.01 ) {
-    float pe = gPulso( p.x, x0 - 0.03, x1 + 0.03, d.x ) * gPulso( fv, yy0 - 0.06 / andar, yy0, d.y );
+    float pe = gPulso( p.x, x0 - 0.03, x1 + 0.03, d.x ) * gPulso( fv, max( yy0 - 0.06 / andar, 0.0 ), yy0, d.y );
     s.alb = mix( s.alb, vec3( 0.42, 0.41, 0.39 ) * ( 0.9 + 0.2 * dt.b ), pe );
     float esc2 = smoothstep( yy0 - 1.1 / andar, yy0, fy ) * step( fy, yy0 ) * gPulso( p.x, x0 + 0.08, x1 - 0.08, d.x );
     s.alb *= 1.0 - desg * 0.22 * esc2 * ( 0.6 + 0.8 * dt.g ) * ( 1.0 - lonje );
@@ -305,8 +312,8 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
   s.alb = mix( s.alb, s.alb * sombraR, revela );
   s.ao *= 1.0 - 0.25 * revela;
   // caixilho de correr e o vidro dentro dele (5 cm)
-  float cxf = 0.05 / vao;
-  float cyf = 0.05 / andar;
+  float cxf = min( 0.05 / vao, 0.25 * ( x1 - x0 ) );
+  float cyf = min( 0.05 / andar, 0.25 * ( yy1 - yy0 ) );
   vec4 Rv = vec4( x0 + cxf, x1 - cxf, yy0 + cyf, yy1 - cyf );
   float pano = furo * gRet( q, Rv, d );
   float nf = tv > 0.5 && tv < 1.5 ? 4.0 : ( fita ? max( 2.0, floor( vao / 0.9 ) ) : 2.0 );
@@ -381,8 +388,8 @@ void gJanelas( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float nB
       float caixa = gRet( p, A, d ) * tem;
       vec2 cm = vec2( ( fract( p.x ) - ( acx - 0.15 * lado / vao ) ) * vao, ( fy - ( A.z + A.w ) * 0.5 ) * andar );
       float ven = gDisco( cm, 0.19, max( duv.x * vao, 0.01 ) ) * caixa;
-      float somb = gRet( p, vec4( A.x, A.y, A.z - 0.12 / andar, A.z ), d ) * tem;
-      float pinga = gRet( p, vec4( acx - 0.05 / vao, acx + 0.05 / vao, A.z - 1.6 / andar, A.z ), d ) * tem * desg;
+      float somb = gRet( p, vec4( A.x, A.y, max( A.z - 0.12 / andar, 0.0 ), A.z ), d ) * tem;
+      float pinga = gRet( p, vec4( acx - 0.05 / vao, acx + 0.05 / vao, max( A.z - 1.6 / andar, 0.0 ), A.z ), d ) * tem * desg;
       s.alb *= 1.0 - 0.35 * somb - 0.3 * pinga * smoothstep( A.z - 1.6 / andar, A.z, fy );
       s.alb = mix( s.alb, vec3( 0.52, 0.52, 0.5 ) * ( 0.85 + 0.2 * dt.r ), caixa );
       s.alb = mix( s.alb, vec3( 0.06 ), ven * 0.85 );
@@ -462,7 +469,7 @@ void gBrise( inout GSup s, vec2 uv, vec2 duv, float andar, float vao, float vari
     // (a face do prédio é o plano de fora das aletas; o vidro fica 40 cm para dentro)
     float passo = vao / 4.0;
     float t = uv.x * 4.0;
-    float lf = 0.12 / passo;
+    float lf = min( 0.12 / passo, 0.5 ); // num vão estreito a aleta não passa de meio passo (clamp com min > max)
     float sw = clamp( 0.4 * abs( vista.x ) / vista.z / passo, 0.0, 0.85 - lf ) * ( 1.0 - lonje );
     float lp = lf + sw;
     lam = vista.x > 0.0 ? gPulso( t, 0.0, lp, duv.x * 4.0 ) : gPulso( t + sw, 0.0, lp, duv.x * 4.0 );
@@ -882,12 +889,12 @@ if ( mod( vIdent.y, 2.0 ) > 0.5 ) diffuseColor.rgb *= vec3( 0.62, 0.6, 0.57 );
 
 export const FRAGMENTO_RUGOSIDADE = /* glsl */ `
 #include <roughnessmap_fragment>
-roughnessFactor = gS.rug;
+roughnessFactor = clamp( gS.rug, 0.0, 1.0 );
 `;
 
 export const FRAGMENTO_METAL = /* glsl */ `
 #include <metalnessmap_fragment>
-metalnessFactor = gS.met;
+metalnessFactor = clamp( gS.met, 0.0, 1.0 );
 `;
 
 /** Normal inclinada por painel (depois do #include <normal_fragment_maps>): tangente horizontal da face. */

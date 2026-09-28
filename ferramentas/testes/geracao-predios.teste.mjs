@@ -327,3 +327,39 @@ test('sombra própria e duas faixas: setores projetores pelo chão da cascata e 
     assert.equal(limiteFaixas(dist), f.limite, `corte a ${dist} m`);
   }
 });
+
+test('duas faixas: todo ponto visível de um setor cai numa faixa que o desenha, também nos cantos da tela', async () => {
+  const THREE = await import('three');
+  const { faixaDaCaixa, limiteFaixas } = await import('../../fonte/render/mundo/predios.js');
+  // a vista lod2 da cena bairro (3,2 km a 24 graus) e a vista aberta, em várias guinadas
+  for (const [dist, inc] of [[3200, 24], [2200, 38], [5000, 20]]) {
+    const lim = limiteFaixas(dist);
+    const cam = new THREE.PerspectiveCamera(40, 1376 / 768, 0.5, 60000);
+    for (let gu = 0; gu < 360; gu += 30) {
+      const g = (gu * Math.PI) / 180;
+      const i = (inc * Math.PI) / 180;
+      cam.position.set(-1000 - dist * Math.cos(i) * Math.sin(g), dist * Math.sin(i), -460 + dist * Math.cos(i) * Math.cos(g));
+      cam.lookAt(-1000, 0, -460);
+      cam.updateMatrixWorld();
+      const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+      const f = cam.getWorldDirection(new THREE.Vector3());
+      const c = cam.position;
+      const p = new THREE.Vector3();
+      for (let x0 = -4096; x0 < 4096; x0 += 256) {
+        for (let z0 = -4096; z0 < 4096; z0 += 256) {
+          const bits = faixaDaCaixa(c.x, c.y, c.z, f.x, f.y, f.z, x0 - 40, 0, z0 - 40, x0 + 296, 45, z0 + 296, lim);
+          for (let a = 0; a <= 8; a++) {
+            for (let b = 0; b <= 8; b++) {
+              p.set(x0 + 32 * a, 20, z0 + 32 * b);
+              if (!fr.containsPoint(p)) continue;
+              const prof = p.clone().sub(c).dot(f);
+              const naPerto = prof < lim * 1.02 && bits & 1;
+              const naLonge = prof > lim * 0.9 && bits & 2;
+              assert.ok(naPerto || naLonge, `buraco na emenda: setor ${x0},${z0} a ${prof.toFixed(0)} m (corte ${lim}, guinada ${gu})`);
+            }
+          }
+        }
+      }
+    }
+  }
+});
