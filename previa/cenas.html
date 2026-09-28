@@ -8,8 +8,9 @@
 <title>Prévia do jogo novo</title>
 <link rel="icon" href="icones/icone-192.png">
 <!-- Índice da prévia (PROJETO 4.6 e 5.3): o jogo, o roteiro de 5 min, as cenas fixas e a página de teste, para o dono
-     abrir no celular e no PC. O montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo
-     (index.html), sem nada ou com ?cena=. -->
+     abrir no PC e no celular. O montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo
+     (index.html), sem nada ou com ?cena=. Em destaque a Prévia 1b (sede v2 e o PC do dono, D63 a D66); a Prévia 1 e a
+     Prévia 0 continuam abaixo. Os links marcados data-auto não levam o perfil: a escolha automática vale. -->
 <style>
 :root{--fundo:#0B0F14;--vidro:#121821;--borda:rgba(255,255,255,.10);--texto:#EEF2F6;--fraco:#A7B1BD;--ouro:#D9BD84;--azul:#5AB0FF}
 *{box-sizing:border-box}
@@ -38,6 +39,7 @@ ol.roteiro{margin:0;padding:12px 16px 12px 36px;border:1px solid var(--borda);bo
 ol.roteiro li{margin:6px 0}
 ol.roteiro li span{color:var(--fraco)}
 .anterior{margin-top:30px;padding-top:18px;border-top:1px solid var(--borda)}
+p.nota{margin:8px 0 0;color:var(--fraco);font-size:13px}
 footer{color:var(--fraco);font-size:12px;margin-top:8px}
 </style>
 </head>
@@ -45,7 +47,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 <main>
 <header>
   <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="#D9BD84" stroke-width="3"/><path fill="#D9BD84" d="M34 30h7v17h18V30h7v40h-7V53H41v17h-7z"/></svg>
-  <div><h1>Prévia 1: via no polegar</h1><p>Heldópolis no mapa de verdade: trace vias, zoneie quadras e veja o trânsito.</p></div>
+  <div><h1>Prévia 1b: sede v2 e o PC do dono</h1><p>A sede em anel com as torres gêmeas no lago, e o jogo afinado para o seu PC.</p></div>
 </header>
 
 <div class="perfil" role="group" aria-label="Perfil gráfico">
@@ -53,9 +55,37 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
   <button type="button" data-q="">Automático</button>
   <button type="button" data-q="leve">Leve</button>
   <button type="button" data-q="media">Média</button>
+  <button type="button" data-q="pc">PC</button>
   <button type="button" data-q="alta">Alta</button>
   <button type="button" data-q="ultra">Ultra</button>
 </div>
+
+<section>
+  <h2>Sede v2 <small>(o anel de 481 m, o lago com as torres de 500 e 452 m, a cachoeira na fenda e a cúpula)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=planos&amp;vista=aerea"><b>Aérea</b><span>o anel inteiro às 17h30, do sul-sudoeste</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=eixo"><b>Eixo norte</b><span>do portão, pelo eixo, até a fenda com a cachoeira</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=mar"><b>Do mar</b><span>da praia, olhando o pórtico sul ao entardecer</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=noite"><b>Noite</b><span>as fontes e a cachoeira acesas, da margem do lago</span></a>
+    <a class="c" href="index.html?cena=torre&amp;prancha=1&amp;hora=17.5"><b>Prancha das torres às 17h30</b><span>4 azimutes, a fenda e as duas coroas</span></a>
+    <a class="c" href="index.html?cena=torre&amp;prancha=1&amp;hora=21"><b>Prancha das torres às 21h</b><span>as coroas-lanterna e o heliponto aceso</span></a>
+    <a class="c" href="index.html?cena=planos&amp;plano=A"><b>Sede v2, câmera livre</b><span>arraste e aproxime à vontade</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Página de teste do PC <small>(mande o texto de "Copiar resultado")</small></h2>
+  <div class="grade">
+    <a class="c pri" data-auto href="index.html?cena=aberta&amp;painel=1"><b>Página de teste: aberta</b><span>perfil escolhido e o motivo, resolução interna, tempo de placa por passe, compilações depois de pronto</span></a>
+    <a class="c" data-auto href="index.html?painel=1"><b>Jogo com a página de teste</b><span>os mesmos números sobre o jogo</span></a>
+  </div>
+  <p class="nota">Estes links abrem sem perfil: vale a escolha automática (no seu PC, a RX 550 deve cair no perfil PC). Depois da aberta, toque em <b>Cena estresse</b> na própria página: ela leva o mesmo perfil, e "Copiar resultado" junta as duas cenas.</p>
+</section>
+
+<div class="anterior">
+<header>
+  <div><h1>Prévia 1: via no polegar</h1><p>Continua valendo: Heldópolis no mapa de verdade, trace vias, zoneie quadras e veja o trânsito.</p></div>
+</header>
 
 <section>
   <h2>Jogar</h2>
@@ -89,6 +119,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
     <a class="c" href="index.html?cena=ferramentas&amp;ui=1"><b>Ferramenta de via</b><span>a avenida em curva traçada pela interface</span></a>
   </div>
 </section>
+</div>
 
 <div class="anterior">
 <header>
@@ -151,14 +182,14 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 </div>
 
 <section>
-  <h2>Página de teste <small>(mande o print ou o texto de "Copiar resultado")</small></h2>
+  <h2>Página de teste da Prévia 1 <small>(com o perfil escolhido acima; sem perfil, a estresse fica no Média)</small></h2>
   <div class="grade">
     <a class="c pri" href="index.html?cena=aberta&amp;painel=1"><b>Sonda e bancada: aberta</b><span>mede sozinha ao abrir</span></a>
     <a class="c pri" href="index.html?cena=estresse&amp;painel=1"><b>Sonda e bancada: estresse</b><span>300 chamadas e 900 mil triângulos</span></a>
   </div>
 </section>
 
-<footer>Abra as duas páginas de teste na mesma aba: "Copiar resultado" junta as duas cenas. O perfil escolhido acima vale para todos os links.</footer>
+<footer>Abra as duas páginas de teste na mesma aba: "Copiar resultado" junta as duas cenas. O perfil escolhido acima vale para todos os links, menos os da página de teste do PC.</footer>
 </main>
 <script>
 /* Perfil gráfico nos links (?q=); lembrado neste aparelho. */
@@ -166,7 +197,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
   var q = '';
   try { q = localStorage.getItem('heldopolis.previa.q') || ''; } catch (e) { /* sem armazenamento: automático */ }
   var botoes = document.querySelectorAll('.perfil button');
-  var links = document.querySelectorAll('a.c');
+  var links = document.querySelectorAll('a.c:not([data-auto])');
   for (var i = 0; i < links.length; i++) links[i].setAttribute('data-base', links[i].getAttribute('href'));
   function aplicar() {
     for (var i = 0; i < botoes.length; i++) botoes[i].setAttribute('aria-pressed', botoes[i].getAttribute('data-q') === q ? 'true' : 'false');
