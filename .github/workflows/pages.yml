@@ -22,11 +22,13 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Montar o site (app instalável em app/)
+      - name: Montar o site (app instalável em app/ e a prévia do jogo novo em previa/)
         run: |
           mkdir -p site
           cp -r app/. site/
           cp arcologia-de-held.html site/arcologia-de-held.html
+          # prévia do jogo novo durante o M1 (sai quando o M1 for para app/)
+          if [ -d previa ]; then cp -r previa site/previa; fi
           touch site/.nojekyll
       - uses: actions/configure-pages@v5
         with:
