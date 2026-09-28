@@ -1,8 +1,7 @@
 # Estado do jogo novo (28/09/2026)
 
-Rodando: I2 (integração da SEDE2 e da PC1, Prévia 1b), base `62e864d`. SEDE2 e PC1 prontas e revisadas (`62e864d`).
-Se parar: relance a I2 com `{"nome": "Prévia 1b", "base": "62e864d", "etapas": [[{"id": "I2", "revisar": false}]]}`
-(acrescente em `parcelas/I2.txt` uma linha RETOMADA com o ponto onde parou).
+Nada rodando. Prévia 1b publicada (`2184a04` fonte, `6c74436` montagem; Pages conferido). Aguardando a nova medição
+do dono na página de teste (perfil pc) para calibrar os tetos por família do ORCAMENTO.pc.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
@@ -14,7 +13,11 @@ Se parar: relance a I2 com `{"nome": "Prévia 1b", "base": "62e864d", "etapas": 
   cúpula de vidro de 240 m; PC primeiro (RX 550, medido em `docs/pesquisa/pc-dono/`).
 
 ## Próximo passo
-- Portão 2: o dono roda o roteiro de 5 min da Prévia 1 (previa/cenas.html) e aprova o gesto e o desempenho.
+- Portão 2: o dono roda o roteiro de 5 min e a página de teste da Prévia 1b (previa/cenas.html) no PC dele.
+- Pendências da I2 para a onda 3: aquecimento com mínimo de quadros (via e edificio compilaram depois de pronto na cena
+  ferramentas); estresse sem ?q= fixa o Média; opção 'pc' nas Configurações (U2a); textos do plano A antigo (U1b, X1b);
+  X1b usa criarPar, torre.corte(h), POUSO (275, 500, 570) e o canal na cavaDoPlano; volumes quadrados da moradia,
+  Universidade e Escola, árvores e Supertrees (R2b, R5); jatos das fontes finos de perto à noite.
 - Onda 3 (S2a, S3a, R2b, R3b, R4b, R5, U1b, U2a, X1b, X3a) até o M1a: os textos dessas parcelas ainda não foram
   escritos. Escreva-os em `parcelas/` no mesmo formato das ondas 1 e 2 (texto da ficha, o que a Prévia 1 mostrou,
   `_comum` da onda) antes de lançar, com a base no último commit.
