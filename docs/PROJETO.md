@@ -1259,7 +1259,9 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   Pendente: o jogo montado passa do teto A1 (1.798 KB contra 1.638; a X2 soma cerca de 85 KB); a sintética das cenas
   roda sem os domínios, então a prévia ali é a local.
   Na I1: `ui/acoes.js` devolve o id do comando em `idComando` e deixa o `Resposta.id` do contrato (a ref criada)
-  intacto; `refCriada()` continua lendo `id`, `ref` ou `dados.ref` e o teste do Colocar cobre o `id`.
+  intacto; `refCriada()` continua lendo `id`, `ref` ou `dados.ref` e o teste do Colocar cobre o `id`. A barra de
+  construção (`hud/Construcao.jsx`) some sob as telas de gestão: pelo vidro da tela Economia ela aparecia por baixo, e a
+  vitrine acusava a sobreposição em 16 cenas da U1a (a cena `u1-primitivas` marca a tela dela como aberta).
 
 #### S2a. Cidade viva, núcleo (onda 3; 3 sessões)
 - **Arquivos:** `sim/zonas/{demanda,crescimento}.js`, `sim/{predios,cidadaos,bemestar,servicos,redes}.js`,
@@ -1317,6 +1319,9 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   `caminho` das entregas (as do teto e as amostras visuais); carros pelo fluxo quando `fluxos` existir e pela
   heurística antes; tetos por perfil (Média 120 carros e 420 pessoas).
 - **Testa sem as outras:** sintética com entregas e fluxos sintéticos. **Depende de:** R3a.
+- **Herda da I1 (pendências da R3a):** prioridade entre os braços do cruzamento (sem ela, 4 carros se cruzam dentro do
+  cruzamento em 300 s, em curvas de braços diferentes); ligar o realce da aresta selecionada (bit G da tabela) pelo
+  evento `selecao` do render, que já leva `{ tipo, ref }`.
 
 #### R4b. Obras, anexos, lote e noite (onda 3; 2 sessões)
 - **Arquivos:** `render/mundo/{obras,anexos,lotes}.js`, `cenas/obra.js`; herda os de R4a.
@@ -1520,6 +1525,16 @@ Onda 4   S1c  S2b  S3b  X4  R6  X3b  U2b                        → C2: M1 em ap
   curvar, emendar, melhorar e demolir vias com os polegares; zonear quadras (as células aparecem, nada cresce ainda);
   carros pela heurística; sombra de longe e noite. O dono roda o roteiro de 5 min (5.3) e manda o print.
   - **Portão 2:** o dono aprova o gesto e o desempenho com vias. Custo até aqui: 31 de 72 (43%).
+  - **Montada na I1 (28/09/2026)** em `previa/`: o índice abre no jogo (o mapa autoral, sem o canteiro de prova da F0),
+    no roteiro de 5 min e nas cenas de vias; as cenas da Prévia 0 continuam abrindo, agora sob demanda. Roteiro
+    automatizado no Chromium (1376 x 768 e 986 x 443), pela interface: 10 vias (retas, curvas, contínua e duas
+    avenidas), 2 cruzamentos com a avenida, desfazer uma via, melhorar a travessa de terra da Vila, demolir e desfazer
+    a demolição, 3 quadras zoneadas (cerca de 540, 425 e 420 células), sem erro no console, sem recusa da simulação e
+    sem domínio substituto. Bancada (1376 x 768, pior de 120 quadros, sol andando em 4x): `aberta` no Média 50 chamadas
+    e 214 mil triângulos (sombra 5 e 34 mil; prédios 137 mil), no Alta 58 e 423 mil (sombra 10 e 126 mil); `estresse`
+    no Média 285 e 897 mil, no Alta 290 e 901 mil; guarda do Mali sem falha. JS principal de 1.530 KB (teto 1.638) e
+    120 KB sob demanda em 21 pedaços. Na integração, a barra de construção da X2 passou a sumir sob as telas de gestão
+    (aparecia pelo vidro da tela Economia).
 - **M1a** (depois da onda 3, montado por C1 em `previa/`): jogável do minuto 0 ao marco 7, com a Torre, a economia, a
   Holding e as 6 camadas. O robô em Node roda desde o começo da onda 3 (S3a), com as metas A4 parciais (marco 1 e marco
   3) antes da calibração. O dono joga e decide seguir para o M1b. Custo até aqui: 57 de 72 (79%).

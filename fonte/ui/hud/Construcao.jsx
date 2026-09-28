@@ -7,7 +7,7 @@
 import { computed } from '@preact/signals';
 import { Botao } from '../comp/Botao.jsx';
 import { Glifo } from '../glifos/Glifo.jsx';
-import { barra, ferramenta, eventos } from '../loja.js';
+import { barra, ferramenta, eventos, tela } from '../loja.js';
 import { t } from '../textos.js';
 import { Bandeja } from './Bandeja.jsx';
 import { categoria, sessao, ferramentas, GRUPOS, ATALHOS, GLIFO_CATEGORIA, categoriaVisivel, estadoArcologia } from '../ferramentas/sessao.js';
@@ -63,7 +63,9 @@ function BotaoCategoria({ ui, cat }) {
 function Grupo({ ui, nome, lado }) {
   marcoN.value; // os cadeados mudam com o marco
   eventos.value; // e o catálogo com os desbloqueios (o evento da simulação)
-  if (ferramenta.value || sessao.value) return null;
+  // com uma ferramenta ativa a barra dela toma o lugar; sob uma tela de gestão a barra some (o vidro da tela a deixava
+  // aparecer por baixo)
+  if (ferramenta.value || sessao.value || tela.value) return null;
   const esp = ui.obterSim()?.espelho;
   const cats = GRUPOS[nome].filter((c) => categoriaVisivel(c, { consultar: ui.consultar, espelho: esp }));
   if (!cats.length) return null;

@@ -190,9 +190,12 @@ export function registrar(registrarCenaVitrine) {
   // todas as primitivas numa tela, para conferir alvos, texto e contraste
   registrarCenaVitrine('u1-primitivas', {
     cenario: 'meio',
-    async preparar({ sim, acionar, esperar }) {
+    async preparar({ sim, ui, acionar, esperar }) {
       contaFechada(sim);
       acionar('velocidade', 1);
+      // a tela das primitivas monta fora da árvore: marca a tela aberta para o HUD de baixo sumir como numa tela de
+      // verdade (a barra de construção da X2 some sob as telas)
+      ui.ui.loja.tela.value = 'primitivas';
       montarFora(h(Primitivas));
       await esperar(60);
     },
