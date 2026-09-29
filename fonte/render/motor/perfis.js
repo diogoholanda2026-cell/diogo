@@ -10,9 +10,10 @@ const SOMBRA_ALTA = { tam: 1024, cascatas: 2, raioMax: 1400, degrau: 1, pcf: 8, 
  * Cada perfil: resolução interna (x CSS, com a resolução dinâmica em degraus entre prMin e prMax; no 'pc', em escalas
  * da nativa com teto de pixels), MSAA do alvo HDR, sombra própria (D43: tamanho de cada cascata, cascatas, raio
  * máximo, degrau do sol em graus, amostras e raio do PCF), alcance do LOD0 dos prédios, níveis do bloom, céu (direto
- * por pixel ou cubo assado, D9), tamanho do PMREM, pós ligado, vinheta, o qps alvo e, nos perfis de PC, o alvo em ms
- * de placa da resolução dinâmica pelo cronômetro (alvoGpu). `base`: o perfil de quem o 'pc' herda as tabelas dos
- * domínios (porPerfil). Teto do orçamento em fonte/contratos/render.js (ORCAMENTO; no 'pc', também em `orcamento`).
+ * por pixel ou cubo assado, D9; fatias: pedaços de uma face assados por quadro), tamanho do PMREM, pós ligado,
+ * vinheta, o qps alvo e, nos perfis de PC, o alvo em ms de placa da resolução dinâmica pelo cronômetro (alvoGpu).
+ * `base`: o perfil de quem o 'pc' herda as tabelas dos domínios (porPerfil). Teto do orçamento em
+ * fonte/contratos/render.js (ORCAMENTO; no 'pc', também em `orcamento`).
  */
 export const PERFIS = congelar({
   ultra: {
@@ -25,14 +26,15 @@ export const PERFIS = congelar({
     sombra: SOMBRA_ALTA,
     ceu: { modo: 'direto', cubo: 0, nuvens: true },
   },
-  // PC do dono (D66): 1080p nativo com MSAA 2x (o custo medido é de pixel, não de triângulo), sombra, HAO, céu e LOD
-  // como no Alta; resolução dinâmica pelo cronômetro da placa de 70% a 100% da nativa, mirando 15,5 ms de placa;
-  // alvo de 60 qps, piso de 30 e teto de 60 (um monitor de 144 Hz não gasta a placa à toa)
+  // PC do dono (D66): 1080p nativo com MSAA 2x (o custo medido é de pixel, não de triângulo), sombra, HAO e LOD como
+  // no Alta; resolução dinâmica pelo cronômetro da placa de 70% a 100% da nativa, mirando 15,5 ms de placa; alvo de
+  // 60 qps, piso de 30 e teto de 60 (um monitor de 144 Hz não gasta a placa à toa). O céu (PC2) sai de um cubo de 512
+  // assado em fatias (meia face por quadro, 12 quadros por cubo): o direto custava 5 ms de placa na RX 550
   pc: {
     id: 'pc', nome: 'PC', base: 'alta', nativo: true, pixelsMax: 1920 * 1080, escalas: [0.7, 0.8, 0.9, 1],
     msaa: 2, lod0: 600, bloom: 5, ibl: 128, pos: true, vinheta: 0.1, qps: 60, qpsPiso: 30, tetoQps: 60, alvoGpu: 15.5,
     sombra: SOMBRA_ALTA,
-    ceu: { modo: 'direto', cubo: 0, nuvens: true },
+    ceu: { modo: 'cubo', cubo: 512, nuvens: true, fatias: 2 },
     // tetos da vista aberta com a cidade grande (D66), por família como a 4.8 faz no Média: no contrato
     orcamento: ORCAMENTO.pc,
   },

@@ -16,8 +16,11 @@ import { AGUA, TIPO_PREDIO, CELULA } from '../../fonte/contratos/flags.js';
 import {
   alturaComoGLSL, distanciaAgua, codificarAgua, prepararDados, piramideAlturas, limitesAltura, mipsDeMinimos,
   selecionarNos, faixasCDLOD, rasterizarUso, rasterizarCelulas, estacaoSeca, caixaCelula, PERFIL_TERRENO, RAIZ_CDLOD,
-  COPA_ALTURA, COPA_MAX,
+  COPA_ALTURA, COPA_MAX, limitesLonge, pesoCompleto, dividirNos, inclinacaoMaxima, INCL_ENCOSTA, LONGE_PIXEL,
+  ORDEM_TERRENO, criarMaterialTerreno, criarUniformes,
 } from '../../fonte/render/mundo/terreno.js';
+import { preprocessar } from '../../fonte/render/motor/capacidades.js';
+import { ORDEM_FUNDO } from '../../fonte/render/ambiente/ceu.js';
 import { lerManifesto, conferirLicencas, normalizarFatia, TETO_BYTES } from '../codificar-texturas.mjs';
 import { geometriaAgua, faixasDeMar, curvaDoRio, abrirContorno } from '../../fonte/render/mundo/agua.js';
 import {
@@ -402,7 +405,8 @@ test('relevo fino do fragmento: cada termo some pelo pixel em 3D (na encosta a p
     for (const a of atribs) assert.ok(a[1].includes('tPix'), `${termo} sem o corte pelo tamanho do pixel`);
   }
   assert.ok(!/length\( abs\( tDx \) \+ abs\( tDy \) \)/.test(cor), 'corte pelo pixel só em x e z (falha na encosta)');
-  assert.match(cor, /terRelevo\( tN, \( tRel \+ tCopaRel \* 0\.65 \+ tRelRocha \+ tRelVeg \)/);
+  assert.match(cor, /tRelH = tRel \+ tCopaRel \* 0\.65 \+ tRelRocha \+ tRelVeg;/);
+  assert.match(cor, /terRelevo\( tN, tRelH \* uTerDetalhe\.z \)/);
 });
 
 test('relevo fino: inclinação limitada e sem NaN (a parede da copa levantada leva o det a zero)', () => {
@@ -440,8 +444,8 @@ test('vegetação: na borda (cobertura parcial) o vão escuro entre as copas mos
   const cam = GLSL_TER_FRAGMENTO.pars;
   assert.match(cam, /float terCobVeg\( float cob, vec3 cor \)/);
   // a mesma regra no assado e no pintado por pixel (senão o perto e o longe mudam de cor na troca)
-  assert.match(cam, /float veg = terCobVeg\( terVegetacao\( e, cv \), cv \);/);
-  assert.match(GLSL_TER_FRAGMENTO.cor, /tAlb = mix\( tAlb, cVeg, terCobVeg\( tVeg, cVeg \) \* tMed \);/);
+  assert.match(cam, /float vegBruta = terVegetacao\( e, cv \);[\s\S]*float veg = terCobVeg\( vegBruta, cv \);/);
+  assert.match(GLSL_TER_FRAGMENTO.cor, /tAlb = mix\( tAlb, cVeg, terCobVeg\( tVeg, cVeg \) \* tMed \* max\( kP, tIngreme \) \);/);
   // a conta em JavaScript: vão (luminância 0,01) com cobertura 1 continua; com cobertura 0,5 quase some
   const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const cobVeg = (cob, lum) => cob * (1 - (1 - ss(0.013, 0.026, lum)) * (1 - ss(0.4, 0.95, cob)));
@@ -525,4 +529,126 @@ test('CC0: arte/materiais/chao-camadas.ktx2 é um KTX2 de 8 fatias de 1024, até
   assert.equal(u32(24), 1024, 'altura');
   assert.equal(u32(32), PALETA_CHAO.length, 'fatias');
   assert.ok(u32(40) >= 10, 'mipmaps');
+});
+
+// ------------------------------------------------------------------------------------------------ LOD do sombreador (PC2)
+
+test('LOD do sombreador: o caminho barato é escolhido de longe e o completo de perto, pela distância e pela tela', () => {
+  const pc = PERFIL_TERRENO.alta; // o 'pc' herda do Alta (porPerfil)
+  assert.equal(pc.cor, 4096, 'o PC assa o chão a 2 m por texel');
+  // no PC do dono (2070 x 1001, 40 graus): o pixel visto de frente cobre 0,6 texel de 2 m a ~1,65 km
+  const ang = (2 * Math.tan(Math.PI / 9)) / 1001;
+  const [l0, l1] = limitesLonge(pc, 8192, ang);
+  assert.ok(Math.abs(l0 - (LONGE_PIXEL[0] * 2) / ang) < 1 && Math.abs(l0 - 1651) < 5, `início ${l0}`);
+  assert.ok(Math.abs(l1 - 2477) < 5, `fim ${l1}`);
+  // sem a tela, o mínimo do perfil (de perto, até uns 600 m, fica tudo)
+  assert.deepEqual(limitesLonge(pc, 8192, 0), pc.longe);
+  for (const id of Object.keys(PERFIL_TERRENO)) assert.ok(PERFIL_TERRENO[id].longe[0] >= 250 && PERFIL_TERRENO[id].longe[1] > PERFIL_TERRENO[id].longe[0], id);
+  // o peso do caminho completo (kP do GLSL): 1 perto, 0 de longe, suave no meio; fora do mapa sempre completo
+  assert.equal(pesoCompleto(300, [l0, l1]), 1);
+  assert.equal(pesoCompleto(3000, [l0, l1]), 0);
+  const meio = pesoCompleto((l0 + l1) / 2, [l0, l1]);
+  assert.ok(meio > 0.4 && meio < 0.6);
+  assert.equal(pesoCompleto(9000, [l0, l1], false), 1);
+  // o GLSL faz a mesma conta e a variante de longe tem o peso constante (o compilador tira o caminho completo)
+  const cor = GLSL_TER_FRAGMENTO.cor;
+  assert.match(cor, /float kP = tDentro && uTerMascara < 0\.5 \? 1\.0 - smoothstep\( uTerLonge\.x, uTerLonge\.y, tDist \) : 1\.0;/);
+  const longe = preprocessar(`#define TER_LONGE\n${cor}`).texto;
+  const perto = preprocessar(cor).texto;
+  assert.match(longe, /const float kP = 0\.0;/);
+  assert.match(longe, /const bool tEncosta = false;/);
+  assert.ok(!longe.includes('terMisturaLinear') && perto.includes('terMisturaLinear'), 'a mistura de fora do mapa só no completo');
+  assert.ok(!longe.includes('terGramado') && perto.includes('terGramado'), 'o passe da máscara só no completo');
+});
+
+test('LOD do sombreador: os nós além da transição vão para a malha barata; perto, fora do mapa e encosta íngreme não', () => {
+  const T = espelhoSintetico().terreno;
+  const dados = prepararDados(T, espelhoSintetico().floresta, distanciaAgua(T.agua, T.n));
+  const P = piramideAlturas(T, dados);
+  const mapa = { ox: T.origem[0], oz: T.origem[1], lado: T.passo * (T.n - 1) };
+  // a inclinação máxima de um bloco cobre a de cada amostra dentro dele
+  for (let k = 0; k < 60; k++) {
+    const x0 = mapa.ox + hashF(k, 11, 3) * 7800;
+    const z0 = mapa.oz + hashF(k, 12, 3) * 7800;
+    const m = inclinacaoMaxima(P, x0, z0, x0 + 256, z0 + 256);
+    const i = Math.round((x0 + 128 - mapa.ox) / T.passo);
+    const j = Math.round((z0 + 128 - mapa.oz) / T.passo);
+    const q = 4 * (j * T.n + i);
+    const nx = (dados[q] / 255) * 2 - 1;
+    const nz = (dados[q + 1] / 255) * 2 - 1;
+    assert.ok(1 - Math.sqrt(Math.max(0, 1 - nx * nx - nz * nz)) <= m + 1e-6, 'amostra mais íngreme que o bloco');
+  }
+  assert.equal(inclinacaoMaxima(P, mapa.ox - 256, 0, mapa.ox, 256), 1, 'fora do mapa conta como íngreme');
+  // quatro nós: um perto, um longe e plano, um longe fora do mapa e um longe na encosta mais íngreme do mapa
+  let ingreme = null;
+  for (let bj = 0; bj < P.niveis[0].lado && !ingreme; bj++) {
+    for (let bi = 0; bi < P.niveis[0].lado; bi++) {
+      if (P.niveis[0].incl[bj * P.niveis[0].lado + bi] > 0.45) {
+        ingreme = [mapa.ox + bi * P.bloco, mapa.oz + bj * P.bloco];
+        break;
+      }
+    }
+  }
+  assert.ok(ingreme, 'a cidade sintética tem encosta íngreme (morros)');
+  let plano = null;
+  for (let bj = 0; bj < P.niveis[0].lado && !plano; bj++) {
+    for (let bi = 0; bi < P.niveis[0].lado; bi++) {
+      if (P.niveis[0].incl[bj * P.niveis[0].lado + bi] < 0.05) {
+        plano = [mapa.ox + bi * P.bloco, mapa.oz + bj * P.bloco];
+        break;
+      }
+    }
+  }
+  const nos = new Float32Array([
+    plano[0], plano[1], 128, 0,
+    plano[0], plano[1], 128, 0,
+    mapa.ox - 512, mapa.oz, 256, 1,
+    ingreme[0], ingreme[1], 128, 0,
+  ]);
+  const perto = new Float32Array(16);
+  const longe = new Float32Array(16);
+  // com a câmera no nó plano, ele fica perto
+  let r = dividirNos(nos, 1, { x: plano[0] + 64, y: 300, z: plano[1] + 64 }, mapa, 2000, perto, longe, P);
+  assert.deepEqual(r, { perto: 1, longe: 0 });
+  // a 9 km dele: o plano vai para a barata; o de fora do mapa e o da encosta íngreme ficam na completa (a mata e a
+  // pedra na projeção lateral)
+  const c = { x: plano[0] + 9000, y: 300, z: plano[1] };
+  r = dividirNos(nos.subarray(4), 3, c, mapa, 2000, perto, longe, P);
+  assert.deepEqual(r, { perto: 2, longe: 1 });
+  assert.deepEqual([...longe.subarray(0, 4)], [plano[0], plano[1], 128, 0]);
+  assert.ok(INCL_ENCOSTA > 0.15 && INCL_ENCOSTA < 0.3);
+  // o corte infinito (o passe da máscara) põe tudo perto
+  r = dividirNos(nos, 4, c, mapa, Infinity, perto, longe, P);
+  assert.equal(r.longe, 0);
+});
+
+test('LOD do sombreador: o chão por último entre os opacos e o céu depois dele, as duas malhas com o mesmo vértice', () => {
+  assert.ok(ORDEM_TERRENO > 0, 'o terreno depois dos prédios e da água (ordem 0)');
+  assert.ok(ORDEM_FUNDO > ORDEM_TERRENO, 'o céu depois do chão, no plano distante');
+  const U = criarUniformes();
+  assert.ok('uTerLonge' in U);
+  const ganchos = { aplicar: (m) => m };
+  const perto = criarMaterialTerreno(ganchos, U, { detalhe: true });
+  const longe = criarMaterialTerreno(ganchos, U, { detalhe: true, longe: true });
+  assert.ok('TER_DETALHE' in perto.defines && !('TER_LONGE' in perto.defines));
+  assert.ok('TER_LONGE' in longe.defines && !('TER_DETALHE' in longe.defines), 'de longe sem as camadas de detalhe');
+  assert.notEqual(perto.customProgramCacheKey(), longe.customProgramCacheKey());
+  const sh = (m) => {
+    const s = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+    m.onBeforeCompile(s);
+    return s;
+  };
+  const a = sh(perto);
+  const b = sh(longe);
+  assert.equal(a.vertexShader, b.vertexShader, 'o mesmo vértice (sem rachadura entre perto e longe)');
+  assert.ok('uTerLonge' in a.uniforms && 'uTerLonge' in b.uniforms);
+});
+
+test('assado: o mapa de cor leva as manchas do campo (o chão de longe não as pinta por pixel) com o mesmo ruído do perto', () => {
+  const f = GLSL_ASSAR.fragmento;
+  assert.match(f, /vec4 m = terMistura\( e, true, mA, mB \);/);
+  assert.match(f, /mA = texture\( uTerRuido, TER_ROT_A \* w \* \( 1\.0 \/ 23\.0 \) \+ vec2\( 0\.13, 0\.71 \) \)/);
+  assert.match(GLSL_TER_FRAGMENTO.cor, /mA = textureGrad\( uTerRuido, TER_ROT_A \* tW \* \( 1\.0 \/ 23\.0 \) \+ vec2\( 0\.13, 0\.71 \)/);
+  // de perto as manchas só na parte pintada pelas camadas (a do assado já as tem)
+  assert.match(GLSL_TER_FRAGMENTO.cor, /tAlb \+= aPerto \* \( terManchas\( p, asf, tVeg, mA, mB \) - 1\.0 \) \* \( tPerto \* tMed \);/);
 });

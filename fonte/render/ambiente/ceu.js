@@ -1,8 +1,9 @@
 // Céu (D9, desenho do render 2.1 e 2.2): modelo de Preetham (o do Sky do three r186, com as nuvens 2D dele) numa
 // unidade só com a luz do jogo, mais o crepúsculo, a noite, a lua, as estrelas e o brilho da cidade. Serve a três
-// coisas com a MESMA conta: o fundo (no PC direto por pixel; no Média e no Leve lido de um cubo assado uma face por
-// quadro, em duplo buffer), o cubo de onde sai a luz do ambiente (ibl.js) e as cores que a luz do sol, a neblina e a
-// exposição usam (esta conta em JS, igual à do GLSL de shaders/ceu.glsl.js).
+// coisas com a MESMA conta: o fundo (no Ultra e no Alta direto por pixel; no PC, no Média e no Leve lido de um cubo
+// assado uma fatia por quadro, em duplo buffer), o cubo de onde sai a luz do ambiente (ibl.js) e as cores que a luz
+// do sol, a neblina e a exposição usam (esta conta em JS, igual à do GLSL de shaders/ceu.glsl.js). O fundo vai na
+// cena, depois dos opacos e no plano distante (PC2): o céu só custa onde ele aparece.
 //
 // Unidade: a radiância do Preetham vezes K_CEU, escolhido para que, com o sol a 45 graus, a luz no chão (sol mais céu,
 // na horizontal) valha pi: um chão branco lambertiano fica com radiância 1 e um de albedo 0,18 com 0,18. A luz do sol
@@ -20,6 +21,7 @@ import { Exposicao } from './exposicao.js';
 import { Neblina, umidadeManha } from './neblina.js';
 import { Nuvens } from './nuvens.js';
 import { CEU_VERTICE, fragmentoCeu } from '../materiais/shaders/ceu.glsl.js';
+import { CAMADA_LONGE } from '../motor/faixas.js';
 
 // ------------------------------------------------------------------------------------------------ modelo (sem three)
 
@@ -321,11 +323,13 @@ export function criarMaterialCeu(modo = 'fundo', { nuvens = true, lerCubo = fals
       uChao: { value: new THREE.Vector3() },
       uCubo: { value: null },
       uDisco: { value: 60 },
+      uFundoZ: { value: 0 },
       ...gNeblinaUniformesCeu(),
     },
     vertexShader: CEU_VERTICE,
     fragmentShader: CEU_FRAGMENTO,
-    depthTest: false,
+    // o fundo vai na cena no plano distante e só passa onde nada foi desenhado; as faces e a luz do ambiente não testam
+    depthTest: modo === 'fundo',
     depthWrite: false,
   });
 }
@@ -411,24 +415,47 @@ export function triangulo() {
 }
 
 /**
- * Desenha as faces [f0, f1) do cubo com o material (modo cubo ou ibl).
+ * Faixa de linhas [y0, y0 + h) da fatia k de n de uma face de lado `lado` (as fatias cobrem a face sem sobra nem
+ * sobreposição).
+ * @example faixaDaFatia(512, 1, 2) // { y0: 256, h: 256 }
+ */
+export function faixaDaFatia(lado, k, n) {
+  const y0 = Math.floor((lado * k) / n);
+  return { y0, h: Math.floor((lado * (k + 1)) / n) - y0 };
+}
+
+/**
+ * Desenha as faces [f0, f1) do cubo com o material (modo cubo ou ibl); com fatia = [k, n], só a fatia k de n de cada
+ * face (uma faixa de linhas, pelo recorte do alvo).
  * @param {THREE.WebGLCubeRenderTarget} rt
  */
-export function desenharFaces(renderer, rt, mat, cena, cam, f0 = 0, f1 = 6) {
+export function desenharFaces(renderer, rt, mat, cena, cam, f0 = 0, f1 = 6, fatia = null) {
   const u = mat.uniforms;
   const antes = renderer.getRenderTarget();
   const faceAntes = renderer.getActiveCubeFace();
   const mipAntes = renderer.getActiveMipmapLevel();
   cena.children[0].material = mat;
-  for (let f = f0; f < f1; f++) {
-    const e = EIXOS_FACES[f];
-    u.uFrente.value.copy(e.frente);
-    u.uDireita.value.copy(e.direita);
-    u.uCima.value.copy(e.cima);
-    renderer.setRenderTarget(rt, f);
-    renderer.render(cena, cam);
+  if (fatia) {
+    const { y0, h } = faixaDaFatia(rt.width, fatia[0], fatia[1]);
+    rt.scissor.set(0, y0, rt.width, h);
+    rt.scissorTest = true;
   }
-  renderer.setRenderTarget(antes, faceAntes, mipAntes);
+  try {
+    for (let f = f0; f < f1; f++) {
+      const e = EIXOS_FACES[f];
+      u.uFrente.value.copy(e.frente);
+      u.uDireita.value.copy(e.direita);
+      u.uCima.value.copy(e.cima);
+      renderer.setRenderTarget(rt, f);
+      renderer.render(cena, cam);
+    }
+  } finally {
+    if (fatia) {
+      rt.scissorTest = false;
+      rt.scissor.set(0, 0, rt.width, rt.height);
+    }
+    renderer.setRenderTarget(antes, faceAntes, mipAntes);
+  }
 }
 
 /** Frente, direita e cima (vezes as tangentes do campo) da câmera da vista. */
@@ -445,7 +472,9 @@ export function eixosDaCamera(cam, u) {
 // ------------------------------------------------------------------------------------------------ o céu desenhado
 
 /**
- * O céu da vista: direto (PC) ou lido de um cubo assado uma face por quadro, em duplo buffer (Média e Leve, D9).
+ * O céu da vista: direto (Ultra e Alta) ou lido de um cubo assado uma fatia por quadro, em duplo buffer (PC, Média e
+ * Leve, D9). O cubo leva o céu inteiro com as nuvens; o fundo lê o cubo e desenha por cima, por pixel e nítidos, só os
+ * discos do sol e da lua (com a nuvem na frente) e as estrelas.
  */
 export class Ceu {
   constructor(ctx) {
@@ -459,25 +488,45 @@ export class Ceu {
     this.nuvem = new THREE.Vector4(0.3, 0.4, 0.00018, 0.5);
     this.nuvemPasso = new THREE.Vector2();
     this.estrelas = 0;
+    this.naCena = criarFundoNaCena(this, !!ctx.semClip);
     this.configurar(ctx.perfil);
   }
 
-  /** Troca o modo pelo perfil: céu direto no PC; cubo de 256 (Média) ou 128 sem nuvens (Leve). */
+  /** Troca o modo pelo perfil: direto (Ultra, Alta); cubo de 512 em meias faces (PC), de 256 (Média), de 128 (Leve). */
   configurar(perfil) {
     const c = perfil.ceu ?? { modo: 'direto', cubo: 0, nuvens: true };
-    if (this._cfg && this._cfg.modo === c.modo && this._cfg.cubo === c.cubo && this._cfg.nuvens === c.nuvens) return;
+    const f = this._cfg;
+    if (f && f.modo === c.modo && f.cubo === c.cubo && f.nuvens === c.nuvens && f.fatias === (c.fatias ?? 1)) return;
     this.descartarAlvos();
-    this._cfg = { ...c };
+    this._cfg = { ...c, fatias: c.fatias ?? 1 };
     this.direto = c.modo === 'direto';
     this.fundo = criarMaterialCeu('fundo', { nuvens: c.nuvens, lerCubo: !this.direto });
+    this.naCena.material = this.fundo;
     this.faces = this.direto ? null : criarMaterialCeu('cubo', { nuvens: c.nuvens });
     if (!this.direto) {
       const op = { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
       this.cubos = [new THREE.WebGLCubeRenderTarget(c.cubo, op), new THREE.WebGLCubeRenderTarget(c.cubo, op)];
       this.frente = 0; // o cubo que o fundo lê
       this.faceSeguinte = 0; // a próxima face do cubo de trás
+      this.fatiaSeguinte = 0; // a próxima fatia dessa face
       this.cheio = false; // o da frente já tem as 6 faces
     }
+  }
+
+  /**
+   * Um salto no estado do céu (a hora pulou, o brilho da cidade medido chegou): o cubo da frente sai inteiro no próximo
+   * assar e o de trás recomeça, sem esperar os quadros das fatias (nem trocar para um cubo com faces de antes do salto).
+   */
+  refazer() {
+    if (this.direto) return;
+    this.cheio = false;
+    this.faceSeguinte = 0;
+    this.fatiaSeguinte = 0;
+  }
+
+  /** Fatias de face assadas por quadro no cubo de trás (6 x fatias quadros por cubo). */
+  get fatias() {
+    return this._cfg?.fatias ?? 1;
   }
 
   /** Estado do quadro nos materiais (e as nuvens, o giro das estrelas). */
@@ -488,13 +537,14 @@ export class Ceu {
   }
 
   /**
-   * Passes antes da cena: uma face do cubo de trás por quadro; com as 6 prontas, troca. O primeiro cubo sai inteiro.
-   * @returns {number} faces desenhadas
+   * Passes antes da cena: uma fatia de face do cubo de trás por quadro; com as 6 faces prontas, troca. O primeiro
+   * cubo sai inteiro.
+   * @returns {number} faces desenhadas (a fração de uma face com as fatias)
    */
   assar(renderer, medidas) {
     if (this.direto) return 0;
-    const faz = (f0, f1, alvo) => {
-      const fn = () => desenharFaces(renderer, alvo, this.faces, this.cena, this.camTela, f0, f1);
+    const faz = (f0, f1, alvo, fatia = null) => {
+      const fn = () => desenharFaces(renderer, alvo, this.faces, this.cena, this.camTela, f0, f1, fatia);
       if (medidas) medidas.passe(fn);
       else fn();
     };
@@ -503,20 +553,34 @@ export class Ceu {
       this.cheio = true;
       return 6;
     }
+    const n = this.fatias;
     const tras = this.cubos[1 - this.frente];
-    faz(this.faceSeguinte, this.faceSeguinte + 1, tras);
-    this.faceSeguinte++;
-    if (this.faceSeguinte === 6) {
-      this.faceSeguinte = 0;
-      this.frente = 1 - this.frente;
+    faz(this.faceSeguinte, this.faceSeguinte + 1, tras, n > 1 ? [this.fatiaSeguinte, n] : null);
+    if (++this.fatiaSeguinte >= n) {
+      this.fatiaSeguinte = 0;
+      if (++this.faceSeguinte === 6) {
+        this.faceSeguinte = 0;
+        this.frente = 1 - this.frente;
+      }
     }
-    return 1;
+    return 1 / n;
   }
 
-  /** Desenha o fundo no alvo atual (antes da cena, sem profundidade). */
+  /** Uniformes do fundo para uma câmera: os eixos, o cubo da frente e o plano distante da profundidade em uso. */
+  prepararFundo(renderer, cam) {
+    const u = this.fundo.uniforms;
+    if (!cam.isPerspectiveCamera) {
+      u.uFundoZ.value = 2; // fora do volume de recorte: uma vista ortográfica (sombra, campo de alturas) não tem céu
+      return;
+    }
+    eixosDaCamera(cam, u);
+    if (!this.direto) u.uCubo.value = this.cubos[this.frente].texture;
+    u.uFundoZ.value = renderer.state?.buffers?.depth?.getReversed?.() ? 0 : 1;
+  }
+
+  /** Desenha o fundo no alvo atual (antes da cena; sem uso quando o fundo vai na cena). */
   desenharFundo(renderer, cam) {
-    eixosDaCamera(cam, this.fundo.uniforms);
-    if (!this.direto) this.fundo.uniforms.uCubo.value = this.cubos[this.frente].texture;
+    this.prepararFundo(renderer, cam);
     this.malha.material = this.fundo;
     renderer.render(this.cena, this.camTela);
   }
@@ -531,7 +595,32 @@ export class Ceu {
   descartar() {
     this.descartarAlvos();
     this.malha.geometry.dispose();
+    this.naCena.removeFromParent();
+    this.naCena.geometry.dispose();
   }
+}
+
+/** Ordem do fundo na cena: depois de todos os opacos (o terreno vai em 1), antes dos transparentes (outra lista). */
+export const ORDEM_FUNDO = 1000;
+
+/**
+ * O fundo do céu como uma malha da cena (PC2): um triângulo de tela cheia no plano distante, desenhado depois dos
+ * opacos com o teste de profundidade, então o céu só custa nos pixels em que ele aparece (na vista aberta, quase
+ * nenhum). Com as duas faixas de profundidade (sem EXT_clip_control) vai só na de longe. O quadro passa a câmera
+ * certa (onBeforeRender); o passe do cronômetro é o 'ceu'.
+ */
+function criarFundoNaCena(ceu, duasFaixas) {
+  const m = new THREE.Mesh(triangulo(), null);
+  m.name = 'ceu:fundo';
+  m.frustumCulled = false;
+  m.renderOrder = ORDEM_FUNDO;
+  m.userData.familia = 'ceu';
+  if (duasFaixas) {
+    m.layers.set(CAMADA_LONGE);
+    m.userData.faixa = 'longe';
+  }
+  m.onBeforeRender = (renderer, cena, cam) => ceu.prepararFundo(renderer, cam);
+  return m;
 }
 
 // ------------------------------------------------------------------------------------------------ o ambiente (domínio)
@@ -558,6 +647,8 @@ export class Ambiente {
     this.ast = { sol: undefined, lua: undefined, dia: 1 };
     this.est = {};
     this.brilhoCidade = 0.6;
+    this._cidCubo = this.brilhoCidade; // o brilho da cidade do último cubo inteiro
+    this._horaAnt = null;
     this.ceu = new Ceu(ctx);
     this.sol = new Sol(ctx);
     this.ibl = new Ibl(ctx, this);
@@ -614,6 +705,15 @@ export class Ambiente {
       this.sol.configurar(ctx.perfil);
       this.nuvens.configurar(ctx.perfil);
     }
+    // um salto (a hora pulou mais de 15 min num quadro, ou o brilho da cidade mudou 10% de noite, como quando o mapa de
+    // luz da rua chega depois do primeiro cubo): o cubo do céu sai inteiro de novo
+    const pulo = this._horaAnt !== null && Math.abs(((((hora - this._horaAnt + 36) % 24) + 24) % 24) - 12) > 0.25;
+    this._horaAnt = hora;
+    const cid = this.brilhoCidade;
+    if (pulo || ((this.est.noite ?? 0) > 0.05 && Math.abs(cid - this._cidCubo) > 0.1 * Math.max(cid, this._cidCubo, 0.05))) {
+      this.ceu.refazer();
+      this._cidCubo = cid;
+    }
     this.nuvens.atualizar(dt, clima, this.est, this.ceu);
     this.ceu.estrelas = this.est.noite * (1 - 0.6 * this.ast.lua.iluminada * Math.max(0, this.ast.lua.dir[1]));
     giroEstrelas(hora, tempo?.diaDoAno ?? 0, esp?.mapa?.latitude ?? -23.5, this.ceu.giro);
@@ -623,6 +723,8 @@ export class Ambiente {
     this.neblina.atualizar(this.est, { umidade: umidadeManha(hora, this.nascerEPor().nascer), nuvens: clima.nuvens ?? 0.3 });
     this.ibl.atualizar(hora, this.est);
     ctx.sol.dia = this.ast.dia;
+    // com uma cor de fundo na cena (a depuração), o céu sai
+    this.ceu.naCena.visible = !ctx.cena.background;
   }
 
   /** Passes antes da cena (cubo do céu e luz do ambiente), medidos. */
@@ -634,6 +736,11 @@ export class Ambiente {
 
   desenharFundo(renderer, cam) {
     this.ceu.desenharFundo(renderer, cam);
+  }
+
+  /** O fundo vai na cena (depois dos opacos): o quadro não desenha o de tela cheia antes dela. */
+  get fundoNaCena() {
+    return !!this.ceu.naCena.parent;
   }
 
   /** Números do quadro para a composição (pos.js). */
@@ -655,6 +762,7 @@ export function registrar(api) {
     const amb = new Ambiente(ctx);
     ctx.ambiente = amb;
     ctx.cena.background = null;
+    ctx.cena.add(amb.ceu.naCena);
     return {
       nome: 'ceu',
       quadro: (tMs) => amb.quadro(tMs),

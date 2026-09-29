@@ -1,6 +1,8 @@
 // Terreno (desenho do render 3.1 e 3.2, D4, D44, D46): troca o chão da depuração (domínio 'terreno').
-//   - CDLOD numa chamada: uma grade de 16 x 16 quadrados (512 triângulos) instanciada, um nó da quadtree por
-//     instância, escolhidos na CPU a cada quadro; "morph" no vértice em até três níveis (sem rachaduras nem estalos).
+//   - CDLOD: uma grade de 16 x 16 quadrados (512 triângulos) instanciada, um nó da quadtree por instância, escolhidos
+//     na CPU a cada quadro; "morph" no vértice em até três níveis (sem rachaduras nem estalos). Duas chamadas (PC2): os
+//     nós de perto com o sombreador completo e os de longe (além da transição, sem encosta íngreme) só com o caminho
+//     barato; as duas depois dos outros opacos, e o teste de profundidade descarta o chão coberto antes do sombreador.
 //   - Alturas: a grade do espelho (R32F) lida no vértice pela mesma bilinear de comum/altura.js (teste de paridade).
 //   - Dados por amostra (RGBA8): normal, floresta e distância à água; uso do solo a 4 m (vias, pisos, terra batida,
 //     gramados dos lotes) rasterizado na CPU pelo espelho; mapa de cor assado na GPU para o longe e para a água.
@@ -22,13 +24,25 @@ import { porPerfil } from '../motor/perfis.js';
 
 // ------------------------------------------------------------------------------------------------ parâmetros
 
-/** Por perfil: primeiro alcance do CDLOD, lado do mapa de cor, alcance do detalhe e relevo das copas (m). */
+/**
+ * Por perfil: primeiro alcance do CDLOD, lado do mapa de cor, alcance do detalhe e relevo das copas (m) e o caminho de
+ * longe do sombreador (PC2): longe = [início, fim] mínimos em metros (limitesLonge empurra para onde o pixel da tela
+ * já passou do texel do assado: de perto fica tudo). O Alta (e o PC, que herda dele) assa o mapa a 2 m por texel; o
+ * chão de longe inteiro sai dele, com as manchas do campo e a vegetação.
+ */
 export const PERFIL_TERRENO = Object.freeze({
-  ultra: { r0: 1000, cor: 4096, detalhe: 600, faixa: 150, copaRelevo: 4000, aniso: 8 },
-  alta: { r0: 800, cor: 2048, detalhe: 400, faixa: 120, copaRelevo: 3000, aniso: 8 },
-  media: { r0: 600, cor: 2048, detalhe: 180, faixa: 60, copaRelevo: 2000, aniso: 4 },
-  leve: { r0: 320, cor: 1024, detalhe: 0, faixa: 1, copaRelevo: 800, aniso: 1 },
+  ultra: { r0: 1000, cor: 4096, detalhe: 600, faixa: 150, copaRelevo: 4000, aniso: 8, longe: [900, 1200] },
+  alta: { r0: 800, cor: 4096, detalhe: 400, faixa: 120, copaRelevo: 3000, aniso: 8, longe: [600, 800] },
+  media: { r0: 600, cor: 2048, detalhe: 180, faixa: 60, copaRelevo: 2000, aniso: 4, longe: [400, 550] },
+  leve: { r0: 320, cor: 1024, detalhe: 0, faixa: 1, copaRelevo: 800, aniso: 1, longe: [250, 350] },
 });
+/**
+ * O caminho de longe começa onde o pixel da tela, visto de frente, cobre 0,6 texel do assado no chão e fica inteiro
+ * a 0,9 (na vista inclinada o pixel no chão é bem maior: ali o assado já é mais fino que a tela).
+ */
+export const LONGE_PIXEL = Object.freeze([0.6, 0.9]);
+/** Ordem do terreno entre os opacos: depois dos prédios e da água (o teste de profundidade descarta o chão coberto). */
+export const ORDEM_TERRENO = 1;
 export const LADO_USO = 2048; // 4 m por texel no mapa de 8.192 m
 export const RAIZ_CDLOD = Object.freeze({ x: -16384, z: -16384, lado: 32768 }); // moldura de 32 km (1.4)
 export const COPA_ALTURA = 18;
@@ -135,6 +149,60 @@ export function distanciaAgua(agua, n) {
   return { dist, mar };
 }
 
+/**
+ * Limites do caminho de longe (uTerLonge.xy, m): o maior entre o do perfil e a distância em que o pixel da tela, visto
+ * de frente, cobre LONGE_PIXEL texels do assado (a tela mais fina empurra o longe para mais longe).
+ * @param {number} pxAng  ângulo de um pixel (rad): 2 tan(fov / 2) / altura do desenho em pixels (0: só o do perfil)
+ * @example limitesLonge(PERFIL_TERRENO.alta, 8192, 2 * Math.tan(Math.PI / 9) / 1001) // [~1650, ~2476] no PC do dono
+ */
+export function limitesLonge(pt, ladoMapa = 8192, pxAng = 0) {
+  const k = pxAng > 0 ? ladoMapa / pt.cor / pxAng : 0;
+  return [Math.max(pt.longe[0], LONGE_PIXEL[0] * k), Math.max(pt.longe[1], LONGE_PIXEL[1] * k)];
+}
+
+/**
+ * Peso do caminho completo do sombreador (a mesma conta do GLSL, kP): 1 perto, 0 de longe; fora do mapa sempre 1.
+ * @param {number} dist  distância à câmera (m)
+ * @example pesoCompleto(3000, [1266, 1899]) // 0: o caminho barato
+ */
+export function pesoCompleto(dist, lim, dentro = true) {
+  if (!dentro) return 1;
+  const t = Math.min(1, Math.max(0, (dist - lim[0]) / (lim[1] - lim[0])));
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/** Inclinação (1 - normal y) a partir da qual o sombreador pinta a mata e a pedra na projeção lateral (GLSL: tEncosta). */
+export const INCL_ENCOSTA = 0.2;
+
+/**
+ * Divide os nós escolhidos (4 por nó: x0, z0, lado, nível) entre a malha de perto (o sombreador completo, com a
+ * transição) e a de longe (só o caminho barato, TER_LONGE): de longe vai o nó inteiro dentro do mapa, sem encosta
+ * íngreme (P: a pirâmide com as inclinações), cujo ponto mais perto da câmera, no chão, passa do corte (o fim da
+ * transição; a distância em 3D só é maior).
+ * @returns {{ perto: number, longe: number }} nós escritos em cada saída
+ */
+export function dividirNos(nos, n, cam, mapa, corte, perto, longe, P = null) {
+  let a = 0;
+  let b = 0;
+  const c2 = corte * corte;
+  for (let k = 0; k < n; k++) {
+    const x0 = nos[4 * k];
+    const z0 = nos[4 * k + 1];
+    const s = nos[4 * k + 2];
+    const dx = Math.max(x0 - cam.x, 0, cam.x - x0 - s);
+    const dz = Math.max(z0 - cam.z, 0, cam.z - z0 - s);
+    const dentro = !!mapa && x0 >= mapa.ox && z0 >= mapa.oz && x0 + s <= mapa.ox + mapa.lado && z0 + s <= mapa.oz + mapa.lado;
+    const vaiLonge = dentro && dx * dx + dz * dz >= c2 && !(P && inclinacaoMaxima(P, x0, z0, x0 + s, z0 + s) > INCL_ENCOSTA - 0.01);
+    const saida = vaiLonge ? longe : perto;
+    const o = vaiLonge ? 4 * b++ : 4 * a++;
+    saida[o] = x0;
+    saida[o + 1] = z0;
+    saida[o + 2] = s;
+    saida[o + 3] = nos[4 * k + 3];
+  }
+  return { perto: a, longe: b };
+}
+
 /** Byte da distância à água: passos de 2 m (0 a 127, até 254 m) mais 128 se a água que conta é o mar. */
 export const codificarAgua = (metros, mar) => Math.min(127, Math.round(metros / 2)) + (mar ? 128 : 0);
 
@@ -214,8 +282,12 @@ export function mipsDeMinimos(T) {
   return out;
 }
 
-/** Pirâmide de mínimos e máximos das alturas em blocos de 16 amostras (128 m) e seus agrupamentos 2 x 2. */
-export function piramideAlturas(T) {
+/**
+ * Pirâmide de mínimos e máximos das alturas em blocos de 16 amostras (128 m) e seus agrupamentos 2 x 2; com os dados
+ * (prepararDados), também a inclinação máxima (1 - normal y) de cada bloco, que manda a encosta íngreme para a malha
+ * de perto (a pedra e a mata na projeção lateral).
+ */
+export function piramideAlturas(T, dados = null) {
   const n = T.n;
   const b = (n - 1) / GRADE_NO;
   const niveis = [];
@@ -237,22 +309,26 @@ export function piramideAlturas(T) {
       max[bj * b + bi] = hi;
     }
   }
-  niveis.push({ lado, min, max });
+  let incl = dados ? inclinacoesDosBlocos(dados, n, b) : null;
+  niveis.push({ lado, min, max, incl });
   while (lado > 1) {
     const l2 = lado >> 1;
     const mi = new Float32Array(l2 * l2);
     const ma = new Float32Array(l2 * l2);
+    const inc = incl ? new Float32Array(l2 * l2) : null;
     for (let j = 0; j < l2; j++) {
       for (let i = 0; i < l2; i++) {
         const ks = [2 * j * lado + 2 * i, 2 * j * lado + 2 * i + 1, (2 * j + 1) * lado + 2 * i, (2 * j + 1) * lado + 2 * i + 1];
         mi[j * l2 + i] = Math.min(...ks.map((k) => min[k]));
         ma[j * l2 + i] = Math.max(...ks.map((k) => max[k]));
+        if (inc) inc[j * l2 + i] = Math.max(...ks.map((k) => incl[k]));
       }
     }
     lado = l2;
     min = mi;
     max = ma;
-    niveis.push({ lado, min, max });
+    incl = inc;
+    niveis.push({ lado, min, max, incl });
   }
   // borda do mapa (para os nós de fora)
   let bMin = Infinity;
@@ -264,6 +340,47 @@ export function piramideAlturas(T) {
     }
   }
   return { niveis, bloco: T.passo * GRADE_NO, ox: T.origem[0], oz: T.origem[1], lado: T.passo * (n - 1), bMin, bMax };
+}
+
+/** Inclinação máxima (1 - normal y) em cada bloco de 16 amostras, pelas normais dos dados (a mesma leitura do GLSL). */
+function inclinacoesDosBlocos(dados, n, b) {
+  const out = new Float32Array(b * b);
+  for (let bj = 0; bj < b; bj++) {
+    for (let bi = 0; bi < b; bi++) {
+      let m = 0;
+      for (let j = bj * GRADE_NO; j <= (bj + 1) * GRADE_NO; j++) {
+        for (let i = bi * GRADE_NO; i <= (bi + 1) * GRADE_NO; i++) {
+          const k = 4 * (j * n + i);
+          const x = (dados[k] / 255) * 2 - 1;
+          const z = (dados[k + 1] / 255) * 2 - 1;
+          const inc = 1 - Math.sqrt(Math.max(0, 1 - x * x - z * z));
+          if (inc > m) m = inc;
+        }
+      }
+      out[bj * b + bi] = m;
+    }
+  }
+  return out;
+}
+
+/**
+ * Inclinação máxima num retângulo do mundo (conservador: os blocos que ele toca); fora do mapa ou sem os dados, 1.
+ */
+export function inclinacaoMaxima(P, x0, z0, x1, z1) {
+  if (!P.niveis[0].incl || x0 < P.ox || z0 < P.oz || x1 > P.ox + P.lado || z1 > P.oz + P.lado) return 1;
+  const base = P.niveis[0].lado;
+  const bi0 = Math.max(0, Math.floor((x0 - P.ox) / P.bloco));
+  const bj0 = Math.max(0, Math.floor((z0 - P.oz) / P.bloco));
+  const bi1 = Math.min(base, Math.ceil((x1 - P.ox) / P.bloco));
+  const bj1 = Math.min(base, Math.ceil((z1 - P.oz) / P.bloco));
+  let l = 0;
+  while (l < P.niveis.length - 1 && Math.max(bi1 - bi0, bj1 - bj0) >> l > 4) l++;
+  const N = P.niveis[l];
+  let m = 0;
+  for (let j = bj0 >> l; j < Math.min(N.lado, (bj1 + (1 << l) - 1) >> l); j++) {
+    for (let i = bi0 >> l; i < Math.min(N.lado, (bi1 + (1 << l) - 1) >> l); i++) m = Math.max(m, N.incl[j * N.lado + i]);
+  }
+  return m;
 }
 
 /** Mínimo e máximo das alturas num retângulo do mundo (conservador), com a moldura de fora se ligada. */
@@ -716,6 +833,7 @@ export function criarUniformes() {
     uTerMorph: v(Array.from({ length: NIVEIS_CDLOD }, () => new THREE.Vector2())),
     uTerCopaV: v(new THREE.Vector4(COPA_ALTURA, 0, 150, 0)),
     uTerDetalhe: v(new THREE.Vector4(180, 60, 1, 2000)),
+    uTerLonge: v(new THREE.Vector4(400, 550, 0, 0)),
     uTerGanho: v(Array.from({ length: N_CAMADAS }, () => new THREE.Vector3(1, 1, 1))),
     uTerGanhoB: v(Array.from({ length: N_CAMADAS }, () => new THREE.Vector3(1, 1, 1))),
     uTerAB: v(new THREE.Vector4(0, 0, 0, 0)),
@@ -733,13 +851,17 @@ function trocar(src, alvo, novo) {
   return src.replace(alvo, novo);
 }
 
-/** Material do terreno: MeshStandardMaterial com os trechos do CDLOD e das camadas; os ganchos entram por cima. */
-export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false } = {}) {
+/**
+ * Material do terreno: MeshStandardMaterial com os trechos do CDLOD e das camadas; os ganchos entram por cima. longe:
+ * a variante dos nós de longe (TER_LONGE, PC2), só com o caminho barato do sombreador.
+ */
+export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false, longe = false } = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
-  mat.name = 'terreno';
+  mat.name = longe ? 'terreno-longe' : 'terreno';
   mat.defines = { ...mat.defines }; // mantém o STANDARD do three (IBL difusa e oclusão especular)
-  if (detalhe) mat.defines.TER_DETALHE = '';
-  if (ab) mat.defines.TER_AB = '';
+  if (detalhe && !longe) mat.defines.TER_DETALHE = '';
+  if (ab && !longe) mat.defines.TER_AB = '';
+  if (longe) mat.defines.TER_LONGE = '';
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U);
     let vs = shader.vertexShader;
@@ -932,11 +1054,23 @@ function criarTerreno(ctx) {
   espelharB();
 
   let mat = criarMaterialTerreno(ctx.ganchos, U, { detalhe: pt.detalhe > 0, ab: modo === 'ab' });
+  let matLonge = criarMaterialTerreno(ctx.ganchos, U, { longe: true });
   const geo = geometriaNo();
+  const geoLonge = geometriaNo();
+  // duas malhas da mesma grade instanciada (PC2): os nós de perto com o sombreador completo e os de longe só com o
+  // caminho barato; as duas por último entre os opacos (prédios, água e o resto na frente descartam o chão coberto
+  // antes do sombreador)
   const malha = ctx.medidas.familia(new THREE.Mesh(geo, mat), 'terreno');
+  const malhaLonge = ctx.medidas.familia(new THREE.Mesh(geoLonge, matLonge), 'terreno');
   malha.name = 'terreno';
-  malha.frustumCulled = false;
-  ctx.cena.add(malha);
+  malhaLonge.name = 'terreno:longe';
+  for (const m of [malha, malhaLonge]) {
+    m.frustumCulled = false;
+    m.renderOrder = ORDEM_TERRENO;
+    ctx.cena.add(m);
+  }
+  const nosTodos = new Float32Array(MAX_NOS * 4);
+  const tamDesenho = new THREE.Vector2();
 
   const promessaCC0 = modo === 'proc' ? Promise.resolve(null) : carregarCC0({ renderer: ctx.renderer, THREE: ctx.THREE, montagem: ctx.montagem });
   promessaCC0.then((tex) => {
@@ -978,7 +1112,7 @@ function criarTerreno(ctx) {
     td.needsUpdate = true;
     estado.texDados = td;
     U.uTerDados.value = td;
-    estado.P = piramideAlturas(T);
+    estado.P = piramideAlturas(T, estado.dados);
     // uso do solo
     if (!estado.uso) {
       estado.uso = new Uint8Array(LADO_USO * LADO_USO * 4);
@@ -1037,7 +1171,7 @@ function criarTerreno(ctx) {
     if (alturaMudou) {
       estado.texAlt.mipmaps = [{ data: T.altura, width: n, height: n }, ...mipsDeMinimos(T)];
       estado.texAlt.needsUpdate = true;
-      estado.P = piramideAlturas(T);
+      estado.P = piramideAlturas(T, estado.dados);
     }
     if (tudo) sujarCor(tudo);
   }
@@ -1188,6 +1322,10 @@ function criarTerreno(ctx) {
       malha.material = novo;
       mat.dispose();
       mat = novo;
+      const novoLonge = criarMaterialTerreno(ctx.ganchos, U, { longe: true });
+      malhaLonge.material = novoLonge;
+      matLonge.dispose();
+      matLonge = novoLonge;
       if (estado.T) montarTudo(ctx.sim.espelho);
     }),
   ];
@@ -1214,14 +1352,30 @@ function criarTerreno(ctx) {
       m4.multiplyMatrices(camCorte.projectionMatrix, cam.matrixWorldInverse);
     } else m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     frustum.setFromProjectionMatrix(m4);
-    // escreve direto no atributo (sem um Float32Array novo por quadro)
-    const attr = geo.getAttribute('aNo');
-    const nos = selecionarNos({ cam: cam.position, visivel, faixas: estado.faixas, P: estado.P, fora: U.uTerFora.value.x > 0.5, saida: attr.array });
-    attr.clearUpdateRanges();
-    attr.addUpdateRange(0, nos.n * 4);
-    attr.needsUpdate = true;
-    geo.instanceCount = nos.n;
+    const nos = selecionarNos({ cam: cam.position, visivel, faixas: estado.faixas, P: estado.P, fora: U.uTerFora.value.x > 0.5, saida: nosTodos });
+    // de longe o nó inteiro além do fim da transição (o passe da máscara quer o caminho completo em tudo); escreve
+    // direto nos atributos (sem um Float32Array novo por quadro)
+    const aP = geo.getAttribute('aNo');
+    const aL = geoLonge.getAttribute('aNo');
+    const corte = U.uTerMascara.value > 0.5 ? Infinity : U.uTerLonge.value.y;
+    const d = dividirNos(nos, nos.n, cam.position, estado.mapa, corte, aP.array, aL.array, estado.P);
+    for (const [g, a, k] of [[geo, aP, d.perto], [geoLonge, aL, d.longe]]) {
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, k * 4);
+      a.needsUpdate = true;
+      g.instanceCount = k;
+    }
     estado.nos = nos.n;
+    estado.nosLonge = d.longe;
+  }
+
+  /** Limites do caminho de longe pelo perfil e pelo ângulo de um pixel na tela (a transição segue a resolução). */
+  function atualizarLonge(c) {
+    const cam = c.camera;
+    const h = c.renderer?.getDrawingBufferSize?.(tamDesenho).y ?? 0;
+    const pxAng = cam?.isPerspectiveCamera && h > 0 ? (2 * Math.tan((cam.fov * Math.PI) / 360)) / (cam.zoom || 1) / h : 0;
+    const [l0, l1] = limitesLonge(pt, estado.mapa?.lado, pxAng);
+    U.uTerLonge.value.set(l0, l1, 0, 0);
   }
 
   // ---------------------------------------------------------------- API
@@ -1260,14 +1414,18 @@ function criarTerreno(ctx) {
         estado.ultimoAssado = agora;
       }
       U.uTerEstacao.value = estacaoSeca(c.sim.espelho.tempo?.diaDoAno);
+      atualizarLonge(c);
       escolherNos(c.camera);
       if (U.uTerAB.value.y > 0.5 && estado.abX !== undefined) U.uTerAB.value.x = estado.abX * c.renderer.getPixelRatio();
     },
     descartar() {
       for (const f of soltar) f();
       ctx.cena.remove(malha);
+      ctx.cena.remove(malhaLonge);
       geo.dispose();
+      geoLonge.dispose();
       mat.dispose();
+      matLonge.dispose();
       estado.texAlt?.dispose();
       estado.texDados?.dispose();
       estado.texUso?.dispose();
@@ -1285,6 +1443,12 @@ function criarTerreno(ctx) {
     get nos() {
       return estado.nos ?? 0;
     },
+    /** Nós na malha de longe (só o caminho barato do sombreador). */
+    get nosLonge() {
+      return estado.nosLonge ?? 0;
+    },
+    /** A malha dos nós de longe (TER_LONGE). */
+    malhaLonge,
     get assados() {
       return estado.assador?.vezes ?? 0;
     },

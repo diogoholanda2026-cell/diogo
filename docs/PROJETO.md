@@ -998,6 +998,34 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   aquecimento e compilações depois de pronto, tudo no "Copiar resultado" (`?quadros=` troca os 120 quadros).
   `bancada.mjs` mede o `pc` por padrão, espera o aquecimento e avisa as compilações depois de pronto. No SwiftShader
   os números não valem: o de verdade vem da página de teste no PC do dono.
+- **Entregue em 29/09/2026 (PC2, custo por pixel no PC do dono).** Céu do `pc` pelo cubo assado de 512 (duas fatias
+  por quadro, sol, nuvens, horizonte, pôr do sol e noite iguais), desenhado na cena depois dos opacos (só onde nada
+  cobriu). Terreno com nível de detalhe do sombreador: malha de longe separada (`TER_LONGE`, sem ruído, tufos, copas,
+  manchas nem máscara; a troca vem pela distância e pelo tamanho do pixel, de 600 a 800 m no Alta e no `pc`), encostas
+  íngremes sempre no caminho completo, manchas assadas no mapa de cor (4.096 no Alta e no `pc`) e o chão desenhado
+  depois dos prédios e da água. Prédios com a fachada barata (`FAC_BARATA`) no LOD1 e no LOD2 e ordem da frente para
+  trás por rumo da câmera (1,36 para 1,13 camadas por pixel). CAS pela ampliação (`forcaCas`: no dono, 3.840 sobre
+  2.070, de 0 para 0,72, sem serrilhar). Resolução dinâmica conferida no jogo (teste: liga pelo cronômetro e segura
+  15,5 ms). A/B às 10h, 17h30, bairro a 50 m e rua sem diferença visível (média até 1/255).
+
+  | Passe | SwiftShader, aberta (ms) | Por pixel (ms) | Pixels sombreados | RX 550 (ms, estimado) |
+  |---|---|---|---|---|
+  | Céu | 210 para 87 (+19 da fatia) | 211 para 136 | aberta 0%, rua 11% | 5,05 para ~0,3 |
+  | Terreno | 1.569 para 1.051 | 987 para 665 | 91,5% para 58,3% | 12,93 para ~5,5 |
+  | Prédios | 1.822 para 1.757 | 658 para 609 | 1,36 para 1,13 camadas | 13,86 para 8 a 10,7 |
+  | Cena inteira | 3.679 para 3.157 | 1.697 para 1.445 | | 35,5 para ~17 a 20 |
+
+  A estimativa multiplica o tempo medido na RX 550 pelo ganho por pixel e pelos pixels a menos; o SwiftShader não
+  descarta pelo teste de profundidade antes do sombreador nem pula ramo, então o ganho real deve ser maior. O resto até
+  15 ms fica com a resolução dinâmica; o número de verdade vem da página de teste no PC do dono. Pendente: prédios
+  ainda acima de 6 ms (passe só de profundidade, LOD dos ganchos na sombra, distância do LOD2).
+
+  Revisão da PC2: a CAS filtrava o HDR linear e, sempre ligada, desenhava um anel preto em volta de cada luz da cidade
+  à noite; agora filtra num espaço perceptivo (`composicaoPerceptiva` em `motor/pos.js`, a levar para `pos.glsl.js`),
+  com a média da imagem igual à sem CAS. O primeiro cubo do céu saía antes do brilho da cidade medido (à noite, o céu
+  ficava sem o laranja até a troca de cubo); um salto de hora ou de brilho refaz o cubo inteiro (`Ceu.refazer`). A
+  reordenação das instâncias travava uns 20 ms de CPU a cada 22,5 graus de giro: agora é uma ordenação nativa por
+  chave empacotada, com no máximo 6 mil instâncias por quadro.
 
 #### R2a. Chão, mar e lagoa; A/B de materiais (onda 1; 2 sessões)
 - **Arquivos:** `render/mundo/{terreno,agua}.js`, `render/geracao/ruido.js`, `render/materiais/texturas-chao.js`,

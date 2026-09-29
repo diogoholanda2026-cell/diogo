@@ -35,13 +35,14 @@ import { Aquecimento, Ritmo, AQUECER } from '../../fonte/render/motor/quadro.js'
 import { Cronometro, Medidas, classeDoDesenho, PASSES_GPU } from '../../fonte/render/motor/medidas.js';
 import { FAMILIAS } from '../../fonte/contratos/render.js';
 import { lookNoAgxDoThree } from '../../fonte/render/motor/renderizador.js';
-import { LOOK } from '../../fonte/render/motor/pos.js';
+import { LOOK, forcaCas } from '../../fonte/render/motor/pos.js';
+import { Quadro } from '../../fonte/render/motor/quadro.js';
 import { ehDeLonge, Faixas, CAMADA_LONGE } from '../../fonte/render/motor/faixas.js';
 import { Sol } from '../../fonte/render/ambiente/sol.js';
 import { registrar as registrarBancada, ligacao } from '../../fonte/render/motor/bancada.js';
 import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { ALBEDOS, ALBEDO_MAXIMO, luminanciaAlbedo } from '../../fonte/render/materiais/biblioteca.js';
-import { fragmentoCeu } from '../../fonte/render/materiais/shaders/ceu.glsl.js';
+import { fragmentoCeu, CEU_VERTICE } from '../../fonte/render/materiais/shaders/ceu.glsl.js';
 import { terrenoPlano } from '../../fonte/sim/substitutos.js';
 
 const RAD = Math.PI / 180;
@@ -472,7 +473,7 @@ void main() { cor = texture( a, vUv ) * c; }`;
   assert.equal(preprocessar('#if defined(A) && B > 2\nx\n#else\ny\n#endif').texto.trim(), 'y');
 });
 
-test('perfis: Média com cubo do céu, 1 cascata e degrau de 1,5 grau; PC com céu direto e 2 cascatas', () => {
+test('perfis: Média com cubo do céu, 1 cascata e degrau de 1,5 grau; Ultra com céu direto e 2 cascatas', () => {
   assert.equal(PERFIS.media.ceu.modo, 'cubo');
   assert.equal(PERFIS.media.ceu.cubo, 256);
   assert.equal(PERFIS.media.sombra.cascatas, 1);
@@ -714,11 +715,12 @@ test('perfis: a escolha pelo nome da placa põe a RX 550 do dono no PC, não no 
   assert.deepEqual(ORDEM_PERFIS, ['leve', 'media', 'pc', 'alta', 'ultra']);
 });
 
-test('perfis: o PC em 1080p nativo com MSAA 2x, sombra e céu do Alta, alvo de 15,5 ms e teto de 60 qps', () => {
+test('perfis: o PC em 1080p nativo com MSAA 2x, sombra do Alta, céu do cubo de 512, alvo de 15,5 ms e teto de 60 qps', () => {
   const P = PERFIS.pc;
   assert.equal(P.msaa, 2);
   assert.deepEqual(P.sombra, PERFIS.alta.sombra, 'sombra como no Alta');
-  assert.deepEqual(P.ceu, PERFIS.alta.ceu);
+  // o céu direto por pixel custava 5 ms de placa na RX 550 (PC2): cubo de 512 em meias faces, 12 quadros por cubo
+  assert.deepEqual(P.ceu, { modo: 'cubo', cubo: 512, nuvens: true, fatias: 2 });
   assert.equal(P.ibl, PERFIS.alta.ibl);
   assert.equal(P.lod0, PERFIS.alta.lod0);
   assert.equal(P.alvoGpu, 15.5);
@@ -1284,4 +1286,213 @@ test('página de teste: as ligações entre as cenas medem no mesmo perfil (a es
   assert.deepEqual(p(ligacao('estresse', 'pc', '?cena=aberta&painel=1')), { cena: 'estresse', painel: '1', q: 'pc' });
   assert.deepEqual(p(ligacao('aberta', 'pc', '?cena=estresse&painel=1&q=alta&quadros=30')), { cena: 'aberta', painel: '1', q: 'alta', quadros: '30' });
   assert.deepEqual(p(ligacao('aberta', null, '')), { cena: 'aberta', painel: '1' });
+});
+
+// ------------------------------------------------------------------------------------------------ PC2 (custo por pixel)
+
+test('céu do PC: cubo de 512 assado em meias faces (12 quadros por cubo), sem sobra nem sobreposição', () => {
+  for (const [lado, n] of [[512, 2], [256, 1], [384, 3]]) {
+    let y = 0;
+    for (let k = 0; k < n; k++) {
+      const f = C.faixaDaFatia(lado, k, n);
+      assert.equal(f.y0, y, `fatia ${k} de ${n} começa onde a outra acabou`);
+      y += f.h;
+    }
+    assert.equal(y, lado);
+  }
+  // um renderer de mentira: guarda cada desenho (face e recorte) no alvo
+  const desenhos = [];
+  let alvo = null;
+  let face = 0;
+  const renderer = {
+    getRenderTarget: () => alvo,
+    getActiveCubeFace: () => face,
+    getActiveMipmapLevel: () => 0,
+    setRenderTarget: (rt, f = 0) => ((alvo = rt), (face = f)),
+    render: () => desenhos.push({ alvo, face, recorte: alvo?.scissorTest ? alvo.scissor.clone() : null }),
+    state: { buffers: { depth: { getReversed: () => true } } },
+  };
+  const ceu = new C.Ceu({ perfil: PERFIS.pc });
+  assert.equal(ceu.direto, false);
+  assert.equal(ceu.fatias, 2);
+  assert.equal(ceu.cubos[0].width, 512);
+  // o primeiro cubo sai inteiro; depois meia face por quadro no cubo de trás, e a troca depois das 6 faces
+  assert.equal(ceu.assar(renderer, null), 6);
+  assert.equal(desenhos.length, 6);
+  const frente0 = ceu.frente;
+  desenhos.length = 0;
+  for (let q = 0; q < 12; q++) assert.equal(ceu.assar(renderer, null), 0.5);
+  assert.equal(desenhos.length, 12);
+  assert.notEqual(ceu.frente, frente0, 'o cubo novo vai para a frente depois de 12 quadros');
+  assert.ok(desenhos.every((d) => d.alvo === ceu.cubos[frente0 === 0 ? 1 : 0]), 'sempre no cubo de trás');
+  assert.deepEqual(desenhos.slice(0, 2).map((d) => [d.face, d.recorte.y, d.recorte.w]), [[0, 0, 256], [0, 256, 256]]);
+  assert.equal(ceu.cubos[0].scissorTest || ceu.cubos[1].scissorTest, false, 'o recorte volta ao normal');
+  // o Média segue com uma face por quadro no cubo de 256
+  const media = new C.Ceu({ perfil: PERFIS.media });
+  assert.equal(media.fatias, 1);
+  media.assar(renderer, null);
+  assert.equal(media.assar(renderer, null), 1);
+  // estrelas só de noite (desvio pelo uniforme)
+  assert.match(fragmentoCeu({ K_CEU: C.K_CEU, CREPUSCULO: C.CREPUSCULO, NOITE: C.NOITE, LUA: C.LUA }), /if \( uEstrelas > 0\.0 \) cor \+= gcEstrelas\( d \);/);
+});
+
+test('céu na cena: depois dos opacos, no plano distante (só custa onde aparece), na faixa de longe sem clip control', () => {
+  assert.match(CEU_VERTICE, /gl_Position = vec4\( position\.xy, uFundoZ, 1\.0 \);/);
+  assert.equal(C.criarMaterialCeu('fundo').depthTest, true);
+  assert.equal(C.criarMaterialCeu('fundo').depthWrite, false);
+  assert.equal(C.criarMaterialCeu('cubo').depthTest, false);
+  assert.equal(C.criarMaterialCeu('ibl').depthTest, false);
+  const ceu = new C.Ceu({ perfil: PERFIS.pc });
+  const m = ceu.naCena;
+  assert.equal(m.renderOrder, C.ORDEM_FUNDO);
+  assert.ok(C.ORDEM_FUNDO > 0 && m.frustumCulled === false);
+  assert.equal(m.userData.familia, 'ceu', 'o cronômetro põe o desenho no passe do céu');
+  assert.equal(classeDoDesenho(m, m.material), 'ceu');
+  assert.equal(m.material, ceu.fundo);
+  // o plano distante pela profundidade em uso; câmera ortográfica fora do recorte
+  let invertida = true;
+  const r = { state: { buffers: { depth: { getReversed: () => invertida } } } };
+  const cam = new THREE.PerspectiveCamera(40, 1.8, 1, 1000);
+  ceu.prepararFundo(r, cam);
+  assert.equal(ceu.fundo.uniforms.uFundoZ.value, 0);
+  invertida = false;
+  ceu.prepararFundo(r, cam);
+  assert.equal(ceu.fundo.uniforms.uFundoZ.value, 1);
+  ceu.prepararFundo(r, new THREE.OrthographicCamera());
+  assert.equal(ceu.fundo.uniforms.uFundoZ.value, 2);
+  // duas faixas: só na de longe (na de perto a profundidade foi limpa e o céu cobriria o longe)
+  const c2 = new C.Ceu({ perfil: PERFIS.pc, semClip: true });
+  assert.equal(c2.naCena.layers.mask, 1 << CAMADA_LONGE);
+  assert.ok(ehDeLonge(c2.naCena));
+  assert.equal(m.layers.mask, 1, 'com clip control, na camada de sempre');
+});
+
+test('CAS: ligada sempre que o desenho interno é menor que a tela, na medida da ampliação', () => {
+  assert.equal(forcaCas(1), 0);
+  assert.equal(forcaCas(1.01), 0);
+  assert.equal(forcaCas(0.8), 0, 'desenho maior que a tela não pede nitidez');
+  let ant = 0;
+  for (let a = 1.05; a <= 3; a += 0.05) {
+    const f = forcaCas(a);
+    assert.ok(f >= ant && f <= 0.85, `ampliação ${a.toFixed(2)}: ${f}`);
+    ant = f;
+  }
+  // o PC do dono (medido em 29/09/2026): tela de 4K a 2,5 de escala, desenho de 2070 x 1001 -> 1,85 vez
+  const dono = forcaCas(3840 / 2070);
+  assert.ok(dono > 0.65 && dono < 0.8, `CAS ${dono}`);
+  // no quadro: pela razão de pixels contra o dpr, e nunca abaixo do CAS da resolução dinâmica
+  const cas = Object.getOwnPropertyDescriptor(Quadro.prototype, 'cas').get;
+  const q = (perfil, pr, dpr, casRes = 0) => cas.call({ ctx: { perfil, pr }, resolucao: { dpr, cas: casRes } });
+  assert.ok(Math.abs(q(PERFIS.pc, 1.3479, 2.5) - forcaCas(2.5 / 1.3479)) < 1e-9);
+  assert.ok(q(PERFIS.pc, 1.3479, 2.5) > 0.65, 'a bancada de 29/09 mostrava CAS 0 com a tela ampliada 1,85 vez');
+  assert.equal(q(PERFIS.pc, 1.5, 1.5), 0, '1080p nativo: sem ampliação, sem CAS');
+  assert.equal(q(PERFIS.pc, 1.5, 1.5, 0.6), 0.6, 'a queda da resolução dinâmica segue ligando o CAS');
+  assert.equal(q(PERFIS.leve, 0.7, 2), 0, 'o Leve não tem pós');
+});
+
+test('resolução no jogo: o PC do dono (4K a 2,5 de escala) liga pelo cronômetro e segura os 15,5 ms de placa', () => {
+  const ctx = { perfil: PERFIS.pc, pr: 1, tela: { w: 1536, h: 743 } };
+  const r = new Resolucao(ctx, { fixa: false });
+  Object.defineProperty(r, 'dpr', { value: 2.5 });
+  r.conferir();
+  assert.ok(Math.abs(ctx.pr - 1.3479) < 1e-3, `nominal ${ctx.pr} (o teto de 1080p em pixels)`);
+  const nominal = ctx.pr;
+  // o custo de placa vai com a área: 19 ms na nativa (acima da mira) desce a 90% e fica abaixo de 15,5 x 1,06
+  const ms = (pr) => 2 + 17 * (pr / nominal) ** 2;
+  let t = 0;
+  const vistos = [];
+  for (; t < 120000; t += 16.7) {
+    r.amostraGpu(ms(ctx.pr), ctx.pr, t);
+    r.medir(t, 'livre');
+    if (t > 20000) vistos.push(ms(ctx.pr));
+  }
+  assert.equal(r.modo, 'cronometro', 'no jogo quem manda é o cronômetro da placa');
+  assert.ok(ctx.pr < nominal && ctx.pr > nominal * 0.85, `degrau ${ctx.pr / nominal}`);
+  assert.ok(Math.max(...vistos) <= 15.5 * 1.06, `pior ${Math.max(...vistos).toFixed(2)} ms`);
+  assert.ok(r.trocas <= 2, `trocas ${r.trocas}: sem pisca-pisca`);
+  // com a placa folgada (13 ms na nativa) fica na nativa
+  const ctx2 = { perfil: PERFIS.pc, pr: 1, tela: { w: 1536, h: 743 } };
+  const r2 = new Resolucao(ctx2, { fixa: false });
+  Object.defineProperty(r2, 'dpr', { value: 2.5 });
+  r2.conferir();
+  for (let t2 = 0; t2 < 60000; t2 += 16.7) r2.amostraGpu(13, ctx2.pr, t2);
+  assert.equal(ctx2.pr, nominal);
+  // a bancada trava (?pr= e o estado 'teste'); o jogo não
+  assert.equal(new Resolucao(ctx2, { fixa: true }).modo, 'fixa');
+  assert.equal(r2.amostraGpu(40, ctx2.pr, 70000, 'teste'), false);
+});
+
+test('CAS perceptiva: sem anel preto em volta da luz acesa, e a troca vale no GLSL cru e no enxuto da montagem', async () => {
+  const { composicaoPerceptiva } = await import('../../fonte/render/motor/pos.js');
+  const { COMPOSICAO } = await import('../../fonte/render/materiais/shaders/pos.glsl.js');
+  const { enxugarGlsl } = await import('../montar.mjs');
+  const js = enxugarGlsl(`const x = /* glsl */ \`${COMPOSICAO}\`;`);
+  const enxuto = js.slice(js.indexOf('`') + 1, js.lastIndexOf('`'));
+  assert.ok(enxuto.length < COMPOSICAO.length, 'a montagem enxuga o GLSL');
+  for (const f of [COMPOSICAO, enxuto]) {
+    const g = composicaoPerceptiva(f);
+    assert.match(g, /cor = casDe\( clamp\(/);
+    assert.ok(!/comprime\(\s*cor\s*\)/.test(g), 'o filtro linear saiu');
+    assert.equal((g.match(/void main\(\s*\)/g) ?? []).length, 1);
+  }
+  assert.throws(() => composicaoPerceptiva('void main() {}'), /trecho da CAS/);
+  // as duas contas em JS (um canal): a fachada escura (0,05) ao lado da janela acesa (10), exposição 1, CAS do dono
+  const cas = 0.72;
+  const lum = (c) => c; // cinza: a luminância é o próprio valor
+  const velha = (c0, viz) => {
+    const comp = (c) => lum(c) / (1 + lum(c));
+    const cs = [c0, ...viz].map(comp);
+    const mn = Math.min(...cs);
+    const mx = Math.max(...cs);
+    const amp = Math.sqrt(Math.min(1, Math.max(0, Math.min(mn, 1 - mx) / Math.max(mx, 1e-4))));
+    const w = -amp / (8 + (5 - 8) * cas);
+    return Math.max(0, (c0 + w * viz.reduce((a, b) => a + b, 0)) / (1 + 4 * w));
+  };
+  const para = (c) => Math.sqrt(c / (1 + c));
+  const de = (p) => {
+    const t = p * p;
+    return t / (1 - Math.min(t, 0.999));
+  };
+  const nova = (c0, viz) => {
+    const ps = [c0, ...viz].map(para);
+    const mn = Math.min(...ps);
+    const mx = Math.max(...ps);
+    const amp = Math.sqrt(Math.min(1, Math.max(0, Math.min(mn, 1 - mx) / Math.max(mx, 1e-4))));
+    const w = -amp / (8 + (5 - 8) * cas);
+    return de(Math.min(1, Math.max(0, (ps[0] + w * (ps[1] + ps[2] + ps[3] + ps[4])) / (1 + 4 * w))));
+  };
+  const viz = [10, 0.05, 0.05, 0.05];
+  assert.equal(velha(0.05, viz), 0, 'a conta linear apagava o vizinho da luz (o anel preto)');
+  assert.ok(nova(0.05, viz) > 0.025, `a perceptiva só escurece um pouco: ${nova(0.05, viz)}`);
+  // onde não há o que realçar, a volta ao HDR é exata; na borda comum ela ainda realça
+  for (const c of [0, 0.02, 0.18, 1, 7.5, 60]) assert.ok(Math.abs(nova(c, [c, c, c, c]) - c) < 1e-6 * Math.max(1, c));
+  assert.ok(nova(0.2, [0.4, 0.2, 0.2, 0.2]) < 0.2, 'o lado escuro da borda escurece');
+  assert.ok(nova(0.4, [0.2, 0.4, 0.4, 0.4]) > 0.4, 'e o claro clareia');
+});
+
+test('céu em cubo: um salto no estado (hora pulada, brilho da cidade que chega) refaz o cubo da frente inteiro', () => {
+  const desenhos = [];
+  let alvo = null;
+  const renderer = {
+    getRenderTarget: () => alvo,
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
+    setRenderTarget: (rt) => (alvo = rt),
+    render: () => desenhos.push(alvo),
+  };
+  const ceu = new C.Ceu({ perfil: PERFIS.pc });
+  assert.equal(ceu.assar(renderer, null), 6);
+  for (let q = 0; q < 5; q++) ceu.assar(renderer, null);
+  assert.ok(ceu.faceSeguinte > 0 || ceu.fatiaSeguinte > 0, 'o cubo de trás estava no meio');
+  const frente = ceu.frente;
+  desenhos.length = 0;
+  ceu.refazer();
+  assert.equal(ceu.assar(renderer, null), 6, 'o da frente sai inteiro no quadro seguinte');
+  assert.ok(desenhos.length === 6 && desenhos.every((a) => a === ceu.cubos[frente]));
+  assert.equal(ceu.faceSeguinte, 0, 'e o de trás recomeça (sem faces de antes do salto)');
+  assert.equal(ceu.fatiaSeguinte, 0);
+  // o céu direto não tem cubo
+  const direto = new C.Ceu({ perfil: PERFIS.alta });
+  direto.refazer();
+  assert.equal(direto.assar(renderer, null), 0);
 });

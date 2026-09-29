@@ -10,15 +10,20 @@ import { NEBLINA_COR_PARS } from './neblina.glsl.js';
 const f = (x) => (Number.isInteger(x) ? `${x}.0` : String(x));
 const v3 = (a) => `vec3( ${a.map(f).join(', ')} )`;
 
-/** Vértice de tela cheia com a direção por pixel. */
+/**
+ * Vértice de tela cheia com a direção por pixel. uFundoZ põe o triângulo no plano distante quando o fundo vai na
+ * cena, depois dos opacos (0 com a profundidade invertida, 1 sem ela; fora de [-1, 1] não desenha): o teste de
+ * profundidade descarta o céu atrás do chão e dos prédios antes do sombreador.
+ */
 export const CEU_VERTICE = /* glsl */ `
 uniform vec3 uFrente;
 uniform vec3 uDireita;
 uniform vec3 uCima;
+uniform float uFundoZ;
 varying vec3 vDir;
 void main() {
   vDir = uFrente + position.x * uDireita + position.y * uCima;
-  gl_Position = vec4( position.xy, 0.0, 1.0 );
+  gl_Position = vec4( position.xy, uFundoZ, 1.0 );
 }
 `;
 
@@ -241,7 +246,9 @@ void main() {
   vec3 cor = gcCeu( d );
 #endif
 #ifdef CEU_DISCOS
-  cor += gcEstrelas( d ) + gcDiscos( d );
+  // as estrelas só de noite (desvio pelo uniforme: o quadro inteiro vai junto, e as derivadas delas seguem valendo)
+  if ( uEstrelas > 0.0 ) cor += gcEstrelas( d );
+  cor += gcDiscos( d );
 #endif
   gl_FragColor = vec4( cor, 1.0 );
   #include <tonemapping_fragment>

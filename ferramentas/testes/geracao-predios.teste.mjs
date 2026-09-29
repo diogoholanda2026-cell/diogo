@@ -363,3 +363,143 @@ test('duas faixas: todo ponto visível de um setor cai numa faixa que o desenha,
     }
   }
 });
+
+// ------------------------------------------------------------------------------------------------ PC2 (custo por pixel)
+
+test('fachada de longe: o LOD1 e o LOD2 com a fachada barata, o LOD0 (perto) com a completa', async () => {
+  const THREE = await import('three');
+  const { ganchos } = await import('../../fonte/render/motor/ganchos.js');
+  const { criarMaterialEdificio, registrar } = await import('../../fonte/render/mundo/predios.js');
+  const { FRAGMENTO_LONGE, FRAGMENTO_COR } = await import('../../fonte/render/materiais/shaders/fachada.glsl.js');
+  const { preprocessar } = await import('../../fonte/render/motor/capacidades.js');
+  const { PERFIS } = await import('../../fonte/render/motor/perfis.js');
+  const completa = criarMaterialEdificio({ ganchos });
+  const barata = criarMaterialEdificio({ ganchos }, { barata: true });
+  assert.equal(completa.name, 'edificio');
+  assert.equal(barata.name, 'edificio-longe');
+  assert.ok('FAC_BARATA' in barata.defines && !('FAC_BARATA' in (completa.defines ?? {})));
+  assert.notEqual(barata.customProgramCacheKey(), completa.customProgramCacheKey(), 'dois programas');
+  // a mesma fonte: com FAC_BARATA a cor sai de gFachadaLonge, sem a vista (paralaxe)
+  assert.match(preprocessar(`#define FAC_BARATA\n${FRAGMENTO_COR}`).texto, /GSup gS = gFachadaLonge\(\);/);
+  assert.match(preprocessar(FRAGMENTO_COR).texto, /GSup gS = gFachada\( gVista \);/);
+  assert.ok(!preprocessar(`#define FAC_BARATA\n${FRAGMENTO_COR}`).texto.includes('gVista'));
+  // poucas leituras: o detalhe grosso e o escorrido da chuva (o fino de 1,9 m some no pixel)
+  const i0 = FRAGMENTO_LONGE.indexOf('GSup gFachadaLonge()');
+  const corpo = FRAGMENTO_LONGE.slice(i0);
+  assert.equal((corpo.match(/texture\( gDetalhe/g) ?? []).length, 2);
+  for (const f of ['gJanelasLonge', 'gPeleLonge', 'gTerreoLonge']) {
+    const a = FRAGMENTO_LONGE.indexOf(`void ${f}(`);
+    const b = FRAGMENTO_LONGE.indexOf('\n}', a);
+    assert.ok(a >= 0 && !/\bvista\b|texture\(/.test(FRAGMENTO_LONGE.slice(a, b)), `${f} sem paralaxe nem leitura de textura`);
+  }
+  // todos os tipos de superfície têm caminho de longe (as paredes pelo desenho, os lisos pela média)
+  for (const nome of Object.keys(FACHADA)) {
+    if (['JANELA', 'TOLDO'].includes(nome)) continue; // a parede comum e o toldo caem no caso geral
+    assert.ok(FRAGMENTO_LONGE.includes(`F_${nome}`), `F_${nome} na fachada de longe`);
+  }
+  // no domínio: as listas do LOD1 e do LOD2 usam a barata; o material publicado (LOD0, X1a, R5) é o completo
+  let fabrica = null;
+  registrar({ registrarDominio: (n, f) => (fabrica = f), registrarSelecionavel() {} });
+  const cena = new THREE.Scene();
+  const ctx = {
+    cena, ganchos, perfil: PERFIS.pc, semClip: false, stats: { instancias: {}, setores: {} },
+    medidas: { familia: (m) => m }, textura: () => null, ouvir: () => () => {},
+    sim: { espelho: { mapa: { tam: 8192, origem: [-4096, -4096] } } },
+    sombra: { projetor: (m) => m, soltar() {}, marcar() {} },
+  };
+  const dom = fabrica(ctx);
+  const listas = cena.children.filter((o) => o.name.startsWith('predios:lod1:'));
+  assert.equal(listas.length, 4);
+  assert.ok(listas.every((o) => o.material === dom.materialLonge && o.material.name === 'edificio-longe'));
+  assert.equal(dom.material.name, 'edificio');
+  dom.descartar();
+});
+
+test('ordem da frente para trás: setores pela faixa de distância e instâncias na direção da vista (LOD1 e LOD2)', async () => {
+  const { ordenarDaFrente, baldeDaVista, ordenarInstancias } = await import('../../fonte/render/mundo/predios.js');
+  // setores: por faixas de 256 m, e o índice no empate (a lista não muda a cada passo da câmera)
+  const lista = [{ s: 9, dist: 700 }, { s: 3, dist: 100 }, { s: 5, dist: 300 }, { s: 1, dist: 290 }];
+  assert.deepEqual(ordenarDaFrente(lista).map((st) => st.s), [3, 1, 5, 9]);
+  // balde: rumo em 16 passos e inclinação em 3 faixas
+
+  assert.equal(baldeDaVista({ x: 0.6, y: -0.57, z: 0.57 }).id, baldeDaVista({ x: 0.61, y: -0.56, z: 0.56 }).id, 'giro pequeno: mesmo balde');
+  assert.notEqual(baldeDaVista({ x: 1, y: -0.5, z: 0 }).id, baldeDaVista({ x: 0, y: -0.5, z: 1 }).id);
+  assert.notEqual(baldeDaVista({ x: 1, y: -0.1, z: 0 }).id, baldeDaVista({ x: 1, y: -3, z: 0 }).id, 'rasante e de cima');
+  // instâncias: 6 peças (2 principais), fora de ordem; matriz com a posição e id/bytes que acompanham a peça
+  const n = 6;
+  const np = 2;
+  const pos = [[300, 0, 0], [10, 0, 0], [50, 0, 0], [-20, 0, 0], [5, 40, 0], [400, 0, 0]];
+  const mat = new Float32Array(16 * n);
+  const bytes = new Uint8Array(16 * n);
+  const ids = new Uint32Array(n);
+  pos.forEach(([x, y, z], i) => {
+    mat[16 * i] = mat[16 * i + 5] = mat[16 * i + 10] = mat[16 * i + 15] = 1;
+    mat[16 * i + 12] = x;
+    mat[16 * i + 13] = y;
+    mat[16 * i + 14] = z;
+    bytes.fill(i + 1, 16 * i, 16 * i + 16);
+    ids[i] = 100 + i;
+  });
+  const x = { n, np, mat, bytes, ids };
+  // vista para -x (a câmera a leste olhando para oeste): o de x maior está mais perto
+  const balde = baldeDaVista({ x: -0.8, y: -0.6, z: 0 });
+  ordenarInstancias(x, balde);
+  const xs = [...Array(n).keys()].map((i) => mat[16 * i + 12]);
+  assert.deepEqual(xs.slice(0, np), [300, 10], 'as principais primeiro (o LOD2 desenha só elas), da frente para trás');
+  assert.deepEqual(xs.slice(np), [400, 50, 5, -20], 'e as outras; a peça alta (y 40) vem antes da baixa no mesmo lugar');
+  for (let i = 0; i < n; i++) {
+    const orig = pos.findIndex((p) => p[0] === mat[16 * i + 12]);
+    assert.equal(ids[i], 100 + orig, 'o id acompanha a peça');
+    assert.equal(bytes[16 * i], orig + 1, 'os bytes acompanham a peça');
+  }
+  // o LOD1 numa cópia com todas as peças juntas em ordem (a secundária de perto antes da principal de trás)
+  assert.deepEqual([...Array(n).keys()].map((i) => x.todas.mat[16 * i + 12]), [400, 300, 50, 5, 10, -20]);
+  for (let i = 0; i < n; i++) {
+    const orig = pos.findIndex((p) => p[0] === x.todas.mat[16 * i + 12]);
+    assert.equal(x.todas.ids[i], 100 + orig);
+    assert.equal(x.todas.bytes[16 * i + 15], orig + 1);
+  }
+  // de novo no mesmo balde: nada muda
+  const antes = mat.slice();
+  const antesTodas = x.todas.mat.slice();
+  ordenarInstancias(x, balde);
+  assert.deepEqual(mat, antes);
+  assert.deepEqual(x.todas.mat, antesTodas);
+});
+
+test('ordem das instâncias: chave empacotada (ordenação nativa), matriz com NaN no fim e grupo grande intacto', async () => {
+  const { baldeDaVista, ordenarInstancias } = await import('../../fonte/render/mundo/predios.js');
+  const balde = baldeDaVista({ x: 1, y: -0.5, z: 0 });
+  const grupo = (xs) => {
+    const n = xs.length;
+    const mat = new Float32Array(16 * n);
+    const ids = new Uint32Array(n);
+    xs.forEach((x, i) => {
+      mat[16 * i + 12] = x;
+      mat[16 * i + 15] = 1;
+      ids[i] = i;
+    });
+    return { n, np: n, mat, bytes: null, ids };
+  };
+  // da frente para trás olhando para +x; a de NaN (matriz ainda vazia) vai para o fim sem desmanchar as outras
+  const g = grupo([30, NaN, -12.5, 7, -12.4]);
+  ordenarInstancias(g, balde);
+  assert.deepEqual([...g.ids], [2, 4, 3, 0, 1]);
+  assert.equal(g.todas, null, 'só principais: sem a cópia do LOD1');
+  // 1/8 de metro de resolução: o que empata fica na ordem de antes (estável pelo índice), o resto se ordena
+  const e = grupo([5, 5.01, 4.99, 4.8]);
+  ordenarInstancias(e, balde);
+  assert.deepEqual([...e.ids], [3, 0, 1, 2]);
+  // um grupo acima de 65.536 peças (o índice não cabe na chave) fica como está
+  const xs = Array.from({ length: 65537 }, (_, i) => 65537 - i);
+  const G = grupo(xs);
+  ordenarInstancias(G, balde);
+  assert.equal(G.ids[0], 0);
+  // muitas peças: rápido o bastante para caber na cota de um quadro (6.000 em poucos ms)
+  const M = grupo(Array.from({ length: 6000 }, (_, i) => ((i * 7919) % 6000) - 3000));
+  const t0 = performance.now();
+  ordenarInstancias(M, balde);
+  const ms = performance.now() - t0;
+  for (let i = 1; i < 6000; i++) assert.ok(M.mat[16 * i + 12] >= M.mat[16 * (i - 1) + 12]);
+  assert.ok(ms < 50, `${ms.toFixed(1)} ms`);
+});

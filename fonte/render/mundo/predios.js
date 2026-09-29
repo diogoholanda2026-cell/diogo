@@ -1,8 +1,9 @@
 // Prédios da cidade (desenho do render 5, D39, D43): troca o substituto de caixas da F0 (domínio 'predios').
 //   LOD0  por setor de 256 m: a malha fundida que a oficina gera (fundir.js), um Mesh por setor perto da câmera, com
 //         cache LRU e teto de memória por perfil
-//   LOD1  instâncias de forma (caixa, chanfro, cilindro, duas águas) com a fachada inteira no shader; LOD2 é o mesmo
-//         buffer só com a peça principal de cada prédio; os buffers são montados com os setores visíveis. Com as duas
+//   LOD1  instâncias de forma (caixa, chanfro, cilindro, duas águas) com a fachada de longe no shader (FAC_BARATA, PC2);
+//         LOD2 é o mesmo buffer só com a peça principal de cada prédio; os buffers são montados com os setores visíveis,
+//         da frente para trás (setores pela distância e, dentro deles, as instâncias na direção da vista). Com as duas
 //         faixas de profundidade (?semClip=1, sem EXT_clip_control) os setores além do corte vão numa segunda lista,
 //         só da faixa de longe, e os de perto numa só da faixa de perto: a cidade não é desenhada duas vezes
 //   sombra própria (D43): listas de projetores com o LOD1 dos setores cuja sombra cai no chão da cascata
@@ -60,6 +61,131 @@ export function faixaDaCaixa(cx, cy, cz, fx, fy, fz, x0, y0, z0, x1, y1, z1, lim
   return (meio - ext < lim * 1.02 ? 1 : 0) | (meio + ext > lim * 0.9 ? 2 : 0);
 }
 
+/**
+ * Ordena os setores visíveis da frente para trás pela faixa de distância (um lado de setor, 256 m) e pelo índice: a
+ * ordem só muda quando um setor troca de faixa, e a lista compactada não é refeita a cada passo da câmera.
+ * @param {{ s: number, dist: number }[]} lista
+ */
+export function ordenarDaFrente(lista) {
+  const faixa = (st) => Math.floor(st.dist / LADO_SETOR);
+  return lista.sort((a, b) => faixa(a) - faixa(b) || a.s - b.s);
+}
+
+/** Instâncias reordenadas por quadro no máximo (uns 1 a 2 ms de CPU; 21 mil na vista aberta: 4 quadros). */
+const ORDEM_POR_QUADRO = 6000;
+
+/** Direções da ordem das instâncias: 16 rumos (22,5 graus) e 3 inclinações (a tangente de cada faixa). */
+const RUMOS = 16;
+const TAN_INCLINACAO = Object.freeze([0.27, 0.7, 2]);
+
+/**
+ * Balde da direção da câmera para a ordem das instâncias dentro dos setores (PC2): o rumo em 16 passos e a inclinação
+ * em 3 faixas. A ordem só é refeita quando o balde muda (girar a câmera 22,5 graus ou passar de uma faixa de
+ * inclinação para outra).
+ * @param {{ x: number, y: number, z: number }} frente  direção da vista (unitária)
+ * @returns {{ id: number, fx: number, fz: number, k: number }}
+ */
+export function baldeDaVista(frente) {
+  const h = Math.hypot(frente.x, frente.z);
+  const r = (((Math.round((Math.atan2(frente.z, frente.x) / (2 * Math.PI)) * RUMOS) % RUMOS) + RUMOS) % RUMOS);
+  const inc = Math.atan2(-frente.y, Math.max(h, 1e-6));
+  const f = inc < 0.44 ? 0 : inc < 0.96 ? 1 : 2; // 25 e 55 graus
+  const a = (r / RUMOS) * 2 * Math.PI;
+  return { id: r * 3 + f, fx: Math.cos(a), fz: Math.sin(a), k: TAN_INCLINACAO[f] };
+}
+
+// rascunhos da ordem (crescem com o maior grupo e ficam): chaves empacotadas, índices e a cópia de trabalho
+let _chaves = new Float64Array(0);
+let _idx = new Uint32Array(0);
+let _mat = new Float32Array(0);
+let _bytes = new Uint8Array(0);
+let _ids = new Uint32Array(0);
+/** Chave em 1/8 de metro (a profundidade de um grupo cabe folgada em 2^37 com o índice nos 16 bits de baixo). */
+const PASSO_CHAVE = 8;
+const BASE_IDX = 65536;
+
+function garantirRascunhos(n) {
+  if (n <= _idx.length) return;
+  const m = 2 ** Math.ceil(Math.log2(n));
+  _chaves = new Float64Array(m);
+  _idx = new Uint32Array(m);
+  _mat = new Float32Array(16 * m);
+  _bytes = new Uint8Array(16 * m);
+  _ids = new Uint32Array(m);
+}
+
+/**
+ * Índices [a, b) de mat em ordem de profundidade na direção do balde, escritos em _idx[a, b). A chave (a
+ * profundidade em 1/8 de metro, mais o índice) vai empacotada num Float64Array: a ordenação numérica nativa, sem
+ * função de comparação, custa uma fração da de antes (21 mil instâncias num giro de câmera).
+ */
+function ordemDoTrecho(mat, a, b, balde) {
+  if (b - a < 2) {
+    if (b > a) _idx[a] = a;
+    return;
+  }
+  let min = Infinity;
+  for (let i = a; i < b; i++) {
+    const k = balde.fx * mat[16 * i + 12] + balde.fz * mat[16 * i + 14] - balde.k * mat[16 * i + 13];
+    _chaves[i] = k;
+    if (k < min) min = k;
+  }
+  if (!Number.isFinite(min)) min = 0;
+  for (let i = a; i < b; i++) {
+    const q = Math.floor((_chaves[i] - min) * PASSO_CHAVE);
+    // NaN (matriz vazia) vai para o fim, sem desmanchar a ordem das outras
+    _chaves[i] = (q >= 0 && q < 2 ** 36 ? q : 2 ** 36) * BASE_IDX + (i - a);
+  }
+  const k = _chaves.subarray(a, b);
+  k.sort();
+  for (let i = a; i < b; i++) _idx[i] = a + (_chaves[i] % BASE_IDX);
+}
+
+/** Copia as instâncias na ordem de _idx (as n primeiras) de (mat, bytes, ids) para as saídas. */
+function permutar(n, mat, bytes, ids, oMat, oBytes, oIds) {
+  for (let d = 0; d < n; d++) {
+    const o = 16 * _idx[d];
+    const dd = 16 * d;
+    for (let c = 0; c < 16; c++) oMat[dd + c] = mat[o + c];
+    if (bytes) for (let c = 0; c < 16; c++) oBytes[dd + c] = bytes[o + c];
+    if (ids) oIds[d] = ids[_idx[d]];
+  }
+}
+
+/**
+ * Ordena as instâncias de uma forma de um setor da frente para trás na direção do balde (profundidade ao longo da
+ * vista: rumo no chão e a altura pela inclinação). No próprio buffer, as peças principais (as np primeiras, o LOD2)
+ * e depois as outras; em x.todas, uma cópia com todas as peças juntas em ordem (o LOD1). Com a cidade em ordem, o
+ * teste de profundidade descarta o prédio de trás antes da fachada. Grupos acima de 65.536 instâncias ficam como estão.
+ * @param {{ n: number, np: number, mat: Float32Array, bytes: Uint8Array | null, ids: Uint32Array | null, todas?: object }} x
+ */
+export function ordenarInstancias(x, balde) {
+  if (!x || x.n < 1 || x.n > BASE_IDX) return;
+  const n = x.n;
+  const np = Math.min(Math.max(x.np | 0, 0), n);
+  garantirRascunhos(n);
+  const { mat, bytes, ids } = x;
+  // o LOD2: as principais em ordem e depois as outras, no próprio buffer
+  ordemDoTrecho(mat, 0, np, balde);
+  ordemDoTrecho(mat, np, n, balde);
+  let igual = true;
+  for (let i = 0; i < n && igual; i++) igual = _idx[i] === i;
+  if (!igual) {
+    _mat.set(mat.subarray(0, 16 * n));
+    if (bytes) _bytes.set(bytes.subarray(0, 16 * n));
+    if (ids) _ids.set(ids.subarray(0, n));
+    permutar(n, _mat, bytes ? _bytes : null, ids ? _ids : null, mat, bytes, ids);
+  }
+  // o LOD1: todas as peças juntas em ordem, numa cópia (as secundárias de perto passam na frente das principais de trás)
+  if (np >= n) {
+    x.todas = null;
+    return;
+  }
+  const t = x.todas && x.todas.mat.length === 16 * n ? x.todas : (x.todas = { mat: new Float32Array(16 * n), bytes: bytes ? new Uint8Array(16 * n) : null, ids: ids ? new Uint32Array(n) : null });
+  ordemDoTrecho(mat, 0, n, balde);
+  permutar(n, mat, bytes, ids, t.mat, t.bytes, t.ids);
+}
+
 /** Distância do ponto (px, pz) ao retângulo [x0, x1] x [z0, z1] no chão (0 dentro). */
 function distRet(px, pz, x0, z0, x1, z1) {
   const dx = px < x0 ? x0 - px : px > x1 ? px - x1 : 0;
@@ -103,11 +229,14 @@ function trocar(src, alvo, novo) {
 /**
  * Material `edificio` (desenho do render 9.1): MeshStandardMaterial com a fachada no shader e os ganchos comuns. O
  * mesmo material serve ao LOD0 fundido (atributos quantizados por vértice) e ao LOD1 instanciado (o three compila as
- * duas variantes). Para X1a e R5: escrever a malha no formato de malhaPredio.js e usar este material.
+ * duas variantes). Para X1a e R5: escrever a malha no formato de malhaPredio.js e usar este material. barata (PC2): a
+ * fachada de longe do LOD1 e do LOD2 (FAC_BARATA: sem paralaxe, caixilho, ar-condicionado, grade, letras e o detalhe
+ * fino, que somem no pixel; a grade de janelas, as persianas, as cortinas e a luz das janelas ficam).
  */
-export function criarMaterialEdificio(ctx, { ganchos = null } = {}) {
+export function criarMaterialEdificio(ctx, { ganchos = null, barata = false } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
-  m.name = 'edificio';
+  m.name = barata ? 'edificio-longe' : 'edificio';
+  if (barata) m.defines = { ...m.defines, FAC_BARATA: '' };
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniformesEdificio);
     let vs = shader.vertexShader;
@@ -127,7 +256,7 @@ export function criarMaterialEdificio(ctx, { ganchos = null } = {}) {
     shader.vertexShader = vs;
     shader.fragmentShader = fs;
   };
-  m.customProgramCacheKey = () => 'edificio-1';
+  m.customProgramCacheKey = () => (barata ? 'edificio-1-barata' : 'edificio-1');
   m.userData.edificio = true;
   const g = ganchos ?? ctx.ganchos;
   g.aplicar(m, g.nomes());
@@ -157,7 +286,9 @@ function criarPredios(ctx) {
   const esp0 = ctx.sim.espelho;
   const grade = new GradeSetores({ tam: esp0.mapa?.tam ?? 8192, origem: esp0.mapa?.origem ?? [-4096, -4096] });
   const oficina = oficinaDe(ctx);
+  // o LOD0 (perto) com a fachada inteira; o LOD1 e o LOD2 (de longe) com a barata (PC2)
   const material = criarMaterialEdificio(ctx);
+  const materialLonge = criarMaterialEdificio(ctx, { barata: true });
 
   // tabelas na GPU
   const dadosTab = new Uint8Array(LADO_TABELA * LADO_TABELA * 4);
@@ -206,13 +337,13 @@ function criarPredios(ctx) {
     const gs = new THREE.BufferGeometry();
     gs.setAttribute('position', g.attributes.position);
     gs.setIndex(g.index);
-    const vis = new ListaCompactada({ geometria: g, material, nome: `predios:lod1:${nome}`, bytes: BYTES_INST, comId: true, cap: 2048 });
+    const vis = new ListaCompactada({ geometria: g, material: materialLonge, nome: `predios:lod1:${nome}`, bytes: BYTES_INST, comId: true, cap: 2048 });
     const sombra = new ListaCompactada({ geometria: gs, material: null, nome: `predios:sombra:${nome}`, cap: 1024 });
     vis.aoCriar = naCena(duasFaixas ? 'perto' : null);
     vis.aoCriar(vis.malha, null);
     let longe = null;
     if (duasFaixas) {
-      longe = new ListaCompactada({ geometria: g, material, nome: `predios:lod2:${nome}`, bytes: BYTES_INST, comId: true, cap: 2048 });
+      longe = new ListaCompactada({ geometria: g, material: materialLonge, nome: `predios:lod2:${nome}`, bytes: BYTES_INST, comId: true, cap: 2048 });
       longe.aoCriar = naCena('longe');
       longe.aoCriar(longe.malha, null);
     }
@@ -234,6 +365,7 @@ function criarPredios(ctx) {
   let pendentes1 = 0;
   let pendentes0 = 0;
   let chaveVis = -1;
+  let ordemVista = -1; // o balde em que todos os setores visíveis já estão em ordem
   let chaveSombra = -1;
   let nLod0 = 0;
   let bytesLod0 = 0;
@@ -382,6 +514,7 @@ function criarPredios(ctx) {
 
   function receberLod1(st, r, lista, versao) {
     st.lod1 = r.lod1;
+    st.ordem = -1;
     st.lista1 = lista;
     st.caixas = r.caixas;
     st.v1 = versao;
@@ -547,9 +680,35 @@ function criarPredios(ctx) {
         const fx = duasFaixas ? faixaDaCaixa(cp.x, cp.y, cp.z, frente.x, frente.y, frente.z, caixa.min.x, caixa.min.y, caixa.min.z, caixa.max.x, caixa.max.y, caixa.max.z, lim) : 1;
         st.faixa = fx;
         vis.push(st);
-        hv = Math.imul(hv ^ st.s, 0x01000193);
-        hv = Math.imul(hv ^ (st.modo * 7919 + st.v1 * 4 + fx), 0x01000193);
       }
+    }
+    // da frente para trás (PC2): o teste de profundidade descarta o prédio de trás antes da fachada. Por faixas de um
+    // setor de distância, para a lista não ser refeita a cada passo da câmera
+    ordenarDaFrente(vis);
+    // e as instâncias de cada setor na direção da vista (só quando o balde da direção muda), com um teto de instâncias
+    // por quadro, os setores da frente primeiro: girar a câmera não trava um quadro. As listas só são refeitas com a
+    // ordem nova em todos (até lá a GPU desenha a ordem de antes, que só custa um pouco mais de pixel)
+    cam.getWorldDirection(frente);
+    const balde = baldeDaVista(frente);
+    let cota = ORDEM_POR_QUADRO;
+    let emOrdem = true;
+    for (const st of vis) {
+      if (st.ordem === balde.id) continue;
+      if (cota <= 0) {
+        emOrdem = false;
+        continue;
+      }
+      for (const x of st.lod1) {
+        ordenarInstancias(x, balde);
+        cota -= x.n;
+      }
+      st.ordem = balde.id;
+    }
+    if (emOrdem) ordemVista = balde.id;
+    hv = Math.imul(hv ^ ordemVista, 0x01000193);
+    for (const st of vis) {
+      hv = Math.imul(hv ^ st.s, 0x01000193);
+      hv = Math.imul(hv ^ (st.modo * 7919 + st.v1 * 4 + st.faixa), 0x01000193);
     }
     // pedidos: os mais perto primeiro
     cand1.sort((a, b) => a.dist - b.dist);
@@ -573,7 +732,9 @@ function criarPredios(ctx) {
           const x = st.lod1[f];
           const k = st.modo === 2 ? x.np : x.n;
           if (!k) continue;
-          const p = { mat: x.mat, ids: x.ids, bytes: x.bytes, n: k };
+          // o LOD1 pela cópia com todas as peças em ordem (ordenarInstancias); o LOD2 só as principais
+          const t = st.modo !== 2 && x.todas ? x.todas : x;
+          const p = { mat: t.mat, ids: t.ids, bytes: t.bytes, n: k };
           if (st.faixa & 1) perto.push(p);
           if (st.faixa & 2) longe.push(p);
         }
@@ -708,6 +869,7 @@ function criarPredios(ctx) {
   const dom = {
     nome: 'predios',
     material,
+    materialLonge,
     tabela,
     obra,
     aplicar(d, esp) {
@@ -780,6 +942,7 @@ function criarPredios(ctx) {
       tabela.dispose();
       obra.dispose();
       material.dispose();
+      materialLonge.dispose();
     },
   };
   return dom;

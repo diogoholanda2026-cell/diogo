@@ -1,11 +1,13 @@
 // Quadro do render (desenho do render 1.4): limite de quadros pelo estado da tela e pelo perfil, tamanho da tela e a
 // ordem dos passes de um quadro:
-//   1. passes raros em fatias do ambiente (uma face do cubo do céu, um quadro-chave da luz do ambiente e a mistura) e
-//      os dos domínios em ctx.quadro.antes (o campo da sombra de longe e do HAO, o mapa de luz da rua): entram em R.stats;
+//   1. passes raros em fatias do ambiente (uma fatia de face do cubo do céu, um quadro-chave da luz do ambiente e a
+//      mistura) e os dos domínios em ctx.quadro.antes (o campo da sombra de longe e do HAO, o mapa de luz da rua):
+//      entram em R.stats;
 //   2. sombra própria (D43), só quando suja;
-//   3. a cena no alvo HDR com MSAA: fundo do céu (tela cheia, sem profundidade) e a cena por cima, numa faixa de
-//      profundidade (invertida) ou em duas (sem EXT_clip_control, motor/faixas.js);
-//   4. composição na tela: bloom, exposição, AgX, CAS e pontilhado (motor/pos.js). O Leve desenha direto na tela.
+//   3. a cena no alvo HDR com MSAA, numa faixa de profundidade (invertida) ou em duas (sem EXT_clip_control,
+//      motor/faixas.js); o fundo do céu vai na própria cena, depois dos opacos e no plano distante (ceu.js, PC2);
+//   4. composição na tela: bloom, exposição, AgX, CAS (sempre que o desenho interno é menor que a tela, na medida da
+//      ampliação) e pontilhado (motor/pos.js). O Leve desenha direto na tela.
 // Mede cada passe (R.stats soma todos; na página de teste o cronômetro da placa separa sombra, preparo, céu, cada
 // família da cena, água e pós) e ajusta a resolução dinâmica em degraus (motor/resolucao.js: pelo cronômetro da placa
 // nos perfis de PC, pelo tempo de quadro nos outros). O 'pc' tem teto de 60 qps (tetoQps).
@@ -18,7 +20,7 @@
 // programa novo como compilação depois de pronto.
 // A sombra própria mora em render/sombra/mapa.js; a classe segue exportada daqui para o índice do render.
 import * as THREE from 'three';
-import { Pos } from './pos.js';
+import { Pos, forcaCas } from './pos.js';
 import { Resolucao } from './resolucao.js';
 import { Faixas } from './faixas.js';
 import { marcarPronto, desmarcarPronto, paginaDeTeste } from './capacidades.js';
@@ -316,6 +318,16 @@ export class Quadro {
     }
   }
 
+  /**
+   * Força do CAS (PC2): sempre que o desenho interno é menor que a tela (o teto de pixels do 'pc' numa tela maior que
+   * 1080p ou a resolução dinâmica abaixo do nominal), na medida da ampliação (forcaCas, motor/pos.js).
+   */
+  get cas() {
+    if (!this.ctx.perfil.pos) return 0;
+    const dpr = this.resolucao.dpr || 1;
+    return Math.max(forcaCas(dpr / (this.ctx.pr || dpr)), this.resolucao.cas);
+  }
+
   /** Teto de qps do momento: o do estado da tela e o do perfil (0 = sem teto). */
   get teto() {
     const e = TETO_QPS[this.estado] || 0;
@@ -381,7 +393,8 @@ export class Quadro {
       if (amb && !cena.background) {
         renderer.clear(true, true, false);
         renderer.autoClear = false;
-        amb.desenharFundo(renderer, camera);
+        // o fundo na cena (ceu.js) vai depois dos opacos, só onde nada foi desenhado
+        if (!amb.fundoNaCena) amb.desenharFundo(renderer, camera);
       }
     });
     medidas.classificar(true);
@@ -394,7 +407,7 @@ export class Quadro {
 
     medidas.marcar('pos');
     if (comPos) {
-      const cas = this.resolucao.cas;
+      const cas = this.cas;
       medidas.passe(() => this.pos.compor({ exposicao: comp.exposicao, limiarBloom: comp.limiarBloom, cas, tMs }));
     }
     const s = medidas.stats;
@@ -422,7 +435,7 @@ export class Quadro {
     x.nativa = { w: Math.round(this.w * dpr), h: Math.round(this.h * dpr) };
     x.modo = r.modo;
     x.alvoGpu = this.ctx.perfil.alvoGpu ?? null;
-    x.cas = +r.cas.toFixed(2);
+    x.cas = +this.cas.toFixed(2);
     x.trocas = r.trocas;
     x.ultimaTroca = r.ultimaTroca;
   }
