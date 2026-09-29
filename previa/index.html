@@ -13,10 +13,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
-<link rel="preload" href="fontes/inter.20260928202955.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fontes/inter.20260929044056.woff2" as="font" type="font/woff2" crossorigin>
 <!-- Primeiro quadro: só HTML e CSS, antes do JS (A1). O app troca a fase, anda a barra e tira a carga. -->
 <style>
-@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(fontes/inter.20260928202955.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(fontes/inter.20260929044056.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 html,body{margin:0;height:100%;background:#0B0F14;color:#EEF2F6;overflow:hidden;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
 body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-feature-settings:'tnum' 1}
 #mundo{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -34,7 +34,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fo
 @media (max-height:420px){#carga .marca{width:44px;height:44px;margin-bottom:14px}#carga .trilho{margin-top:20px}}
 @media (prefers-reduced-motion:reduce){#carga,#carga #carga-barra{transition:none}}
 </style>
-<link rel="stylesheet" href="estilo.20260928202955.css">
+<link rel="stylesheet" href="estilo.20260929044056.css">
 </head>
 <body>
 <canvas id="mundo" aria-label="Heldópolis"></canvas>
@@ -49,7 +49,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fo
 <noscript><p style="position:fixed;bottom:16px;width:100%;text-align:center;z-index:91">Ative o JavaScript para jogar.</p></noscript>
 <script>
 /* Montagem (preenchida pelo montar.mjs): versão, carimbo, app e os endereços dos workers e das texturas. */
-window.__HELD_MONTAGEM__ = {"versao":"3.0.0-dev","carimbo":"20260928202955","app":"previa","unico":false,"workers":{"tarefas":"tarefas.20260928202955.js","oficina":"oficina.20260928202955.js"},"texturas":{"chao-camadas":"materiais/chao-camadas.20260928202955.ktx2"},"basis":"basis/"};
+window.__HELD_MONTAGEM__ = {"versao":"3.0.0-dev","carimbo":"20260929044056","app":"previa","unico":false,"workers":{"tarefas":"tarefas.20260929044056.js","oficina":"oficina.20260929044056.js"},"texturas":{"chao-camadas":"materiais/chao-camadas.20260929044056.ktx2"},"basis":"basis/"};
 
 /* Falha de carga: a tela diz o que houve em vez de ficar parada. */
 addEventListener('error', function (e) {
@@ -62,22 +62,22 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !/[?&
   addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
 }
 </script>
-<link rel="modulepreload" href="parte.20260928202955.MWP5KBI4.js">
-<link rel="modulepreload" href="parte.20260928202955.NRVGTEV3.js">
-<link rel="modulepreload" href="parte.20260928202955.NB4EFBJD.js">
-<link rel="modulepreload" href="parte.20260928202955.ACO56LZS.js">
-<link rel="modulepreload" href="parte.20260928202955.PTWINUMZ.js">
-<link rel="modulepreload" href="parte.20260928202955.OUH4QGCQ.js">
-<link rel="modulepreload" href="parte.20260928202955.IBTJYPFY.js">
-<link rel="modulepreload" href="parte.20260928202955.5OZNUAOP.js">
-<link rel="modulepreload" href="parte.20260928202955.VKOFZON4.js">
-<link rel="modulepreload" href="parte.20260928202955.S7MBTGHK.js">
-<link rel="modulepreload" href="parte.20260928202955.T3R7COF5.js">
-<link rel="modulepreload" href="parte.20260928202955.5UHVSG5O.js">
-<link rel="modulepreload" href="parte.20260928202955.2WRSHF34.js">
-<link rel="modulepreload" href="parte.20260928202955.WQZYXMFK.js">
-<link rel="modulepreload" href="parte.20260928202955.M7QJYKEW.js">
-<link rel="modulepreload" href="parte.20260928202955.SQJ6LB6E.js">
-<script type="module" src="jogo.20260928202955.js"></script>
+<link rel="modulepreload" href="parte.20260929044056.7PKMEB27.js">
+<link rel="modulepreload" href="parte.20260929044056.IAJXRQ2V.js">
+<link rel="modulepreload" href="parte.20260929044056.QWPBSO6A.js">
+<link rel="modulepreload" href="parte.20260929044056.WVBHAN32.js">
+<link rel="modulepreload" href="parte.20260929044056.AFHWSEYT.js">
+<link rel="modulepreload" href="parte.20260929044056.7TPJWBRQ.js">
+<link rel="modulepreload" href="parte.20260929044056.6DKPERFK.js">
+<link rel="modulepreload" href="parte.20260929044056.OAZESJ5N.js">
+<link rel="modulepreload" href="parte.20260929044056.M5SPDIM5.js">
+<link rel="modulepreload" href="parte.20260929044056.LEJ5UAV3.js">
+<link rel="modulepreload" href="parte.20260929044056.4EUOWWUE.js">
+<link rel="modulepreload" href="parte.20260929044056.NFTTYUJ5.js">
+<link rel="modulepreload" href="parte.20260929044056.EPQYOFI3.js">
+<link rel="modulepreload" href="parte.20260929044056.VS36TVE7.js">
+<link rel="modulepreload" href="parte.20260929044056.244I5MM4.js">
+<link rel="modulepreload" href="parte.20260929044056.ZOTCJJIA.js">
+<script type="module" src="jogo.20260929044056.js"></script>
 </body>
 </html>
