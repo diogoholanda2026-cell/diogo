@@ -1,0 +1,16 @@
+{
+  "quando": "2026-09-29",
+  "maquina": "i3-9100F, Radeon RX 550 4 GB, 16 GB; monitor 4K (janela nativa 3840 x 1858), Chrome no Windows",
+  "escolha": { "id": "pc", "motivo": "Radeon RX 550 Series: placa de entrada do PC (RX 460 a 560, GTX 750 a 1050, integradas boas)" },
+  "resolucaoInterna": { "w": 2070, "h": 1001, "pr": 1.3479, "nativa": { "w": 3840, "h": 1858 }, "modo": "fixa (a bancada trava a resolução)", "cas": 0 },
+  "compilacoesDepoisDePronto": 0,
+  "aquecimento": { "ms": 1079, "programas": 32 },
+  "cenas": [
+    { "cena": "aberta", "perfil": "pc", "msaa": 2, "qps": 26.2, "msMedio": 38.19, "p95": 50, "piorQuadroMs": 50.1, "chamadas": 26, "triangulos": 307920,
+      "gpuMsTimer": 35.46, "gpuPassesMs": { "ceu": 5.05, "terreno": 12.93, "predios": 13.86, "agua": 1.31, "arcologia": 1.08, "pos": 1.23, "sombra": 0, "vida": 0.02 },
+      "videoMB": 279 },
+    { "cena": "estresse", "perfil": "pc", "msaa": 2, "qps": 60, "msMedio": 16.66, "p95": 16.8, "chamadas": 268, "triangulos": 894221,
+      "gpuMsTimer": 14.53, "gpuPassesMs": { "ceu": 5.77, "predios": 6.92, "pos": 1.23 }, "videoMB": 89 }
+  ],
+  "leitura": "O soluço acabou (pior quadro 50 ms, era 166) e nenhuma compilação depois de pronto. A vista aberta segue em 26 qps porque três passes pesam por pixel: céu 5 ms (desenhado por pixel, deveria custar menos de 1), terreno 13 ms e prédios 14 ms. A tela é 4K e o perfil pc desenha em ~2 megapixels e amplia, mas a nitidez CAS está desligada (0) justamente quando amplia quase 2 vezes."
+}
