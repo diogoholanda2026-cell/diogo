@@ -1,8 +1,8 @@
 # Estado do jogo novo (28/09/2026)
 
-Rodando: PC2 (custo por pixel no PC do dono), base `2ff05c1`, texto em `parcelas/PC2.txt`. Prévia 1b publicada
-(`2184a04`, `6c74436`). Se parar: relance `{"nome": "PC2 custo por pixel", "base": "2ff05c1", "etapas": [[{"id": "PC2"}]]}`.
-Depois: o integrador monta e publica a previa/ e pede ao dono uma nova medição.
+Nada rodando. PC2 pronta, revisada e publicada na previa/ (Prévia 1c). Aguardando a medição do dono na página de
+teste. Pendências da PC2: prédios ainda acima de 6 ms (o peso está nos ganchos: sombra, neblina, noite, camadas), levar
+a CAS perceptiva de pos.js para pos.glsl.js, mapa de cor do terreno do Alta em 4096 (+85 MB), pacote JS em 1.608 de 1.638 KB.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
