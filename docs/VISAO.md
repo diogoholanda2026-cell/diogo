@@ -237,6 +237,10 @@ Cada metrópole faz o papel de um país. Tem arquitetura, clima, moeda, leis, re
 
 ### 5.8 A história em atos
 
+**Atualização (D67, 30/09/2026):** a história agora tem três partes (2005 a 2019, 2020 a jun 2026 e jun 2026 a 2040), com
+calendário, sócios e horas em `docs/desenho/historia.md`. Os atos abaixo ficam como roteiro de conteúdo: os atos 1 e 2
+caem na parte 2 e os atos 3 a 5 na parte 3.
+
 1. **A Arcologia (hoje):** a obra que dá origem à Holding.
 2. **A Holding:** a cidade cresce em volta. Surgem os primeiros rivais e a primeira eleição.
 3. **O mercado:** cadeias de produção, bolsa e uma crise que testa as alianças.

@@ -8,13 +8,14 @@ interface, PWA para PC e para o Poco X7 do dono.
 
 **O documento que manda é `docs/PROJETO.md`** (decisões, contratos, estrutura, parcelas do M1 e regras de trabalho).
 Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesquisa/*.md` (fontes). `docs/VISAO.md` é a
-visão de longo prazo (Holding, rivais, 12 metrópoles).
+visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.md` é a história em três partes (D67: 2005 a
+2019, 2020 a jun 2026 e jun 2026 a 2040), com sócios, calendário, horas e o dólar (D68).
 
 ## Como o dono trabalha
 - Fala português do Brasil; responda em português: resultado primeiro, frases curtas, sem travessão.
 - Joga sozinho, dá autonomia ("continue sem pedir permissão"), mas é sensível a custo: não repetir etapas já feitas,
   capturas só as necessárias.
-- Regras de economia fixadas por ele (valem no jogo novo com os mesmos números, em `REGRAS_DONO`): produção em lotes
+- Regras de economia fixadas por ele (valem no jogo novo com a mesma razão, em dólares reais pela D68, em `REGRAS_DONO`): produção em lotes
   de 1 a 10; vendas no Depósito a 150% do preço base, até 100 por janela; empréstimo de 50 mil por ano, 10% ao ano,
   dívida até 500 mil; renda de 5/8/11 créditos por morador por hora conforme o bem-estar.
 - Estética proibida: SimCity BuildIt, maquete, cartum, verde-lima, formas "quadradas e robóticas", Torre em bolo.
