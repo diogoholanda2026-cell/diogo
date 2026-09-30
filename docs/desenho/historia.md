@@ -6,19 +6,18 @@ fim, em "Pendências".
 
 ## 1. O fio da história
 
-Um gênio da computação, com doutorado em ciência da computação, física e matemática, deixa em 2005, aos 25 anos, um
-departamento do maior laboratório de buscas do mundo e funda a Holding Held. Em 2020 a Holding já é grande o bastante
-para propor uma cidade nova, e em janeiro daquele ano começa a construir, com dois tipos de sócio:
+**Diogo Holanda**, nascido em 1980, tem doutorado em ciência da computação, física e matemática e é um gênio
+intelectual. Em 2005, aos 25 anos, deixa um departamento do laboratório de buscas **The Axion Evergreen** (nome
+fictício, escolhido pelo dono) e funda a Holding Held. Em 2020 a Holding já é grande o bastante para propor uma cidade
+nova, e em janeiro daquele ano começa a construir, com dois tipos de sócio de projeto:
 
 - a **Federação de Nova Libertas** (os EUA do jogo);
 - **cinco fundos soberanos** (seção 5).
 
 A cidade é Heldópolis. Quando pronta, terá **500 mil moradores** e capacidade para **10 milhões de turistas por mês**.
 A meta de investimento é de **US$ 500 a 900 bilhões**, no ponto médio US$ 700 bilhões, pagos em tranches de 2020 a 2032.
-
-Nomes fictícios: o laboratório de buscas se chama **Axiom** no jogo (o dono citou o Google; o nome real não entra no
-texto, para não misturar marca real com o país fictício. Trocar é uma linha em `ui/textos/`). O nome do fundador fica
-para o dono escolher (pendência 1).
+A sede da Holding nasce no mesmo dia e fica pronta em junho de 2026, com parte da cidade já operando para a Holding e
+para alguns turistas.
 
 ## 2. As três partes
 
@@ -66,27 +65,75 @@ visível na rua.
 Consequência: o marco 7 do M1 (Torre pronta, D49 e D51) **não é mais o fim da parte 2**. Vira "a Arcologia inaugurada em
 fase inicial" e a sede completa de jun 2026 passa a pedir mais etapas (pendência 3).
 
-## 5. Quem paga
+## 5. Quem paga e quem é dono
 
-O país anfitrião (a costa que o jogo já usa em Heldópolis) concede o território, como na premissa de concessão do
-`PROJETO.md`. Os sócios do capital, pelo ponto médio de US$ 700 bilhões (proposta, o dono ajusta):
+São duas camadas, e é fácil confundir.
 
-| Sócio | Fatia | Origem no mundo do jogo (VISAO, 5.6) | Perfil e o que exige |
-|---|---|---|---|
-| Holding Held | 15% | Heldópolis | risco alto, alavancada; dona do projeto e da sede |
-| Federação de Nova Libertas (EUA) | 25% | Nova Libertas | finanças, tecnologia e mídia; capital de bolsa, garantias e licenças de tecnologia; quer voz na governança e na segurança |
-| Autoridade de Investimento de Qasr al-Noor | 15% | Emirados Árabes Unidos | turismo de luxo e aviação; exige hotéis de grife, aeroporto e um marco arquitetônico |
-| Fundo de Megaprojetos de Rimal | 15% | Arábia Saudita | energia e cidades novas; exige energia própria e ritmo de obra |
-| Companhia Soberana de Singara | 12% | Singapura | porto, finanças e hub aéreo; exige planejamento rigoroso, porto e aeroporto operados por ela |
-| Fundo Estratégico de Jinhai | 10% | China | manufatura e infraestrutura; exige contratos de fornecimento (cadeia de materiais) e turismo de massa |
-| Fundo de Pensões de Hoshimura | 8% | Japão | paciente, quer retorno estável; exige governança, qualidade de vida e residências |
+### 5.1 O dono da Holding em junho de 2026 (decidido pelo dono)
 
-Por que esses cinco: são os países dos 12 que têm de fato fundos soberanos ou de pensão gigantes, e cada um traz uma
-vocação diferente (turismo, energia, porto, manufatura, previdência). Os nomes vêm da lista da VISAO, para a parte 3
-ligar os sócios às metrópoles que o jogador abre depois (filiais, rivalidade, geopolítica).
+A **Holding Held guarda-chuva** é totalmente privada. Em junho de 2026 (fecho da parte 2) seu capital fica assim:
 
-**Aportes em tranches:** cada tranche é um evento de história, com condição do sócio (ex.: "Qasr al-Noor libera a
-próxima tranche se o primeiro hotel de grife abrir"). Até jun 2026 entram uns 35% do total (cerca de US$ 245 bilhões).
+| Quem | Fatia | Em dólares (valuation de US$ 5,53 trilhões) |
+|---|---|---|
+| Diogo Holanda, o criador | 20% | US$ 1,106 trilhão |
+| 20 altos executivos e chefes de departamento | 10% no total, 0,5% cada | US$ 27,65 bilhões cada |
+| 5 fundos soberanos | 5% cada, 25% no total | US$ 276,5 bilhões cada |
+| 9 gigantes mundiais | 5% cada, 45% no total | US$ 276,5 bilhões cada |
+
+- **Valuation:** US$ 5,53 trilhões. **Lucro líquido do ano fiscal fechado de 2025:** US$ 215 bilhões (preço sobre lucro
+  de 25,7 vezes, na faixa das maiores empresas de tecnologia).
+- **Conta:** 20% + 10% + 70% (14 sócios x 5%) = 100%.
+
+### 5.2 Os 5 fundos soberanos (5% cada)
+
+Os países são os que a VISAO já tem, com nome fictício. Cada um traz uma vocação e uma exigência.
+
+| Fundo | Metrópole (país de referência) | Perfil e o que exige |
+|---|---|---|
+| Autoridade de Investimento de Qasr al-Noor | Qasr al-Noor (Emirados) | turismo de luxo e aviação; hotéis de grife, aeroporto e marco arquitetônico |
+| Fundo de Megaprojetos de Rimal | Rimal (Arábia Saudita) | energia e cidades novas; energia própria e ritmo de obra |
+| Companhia Soberana de Singara | Singara (Singapura) | porto, finanças e hub aéreo; planejamento rigoroso, porto e aeroporto operados por ela |
+| Fundo Estratégico de Jinhai | Jinhai (China) | manufatura e infraestrutura; contratos de fornecimento e turismo de massa |
+| Fundo de Pensões de Hoshimura | Hoshimura (Japão) | paciente, quer retorno estável; governança, qualidade de vida e residências |
+
+### 5.3 Os 9 gigantes mundiais (5% cada), especificação proposta
+
+Sete metrópoles da VISAO, com três gigantes de Nova Libertas (os EUA concentram quase metade do valor das maiores
+empresas do mundo). Todos os nomes são fictícios.
+
+| Gigante | Metrópole | Setor | O que traz | O que quer (gancho de história) |
+|---|---|---|---|---|
+| Halcyon Systems | Nova Libertas | nuvem, IA e chips de projeto | gêmeo digital da cidade, dados e automação | dados dos moradores (conflito de privacidade) |
+| Libertas Capital Partners | Nova Libertas | gestora de ativos e banco de investimento | crédito, a bolsa e uma futura abertura de capital | retorno rápido e liquidez para sair |
+| Starlight Media Group | Nova Libertas | mídia, streaming e esportes | atenção do mundo e eventos de massa | espetáculos e direitos de imagem da cidade |
+| Albionford & Lyle Assurance | Albionford | seguros e resseguros | seguro das mega-obras e prêmios menores | normas conservadoras e vistorias |
+| Rheinhaven Werke AG | Rheinhaven | indústria pesada, veículos e trens | máquinas, caminhões, trens e fábricas | disputa a manufatura com Jinhai |
+| Maison Valmonde | Valmonde | luxo, moda e hotelaria | hotéis de grife e o padrão de luxo da Torre | disputa o luxo com Qasr al-Noor |
+| Hanbit Heavy & Electronics | Hanbit | estaleiros, semicondutores e eletrônicos | navios, cruzeiros, telões e chips | encomendas de longo prazo |
+| Tantra Group | Suryapur | serviços de TI, saúde e farmácia | hospitais, centros de operação e mão de obra técnica | isenções e contratos de serviço |
+| Terra Roxa S.A. | Heldópolis | alimentos, minério e energia | alimentos, biocombustível e energia da região | licenças ambientais e terra |
+
+### 5.4 Os 20 executivos (0,5% cada)
+
+Os cargos propostos (nomes ficam para o roteirista): diretor financeiro, jurídico, relações públicas, obras e
+engenharia, produção e cadeias, logística e portos, aviação e aeroporto, turismo e hotelaria, serviços urbanos, saúde,
+educação, tecnologia, energia e água, segurança, cultura e eventos, sustentabilidade, mercado e bolsa, política e
+governo, pessoas e recursos humanos, e pesquisa e ciência. Os conselheiros já existentes (Íris, Tomé, Nara, Caio, Dona
+Cida e Lívia) entram nessa lista.
+
+### 5.5 Nova Libertas e o projeto da cidade
+
+A **Federação de Nova Libertas não tem ações**. É sócia do **projeto da cidade** (US$ 500 a 900 bilhões em tranches),
+com garantias, crédito público, licenças de tecnologia e voz na segurança. O país anfitrião concede o território, como
+na premissa de concessão do `PROJETO.md`.
+
+**Como as duas camadas se ligam (proposta):** de 2020 a 2026 o projeto é pago pelos lucros da Holding, pelas tranches
+de Nova Libertas e pelos aportes dos 5 fundos. Em junho de 2026, na **Reorganização**, os aportes dos fundos viram os
+5% de cada um, os 9 gigantes entram trocando ações por contratos globais e os executivos recebem seus 10%. O criador
+cai de 100% para 20%, o preço da ambição e o fecho da parte 2.
+
+**Governo da Holding (a decidir):** com 20% e 30% se os executivos votarem juntos, o criador precisa de mais 4 dos 14
+sócios para chegar a 50%.
 
 ## 6. Dinheiro (D68)
 
@@ -105,8 +152,9 @@ próxima tranche se o primeiro hotel de grife abrir"). Até jun 2026 entram uns 
 
 ## Pendências (perguntas ao dono)
 
-1. Nome do fundador (personagem da parte 1)?
-2. Axiom no lugar do nome real do laboratório, tudo bem?
-3. Sede completa em jun 2026 pede mais etapas que a Torre do M1. Confirma que o M1 fecha a primeira metade da parte 2 e
-   a segunda vem depois?
-4. As fatias dos sócios (seção 5) e os 300 mil turistas por mês de jun 2026 servem como partida?
+1. **Controle:** ações com voto reforçado para o criador, ou controle por alianças?
+2. **Reorganização de junho de 2026:** a conversão dos aportes em 5% por sócio e a entrada dos 9 gigantes servem?
+3. **Caixa do jogo:** o jogador administra o caixa do projeto da cidade (tranches), e o lucro de US$ 215 bilhões da
+   Holding fica como pano de fundo?
+4. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3.
+5. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
