@@ -44,11 +44,13 @@ O padrão é claro: **o grupo cresce em cada crise.** É a ideia de "anticrise" 
   majoritário e dita o rumo. **70%** está com **14 sócios de 5%** (5 fundos e 9 gigantes) e **10%** com **20 altos
   executivos** (0,5% cada).
 - **Valor:** US$ **5,53 trilhões** de mercado e lucro líquido de US$ **215 bilhões** no último ano fiscal fechado. O Fundo
-  Gestor tem **US$ 4,3 trilhões** sob gestão.
+  Gestor tem **US$ 4,3 trilhões** sob gestão (dinheiro dos 14 sócios, ver 5.2).
 - **Gente:** **45 mil funcionários** em 3 turnos de 15 mil na sede, e **1 mil na parte subterrânea**, em projetos
   privados e para governos.
 - **Faculdade:** uns 10 mil estudantes (2 turnos de 8 h, 5 mil cada). **Escola:** 17 mil alunos de 10 a 17 anos (2
-  turnos de 6 h, de 10 mil e de 7 mil). **Tudo grátis, com um "pagamento extremamente inteligente"** (pendência 4).
+  turnos de 6 h, de 10 mil e de 7 mil). **Tudo grátis, e o "pagamento extremamente inteligente" é a inteligência:** para entrar basta ter um alto nível de
+  inteligência, e não se paga mais nada, nem o estudo nem a moradia (a moradia é gratuita para quem comprova que não
+  tem condições). O Super Cérebro aplica a seleção.
 
 ### 1.4 O projeto da cidade
 
@@ -90,7 +92,7 @@ Total: **38 a 53 h**, com meta central de **48 h**.
 | Data | Marco | Metas de estado (de partida, o robô calibra) |
 |---|---|---|
 | jan 2020 | início da obra da sede e da cidade | Vila de Santa Cida, rodovia, gleba; caixa da primeira tranche |
-| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, Torre de 500 m e irmã de 452 m; o santuário é do complexo, D69); cidade parcial para a **moradia da Holding** (conta de trabalho: uns **130 a 150 mil moradores** se os 45 mil funcionários e as famílias vivem nela; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
+| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, Torre de 500 m e irmã de 452 m; o santuário é do complexo, D69); cidade parcial com **70 mil moradores** (decidido em 02/10/2026; o restante dos 45 mil funcionários e dos alunos vem de **trem-bala**; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
 | 2026 a 2032 | a cidade cresce | 500 mil moradores e 10 milhões de turistas por mês até **jun 2032** |
 | jun 2032 | cidade pronta | fim da frente da cidade; o mundo segue |
 | 2040 | fim da parte 3 | final por Influência e Legado (VISAO, 5.7) |
@@ -105,8 +107,8 @@ visível na rua.
 
 **Complexo de lazer e esporte (D69):** nasce em três fases (até jun 2026, até 2029 e até 2032), pelo que mais serve à
 economia e ao conforto de quem vai morar. Detalhe em `marcos.md`. O dono disse que a cidade fica **liberada para morar em
-jun 2026**, para a demanda de moradia da Holding (caderno). Antes disso moram os pioneiros: operários e funcionários
-que chegam (pendência 3).
+jun 2026**, para a demanda de moradia da Holding (caderno). Em jun 2026 são **70 mil moradores**, e o restante
+dos funcionários e dos alunos chega de trem-bala (D78).
 
 ### Eventos reais de 2008 a 2026 e o BOOM
 
@@ -165,17 +167,25 @@ A **Holding Held guarda-chuva** é totalmente privada:
 
 ### 5.2 O Fundo Gestor de Grandes Players
 
-- **O que é:** o fundo criado em 2020, em que os 14 sócios alocam dinheiro, gerido pelo grupo. Começou com US$ 250
-  bilhões, passou a 372 em um ano, e hoje tem **US$ 4,3 trilhões**, a 40% ao ano de média. (Um retorno desses, em
-  trilhões, não existe na vida real. No jogo ele é a razão de ser do Super Cérebro.)
+- **De quem é o dinheiro:** os **US$ 4,3 trilhões são dos 14 sócios**. O Fundo **administra parte do que eles têm**. Eles
+  fizeram aportes ao longo dos anos e, somados à média de **40% ao ano**, chegaram a 4,3 trilhões. Começou com US$ 250
+  bilhões em 2020, passou a 372 em um ano e recebeu os gigantes de 2021 a 2025. (Um retorno de 40% em trilhões não
+  existe na vida real. No jogo ele é obra do Super Cérebro.)
+- **Daqui para a frente:** a meta é de **5 a 7% ao ano**, porque o valor é astronômico e o Fundo **move o mercado
+  financeiro** e outros setores no mundo todo. Cinco por cento de 4,3 trilhões são **US$ 215 bilhões**, o lucro líquido
+  do último ano; sete por cento são uns US$ 300 bilhões por ano.
 - **O projeto da cidade** (US$ 500 a 900 bilhões) é uma fatia de uns 12 a 21% desse fundo.
-- **Na parte 3,** é o **motor da expansão ao mundo**: o jogador decide quanto do Fundo vai para a cidade e quanto vai
-  abrir filiais nas outras metrópoles (pendência 6).
+- **Na parte 3,** o Fundo é o **motor da expansão ao mundo**: o jogador decide quanto vai para a cidade e quanto abre
+  filiais nas outras metrópoles.
+- **Conselheiro de Estratégia:** o jogo **sugere como maximizar os lucros**, com **estratégias reais que deram certo**
+  (comprar ativos em crise, ser dono só da infraestrutura, diversificar como os fundos soberanos, travar preço com
+  contratos de longo prazo, e assim por diante). Cada sugestão mostra o caso real em que funcionou e o risco. Quem aconselha
+  é o Super Cérebro. Entra no M3, com os eventos com memória.
 
 ### 5.3 Os 5 fundos soberanos (5% cada)
 
-Os países são os que a VISAO já tem, com nome fictício. O caderno diz "tipo da Noruega, Arábia". Proposta, com um fundo
-tipo Noruega no lugar do de pensões japonês:
+Os países são os que a VISAO já tem, com nome fictício. O caderno diz "tipo da Noruega, Arábia". Confirmado em 02/10/2026, com um
+fundo tipo Noruega no lugar do de pensões japonês:
 
 | Fundo | Referência | Perfil e o que exige |
 |---|---|---|
@@ -188,7 +198,7 @@ tipo Noruega no lugar do de pensões japonês:
 ### 5.4 Os 9 gigantes mundiais (5% cada), especificação proposta
 
 Entram em **2021 (3), 2023 (2), 2024 (2) e 2025 (2)**. Sete metrópoles da VISAO, com três de Nova Libertas. Nomes
-fictícios. A ordem de entrada abaixo é minha proposta.
+fictícios. Os anos de entrada estão confirmados; a ordem dos gigantes dentro de cada ano é minha proposta.
 
 | Gigante | Entra | Metrópole | Setor | O que traz | O que quer |
 |---|---|---|---|---|---|
@@ -204,17 +214,20 @@ fictícios. A ordem de entrada abaixo é minha proposta.
 
 ### 5.5 Estrutura do grupo e os 20 executivos
 
-- **Guarda-chuva:** a Holding Held controla **holdings intermediárias**, usadas para **adquirir** empresas e
-  infraestrutura (mineração e terras raras, portos, ferrovias, silos, transporte, e assim por diante). A regra é
-  **comprar só a infraestrutura e nunca administrá-la**.
-- **Fintech unificada (2022):** 5 departamentos: tecnologia, agroindústria, clientes VIP, construções de grande porte e
-  alimentícia, siderurgia e sucroalcooleira.
-- **Super Cérebro:** a IA do grupo, criada em 2014. Roda na **parte subterrânea da sede**, com 1 mil pessoas em projetos
-  privados e para governos (pendência 5). É também a IA da cidade.
+A **Holding Held guarda-chuva** controla **4 holdings intermediárias** (decidido em 02/10/2026):
+
+| Intermediária (nome proposto) | O que é |
+|---|---|
+| **Held Capital** | a **fintech financeira**, unificada em 2022, com **5 departamentos**: tecnologia, agroindústria, clientes VIP de alto padrão, construções de grande porte, e alimentícia, siderurgia e sucroalcooleira |
+| **Held Litos** | **terras raras** (e ouro): empresas e direitos de minerar e refinar |
+| **Held Silício** | **semicondutores e hardware para IA e uso interno**: chips, placas de vídeo, memória, software |
+| **Held Pórtico** | **infraestrutura física**: portos, silos, ferrovias e transportadoras terrestres, aéreas e marítimas, **sempre só a infraestrutura, nunca a gestão do negócio** que funciona nela |
+
+- **Super Cérebro:** a IA do grupo, criada em 2014 sob a guarda-chuva. É também a IA da cidade e a conselheira do jogador.
+- **Parte subterrânea da sede** (1 mil pessoas, projetos privados e para governos): sem resposta do dono, **fica de
+  fora por ora**.
 - **Os 20 executivos (0,5% cada):** o topo e de alta confiança. Os conselheiros já existentes (Íris, Tomé, Nara, Caio,
   Dona Cida e Lívia) entram nessa lista. Nomes ficam para o roteirista.
-- **A proposta antiga** (10 divisões da `VISAO.md` como intermediárias) **fica suspensa** até o dono dizer quais são as
-  intermediárias (pendência 5).
 
 ### 5.6 Nova Libertas e o projeto da cidade
 
@@ -237,21 +250,34 @@ licenças de tecnologia e voz na segurança. O país anfitrião concede o territ
 - **Preços base:** em dólar de mercado por unidade do item. Para os preços fazerem sentido ao lado de bilhões, a unidade
   do item vira a carga de caminhão ou o lote industrial (a S3a fecha a tabela).
 
+## 7. Nomes fictícios (proposta, o dono aprova ou troca)
+
+| Real | No jogo |
+|---|---|
+| Google | **The Axion Evergreen** (do dono) |
+| rede financeira Swift | **Rede Meridiano** |
+| crise de 2008 | **Crise dos Lastros** |
+| crise da Crimeia (2014) | **Crise de Karsk** |
+| guerra de tarifas China x EUA (2018) | **Guerra das Tarifas** entre Nova Libertas e Jinhai, no 1º mandato do presidente **Calvin Rourke** |
+| pandemia (2020) | **Febre Aurora** |
+| bloqueio do canal de navegação (2021) | **Bloqueio do Canal de Seshat** |
+| guerra no leste europeu (2022) | **Guerra de Volkara**, com a **Crise da Energia de 2022** |
+| quebra de bancos regionais (2023) | **Quebra do Banco Vale Prata** |
+| assistentes de IA (fim de 2022) | **a Onda dos Assistentes** |
+| tarifas comerciais (2025) | **Rodada de Tarifas de 2025** |
+| Fundo Gestor de Grandes Players | **Fundo Atlas** |
+| fundo soberano tipo Noruega | **Fundo Soberano do Norte** |
+| intermediárias | **Held Capital, Held Litos, Held Silício e Held Pórtico** |
+
 ## Pendências (perguntas ao dono)
 
-Do caderno (02/10/2026):
+1. **Nomes fictícios** da seção 7: aprova ou troca?
+2. **Parte subterrânea da sede** (1 mil pessoas, projetos privados e para governos): o que é? Proposta: o Super Cérebro e
+   laboratórios, com contratos de governo como gancho de história.
+3. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3 (a meta de retorno do Fundo é de 5 a 7% ao ano).
+4. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
 
-1. **"10 milhões de visitantes diários"** no caderno, e **"mensais"** na conversa. O jogo usa **por mês, como capacidade de
-   pico** (D71). Confirma?
-2. **Torre de 250 m** no caderno e **300 m** (Torre Lúculo) na conversa. Qual vale?
-3. **Moradia em jun 2026:** quantos dos 45 mil funcionários e famílias moram na cidade? A conta de trabalho é 130 a 150
-   mil moradores, bem acima dos 30 a 38 mil do M1.
-4. **Faculdade e escola grátis, "pagamento extremamente inteligente":** qual é o pagamento?
-5. **Holdings intermediárias:** quais são? E o que é a **parte subterrânea** da sede (1 mil pessoas, projetos privados e
-   para governos)?
-6. **Fundo Gestor:** o jogador o administra na parte 3, decidindo quanto vai para a cidade e quanto para o mundo?
-7. **Fundo tipo Noruega** no lugar do de pensões japonês, e anos das entradas dos gigantes (2023, 2024, 2025)?
-8. **Nomes fictícios** do "Swift", da pandemia, das crises e do presidente de Nova Libertas.
-9. **"PC mais fraco divide em 10 versões de 2,5 GB":** o que significa?
-
-Resolvidas: controle da Holding (ações de 10 a 20 votos), Reorganização (não existe), país (Vera Cruz do Leste).
+Resolvidas em 02/10/2026: controle (ações de 10 a 20 votos), Reorganização (não existe), país (Vera Cruz do Leste), pico
+mensal de 10 milhões, Torre de 300 m, 70 mil moradores em jun 2026, educação grátis por inteligência, as 4 intermediárias,
+o Fundo (dinheiro dos 14 sócios, retorno de 5 a 7%), o Conselheiro de Estratégia, o fundo tipo Noruega, os anos dos
+gigantes. A frase "PC mais fraco divide em 10 versões de 2,5 GB" foi dispensada.

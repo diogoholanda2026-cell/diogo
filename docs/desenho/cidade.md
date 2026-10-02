@@ -59,7 +59,7 @@ Três classes, todas "estadia temporária", na composição do pico de 10 milhõ
 - **Metrô e trem urbano** ligam as estações às áreas. O que for preciso para os estádios (3 a 4 linhas pesadas, D69)
   e para os pendulares vem **antes** do M4.
 - **Fase 1 (até jun 2026):** o primeiro corredor já abre com a cidade, porque os trabalhadores da obra e os pioneiros
-  vêm da região.
+  vêm da região. Em jun 2026 são **70 mil moradores**, e o restante dos 45 mil funcionários e dos alunos chega de trem-bala.
 - **Nome:** fictício, com as características do original (por exemplo, "Trem-Bala Held", com linhas nomeadas).
 - **Custo estimado:** de US$ 50 a 100 bilhões, pelos túneis.
 
@@ -78,6 +78,8 @@ Três classes, todas "estadia temporária", na composição do pico de 10 milhõ
 - **Custo:** uns US$ 4 bilhões de obra, mais o subsídio anual, que sai de um **Fundo de Moradia** abastecido pela
   Holding e por parte das tranches dos sócios.
 - **No jogo:** dois tipos de zona novos (Acolhimento e Popular), com tarifa própria, e metas de Legado.
+- **Alunos:** a moradia gratuita por comprovação de falta de condições vale também para os alunos admitidos por
+  inteligência na faculdade e na escola da Holding (`historia.md`, 1.3).
 
 ## 5. Aeroportos (D73)
 

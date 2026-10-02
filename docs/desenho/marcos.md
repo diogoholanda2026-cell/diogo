@@ -23,7 +23,7 @@ projeto, para o dono ajustar.
    ou vítimas de maus tratos e perseguição** (seção 3.4). A reserva fica **dentro do mapa jogável** e se chama **Reserva da Transformação**.
 10. **Nome da torre:** mais imponente e menos genérico, **Torre Lúculo** (seção 6).
 11. **Ordem:** os marcos entram depois do M1a, sem mexer na onda 3.
-12. **Junho de 2026:** antes moram os pioneiros (operários e funcionários que chegam; o caderno pede moradia para a Holding) e a moradia abre
+12. **Junho de 2026:** a cidade tem **70 mil moradores** (o restante dos funcionários vem de trem-bala) e a moradia abre
     ao público em jun 2026.
 
 ## 2. As 19 estruturas
