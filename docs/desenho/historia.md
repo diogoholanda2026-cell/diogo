@@ -19,6 +19,9 @@ A meta de investimento é de **US$ 500 a 900 bilhões**, no ponto médio US$ 700
 A sede da Holding nasce no mesmo dia e fica pronta em junho de 2026, com parte da cidade já operando para a Holding e
 para alguns turistas.
 
+**O país:** Heldópolis fica na **República de Vera Cruz do Leste** (o Brasil do jogo, nome escolhido pelo dono em
+02/10/2026), que concede o território. Os voos nacionais são os de dentro dela, e os internacionais vêm de fora.
+
 ## 2. As três partes
 
 | Parte | Período | Papel | Como se joga | Horas (melhor faixa) |
@@ -45,7 +48,7 @@ Total: **38 a 53 h**, com meta central de **48 h**.
 | Data | Marco | Metas de estado (de partida, o robô calibra) |
 |---|---|---|
 | jan 2020 | início da obra da sede e da cidade | Vila de Santa Cida, rodovia, gleba; caixa da primeira tranche |
-| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, cúpula, Torre de 500 m e irmã de 452 m); cidade parcial de **30 a 38 mil moradores** (o marco 7 da D51); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
+| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, Torre de 500 m e irmã de 452 m; o santuário é do complexo, D69); cidade parcial de **30 a 38 mil moradores** (o marco 7 da D51); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
 | 2026 a 2032 | a cidade cresce | 500 mil moradores e 10 milhões de turistas por mês até **jun 2032** |
 | jun 2032 | cidade pronta | fim da frente da cidade; o mundo segue |
 | 2040 | fim da parte 3 | final por Influência e Legado (VISAO, 5.7) |
@@ -61,6 +64,28 @@ visível na rua.
 **Complexo de lazer e esporte (D69):** nasce em três fases (até jun 2026, até 2029 e até 2032), pelo que mais serve à
 economia e ao conforto de quem vai morar. Detalhe em `marcos.md`. O dono disse que a cidade fica **liberada para morar em
 jun 2026**; confirmado: antes disso moram os pioneiros (operários e famílias de funcionários).
+
+### Eventos reais de 2020 a 2026 e o BOOM (rascunho até as fotos)
+
+Decidido pelo dono em 02/10/2026: os **eventos reais entram**, com nome fictício e características reais, e são o que dá
+o **BOOM** de crescimento da Holding guarda-chuva e das holdings intermediárias. Leitura de trabalho: a pandemia acelera
+o digital e a **onda de IA** a partir de fins de 2022 dá o salto, o que leva o grupo ao valuation de US$ 5,53 trilhões e
+ao lucro de US$ 215 bilhões em 2025. Cada evento vira um choque com data marcada (eventos com memória, M3).
+
+| Quando | Evento real | No jogo (nome fictício a definir) e efeito |
+|---|---|---|
+| jan 2020 | início da obra | Vila de Santa Cida, rodovia, gleba; primeira tranche |
+| mar 2020 | pandemia | a obra pára por semanas e o canteiro tem restrições; a demanda por nuvem e IA dispara, o que começa o crescimento do grupo |
+| 2020 a 2021 | trabalho remoto, dinheiro barato | a divisão de tecnologia cresce; crédito fácil para o projeto |
+| mar 2021 | bloqueio de um canal de navegação e falta de chips | atraso nas importações da cadeia de materiais |
+| fev 2022 | guerra no leste europeu e crise de energia | energia, aço e fertilizantes sobem de preço |
+| 2022 e 2023 | inflação, juros altos, quebra de bancos regionais | crédito caro, custo de obra e de importação maiores |
+| fim de 2022 em diante | assistentes de IA e a corrida da IA | **o BOOM**: valuation e lucro do grupo disparam, entram os fundos e os gigantes |
+| 2024 e 2025 | corrida por data centers e energia | demanda de energia e água sobe, e a Holding vende tecnologia e energia |
+| 2025 | tarifas comerciais entre as grandes economias | a cadeia de materiais encarece, câmbio e importação se movem |
+| jun 2026 | sede pronta | Reorganização da Holding (seção 5.5) |
+
+A pandemia entra como obstáculo de obra e de logística, sem cenas de doença.
 
 ## 4. Ordem de construção
 
@@ -120,13 +145,15 @@ empresas do mundo). Todos os nomes são fictícios.
 | Tantra Group | Suryapur | serviços de TI, saúde e farmácia | hospitais, centros de operação e mão de obra técnica | isenções e contratos de serviço |
 | Terra Roxa S.A. | Heldópolis | alimentos, minério e energia | alimentos, biocombustível e energia da região | licenças ambientais e terra |
 
-### 5.4 Os 20 executivos (0,5% cada)
+### 5.4 Guarda-chuva, holdings intermediárias e os 20 executivos (proposta)
 
-Os cargos propostos (nomes ficam para o roteirista): diretor financeiro, jurídico, relações públicas, obras e
-engenharia, produção e cadeias, logística e portos, aviação e aeroporto, turismo e hotelaria, serviços urbanos, saúde,
-educação, tecnologia, energia e água, segurança, cultura e eventos, sustentabilidade, mercado e bolsa, política e
-governo, pessoas e recursos humanos, e pesquisa e ciência. Os conselheiros já existentes (Íris, Tomé, Nara, Caio, Dona
-Cida e Lívia) entram nessa lista.
+- **Estrutura:** a **Holding Held guarda-chuva** controla **holdings intermediárias**, uma por divisão, e cada uma é dona
+  das empresas operacionais do ramo. As **10 divisões** da `VISAO.md` (5.2) são as intermediárias: Construção,
+  Imobiliário, Indústria, Logística, Finanças, Energia, Tecnologia, Mídia, Hotelaria e luxo, Aviação e navegação.
+- **Os 20 executivos (0,5% cada):** **2 por divisão**, um diretor e um chefe de departamento. Os departamentos de cada
+  divisão são as funções do dia a dia (obras, produção, turismo, saúde, serviços urbanos, segurança, cultura, e assim
+  por diante). Os conselheiros já existentes (Íris, Tomé, Nara, Caio, Dona Cida e Lívia) entram nessa lista.
+- **Nomes:** ficam para o roteirista, no momento de cada parte.
 
 ### 5.5 Nova Libertas e o projeto da cidade
 
@@ -159,10 +186,15 @@ sócios para chegar a 50%.
 
 ## Pendências (perguntas ao dono)
 
+Aguardam as fotos do dono:
+
 1. **Controle:** ações com voto reforçado para o criador, ou controle por alianças?
 2. **Reorganização de junho de 2026:** a conversão dos aportes em 5% por sócio e a entrada dos 9 gigantes servem?
 3. **Caixa do jogo:** o jogador administra o caixa do projeto da cidade (tranches), e o lucro de US$ 215 bilhões da
    Holding fica como pano de fundo?
 4. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3.
-5. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
-5. **Jun 2026 (resolvida em 02/10/2026):** moradia liberada ao público em jun 2026, com pioneiros antes (de 30 a 38 mil, como o M1 simula).
+5. **Eventos e estrutura:** o BOOM é a onda de IA de fins de 2022 em diante, depois do impulso digital da pandemia? As 10
+   divisões são as holdings intermediárias, com 2 executivos cada?
+6. **Nomes fictícios dos eventos** da tabela de 2020 a 2026.
+
+Resolvidas: moradia liberada em jun 2026, com pioneiros antes (02/10/2026); país anfitrião (Vera Cruz do Leste).

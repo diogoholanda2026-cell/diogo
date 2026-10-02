@@ -210,6 +210,7 @@ Cada metrópole faz o papel de um país. Tem arquitetura, clima, moeda, leis, re
 | Arábia Saudita | **Rimal** | energia e megaprojetos no deserto; cidades lineares |
 
 - **Por que nomes fictícios:** a política e as crises ficam livres de fatos reais.
+- **O país de Heldópolis** chama-se **República de Vera Cruz do Leste** (D77).
 - **Mapa-múndi:** liga as metrópoles por rotas de avião e de navio. O porto e o aeroporto de cada uma são a porta de
   entrada.
 - **Abrir filial em outra metrópole pede:**
