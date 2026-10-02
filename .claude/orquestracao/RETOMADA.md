@@ -1,5 +1,14 @@
 # Estado do jogo novo (28/09/2026)
 
+## ONDE PAROU (02/10/2026)
+
+**Onda 3 em andamento.** O dono escolheu voltar ao jogo (fase 1 do complexo toda dialogada, D86). Textos das parcelas
+em `parcelas/` (comum da onda em `_comum4.txt`; D87 decide o dinheiro). Etapa 1: S2a, S3a, R2b, R4b, U1b, com a base no
+commit "Onda 3: textos das parcelas". Etapa 2 depois: R3b, R5, U2a, X1b, X3a (antes dela, ver se o dono respondeu sobre a
+Universidade e a Escola da sede, regra D78). Por último a C1 (texto a escrever com o que as etapas deixarem). As notas de
+entrega ficam em `scratchpad/novo/<parcela>/nota.md`; o integrador junta nas fichas. Commit de segurança depois de cada
+etapa revisada.
+
 Nada rodando. PC2 pronta, revisada e publicada na previa/ (Prévia 1c). Aguardando a medição do dono na página de
 teste. Pendências da PC2: prédios ainda acima de 6 ms (o peso está nos ganchos: sombra, neblina, noite, camadas), levar
 a CAS perceptiva de pos.js para pos.glsl.js, mapa de cor do terreno do Alta em 4096 (+85 MB), pacote JS em 1.608 de 1.638 KB.

@@ -1,0 +1,19 @@
+PARCELA R4b: obras, anexos, lote e noite. Implemente a ficha R4b do docs/PROJETO.md (seção 4.5) com a D39 e o detalhe de obras, anexos, lotes e janelas do docs/desenho/render.md. Herda os arquivos da R4a (veja a nota de entrega da R4a e o que a PC2 mudou em mundo/predios.js e fachada.glsl.js).
+O que mudou depois do desenho:
+- Cidade vertical (D76): torres de 12 a 25 andares no M1a e de 30 a 60 no M1b. A obra de prédio alto tem grua de torre que sobe com os andares e o esqueleto subindo por andar; a de prédio baixo continua com grua móvel e andaime.
+- Custo dos prédios: na vista aberta do 'pc' os prédios ainda levam de 8 a 10 ms de placa (meta: 6 ou menos). O peso está nos ganchos do sombreador da fachada (sombra, neblina, noite, camadas). Corte o que não muda nada de longe (a fachada barata da PC2 de longe continua) e meça passe por passe, como a PC2 (no SwiftShader: só aquele passe N vezes com gl.finish, antes e depois, mesma câmera). Relate a tabela.
+- Meta da ficha: na cena bairro com crescimento sintético em 4x, a fila da oficina esvazia e o envio fica em até 3 ms no pior quadro.
+Capturas (no máximo 4, 1376 x 768, ?q=pc): bairro com obras às 10h, a noite com janelas por agenda, um lote de perto e um prédio alto em obra.
+Testes: os da R4a verdes e os novos da obra (5 fases pelo uniforme de tique) e do anexo (refusão depois de 5 s sem mudança).
+Contexto da onda 3 (vale para todas as parcelas da onda, que termina no M1a jogável):
+- Decisões novas do dono: D63 a D87 no docs/PROJETO.md (2.1). Leia as linhas inteiras. As que mudam o M1a:
+  - D67: calendário com data real. O jogo começa em jan. 2020 (a D42 fica: 1 h de jogo = 6 meses; mês = 600 tiques). A interface mostra "jan. 2020", nunca "Mês 3 · Ano 2".
+  - D68 e D87: dinheiro em dólar. A simulação guarda em unidades de desenho (o crédito antigo) e a interface mostra em dólar pelo fator único REGRAS_DONO.moeda (US$, fator 600). As regras do dono e os testes A2 continuam nas unidades. Nenhuma tela multiplica por conta própria: tudo passa por ui/formato.js.
+  - D76: cidade vertical. A residencial média chega a 12 a 25 andares no nível 5; a residencial alta (M1b) a 30 a 60.
+  - D77 a D83: a história (docs/desenho/historia.md). Holding Held; o jogador é o criador, Diogo Holanda; os conselheiros com nome completo (Íris Valverde, Tomé Carvalho, Nara Guimarães, Caio Montenegro, Dona Cida, Lívia Andrade; cargos na seção 8); o país é a República de Vera Cruz do Leste. Eventos reais só com os nomes fictícios da seção 7 (nunca o nome real de empresa, país, doença ou pessoa).
+  - D66 e D70: o alvo é o PC atual do dono (perfil 'pc', que herda as tabelas do Alta por porPerfil). Não otimize para o celular, mas não quebre o Média.
+- Fora do M1a (não implemente, mas não feche a porta nos dados): o complexo de lazer e esporte (D69 a D86), visitantes e turismo (D71, D74), trem-bala, moradia social (D72), aeroportos e Modo Visita (D73), Fundo Gestor e Conselheiro de Estratégia (D79).
+- JS principal em 1.608 de 1.638 KB (A1): toda tela, cena, gerador grande e texto longo novo entra sob demanda (import dinâmico). Meça com node ferramentas/montar.mjs --saida <pasta temporária sua> e diga o tamanho na entrega.
+- Régua de qualidade: Cities: Skylines II e megaprojetos reais; nada de maquete, cartum, verde-lima, formas quadradas e robóticas, Torre em bolo.
+- A Prévia 1c (SEDE2, PC1, I2 e PC2) está no repositório: leia as notas de entrega no fim das fichas que tocam os seus arquivos (R1a, R2a, R4a, X1a, U1a e as da onda 2).
+- A onda roda em duas etapas: etapa 1 (S2a, S3a, R2b, R4b, U1b) e etapa 2 (R3b, R5, U2a, X1b, X3a). Quem é da etapa 2 já encontra o que a etapa 1 publicou. As outras parcelas da sua etapa rodam ao mesmo tempo: só os seus arquivos; o que precisar fora, pendência.

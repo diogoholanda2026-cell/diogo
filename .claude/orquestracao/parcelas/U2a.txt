@@ -1,0 +1,21 @@
+PARCELA U2a: sistema (save, diário, menus, configurações, Teste de desempenho e primeira hora). Implemente a ficha U2a do docs/PROJETO.md (seção 4.5) com as decisões D31, D38, D42, D58, D66, D67 e D70 e o desenho de interface do docs/desenho/ui.md.
+O que mudou depois do desenho:
+- PC primeiro (D66 e D70): "Clique para entrar" quando o ponteiro é mouse e "Toque para entrar" no toque; atalhos de teclado no menu e nas configurações.
+- Configurações: a opção 'pc' (nome "PC") no seletor de qualidade (pendência da I2), mais a resolução dinâmica e a nitidez (CAS) da PC1 e da PC2.
+- Teste de desempenho: lê os campos da PC1 e da PC2 (perfil escolhido e o motivo, resolução interna, resolução dinâmica, tempo de placa por passe, aquecimento, compilações depois de pronto) e copia e compartilha.
+- Nova partida: "Holding Held" e o criador "Diogo Holanda" já preenchidos (editáveis) e a cor da Holding. O calendário começa em jan. 2020 (D67); o menu inicial e "Onde você parou" mostram a data.
+- Telas novas sob demanda (Configuracoes, TesteDesempenho e o início).
+Save: IndexedDB com 3 automáticos e 8 manuais, capa, exportar e importar com as travas herdadas, diário síncrono com o carimbo da página, save sem gzip no segundo plano. Teste no Chromium: matar a página no meio de um save e recarregar sem perder tique.
+Testes: save e os da vitrine; capturas na vitrine (no máximo 4, 1376 x 768 e 986 x 443).
+Contexto da onda 3 (vale para todas as parcelas da onda, que termina no M1a jogável):
+- Decisões novas do dono: D63 a D87 no docs/PROJETO.md (2.1). Leia as linhas inteiras. As que mudam o M1a:
+  - D67: calendário com data real. O jogo começa em jan. 2020 (a D42 fica: 1 h de jogo = 6 meses; mês = 600 tiques). A interface mostra "jan. 2020", nunca "Mês 3 · Ano 2".
+  - D68 e D87: dinheiro em dólar. A simulação guarda em unidades de desenho (o crédito antigo) e a interface mostra em dólar pelo fator único REGRAS_DONO.moeda (US$, fator 600). As regras do dono e os testes A2 continuam nas unidades. Nenhuma tela multiplica por conta própria: tudo passa por ui/formato.js.
+  - D76: cidade vertical. A residencial média chega a 12 a 25 andares no nível 5; a residencial alta (M1b) a 30 a 60.
+  - D77 a D83: a história (docs/desenho/historia.md). Holding Held; o jogador é o criador, Diogo Holanda; os conselheiros com nome completo (Íris Valverde, Tomé Carvalho, Nara Guimarães, Caio Montenegro, Dona Cida, Lívia Andrade; cargos na seção 8); o país é a República de Vera Cruz do Leste. Eventos reais só com os nomes fictícios da seção 7 (nunca o nome real de empresa, país, doença ou pessoa).
+  - D66 e D70: o alvo é o PC atual do dono (perfil 'pc', que herda as tabelas do Alta por porPerfil). Não otimize para o celular, mas não quebre o Média.
+- Fora do M1a (não implemente, mas não feche a porta nos dados): o complexo de lazer e esporte (D69 a D86), visitantes e turismo (D71, D74), trem-bala, moradia social (D72), aeroportos e Modo Visita (D73), Fundo Gestor e Conselheiro de Estratégia (D79).
+- JS principal em 1.608 de 1.638 KB (A1): toda tela, cena, gerador grande e texto longo novo entra sob demanda (import dinâmico). Meça com node ferramentas/montar.mjs --saida <pasta temporária sua> e diga o tamanho na entrega.
+- Régua de qualidade: Cities: Skylines II e megaprojetos reais; nada de maquete, cartum, verde-lima, formas quadradas e robóticas, Torre em bolo.
+- A Prévia 1c (SEDE2, PC1, I2 e PC2) está no repositório: leia as notas de entrega no fim das fichas que tocam os seus arquivos (R1a, R2a, R4a, X1a, U1a e as da onda 2).
+- A onda roda em duas etapas: etapa 1 (S2a, S3a, R2b, R4b, U1b) e etapa 2 (R3b, R5, U2a, X1b, X3a). Quem é da etapa 2 já encontra o que a etapa 1 publicou. As outras parcelas da sua etapa rodam ao mesmo tempo: só os seus arquivos; o que precisar fora, pendência.
