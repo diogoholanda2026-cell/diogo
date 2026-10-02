@@ -1,2 +1,153 @@
-// Textos da parcela S3. Esqueleto da F0 (dona: S3a e S3b); registrar(registrarTextos) vem de ui/textos.js.
-export function registrar() {}
+// Textos da parcela S3 (dona: S3a e S3b): itens, prédios da Holding, paradas das linhas, objetivos, alertas da
+// economia, calendário, etapas, decisões e Mural. Português do Brasil, sem travessão, taxas em "/h" de jogo (D42). As
+// chaves que a simulação devolve (texto, titulo, ganho, custo) estão aqui; registrar(registrarTextos) vem de
+// ui/textos.js. Parâmetros de objetivos marcados em `paramsChave` são chaves daqui (a interface traduz antes).
+// Nenhum valor em dinheiro escrito nas frases (D87): o preço vem em número e a interface mostra em dólar.
+export function registrar(registrarTextos) {
+  registrarTextos('s3', {
+    // calendário (D67): "jan. 2020"
+    's3.data': '{mes} {ano}',
+    's3.mes.1': 'jan.', 's3.mes.2': 'fev.', 's3.mes.3': 'mar.', 's3.mes.4': 'abr.', 's3.mes.5': 'mai.', 's3.mes.6': 'jun.',
+    's3.mes.7': 'jul.', 's3.mes.8': 'ago.', 's3.mes.9': 'set.', 's3.mes.10': 'out.', 's3.mes.11': 'nov.', 's3.mes.12': 'dez.',
+    's3.ato.1': 'Ato 1: A Concessão',
+
+    // itens (D25: preço base é o preço de catálogo)
+    's3.item.brita': 'Brita', 's3.item.areia': 'Areia', 's3.item.argila': 'Argila', 's3.item.tijolo': 'Tijolo',
+    's3.item.madeira': 'Madeira', 's3.item.serrada': 'Madeira serrada', 's3.item.calcario': 'Calcário',
+    's3.item.cimento': 'Cimento', 's3.item.concreto': 'Concreto', 's3.item.vidro': 'Vidro', 's3.item.aco': 'Aço',
+
+    // prédios da Holding e o que cada um faz
+    's3.holding.escritorioObra': 'Escritório de Obra',
+    's3.holding.escritorioObra.faz': 'guarda o estoque da Holding e mantém a frota de caminhões',
+    's3.holding.pedreira': 'Pedreira',
+    's3.holding.pedreira.faz': 'tira brita do granito',
+    's3.holding.areal': 'Areal',
+    's3.holding.areal.faz': 'tira areia da margem do rio',
+    's3.holding.olaria': 'Olaria',
+    's3.holding.olaria.faz': 'tira argila da várzea e queima tijolos',
+    's3.holding.concreteira': 'Concreteira',
+    's3.holding.concreteira.faz': 'mistura concreto com cimento, brita e areia',
+    's3.holding.mina': 'Mina de calcário',
+    's3.holding.mina.faz': 'tira calcário para o cimento',
+    's3.holding.cimenteira': 'Cimenteira',
+    's3.holding.cimenteira.faz': 'faz cimento com calcário e argila',
+    's3.holding.vidraria': 'Vidraria',
+    's3.holding.vidraria.faz': 'faz vidro com areia e calcário',
+    's3.holding.serraria': 'Serraria',
+    's3.holding.serraria.faz': 'serra madeira para obras',
+    's3.holding.manejo': 'Manejo florestal',
+    's3.holding.manejo.faz': 'tira madeira da mata com reposição',
+
+    // por que uma linha está parada
+    's3.parada.pessoal': 'Faltam trabalhadores (menos de 50% das vagas)',
+    's3.parada.estoque': 'Faltam insumos no estoque',
+    's3.parada.armazem': 'Armazém cheio: venda no Depósito ou amplie o armazém',
+    's3.parada.creditos': 'Sem caixa para os salários',
+    's3.parada.recurso': 'O recurso natural acabou nesta planta',
+    's3.parada.obra': 'Em obra',
+    's3.linha.lote': 'Lote de {n}',
+    's3.linha.sugestao': 'Sugestão: lote de {n}',
+
+    // alertas da economia, da Holding e do Conselho (q.barra().alertas[].codigo)
+    's3.alerta.caixaZerado': 'Caixa zerado: serviços na fração paga, linhas e etapas paradas',
+    's3.alerta.caixaVaiZerar': 'O caixa zera em uns {minutos} min de jogo',
+    's3.alerta.obrasSemMaterial': 'Obras paradas por falta de {item}',
+    's3.alerta.decisaoAberta': 'Uma decisão espera o Conselho',
+    's3.acao.tomarEmprestimo': 'Tomar empréstimo',
+    's3.acao.venderDeposito': 'Vender no Depósito',
+    's3.acao.verOrcamento': 'Ver orçamento',
+
+    // Influência e Legado (D55)
+    's3.medidor.influencia': 'Influência',
+    's3.medidor.legado': 'Legado',
+    's3.medidor.influencia.efeito': 'Áreas novas {pct}% mais baratas',
+    's3.medidor.legado.efeito': '+{v} de atratividade para morar',
+
+    // marcos (D51) e etapas da Arcologia (nomes curtos para objetivos e Mural)
+    's3.marco.0': 'Canteiro', 's3.marco.1': 'Povoado', 's3.marco.2': 'Vila', 's3.marco.3': 'Vila Próspera',
+    's3.marco.4': 'Cidade Nova', 's3.marco.5': 'Cidade', 's3.marco.6': 'Cidade Grande', 's3.marco.7': 'Polo Regional',
+    's3.marco.requisito.torre.e4': 'Pede a Blade Tower pronta',
+    's3.etapa.lago.e1': 'Reservatório e portões',
+    's3.etapa.torre.e1': 'Blade Tower: fundações e pódio',
+    's3.etapa.torre.e2': 'Blade Tower: sede operacional',
+    's3.etapa.torre.e3': 'Blade Tower: moradias de luxo',
+    's3.etapa.torre.e4': 'Blade Tower: coroa e heliponto',
+
+    // objetivos (D58): um da cidade, um da Holding e um da Arcologia
+    's3.objetivo.cidade.avenida': 'Ligue a rodovia à gleba com a primeira avenida',
+    's3.objetivo.cidade.captacao': 'Construa a captação no rio, acima da Vila',
+    's3.objetivo.cidade.agua': 'Leve água à Vila de Santa Cida',
+    's3.objetivo.cidade.zonas': 'Zoneie as primeiras quadras ({n} células)',
+    's3.objetivo.cidade.energia': 'Ponha a usina solar e leve energia às casas',
+    's3.objetivo.cidade.mil': 'Chegue a {n} moradores',
+    's3.objetivo.cidade.saudeEducacao': 'Abra uma clínica e uma escola',
+    's3.objetivo.cidade.media': 'Zoneie {n} células de residencial média',
+    's3.objetivo.cidade.bemEstar': 'Leve o bem-estar médio a {n} (tarifa de 11)',
+    's3.objetivo.cidade.marco': 'Mais {n} moradores para o marco {marco}, {nome}',
+    's3.objetivo.cidade.marcoTorre': 'Termine a Blade Tower para o marco {marco}, {nome}',
+    's3.objetivo.cidade.crescer': 'Chegue a {n} moradores',
+    's3.objetivo.holding.escritorio': 'Construa o Escritório de Obra',
+    's3.objetivo.holding.pedreiraAreal': 'Abra a Pedreira e o Areal com lote de 10 e Auto',
+    's3.objetivo.holding.olaria': 'Abra a Olaria na várzea',
+    's3.objetivo.holding.deposito': 'Faça a primeira venda no Depósito',
+    's3.objetivo.holding.concreteira': 'Abra a Concreteira perto do armazém',
+    's3.objetivo.holding.estoque': 'Junte {n} de {item} para a próxima etapa',
+    's3.objetivo.holding.estoque.base': 'Junte {n} de {item} no estoque',
+    's3.objetivo.arcologia.lago': 'Comece o reservatório da Arcologia',
+    's3.objetivo.arcologia.etapa': 'Leve a Arcologia à próxima etapa',
+    's3.objetivo.arcologia.lago.e1': 'Termine o reservatório e os portões',
+    's3.objetivo.arcologia.torre.e1': 'Leve a Blade Tower à etapa 1: fundações e pódio',
+    's3.objetivo.arcologia.torre.e2': 'Leve a Blade Tower à etapa 2: sede operacional',
+    's3.objetivo.arcologia.torre.e3': 'Leve a Blade Tower à etapa 3: moradias de luxo',
+    's3.objetivo.arcologia.torre.e4': 'Leve a Blade Tower à etapa 4: coroa e heliponto',
+    's3.objetivo.arcologia.falta.lago.e1': 'Termine o reservatório: faltam {n} de {item}',
+    's3.objetivo.arcologia.falta.torre.e1': 'Leve a Blade Tower à etapa 1: faltam {n} de {item}',
+    's3.objetivo.arcologia.falta.torre.e2': 'Leve a Blade Tower à etapa 2: faltam {n} de {item}',
+    's3.objetivo.arcologia.falta.torre.e3': 'Leve a Blade Tower à etapa 3: faltam {n} de {item}',
+    's3.objetivo.arcologia.falta.torre.e4': 'Leve a Blade Tower à etapa 4: faltam {n} de {item}',
+    's3.objetivo.arcologia.inaugurada': 'A Arcologia está inaugurada em fase inicial',
+
+    // decisões do Ato 1 no M1a (D52, D77)
+    's3.decisao.vila.agua.titulo': 'Água da Vila',
+    's3.decisao.vila.agua.texto': 'A Vila de Santa Cida espera água encanada há vinte anos. Dona Cida quer a captação no rio já; Tomé prefere começar pelo reservatório da Arcologia, que também abre os portões.',
+    's3.decisao.vila.agua.captacao': 'Captação no rio, acima da Vila',
+    's3.decisao.vila.agua.captacao.ganho': 'Água para uns 5 mil moradores com 1 min de jogo de obra; Legado +5',
+    's3.decisao.vila.agua.captacao.custo': 'A captação custa a obra dela; o reservatório fica para depois',
+    's3.decisao.vila.agua.reservatorio': 'Reservatório da Arcologia',
+    's3.decisao.vila.agua.reservatorio.ganho': 'Água para uns 6 mil e os portões da gleba; Influência +5',
+    's3.decisao.vila.agua.reservatorio.custo': 'Obra maior e mais lenta (5 min de jogo); a Vila espera',
+    's3.decisao.febre.aurora.titulo': 'A Febre Aurora',
+    's3.decisao.febre.aurora.texto': 'A Febre Aurora fecha fronteiras e derruba preços. Lívia vê infraestrutura à venda a preço de banana; Dona Cida pede proteger o canteiro e a Vila antes de tudo.',
+    's3.decisao.febre.aurora.comprar': 'Comprar infraestrutura a preço de banana',
+    's3.decisao.febre.aurora.comprar.ganho': 'Uma licença de área a mais; Influência +8',
+    's3.decisao.febre.aurora.comprar.custo': 'Paga agora e as linhas da Holding ficam 10% mais lentas por 6 meses',
+    's3.decisao.febre.aurora.proteger': 'Proteger o canteiro e a Vila',
+    's3.decisao.febre.aurora.proteger.ganho': 'Bem-estar +4 na Vila por 1 ano; Legado +8',
+    's3.decisao.febre.aurora.proteger.custo': 'Paga agora protocolos e equipes no canteiro e na Vila',
+    's3.decisao.canal.seshat.titulo': 'O Bloqueio do Canal de Seshat',
+    's3.decisao.canal.seshat.texto': 'Um cargueiro atravessado fecha o Canal de Seshat. A importação fica 25% mais cara e três vezes mais lenta por 6 meses. Lívia quer fretar navios próprios; Tomé quer apostar na produção local.',
+    's3.decisao.canal.seshat.navios': 'Fretar navios próprios',
+    's3.decisao.canal.seshat.navios.ganho': 'A importação segue a 160% e no prazo; Influência +6',
+    's3.decisao.canal.seshat.navios.custo': 'Paga agora o frete dos navios',
+    's3.decisao.canal.seshat.local': 'Apostar na produção local',
+    's3.decisao.canal.seshat.local.ganho': 'Linhas da Holding 15% mais rápidas por 1 ano; Legado +6',
+    's3.decisao.canal.seshat.local.custo': 'A importação fica a 200% e lenta por 6 meses',
+
+    // Mural: marcos, eventos do calendário e o que cada decisão deixou
+    's3.mural.marco': 'Marco {n}: {nome}. Heldópolis cresce e o Conselho comemora.',
+    's3.mural.evento.inicio': 'Jan. 2020: começa a obra da sede da Holding Held, sem parar nem de madrugada, e junto nasce Heldópolis.',
+    's3.mural.evento.febreAurora': 'A Febre Aurora fechou fronteiras. Há ativos à venda por muito pouco, e a logística sofre.',
+    's3.mural.evento.dinheiroBarato': 'Crédito barato no mundo inteiro: bom momento para obras longas.',
+    's3.mural.evento.rivais': 'Um consórcio rival sondou terrenos na orla. Por ora, só sondou.',
+    's3.mural.evento.canalSeshat': 'O Canal de Seshat está bloqueado. Navios esperam na fila e o frete dispara.',
+    's3.mural.evento.energia2022': 'A Guerra de Volkara abriu a Crise da Energia de 2022: energia, aço e fertilizantes sobem.',
+    's3.mural.evento.ondaAssistentes': 'A Onda dos Assistentes chegou: o Super Cérebro e o Mosaico viram assunto no mundo inteiro.',
+    's3.mural.evento.bancoValePrata': 'A Quebra do Banco Vale Prata assusta o mercado; crédito mais caro por um tempo.',
+    's3.mural.decisao.vila.agua.captacao': 'A captação vai para a Vila primeiro. Dona Cida agradece em nome dos moradores.',
+    's3.mural.decisao.vila.agua.reservatorio': 'O reservatório da Arcologia vem primeiro. Tomé já marca o canteiro.',
+    's3.mural.decisao.febre.aurora.comprar': 'Compramos infraestrutura a preço de banana. O mercado notou a Holding Held.',
+    's3.mural.decisao.febre.aurora.proteger': 'Canteiro e Vila protegidos. A obra seguiu sem parar e ninguém ficou para trás.',
+    's3.mural.decisao.canal.seshat.navios': 'Navios próprios fretados: a carga da Holding chegou no prazo.',
+    's3.mural.decisao.canal.seshat.local': 'A Holding apostou na produção local; as linhas de Heldópolis aceleraram.',
+  });
+}

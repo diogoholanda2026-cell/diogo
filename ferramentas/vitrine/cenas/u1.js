@@ -1,6 +1,8 @@
 // Cenas da vitrine da U1a (pele da interface): barra de cima em repouso e com popover, partida nova (saldo negativo,
 // pausado), cartão de prédio residencial, de serviço e em obra, tela Economia (orçamento e empréstimo) e a folha de
-// glifos.
+// glifos. E as da U1b (u1b-*): telas Holding, Cidade, Progresso e Conselho, decisão, momento do marco e da etapa,
+// folha por tipo (residencial, empresa da Holding, via, terreno), menu de contexto, faixa de alerta, avisos, objetivos,
+// "Onde você parou" e a Ajuda do menu.
 //   node ferramentas/vitrine-ui.mjs <pasta> u1-barra,u1-cartao-res,u1-cartao-servico,u1-economia
 // A simulação falsa dá os números de uma cidade de 12 mil; o serviço é montado aqui sobre q.predio (a falsa só tem
 // zonas) no formato do contrato: o tipo do catálogo ('clinica') diz a categoria, sem campo extra.
@@ -22,14 +24,25 @@ import { Indicador } from '../../../fonte/ui/comp/Indicador.jsx';
 import { Vazio } from '../../../fonte/ui/comp/Vazio.jsx';
 import { Modal } from '../../../fonte/ui/comp/Modal.jsx';
 import { Glifo } from '../../../fonte/ui/glifos/Glifo.jsx';
+import { avisar } from '../../../fonte/ui/loja.js';
+import { abrirTelaNaAba } from '../../../fonte/ui/hud/Menu.jsx';
+import { abrirDecisao } from '../../../fonte/ui/telas/Decisao.jsx';
+import { manterFolha } from '../../../fonte/ui/selecao/Cartao.jsx';
+import { abrirMenuContexto } from '../../../fonte/ui/mundo/MenuContexto.jsx';
+import { mostrarRetomar } from '../../../fonte/ui/hud/Retomar.jsx';
+import { objetivoRecolhido } from '../../../fonte/ui/hud/Objetivo.jsx';
+import { registrarItemTrilho } from '../../../fonte/ui/hud/Trilho.jsx';
 
 const REF = (idx) => idx + 2 ** 20;
 const IDX_RES = 3; // quadra 0: residencial baixa na simulação falsa
 const IDX_SERV = 40;
 
-function selecionar({ ui, R, sim }, idx) {
+// no PC a seleção abre a folha direto (U1b); as cenas do cartão pedem o cartão também no PC (prefs.cartaoNoPC)
+function selecionar({ ui, R, sim }, idx, { cartao = true } = {}) {
+  const loja = ui.ui.loja;
+  if (cartao) loja.prefs.value = { ...(loja.prefs.peek() ?? {}), cartaoNoPC: true };
   const P = sim.espelho.predios;
-  ui.ui.loja.selecao.value = { tipo: 'predio', ref: REF(idx), idx, ponto: [P.x[idx], 0, P.z[idx]] };
+  loja.selecao.value = { tipo: 'predio', ref: REF(idx), idx, ponto: [P.x[idx], 0, P.z[idx]] };
   R.selecionado(REF(idx));
 }
 
@@ -97,15 +110,23 @@ const conferirTexto = (seletor, re, nome) => () => {
   return re.test(e.textContent) ? [] : [`${nome}: "${e.textContent.slice(0, 80)}" não bate com ${re}`];
 };
 
-// o saldo em destaque é a conta escrita embaixo dele (receitas menos despesas) e o mesmo da barra de cima
+// valor em dólar escrito curto ("+US$ 80,6 mi/h", "−US$ 13,4 mi/h", "US$ 4.800/h") de volta a número
+const ESCALA = { mil: 1e3, mi: 1e6, bi: 1e9, tri: 1e12 };
+const RE_DOLAR = /([+−-]?)US\$\s?([\d.]+(?:,\d+)?)(?:\s(mil|mi|bi|tri))?/g;
+const lerDolar = (m) => (m[1] === '−' || m[1] === '-' ? -1 : 1) * Number(m[2].replace(/\./g, '').replace(',', '.')) * (ESCALA[m[3]] ?? 1);
+const dolares = (s) => [...(s ?? '').matchAll(RE_DOLAR)].map(lerDolar);
+
+// o saldo em destaque é a conta escrita embaixo dele (receitas menos despesas, com a folga do arredondamento curto) e
+// o mesmo da barra de cima
 function somaDoSaldo() {
-  const n = (s) => Number((s.match(/[+−-]?[\d.]+/) ?? ['0'])[0].replace(/\./g, '').replace('−', '-'));
   const saldo = document.querySelector('.eco-saldo')?.textContent ?? '';
-  const conta = [...(document.querySelector('.eco-saldo-conta')?.textContent ?? '').matchAll(/[+−-][\d.]+/g)].map((m) => n(m[0]));
+  const conta = dolares(document.querySelector('.eco-saldo-conta')?.textContent);
   const barra = document.querySelector('[data-a="creditos"] .hud-sub')?.textContent ?? '';
+  const [s] = dolares(saldo);
   const f = [];
-  if (conta.length !== 2 || n(saldo) !== conta[0] + conta[1]) f.push(`saldo "${saldo}" não é a conta "${conta.join(' ')}"`);
-  if (n(barra) !== n(saldo)) f.push(`saldo da barra "${barra}" difere do da Economia "${saldo}"`);
+  const folga = (v) => Math.abs(v) * 0.006 + 1;
+  if (conta.length !== 2 || !Number.isFinite(s) || Math.abs(s - (conta[0] + conta[1])) > folga(conta[0]) + folga(conta[1])) f.push(`saldo "${saldo}" não é a conta "${conta.join(' ')}"`);
+  if (dolares(barra)[0] !== s) f.push(`saldo da barra "${barra}" difere do da Economia "${saldo}"`);
   return f;
 }
 
@@ -116,6 +137,18 @@ function popoverPorCima(seletor) {
   const r = p.getBoundingClientRect();
   const pontos = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 12, r.bottom - 12], [r.right - 12, r.bottom - 12]];
   return pontos.some(([x, y]) => !p.contains(document.elementFromPoint(x, y))) ? [`${seletor} ficou por baixo de outra camada`] : [];
+}
+
+// área dos grupos do HUD (a mesma conta da vitrine) para cenas que não são repouso: a meta da 7.1 com o objetivo
+// aberto (~17,6% em 986 x 443 e ~19% em 915 x 412)
+const META_AREA = { 986: 17.6, 915: 19 };
+function areaDoHud() {
+  const meta = META_AREA[innerWidth];
+  if (!meta) return [];
+  const area = [...document.querySelectorAll('[data-hud]')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0)
+    .reduce((s, r) => s + Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)), 0);
+  const pct = (100 * area) / (innerWidth * innerHeight);
+  return pct > meta ? [`HUD em ${pct.toFixed(1)}% (meta ${meta}%)`] : [];
 }
 
 // nenhum grupo da barra sai da tela nem encosta no outro (a vitrine só mede o texto)
@@ -224,7 +257,8 @@ export function registrar(registrarCenaVitrine) {
     conferir: () => [
       ...barraCabe(),
       ...conferirTexto('[data-a="bemEstar"]', /\+\d+ acima de 61/, 'margem do bem-estar')(),
-      ...conferirTexto('[data-a="calendario"]', /Mês \d+ · Ano \d+/, 'calendário')(),
+      ...conferirTexto('[data-a="calendario"]', /\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\. 20\d\d/, 'calendário (D67)')(),
+      ...conferirTexto('[data-a="creditos"]', /US\$ /, 'caixa em dólar (D87)')(),
       ...conferirTexto('[data-a="creditos"]', /\/h/, 'saldo por hora')(),
     ],
   });
@@ -241,15 +275,15 @@ export function registrar(registrarCenaVitrine) {
     },
     conferir: () => [...barraCabe(), ...conferirTexto('[data-a="bemEstar"]', /\+1 acima de 61/, 'margem âmbar')()],
   });
-  // PC com as cinco telas de gestão registradas (como ficará com a U1b): a barra aperta (sem os botões repetidos de
-  // Holding e Conselho, depois só com glifo e, se preciso, sem o valor e a dívida) em vez de sair da tela
+  // PC com as cinco telas de gestão registradas (a U1b registra Holding, Cidade, Progresso e Conselho): a barra aperta
+  // (sem os botões repetidos de Holding e Conselho, depois só com glifo e, se preciso, sem o valor e a dívida) em vez de
+  // sair da tela
   registrarCenaVitrine('u1-barra-pc', {
     cenario: 'meio',
     repouso: true,
     tamanhos: ['1376x768', '1920x1080'],
     async preparar({ sim, ui, acionar, esperar }) {
       contaFechada(sim);
-      for (const id of ['holding', 'cidade', 'progresso', 'conselho']) ui.ui.registrarTela(id, () => null);
       acionar('velocidade', 1);
       await esperar(120); // o aperto mede no quadro seguinte ao do ResizeObserver
     },
@@ -270,7 +304,7 @@ export function registrar(registrarCenaVitrine) {
       await esperar(30);
       acionar('bemEstar');
     },
-    conferir: conferirTexto('[data-popover="barra.bem"]', /61 a 100.*11\/h/, 'faixas'),
+    conferir: conferirTexto('[data-popover="barra.bem"]', /61 a 100.*US\$ 6\.600\/h/, 'faixas'),
   });
   // o "de onde vem" com a Economia aberta: a barra fica à vista e o popover abre por cima da tela
   registrarCenaVitrine('u1-bem-tela', {
@@ -284,7 +318,7 @@ export function registrar(registrarCenaVitrine) {
     },
     conferir: () => popoverPorCima('[data-popover="barra.bem"]'),
   });
-  // o menu do canto enquanto a tela 'menu' (U1b) não existe: as telas registradas e o aviso do resto
+  // o menu do canto abre a tela 'menu' da U1b (Retomar, as telas registradas, Ajuda), que vem sob demanda
   registrarCenaVitrine('u1-menu', {
     cenario: 'meio',
     async preparar({ sim, acionar, esperar }) {
@@ -292,17 +326,31 @@ export function registrar(registrarCenaVitrine) {
       acionar('velocidade', 1);
       await esperar(30);
       acionar('menu');
+      await esperar(150);
     },
-    conferir: () => [...popoverPorCima('[data-popover="barra.menu"]'), ...conferirTexto('[data-popover="barra.menu"]', /Economia/, 'menu')()],
+    conferir: () => [...conferirTexto('[data-tela="menu"]', /Retomar.*Holding.*Economia.*Cidade.*Progresso.*Conselho.*Ajuda/, 'menu')()],
   });
-  // partida nova: pausado, saldo negativo com o glifo de alerta, população zero e o bem-estar "sem moradores"
+  // partida nova: pausado, saldo negativo com o glifo de alerta, população zero e o bem-estar "sem moradores". É o
+  // estado Pausado da 7.3 (o chip sob a barra, no centro) com o objetivo aberto da primeira hora embaixo, no centro
+  // (7.1): os dois juntos deixam 307 px no meio em 986 x 443, então a faixa livre do repouso mede-se na cena seguinte,
+  // em 1x; aqui fica a área do HUD, com a meta do objetivo aberto
   registrarCenaVitrine('u1-inicio', {
     cenario: 'inicio',
-    repouso: true,
     conferir: () => [
       ...conferirTexto('[data-hud="pausado"]', /pausado/i, 'chip de pausa')(),
       ...conferirTexto('[data-a="bemEstar"]', /sem moradores/, 'bem-estar da cidade vazia')(),
+      ...areaDoHud(),
     ],
+  });
+  // partida nova rodando em 1x: o repouso da primeira hora, com o cartão do objetivo aberto
+  registrarCenaVitrine('u1-inicio-1x', {
+    cenario: 'inicio',
+    repouso: true,
+    async preparar({ acionar, esperar }) {
+      acionar('velocidade', 1);
+      await esperar(40);
+    },
+    conferir: () => [...conferirTexto('[data-hud="objetivo"]', /Objetivo 1 de 3/i, 'objetivo aberto na primeira hora')()],
   });
   // cartão de prédio residencial
   registrarCenaVitrine('u1-cartao-res', {
@@ -360,7 +408,7 @@ export function registrar(registrarCenaVitrine) {
       await esperar(60);
     },
     conferir: () => [
-      ...conferirTexto('[data-k="moradores"]', /Contribuição: 12\.480 × 11 = 137\.280\/h/, 'regra da contribuição')(),
+      ...conferirTexto('[data-k="moradores"]', /Contribuição: 12\.480 × US\$ 6\.600 = US\$ 82,4 mi\/h/, 'regra da contribuição')(),
       ...somaDoSaldo(),
     ],
   });
@@ -376,11 +424,12 @@ export function registrar(registrarCenaVitrine) {
       await esperar(60);
     },
     conferir: () => [
-      ...conferirTexto('.eco-regras', /50\.000 por ano/, 'regras do empréstimo')(),
-      ...conferirTexto('.eco-regras', /500\.000/, 'regras do empréstimo')(),
-      ...conferirTexto('.eco-medidores', /10\.000 de 50\.000/, 'disponível no ano')(),
+      ...conferirTexto('.eco-regras', /US\$ 30 mi por ano/, 'regras do empréstimo')(),
+      ...conferirTexto('.eco-regras', /US\$ 300 mi/, 'regras do empréstimo')(),
+      ...conferirTexto('.eco-medidores', /US\$ 6 mi de US\$ 30 mi/, 'disponível no ano')(),
     ],
   });
+  registrarU1b(registrarCenaVitrine);
   // folha de todos os glifos (conferência do estilo único), só no PC grande (cabem os ~150 com o nome)
   registrarCenaVitrine('u1-glifos', {
     semUI: true,
@@ -398,5 +447,220 @@ export function registrar(registrarCenaVitrine) {
       folha.innerHTML = nomes.map((n) => `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:8px;background:rgba(255,255,255,.04)">${svg(n)}<span style="color:#a7b1bd;font-size:12px">${n}</span></div>`).join('') + `<div style="grid-column:span 2;align-self:center;color:#a7b1bd">${nomes.length} glifos</div>`;
       document.body.appendChild(folha);
     },
+  });
+}
+
+// ================================================================================================== U1b
+
+const IDX_HOLDING = 7; // na simulação falsa, um prédio em cada 9 (índice 7) é a Concreteira da Holding
+const REF_VIA = 5;
+
+// as telas e os modais vêm sob demanda: espera o corpo chegar
+async function esperarSeletor(esperar, seletor, ms = 1500) {
+  for (let t = 0; t < ms; t += 30) {
+    if (document.querySelector(seletor)) return;
+    await esperar(30);
+  }
+}
+
+// abre a folha (no celular a seleção abre o cartão; "Detalhes" abre a folha: aqui direto)
+async function abrirFolha({ ui, R, esperar }, sel, ref = null) {
+  manterFolha.proxima = true;
+  ui.ui.loja.selecao.value = sel;
+  if (ref !== null) R.selecionado(ref);
+  await esperarSeletor(esperar, '.lugar-folha .folha');
+  await esperar(60);
+}
+
+const tela = (id, aba, re, nome, extra = {}) => ({
+  cenario: 'meio',
+  async preparar({ sim, ui, esperar }) {
+    contaFechada(sim);
+    abrirTelaNaAba(ui.ui, id, aba);
+    await esperarSeletor(esperar, `[data-tela="${id}"] .tela-corpo > *`);
+    await esperar(80);
+    await extra.depois?.({ ui, esperar });
+  },
+  conferir: () => [...conferirTexto(`[data-tela="${id}"]`, re, nome)(), ...(extra.conferir?.() ?? [])],
+});
+
+function registrarU1b(registrarCenaVitrine) {
+  // Holding: visão geral com Influência e Legado, o efeito escrito embaixo de cada medidor (D55)
+  registrarCenaVitrine('u1b-holding', tela('holding', 'geral', /Influência.*Legado/, 'medidores da Holding'));
+  // produção: as linhas com lote de 1 a 10, Auto e a sugestão de lote da parada por estoque
+  registrarCenaVitrine('u1b-holding-producao', tela('holding', 'producao', /Concreto/, 'linhas de produção'));
+  // Mercado: "37 de 100 vendas nesta janela", preços a 150% e "Abastecer a cidade por importação"
+  registrarCenaVitrine('u1b-holding-mercado', tela('holding', 'mercado', /\d+ de 100 vendas nesta janela.*importação/i, 'mercado'));
+  // Cidade: demanda com os fatores por zona
+  registrarCenaVitrine('u1b-cidade', tela('cidade', 'demanda', /Residencial/, 'demanda da cidade'));
+  // Progresso: os marcos, o que cada um libera e o requisito do marco 7
+  registrarCenaVitrine('u1b-progresso', tela('progresso', 'marcos', /Marco 7|Cidade Grande/, 'marcos'));
+  // Conselho: a decisão pendente em cartão, quem propõe, o prazo
+  registrarCenaVitrine('u1b-conselho', tela('conselho', 'decisoes', /Decidir/, 'decisões pendentes'));
+  // Conselho: os seis conselheiros com nome completo e cargo (D83)
+  registrarCenaVitrine('u1b-conselheiros', tela('conselho', 'conselheiros', /Íris.*Tomé/, 'conselheiros'));
+  // o modal da decisão: as opções lado a lado, quem propõe, ganho e custo, "Decidir depois" com o prazo
+  registrarCenaVitrine('u1b-decisao', {
+    cenario: 'meio',
+    async preparar({ sim, esperar }) {
+      contaFechada(sim);
+      abrirDecisao('febre.aurora');
+      await esperarSeletor(esperar, '[data-modal="decisao"] .dec-cartao');
+      await esperar(80);
+    },
+    conferir: () => [...conferirTexto('[data-modal="decisao"]', /Escolher.*Escolher/, 'opções da decisão')(), ...conferirTexto('[data-modal="decisao"]', /Decidir depois/, 'adiar')()],
+  });
+  // o momento do marco depois do título: prêmios em dólar, licença e "Liberado agora" (sem a cena, direto ao modal)
+  registrarCenaVitrine('u1b-momento', {
+    cenario: 'meio',
+    async preparar({ sim, ui, esperar }) {
+      contaFechada(sim);
+      const loja = ui.ui.loja;
+      loja.prefs.value = { ...(loja.prefs.peek() ?? {}), cenasMarco: false };
+      ui.ui.momento({ tipo: 'marco', n: 5, nome: 'Cidade Nova', premios: { creditos: 50000, licencas: 1 }, libera: ['holding.concreteira', 'item.concreto', 'servico.bombeiros', 'zona.resMedia'], fala: { quem: 'cida', texto: 'A Vila virou cidade. Agora a orla inteira quer morar aqui.' } });
+      await esperarSeletor(esperar, '[data-modal="momento"]');
+      await esperar(80);
+    },
+    conferir: () => [...conferirTexto('[data-modal="momento"]', /US\$ 30 mi/, 'prêmio em dólar')(), ...conferirTexto('[data-modal="momento"]', /Concreteira/, 'liberado agora')()],
+  });
+  // o título de terço inferior da etapa da Torre, com a fala e "Continuar"
+  registrarCenaVitrine('u1b-momento-etapa', {
+    cenario: 'meio',
+    async preparar({ sim, ui, esperar }) {
+      contaFechada(sim);
+      ui.ui.momento({ tipo: 'etapa', titulo: 'Blade Tower', sub: { etapa: 2, de: 4, nome: 'Sede operacional' }, fala: { quem: 'iris', texto: 'A sede operacional está de pé. Daqui a Holding vê a baía inteira.' } });
+      await esperarSeletor(esperar, '.mom-terco');
+      await esperar(80);
+    },
+    conferir: conferirTexto('.mom-terco', /Etapa 2 de 4/, 'título da etapa'),
+  });
+  // folha do residencial: moradores, contribuição em dólar, serviços, cores
+  registrarCenaVitrine('u1b-folha-res', {
+    cenario: 'meio',
+    async preparar(ctx) {
+      contaFechada(ctx.sim);
+      const P = ctx.sim.espelho.predios;
+      await abrirFolha(ctx, { tipo: 'predio', ref: REF(IDX_RES), idx: IDX_RES, ponto: [P.x[IDX_RES], 0, P.z[IDX_RES]] }, REF(IDX_RES));
+    },
+    conferir: () => [...conferirTexto('.lugar-folha .folha', /Moradores/, 'folha residencial')(), ...conferirTexto('.lugar-folha .folha', /US\$/, 'dinheiro em dólar')()],
+  });
+  // folha da empresa da Holding: linhas de produção, vagas, nível
+  registrarCenaVitrine('u1b-folha-empresa', {
+    cenario: 'meio',
+    async preparar(ctx) {
+      contaFechada(ctx.sim);
+      const P = ctx.sim.espelho.predios;
+      await abrirFolha(ctx, { tipo: 'predio', ref: REF(IDX_HOLDING), idx: IDX_HOLDING, ponto: [P.x[IDX_HOLDING], 0, P.z[IDX_HOLDING]] }, REF(IDX_HOLDING));
+    },
+    conferir: () => [...conferirTexto('.lugar-folha .folha', /Concreteira/, 'folha da empresa')(), ...conferirTexto('.lugar-folha .folha', /Concreto/, 'linha de produção')()],
+  });
+  // folha da via: tipo, comprimento, declive, manutenção em dólar e "Melhorar"
+  registrarCenaVitrine('u1b-folha-via', {
+    cenario: 'meio',
+    async preparar(ctx) {
+      contaFechada(ctx.sim);
+      await abrirFolha(ctx, { tipo: 'aresta', ref: REF_VIA, ponto: [0, 0, 0] });
+    },
+    conferir: () => [...conferirTexto('.lugar-folha .folha', /Avenida das Palmeiras/, 'folha da via')(), ...conferirTexto('.lugar-folha .folha', /412 m/, 'comprimento')()],
+  });
+  // folha do terreno: área, cota e recursos do ponto
+  registrarCenaVitrine('u1b-folha-terreno', {
+    cenario: 'meio',
+    async preparar(ctx) {
+      contaFechada(ctx.sim);
+      await abrirFolha(ctx, { tipo: 'terreno', ponto: [120, 4, -80] });
+    },
+    conferir: conferirTexto('.lugar-folha .folha', /Terreno|Cota/i, 'folha do terreno'),
+  });
+  // menu de contexto radial numa empresa da Holding (toque longo ou botão direito)
+  registrarCenaVitrine('u1b-ctx', {
+    cenario: 'meio',
+    async preparar({ sim, ui, R, esperar }) {
+      contaFechada(sim);
+      const original = R.selecionar;
+      R.selecionar = () => ({ tipo: 'predio', ref: REF(IDX_HOLDING), idx: IDX_HOLDING });
+      abrirMenuContexto(ui.ui, Math.round(innerWidth * 0.45), Math.round(innerHeight * 0.6));
+      R.selecionar = original;
+      await esperar(80);
+    },
+    conferir: () => {
+      const n = document.querySelectorAll('.ctx-petala').length;
+      return n === 4 ? conferirTexto('.ctx', /Produção/, 'pétala de produção')() : [`menu de contexto com ${n} pétalas`];
+    },
+  });
+  // caixa zerado: a faixa grave com as três saídas (empréstimo, Depósito, orçamento) e a pausa
+  registrarCenaVitrine('u1b-faixa-caixa', {
+    cenario: 'meio',
+    espera: 900, // depois da contagem dos créditos até 0
+    async preparar({ sim, acionar, esperar }) {
+      contaFechada(sim);
+      acionar('velocidade', 0); // pausa antes de zerar, senão o saldo positivo da cidade enche o caixa de novo
+      await esperar(30);
+      sim.estado.creditos = 0;
+      await esperar(60);
+    },
+    conferir: () => {
+      const f = [...conferirTexto('[data-hud="faixa"]', /Caixa zerado/i, 'faixa do caixa')(), ...conferirTexto('[data-hud="pausado"]', /pausado/i, 'chip de pausa')()];
+      // as três saídas da D41: na faixa no PC; até 1.100 px, a primeira na faixa e as outras no "Mais"
+      const visiveis = [...document.querySelectorAll('[data-a="faixa.acao"]')].filter((b) => b.getBoundingClientRect().width > 0).length;
+      const mais = document.querySelector('[data-a="faixa.mais"]')?.getBoundingClientRect().width > 0;
+      if (!(visiveis === 3 || (visiveis === 1 && mais))) f.push(`saídas do caixa zerado: ${visiveis} na faixa${mais ? ' e o Mais' : ''}`);
+      if (!/US\$ 0\b/.test(document.querySelector('[data-a="creditos"]')?.textContent ?? '')) f.push('o caixa não mostra US$ 0');
+      return f;
+    },
+  });
+  // falta água: a faixa de atenção com "Ver camada" e dois avisos curtos à direita
+  registrarCenaVitrine('u1b-faixa-agua', {
+    cenario: 'meio',
+    async preparar({ sim, esperar }) {
+      contaFechada(sim);
+      // as Camadas como a X3a registra (sem elas, a faixa leva ao lugar com "Ver", não com "Ver camada")
+      registrarItemTrilho({ id: 'camadas', glifo: 'camadas', rotulo: 'trilho.camadas', ordem: 10, aoTocar: () => {} });
+      sim.estado.alertaAgua = true;
+      avisar({ texto: 'Lote de concreto pronto na Concreteira Held', gravidade: 'holding', glifo: 'lote' });
+      avisar({ texto: 'Objetivo cumprido: Leve água à Vila de Santa Cida', gravidade: 'info', glifo: 'objetivo' });
+      await esperar(80);
+    },
+    conferir: () => [...conferirTexto('[data-hud="faixa"]', /Falta água.*Ver camada/, 'faixa da água')(), ...(document.querySelectorAll('.toast').length === 2 ? [] : ['os dois avisos não apareceram'])],
+  });
+  // os três objetivos abertos na lista (cidade, Holding, Arcologia), com quem fala
+  registrarCenaVitrine('u1b-objetivos', {
+    cenario: 'meio',
+    async preparar({ sim, acionar, esperar }) {
+      contaFechada(sim);
+      objetivoRecolhido.value = false;
+      await esperar(40);
+      acionar('objetivo.lista');
+      await esperar(60);
+    },
+    conferir: () => {
+      const n = document.querySelectorAll('.obj-linha').length;
+      return n === 3 ? [] : [`lista com ${n} objetivos`];
+    },
+  });
+  // "Onde você parou" ao carregar: o objetivo da Arcologia e o problema maior
+  registrarCenaVitrine('u1b-retomar', {
+    cenario: 'meio',
+    async preparar({ sim, ui, esperar }) {
+      contaFechada(sim);
+      // as Camadas como a X3a registra (sem elas, a faixa leva ao lugar com "Ver", não com "Ver camada")
+      registrarItemTrilho({ id: 'camadas', glifo: 'camadas', rotulo: 'trilho.camadas', ordem: 10, aoTocar: () => {} });
+      sim.estado.alertaAgua = true;
+      mostrarRetomar(ui.ui);
+      await esperar(80);
+    },
+    conferir: conferirTexto('[data-hud="retomar"]', /Falta água/, 'problema no retomar'),
+  });
+  // a Ajuda do menu: glossário curto e atalhos do PC
+  registrarCenaVitrine('u1b-ajuda', {
+    cenario: 'meio',
+    async preparar({ sim, ui, acionar, esperar }) {
+      contaFechada(sim);
+      ui.ui.abrirTela('menu');
+      await esperarSeletor(esperar, '[data-a="menu.item"][data-k="ajuda"]');
+      acionar('menu.item', 'ajuda');
+      await esperar(80);
+    },
+    conferir: conferirTexto('[data-tela="menu"]', /Demanda.*Espaço/, 'glossário e atalhos'),
   });
 }

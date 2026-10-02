@@ -33,8 +33,15 @@ export const USO = congelar({ RES: 0, COM: 1, ESC: 2, IND: 3 });
 export const FORMA = congelar({ CAIXA: 0, CHANFRO: 1, CILINDRO: 2, DUAS_AGUAS: 3 });
 export const FORMAS = congelar(['caixa', 'chanfro', 'cilindro', 'duasAguas']);
 
-/** Bits do canal G da tabela de prédios na GPU (RGBA 512²: R camada, G bits, B agenda, A livre). */
-export const BITS_TABELA = congelar({ ABANDONADO: 1, SELECIONADO: 2, HOLDING: 4, OBRA: 8, APAGADO: 16 });
+/**
+ * Bits do canal G da tabela de prédios na GPU (RGBA 512²: R camada, G bits, B agenda, A livre). OBRA com NIVEL é a
+ * reforma de subir de nível (não corta no vértice); ANEXO: a malha que vale é a do anexo do setor (D39), ou o prédio
+ * saiu da malha do setor (morto, mudou de setor) e some dela.
+ */
+export const BITS_TABELA = congelar({ ABANDONADO: 1, SELECIONADO: 2, HOLDING: 4, OBRA: 8, APAGADO: 16, NIVEL: 32, ANEXO: 64 });
+
+/** Bit do aId que marca as malhas do anexo (o idx do prédio fica nos bits de baixo; teto de 2^18 vagas, D19). */
+export const ID_ANEXO = 1 << 30;
 
 /** Floats por instância do LOD1 no registro de um setor: matriz (16) e id. Bytes: fac, corA, corB, topo (16). */
 export const INST_F = 17;

@@ -73,6 +73,7 @@ class Ctx {
     this.corJogador = CORES_PREDIO[e.cor ?? 0] ?? null;
     this.dg = e.abandonado ? 0.95 : clamp(0.18 + this.r.f() * 0.45 + (5 - e.nivel) * 0.04, 0, 1);
     this.vd = this.r.f();
+    this.abandonado = !!e.abandonado;
     this.pecas = [];
   }
 
@@ -1184,6 +1185,8 @@ export function planoPredio(e) {
 }
 
 function finalizar(c) {
+  const predio = (P) => !P.lote && !P.sobra;
+  const lote = vestirLote(c, caixaDasPecas(c.pecas, predio));
   for (const P of c.pecas) {
     if (P.chao) {
       P.y0 -= ENTERRA;
@@ -1192,9 +1195,103 @@ function finalizar(c) {
       P.ent = true;
     }
   }
-  const predio = (P) => !P.lote && !P.sobra;
   const caixa = caixaDasPecas(c.pecas, predio);
-  return { pecas: c.pecas, caixa, alturaTopo: caixa[4], tipologia: c.tip, andares: c.andares };
+  return { pecas: c.pecas, caixa, alturaTopo: caixa[4], tipologia: c.tip, andares: c.andares, lote };
+}
+
+// ------------------------------------------------------------------------------------------------ lote (R4b)
+
+/** Espécies das árvores do lote (render/mundo/lotes.js desenha com os modelos das árvores de rua). */
+export const ARVORE_LOTE = Object.freeze({ COPA: 0, PALMEIRA: 1 });
+/** Modelos dos carros parados (índices em geracao/veiculos.js MODELOS: hatch, sedã, SUV, picape). */
+export const CARROS_LOTE = Object.freeze([0, 1, 2, 3]);
+/** Frota parada: branco, prata, preto e cinza passam de 80% (sRGB). */
+const CORES_CARRO = ['#e8e8e6', '#e8e8e6', '#b9bcbf', '#b9bcbf', '#1c1d1f', '#1c1d1f', '#6d7073', '#8a2a24', '#2f4664', '#a8a08c'];
+
+/** O retângulo (x, z, meia largura, meio fundo) cruza alguma peça alta do plano (prédio, piscina, coluna, divisa)? */
+function bate(c, x, z, hw, hd) {
+  for (const P of c.pecas) {
+    if ((P.y0 ?? 0) > 2.2) continue; // acima do carro e da copa baixa (corpo sobre pilotis, andar de cima)
+    const alta = (P.h ?? 0) > 0.35 && P.forma !== 'inclinado' && P.forma !== 'placa';
+    const agua = P.forma === 'piso' && (P.mat?.t === F.AGUA || P.mat?.t === F.MADEIRA);
+    if (!alta && !agua) continue;
+    const g = Math.abs(Math.sin(P.giro ?? 0)) > 0.5;
+    const pw = (g ? P.d : P.w) / 2;
+    const pd = (g ? P.w : P.d) / 2;
+    if (Math.abs(x - P.x) < hw + pw && Math.abs(z - P.z) < hd + pd) return true;
+  }
+  return false;
+}
+
+/**
+ * Árvores e carros parados do lote (desenho do render 5.4), pelos vazios em volta do prédio: o quintal dos fundos, o
+ * recuo da frente e, nos prédios sobre pilotis, a garagem aberta embaixo. Dados no espaço do lote (y = 0 na cota da
+ * plataforma): arvores [x, z, espécie, escala] e carros [x, z, giro, modelo, cor sRGB]. O prédio abandonado fica sem
+ * carro; o mato é do shader.
+ */
+function vestirLote(c, caixa) {
+  const { W, D, r } = c;
+  const arvores = [];
+  const carros = [];
+  const res = c.fam === 'res';
+  const alto = c.nivel >= 4 || c.fam === 'esc';
+  const z0 = caixa[2];
+  const z1 = caixa[5];
+  const xMin = -W / 2 + 1.4;
+  const xMax = W / 2 - 1.4;
+  // quintal: uma árvore a cada ~9 m de frente, mais nas casas
+  const fundo = z0 - -D / 2;
+  if (fundo >= 2.6 && W >= 6) {
+    const n = Math.max(1, Math.round(W / 9));
+    for (let k = 0; k < n; k++) {
+      if (!r.chance(res ? 0.62 : 0.45)) continue;
+      const x = xMin + (xMax - xMin) * ((k + r.entre(0.25, 0.75)) / n);
+      const z = -D / 2 + Math.min(fundo / 2, r.entre(1.3, 2.6));
+      if (!bate(c, x, z, 0.6, 0.6)) arvores.push([x, z, ARVORE_LOTE.COPA, r.entre(0.62, 0.95)]);
+    }
+  }
+  // frente: palmeiras nos jardins dos prédios altos e dos escritórios, copa nas casas com recuo
+  const frente = D / 2 - z1;
+  if (frente >= 3.5) {
+    const n = Math.max(1, Math.round(W / 12));
+    for (let k = 0; k < n; k++) {
+      if (!r.chance(alto ? 0.7 : 0.35)) continue;
+      const x = xMin + (xMax - xMin) * ((k + r.entre(0.2, 0.8)) / n);
+      const z = D / 2 - r.entre(1.2, Math.min(frente - 1, 2.6));
+      if (!bate(c, x, z, 0.6, 0.6)) arvores.push([x, z, alto ? ARVORE_LOTE.PALMEIRA : ARVORE_LOTE.COPA, alto ? r.entre(0.55, 0.8) : r.entre(0.55, 0.8)]);
+    }
+  }
+  if (!c.abandonado) {
+    const cor = () => parseInt(CORES_CARRO[r.int(0, CORES_CARRO.length - 1)].slice(1), 16);
+    const modelo = () => (c.fam === 'ind' ? (r.chance(0.6) ? 3 : 0) : r.escolher([4, 3, 3, 1]));
+    // vagas de frente (o carro de frente para o prédio, 2,6 m por vaga) no recuo de 5,2 m ou mais
+    if (frente >= 5.2) {
+      const vagas = Math.floor((xMax - xMin + 1.4) / 2.6);
+      const ocupa = c.fam === 'res' && c.tip.startsWith('casa') ? 0.35 : c.fam === 'com' ? 0.6 : 0.45;
+      for (let k = 0; k < vagas; k++) {
+        if (!r.chance(ocupa)) continue;
+        const x = xMin - 0.1 + 1.3 + k * 2.6;
+        const z = z1 + Math.min(frente - 0.9, 2.6) - (frente >= 6 ? 0.3 : 0);
+        if (!bate(c, x, z, 1.0, 2.3)) carros.push([x, z, Math.PI + r.entre(-0.05, 0.05), modelo(), cor()]);
+      }
+    } else if (frente >= 2.4 && W >= 8 && c.tip.startsWith('casa') && r.chance(0.4)) {
+      // casa: o carro na garagem da frente, de lado no recuo raso
+      const x = r.chance(0.5) ? xMin + 1.2 : xMax - 1.2;
+      const z = z1 + frente / 2;
+      if (!bate(c, x, z, 2.3, 1.0)) carros.push([x, z, Math.PI / 2 + (r.chance(0.5) ? 0 : Math.PI), modelo(), cor()]);
+    }
+    // garagem aberta sob os pilotis
+    if (c.tip === 'pilotis') {
+      const nx = Math.floor((caixa[3] - caixa[0] - 1) / 2.6);
+      for (let k = 0; k < nx; k++) {
+        if (!r.chance(0.55)) continue;
+        const x = caixa[0] + 1.8 + k * 2.6;
+        const z = caixa[5] - 2.6;
+        if (!bate(c, x, z, 1.0, 2.3)) carros.push([x, z, r.chance(0.5) ? 0 : Math.PI, modelo(), cor()]);
+      }
+    }
+  }
+  return { arvores, carros };
 }
 
 /** O plano roda dentro do gerador de setor (fundir.js): este módulo não registra tipo na oficina. */

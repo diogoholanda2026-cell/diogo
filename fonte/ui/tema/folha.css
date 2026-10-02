@@ -203,3 +203,211 @@
 @media (min-width: 1200px) {
   .folha { width: 400px; }
 }
+
+/* ================================================================== U1b: folha do selecionado (desenho da UI 8.7) */
+
+/* a folha termina acima da barra de construção (o grupo da cidade fica à mão e os dois não se cobrem) */
+.lugar-folha .folha {
+  bottom: 60px;
+}
+.folha-titulos .fl-renomear {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fl-renomear-campo {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r1);
+  background: var(--s3);
+  box-shadow: inset 0 0 0 1px var(--fio2);
+  color: var(--t1);
+  font: inherit;
+  font-size: var(--t15);
+  font-weight: 600;
+}
+.fl-renomear-campo:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 1px;
+}
+.folha-rodape .popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+.folha-rodape .popover::before {
+  top: auto;
+  bottom: -5px;
+}
+.fl-bloco + .fl-bloco,
+.fl-bloco + .fl-nota,
+.fl-linha + .fl-linha {
+  margin-top: var(--e4);
+}
+.fl-bloco-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e2);
+  min-height: 28px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--fio2);
+}
+.fl-bloco-cab .bt-fan {
+  height: 32px;
+  font-size: var(--t13);
+}
+.fl-bloco-cab .bt-fan::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.fl-par {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e3);
+  min-height: 34px;
+  border-bottom: 1px solid var(--fio);
+  font-size: var(--t13);
+  font-weight: 500;
+}
+.fl-par-rot {
+  min-width: 0;
+  color: var(--t2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-par-valor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: var(--t15);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.fl-par-valor .glifo { color: currentColor; }
+.fl-par-barra .fl-par-rot {
+  flex: none;
+  width: 112px;
+}
+.fl-par-barra .barra-prog {
+  flex: 1;
+  margin: 0;
+}
+.fl-nota {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: var(--t12);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--t2);
+}
+.fl-nota.tx-al { color: var(--al); }
+.fl-texto {
+  font-size: var(--t13);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.fl-avisos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fl-redes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.fl-cores { display: flex; }
+.fl-paleta {
+  display: grid;
+  grid-template-columns: repeat(4, 44px);
+  gap: 8px;
+}
+.fl-cor {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--cor, var(--s3));
+  box-shadow: inset 0 0 0 1px var(--fio2);
+  display: grid;
+  place-items: center;
+  color: var(--t2);
+}
+.fl-cor[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--t1), 0 0 0 2px var(--ac);
+}
+.fl-linha {
+  padding: 8px 0 4px;
+}
+.fl-linha .segmentado { margin: 4px 0 6px; }
+.fl-linha-lote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 4px 0 8px;
+}
+.fl-linha-lote .fl-par-rot { flex: none; }
+.fl-linha .barra-prog { margin: 4px 0; }
+.fl-linha .chip-bt { margin: 4px 0; }
+.fl-cadeia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 6px 0;
+  font-size: var(--t13);
+  font-weight: 500;
+}
+.fl-cadeia .glifo { color: var(--t2); }
+.fl-insumo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fl-insumo .bt-fan {
+  height: 32px;
+  padding: 0 6px;
+  font-size: var(--t13);
+}
+.fl-insumo .bt-fan::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.fl-tempo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.fl-tempo .fl-par-rot { width: 100%; }
+.fl-tempo-bt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 58px;
+  height: 44px;
+  padding: 0 6px;
+  font-size: var(--t12);
+  font-weight: 600;
+  line-height: 1.15;
+}
+.fl-tempo-bt small {
+  font-size: var(--t12);
+  font-weight: 600;
+  color: var(--ch);
+}

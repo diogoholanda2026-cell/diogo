@@ -1,11 +1,16 @@
-// Tela Economia (desenho da UI 8.13; D41, D42 e as regras do dono): o painel de economia do CS2 com a regra à vista.
+// Tela Economia (desenho da UI 8.13; D41, D42, D68, D87 e as regras do dono): o painel de economia do CS2 com a regra
+// à vista, todo valor em dólar por ui/formato.js (a simulação manda unidades).
 //   Orçamento: saldo por hora de jogo, caixa, dívida e valor da Holding; receitas e despesas por hora com a linha da
-//     regra ("Contribuição: 12.480 × 11 = 137.280/h" e a faixa do bem-estar); o que ficou sem pagar (D41: o caixa nunca
-//     fica negativo, os serviços trabalham na fração paga); o caixa dos últimos 12 meses.
-//   Empréstimo: as regras escritas a partir de REGRAS_DONO (50 mil por ano, 10% ao ano, dívida até 500 mil, prazo de
-//     10 anos e mora), disponível no ano e dívida com barra, tomar de 1.000 em 1.000, contratos e pagar ou quitar.
-// Lê q.orcamento, q.emprestimo e q.barra; age só por comando() (Promise, D16).
+//     regra ("Contribuição: 12.480 × US$ 6.600 = US$ 82,4 mi/h" e a faixa do bem-estar), a importação para a cidade
+//     (D48); o que ficou sem pagar (D41: o caixa nunca fica negativo, os serviços trabalham na fração paga); o caixa
+//     dos últimos 12 meses do calendário (D67).
+//   Empréstimo: as regras escritas a partir de REGRAS_DONO (US$ 30 mi por ano, 10% ao ano, dívida até US$ 300 mi,
+//     prazo de 10 anos e mora), disponível no ano e dívida com barra, tomar de US$ 600 mil em US$ 600 mil, contratos e
+//     pagar ou quitar.
+// Lê q.orcamento, q.emprestimo e q.barra; age só por comando() (Promise, D16). abaEconomia abre numa aba (a faixa de
+// alerta do "Caixa zerado" abre direto no empréstimo).
 import { useState, useEffect } from 'preact/hooks';
+import { signal } from '@preact/signals';
 import { barra } from '../loja.js';
 import { consultar } from '../consultas.js';
 import { comando, frase } from '../acoes.js';
@@ -24,6 +29,9 @@ import { Dica } from '../comp/Dica.jsx';
 import { Vazio } from '../comp/Vazio.jsx';
 import { REGRAS_DONO, bemEstarArredondado } from '../../data/economia.js';
 import { anoDoTique } from '../../comum/relogio.js';
+
+/** Aba que a tela abre na próxima vez ('orcamento' | 'emprestimo'); quem abre por fora escreve aqui. */
+export const abaEconomia = signal('orcamento');
 
 const RECEITAS = [
   ['moradores', 'populacao'],
@@ -60,15 +68,15 @@ export function linhasOrcamento(orc) {
 }
 
 /**
- * A regra do dono na linha da contribuição: "Contribuição: 12.480 × 11 = 137.280/h" quando a conta fecha com a
- * receita; senão (tarifa por prédio, a pergunta 3), a média por morador.
+ * A regra do dono na linha da contribuição, em dólar (D68): "Contribuição: 12.480 × US$ 6.600 = US$ 82,4 mi/h" quando
+ * a conta fecha com a receita; senão (tarifa por prédio, a pergunta 3), a média por morador.
  */
 export function regraContribuicao(pop, tarifa, receita) {
   const produto = Math.round(pop * tarifa);
   if (Math.abs(produto - receita) <= Math.max(1, Math.abs(receita) * 0.01)) {
-    return t('eco.regra', { pop: fmt.numero(pop), tarifa, total: fmt.numero(produto) });
+    return t('eco.regra', { pop: fmt.numero(pop), tarifa: fmt.dinheiro(tarifa), total: fmt.dinheiroPorHora(produto) });
   }
-  return t('eco.regraMedia', { media: fmt.numero(pop > 0 ? receita / pop : 0, 1), total: fmt.numero(receita) });
+  return t('eco.regraMedia', { media: fmt.dinheiro(pop > 0 ? receita / pop : 0), total: fmt.dinheiroPorHora(receita) });
 }
 
 /**
@@ -98,21 +106,19 @@ export function limitesEmprestimo(emp, regras = REGRAS_DONO.emprestimo) {
 /** Os últimos 12 pontos da série mensal do orçamento (um por mês). */
 export const serieDoAno = (serie) => (Array.isArray(serie) ? serie.slice(-12) : []);
 
-/** Taxa por hora sem sinal, para séries que já dizem o que são (receitas, despesas): '70.000/h'. */
-const taxa = (v) => `${fmt.numero(Math.round(v))}${t('unid.porHora')}`;
+/** Taxa por hora sem sinal, para séries que já dizem o que são (receitas, despesas): 'US$ 42 mi/h'. */
+const taxa = (v) => fmt.dinheiroPorHora(v);
 
-/** Créditos curtos para o eixo dos gráficos: '150 mil', '1,2 mi'. */
-export function curto(v) {
-  const a = Math.abs(v);
-  if (a >= 1e6) return `${fmt.numero(v / 1e6, a >= 1e7 ? 0 : 1)} ${t('unid.mi')}`;
-  if (a >= 1e3) return t('eco.mil', { n: fmt.numero(v / 1e3, a >= 1e4 ? 0 : 1) });
-  return fmt.numero(v);
-}
+/** Dinheiro curto para o eixo dos gráficos: 'US$ 90 mi', '−US$ 24 mi'. */
+export const curto = (v) => fmt.dinheiro(v);
+
+/** Rótulo de um ponto da série mensal: 'jan. 2020' (o ponto sem ano é da série antiga: só o mês). */
+const rotuloMes = (p) => (p?.ano ? fmt.dataCalendario(p) : fmt.mesCurto(p?.mes));
 
 // ------------------------------------------------------------------------------------------ peças
 
 function LinhaValor({ glifo, rotulo, valor, frac = null, sinal = 1, sub = null, sub2 = null, k }) {
-  const v = sinal > 0 ? fmt.porHora(valor) : fmt.porHora(-valor);
+  const v = fmt.dinheiroHora(sinal > 0 ? valor : -valor);
   return (
     <div class={`eco-linha${valor ? '' : ' zero'}`} data-k={k} title={fmt.dicaHora()}>
       <span class="eco-linha-glifo">
@@ -152,21 +158,21 @@ function Orcamento({ orc, b }) {
           </span>
           <span class={`eco-saldo num${saldo < 0 ? ' tx-er' : ''}`}>
             {saldo < 0 ? <Glifo n="alerta" tam={22} /> : null}
-            {fmt.porHora(saldo)}
+            {fmt.dinheiroHora(saldo)}
           </span>
-          <span class="eco-saldo-conta num" title={fmt.dicaHora()} data-dica="hora">{t('eco.conta', { rec: fmt.porHora(receitas.total), des: fmt.porHora(-despesas.total) })}</span>
+          <span class="eco-saldo-conta num" title={fmt.dicaHora()} data-dica="hora">{t('eco.conta', { rec: fmt.dinheiroHora(receitas.total), des: fmt.dinheiroHora(-despesas.total) })}</span>
         </div>
         <div class="eco-indicadores">
-          <Indicador rotulo={t('eco.caixa')} valor={fmt.creditos(orc.caixa ?? b.creditos)} glifo="creditos" estado={(orc.caixa ?? b.creditos) <= 0 ? 'er' : 'ch'} />
-          <Indicador rotulo={t('eco.divida')} valor={fmt.creditos(b.divida)} glifo="contrato" />
-          <Indicador rotulo={t('eco.valuation')} valor={fmt.creditosBarra(b.valuation)} glifo="valuation" />
+          <Indicador rotulo={t('eco.caixa')} valor={fmt.dinheiro(orc.caixa ?? b.creditos)} glifo="creditos" estado={(orc.caixa ?? b.creditos) <= 0 ? 'er' : 'ch'} />
+          <Indicador rotulo={t('eco.divida')} valor={fmt.dinheiro(b.divida)} glifo="contrato" />
+          <Indicador rotulo={t('eco.valuation')} valor={fmt.dinheiro(b.valuation)} glifo="valuation" />
         </div>
         {serie.length > 1 ? (
           <Grafico
             titulo={t('eco.graficoCaixa')}
             series={[{ id: 'caixa', rotulo: t('eco.caixa'), cor: 'var(--g1)', valores: serie.map((p) => p.caixa) }]}
-            rotulos={serie.map((p) => t('eco.mes', { mes: p.mes }))}
-            formato={fmt.creditos}
+            rotulos={serie.map(rotuloMes)}
+            formato={fmt.dinheiro}
             formatoEixo={curto}
             tipo="area"
             altura={96}
@@ -180,7 +186,7 @@ function Orcamento({ orc, b }) {
               { id: 'receitas', rotulo: t('eco.receitasCurto'), cor: 'var(--g3)', valores: serie.map((p) => p.receitas) },
               { id: 'despesas', rotulo: t('eco.despesasCurto'), cor: 'var(--g2)', valores: serie.map((p) => p.despesas) },
             ]}
-            rotulos={serie.map((p) => t('eco.mes', { mes: p.mes }))}
+            rotulos={serie.map(rotuloMes)}
             formato={taxa}
             formatoEixo={curto}
             altura={96}
@@ -189,16 +195,16 @@ function Orcamento({ orc, b }) {
         ) : null}
       </div>
       <div class="eco-col">
-        <Secao titulo={t('eco.receitas')} acao={<span class="eco-total num tx-ok">{fmt.porHora(receitas.total)}</span>} class="eco-secao">
+        <Secao titulo={t('eco.receitas')} acao={<span class="eco-total num tx-ok">{fmt.dinheiroHora(receitas.total)}</span>} class="eco-secao">
           {receitas.linhas.map((l) =>
             l.id === 'moradores' ? (
-              <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} sub={regraContribuicao(b.populacao, b.tarifa, l.valor)} sub2={t('eco.regraFaixa', { bem: bemEstarArredondado(b.bemEstarTarifa ?? b.bemEstar), de: faixa.de, ate: faixa.ate, tarifa: faixa.tarifa })} />
+              <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} sub={regraContribuicao(b.populacao, b.tarifa, l.valor)} sub2={t('eco.regraFaixa', { bem: bemEstarArredondado(b.bemEstarTarifa ?? b.bemEstar), de: faixa.de, ate: faixa.ate, tarifa: fmt.dinheiro(faixa.tarifa) })} />
             ) : (
               <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} />
             ),
           )}
         </Secao>
-        <Secao titulo={t('eco.despesas')} acao={<span class="eco-total num">{fmt.porHora(-despesas.total)}</span>} class="eco-secao">
+        <Secao titulo={t('eco.despesas')} acao={<span class="eco-total num">{fmt.dinheiroHora(-despesas.total)}</span>} class="eco-secao">
           {despesas.linhas.map((l) => (
             <LinhaValor k={l.id} glifo={l.glifo} rotulo={l.rotulo} valor={l.valor} frac={l.frac} sinal={-1} />
           ))}
@@ -215,7 +221,7 @@ function Orcamento({ orc, b }) {
                   <span class="eco-linha-sub">{t(`eco.naoPago.${l.id}.efeito`)}</span>
                 </span>
                 <span class="eco-linha-valor num tx-al" title={fmt.dicaHora()} data-dica="hora">
-                  {fmt.porHora(-l.valor)}
+                  {fmt.dinheiroHora(-l.valor)}
                 </span>
               </div>
             ))
@@ -244,7 +250,7 @@ function Emprestimo({ emp, b }) {
   }, [retorno]);
   if (!emp) return <Vazio glifo="contrato" texto={t('eco.semDados')} />;
   const v = Math.min(Math.max(valor, lim.min), Math.max(lim.min, lim.max));
-  const ano = b.data?.ano ?? 1;
+  const ano = fmt.anoCalendario(b.data?.ano ?? 1);
   // o retorno aparece na seção do botão tocado (tomar ou contratos): no celular a outra pode estar fora da vista
   const agir = async (nome, args, ok, onde = 'contratos') => {
     const res = await comando(nome, args, { silencioso: true });
@@ -260,10 +266,10 @@ function Emprestimo({ emp, b }) {
     ) : null;
   const contratos = (emp.contratos ?? []).map((c) => ({
     id: c.id,
-    ano: c.ano,
+    ano: fmt.anoCalendario(c.ano),
     valor: c.valor,
     saldo: c.saldo,
-    vence: anoDoTique(c.fim ?? 0),
+    vence: fmt.anoCalendario(anoDoTique(c.fim ?? 0)),
     juros: c.mora ? r.mora : r.taxaAno,
     mora: !!c.mora,
   }));
@@ -285,7 +291,7 @@ function Emprestimo({ emp, b }) {
         <Secao titulo={t('eco.regras')} class="eco-secao eco-regras">
           <p class="eco-regra">
             <Glifo n="calendario" tam={18} />
-            {t('eco.regra.porAno', { n: fmt.creditos(r.porAno) })}
+            {t('eco.regra.porAno', { n: fmt.dinheiro(r.porAno) })}
           </p>
           <p class="eco-regra">
             <Glifo n="juros" tam={18} />
@@ -293,7 +299,7 @@ function Emprestimo({ emp, b }) {
           </p>
           <p class="eco-regra">
             <Glifo n="contrato" tam={18} />
-            {t('eco.regra.divida', { n: fmt.creditos(r.dividaMax) })}
+            {t('eco.regra.divida', { n: fmt.dinheiro(r.dividaMax) })}
           </p>
           <p class="eco-regra">
             <Glifo n="prazo" tam={18} />
@@ -301,7 +307,7 @@ function Emprestimo({ emp, b }) {
           </p>
           <p class="eco-regra">
             <Glifo n="mais" tam={18} />
-            {t('eco.regra.passo', { n: fmt.creditos(r.passo) })}
+            {t('eco.regra.passo', { n: fmt.dinheiro(r.passo) })}
           </p>
         </Secao>
       </div>
@@ -309,11 +315,11 @@ function Emprestimo({ emp, b }) {
         <div class="eco-medidores">
           <div class="eco-medidor">
             <span class="rot">{t('eco.disponivel', { ano })}</span>
-            <Barra valor={(emp.disponivelAno ?? 0) / (emp.limiteAno || r.porAno)} estado="ac" rotulo={t('eco.disponivel', { ano })} texto={t('eco.deN', { a: fmt.creditos(emp.disponivelAno), b: fmt.creditos(emp.limiteAno ?? r.porAno) })} />
+            <Barra valor={(emp.disponivelAno ?? 0) / (emp.limiteAno || r.porAno)} estado="ac" rotulo={t('eco.disponivel', { ano })} texto={t('eco.deN', { a: fmt.dinheiro(emp.disponivelAno), b: fmt.dinheiro(emp.limiteAno ?? r.porAno) })} />
           </div>
           <div class="eco-medidor">
             <span class="rot">{t('eco.divida')}</span>
-            <Barra valor={(emp.divida ?? 0) / (emp.dividaMax || r.dividaMax)} estado={(emp.divida ?? 0) > 0.8 * (emp.dividaMax || r.dividaMax) ? 'al' : 'ch'} rotulo={t('eco.divida')} texto={t('eco.deN', { a: fmt.creditos(emp.divida), b: fmt.creditos(emp.dividaMax ?? r.dividaMax) })} />
+            <Barra valor={(emp.divida ?? 0) / (emp.dividaMax || r.dividaMax)} estado={(emp.divida ?? 0) > 0.8 * (emp.dividaMax || r.dividaMax) ? 'al' : 'ch'} rotulo={t('eco.divida')} texto={t('eco.deN', { a: fmt.dinheiro(emp.divida), b: fmt.dinheiro(emp.dividaMax ?? r.dividaMax) })} />
           </div>
         </div>
         <Secao titulo={t('eco.tomar')} class="eco-secao">
@@ -324,9 +330,9 @@ function Emprestimo({ emp, b }) {
             </p>
           ) : (
             <div class="eco-tomar">
-              <Deslizante valor={v} aoMudar={setValor} min={lim.min} max={lim.max} passo={lim.passo} rotulo={t('eco.valorTomar')} formato={fmt.creditos} botoes a="eco.valor" />
-              <Botao a="eco.tomar" rotulo={t('eco.tomarN', { n: fmt.creditos(v) })} principal class="bt-pri" onClick={() => agir('emprestimo.tomar', { valor: v }, t('eco.tomado', { n: fmt.creditos(v) }), 'tomar')}>
-                {t('eco.tomarN', { n: fmt.creditos(v) })}
+              <Deslizante valor={v} aoMudar={setValor} min={lim.min} max={lim.max} passo={lim.passo} rotulo={t('eco.valorTomar')} formato={fmt.dinheiro} botoes a="eco.valor" />
+              <Botao a="eco.tomar" rotulo={t('eco.tomarN', { n: fmt.dinheiro(v) })} principal class="bt-pri" onClick={() => agir('emprestimo.tomar', { valor: v }, t('eco.tomado', { n: fmt.dinheiro(v) }), 'tomar')}>
+                {t('eco.tomarN', { n: fmt.dinheiro(v) })}
               </Botao>
             </div>
           )}
@@ -340,10 +346,10 @@ function Emprestimo({ emp, b }) {
                 rotulo={t('eco.contratos')}
                 chave={(c) => c.id}
                 colunas={[
-                  { id: 'ano', rotulo: t('eco.col.ano'), num: true, formato: (x) => t('eco.anoN', { ano: x }) },
-                  { id: 'valor', rotulo: t('eco.col.valor'), num: true, formato: fmt.creditos },
-                  { id: 'saldo', rotulo: t('eco.col.saldo'), num: true, formato: fmt.creditos },
-                  { id: 'vence', rotulo: t('eco.col.vence'), num: true, formato: (x) => t('eco.anoN', { ano: x }) },
+                  { id: 'ano', rotulo: t('eco.col.ano'), num: true, formato: String },
+                  { id: 'valor', rotulo: t('eco.col.valor'), num: true, formato: fmt.dinheiro },
+                  { id: 'saldo', rotulo: t('eco.col.saldo'), num: true, formato: fmt.dinheiro },
+                  { id: 'vence', rotulo: t('eco.col.vence'), num: true, formato: String },
                   { id: 'juros', rotulo: t('eco.col.juros'), num: true, formato: (x) => `${fmt.numero(x * 100)}%`, estado: (x, l) => (l.mora ? 'al' : null) },
                 ]}
                 linhas={contratos}
@@ -352,20 +358,20 @@ function Emprestimo({ emp, b }) {
                 {/* fracos mas tocáveis: o toque diz o motivo aqui mesmo, na linha de retorno da seção */}
                 <Botao
                   a="eco.pagarJuros"
-                  rotulo={t('eco.pagarJuros', { n: fmt.creditos(emp.jurosDevidos) })}
+                  rotulo={t('eco.pagarJuros', { n: fmt.dinheiro(emp.jurosDevidos) })}
                   aria-disabled={semJuros ? 'true' : undefined}
                   dica={semJuros ? t('eco.semJuros') : undefined}
                   class="bt-sec"
                   onClick={() => (semJuros ? recusar(t('eco.semJuros')) : agir('emprestimo.pagarJuros', {}, t('eco.pago')))}
                 >
-                  {t('eco.pagarJuros', { n: fmt.creditos(emp.jurosDevidos) })}
+                  {t('eco.pagarJuros', { n: fmt.dinheiro(emp.jurosDevidos) })}
                 </Botao>
-                <Botao a="eco.pagarParcela" rotulo={t('eco.pagarParcela')} dica={t('eco.parcelaDica')} class="bt-sec" onClick={() => agir('emprestimo.pagarParcela', {}, t('eco.pago'))}>
+                <Botao a="eco.pagarParcela" rotulo={t('eco.pagarParcela')} dica={t('eco.parcelaDica', { min: fmt.dinheiro(r.passo) })} class="bt-sec" onClick={() => agir('emprestimo.pagarParcela', {}, t('eco.pago'))}>
                   {t('eco.pagarParcela')}
                 </Botao>
                 <DoisToques
                   a="eco.quitar"
-                  rotulo={t('eco.quitar', { n: fmt.creditos(quitar) })}
+                  rotulo={t('eco.quitar', { n: fmt.dinheiro(quitar) })}
                   aoConfirmar={() => agir('emprestimo.quitar', {}, t('eco.quitado'))}
                   desligado={semCaixa}
                   dica={semCaixa ? t('codigo.creditos') : undefined}
@@ -387,7 +393,11 @@ function Emprestimo({ emp, b }) {
 // ------------------------------------------------------------------------------------------ tela
 
 export function Economia({ fechar }) {
-  const [aba, setAba] = useState('orcamento');
+  const [aba, setAba] = useState(abaEconomia.peek());
+  // quem abre por fora escolhe a aba só uma vez: a próxima abertura volta ao orçamento
+  useEffect(() => {
+    abaEconomia.value = 'orcamento';
+  }, []);
   const b = barra.value; // relê a cada leitura da barra (4 por segundo)
   const orc = aba === 'orcamento' ? consultar('orcamento') : null;
   const emp = aba === 'emprestimo' ? consultar('emprestimo') : null;

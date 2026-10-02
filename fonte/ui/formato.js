@@ -1,10 +1,16 @@
 // Formatação dos números e unidades da interface (D42, desenho da UI 5): pt-BR com formatadores guardados; taxas só
 // em "/h" (hora de jogo, com a dica fixa); a hora do céu nunca aparece em número (fase: manhã, tarde, fim de tarde,
-// noite); calendário "Mês 3 · Ano 2"; durações de catálogo em "min de jogo"; contagens regressivas em mm:ss reais na
-// velocidade atual (pausado: o valor em 1x). Sinal de menos é o U+2212. A palavra "dia" não aparece.
+// noite); calendário com data real, "jan. 2020" (D67); durações de catálogo em "min de jogo"; contagens regressivas
+// em mm:ss reais na velocidade atual (pausado: o valor em 1x). Sinal de menos é o U+2212. A palavra "dia" não aparece.
+// Dinheiro (D68 e D87): as consultas mandam unidades de desenho e TODA tela mostra em dólar por aqui, pelo fator único
+// REGRAS_DONO.moeda ("US$ 30 mi", "US$ 1,2 bi", "US$ 4.800/h"). Nenhuma tela multiplica por conta própria.
 import { t } from './textos.js';
+import { REGRAS_DONO } from '../data/economia.js';
+import { ANO_INICIAL } from '../data/historia.js';
 
 export const MENOS = '−';
+/** Moeda da interface (D87): símbolo e quantos dólares vale uma unidade de desenho. */
+export const MOEDA = Object.freeze(REGRAS_DONO.moeda ?? { simbolo: 'US$', fator: 600 });
 
 const formatadores = new Map();
 function nf(casas) {
@@ -28,11 +34,61 @@ export function numero(n, casas = 0) {
   return v < 0 && s !== nf(casas).format(0) ? MENOS + s : s;
 }
 
-/** Créditos cheios ('284.500'). */
+/**
+ * Número curto em pt-BR, sem sinal: cheio até 9.999 e, daí em diante, mil, mi, bi e tri com uma casa abaixo de 100
+ * ('4.800', '12,5 mil', '480 mil', '1,2 mi', '30 mi', '180 mi', '1,2 bi'). O arredondamento que chega a 1.000 passa
+ * para a escala de cima ('1 mi', nunca '1.000 mil').
+ */
+export function curto(a) {
+  const v = Math.abs(finito(a));
+  if (Math.round(v) < 1e4) return numero(Math.round(v));
+  const escalas = [[1e3, 'unid.mil'], [1e6, 'unid.mi'], [1e9, 'unid.bi'], [1e12, 'unid.tri']];
+  let k = escalas.findLastIndex(([base]) => v >= base);
+  for (;;) {
+    const x = v / escalas[k][0];
+    const casas = x < 99.95 ? 1 : 0;
+    const r = Math.round(x * 10 ** casas) / 10 ** casas;
+    if (r >= 1000 && k < escalas.length - 1) {
+      k++;
+      continue;
+    }
+    return `${numero(r, r % 1 ? casas : 0)} ${t(escalas[k][1])}`;
+  }
+}
+
+/** Dólares de um valor em unidades de desenho (D87; só a exibição usa). */
+export const dolares = (unidades) => finito(unidades) * MOEDA.fator;
+
+/**
+ * Dinheiro em dólar, curto, com o menos quando negativo (D68, D87).
+ * @example [dinheiro(50000), dinheiro(8), dinheiro(-2e6)] // ['US$ 30 mi', 'US$ 4.800', '−US$ 1,2 bi']
+ */
+export function dinheiro(unidades) {
+  const v = dolares(unidades);
+  const s = `${MOEDA.simbolo} ${curto(v)}`;
+  return v < 0 && Math.round(Math.abs(v)) ? MENOS + s : s;
+}
+
+/**
+ * Dinheiro por hora de jogo, com o sinal sempre (D42): '+US$ 82,4 mi/h', '−US$ 9,6 mi/h', 'US$ 0/h'.
+ */
+export function dinheiroHora(unidades) {
+  const v = dolares(unidades);
+  const sinal = Math.round(Math.abs(v)) === 0 ? '' : v < 0 ? MENOS : '+';
+  return `${sinal}${MOEDA.simbolo} ${curto(v)}${t('unid.porHora')}`;
+}
+
+/** Valor por hora sem sinal, para preços e regras ('US$ 6.600/h'). */
+export const dinheiroPorHora = (unidades) => `${MOEDA.simbolo} ${curto(dolares(unidades))}${t('unid.porHora')}`;
+
+/**
+ * Unidades de desenho (créditos antigos), sem moeda: só as telas da X2 ainda usam (pendência da U1b: passar para
+ * dinheiro). Tela nova não usa.
+ */
 export const creditos = (n) => numero(Math.round(finito(n)));
 
 /**
- * Créditos na barra de cima: cheio até 9.999.999, curto a partir de 10 milhões ('128,4 mi').
+ * Unidades de desenho na forma da barra antiga (pendência da X2, como creditos): cheio até 9.999.999, curto depois.
  * @example creditosBarra(128400000) // '128,4 mi'
  */
 export function creditosBarra(n) {
@@ -70,10 +126,22 @@ export const populacao = (n) => numero(Math.round(finito(n)));
 export const pct = (x, casas = 0) => `${numero(finito(x) * 100, casas)}%`;
 
 /**
- * Calendário (D42): 'Mês 3 · Ano 2'.
+ * Ano do calendário (D67): as consultas já mandam 2020 em diante; um ano de jogo (1, 2...) de quem ainda não mandou
+ * a data real vira o ano do calendário (o ano 1 é 2020).
+ */
+export const anoCalendario = (ano) => {
+  const a = Math.floor(finito(ano));
+  return a >= 1000 ? a : ANO_INICIAL + Math.max(1, a) - 1;
+};
+
+/** Mês abreviado ('jan.'), de 1 a 12. */
+export const mesCurto = (mes) => t(`cal.mes.${Math.min(12, Math.max(1, Math.floor(finito(mes)) || 1))}`);
+
+/**
+ * Calendário (D67): 'jan. 2020'.
  * @param {{ mes: number, ano: number }} data
  */
-export const dataCalendario = ({ mes, ano } = {}) => t('data.mesAno', { mes: mes ?? 1, ano: ano ?? 1 });
+export const dataCalendario = ({ mes, ano } = {}) => t('cal.data', { mes: mesCurto(mes ?? 1), ano: anoCalendario(ano ?? 1) });
 
 /** Nome da fase do céu ('Fim de tarde'). */
 export const fase = (f) => t(`fase.${f || 'manha'}`);

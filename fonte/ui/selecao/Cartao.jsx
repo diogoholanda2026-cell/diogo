@@ -6,9 +6,13 @@
 //   comercial e indústria: trabalhadores de vagas, produtividade, nível
 //   Holding (sem o bloco trabalho): trabalhadores de vagas, linhas de produção ativas, nível
 //   serviço: o tipo do catálogo (clinica, escolaF...) dá o glifo e o nome; o contrato não tem categoria
-// A consulta q.predio(ref) é relida 2 vezes por segundo enquanto há seleção de prédio e fica em loja.detalhe (a folha
-// usa). Via e Arcologia não são prédios: o ref delas não vai para q.predio (daria o prédio de mesmo índice).
+// A consulta q.predio(ref) (ou q.aresta(ref), na via) é relida 2 vezes por segundo enquanto há seleção e fica em
+// loja.detalhe (a folha usa). A Arcologia não é prédio: o ref dela não vai para q.predio (daria o prédio de mesmo
+// índice). Decisão da U1b: se a primeira leitura vem nula (o render conhece, a simulação não), a seleção e o destaque
+// caem juntos, nunca um destaque sem cartão. Dinheiro sempre em dólar por ui/formato.js (D87). No PC a seleção abre
+// direto a folha (desenho da UI 8.7); Arcologia e terreno não têm cartão e abrem a folha.
 import { signal, effect } from '@preact/signals';
+import { VIAS } from '../../data/vias.js';
 import { selecao, detalhe } from '../loja.js';
 import { consultar } from '../consultas.js';
 import * as fmt from '../formato.js';
@@ -24,6 +28,8 @@ import { tarifaDoBemEstar, bemEstarArredondado } from '../../data/economia.js';
 
 /** A folha completa (U1b) abre por aqui; o cartão some enquanto ela está aberta. */
 export const folhaAberta = signal(false);
+/** A folha pede para ficar aberta na próxima troca de seleção (a pilha do Voltar, selecao/Folha.jsx). */
+export const manterFolha = { proxima: false };
 
 // O que a ação de um aviso faz ("Ver camada de energia", "Construir usina") é de quem conhece o destino (U1b, X3a):
 // registrarAcaoAviso('verCamadaEnergia', ({ ui, predio, selecao }) => ...). Sem registro, o botão não aparece (um
@@ -39,6 +45,12 @@ export const RELER_MS = 500;
 export const TIPOS_PREDIO = Object.freeze(['predio', 'colocavel', 'marcador']);
 /** A seleção é de prédio (e tem ref)? */
 export const ehPredio = (s) => !!s && TIPOS_PREDIO.includes(s.tipo) && s.ref !== null && s.ref !== undefined;
+/** A seleção é de via (aresta com ref)? */
+export const ehVia = (s) => !!s && s.tipo === 'aresta' && s.ref !== null && s.ref !== undefined;
+/** Seleção que abre a folha sem cartão: Arcologia e terreno (o menu de contexto). */
+export const semCartao = (s) => !!s && (s.tipo === 'arcologia' || s.tipo === 'terreno');
+// PC (mouse e tela larga): a seleção abre direto a folha, como no CS2; o jogador pode preferir o cartão
+const noPC = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine) and (min-width: 1200px)').matches;
 const GLIFO_FAMILIA = { res: 'residencial', com: 'comercial', ind: 'industrial', esc: 'escritorio' };
 const GLIFO_SERVICO = {
   agua: 'agua', esgoto: 'esgoto', energia: 'energia', saude: 'saude', educacao: 'educacao', seguranca: 'policia',
@@ -104,7 +116,7 @@ export function numerosDoCartao(p) {
       { id: 'moradores', rotulo: t('cartao.moradores'), valor: t('cartao.deN', { a: fmt.numero(m.moradores), b: fmt.numero(m.capacidade) }), frac: m.capacidade ? m.moradores / m.capacidade : 0 },
       // o rosto é o do prédio (a faixa do bem-estar dele), não o da tarifa da cidade
       { id: 'bemEstar', rotulo: t('cartao.bemEstar'), valor: fmt.numero(bem), glifo: glifoBemEstar(tar), estado: tar >= 11 ? 'ok' : tar >= 8 ? null : 'er' },
-      { id: 'contribuicao', rotulo: t('cartao.contribuicao'), valor: fmt.porHora(m.contribuicaoHora ?? 0), estado: 'ch', dica: hora },
+      { id: 'contribuicao', rotulo: t('cartao.contribuicao'), valor: fmt.dinheiroHora(m.contribuicaoHora ?? 0), estado: 'ch', dica: hora },
     ];
   }
   if (p.servico) {
@@ -113,7 +125,7 @@ export function numerosDoCartao(p) {
     return [
       { id: 'atendidos', rotulo: t('cartao.atendidos'), valor: t('cartao.deN', { a: fmt.numero(s.uso ?? 0), b: fmt.numero(s.capacidade ?? 0) }), frac: s.capacidade ? (s.uso ?? 0) / s.capacidade : 0 },
       { id: 'eficiencia', rotulo: t('cartao.eficiencia'), valor: fmt.pct(efic), estado: efic < 0.5 ? 'er' : efic < 0.8 ? 'al' : null, glifo: efic < 0.8 ? 'alerta' : null },
-      { id: 'manutencao', rotulo: t('cartao.manutencao'), valor: fmt.porHora(-(s.manutencaoHora ?? 0)), dica: hora },
+      { id: 'manutencao', rotulo: t('cartao.manutencao'), valor: fmt.dinheiroHora(-(s.manutencaoHora ?? 0)), dica: hora },
     ];
   }
   // soma das vagas por escolaridade ([4]) ou o número direto; campo torto vale 0
@@ -141,6 +153,24 @@ export function numerosDoCartao(p) {
     ];
   }
   return [];
+}
+
+/** Glifo do tipo da via (a rodovia usa o da avenida grande). */
+export const glifoDaVia = (tipo) => ({ rua: 'rua', ruaMao: 'ruaMao', avenida: 'avenida', avenidaG: 'avenidaG', terra: 'terra', rodovia: 'avenidaG' })[tipo] ?? 'vias';
+
+/** Nome do tipo da via ('Avenida') pelo catálogo; tipo desconhecido, 'Via'. */
+export const nomeTipoVia = (tipo) => VIAS[tipo]?.nome ?? t('cartao.via');
+
+/** Os números do cartão da via (q.aresta): comprimento, manutenção por hora e o fluxo (M1b) ou o declive. */
+export function numerosDaVia(a) {
+  if (!a) return [];
+  const l = [
+    { id: 'comprimento', rotulo: t('cartao.via.comprimento'), valor: t('cartao.via.m', { m: fmt.numero(a.comprimento ?? 0) }) },
+    { id: 'manutencao', rotulo: t('cartao.manutencao'), valor: fmt.dinheiroHora(-(a.manutencaoHora ?? 0)), dica: fmt.dicaHora() },
+  ];
+  if (a.fluxo) l.push({ id: 'fluxo', rotulo: t('cartao.via.fluxo'), valor: fmt.pct(a.fluxo.vel ?? 1), estado: (a.fluxo.vel ?? 1) < 0.5 ? 'al' : null });
+  else l.push({ id: 'declive', rotulo: t('cartao.via.declive'), valor: fmt.pct(Math.abs(a.declive ?? 0), 1) });
+  return l;
 }
 
 /** Aviso mais grave com a frase: da simulação (aviso.<codigo>), do cartão ou genérico pela gravidade. */
@@ -171,15 +201,31 @@ export function faseDaObra(obra) {
 
 // ------------------------------------------------------------------------------------------ componente
 
+/** Números em três colunas (cartão de prédio e de via). */
+const Numeros = ({ lista }) => (
+  <dl class="cartao-numeros">
+    {lista.map((x) => (
+      <div class="cartao-num" data-k={x.id}>
+        <dt class="rot">{x.rotulo}</dt>
+        <dd class={`num cartao-valor${x.estado ? ` tx-${x.estado}` : ''}`} title={x.dica ?? undefined} data-dica={x.dica ? 'hora' : undefined}>
+          {x.glifo ? <Glifo n={x.glifo} tam={16} /> : null}
+          {x.valor}
+        </dd>
+      </div>
+    ))}
+  </dl>
+);
+
 export function Cartao({ ui }) {
   const s = selecao.value;
   const p = detalhe.value;
-  if (!ehPredio(s) || !p || folhaAberta.value) return null;
-  const ap = aparencia(p);
+  const via = ehVia(s);
+  if ((!ehPredio(s) && !via) || !p || folhaAberta.value) return null;
+  const ap = via ? { glifo: glifoDaVia(p.tipo), cor: null } : aparencia(p);
   const agora = ui.obterSim()?.espelho?.tempo?.tique ?? null;
-  const aviso = avisoPrincipal(p, agora);
-  const numeros = numerosDoCartao(p);
-  const obra = p.estado === 'obra' ? faseDaObra(p.obra) : null;
+  const aviso = via ? null : avisoPrincipal(p, agora);
+  const numeros = via ? numerosDaVia(p) : numerosDoCartao(p);
+  const obra = !via && p.estado === 'obra' ? faseDaObra(p.obra) : null;
   const temFolha = ui.secoes().length > 0;
   const fechar = () => {
     selecao.value = null;
@@ -189,18 +235,20 @@ export function Cartao({ ui }) {
     const pt = s.ponto;
     if (pt && ui.R?.camera?.irPara) ui.R.camera.irPara({ x: pt[0], z: pt[2], dist: 220 }, 900);
   };
-  const via = p.via?.nome ?? null;
+  const nome = p.nome || (via ? nomeTipoVia(p.tipo) : t('cartao.predio'));
+  const onde = via ? null : p.via?.nome ?? null;
+  const faz = via ? (p.rodovia ? t('cartao.via.rodovia') : p.mao ? t('cartao.via.mao') : null) : p.faz;
   return (
-    <section class="cartao vidro" data-hud="cartao" role="dialog" aria-label={p.nome}>
+    <section class="cartao vidro" data-hud="cartao" role="dialog" aria-label={nome}>
       <header class="cartao-cab">
         <span class="cartao-glifo" style={ap.cor ? { '--cor': ap.cor } : null}>
           <Glifo n={ap.glifo} tam={20} />
         </span>
         <div class="cartao-titulos">
-          <h2 class="cartao-nome" title={p.nome}>
-            {p.nome}
+          <h2 class="cartao-nome" title={nome}>
+            {nome}
           </h2>
-          <span class="cartao-sub">{subtitulo(p)}</span>
+          <span class="cartao-sub">{via ? nomeTipoVia(p.tipo) : subtitulo(p)}</span>
         </div>
         <Botao a="cartao.localizar" rotulo={t('comp.localizar')} class="bt-glifo" onClick={localizar}>
           <Glifo n="localizar" />
@@ -228,24 +276,14 @@ export function Cartao({ ui }) {
           <Barra valor={obra.frac} estado="al" rotulo={t('cartao.obra', { fase: obra.nome })} texto={fmt.pct(obra.frac)} />
         </div>
       ) : numeros.length ? (
-        <dl class="cartao-numeros">
-          {numeros.map((x) => (
-            <div class="cartao-num" data-k={x.id}>
-              <dt class="rot">{x.rotulo}</dt>
-              <dd class={`num cartao-valor${x.estado ? ` tx-${x.estado}` : ''}`} title={x.dica ?? undefined} data-dica={x.dica ? 'hora' : undefined}>
-                {x.glifo ? <Glifo n={x.glifo} tam={16} /> : null}
-                {x.valor}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <Numeros lista={numeros} />
       ) : null}
       <footer class="cartao-pe">
         <div class="cartao-onde">
-          {via ? <span class="cartao-via">{via}</span> : null}
-          {p.faz ? <span class="cartao-faz">{p.faz}</span> : null}
+          {onde ? <span class="cartao-via">{onde}</span> : null}
+          {faz ? <span class="cartao-faz">{faz}</span> : null}
         </div>
-        {/* sem a folha (U1b) o botão fica fora, como a categoria sem item fica fora da barra (D24): um "Detalhes" que
+        {/* sem a folha o botão fica fora, como a categoria sem item fica fora da barra (D24): um "Detalhes" que
             não abre nada seria um toque mudo */}
         {temFolha ? (
           <Botao a="cartao.detalhes" rotulo={t('cartao.detalhes')} class="bt-sec bt-curto" onClick={() => (folhaAberta.value = true)}>
@@ -258,6 +296,9 @@ export function Cartao({ ui }) {
   );
 }
 
+/** Ação de aviso registrada (a folha usa o mesmo registro). */
+export const acaoDeAviso = (id) => acoesAviso.get(id) ?? null;
+
 // uma interface por página (loja.js): registrar de novo (a interface refeita) solta a leitura da anterior, que
 // seguiria viva presa à loja e ao render antigo
 let soltarLeitura = null;
@@ -265,29 +306,29 @@ let soltarLeitura = null;
 /** Entra no lugar 'folha'; relê o selecionado ao trocar e 2 vezes por segundo. */
 export function registrar(ui) {
   soltarLeitura?.();
-  let refLida = null; // ref cujo detalhe já veio (para saber quando o prédio some)
+  const soltar = () => {
+    selecao.value = null;
+    ui.R?.selecionado?.(null);
+  };
   const reler = () => {
     const s = selecao.value;
-    if (!ehPredio(s)) {
-      refLida = null;
+    const via = ehVia(s);
+    if (!ehPredio(s) && !via) {
       detalhe.value = null;
       return;
     }
-    const p = consultar('predio', s.ref);
-    if (!p && refLida === s.ref) {
-      // o prédio sumiu (demolido): a seleção e o destaque do render caem junto
-      refLida = null;
-      selecao.value = null;
-      ui.R?.selecionado?.(null);
-      return;
-    }
-    refLida = p ? s.ref : null;
+    const p = consultar(via ? 'aresta' : 'predio', s.ref);
+    // nulo na primeira leitura (o render destacou o que a simulação não conhece) ou depois (demolido): a seleção e
+    // o destaque do render caem juntos
+    if (!p) return soltar();
     detalhe.value = p;
   };
   let ultima = -Infinity;
   const semEfeito = effect(() => {
-    selecao.value; // a troca de seleção relê na hora e fecha a folha do anterior
-    folhaAberta.value = false;
+    const s = selecao.value; // a troca de seleção relê na hora e fecha a folha do anterior (salvo a pilha do Voltar)
+    const manter = manterFolha.proxima;
+    manterFolha.proxima = false;
+    folhaAberta.value = !!s && (manter || semCartao(s) || (noPC() && !ui.loja.prefs.peek()?.cartaoNoPC && ui.secoes().length > 0));
     reler();
   });
   const semQuadro = ui.aoQuadro((tMs) => {

@@ -1,5 +1,7 @@
 // Cena 'costa' (A10: praia e mar a 300 m): o costão de granito dos morros do oeste descendo no mar, a praia e o
 // começo da cidade, vistos de cima do mar, sobre a cidade sintética. Hora padrão 10h (a captura do fim de tarde usa ?hora=17.5).
+// ?vista= troca a câmera (R2b): rio (o rio Held de perto, com a mata ciliar), mata (dentro da mata, a 60 m) e serra (a
+// rasante do mar para o norte, com o mundo de fora atrás dos morros).
 // Confere na GPU a paridade da altura do terreno (GLSL) com alturaEm de comum/altura.js em 64 pontos sorteados:
 // window.__resultado = { ok, falhas, paridade: { pontos, erroMax }, terreno: { nos, tris }, ... }.
 import * as THREE from 'three';
@@ -8,6 +10,12 @@ import { hashF } from '../geracao/ruido.js';
 import { GLSL_TER_COMUM, GLSL_TER_ALTURA } from '../materiais/shaders/terreno.glsl.js';
 
 export const CAMERA_COSTA = Object.freeze({ x: -2150, z: 1790, dist: 520, guinada: 292, inclinacao: 16 });
+/** Vistas da R2b (?vista=). */
+export const VISTAS_COSTA = Object.freeze({
+  rio: { x: -1060, z: 560, dist: 190, guinada: 200, inclinacao: 18 },
+  mata: { x: -1185, z: 470, dist: 70, guinada: 250, inclinacao: 12 },
+  serra: { x: -400, z: 1500, dist: 2600, guinada: 340, inclinacao: 4 },
+});
 const N_PONTOS = 64;
 
 /** Pontos sorteados (determinísticos) dentro do mapa, com a altura esperada pela leitura da simulação. */
@@ -89,9 +97,14 @@ export function registrar(registrarCena) {
     camera: CAMERA_COSTA,
     async montar(ctx) {
       let quadros = 0;
+      const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+      const vista = VISTAS_COSTA[qs.get('vista')];
+      if (vista) ctx.cameraApi.definir(vista);
       return {
         quadro(tMs, c) {
           quadros++;
+          // as árvores de perto prontas antes da captura (no jogo a vegetação gera os ladrilhos aos poucos)
+          if (quadros === 3) c.dominio('vegetacao')?.preparar?.();
           // o mar vai até o horizonte: enquanto a câmera básica da F0 corta a 12 vezes a distância, a cena abre o far
           // (a câmera da R1a cuida das duas faixas de profundidade e deixa isto sem efeito)
           if (c.camera.far < 20000) {

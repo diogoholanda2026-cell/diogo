@@ -218,8 +218,8 @@ export function criarUI(raiz, { sim, R = null, jogo = null } = {}) {
   render(<App />, raiz);
 
   // toque no mundo: seleciona pelo render (o árbitro de gestos é do render, D40)
-  const soltarToque = R?.entrada?.aoToque?.(({ x, y, longo }) => {
-    if (longo) return; // menu de contexto: U1b
+  const soltarToque = R?.entrada?.aoToque?.(({ x, y, longo, botao }) => {
+    if (longo || botao === 2) return; // menu de contexto (toque longo ou botão direito): U1b
     const s = R.selecionar(x, y);
     const util = s && s.tipo !== 'terreno' && s.tipo !== 'agua' ? s : null;
     loja.selecao.value = util;

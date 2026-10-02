@@ -351,7 +351,7 @@ sim.mudancas.desde(v) → {
 O diário deduplica por tabela com uma coluna `mudou[idx] = versao`, então uma pintura grande não enche o anel; `tudo`
 de um domínio refaz só aquele domínio (células refazem só a camada de zona). O render chama `desde()` uma vez por
 quadro e aplica com teto de 2 ms. A fase da obra sai de `(tique + frac − obraIni) / (obraFim − obraIni)`, calculada
-**no vértice**: `obraIni` e `obraFim` vão para uma textura RG32F de 512² só quando a obra começa (nenhum envio por
+**no vértice**: `obraIni` e `obraFim` vão para uma textura RGBA32F de 512² (início, fim, cota da base e altura; a R4b trocou porque o `updateTexture` do three r186 supõe 4 componentes) só quando a obra começa (nenhum envio por
 quadro). Canteiro até 0,1, fundação até 0,25, estrutura até 0,6, fechamento até 1.
 
 ### 2.5 Comandos (UI e robô para a simulação)
@@ -1092,7 +1092,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Consome:** `espelho.predios`, `celulas`, `data/predios.js` (planta e andares), ganchos de R1a,
   `registrarGeradorOficina('setor')`.
 - **Publica:** material `edificio` (fachada no shader) com variantes LOD0 e LOD1, usado por X1a e R5; tabela de prédios
-  na GPU (RGBA 512²: camada, flags, agenda) e a RG32F de início e fim de obra; caixas LOD1 cujos buffers de instância a
+  na GPU (RGBA 512²: camada, flags, agenda) e a RGBA32F de obra; caixas LOD1 cujos buffers de instância a
   sombra própria de R1a compartilha; gerador de setor na oficina; gancho `mascara` dos telhados; `registrarSelecionavel
   ('predio')`.
 - **Entrega:** plano (gramática por zona e nível, tipologias brasileiras da seção 5.1 do desenho do render) para as 7
@@ -1103,7 +1103,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Testa sem as outras:** lotes da cidade sintética. **Depende de:** F0.
 - **Entregue em 27/09/2026** (R4a, revisada). Publicou o material `edificio` (`criarMaterialEdificio`,
   `uniformesEdificio`) com variantes LOD0 fundida e LOD1 instanciada; a tabela de prédios na GPU (RGBA8 512²) e a de
-  obra (RG32F 512²) em `ctx.dominio('predios').tabela` e `.obra`; caixas LOD1 que a sombra própria compartilha;
+  obra (RGBA32F 512²) em `ctx.dominio('predios').tabela` e `.obra`; caixas LOD1 que a sombra própria compartilha;
   geradores `setor` e `anexo` na oficina (`fundir.js`); `gMascaraTelhado` (`?passe=mascara`);
   `registrarSelecionavel('predios')`; `limiteFaixas`, `sombraAlcanca` e `faixaDaCaixa` em `mundo/predios.js`
   (projetores pela `ctx.sombra.regiao` varridos pelo sol; com `?semClip=1`, listas por faixa pela profundidade no eixo
@@ -1373,6 +1373,16 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   pronto; 8 serviços com Dijkstra fatiado e atualização incremental; água e energia por componente com racionamento
   pelos mais distantes; energia externa pelo nó de entrada (D52); valor do terreno.
 - **Testa sem as outras:** grafo de teste pela API da F0; dinheiro pelo substituto. **Depende de:** S1b.
+- **Entregue em 02/10/2026** (S2a, revisada; onda 3, etapa 1). Zonas como registro extensível (4 no M1a, 3 no M1b),
+  demanda R/C/I/E com fatores, nascimento de frente para a via, níveis, abandono da D42, cidadãos, bem-estar, serviços,
+  redes (energia da rodovia só pelo nó de entrada, até 5 MW; nenhuma água de fora, D52) e valor do terreno em grade de
+  32 m; camadas zonas, nivel, bemEstar, agua, energia, servicos e valor; D76 nos andares (residencial média de 3 a 6 no
+  nível 1 a 12 a 25 no 5). Tique na sintética de 2.591 prédios: p95 2,41 ms; `--bancada` com 158 mil moradores: p95
+  3,82 ms. Fora do contrato escrito (aceitos pelo integrador): `sim.cidade` (efeito, remover, lista), agregados
+  `bemEstarSuave`, `bemEstarTarifa` e `empregos.taxa`, `q.avisosPredios().nomes`, `q.demanda().ativas`, `custoDemolir` e
+  `semRede` na prévia. Pendências: cobertura dos serviços ainda síncrona (fatiar), -3 do sobrequalificado (7.3), consumo
+  menor nos níveis altos (6.6), calibração do começo (Vila sem água nem energia, demanda perto de 0) para a C1. Nota
+  completa em `docs/entregas/onda3/S2a.md`.
 
 #### S3a. Economia, Holding e progresso, núcleo (onda 3; 3 sessões)
 - **Arquivos:** `sim/{economia,progresso,objetivos,historia}.js`, `sim/holding/*`,
@@ -1395,6 +1405,16 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   máximo), com o cenário de uma via a cada 10 tiques.
 - **Testa sem as outras:** cidade de faz de conta pelos agregados; os testes das regras do dono não dependem de nada.
   **Depende de:** F0.
+- **Entregue em 02/10/2026** (S3a, revisada; onda 3, etapa 1). `sim.holding` (caixa nunca negativo com livro-caixa,
+  comprarParaObra pela D48, entregar com a frota da D47, efeito) e `sim.progresso` de verdade; comandos de linha,
+  estoque, depósito, importação, empréstimo, decisão e identidade; consultas de orçamento, depósito, produção, holding,
+  marcos, objetivos, retomar, decisões e mural; os 5 prédios da Holding do M1a; história do M1a com data (vila.agua no
+  minuto 3, Febre Aurora em mar. 2020, Bloqueio do Canal de Seshat em mar. 2021); marco 7 pede torre.e4; robô
+  `ferramentas/robo/robo-sim.mjs`. Acréscimos ao contrato: `sim.holding.registrarChegada`, `folha`, `ocupados`,
+  `estoque`, o objeto `sim.economia`, `nLote` na linha e `fluxoCaixaHora` no orçamento. Pendências para a C1: ritmo dos
+  marcos e do empréstimo no robô fora das metas, preços em dólar acima do mercado (proposta na nota), reserva padrão da
+  próxima etapa da Arcologia (depende da X1b), frota somada por Escritório. Nota completa em
+  `docs/entregas/onda3/S3a.md`.
 
 #### R2b. Vegetação, rio e horizonte simples (onda 3; 2 sessões)
 - **Arquivos:** `render/mundo/{fora,vegetacao}.js`, `render/geracao/{arvores,impostor}.js`,
@@ -1404,6 +1424,13 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** 3 espécies (palmeira-imperial, oiti, mata com embaúba) com LOD0, LOD1 e impostor num atlas só; rio com
   correnteza e espuma; mundo de fora simples (mar e serra); tetos por perfil.
 - **Testa sem as outras:** sintética. **Depende de:** R2a.
+- **Entregue em 02/10/2026** (R2b, revisada; onda 3, etapa 1). Domínios 'vegetacao' e 'fora', atlas de folhas na
+  GPU e 7 espécies (palmeira-imperial, oiti, três de Mata Atlântica, embaúba e moita) em LOD0, LOD1 e impostor;
+  `ctx.vegetacao` e `ctx.chao.vegetacaoPerto`; rio turvo nas coordenadas dele, com plumas, espuma e pedras; água em dois
+  programas (mar e rio); mapa de cor do Alta e do pc de 85,3 para 42,7 MiB; manchas escuras dos morros e mar raso das
+  ilhas resolvidos. Pendências: copas ralas na média distância e custo da mata a medir no PC do dono antes de mexer;
+  margem do rio em degraus na vista aberta (R2a); faixa entre o anel de fora e a moldura do CDLOD com a câmera baixa.
+  Nota completa em `docs/entregas/onda3/R2b.md`.
 
 #### R3b. Gente, caminhões e fluxo (onda 3; 2 sessões)
 - **Arquivos:** `render/geracao/pessoas.js`, `render/mundo/{pedestres,caminhoes}.js`, `shaders/pessoa.glsl.js`; herda
@@ -1426,6 +1453,14 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   `bairro` com crescimento sintético em 4x: fila da oficina e ms de envio por quadro (meta: fila que esvazia e até 3 ms
   de envio no pior quadro).
 - **Testa sem as outras:** sintética com obras sintéticas. **Depende de:** R4a.
+- **Entregue em 02/10/2026** (R4b, revisada; onda 3, etapa 1). Obra em 5 fases na GPU (corte da fachada pelo
+  `gTique` sobre a textura de obra, agora **RGBA32F** com início, fim, cota da base e altura), canteiro, esqueleto, grua
+  de torre que sobe com o prédio, tela e andaime; anexo do setor (D39) sem buraco nem cópia dupla; lote vestido (árvores,
+  vagas, carros); abandonado, cor da Holding por bit e janelas por agenda; `alturaObra(i, H)` para a R5. **A meta de 6 ms
+  dos prédios de longe não foi atingida** (estimativa da RX 550 de 7,4 a 9,9 ms; os ganchos somam uns 30% e o resto é a
+  fachada): fica para a bancada no PC do dono. Pendências: cor da Holding nos caixilhos (70%) contra o desenho 5.5
+  (decidir com o dono), árvores do lote com a copa facetada das ruas (trocar pelas da R2b), primeira montagem de 200
+  obras de 7 a 8 ms com o JIT frio. Nota completa em `docs/entregas/onda3/R4b.md`.
 
 #### R5. Prédios colocáveis (onda 3; 2 sessões)
 - **Arquivos:** `render/colocaveis/*`, `data/colocaveis.js`, `cenas/servicos.js`,
@@ -1466,7 +1501,8 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 #### U1b. HUD, seleção e gestão (onda 3; 3 sessões)
 - **Arquivos:** `ui/hud/{Velocidade,Trilho,Objetivo,FaixaAlerta,Avisos,Menu,Retomar}.jsx`, `ui/selecao/Folha.jsx`,
   `ui/selecao/secoes/{residencial,comercial,industrial,servico,empresa,via,terreno}.jsx`,
-  `ui/telas/{Holding,Cidade,Progresso,Conselho,Decisao,Momento}.jsx`, `ui/mundo/MenuContexto.jsx`; herda os de U1a.
+  `ui/telas/{Holding,Cidade,Progresso,Conselho,Decisao,Momento}.jsx`, `ui/telas/corpo/*` (corpos sob demanda),
+  `ui/mundo/MenuContexto.jsx`; herda os de U1a.
 - **Consome:** `q.barra`, `q.retomar`, `q.predio`, `q.orcamento`, `q.emprestimo`, `q.deposito`, `q.producao`,
   `q.holding`, `q.cidade`, `q.demanda`, `q.marcos`, `q.decisoes`; eventos; `R.selecionar`, `R.camera`, `R.estado`.
 - **Publica:** `Momento` (título de terço inferior, fala, voo) para marco e etapa; `registrarSecao` usado por X1b.
@@ -1478,6 +1514,15 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   (marcos com o requisito do marco 7, áreas), Conselho (decisão em cartões, histórico); gráficos em SVG; nenhuma
   unidade fora da D42.
 - **Testa sem as outras:** `sim-falsa.js` e `render-falso.js` na vitrine. **Depende de:** U1a.
+- **Entregue em 02/10/2026** (U1b, revisada; onda 3, etapa 1). Data no calendário da D67 ("mar. 2021"), dinheiro em
+  dólar só pelo `ui/formato.js`, conselheiros com nome completo e cargo, textos do plano A antigo fora. Interfaces:
+  `ui.momento` e `registrarEtapaMomento`, `abrirDecisao`, `registrarItemTrilho`, `pausarPor`, `abrirTelaNaAba`,
+  `mostrarRetomar`, `registrarAcaoAviso`, Bloco e Par da folha e `sobDemanda`. Telas menu, holding, cidade, progresso e
+  conselho com o corpo sob demanda em `ui/telas/corpo/` (a U1b é dona da pasta); HUD com faixa de alerta, trilho,
+  objetivo, avisos, "Onde você parou" e menu de contexto radial; folhas por tipo; 27 cenas novas na vitrine.
+  Pendências: a fila de modais não esvazia ao carregar outra partida (U2a), o "Ir" da Arcologia sem tela (X1b), o item
+  'camadas' no trilho (X3a), 307 px livres em 986 x 443 com alerta, abaixo da meta de 340 (confirmar com o dono). Nota
+  completa em `docs/entregas/onda3/U1b.md`.
 
 #### U2a. Sistema: save, diário, menus, configurações, Teste de desempenho e primeira hora (onda 3; 3 sessões)
 - **Arquivos:** `fonte/app/{salvamento,armazem,diario}.js`, `ui/inicio/*` (menos a abertura),
@@ -1809,7 +1854,7 @@ M1b (D53).
 | Render | 2.5 e 10.3 (colisão pela cópia na CPU do campo na GPU) | grade da oficina, sem `readPixels` |
 | Render | 3.1 (grade de 32 x 32 por nó; bicúbico) | 16 x 16; bilinear igual à simulação |
 | Render | 4.1 (`rua2`, `avenida4`, `via6`, `pedestre`) | tipos da seção 2.3 |
-| Render | 5.6 (progresso da obra em 8 bits) | início e fim numa RG32F, progresso no vértice |
+| Render | 5.6 (progresso da obra em 8 bits) | início e fim numa RGBA32F, progresso no vértice |
 | Render | 6 e 17.1 (Trevo a 10 m; Torre em blocos com faixas escuras, 4 mil e 9 mil triângulos; Sede no M1) | planos da D59; Torre da D27; Sede no M2, fantasma no M1 |
 | Render | 7.1 (6 espécies no M1) | 3 no núcleo e 3 na linha de corte |
 | Render | 9.3 (tudo procedural) | A/B com CC0 (D46) |
@@ -1946,7 +1991,7 @@ dos limites do SwiftShader (engenharia 3) e do arredondamento da tarifa (dono 17
     parcial:** perto da mira, num raio de 400 m e até 8 mil células (16 mil triângulos), ficam instâncias, porque
     células de 8 m giradas numa textura de 4 m perdem a grade nítida que o dono usa para pintar.
 22. **[leve] Cubo de 128. Aceito.** 256 no Média, com sol e lua analíticos (D9, R1a).
-23. **[leve] Progresso da obra. Aceito.** RG32F de início e fim, progresso no vértice (2.4, R4a, R4b).
+23. **[leve] Progresso da obra. Aceito.** RGBA32F de início e fim, progresso no vértice (2.4, R4a, R4b).
 24. **[leve] three nos workers. Aceito.** Guarda de texto e teto por worker (A1, 2.8).
 25. **[leve] Comando síncrono. Aceito, as duas saídas** (D16).
 

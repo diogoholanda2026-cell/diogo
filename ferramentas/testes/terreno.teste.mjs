@@ -455,7 +455,8 @@ test('vegetação: na borda (cobertura parcial) o vão escuro entre as copas mos
 });
 
 test('CDLOD: a caixa de cada nó cobre a copa mais alta que o vértice levanta (senão o corte pela vista come copa)', () => {
-  const m = GLSL_TER_VERTICE.normal.match(/tCopa \*= uTerCopaV\.x \* \( ([\d.]+) \+ ([\d.]+) \* tRc\.z \);/);
+  // (R2b) de longe o fator usa a média 0,5 no lugar do ruído das copas: o máximo continua o do ruído em 1
+  const m = GLSL_TER_VERTICE.normal.match(/tCopa \*= uTerCopaV\.x \* \( ([\d.]+) \+ ([\d.]+) \* mix\( tRc\.z, 0\.5,/);
   assert.ok(m, 'fator da copa no vértice');
   assert.ok(COPA_MAX >= COPA_ALTURA * (Number(m[1]) + Number(m[2])) - 1e-9, `COPA_MAX ${COPA_MAX} abaixo da copa do GLSL`);
 });

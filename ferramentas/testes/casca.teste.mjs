@@ -5,7 +5,7 @@
 // node ferramentas/testes/casca.teste.mjs (o simular --testes descobre).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ARESTA } from '../../fonte/contratos/flags.js';
@@ -24,7 +24,7 @@ test('formato: unidades da D42 (pt-BR, /h com sinal, calendário, fase, min de j
   assert.equal(f.porHora(3840), '+3.840/h');
   assert.equal(f.porHora(-12300), '\u221212.300/h');
   assert.equal(f.porHora(0), '0/h');
-  assert.equal(f.dataCalendario({ mes: 3, ano: 2 }), 'Mês 3 · Ano 2');
+  assert.equal(f.dataCalendario({ mes: 3, ano: 2 }), 'mar. 2021', 'D67: o ano 1 é 2020');
   assert.equal(f.fase('fimDeTarde'), 'Fim de tarde');
   assert.equal(f.glifoDaFase('noite'), 'lua');
   assert.equal(f.minutosDeJogo(300), '5 min de jogo');
@@ -437,6 +437,17 @@ function listar(dir, ext) {
 }
 // import estático no começo da linha ou import('./...') dinâmico (as cenas vêm sob demanda)
 const importados = (arquivo) => [...readFileSync(arquivo, 'utf8').matchAll(/^import\s[^'"]*['"](\.[^'"]+)['"]|\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/gm)].map((m) => resolve(dirname(arquivo), m[1] ?? m[2]));
+// Fecho dos imports a partir dos índices: um corpo sob demanda (import() dentro de um registrado) também está ligado.
+const alcancaveis = (raizes) => {
+  const vistos = new Set(), fila = raizes.flatMap(importados);
+  while (fila.length) {
+    const f = fila.pop();
+    if (vistos.has(f) || !existsSync(f)) continue;
+    vistos.add(f);
+    fila.push(...importados(f));
+  }
+  return [...vistos];
+};
 
 test('índices: todo módulo do render e da interface está ligado a um índice fixo (esqueletos inclusive)', () => {
   const r = (p) => fonte(`render/${p}`);
@@ -448,7 +459,7 @@ test('índices: todo módulo do render e da interface está ligado a um índice 
     if (!indicesRender.includes(f)) semIndice.push(`render/${rel}`);
   }
   const u = (p) => fonte(`ui/${p}`);
-  const indicesUI = [u('index.jsx'), u('textos.js')].flatMap(importados);
+  const indicesUI = alcancaveis([u('index.jsx'), u('textos.js')]);
   for (const f of listar(fonte('ui'), /\.(js|jsx)$/)) {
     const rel = relative(fonte('ui'), f).split('\\').join('/');
     if (/^(index\.jsx|ponte|loja|acoes|consultas|textos|formato|prefs)\.js$|^index\.jsx$|^comp\/|^glifos\/(glifos\.js|Glifo\.jsx)$/.test(rel)) continue;

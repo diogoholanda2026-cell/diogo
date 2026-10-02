@@ -31,11 +31,18 @@ import { porPerfil } from '../motor/perfis.js';
  * chão de longe inteiro sai dele, com as manchas do campo e a vegetação.
  */
 export const PERFIL_TERRENO = Object.freeze({
-  ultra: { r0: 1000, cor: 4096, detalhe: 600, faixa: 150, copaRelevo: 4000, aniso: 8, longe: [900, 1200] },
-  alta: { r0: 800, cor: 4096, detalhe: 400, faixa: 120, copaRelevo: 3000, aniso: 8, longe: [600, 800] },
+  ultra: { r0: 1000, cor: 4096, cor16: true, detalhe: 600, faixa: 150, copaRelevo: 4000, aniso: 8, longe: [900, 1200] },
+  alta: { r0: 800, cor: 4096, cor16: true, detalhe: 400, faixa: 120, copaRelevo: 3000, aniso: 8, longe: [600, 800] },
   media: { r0: 600, cor: 2048, detalhe: 180, faixa: 60, copaRelevo: 2000, aniso: 4, longe: [400, 550] },
   leve: { r0: 320, cor: 1024, detalhe: 0, faixa: 1, copaRelevo: 800, aniso: 1, longe: [250, 350] },
 });
+/**
+ * Memória do mapa de cor assado em MB (com os mipmaps): RGBA8 tem 4 bytes por texel; com cor16 (R2b), RGB565 com 2,
+ * pontilhado no assado (o degrau de 5 e 6 bits vira grão fino, que os mipmaps e a distância apagam) e a rugosidade de
+ * longe fixa (sem alfa). No Alta e no 'pc' (4.096²): de 85,3 para 42,7 MiB.
+ */
+export const memoriaAssadoMB = (pt) => ((pt.cor * pt.cor * (pt.cor16 ? 2 : 4)) / 1048576) * (4 / 3);
+
 /**
  * O caminho de longe começa onde o pixel da tela, visto de frente, cobre 0,6 texel do assado no chão e fica inteiro
  * a 0,9 (na vista inclinada o pixel no chão é bem maior: ali o assado já é mais fino que a tela).
@@ -831,9 +838,10 @@ export function criarUniformes() {
     uTerFora: v(new THREE.Vector4(1, FORA.faixa, FORA.serra, FORA.mar)),
     uTerEstacao: v(0),
     uTerMorph: v(Array.from({ length: NIVEIS_CDLOD }, () => new THREE.Vector2())),
-    uTerCopaV: v(new THREE.Vector4(COPA_ALTURA, 0, 150, 0)),
+    uTerCopaV: v(new THREE.Vector4(COPA_ALTURA, 0, 150, 0.8)),
     uTerDetalhe: v(new THREE.Vector4(180, 60, 1, 2000)),
     uTerLonge: v(new THREE.Vector4(400, 550, 0, 0)),
+    uTerVegPerto: v(new THREE.Vector4(0, 1, 0, 1)),
     uTerGanho: v(Array.from({ length: N_CAMADAS }, () => new THREE.Vector3(1, 1, 1))),
     uTerGanhoB: v(Array.from({ length: N_CAMADAS }, () => new THREE.Vector3(1, 1, 1))),
     uTerAB: v(new THREE.Vector4(0, 0, 0, 0)),
@@ -843,6 +851,7 @@ export function criarUniformes() {
     uTerPincel: v(new THREE.Vector4(0, 0, 0, 0)),
     uTerLadrilho: v(new THREE.Vector4(0, -4096, -4096, 512)),
     uTerMascara: v(0),
+    uTerAssado16: v(0),
   };
 }
 
@@ -868,6 +877,8 @@ export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false, l
     vs = trocar(vs, '#include <common>', `#include <common>\n${GLSL_TER_VERTICE.pars}`);
     vs = trocar(vs, '#include <beginnormal_vertex>', GLSL_TER_VERTICE.normal);
     vs = trocar(vs, '#include <begin_vertex>', GLSL_TER_VERTICE.posicao);
+    // depois dos ganchos (eles entram logo depois do fog_vertex; este trecho fica depois deles)
+    vs = trocar(vs, '#include <fog_vertex>', `#include <fog_vertex>\n${GLSL_TER_VERTICE.fim}`);
     let fs = shader.fragmentShader;
     fs = trocar(fs, '#include <common>', `#include <common>\n${GLSL_TER_FRAGMENTO.pars}`);
     fs = trocar(fs, '#include <map_fragment>', GLSL_TER_FRAGMENTO.cor);
@@ -923,10 +934,13 @@ export function geometriaNo() {
 
 /** Mapa de cor assado na GPU (RGBA8, sqrt do albedo e a rugosidade), com mipmaps; refaz por retângulo. */
 class Assador {
-  constructor(renderer, U, lado, aniso) {
+  constructor(renderer, U, lado, aniso, cor16 = false) {
     this.renderer = renderer;
     this.lado = lado;
+    this.cor16 = cor16;
     this.alvo = new THREE.WebGLRenderTarget(lado, lado, {
+      // 16 bits: RGB565 (o verde, que é quase todo o brilho, com 6 bits; o alfa de 1 bit do RGB5_A1 não servia)
+      ...(cor16 ? { format: THREE.RGBFormat, type: THREE.UnsignedByteType, internalFormat: 'RGB565' } : {}),
       depthBuffer: false,
       generateMipmaps: true,
       minFilter: THREE.LinearMipmapLinearFilter,
@@ -994,13 +1008,14 @@ class Assador {
 
 const unir = (a, b) => (a ? [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])] : b.slice());
 
-function lerPasse() {
+function lerParam(nome) {
   try {
-    return new URLSearchParams(globalThis.location?.search ?? '').get('passe');
+    return new URLSearchParams(globalThis.location?.search ?? '').get(nome);
   } catch (e) {
     return null;
   }
 }
+const lerPasse = () => lerParam('passe');
 
 /** Estação seca (0 a 1) pelo dia do ano: o capim amarela de maio a setembro, com o pico no fim de julho. */
 export const estacaoSeca = (diaDoAno) => 0.5 + 0.5 * Math.cos((2 * Math.PI * ((diaDoAno ?? 0) - 212)) / 365);
@@ -1015,6 +1030,17 @@ function criarTerreno(ctx) {
     caixasA: new CaixasGuardadas(), caixasP: new CaixasGuardadas(), caixasC: new CaixasGuardadas(),
     sobre: { camada: null, zona: false, ladrilhos: false, texZona: null, texCamada: null, texLad: null, zonaSuja: true },
     ab: false, instAssinatura: '',
+    ouvintes: new Set(), ruido: null,
+  };
+  /** Avisa quem lê as amostras do chão (as árvores de perto, R2b) dos retângulos que mudaram (null: tudo). */
+  const avisar = (rets) => {
+    for (const fn of estado.ouvintes) {
+      try {
+        fn(rets);
+      } catch (e) {
+        console.error('terreno: ouvinte das amostras falhou:', e);
+      }
+    }
   };
 
   U.uTerRuido.value = ctx.textura('chao.ruido');
@@ -1128,15 +1154,18 @@ function criarTerreno(ctx) {
     estado.texUso.needsUpdate = true;
     // mapa de cor
     const ladoCor = pt.cor;
-    if (!estado.assador || estado.assador.lado !== ladoCor) {
+    const cor16 = !!pt.cor16 && lerParam('assado') !== '8';
+    if (!estado.assador || estado.assador.lado !== ladoCor || estado.assador.cor16 !== cor16) {
       estado.assador?.descartar();
-      estado.assador = new Assador(ctx.renderer, U, ladoCor, pt.aniso);
+      estado.assador = new Assador(ctx.renderer, U, ladoCor, pt.aniso, cor16);
       U.uTerCor.value = estado.assador.alvo.texture;
+      U.uTerAssado16.value = cor16 ? 1 : 0;
     }
     estado.sujoCor = [];
     estado.assador.assar(estado.mapa);
     estado.sobre.zonaSuja = true;
     atualizarSobre(esp);
+    avisar(null);
   }
 
   function guardarCaixas(esp) {
@@ -1174,6 +1203,7 @@ function criarTerreno(ctx) {
       estado.P = piramideAlturas(T, estado.dados);
     }
     if (tudo) sujarCor(tudo);
+    avisar(rets);
   }
 
   /** Refaz o uso do solo nos retângulos (uma passada pelas tabelas para todos) e marca o mapa de cor. */
@@ -1184,6 +1214,7 @@ function criarTerreno(ctx) {
     }
     for (const r of rets) sujarCor(r);
     estado.texUso.needsUpdate = true;
+    avisar(rets);
   }
 
   function mudancasDeUso(d, esp) {
@@ -1315,6 +1346,7 @@ function criarTerreno(ctx) {
     ctx.ouvir('qualidade', () => {
       // a troca de qualidade solta as texturas do registro: pede de novo
       U.uTerRuido.value = ctx.textura('chao.ruido');
+      estado.ruido = null;
       if (!estado.camadasCC0) U.uTerCamadasB.value = ctx.textura('chao.cc0');
       ligarDetalhe();
       espelharB();
@@ -1378,6 +1410,23 @@ function criarTerreno(ctx) {
     U.uTerLonge.value.set(l0, l1, 0, 0);
   }
 
+  /** Lê de volta a textura de ruído (o alvo dela) uma vez: as árvores de perto usam os mesmos números do chão. */
+  function lerRuido() {
+    const t = U.uTerRuido.value;
+    const alvo = t?.userData?.alvo;
+    if (!alvo || !ctx.renderer?.readRenderTargetPixels) return null;
+    const n = alvo.width;
+    const buf = new Uint8Array(n * n * 4);
+    try {
+      ctx.renderer.readRenderTargetPixels(alvo, 0, 0, n, n, buf);
+    } catch (e) {
+      console.warn('terreno: ruído não leu de volta', e);
+      return null;
+    }
+    estado.ladoRuido = n;
+    return buf;
+  }
+
   // ---------------------------------------------------------------- API
 
   const api = {
@@ -1399,6 +1448,7 @@ function criarTerreno(ctx) {
         rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
         estado.texUso.needsUpdate = true;
         sujarCor([estado.mapa.ox, estado.mapa.oz, estado.mapa.ox + estado.mapa.lado, estado.mapa.oz + estado.mapa.lado]);
+        avisar(null);
       } else if (uso.length) refazerUso(esp, uso);
       if (d.celulas?.length || pedeTudo(d, 'celulas')) {
         estado.sobre.zonaSuja = true;
@@ -1414,6 +1464,8 @@ function criarTerreno(ctx) {
         estado.ultimoAssado = agora;
       }
       U.uTerEstacao.value = estacaoSeca(c.sim.espelho.tempo?.diaDoAno);
+      // a elevação do sol (rad) decide onde a sombra de longe lê o chão (GLSL_TER_VERTICE, a folga da sombra)
+      U.uTerCopaV.value.w = c.ambiente?.ast?.sol?.elevacao ?? 0.8;
       atualizarLonge(c);
       escolherNos(c.camera);
       if (U.uTerAB.value.y > 0.5 && estado.abX !== undefined) U.uTerAB.value.x = estado.abX * c.renderer.getPixelRatio();
@@ -1478,6 +1530,29 @@ function criarTerreno(ctx) {
     copaPerto(dist, faixa = 150) {
       U.uTerCopaV.value.y = dist;
       U.uTerCopaV.value.z = faixa;
+    },
+    /**
+     * Vegetação pintada que some perto da câmera (R2b: as árvores e as moitas de verdade tomam o lugar): alcance e
+     * faixa das árvores e das moitas, em m (0 desliga).
+     */
+    vegetacaoPerto(arv, faixaArv = 120, moitas = 0, faixaMoitas = 40) {
+      U.uTerVegPerto.value.set(arv, Math.max(1, faixaArv), moitas, Math.max(1, faixaMoitas));
+    },
+    /**
+     * Amostras do chão na CPU, para pôr as árvores de perto onde o chão pinta (R2b): a grade de alturas, os dados por
+     * amostra (normal, floresta, água: prepararDados), o uso do solo a 4 m e a textura de ruído lida de volta da GPU
+     * (RGBA8 256², a mesma que o sombreador lê). null antes do espelho.
+     */
+    amostras() {
+      if (!estado.T) return null;
+      // uma leitura só (ela espera a GPU): se falhar, as árvores seguem sem o ruído (a pintura sem as manchas)
+      if (estado.ruido === null) estado.ruido = lerRuido() ?? false;
+      return { T: estado.T, dados: estado.dados, uso: estado.uso, ladoUso: LADO_USO, mapa: estado.mapa, ruido: estado.ruido || null, ladoRuido: estado.ladoRuido };
+    },
+    /** Ouve as mudanças das amostras: fn(retângulos [x0, z0, x1, z1] | null = tudo). Devolve a função que solta. */
+    aoMudar(fn) {
+      estado.ouvintes.add(fn);
+      return () => estado.ouvintes.delete(fn);
     },
     /** Refaz o mapa de cor (depois de pintar o uso do solo por fora, por exemplo). */
     reassar: (ret = null) => (ret ? sujarCor(ret) : estado.assador?.assar(estado.mapa)),

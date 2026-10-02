@@ -1,5 +1,6 @@
 // Catálogo dos prédios da cidade, primeira versão (D20). A capacidade (lares, moradores, empregos) sai daqui por modelo
-// e nível; o render escolhe a forma dentro da faixa de andares pela semente. F0 cria; S2a mantém. Números: (calibrar).
+// e nível; o render escolhe a forma dentro da faixa de andares pela semente (D20). F0 criou; dona: S2a. Números:
+// (calibrar).
 //
 // Modelo: { nome, zona, planta: [colunas ao longo da via, linhas de fundo] (células de 8 m), niveis: [5 níveis] }.
 // Os modelos de uma coluna (8 m de frente) são os lotes estreitos das cidades brasileiras; os rasos (bar, casa de
@@ -68,6 +69,14 @@ function niveis(zona, { lares = null, pessoas, andares, materiais }) {
 
 const modelo = (nome, zona, planta, spec) => ({ nome, zona, planta, niveis: niveis(zona, spec) });
 
+// Faixas de andares da cidade vertical (D76): a residencial média sobe de 3 a 6 andares no nível 1 até 12 a 25 no
+// nível 5; a comercial baixa acompanha em escala menor; a residencial alta (M1b) fica pronta com 30 a 60.
+const A_RES_MEDIA = [[3, 6], [4, 8], [6, 12], [9, 18], [12, 25]];
+// (as tipologias com varanda por andar, níveis 1 a 4, passam do teto de triângulos do LOD0 acima de uns 37 andares;
+// a torre de vidro do nível 5 vai a 60)
+const A_RES_ALTA = [[30, 34], [30, 36], [32, 37], [34, 37], [45, 60]];
+const A_COM_BAIXA = [[1, 2], [1, 3], [2, 4], [2, 5], [3, 6]];
+
 export const PREDIOS = congelar({
   casaEsquina: modelo('Casa de esquina', 'resBaixa', [1, 2], {
     lares: [1, 1], pessoas: [3, 4], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], materiais: { tijolo: 1, cimento: 1 },
@@ -84,38 +93,40 @@ export const PREDIOS = congelar({
   sobrado: modelo('Sobrado geminado', 'resBaixa', [3, 4], {
     lares: [2, 3], pessoas: [8, 12], andares: [[2, 2], [2, 2], [2, 3], [2, 3], [3, 3]], materiais: { tijolo: 4, serrada: 2, cimento: 2 },
   }),
+  // residencial média (D76): uns 13 a 15 moradores por andar no lote de 32 x 40 m, metade dele construída
   predioEstreito: modelo('Prédio estreito', 'resMedia', [2, 4], {
-    lares: [6, 12], pessoas: [18, 36], andares: [[4, 5], [5, 6], [6, 8], [8, 10], [10, 12]], materiais: { concreto: 4, tijolo: 3, vidro: 1 },
+    lares: [8, 38], pessoas: [24, 110], andares: A_RES_MEDIA, materiais: { concreto: 4, tijolo: 3, vidro: 1 },
   }),
   predioBaixo: modelo('Prédio baixo', 'resMedia', [3, 4], {
-    lares: [8, 16], pessoas: [24, 48], andares: [[4, 5], [5, 6], [6, 8], [8, 10], [10, 12]], materiais: { concreto: 5, tijolo: 4, vidro: 1 },
+    lares: [12, 58], pessoas: [36, 170], andares: A_RES_MEDIA, materiais: { concreto: 5, tijolo: 4, vidro: 1 },
   }),
   predioMedio: modelo('Prédio médio', 'resMedia', [4, 5], {
-    lares: [16, 28], pessoas: [48, 84], andares: [[4, 6], [6, 8], [8, 10], [10, 12], [12, 16]], materiais: { concreto: 8, tijolo: 6, vidro: 2 },
+    lares: [20, 96], pessoas: [60, 280], andares: A_RES_MEDIA, materiais: { concreto: 8, tijolo: 6, vidro: 2 },
   }),
   predioLargo: modelo('Prédio largo', 'resMedia', [5, 5], {
-    lares: [20, 36], pessoas: [60, 108], andares: [[4, 6], [6, 8], [8, 10], [10, 12], [12, 16]], materiais: { concreto: 10, tijolo: 7, vidro: 3 },
+    lares: [26, 120], pessoas: [75, 350], andares: A_RES_MEDIA, materiais: { concreto: 10, tijolo: 7, vidro: 3 },
   }),
+  // residencial alta (M1b): torres de 30 a 60 andares
   torreRes: modelo('Torre residencial', 'resAlta', [5, 6], {
-    lares: [60, 160], pessoas: [180, 480], andares: [[15, 20], [18, 25], [22, 30], [25, 35], [40, 60]], materiais: { concreto: 24, vidro: 8, aco: 8 },
+    lares: [140, 300], pessoas: [420, 900], andares: A_RES_ALTA, materiais: { concreto: 24, vidro: 8, aco: 8 },
   }),
   torreEstreita: modelo('Torre estreita', 'resAlta', [4, 6], {
-    lares: [40, 110], pessoas: [120, 330], andares: [[15, 20], [18, 25], [22, 30], [25, 35], [35, 50]], materiais: { concreto: 18, vidro: 6, aco: 6 },
+    lares: [110, 240], pessoas: [320, 700], andares: A_RES_ALTA, materiais: { concreto: 18, vidro: 6, aco: 6 },
   }),
   bar: modelo('Bar de esquina', 'comBaixa', [1, 1], {
-    pessoas: [2, 4], andares: [[1, 1], [1, 1], [1, 2], [2, 2], [2, 2]], materiais: { tijolo: 1, vidro: 1 },
+    pessoas: [2, 6], andares: [[1, 1], [1, 2], [1, 2], [2, 3], [2, 3]], materiais: { tijolo: 1, vidro: 1 },
   }),
   lojaEstreita: modelo('Loja estreita', 'comBaixa', [1, 2], {
-    pessoas: [3, 6], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], materiais: { tijolo: 2, vidro: 1 },
+    pessoas: [3, 10], andares: A_COM_BAIXA, materiais: { tijolo: 2, vidro: 1 },
   }),
   loja: modelo('Loja', 'comBaixa', [2, 3], {
-    pessoas: [6, 12], andares: [[1, 1], [1, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, vidro: 1 },
+    pessoas: [6, 24], andares: A_COM_BAIXA, materiais: { tijolo: 3, vidro: 1 },
   }),
   lojaDupla: modelo('Loja dupla', 'comBaixa', [3, 3], {
-    pessoas: [10, 20], andares: [[1, 2], [2, 2], [2, 3], [2, 3], [3, 3]], materiais: { tijolo: 4, vidro: 2 },
+    pessoas: [10, 40], andares: A_COM_BAIXA, materiais: { tijolo: 4, vidro: 2 },
   }),
   mercado: modelo('Mercado de bairro', 'comBaixa', [4, 4], {
-    pessoas: [16, 32], andares: [[1, 1], [1, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 5, concreto: 2, vidro: 2 },
+    pessoas: [16, 60], andares: [[1, 1], [1, 2], [2, 3], [2, 4], [3, 5]], materiais: { tijolo: 5, concreto: 2, vidro: 2 },
   }),
   galeria: modelo('Galeria', 'comAlta', [4, 5], {
     pessoas: [30, 100], andares: [[2, 3], [3, 5], [5, 8], [8, 12], [12, 25]], materiais: { concreto: 12, vidro: 6, aco: 3 },
@@ -151,3 +162,12 @@ export const modelosDaZona = (z) => PREDIOS_ORDEM.filter((id) => PREDIOS[id].zon
 
 /** Pé-direito de referência por família, em metros (render). */
 export const PE_DIREITO = congelar({ res: 3, com: 4.2, esc: 3.8, ind: 8 });
+
+/** Nível n (1 a 5) de um modelo (id ou índice), ou null. */
+export const nivelDoModelo = (m, n) => modeloPredio(m)?.niveis[Math.max(1, Math.min(5, n)) - 1] ?? null;
+
+/** Soma das vagas de um nível do catálogo. */
+export const somaVagas = (nv) => (nv ? nv.empregos[0] + nv.empregos[1] + nv.empregos[2] + nv.empregos[3] : 0);
+
+/** Níveis de cada modelo pelo índice (predios.modelo): NIVEIS[modelo][nivel - 1]. */
+export const NIVEIS = Object.freeze(PREDIOS_ORDEM.map((id) => PREDIOS[id].niveis));

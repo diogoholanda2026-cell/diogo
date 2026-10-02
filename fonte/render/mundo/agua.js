@@ -2,8 +2,10 @@
 //   mar    blocos de 64 m que têm alguma amostra de mar na grade (juntos em faixas por linha) e a moldura até 40 km
 //          quando a borda do mapa é mar; nível do mar do espelho
 //   lagoa  o contorno do espelho, aberto 24 m para fora (a margem de verdade é o chão cortando o plano), no nível dela
-//   rio    faixa ao longo da poligonal dos pontos do espelho, com o nível por ponto e a direção da correnteza por vértice
-//          (a R2b herda e acrescenta a correnteza e a espuma do rio)
+//   rio    faixa ao longo da poligonal dos pontos do espelho, com o nível por ponto, a direção da correnteza (rio
+//          abaixo: para o nível mais baixo) e as coordenadas do rio por vértice (aRio: metros ao longo, posição através
+//          com a margem nominal em ±1 e a meia largura), que o sombreador usa para a correnteza, a espuma das margens
+//          e as pedras (R2b)
 // O material lê as mesmas texturas e uniformes do terreno (ctx.chao.uniformes).
 import * as THREE from 'three';
 import { GLSL_AGUA_VERTICE, GLSL_AGUA_FRAGMENTO, AGUAS } from '../materiais/shaders/agua.glsl.js';
@@ -107,16 +109,28 @@ export function curvaDoRio(pontos, passo = 10) {
   return out;
 }
 
-/** Geometria de toda a água do espelho: posição, tipo (aAgua) e direção da correnteza (aFluxo). */
+/**
+ * Sentido rio abaixo dos pontos (1 na ordem do espelho, -1 ao contrário): para o nível mais baixo; com o nível igual
+ * nas pontas, a ordem em que vieram (a simulação desenha da nascente para a foz).
+ */
+export function sentidoDoRio(pontos) {
+  const m = pontos.length / 4;
+  if (m < 2) return 1;
+  return pontos[4 * (m - 1) + 2] > pontos[2] + 1e-6 ? -1 : 1;
+}
+
+/** Geometria de toda a água do espelho: posição, tipo (aAgua), direção da correnteza (aFluxo) e coordenadas do rio (aRio). */
 export function geometriaAgua(T, nivelMar = 0) {
   const pos = [];
   const tipo = [];
   const fluxo = [];
+  const rio = [];
   const idx = [];
-  const vert = (x, y, z, t, fx = 0, fz = 0) => {
+  const vert = (x, y, z, t, fx = 0, fz = 0, rs = 0, rl = 0, rm = 0) => {
     pos.push(x, y, z);
     tipo.push(t);
     fluxo.push(fx, fz);
+    rio.push(rs, rl, rm);
     return pos.length / 3 - 1;
   };
   const quad = (x0, z0, x1, z1, y, t) => {
@@ -138,6 +152,8 @@ export function geometriaAgua(T, nivelMar = 0) {
       quad(ox + L, oz, R, oz + L, nivelMar, AGUAS.mar.tipo);
     }
   }
+  // o mar primeiro (grupo 0) e a água de dentro depois (grupo 1: lagoas e rios, com o programa do rio)
+  const nMar = idx.length;
   for (const lg of T.lagoas ?? []) {
     const c = abrirContorno(lg.contorno, FOLGA_LAGOA);
     const pts = [];
@@ -156,12 +172,20 @@ export function geometriaAgua(T, nivelMar = 0) {
   }
   for (const r of T.rios ?? []) {
     const c = curvaDoRio(r.pontos, 10);
+    const sent = sentidoDoRio(r.pontos);
+    // comprimento acumulado (m), contado rio abaixo
+    const acum = [0];
+    for (let i = 1; i < c.length; i++) acum.push(acum[i - 1] + Math.hypot(c[i][0] - c[i - 1][0], c[i][1] - c[i - 1][1]));
+    const total = acum[acum.length - 1];
     const base = pos.length / 3;
-    for (const [x, z, nivel, larg, tx, tz] of c) {
-      const m = larg / 2 + FOLGA_MARGEM;
-      vert(x - tz * m, nivel, z + tx * m, AGUAS.rio.tipo, tx, tz);
-      vert(x + tz * m, nivel, z - tx * m, AGUAS.rio.tipo, tx, tz);
-    }
+    c.forEach(([x, z, nivel, larg, tx, tz], i) => {
+      const meia = larg / 2;
+      const m = meia + FOLGA_MARGEM;
+      const sAo = sent > 0 ? acum[i] : total - acum[i];
+      // aRio.y positivo do lado (fz, -fx) da correnteza f (o mesmo nos dois sentidos)
+      vert(x - tz * m, nivel, z + tx * m, AGUAS.rio.tipo, tx * sent, tz * sent, sAo, (-m / meia) * sent, meia);
+      vert(x + tz * m, nivel, z - tx * m, AGUAS.rio.tipo, tx * sent, tz * sent, sAo, (m / meia) * sent, meia);
+    });
     for (let i = 0; i + 1 < c.length; i++) {
       const a = base + 2 * i;
       const b = a + 1;
@@ -181,8 +205,11 @@ export function geometriaAgua(T, nivelMar = 0) {
   g.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
   g.setAttribute('aAgua', new THREE.Float32BufferAttribute(tipo, 1));
   g.setAttribute('aFluxo', new THREE.Float32BufferAttribute(fluxo, 2));
+  g.setAttribute('aRio', new THREE.Float32BufferAttribute(rio, 3));
   g.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e7);
+  if (nMar) g.addGroup(0, nMar, 0);
+  if (idx.length > nMar) g.addGroup(nMar, idx.length - nMar, 1);
   return g;
 }
 
@@ -193,9 +220,14 @@ function trocar(src, alvo, novo) {
   return src.replace(alvo, novo);
 }
 
-export function criarMaterialAgua(ganchos, U) {
+/**
+ * Material da água. Com `dentro`, o programa da água de dentro (lagoas e rios) leva o bloco do rio (AGUA_RIO); o do
+ * mar não: o desvio por tipo na GPU é por triângulo, mas o bloco do rio pesava nos registradores de todo o mar.
+ */
+export function criarMaterialAgua(ganchos, U, dentro = false) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.06, metalness: 0 });
-  mat.name = 'agua';
+  mat.name = dentro ? 'agua-dentro' : 'agua';
+  if (dentro) mat.defines = { AGUA_RIO: '' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U);
     let vs = shader.vertexShader;
@@ -211,7 +243,7 @@ export function criarMaterialAgua(ganchos, U) {
     shader.vertexShader = vs;
     shader.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => 'agua';
+  mat.customProgramCacheKey = () => (dentro ? 'agua-dentro' : 'agua');
   return ganchos.aplicar(mat, ['sombra', 'sombraLonge', 'hao', 'noite', 'neblina']);
 }
 
@@ -227,7 +259,7 @@ function criarAgua(ctx) {
     uAguaCeuH: { value: new THREE.Color(0.62, 0.7, 0.8) },
     uAguaCeuZ: { value: new THREE.Color(0.3, 0.45, 0.7) },
   };
-  const mat = criarMaterialAgua(ctx.ganchos, U);
+  const mat = [criarMaterialAgua(ctx.ganchos, U), criarMaterialAgua(ctx.ganchos, U, true)];
   const soltar = ctx.ouvir('qualidade', () => (U.uAguaOndas.value = ctx.textura('chao.ondas')));
   let malha = null;
   let feito = null;
@@ -267,7 +299,7 @@ function criarAgua(ctx) {
         ctx.cena.remove(malha);
         malha.geometry.dispose();
       }
-      mat.dispose();
+      for (const m of mat) m.dispose();
     },
   };
 }

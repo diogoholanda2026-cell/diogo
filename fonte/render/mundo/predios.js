@@ -8,17 +8,25 @@
 //         só da faixa de longe, e os de perto numa só da faixa de perto: a cidade não é desenhada duas vezes
 //   sombra própria (D43): listas de projetores com o LOD1 dos setores cuja sombra cai no chão da cascata
 //         (ctx.sombra.regiao), cujos buffers de instância o gêmeo da cena de sombra compartilha (o LOD0 nunca projeta)
-//   tabela de prédios na GPU: RGBA8 512² (R camada, G bits, B agenda) e RG32F 512² (início e fim da obra, R4b)
+//   anexos (D39, R4b): o prédio que nasce, sobe de nível ou muda vai para o anexo do setor (malha pequena, refeita na
+//         oficina em poucos ms) e a base do setor é refundida depois de 5 s sem mudança (mundo/anexos.js); o vértice
+//         esconde a cópia que não vale pelo bit ANEXO da tabela
+//   tabela de prédios na GPU: RGBA8 512² (R camada, G bits, B agenda) e RGBA32F 512² (início e fim da obra, cota da
+//         base e altura do prédio: o corte da obra no vértice, R4b)
 // Publica para as outras parcelas: criarMaterialEdificio(ctx) (X1a, R5), uniformesEdificio, e no domínio
-// ctx.dominio('predios'): { tabela, obra, material, preparar(), pronto(), caixaDoPredio(idx), medidas() }.
+// ctx.dominio('predios'): { tabela, obra, material, preparar(), pronto(), caixaDoPredio(idx), medidas(), planoObra(i),
+// alturaObra(i, H) (R5: a altura do corte dos colocáveis), lotesVisiveis() (lotes.js) }.
 import * as THREE from 'three';
 import { GradeSetores, pedidoDoSetor, assinatura, distCaixa, LADO_SETOR } from './setores.js';
 import { ListaCompactada } from './instancias.js';
 import { oficinaDe } from './oficina.js';
-import { formaUnitaria, FORMAS, BITS_TABELA } from '../geracao/malhaPredio.js';
+import { formaUnitaria, FORMAS, BITS_TABELA, ID_ANEXO } from '../geracao/malhaPredio.js';
 import { CAIXA, gerarSetor } from '../geracao/fundir.js';
+import { planoPredio } from '../geracao/planoPredio.js';
+import { RegistroAnexos } from './anexos.js';
 import * as SH from '../materiais/shaders/fachada.glsl.js';
 import { PREDIO, TIPO_PREDIO } from '../../contratos/flags.js';
+import { GANCHOS } from '../../contratos/render.js';
 import { refDe, idxDaRef } from '../../contratos/espelho.js';
 import { LOD_PREDIOS } from '../../data/estilos.js';
 import { PRIORIDADE } from '../camera/selecao.js';
@@ -37,6 +45,8 @@ export const LADO_TABELA = 512;
  */
 const LOD1_NA_CARGA = 40000;
 const BYTES_INST = ['aFac', 'aCorA', 'aCorB', 'aTopo'];
+/** O idx do prédio no aId (sem o bit do anexo). */
+const MASCARA_ID = ID_ANEXO - 1;
 /** Folga (m) em volta do chão da cascata para escolher os setores que projetam sombra. */
 const FOLGA_SOMBRA = 60;
 /** Alcance máximo (m) da sombra de um setor com o sol baixo. */
@@ -210,6 +220,9 @@ export function sombraAlcanca(x0, z0, lado, cx, cz, raio, ux, uz, alcance) {
 /** Uniformes do material `edificio` (um objeto só: mudar o valor vale para todos os prédios). */
 export const uniformesEdificio = {
   gPredTab: { value: null },
+  gPredObra: { value: null },
+  gTique: { value: 0 },
+  gCorHolding: { value: new THREE.Vector3(201, 168, 106) },
   gDetalhe: { value: null },
   gHora: { value: 10 },
   gNoite: { value: 0 },
@@ -221,6 +234,19 @@ export const uniformesEdificio = {
   gCeuChao: { value: new THREE.Color(0.16, 0.16, 0.15) },
 };
 
+/**
+ * Ganchos da fachada de longe (LOD1 e LOD2, a partir do alcance do LOD0; R4b): o HAO sai (a oclusão do céu no pé das
+ * paredes some no pixel de longe) e a sombra própria lê o mapa com 2 amostras em vez de 8 (SOMBRA_LONGE_AMOSTRAS: o
+ * texel da cascata de longe já passa do pixel; na placa cada amostra é uma leitura de textura). Medido passe a passe
+ * no SwiftShader (nota da R4b): todos os ganchos juntos são uns 30% do custo por pixel da fachada de longe (a sombra é
+ * o maior, uns 18%); o resto é a fachada. ?ganchosLonge=a,b e ?amostrasLonge=n trocam na carga, e bancadaLonge() na
+ * mesma página (bancada A/B).
+ */
+export const GANCHOS_FORA_LONGE = Object.freeze(['hao']);
+/** Os ganchos do contrato menos os de GANCHOS_FORA_LONGE (um gancho novo no contrato entra de longe sozinho). */
+export const GANCHOS_LONGE = Object.freeze(GANCHOS.filter((n) => !GANCHOS_FORA_LONGE.includes(n)));
+export const SOMBRA_LONGE_AMOSTRAS = 2;
+
 function trocar(src, alvo, novo) {
   if (!src.includes(alvo)) throw new Error(`edificio: shader sem '${alvo}' (o three mudou?)`);
   return src.replace(alvo, novo);
@@ -231,9 +257,10 @@ function trocar(src, alvo, novo) {
  * mesmo material serve ao LOD0 fundido (atributos quantizados por vértice) e ao LOD1 instanciado (o three compila as
  * duas variantes). Para X1a e R5: escrever a malha no formato de malhaPredio.js e usar este material. barata (PC2): a
  * fachada de longe do LOD1 e do LOD2 (FAC_BARATA: sem paralaxe, caixilho, ar-condicionado, grade, letras e o detalhe
- * fino, que somem no pixel; a grade de janelas, as persianas, as cortinas e a luz das janelas ficam).
+ * fino, que somem no pixel; a grade de janelas, as persianas, as cortinas e a luz das janelas ficam). nomes: os ganchos
+ * (todos por padrão); amostras: teto das amostras do PCF da sombra própria neste material (0: o do perfil).
  */
-export function criarMaterialEdificio(ctx, { ganchos = null, barata = false } = {}) {
+export function criarMaterialEdificio(ctx, { ganchos = null, barata = false, nomes = null, amostras = 0 } = {}) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   m.name = barata ? 'edificio-longe' : 'edificio';
   if (barata) m.defines = { ...m.defines, FAC_BARATA: '' };
@@ -256,10 +283,23 @@ export function criarMaterialEdificio(ctx, { ganchos = null, barata = false } = 
     shader.vertexShader = vs;
     shader.fragmentShader = fs;
   };
-  m.customProgramCacheKey = () => (barata ? 'edificio-1-barata' : 'edificio-1');
-  m.userData.edificio = true;
   const g = ganchos ?? ctx.ganchos;
-  g.aplicar(m, g.nomes());
+  const lista = (nomes ?? g.nomes()).filter((n) => g.nomes().includes(n));
+  m.customProgramCacheKey = () => `${barata ? 'edificio-1-barata' : 'edificio-1'}|${lista.join(',')}|${amostras}`;
+  m.userData.edificio = true;
+  g.aplicar(m, lista);
+  if (amostras > 0) {
+    // o PCF com menos amostras só neste material: o uniforme próprio segue o do gancho com o teto
+    const meu = { value: amostras };
+    const comGanchos = m.onBeforeCompile;
+    m.onBeforeCompile = (shader, renderer) => {
+      comGanchos.call(m, shader, renderer);
+      if (shader.uniforms.gSombraAmostras) shader.uniforms.gSombraAmostras = meu;
+    };
+    m.userData.amostras = () => {
+      meu.value = Math.min(amostras, g.uniformes.gSombraAmostras?.value ?? amostras);
+    };
+  }
   return m;
 }
 
@@ -279,6 +319,61 @@ function soltarCopia() {
   this.array = { byteLength: this.array.byteLength, length: this.array.length };
 }
 
+/** Malha LOD0 quantizada da oficina (fundir.js) num Mesh do three, no canto do setor. */
+function malhaLod0(m, material, x0, z0, nome) {
+  const A = m.atributos;
+  const g = new THREE.BufferGeometry();
+  const at = (arr, k, norm) => new THREE.BufferAttribute(arr, k, norm).onUpload(soltarCopia);
+  g.setAttribute('position', at(A.posicao, 3, true));
+  g.setAttribute('normal', at(A.normal, 2, true));
+  const fuv = new THREE.Float16BufferAttribute(A.facUV, 4);
+  fuv.onUpload(soltarCopia);
+  g.setAttribute('aFacUV', fuv);
+  g.setAttribute('aFac', at(A.fac, 4, false));
+  g.setAttribute('aCorA', at(A.corA, 4, false));
+  g.setAttribute('aCorB', at(A.corB, 4, false));
+  g.setAttribute('aId', at(A.id, 1, false));
+  g.setAttribute('aAO', at(A.ao, 1, true));
+  g.setIndex(at(m.indices, 1, false));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Math.sqrt(3) * 1.01);
+  g.boundingBox = new THREE.Box3(new THREE.Vector3(-1.01, -1.01, -1.01), new THREE.Vector3(1.01, 1.01, 1.01));
+  const mesh = new THREE.Mesh(g, material);
+  const [cx, cy, cz, s] = m.escala;
+  mesh.position.set(x0 + cx, cy, z0 + cz);
+  mesh.scale.setScalar(s);
+  mesh.matrixAutoUpdate = false;
+  mesh.updateMatrix();
+  mesh.name = nome;
+  let bytes = m.indices.byteLength;
+  for (const a of Object.values(A)) bytes += a.byteLength;
+  return { mesh, bytes, tris: m.tris };
+}
+
+/** Grupo do LOD1 ({ n, np, mat, ids, bytes }) só com as instâncias que passam em ok(id): cópia para a sombra e o lote. */
+export function filtrarGrupo(x, ok) {
+  if (!x?.n) return { n: 0, np: 0, mat: new Float32Array(0), ids: null, bytes: null };
+  const keep = [];
+  let np = 0;
+  for (let i = 0; i < x.n; i++) {
+    if (!ok(x.ids[i])) continue;
+    keep.push(i);
+    if (i < (x.np ?? x.n)) np++;
+  }
+  if (keep.length === x.n) return x;
+  const k4 = x.bytes ? x.bytes.length / Math.max(1, x.n) : 0;
+  const mat = new Float32Array(keep.length * 16);
+  const bytes = x.bytes ? new Uint8Array(keep.length * k4) : null;
+  const ids = new Uint32Array(keep.length);
+  keep.forEach((i, k) => {
+    mat.set(x.mat.subarray(16 * i, 16 * i + 16), 16 * k);
+    if (bytes) bytes.set(x.bytes.subarray(k4 * i, k4 * i + k4), k4 * k);
+    ids[k] = x.ids[i];
+  });
+  return { n: keep.length, np, mat, ids, bytes };
+}
+
+const agoraMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 // ------------------------------------------------------------------------------------------------ domínio
 
 function criarPredios(ctx) {
@@ -286,9 +381,14 @@ function criarPredios(ctx) {
   const esp0 = ctx.sim.espelho;
   const grade = new GradeSetores({ tam: esp0.mapa?.tam ?? 8192, origem: esp0.mapa?.origem ?? [-4096, -4096] });
   const oficina = oficinaDe(ctx);
-  // o LOD0 (perto) com a fachada inteira; o LOD1 e o LOD2 (de longe) com a barata (PC2)
+  const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+  // o LOD0 (perto) com a fachada inteira; o LOD1 e o LOD2 (de longe) com a barata (PC2) e os ganchos de longe (R4b)
   const material = criarMaterialEdificio(ctx);
-  const materialLonge = criarMaterialEdificio(ctx, { barata: true });
+  const nomesLonge = qs.has('ganchosLonge') ? qs.get('ganchosLonge').split(',').filter(Boolean) : GANCHOS_LONGE;
+  const amostrasLonge = qs.has('amostrasLonge') ? Number(qs.get('amostrasLonge')) || 0 : SOMBRA_LONGE_AMOSTRAS;
+  const materialLonge = criarMaterialEdificio(ctx, { barata: true, nomes: nomesLonge, amostras: amostrasLonge });
+  const variantesLonge = new Map(); // bancadaLonge
+  const reg = new RegistroAnexos();
 
   // tabelas na GPU
   const dadosTab = new Uint8Array(LADO_TABELA * LADO_TABELA * 4);
@@ -296,9 +396,10 @@ function criarPredios(ctx) {
   tabela.magFilter = tabela.minFilter = THREE.NearestFilter;
   tabela.generateMipmaps = false;
   tabela.name = 'predios:tabela';
-  // RG32F (2.4): início e fim da obra em tiques; o progresso sai no vértice, nenhum envio por quadro
-  const dadosObra = new Float32Array(LADO_TABELA * LADO_TABELA * 2);
-  const obra = new THREE.DataTexture(dadosObra, LADO_TABELA, LADO_TABELA, THREE.RGFormat, THREE.FloatType);
+  // RGBA32F (2.4): início e fim da obra em tiques, a cota da base e a altura do prédio (o corte no vértice, R4b); só
+  // muda quando a obra começa ou acaba: nenhum envio por quadro
+  const dadosObra = new Float32Array(LADO_TABELA * LADO_TABELA * 4);
+  const obra = new THREE.DataTexture(dadosObra, LADO_TABELA, LADO_TABELA, THREE.RGBAFormat, THREE.FloatType);
   obra.magFilter = obra.minFilter = THREE.NearestFilter;
   obra.generateMipmaps = false;
   obra.name = 'predios:obra';
@@ -312,6 +413,7 @@ function criarPredios(ctx) {
     obraInteira = false;
   };
   uniformesEdificio.gPredTab.value = tabela;
+  uniformesEdificio.gPredObra.value = obra;
   uniformesEdificio.gDetalhe.value = ctx.textura('fachadaDetalhe');
   // A/B dos materiais (D46): com ?materiais=cc0 a fachada usa o detalhe fotográfico quando a montagem o traz
   if (modoMateriais() === 'cc0') {
@@ -319,8 +421,7 @@ function criarPredios(ctx) {
       if (t) uniformesEdificio.gDetalhe.value = t;
     });
   }
-  const mascara = typeof location !== 'undefined' && new URLSearchParams(location.search).get('passe') === 'mascara';
-  uniformesEdificio.gPrediosMascara.value = mascara ? 1 : 0;
+  uniformesEdificio.gPrediosMascara.value = qs.get('passe') === 'mascara' ? 1 : 0;
 
   // listas do LOD1/LOD2 visível e dos projetores de sombra, uma por forma; com as duas faixas de profundidade
   // (ctx.semClip), 'vis' fica só na faixa de perto e 'longe' (os setores além do corte) só na de longe
@@ -364,12 +465,25 @@ function criarPredios(ctx) {
   const recebidos = [];
   let pendentes1 = 0;
   let pendentes0 = 0;
+  let pendentesA = 0;
   let chaveVis = -1;
   let ordemVista = -1; // o balde em que todos os setores visíveis já estão em ordem
   let chaveSombra = -1;
+  let sombraAdiada = false;
+  // o pior envio por parte desde a carga (bancada: medidas().envio)
+  const piorPartes = { receber: 0, listas: 0, sombra: 0 };
   let nLod0 = 0;
   let bytesLod0 = 0;
-  let msEnvio = 0;
+  let nAnexos = 0;
+  let serialAnexo = 0; // cada anexo montado ganha um número: as listas visíveis e de sombra seguem a troca
+  // ms de envio (malhas novas e listas compactadas) por quadro e o pior dos últimos 120
+  const janelaEnvio = new Float32Array(120);
+  // versão dos bits (anexo, obra) por setor: as cópias filtradas da sombra e do lote seguem esta versão
+  let versaoBits = 1;
+  let filtros = 0;
+  // plano dos prédios em obra (a altura do corte, o esqueleto e a grua de obras.js) e as alturas de fora (R5)
+  const planos = new Map();
+  const alturasFora = new Map();
   const frustum = new THREE.Frustum();
   const mProj = new THREE.Matrix4();
   const caixa = new THREE.Box3();
@@ -378,7 +492,10 @@ function criarPredios(ctx) {
 
   const novoSetor = (s) => {
     const [x0, z0] = grade.canto(s);
-    return { s, x0, z0, lista: [], versao: 1, lod1: null, lista1: null, v1: 0, pedido1: 0, lod0: null, pedido0: 0, ymin: -2, ymax: 40, usado: 0, modo: 1, vis: false };
+    return {
+      s, x0, z0, lista: [], versao: 1, lod1: null, lista1: null, v1: 0, pedido1: 0, lod0: null, pedido0: 0, lote: null,
+      anexo: null, pedidoA: null, ymin: -2, ymax: 40, usado: 0, modo: 1, vis: false, vBits: 0, filtro: null, vMin: 0,
+    };
   };
   const setorPara = (s) => {
     let st = setores.get(s);
@@ -397,23 +514,81 @@ function criarPredios(ctx) {
     const b = new Uint32Array(cap);
     b.set(sig);
     sig = b;
+    reg.crescer(cap);
   }
 
-  function escreverTabela(P, i) {
-    if (i >= LADO_TABELA * LADO_TABELA) return;
-    const k = 4 * i;
+  /** Plano de um prédio da cidade em obra (guardado pela assinatura) ou null. */
+  function planoObra(i) {
+    const P = ctx.sim.espelho.predios;
+    if (!P || i >= P.n || !P.viva[i] || P.tipo[i] !== TIPO_PREDIO.ZONA) return null;
+    const sg = assinatura(P, i);
+    const g = planos.get(i);
+    if (g && g.sig === sg) return g.plano;
+    const plano = planoPredio({ w: P.w[i], d: P.d[i], modelo: P.modelo[i], semente: P.semente[i], nivel: P.nivel[i], estilo: P.estilo[i], cor: P.cor[i], abandonado: !!(P.flags[i] & PREDIO.ABANDONADO) });
+    planos.set(i, { sig: sg, plano });
+    return plano;
+  }
+
+  /** Bits do canal G da tabela (sem os do anexo). */
+  function bitsDe(P, i) {
     const viva = i < P.n && P.viva[i];
     const f = viva ? P.flags[i] : 0;
     let g = 0;
     if (f & PREDIO.ABANDONADO) g |= BITS_TABELA.ABANDONADO;
     if (f & PREDIO.OBRA) g |= BITS_TABELA.OBRA;
+    if (f & PREDIO.OBRA_NIVEL) g |= BITS_TABELA.NIVEL;
     if (viva && (f & PREDIO.HOLDING || P.tipo[i] === TIPO_PREDIO.HOLDING)) g |= BITS_TABELA.HOLDING;
-    dadosTab[k + 1] = g;
-    dadosTab[k + 2] = viva ? (Math.imul(P.semente[i] ^ 0x5bd1e995, 0x9e3779b1) >>> 24) & 255 : 0;
-    dadosObra[2 * i] = viva ? P.obraIni[i] : 0;
-    dadosObra[2 * i + 1] = viva ? P.obraFim[i] : 0;
-    if (!tabelaInteira) tabela.addUpdateRange(k, 4);
-    if (!obraInteira) obra.addUpdateRange(2 * i, 2);
+    return g;
+  }
+
+  /** Reescreve o canal G da vaga i (bits da simulação e os do anexo). Devolve true se mudou. */
+  function escreverBits(P, i) {
+    if (i >= LADO_TABELA * LADO_TABELA) return false;
+    const viva = i < P.n && P.viva[i] && P.tipo[i] === TIPO_PREDIO.ZONA;
+    const b = reg.bits(i, viva ? setorDe[i] : -1, viva ? sig[i] : 0);
+    const g = bitsDe(P, i) | (b.anexo ? BITS_TABELA.ANEXO : 0) | (b.apagado ? BITS_TABELA.APAGADO : 0);
+    const k = 4 * i + 1;
+    if (dadosTab[k] === g) return false;
+    dadosTab[k] = g;
+    if (!tabelaInteira) tabela.addUpdateRange(4 * i, 4);
+    tabela.needsUpdate = true;
+    return true;
+  }
+
+  /** Escreve a vaga i nas duas tabelas. Devolve true se os bits do canal G mudaram (anexo, obra, abandono). */
+  function escreverTabela(P, i) {
+    if (i >= LADO_TABELA * LADO_TABELA) return false;
+    const k = 4 * i;
+    const viva = i < P.n && P.viva[i];
+    const ag = viva ? (Math.imul(P.semente[i] ^ 0x5bd1e995, 0x9e3779b1) >>> 24) & 255 : 0;
+    if (dadosTab[k + 2] !== ag) {
+      dadosTab[k + 2] = ag;
+      if (!tabelaInteira) tabela.addUpdateRange(k, 4);
+      tabela.needsUpdate = true;
+    }
+    const mudou = escreverBits(P, i);
+    // a obra: início, fim, a cota da base e a altura do prédio (0: sem corte)
+    const f = viva ? P.flags[i] : 0;
+    const emObra = !!(f & PREDIO.OBRA) && !(f & PREDIO.OBRA_NIVEL);
+    let H = 0;
+    if (emObra) H = alturasFora.get(i) ?? planoObra(i)?.alturaTopo ?? 0;
+    else planos.delete(i);
+    // a vaga morta esquece a altura de fora (R5): reaproveitada por um prédio da cidade, o corte sai do plano dele
+    if (!viva) alturasFora.delete(i);
+    const o = 4 * i;
+    const ini = viva ? P.obraIni[i] : 0;
+    const fim = viva ? P.obraFim[i] : 0;
+    const y = viva ? Math.fround(P.y[i]) : 0;
+    const h = emObra ? Math.fround(Math.max(0, H)) : 0;
+    if (dadosObra[o] !== ini || dadosObra[o + 1] !== fim || dadosObra[o + 2] !== y || dadosObra[o + 3] !== h) {
+      dadosObra[o] = ini;
+      dadosObra[o + 1] = fim;
+      dadosObra[o + 2] = y;
+      dadosObra[o + 3] = h;
+      if (!obraInteira) obra.addUpdateRange(o, 4);
+      obra.needsUpdate = true;
+    }
+    return mudou;
   }
 
   function tirar(st, i) {
@@ -424,7 +599,17 @@ function criarPredios(ctx) {
     }
   }
 
-  /** Espelho para os setores: quem mudou de setor, de lote ou de aparência pede o setor de novo. */
+  /** Esquece as malhas de um setor (base, anexo e lote). */
+  function esvaziar(st) {
+    soltarLod0(st);
+    soltarAnexo(st);
+    st.lod1 = null;
+    st.lista1 = null;
+    st.lote = null;
+    st.filtro = null;
+  }
+
+  /** Espelho para os setores: quem mudou de setor, de lote ou de aparência entra no anexo do setor (D39). */
   function aplicar(d, esp) {
     const P = esp.predios;
     if (!P) return;
@@ -433,7 +618,11 @@ function criarPredios(ctx) {
     // primeira leitura ou tudo de novo (um save aberto): o LOD1 sai na hora no próximo passo
     if (tudo) carga = true;
     iniciado = true;
+    if (d.holding || tudo) corHolding(esp);
     if (tudo) {
+      // tudo de novo (a carga, uma cena, um save aberto): o setor que ficou igual (a mesma lista e as mesmas
+      // assinaturas na base, sem anexo) fica; os outros recomeçam sem malha e sem registro
+      planos.clear();
       const novas = new Map();
       for (let i = 0; i < P.n; i++) {
         if (!P.viva[i] || P.tipo[i] !== TIPO_PREDIO.ZONA) continue;
@@ -446,12 +635,20 @@ function criarPredios(ctx) {
       for (const s of new Set([...setores.keys(), ...novas.keys()])) {
         const st = setorPara(s);
         const l = novas.get(s) ?? [];
-        let igual = l.length === st.lista.length;
-        for (let k = 0; igual && k < l.length; k++) igual = l[k] === st.lista[k] && sig[l[k]] === assinatura(P, l[k]);
-        if (!igual) {
-          st.lista = l;
-          st.versao++;
-        }
+        const b = reg.setores.get(s)?.base;
+        const igual = st.lod1 && !st.anexo && b && b.lista.length === l.length && l.every((i, k) => b.lista[k] === i && b.sigs[k] === assinatura(P, i));
+        st.lista = l;
+        if (igual) continue;
+        esvaziar(st);
+        atualizarBits(reg.baseChegou(s, [], []).tocados);
+        const e = reg.setor(s);
+        e.sujo = false;
+        e.desde = -1;
+        e.pedidoBase = null;
+        e.pedidoAnexo = null;
+        st.pedidoA = null;
+        st.versao++;
+        st.vMin = st.versao;
       }
       setorDe.fill(-1);
       for (const [s, l] of novas) for (const i of l) {
@@ -465,9 +662,11 @@ function criarPredios(ctx) {
       for (let i = 0; i < Math.min(P.cap, LADO_TABELA * LADO_TABELA); i++) escreverTabela(P, i);
       tabela.needsUpdate = true;
       obra.needsUpdate = true;
+      versaoBits++;
       return;
     }
     if (!d.predios?.length) return;
+    const t = agoraMs();
     for (const i of d.predios) {
       const velho = setorDe[i];
       const vivo = i < P.n && P.viva[i] && P.tipo[i] === TIPO_PREDIO.ZONA;
@@ -481,20 +680,54 @@ function criarPredios(ctx) {
           st.lista.sort((a, b) => a - b);
           st.versao++;
         }
-      } else if (novo >= 0 && sig[i] !== sg) setorPara(novo).versao++;
+        reg.mudou(velho, novo, t);
+      } else if (novo >= 0 && sig[i] !== sg) {
+        setorPara(novo).versao++;
+        reg.mudou(novo, novo, t);
+      }
+      // a vaga voltou viva fora dos setores (colocável, mesmo idx no aId): as malhas com a cópia velha refundem já,
+      // senão o APAGADO esconderia o colocável junto até a refusão
+      if (!vivo && i < P.n && P.viva[i] && (reg.baseSec[i] >= 0 || reg.anexoSec[i] >= 0)) reg.urgente(i, t);
+      const mexeu = velho !== novo || sig[i] !== sg;
       setorDe[i] = novo;
       sig[i] = sg;
-      escreverTabela(P, i);
+      // a simulação marca o prédio por muita coisa (moradores, empregos): a cópia filtrada da sombra e do lote só é
+      // refeita quando o lugar, a aparência ou os bits mudam
+      if (escreverTabela(P, i) || mexeu) {
+        if (velho >= 0) setorPara(velho).vBits = ++versaoBits;
+        if (novo >= 0) setorPara(novo).vBits = ++versaoBits;
+      }
     }
-    tabela.needsUpdate = true;
-    obra.needsUpdate = true;
+  }
+
+  /** Cor da Holding (D34) para o vértice, em sRGB 0..255. */
+  function corHolding(esp) {
+    const hex = esp.holding?.cor;
+    if (typeof hex !== 'string' || hex.length < 7) return;
+    const n = parseInt(hex.slice(1, 7), 16);
+    if (Number.isFinite(n)) uniformesEdificio.gCorHolding.value.set((n >> 16) & 255, (n >> 8) & 255, n & 255);
+  }
+
+  /** Bits dos prédios tocados por uma base ou um anexo que chegou. */
+  function atualizarBits(idx) {
+    const P = ctx.sim.espelho.predios;
+    if (!P) return;
+    for (const i of idx) {
+      if (!escreverBits(P, i)) continue;
+      const s = setorDe[i];
+      if (s >= 0) setorPara(s).vBits = ++versaoBits;
+      const b = reg.baseSec[i];
+      if (b >= 0 && b !== s) setorPara(b).vBits = ++versaoBits;
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- pedidos
 
+  /** Pede a base do setor (refusão): LOD1 sempre, LOD0 e o lote quando o setor está perto. */
   function pedir(st, lod0) {
     const P = ctx.sim.espelho.predios;
-    const lista = st.lista.slice();
+    const lista = reg.listaDaBase(st.s, st.lista);
+    const sigs = lista.map((i) => sig[i]);
     const versao = st.versao;
     const { dados, transferir } = pedidoDoSetor(P, lista, grade, st.s, lod0);
     if (lod0) {
@@ -504,11 +737,27 @@ function criarPredios(ctx) {
       st.pedido1 = versao;
       pendentes1++;
     }
-    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    reg.pedirBase(st.s, lista, sigs);
+    const t0 = agoraMs();
     oficina.pedir('setor', dados, { chave: st.s, transferir }).then((r) => {
       if (lod0) pendentes0--;
       else pendentes1--;
-      recebidos.push({ st, r, lista, versao, lod0, ms: (typeof performance !== 'undefined' ? performance.now() : 0) - t0 });
+      recebidos.push({ tipo: 'base', st, r, lista, sigs, versao, lod0, ms: agoraMs() - t0 });
+    });
+  }
+
+  /** Pede o anexo do setor: só os prédios que a base não tem na versão atual. */
+  function pedirAnexo(st, lista, lod0) {
+    const P = ctx.sim.espelho.predios;
+    const sigs = lista.map((i) => sig[i]);
+    const { dados, transferir } = pedidoDoSetor(P, lista, grade, st.s, lod0);
+    st.pedidoA = { lista, sigs, lod0 };
+    pendentesA++;
+    reg.pedirAnexo(st.s, lista, sigs);
+    const versao = st.versao;
+    oficina.pedir('anexo', dados, { chave: st.s, transferir }).then((r) => {
+      pendentesA--;
+      recebidos.push({ tipo: 'anexo', st, r, lista, sigs, lod0, versao });
     });
   }
 
@@ -518,18 +767,24 @@ function criarPredios(ctx) {
     st.lista1 = lista;
     st.caixas = r.caixas;
     st.v1 = versao;
+    st.filtro = null;
     // altura do setor pelas caixas (para a distância e o descarte)
+    const [y0, y1] = alturaDasCaixas(lista, r.caixas);
+    st.ymin = y0;
+    st.ymax = y1;
+  }
+
+  function alturaDasCaixas(lista, caixas) {
     let y0 = Infinity;
     let y1 = -Infinity;
     const P = ctx.sim.espelho.predios;
     for (let k = 0; k < lista.length; k++) {
       const i = lista[k];
       const yb = P.y[i];
-      y0 = Math.min(y0, yb + r.caixas[CAIXA * k + 4]);
-      y1 = Math.max(y1, yb + r.caixas[CAIXA * k + 5]);
+      y0 = Math.min(y0, yb + caixas[CAIXA * k + 4]);
+      y1 = Math.max(y1, yb + caixas[CAIXA * k + 5]);
     }
-    st.ymin = Number.isFinite(y0) ? y0 : -2;
-    st.ymax = Number.isFinite(y1) ? y1 : 10;
+    return [Number.isFinite(y0) ? y0 : -2, Number.isFinite(y1) ? y1 : 10];
   }
 
   function soltarLod0(st) {
@@ -542,69 +797,130 @@ function criarPredios(ctx) {
   }
 
   function receberLod0(st, r, versao) {
-    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
     soltarLod0(st);
     const m = r.malhas?.[0];
+    st.lote = r.lote ?? null;
+    st.filtro = null;
     if (!m) {
       st.lod0 = { mesh: new THREE.Object3D(), versao, bytes: 0 };
       nLod0++;
       return;
     }
-    const A = m.atributos;
-    const g = new THREE.BufferGeometry();
-    const at = (arr, k, norm) => new THREE.BufferAttribute(arr, k, norm).onUpload(soltarCopia);
-    g.setAttribute('position', at(A.posicao, 3, true));
-    g.setAttribute('normal', at(A.normal, 2, true));
-    const fuv = new THREE.Float16BufferAttribute(A.facUV, 4);
-    fuv.onUpload(soltarCopia);
-    g.setAttribute('aFacUV', fuv);
-    g.setAttribute('aFac', at(A.fac, 4, false));
-    g.setAttribute('aCorA', at(A.corA, 4, false));
-    g.setAttribute('aCorB', at(A.corB, 4, false));
-    g.setAttribute('aId', at(A.id, 1, false));
-    g.setAttribute('aAO', at(A.ao, 1, true));
-    g.setIndex(at(m.indices, 1, false));
-    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Math.sqrt(3) * 1.01);
-    g.boundingBox = new THREE.Box3(new THREE.Vector3(-1.01, -1.01, -1.01), new THREE.Vector3(1.01, 1.01, 1.01));
-    const mesh = new THREE.Mesh(g, material);
-    const [cx, cy, cz, s] = m.escala;
-    mesh.position.set(st.x0 + cx, cy, st.z0 + cz);
-    mesh.scale.setScalar(s);
-    mesh.matrixAutoUpdate = false;
-    mesh.updateMatrix();
-    mesh.name = `predios:lod0:${st.s}`;
-    medidas.familia(mesh, 'predios');
-    cena.add(mesh);
-    let bytes = m.indices.byteLength;
-    for (const a of Object.values(A)) bytes += a.byteLength;
-    st.lod0 = { mesh, versao, bytes, tris: m.tris };
+    const L = malhaLod0(m, material, st.x0, st.z0, `predios:lod0:${st.s}`);
+    medidas.familia(L.mesh, 'predios');
+    cena.add(L.mesh);
+    st.lod0 = { mesh: L.mesh, versao, bytes: L.bytes, tris: L.tris };
     nLod0++;
-    bytesLod0 += bytes;
-    msEnvio = (typeof performance !== 'undefined' ? performance.now() : 0) - t0;
+    bytesLod0 += L.bytes;
   }
 
-  /** Recebe o que a oficina entregou: LOD1 todos, LOD0 até `max` (um por quadro no jogo). */
+  function soltarAnexo(st) {
+    const a = st.anexo;
+    if (!a) return;
+    if (a.lod0) {
+      cena.remove(a.lod0.mesh);
+      a.lod0.mesh.geometry.dispose();
+      bytesLod0 -= a.lod0.bytes;
+    }
+    st.anexo = null;
+    nAnexos--;
+    st.filtro = null;
+    st.vBits = ++versaoBits;
+    atualizarBits(reg.soltarAnexo(st.s));
+  }
+
+  function receberAnexo(st, r, lista, sigs, lod0) {
+    const velho = st.anexo;
+    if (velho?.lod0) {
+      cena.remove(velho.lod0.mesh);
+      velho.lod0.mesh.geometry.dispose();
+      bytesLod0 -= velho.lod0.bytes;
+    }
+    if (!velho) nAnexos++;
+    let l0 = null;
+    const m = lod0 ? r.malhas?.[0] : null;
+    if (m) {
+      const L = malhaLod0(m, material, st.x0, st.z0, `predios:anexo:${st.s}`);
+      medidas.familia(L.mesh, 'predios');
+      L.mesh.visible = st.modo === 0 && st.vis;
+      cena.add(L.mesh);
+      bytesLod0 += L.bytes;
+      l0 = L;
+    }
+    st.anexo = { n: ++serialAnexo, lod1: r.lod1, caixas: r.caixas, lista, lod0: l0, temLod0: !!lod0, lote: lod0 ? r.lote : null, ordem: -1 };
+    st.filtro = null;
+    // a sombra e o lote seguem o anexo novo mesmo quando nenhum bit muda (a mesma lista, outra versão dos prédios)
+    st.vBits = ++versaoBits;
+    const [y0, y1] = alturaDasCaixas(lista, r.caixas);
+    st.ymin = Math.min(st.ymin, y0);
+    st.ymax = Math.max(st.ymax, y1);
+    atualizarBits(reg.anexoChegou(st.s, lista, sigs));
+  }
+
+  /**
+   * Recebe o que a oficina entregou. A base sem LOD0 e o anexo sem LOD0 entram todos; com LOD0, uma base e um anexo
+   * por quadro (o envio à GPU). A troca de malha e o bit do anexo mudam no mesmo quadro: nada pisca.
+   */
   function receber(max) {
     let feitos0 = 0;
+    let feitosA = 0;
     for (let k = 0; k < recebidos.length; ) {
-      const { st, r, lista, versao, lod0 } = recebidos[k];
+      const x = recebidos[k];
+      const { st, r } = x;
       if (r.erro) {
-        if (lod0) st.pedido0 = 0;
-        else st.pedido1 = 0;
+        if (x.tipo === 'anexo') {
+          st.pedidoA = null;
+          reg.setor(st.s).pedidoAnexo = null;
+        } else {
+          if (x.lod0) st.pedido0 = 0;
+          else st.pedido1 = 0;
+          reg.setor(st.s).pedidoBase = null;
+          reg.setor(st.s).sujo = true;
+        }
         recebidos.splice(k, 1);
         continue;
       }
-      if (lod0 && feitos0 >= max) {
+      if (x.versao < (st.vMin ?? 0)) {
+        // pedida antes de o setor recomeçar (tudo de novo): não vale
+        recebidos.splice(k, 1);
+        continue;
+      }
+      if (x.tipo === 'anexo') {
+        if (x.lod0 && feitosA >= max) {
+          k++;
+          continue;
+        }
+        recebidos.splice(k, 1);
+        if (st.pedidoA && st.pedidoA.lista === x.lista) st.pedidoA = null;
+        receberAnexo(st, r, x.lista, x.sigs, x.lod0);
+        if (x.lod0) feitosA++;
+        // a base refundida chegou antes deste anexo com tudo dentro: ele nasceu inútil (malha e chamada a mais) e sai
+        if (!reg.desejado(st.s, st.lista, (i) => sig[i]).length) soltarAnexo(st);
+        continue;
+      }
+      if (x.lod0 && feitos0 >= max) {
         k++;
         continue;
       }
       recebidos.splice(k, 1);
       // uma resposta velha não passa por cima de uma mais nova
-      if (!st.lod1 || versao >= st.v1) receberLod1(st, r, lista, versao);
-      if (lod0 && (!st.lod0 || versao >= st.lod0.versao)) {
-        receberLod0(st, r, versao);
-        feitos0++;
+      if (st.lod1 && x.versao < st.v1) {
+        reg.setor(st.s).pedidoBase = null;
+        continue;
       }
+      receberLod1(st, r, x.lista, x.versao);
+      if (x.lod0) {
+        receberLod0(st, r, x.versao);
+        feitos0++;
+      } else if (st.lod0) {
+        // a base nova é só do LOD1: o LOD0 guardado (setor longe) ficou velho
+        soltarLod0(st);
+        st.lote = null;
+      }
+      const { tocados } = reg.baseChegou(st.s, x.lista, x.sigs);
+      atualizarBits(tocados);
+      // o anexo que a base absorveu inteiro sai
+      if (st.anexo && !reg.desejado(st.s, st.lista, (i) => sig[i]).length) soltarAnexo(st);
     }
   }
 
@@ -612,14 +928,49 @@ function criarPredios(ctx) {
 
   const perfilLod = () => ({ lod0: ctx.perfil.lod0, ...(porPerfil(LOD_PREDIOS, ctx.perfil)) });
 
+  /** Prédio idx (com o bit do anexo no id) visível nesta cópia? emObra: some também a obra nova (sombra e lote). */
+  function valeId(id, semObra) {
+    const i = id & MASCARA_ID;
+    const g = dadosTab[4 * i + 1];
+    if (g & BITS_TABELA.APAGADO) return false;
+    if (!!(g & BITS_TABELA.ANEXO) !== !!(id & ID_ANEXO)) return false;
+    return !(semObra && (g & (BITS_TABELA.OBRA | BITS_TABELA.NIVEL)) === BITS_TABELA.OBRA);
+  }
+
+  /** Cópias filtradas do setor (sombra: sem as cópias que não valem nem a obra; lote: idem), pela versão dos bits. */
+  function filtroDe(st) {
+    if (st.filtro && st.filtro.v === st.vBits && st.filtro.v1 === st.v1 && st.filtro.a === st.anexo) return st.filtro;
+    const ok = (id) => valeId(id, true);
+    const sombra = [];
+    for (let f = 0; f < FORMAS.length; f++) {
+      const g = [];
+      if (st.lod1) g.push(filtrarGrupo(st.lod1[f], ok));
+      if (st.anexo?.lod1) g.push(filtrarGrupo(st.anexo.lod1[f], ok));
+      sombra.push(g);
+    }
+    const lotes = [];
+    for (const lote of [st.lote, st.anexo?.lote]) {
+      if (!lote) continue;
+      // os itens do lote levam o idx puro: valem pela cópia da malha de onde vieram (base ou anexo)
+      const marca = lote === st.anexo?.lote ? ID_ANEXO : 0;
+      const okL = (id) => valeId((id | marca) >>> 0, true);
+      lotes.push({ copa: filtrarGrupo(lote.copa, okL), palmeira: filtrarGrupo(lote.palmeira, okL), carros: lote.carros.map((c) => filtrarGrupo(c, okL)) });
+    }
+    st.filtro = { v: st.vBits, v1: st.v1, a: st.anexo, sombra, lotes, n: ++filtros };
+    return st.filtro;
+  }
+
   /**
    * Escolhe o LOD de cada setor, faz os pedidos e monta as listas visíveis e de sombra. O LOD1 é leve (só o plano e as
-   * instâncias): na carga sai inteiro aqui (LOD1_NA_CARGA); depois, com o worker, os setores que mudaram vão para a
-   * fila de uma vez. O LOD0 segue com 2 na fila e 1 envio à GPU por quadro.
+   * instâncias): na carga sai inteiro aqui (LOD1_NA_CARGA). Depois, o que muda vai para o anexo do setor (pequeno, um
+   * por quadro) e a base é refundida quando o setor fica quieto (D39).
    */
-  function passo({ envio = 1, pedidos1 = oficina.worker ? 1024 : 6, pedidos0 = 2 } = {}) {
+  function passo({ envio = 1, pedidos1 = oficina.worker ? 1024 : 6, pedidos0 = 2, pedidosA = 8 } = {}) {
     quadros++;
+    const tEnvio0 = agoraMs();
     receber(envio);
+    const tReceber = agoraMs() - tEnvio0;
+    const agora = agoraMs();
     const cam = ctx.camera;
     cam.updateMatrixWorld();
     mProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
@@ -628,6 +979,7 @@ function criarPredios(ctx) {
     const cp = cam.position;
     const cand1 = [];
     const cand0 = [];
+    const candA = [];
     let hv = 0x811c9dc5;
     const vis = [];
     let quer0 = 0;
@@ -638,21 +990,26 @@ function criarPredios(ctx) {
     // carga: o LOD1 que falta sai aqui mesmo, sem a oficina
     if (carga) {
       carga = false;
-      const faltam = [...setores.values()].filter((st) => st.lista.length && (!st.lod1 || st.v1 < st.versao));
+      const faltam = [...setores.values()].filter((st) => st.lista.length && !st.lod1);
       if (faltam.reduce((a, st) => a + st.lista.length, 0) <= LOD1_NA_CARGA) {
         const P = ctx.sim.espelho.predios;
         for (const st of faltam) {
-          const lista = st.lista.slice();
+          const lista = reg.listaDaBase(st.s, st.lista);
+          const sigs = lista.map((i) => sig[i]);
           receberLod1(st, gerarSetor(pedidoDoSetor(P, lista, grade, st.s, false).dados), lista, st.versao);
+          reg.pedirBase(st.s, lista, sigs);
+          atualizarBits(reg.baseChegou(st.s, lista, sigs).tocados);
         }
       }
     }
+    const devidos = new Set(reg.devidos(agora, (s) => setores.get(s)?.anexo?.lista.length ?? 0));
     for (const st of setores.values()) {
       if (!st.lista.length) {
-        // setor que esvaziou: nada a desenhar
-        if (st.lod0) soltarLod0(st);
-        st.lod1 = null;
-        st.lista1 = null;
+        // setor que esvaziou: nada a desenhar (a base sai do registro: as vagas mortas dela deixam de estar apagadas)
+        if (st.lod1 || st.lod0 || st.anexo) {
+          esvaziar(st);
+          atualizarBits(reg.baseChegou(st.s, [], []).tocados);
+        }
         st.v1 = st.versao;
         continue;
       }
@@ -662,16 +1019,31 @@ function criarPredios(ctx) {
       const perto = st.modo === 0 ? d < L.lod0 * 1.1 : d < L.lod0 * 0.9;
       const longe = st.modo === 2 ? d > L.lod2 * 0.9 : d > L.lod2 * 1.1;
       st.modo = perto ? 0 : longe ? 2 : 1;
-      if ((!st.lod1 || st.v1 < st.versao) && st.pedido1 !== st.versao) cand1.push(st);
+      // a base: uma no ar por setor; sem base, na refusão (D39) e, perto, sem o LOD0
+      const noAr = !!reg.setor(st.s).pedidoBase;
+      const refundir = devidos.has(st.s);
       caixa.min.set(st.x0 - 40, st.ymin, st.z0 - 40);
       caixa.max.set(st.x0 + LADO_SETOR + 40, st.ymax + 5, st.z0 + LADO_SETOR + 40);
       st.vis = frustum.intersectsBox(caixa);
       if (st.modo === 0) {
-        if ((!st.lod0 || st.lod0.versao < st.versao) && st.pedido0 !== st.versao && st.lista.length) cand0.push(st);
+        if (!noAr && (!st.lod1 || refundir || !st.lod0)) cand0.push(st);
         if (st.lod0) st.usado = quadros;
+      } else if (!noAr && (!st.lod1 || refundir)) cand1.push(st);
+      // anexo: o que a base não tem na versão atual, pedido quando a lista ou uma assinatura muda (um no ar por setor)
+      if (st.lod1 && !st.pedidoA && reg.setor(st.s).sujo) {
+        const quer = reg.desejado(st.s, st.lista, (i) => sig[i]);
+        const a = st.anexo;
+        const perto0 = st.modo === 0;
+        const igual = a && a.lista.length === quer.length && quer.every((i, k) => a.lista[k] === i && reg.setor(st.s).anexo?.sigs[k] === sig[i]) && (a.temLod0 || !perto0);
+        if (quer.length && !igual) candA.push({ st, quer, lod0: perto0 });
+      } else if (st.modo === 0 && st.anexo && !st.anexo.temLod0 && !st.pedidoA) {
+        candA.push({ st, quer: st.anexo.lista.slice(), lod0: true });
       }
-      const mostra0 = st.modo === 0 && st.lod0;
+      // o LOD0 só com o anexo também no LOD0: o anexo que ainda é só do LOD1 (pedido de longe) esconde a cópia da base
+      // e não seria desenhado; até o LOD0 dele chegar, o setor fica no LOD1 (base e anexo)
+      const mostra0 = st.modo === 0 && st.lod0 && (!st.anexo || st.anexo.temLod0);
       if (st.lod0) st.lod0.mesh.visible = !!mostra0 && st.vis;
+      if (st.anexo?.lod0) st.anexo.lod0.mesh.visible = !!mostra0 && st.vis;
       if (st.modo === 0) quer0++;
       if (mostra0 && st.vis) lod0Vis++;
       if (st.vis && st.lod1 && !mostra0) {
@@ -693,7 +1065,7 @@ function criarPredios(ctx) {
     let cota = ORDEM_POR_QUADRO;
     let emOrdem = true;
     for (const st of vis) {
-      if (st.ordem === balde.id) continue;
+      if (st.ordem === balde.id && (!st.anexo || st.anexo.ordem === balde.id)) continue;
       if (cota <= 0) {
         emOrdem = false;
         continue;
@@ -703,12 +1075,17 @@ function criarPredios(ctx) {
         cota -= x.n;
       }
       st.ordem = balde.id;
+      if (st.anexo) {
+        for (const x of st.anexo.lod1) ordenarInstancias(x, balde);
+        st.anexo.ordem = balde.id;
+      }
     }
     if (emOrdem) ordemVista = balde.id;
     hv = Math.imul(hv ^ ordemVista, 0x01000193);
     for (const st of vis) {
       hv = Math.imul(hv ^ st.s, 0x01000193);
       hv = Math.imul(hv ^ (st.modo * 7919 + st.v1 * 4 + st.faixa), 0x01000193);
+      if (st.anexo) hv = Math.imul(hv ^ st.anexo.n, 0x01000193);
     }
     // pedidos: os mais perto primeiro
     cand1.sort((a, b) => a.dist - b.dist);
@@ -721,22 +1098,32 @@ function criarPredios(ctx) {
       if (pendentes0 >= pedidos0) break;
       pedir(st, true);
     }
-    // listas visíveis do LOD1 (todas as peças) e do LOD2 (só as principais)
-    if (hv !== chaveVis) {
+    candA.sort((a, b) => a.st.dist - b.st.dist);
+    for (const c of candA) {
+      if (pendentesA >= pedidosA) break;
+      pedirAnexo(c.st, c.quer, c.lod0);
+    }
+    // listas visíveis do LOD1 (todas as peças) e do LOD2 (só as principais), com as peças do anexo depois das da base
+    const tLista0 = agoraMs();
+    const refazVis = hv !== chaveVis;
+    if (refazVis) {
       chaveVis = hv;
       let n = 0;
       formas.forEach((F, f) => {
         const perto = [];
         const longe = [];
-        for (const st of vis) {
-          const x = st.lod1[f];
-          const k = st.modo === 2 ? x.np : x.n;
-          if (!k) continue;
+        const por = (x, modo, faixa) => {
+          const k = modo === 2 ? x.np : x.n;
+          if (!k) return;
           // o LOD1 pela cópia com todas as peças em ordem (ordenarInstancias); o LOD2 só as principais
-          const t = st.modo !== 2 && x.todas ? x.todas : x;
+          const t = modo !== 2 && x.todas ? x.todas : x;
           const p = { mat: t.mat, ids: t.ids, bytes: t.bytes, n: k };
-          if (st.faixa & 1) perto.push(p);
-          if (st.faixa & 2) longe.push(p);
+          if (faixa & 1) perto.push(p);
+          if (faixa & 2) longe.push(p);
+        };
+        for (const st of vis) {
+          por(st.lod1[f], st.modo, st.faixa);
+          if (st.anexo) por(st.anexo.lod1[f], st.modo, st.faixa);
         }
         n += F.vis.compactar(perto);
         if (F.longe) n += F.longe.compactar(longe);
@@ -745,15 +1132,16 @@ function criarPredios(ctx) {
     }
     // projetores de sombra (D43): os setores cuja sombra cai no chão da cascata (ctx.sombra.regiao: o foco que a R1a
     // puxa para baixo da câmera nas vistas rasantes, não o alvo), varridos para longe do sol pela altura do setor;
-    // antes do primeiro passe, em volta do alvo da câmera
-    const reg = ctx.sombra?.regiao;
+    // antes do primeiro passe, em volta do alvo da câmera. Sem as cópias que não valem nem as obras (a sombra da obra
+    // que sobe é de obras.js)
+    const reg0 = ctx.sombra?.regiao;
     let rx;
     let rz;
     let raio;
-    if (reg) {
-      rx = reg.x;
-      rz = reg.z;
-      raio = reg.raio + FOLGA_SOMBRA;
+    if (reg0) {
+      rx = reg0.x;
+      rz = reg0.z;
+      raio = reg0.raio + FOLGA_SOMBRA;
     } else {
       ctx.cameraApi?.alvo?.(alvo);
       rx = alvo.x;
@@ -777,12 +1165,24 @@ function criarPredios(ctx) {
       somb.push(st);
       hs = Math.imul(hs ^ st.s, 0x01000193);
       hs = Math.imul(hs ^ (st.v1 * 2 + (st.sombraToda ? 1 : 0)), 0x01000193);
+      hs = Math.imul(hs ^ st.vBits, 0x01000193);
     }
-    if (hs !== chaveSombra) {
+    const tVis = agoraMs() - tLista0;
+    // a sombra espera um quadro quando as listas visíveis já foram refeitas neste (o envio do quadro não soma as duas;
+    // a sombra da cópia velha fica um quadro a mais)
+    const tSombra0 = agoraMs();
+    if (hs !== chaveSombra && (!refazVis || sombraAdiada)) {
+      sombraAdiada = false;
       chaveSombra = hs;
-      formas.forEach((F, f) => F.sombra.compactar(somb.map((st) => ({ mat: st.lod1[f].mat, ids: null, bytes: null, n: st.sombraToda ? st.lod1[f].n : st.lod1[f].np }))));
+      formas.forEach((F, f) => {
+        const pedacos = [];
+        for (const st of somb) for (const g of filtroDe(st).sombra[f]) if (g.n) pedacos.push({ mat: g.mat, ids: null, bytes: null, n: st.sombraToda ? g.n : g.np });
+        F.sombra.compactar(pedacos);
+      });
       ctx.sombra.marcar();
-    }
+    } else if (hs !== chaveSombra) sombraAdiada = true;
+    const tSomb = agoraMs() - tSombra0;
+    const tListas = tVis + tSomb;
     // cache LRU do LOD0 e teto de memória
     const capCache = Math.max(L.cache, quer0);
     if (nLod0 > capCache || bytesLod0 > L.memoriaMB * 1048576 * 0.6) {
@@ -790,16 +1190,29 @@ function criarPredios(ctx) {
       for (const st of velhos) {
         if (nLod0 <= capCache && bytesLod0 <= L.memoriaMB * 1048576 * 0.6) break;
         soltarLod0(st);
+        st.lote = null;
+        st.filtro = null;
       }
     }
+    // envio do quadro: as malhas novas (base e anexo) e as listas compactadas; o pior dos últimos 120 quadros
+    const ms = tReceber + tListas;
+    janelaEnvio[quadros % janelaEnvio.length] = ms;
+    piorPartes.receber = Math.max(piorPartes.receber, tReceber);
+    piorPartes.listas = Math.max(piorPartes.listas, tVis);
+    piorPartes.sombra = Math.max(piorPartes.sombra, tSomb);
     const S = ctx.stats.setores;
     S.lod0 = lod0Vis;
-    S.msEnvio = +msEnvio.toFixed(2);
+    S.anexos = nAnexos;
+    S.msEnvio = +ms.toFixed(2);
+    S.piorEnvio = +Math.max(...janelaEnvio).toFixed(2);
+    S.pendentes = pendentes0 + pendentes1 + pendentesA + recebidos.length;
   }
 
-  /** Hora, noite e o céu de reserva do reflexo. */
+  /** Hora, noite, tique da obra e o céu de reserva do reflexo. */
   function uniformes(c) {
     uniformesEdificio.gHora.value = c.horaDoCeu();
+    const tp = c.sim.espelho.tempo;
+    uniformesEdificio.gTique.value = (tp?.tique ?? 0) + (tp?.frac ?? 0);
     const dia = c.sol?.dia ?? 1;
     uniformesEdificio.gNoite.value = Math.min(1, Math.max(0, 1 - dia * 1.25));
     uniformesEdificio.gCeuLigado.value = c.cena.environment ? 0 : 1;
@@ -809,6 +1222,7 @@ function criarPredios(ctx) {
     if (bg?.isColor) uniformesEdificio.gCeuZen.value.copy(bg).multiplyScalar(0.85);
     else uniformesEdificio.gCeuZen.value.copy(uniformesEdificio.gCeuHor.value).multiply(new THREE.Color(0.55, 0.68, 0.95));
     uniformesEdificio.gCeuChao.value.copy(uniformesEdificio.gCeuHor.value).multiplyScalar(0.28);
+    materialLonge.userData.amostras?.();
   }
 
   // camadas (X3a): o valor por prédio no canal R da tabela; seleção: realce pelo idx
@@ -833,35 +1247,38 @@ function criarPredios(ctx) {
     }),
   ];
 
-  /** Seleção pela caixa de cada prédio (a mesma do plano), sem ler a GPU. */
+  /** Seleção pela caixa de cada prédio (a mesma do plano), sem ler a GPU; a base e o anexo, só a cópia que vale. */
   function selecionar(raio, esp) {
     const P = esp.predios;
     if (!P) return null;
     const o = raio.origem;
     const dv = raio.dir;
     let melhor = null;
-    for (const st of setores.values()) {
-      if (!st.lod1 || !st.lista1) continue;
-      if (raioNaCaixaAlinhada(o, dv, st.x0 - 40, st.ymin, st.z0 - 40, st.x0 + LADO_SETOR + 40, st.ymax, st.z0 + LADO_SETOR + 40) === null) continue;
-      const cx = st.caixas;
-      for (let k = 0; k < st.lista1.length; k++) {
-        const i = st.lista1[k];
-        if (i >= P.n || !P.viva[i]) continue;
+    const testar = (lista, cx, marca) => {
+      for (let k = 0; k < lista.length; k++) {
+        const i = lista[k];
+        if (i >= P.n || !P.viva[i] || !valeId((i | marca) >>> 0, false)) continue;
         const b = CAIXA * k;
         const t = raioNaCaixaGirada(o, dv, P.x[i], P.y[i], P.z[i], P.rot[i], cx[b], cx[b + 4], cx[b + 1], cx[b + 2], cx[b + 5], cx[b + 3]);
         if (t !== null && (!melhor || t < melhor.dist)) {
           melhor = { tipo: 'predio', idx: i, ref: refDe(i, P.ger[i]), dist: t, ponto: [o[0] + dv[0] * t, o[1] + dv[1] * t, o[2] + dv[2] * t] };
         }
       }
+    };
+    for (const st of setores.values()) {
+      if (!st.lod1 || !st.lista1) continue;
+      if (raioNaCaixaAlinhada(o, dv, st.x0 - 40, st.ymin, st.z0 - 40, st.x0 + LADO_SETOR + 40, st.ymax, st.z0 + LADO_SETOR + 40) === null) continue;
+      testar(st.lista1, st.caixas, 0);
+      if (st.anexo) testar(st.anexo.lista, st.anexo.caixas, ID_ANEXO);
     }
     return melhor;
   }
 
   function prontoAgora() {
-    if (pendentes0 || pendentes1 || recebidos.length) return false;
+    if (pendentes0 || pendentes1 || pendentesA || recebidos.length) return false;
     for (const st of setores.values()) {
-      if (st.lista.length && (!st.lod1 || st.v1 < st.versao)) return false;
-      if (st.modo === 0 && st.vis && st.lista.length && (!st.lod0 || st.lod0.versao < st.versao)) return false;
+      if (st.lista.length && !st.lod1) return false;
+      if (st.modo === 0 && st.vis && st.lista.length && (!st.lod0 || (st.anexo && !st.anexo.temLod0))) return false;
     }
     return true;
   }
@@ -887,12 +1304,11 @@ function criarPredios(ctx) {
      * vista pede (sem o limite de um setor por quadro). Devolve as medidas.
      */
     async preparar({ teto = 120000 } = {}) {
-      const agora = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      const t0 = agora();
+      const t0 = agoraMs();
       ctx.cameraApi?.atualizar?.(t0);
       if (!iniciado) aplicar(ctx.sim.mudancas.desde(-1), ctx.sim.espelho);
       uniformes(ctx);
-      while (agora() - t0 < teto) {
+      while (agoraMs() - t0 < teto) {
         passo({ envio: 64, pedidos1: 1024, pedidos0: 4 });
         if (prontoAgora()) break;
         if (oficina.worker) await new Promise((ok) => setTimeout(ok, 30));
@@ -913,22 +1329,82 @@ function criarPredios(ctx) {
         tris1 += c * F.tris;
       });
       let tris0 = 0;
-      for (const st of setores.values()) if (st.lod0?.tris && st.lod0.mesh.visible) tris0 += st.lod0.tris;
+      for (const st of setores.values()) {
+        if (st.lod0?.tris && st.lod0.mesh.visible) tris0 += st.lod0.tris;
+        if (st.anexo?.lod0?.tris && st.anexo.lod0.mesh.visible) tris0 += st.anexo.lod0.tris;
+      }
       return {
-        setores: setores.size, lod0: nLod0, lod0Visiveis: ctx.stats.setores.lod0, instancias: inst, trisLod1: tris1, trisLod0: tris0,
+        setores: setores.size, lod0: nLod0, lod0Visiveis: ctx.stats.setores.lod0, anexos: nAnexos, instancias: inst, trisLod1: tris1, trisLod0: tris0,
         memoriaLod0MB: +(bytesLod0 / 1048576).toFixed(2), sombra: formas.reduce((a, F) => a + F.sombra.count * F.tris, 0),
+        envio: Object.fromEntries(Object.entries(piorPartes).map(([k, v]) => [k, +v.toFixed(2)])),
       };
+    },
+    /** Zera o pior envio por parte (medidas().envio): a cena bairro mede só o crescimento, sem a carga. */
+    zerarEnvio() {
+      for (const k of Object.keys(piorPartes)) piorPartes[k] = 0;
     },
     /** Caixa de um prédio no espaço do lote ([x0, z0, x1, z1, y0, y1]) ou null (âncoras, câmera). */
     caixaDoPredio(i) {
       const st = setores.get(setorDe[i]);
-      if (!st?.lista1) return null;
+      if (!st) return null;
+      const a = st.anexo ? st.anexo.lista.indexOf(i) : -1;
+      if (a >= 0 && valeId((i | ID_ANEXO) >>> 0, false)) return Array.from(st.anexo.caixas.subarray(CAIXA * a, CAIXA * a + 6));
+      if (!st.lista1) return null;
       const k = st.lista1.indexOf(i);
       return k < 0 ? null : Array.from(st.caixas.subarray(CAIXA * k, CAIXA * k + 6));
     },
+    /** Plano do prédio da cidade em obra (obras.js: esqueleto, grua e tela) ou null. */
+    planoObra,
+    /**
+     * Altura (m) do corte da obra de um prédio que não é da cidade (R5: os colocáveis desenhados com o material
+     * `edificio`); 0 ou null tira (sem corte).
+     */
+    alturaObra(i, H) {
+      if (H > 0) alturasFora.set(i, H);
+      else alturasFora.delete(i);
+      const P = ctx.sim.espelho.predios;
+      if (P && i < P.cap) escreverTabela(P, i);
+    },
+    /** Itens do lote (árvores e carros) dos setores com o LOD0 à vista, filtrados (lotes.js). */
+    lotesVisiveis() {
+      const out = [];
+      for (const st of setores.values()) {
+        if (st.modo !== 0 || !st.vis || !st.lod0 || (!st.lote && !st.anexo?.lote)) continue;
+        const f = filtroDe(st);
+        out.push({ s: st.s, dist: st.dist, chave: f.n, lotes: f.lotes });
+      }
+      return out;
+    },
+    /**
+     * Bancada A/B dos ganchos de longe (R4b): põe no LOD1 e no LOD2 o material de longe com estes ganchos e amostras
+     * (null volta ao do domínio), na mesma página e na mesma câmera; devolve o nome da variante.
+     */
+    bancadaLonge(v = null) {
+      const k = v ? `${(v.nomes ?? GANCHOS_LONGE).join(',')}|${v.amostras ?? 0}` : '';
+      let m = materialLonge;
+      if (v) {
+        variantesLonge.set(k, variantesLonge.get(k) ?? criarMaterialEdificio(ctx, { barata: true, nomes: v.nomes ?? GANCHOS_LONGE, amostras: v.amostras ?? 0 }));
+        m = variantesLonge.get(k);
+        m.userData.amostras?.();
+      }
+      for (const F of formas) {
+        for (const l of [F.vis, F.longe]) {
+          if (!l) continue;
+          l.material = m;
+          if (l.malha) l.malha.material = m;
+        }
+      }
+      return k || 'dominio';
+    },
+    /** Lista do setor do prédio i e as assinaturas atuais (testes e obras.js). */
+    setorDe: (i) => (i < setorDe.length ? setorDe[i] : -1),
+    registro: reg,
     descartar() {
       for (const f of paraDesligar) f?.();
-      for (const st of setores.values()) soltarLod0(st);
+      for (const st of setores.values()) {
+        soltarLod0(st);
+        soltarAnexo(st);
+      }
       for (const F of formas) {
         cena.remove(F.vis.malha);
         if (F.longe) {
@@ -943,6 +1419,7 @@ function criarPredios(ctx) {
       obra.dispose();
       material.dispose();
       materialLonge.dispose();
+      for (const m of variantesLonge.values()) m.dispose();
     },
   };
   return dom;

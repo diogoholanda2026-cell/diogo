@@ -14,13 +14,60 @@
 // pixel, num caminho curto.
 // Tudo em highp (D44). Varyings próprios: 4 (vPF, vFac, vCor, vIdent), 3 deles flat.
 //
+// Obra (R4b, 2.4 e desenho do render 12.1): no vértice, o progresso (gTique - início) / (fim - início) da textura de
+// obra (RGBA32F 512²: início e fim em tiques, cota da base e altura do prédio) dá a altura pronta; o vértice acima dela
+// desce até ela e o topo vira uma tampa limpa (sem discard). Canteiro: nada acima do chão; fundação e estrutura: a
+// laje; fechamento: a fachada sobe andar por andar (o esqueleto, a grua e a tela são de render/mundo/obras.js). A obra
+// de subir de nível (reforma) não corta. Anexo (D39): o bit 30 do aId marca a malha do anexo do setor; o bit ANEXO da
+// tabela diz onde o prédio está (no anexo, ou fora da malha do setor), e a outra cópia some no vértice.
+//
 // Para os ganchos comuns e as outras parcelas (camada da X3a, obra da R4b): o material define EDIFICIO; no fragmento
 // valem vIdent (x = idx do prédio, y = bits da tabela, z = agenda, w = valor da camada 0..255) e gMascaraTelhado
 // (1 no telhado, 0 no resto), e o uniforme gPredTab é a tabela de prédios (RGBA 512²: camada, bits, agenda, livre).
-import { FACHADA, TERREO_ALTURA, BITS_TABELA } from '../../geracao/malhaPredio.js';
+import { FACHADA, TERREO_ALTURA, BITS_TABELA, ID_ANEXO } from '../../geracao/malhaPredio.js';
+import { FASES_OBRA } from '../../../contratos/espelho.js';
 
 const defs = Object.entries(FACHADA).map(([k, v]) => `#define F_${k} ${v}.0`).join('\n');
 const alturasTerreo = TERREO_ALTURA.map((h) => h.toFixed(2)).join(', ');
+const bits = Object.entries(BITS_TABELA).map(([k, v]) => `#define B_${k} ${v}u`).join('\n');
+/** Os bits da tabela de prédios como #define B_<NOME> (obras.js lê a mesma tabela). */
+export const BITS_GLSL = bits;
+const fases = FASES_OBRA.map((f, k) => `#define OBRA_F${k} ${f.ate.toFixed(4)}`).join('\n');
+
+/**
+ * Altura pronta da obra (m acima da cota da base) pelo progresso p e a altura H do prédio: a mesma conta do vértice
+ * (GLSL em OBRA_GLSL), em JS para os testes e para o esqueleto e a grua (obras.js). Canteiro: -3 (abaixo das peças
+ * enterradas); fundação: a laje sobe até 0,3 m; estrutura: a laje; fechamento: sobe em degraus de 3 m até H.
+ */
+export const ALTURA_LAJE = 0.3;
+export const DEGRAU_FECHAMENTO = 3;
+export function alturaPronta(p, H) {
+  const [f0, f1, f2] = FASES_OBRA.map((f) => f.ate);
+  if (p <= f0) return -3;
+  if (p <= f1) return -0.6 + (ALTURA_LAJE + 0.6) * Math.min(1, (p - f0) / ((f1 - f0) * 0.6));
+  if (p <= f2) return ALTURA_LAJE;
+  const t = Math.min(1, (p - f2) / (1 - f2));
+  return Math.max(ALTURA_LAJE, DEGRAU_FECHAMENTO * Math.floor((H * t) / DEGRAU_FECHAMENTO + 1e-4));
+}
+
+/** GLSL da obra no vértice (o mesmo em obras.js): fase, altura pronta e a do esqueleto. */
+export const OBRA_GLSL = /* glsl */ `
+${fases}
+// progresso 0..1 da obra pelo uniforme de tique (tique + frac do espelho) e a textura de início e fim
+float gProgressoObra( vec4 ob ) { return clamp( ( gTique - ob.r ) / max( ob.g - ob.r, 1.0 ), 0.0, 1.0 ); }
+float gAlturaPronta( float p, float H ) {
+  if ( p <= OBRA_F0 ) return -3.0;
+  if ( p <= OBRA_F1 ) return -0.6 + ${(ALTURA_LAJE + 0.6).toFixed(2)} * min( 1.0, ( p - OBRA_F0 ) / ( ( OBRA_F1 - OBRA_F0 ) * 0.6 ) );
+  if ( p <= OBRA_F2 ) return ${ALTURA_LAJE.toFixed(2)};
+  float t = min( 1.0, ( p - OBRA_F2 ) / ( 1.0 - OBRA_F2 ) );
+  return max( ${ALTURA_LAJE.toFixed(2)}, ${DEGRAU_FECHAMENTO.toFixed(1)} * floor( H * t / ${DEGRAU_FECHAMENTO.toFixed(1)} + 1e-4 ) );
+}
+// topo do esqueleto: sobe na estrutura até H e fica no fechamento
+float gAlturaEsqueleto( float p, float H ) {
+  if ( p <= OBRA_F1 ) return 0.0;
+  return H * min( 1.0, ( p - OBRA_F1 ) / ( OBRA_F2 - OBRA_F1 ) );
+}
+`;
 
 /** Vértice: declarações (depois do #include <common>). */
 export const VERTICE_PARS = /* glsl */ `
@@ -36,12 +83,17 @@ ${defs}
 attribute vec4 aFac;        // tipo, andar / 0,05 m, vão / 0,1 m, bits (uso 2 | variante 3 | térreo 3)
 attribute vec4 aCorA;       // rgb da cor 1, desgaste (0..255)
 attribute vec4 aCorB;       // rgb da cor 2, vidro (0..255)
-attribute uint aId;         // idx do prédio (vaga da tabela), inteiro
+attribute uint aId;         // idx do prédio (vaga da tabela), inteiro; o bit 30 marca a malha do anexo
 uniform highp sampler2D gPredTab;
+uniform highp sampler2D gPredObra; // início e fim da obra (tiques), cota da base e altura do prédio (m)
+uniform float gTique;              // tique + frac do espelho
+uniform vec3 gCorHolding;          // cor da Holding (sRGB 0..255)
 varying vec4 vPF;           // u (vãos), v (m), vTopo (m), AO
 flat varying vec4 vFac;     // tipo, andar (m), vão (m), bits
 flat varying vec4 vCor;     // cor 1 e cor 2 empacotadas (r*65536 + g*256 + b), vãos da face + desgaste, vidro
 flat varying vec4 vIdent;   // idx, bits da tabela, agenda, camada
+${bits}
+${OBRA_GLSL}
 vec3 gOct( vec2 e ) {
   vec3 v = vec3( e, 1.0 - abs( e.x ) - abs( e.y ) );
   if ( v.z < 0.0 ) v.xy = ( 1.0 - abs( v.yx ) ) * ( step( 0.0, v.xy ) * 2.0 - 1.0 );
@@ -65,11 +117,21 @@ export const VERTICE_NORMAL = /* glsl */ `
 /** Vértice: posição na fachada, cores e a leitura da tabela (depois do #include <begin_vertex>). */
 export const VERTICE_MAIN = /* glsl */ `
 {
-  vec4 gTab = texelFetch( gPredTab, ivec2( int( aId % 512u ), int( aId / 512u ) ), 0 );
-  vIdent = vec4( float( aId ), floor( gTab.g * 255.0 + 0.5 ), gTab.b, floor( gTab.r * 255.0 + 0.5 ) );
+  uint gIdx = aId & ${(ID_ANEXO - 1) >>> 0}u;
+  vec4 gTab = texelFetch( gPredTab, ivec2( int( gIdx % 512u ), int( gIdx / 512u ) ), 0 );
+  uint gBitsT = uint( gTab.g * 255.0 + 0.5 );
+  vIdent = vec4( float( gIdx ), float( gBitsT ), gTab.b, floor( gTab.r * 255.0 + 0.5 ) );
+  // anexo (D39): a cópia que não vale (a do setor com o prédio no anexo, ou a do anexo com ele de volta no setor) some,
+  // e o prédio apagado (morto, ainda numa malha montada) some de todas
+  if ( ( gBitsT & B_APAGADO ) != 0u || ( ( gBitsT & B_ANEXO ) != 0u ) != ( ( aId & ${ID_ANEXO >>> 0}u ) != 0u ) ) transformed = vec3( 0.0 );
   float gTipo = aFac.x;
   vec3 gC1 = aCorA.rgb;
   vec3 gC2 = aCorB.rgb;
+  // prédio da Holding (D34): a cor dela nos caixilhos, montantes e faixas, e inteira nos letreiros e toldos
+  if ( ( gBitsT & B_HOLDING ) != 0u ) {
+    gC2 = mix( gC2, gCorHolding, 0.7 );
+    if ( gTipo == F_LETREIRO || gTipo == F_TOLDO ) gC1 = gCorHolding;
+  }
   float gBits = aFac.w;
   float gVao = max( aFac.z * 0.1, 0.5 );
   float gNB = 1.0;
@@ -110,6 +172,27 @@ export const VERTICE_MAIN = /* glsl */ `
   vPF = vec4( aFacUV.xyz, aAO );
   gNB = max( 1.0, floor( aFacUV.w / gVao + 0.5 ) );
 #endif
+  // obra (2.4): o que passa da altura pronta desce até ela (a fachada sobe andar por andar; o topo vira tampa)
+  if ( ( gBitsT & ( B_OBRA | B_NIVEL ) ) == B_OBRA ) {
+    vec4 gOb = texelFetch( gPredObra, ivec2( int( gIdx % 512u ), int( gIdx / 512u ) ), 0 );
+    if ( gOb.a > 0.0 ) {
+#ifdef USE_INSTANCING
+      mat4 gMI = modelMatrix * instanceMatrix;
+      bool gCima = aUnit.z > 0.5;
+#else
+      mat4 gMI = modelMatrix;
+      bool gCima = objectNormal.y > 0.5;
+#endif
+      float gYc = gOb.b + gAlturaPronta( gProgressoObra( gOb ), gOb.a );
+      float gWy = gMI[ 1 ][ 1 ] * transformed.y + gMI[ 3 ][ 1 ];
+      if ( gWy > gYc ) {
+        // as peças acima descem um pouco mais que as de baixo: a tampa que fica à vista é a da peça mais baixa
+        float gNy = gYc - 0.002 * ( gWy - gYc );
+        transformed.y = ( gNy - gMI[ 3 ][ 1 ] ) / gMI[ 1 ][ 1 ];
+        if ( !gCima ) vPF.y -= gWy - gNy;
+      }
+    }
+  }
   vFac = vec4( gTipo, aFac.y * 0.05, aFac.z * 0.1, gBits );
   vCor = vec4( gEmp( gC1 ), gEmp( gC2 ), min( gNB, 250.0 ) + min( aCorA.a / 255.0, 0.99 ), aCorB.a / 255.0 );
 }
@@ -468,6 +551,7 @@ GSup gFachadaLonge() {
 export const FRAGMENTO_PARS = /* glsl */ `
 #define EDIFICIO
 ${defs}
+${bits}
 varying vec4 vPF;
 flat varying vec4 vFac;
 flat varying vec4 vCor;
@@ -558,7 +642,9 @@ vec3 gAcesa( vec2 h, float uso, float lonje, float queda ) {
   float hora = mod( gHora + ( h.y - 0.5 ) * 1.6 + ( vIdent.z - 0.5 ) * 1.2 + 24.0, 24.0 );
   float fr = gAgenda( uso, hora );
   float acesa = mix( step( h.x, fr ), fr, lonje );
-  if ( mod( vIdent.y, 2.0 ) > 0.5 ) acesa = 0.0; // abandonado
+  // abandonado, ou em obra (a reforma de nível segue morada)
+  uint gB = uint( vIdent.y + 0.5 );
+  if ( ( gB & B_ABANDONADO ) != 0u || ( gB & ( B_OBRA | B_NIVEL ) ) == B_OBRA ) acesa = 0.0;
   vec3 luz = mix( gLuz( fract( h.x * 7.13 + h.y ) ), vec3( 1.0, 0.76, 0.52 ), lonje );
   float brilho = mix( 0.3 + 0.7 * fract( h.y * 13.7 + h.x ), 0.6, lonje );
   // de longe a janela acesa vira a média da fachada: sem esta queda a torre inteira brilharia (a curva de tons clareia
@@ -584,6 +670,66 @@ void gVidroEspelho( inout GSup s, float m, vec2 h, vec3 tinta, float lonje ) {
   s.met = mix( s.met, 0.88, m );
   // a ondulação da chapa quebra o reflexo em mosaico de perto e some de longe
   s.inc = mix( s.inc, ( h - 0.5 ) * 0.03 * ( 1.0 - lonje ), m );
+}
+
+// ---------------------------------------------------------------- abandonado (desenho do render 5.5)
+// pichação (pixo): letras altas e finas em fila, em trechos de 4 m, na faixa [y0, y0 + 1,6] m; 1 onde há tinta
+float gPixo( float um, float v, float y0, float dm, float id ) {
+  float t = gH1( vec3( floor( um / 4.0 ), floor( y0 ), id + 31.0 ) );
+  if ( t > 0.62 || v < y0 || v > y0 + 1.6 ) return 0.0;
+  vec2 p = vec2( um / 0.55, ( v - y0 ) / 1.6 );
+  vec2 d = vec2( dm / 0.55, dm / 1.6 );
+  vec2 h = gH2( vec3( floor( p.x ), floor( y0 ), id + 37.0 ) );
+  vec2 f = vec2( fract( p.x ), p.y );
+  float l = 0.11;
+  float k = gLinha( f.x - 0.18, l, d.x ) + gLinha( f.x - 0.82, l, d.x ) * step( 0.3, h.x );
+  k += gLinha( f.y - ( 0.35 + 0.5 * h.y ), l * 0.35, d.y ) * gPulso( f.x, 0.15, 0.85, d.x );
+  k += gLinha( f.y - 0.97, l * 0.35, d.y ) * gPulso( f.x, 0.05, 0.95, d.x ) * step( 0.5, h.y );
+  k += gLinha( f.x - 0.18 - 0.64 * f.y, l, d.x ) * step( 0.7, h.x );
+  return clamp( k, 0.0, 1.0 ) * gPulso( f.x, 0.05, 0.95, d.x );
+}
+
+void gAbandono( inout GSup s ) {
+  float tipo = vFac.x;
+  vec2 uv = vPF.xy;
+  vec2 duv = max( fwidth( uv ), vec2( 1e-4 ) );
+  float id = vIdent.x;
+  s.emi *= 0.0;
+  if ( tipo == F_PISO || tipo == F_VERDE ) {
+    // mato no lote: touceiras de capim seco e verde
+    vec2 h = gH2( vec3( floor( uv / 0.7 ), id + 3.0 ) );
+    float m = mix( 0.35 + 0.6 * h.y, 0.65, gLonge( duv / 0.7 ) );
+    s.alb = mix( s.alb, mix( vec3( 0.16, 0.15, 0.07 ), vec3( 0.07, 0.11, 0.04 ), h.x ), m );
+    s.rug = mix( s.rug, 0.95, m );
+    return;
+  }
+  if ( tipo < F_TELHA ) {
+    float andar = max( vFac.y, 0.5 );
+    float vao = max( vFac.z, 0.4 );
+    float tH = G_TERREO_H[ int( floor( vFac.w / 32.0 ) ) ];
+    // vidro quebrado em parte das janelas: o escuro de dentro e os cacos em leque
+    if ( s.rug < 0.15 ) {
+      vec2 c = vec2( floor( uv.x ), floor( ( uv.y - tH ) / andar ) );
+      vec2 h = gH2( vec3( c, id + 17.0 ) );
+      if ( h.x < 0.38 ) {
+        vec2 f = vec2( fract( uv.x ), fract( ( uv.y - tH ) / andar ) );
+        float caco = step( 0.5, fract( atan( f.y - h.y, f.x - 0.5 ) * 1.6 + h.y * 5.0 ) ) * step( 0.22, length( f - vec2( 0.5, h.y ) ) );
+        caco = mix( caco, 0.4, gLonge( duv ) );
+        s.alb = mix( vec3( 0.012 ), s.alb, caco * 0.6 );
+        s.rug = mix( 0.9, s.rug, caco );
+        s.met *= caco;
+        s.inc *= caco;
+      }
+    }
+    // pixo no pé da parede e na platibanda
+    float um = uv.x * vao;
+    float dm = max( duv.x * vao, duv.y );
+    float tinta = max( gPixo( um, uv.y, 0.45, dm, id ), uv.y > vPF.z ? gPixo( um, uv.y, vPF.z + 0.05, dm, id + 9.0 ) : 0.0 );
+    vec3 cor = gH1( vec3( floor( um / 4.0 ), 2.0, id ) ) < 0.8 ? vec3( 0.015 ) : vec3( 0.32, 0.03, 0.02 );
+    s.alb = mix( s.alb, cor, tinta * 0.92 );
+    s.rug = mix( s.rug, 0.7, tinta );
+  }
+  s.alb *= vec3( 0.62, 0.6, 0.57 );
 }
 
 // ---------------------------------------------------------------- janelas (reboco, pastilha, tijolo, painel, casa, fita)
@@ -1239,9 +1385,9 @@ vec3 gVista = vec3( 0.0, 0.0, 1.0 );
 }
 GSup gS = gFachada( gVista );
 #endif
+// abandonado: vidros quebrados, pichação, mato no lote, mais escuro e sujo
+if ( ( uint( vIdent.y + 0.5 ) & B_ABANDONADO ) != 0u ) gAbandono( gS );
 diffuseColor.rgb = gS.alb;
-// abandonado: mais escuro e sujo
-if ( mod( vIdent.y, 2.0 ) > 0.5 ) diffuseColor.rgb *= vec3( 0.62, 0.6, 0.57 );
 `;
 
 export const FRAGMENTO_RUGOSIDADE = /* glsl */ `

@@ -2,7 +2,8 @@
 
 ## ONDE PAROU (02/10/2026)
 
-**Onda 3 em andamento.** O dono escolheu voltar ao jogo (fase 1 do complexo toda dialogada, D86). Textos das parcelas
+**Onda 3 em andamento. Etapa 1 pronta, revisada e gravada** (notas nas fichas e em `docs/entregas/onda3/`;
+casca corrigida; JS principal em 1.897 KB, acima do teto de 1.638, decisão da C1). O dono escolheu voltar ao jogo (fase 1 do complexo toda dialogada, D86). Textos das parcelas
 em `parcelas/` (comum da onda em `_comum4.txt`; D87 decide o dinheiro). Etapa 1: S2a, S3a, R2b, R4b, U1b, com a base no
 commit "Onda 3: textos das parcelas". Depois, **etapa 2: SEDE3 e R5** (a SEDE3 faz a área inicial de 6 x 5 e a
 sede v3, D88 a D90) e **etapa 3: R3b, U2a, X1b e X3a** (dependem do mapa novo). Textos prontos em `parcelas/` e copiados
