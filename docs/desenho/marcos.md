@@ -43,13 +43,13 @@ Pegada é a área do terreno ocupada, sem estacionamento e esplanadas. Gerador �
 | 9 | Estádio de jogos virtuais | 50 mil | arena | Jogo | 2 |
 | 10 | Anfiteatro | 40 mil | arena em terreno | Vida | 2 |
 | 11 | Torre Lúculo | 300 m, alta gastronomia | torre | Sede, no eixo | 1 |
-| 12 | Shopping | mais de 1 milhão de m² | edifício | Vida | 1, 2 e 3 |
+| 12 | Shopping Floresta Cintilante | mais de 1 milhão de m² | edifício | Vida | 1, 2 e 3 |
 | 13 | Parque de diversão e aquático | uns 80 ha | parque | Vida | 2 e 3 |
 | 14 | Reserva da Transformação (terra e baía) | uns 500 ha de terra e 100 ha de baía | reserva | à parte, longe do Jogo | 2 (terra) e 3 (baía) |
 | 15 | Resort Marés de Ouro | uns 6 mil quartos em 3 torres, com SkyPark e laguna | torre | Vida, na orla | 2 |
 | 16 | Cinema Cosmos | 50 mil lugares, uns 220 m de diâmetro | esfera | Jogo | 2 |
 | 17 | Centro de Convenções e Feiras | 1 milhão de m², 500 mil de exposição | edifício | Sede, no eixo da estação | 2 |
-| 18 | Marina de iates e porto de cruzeiros | 1.500 vagas de iate e 5 berços de cruzeiro | porto | orla | 1 (marina) e 2 (cruzeiros) |
+| 18 | Marina Aurum e porto de cruzeiros | 1.500 vagas de iate e 5 berços de cruzeiro | porto | orla | 1 (marina) e 2 (cruzeiros) |
 | 19 | Hospital de turismo de saúde | uns 1.200 leitos, com spa e bem-estar | edifício | Vida | 2 |
 
 Pegada das estruturas 1 a 13: de 4 a 5 km², uns 6 a 7% do mapa jogável (8,2 por 8,2 km). A Reserva da Transformação soma
@@ -219,6 +219,7 @@ Decidido com o dono:
 - **Mix de lojas:** **20% de marcas de topo** com exclusividade, **50% de médias** e **30% de pequenas** (cotas de venda
   e aluguel, como no caderno). Um **showroom imersivo da Held Silício e do Mosaico** é a vitrine da tecnologia.
 - **Posição:** na área Vida, **ao lado da estação do trem-bala** e ligado ao Santuário Gaia por um **jardim comum**.
+- **Nome:** **Floresta Cintilante**.
 
 - **Torre Lúculo:** 300 m, só restaurantes de alta gastronomia. O nome vem de Lúculo, general romano célebre pelos
   banquetes (de onde sai "banquete lucúlico"). Salões giratórios em anéis
@@ -247,6 +248,17 @@ Decidido com o dono:
   marina é da fase 1 e os cruzeiros da fase 2.
 - **Hospital de turismo de saúde:** uns 1.200 leitos, com spa e bem-estar, operado pela Tantra (Bumrungrad e a Cleveland
   Clinic Abu Dhabi são as referências), para estadias longas.
+
+### 6.1b Diálogo da Marina (02/10/2026, regra D78)
+
+Decidido com o dono:
+
+- **Forma:** uma **enseada curva** na orla, com **1.500 vagas** de iate, um **píer-boulevard** comercial, clube náutico e
+  um **estaleiro de superiates** da Hanbit, ao lado do Resort Marés de Ouro e do heliponto.
+- **Evento:** a **Semana Náutica de Heldópolis**, uma feira de iates (como o Monaco Yacht Show), em **março**, para encher
+  um mês de baixa com público de alta renda.
+- **Nome:** **Marina Aurum**.
+- **Fase:** 1 (a marina); o porto de cruzeiros fica na fase 2.
 
 ## 7. Nexo e conexão: um fio, três áreas
 
