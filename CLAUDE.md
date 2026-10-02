@@ -10,8 +10,8 @@ interface, PWA para PC e para o Poco X7 do dono.
 Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesquisa/*.md` (fontes). `docs/VISAO.md` é a
 visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.md` é a história em três partes (D67: 2005 a
 2019, 2020 a jun 2026 e jun 2026 a 2040), com sócios, calendário, horas e o dólar (D68). `docs/desenho/marcos.md` descreve o complexo de lazer, esporte e
-natureza (D69: santuário de três esferas, F1, arenas, shopping, parque) e o alvo de qualidade no PC atual (D70). `docs/desenho/cidade.md` trata dos visitantes, do trem-bala, da moradia social
-e dos aeroportos (D71 e D72).
+natureza (D69: santuário de três esferas, F1, arenas, shopping, parque) e o alvo de qualidade no PC atual (D70). `docs/desenho/cidade.md` trata dos visitantes, do trem-bala, da moradia social,
+dos aeroportos e do gasto dos visitantes (D71 a D74).
 
 ## Como o dono trabalha
 - Fala português do Brasil; responda em português: resultado primeiro, frases curtas, sem travessão.

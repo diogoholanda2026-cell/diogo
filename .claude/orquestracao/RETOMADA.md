@@ -9,12 +9,12 @@ a CAS perceptiva de pos.js para pos.glsl.js, mapa de cor do terreno do Alta em 4
 - Onda 2 (S1b, R1b, R3a, X2) revisada (`7ccca28`, `ed81c43`) e integrada pela I1 (`424d396`, `2f82e7f`).
 - Prévia 1 "via no polegar" montada e publicada em `previa/` (`cc8856d`); o site publica `previa/` (`5c50624`).
 
-## Decisões novas do dono (D63 a D72)
+## Decisões novas do dono (D63 a D74)
 - Sede em anel como a Apple Park, lago central com fontes e cachoeira em ciclo, torres de 500 e 452 m quase encostadas,
   cúpula de vidro de 240 m; PC primeiro (RX 550, medido em `docs/pesquisa/pc-dono/`).
 - D67 a D70 (30/09 e 02/10/2026): história em três partes e dólar (`docs/desenho/historia.md`); complexo de lazer e esporte,
   com três esferas no lugar da cúpula, F1, arenas, shopping e parque (`docs/desenho/marcos.md`); PC atual como alvo em
-  todas as partes, upgrade depois; visitantes, trem-bala, moradia social e aeroportos (`docs/desenho/cidade.md`, D71 e D72).
+  todas as partes, upgrade depois; visitantes, trem-bala, moradia social, aeroportos com Modo Visita e economia do visitante (`docs/desenho/cidade.md`, D71 a D74).
   Nada disso está no código; o M1 e a onda 3 não mudam.
 
 ## Próximo passo
