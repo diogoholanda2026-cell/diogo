@@ -1,7 +1,7 @@
-# A cidade de 500 mil e o fluxo de pessoas (D71 a D75)
+# A cidade de 500 mil e o fluxo de pessoas (D71 a D76)
 
 Decidido pelo dono em 02/10/2026. Este anexo trata de quem vive, trabalha e passa por Heldópolis: os visitantes, o que
-eles gastam, os trabalhadores que vêm de fora, a moradia social e os aeroportos. O `docs/PROJETO.md` (D71 a D75) manda;
+eles gastam, os trabalhadores que vêm de fora, a moradia social e os aeroportos. O `docs/PROJETO.md` (D71 a D76) manda;
 aqui está o detalhe. **Nada disto está no código ainda.** Números são estimativas de projeto, para o dono ajustar.
 
 ## 1. Decisões do dono
@@ -24,6 +24,9 @@ aqui está o detalhe. **Nada disto está no código ainda.** Números são estim
    menor movimento**, para o público que não é ultra rico também ir, e um **cinema maior e mais tecnológico que o Sphere
    de Las Vegas**, totalmente fechado, com o teto como extensão do telão e **50 mil lugares** (D75, em `marcos.md`).
 9. **Modo Visita nos dois aeroportos**, e depois estendido a outras estruturas conforme fizer sentido para a cidade.
+10. **Mapa e cidade vertical (D76):** o mapa jogável **fica em 8,2 km** e a cidade de 500 mil é **verticalizada**, em
+    uns 20 km² (como Singapura). **No PC novo, o mapa passa a 12 km** (D70). Os nomes **Resort Marés de Ouro** e
+    **Cinema Cosmos** estão confirmados.
 
 ## 2. Visitantes
 
@@ -183,13 +186,12 @@ Somando o complexo (D69 e D75, uns US$ 110 bilhões), o trem-bala (50 a 100), os
 - **Transporte de massa:** trem-bala, metrô e trem urbano vêm antes do M4, junto da série dos marcos.
 - **Simulação:** classes de visitantes, gasto por classe, calendário de eventos com picos, pendulares por trem, duas
   zonas de moradia social, o Fundo de Moradia e as metas de Legado da escada social.
+- **Cidade vertical:** o catálogo de moradia e comércio precisa de **torres de 30 a 60 andares** em escala (em média uns
+  25 mil moradores por km²), com verde nos terraços (modernismo tropical, VISAO), para a cidade caber no mapa de 8,2 km.
+  O gerador de prédios (R2b e R4b) e a demanda por zona partem dessa densidade.
 - **Aeroportos:** na moldura, com estação, aviões no céu, tela de gestão e o Modo Visita (cena de interior própria; o M1
   deixou "interiores falsos" de fora). O Modo Visita entra depois do M1a, começando pelos dois aeroportos.
 
 ## Pendências (perguntas ao dono)
 
-1. **Cabe tudo no mapa jogável de 8,2 km (67 km²)?** O complexo passa a ocupar uns 6 a 7 km², a Reserva da Transformação
-   uns 6 km² e a cidade de 500 mil de 20 a 35 km². Dá uns 32 a 48 km², fora o mar, os morros e o rio. Recomendação:
-   manter o mapa e **verticalizar a cidade** (500 mil em uns 20 km², como Singapura), e **ampliar o mapa para 12 km**
-   quando o PC novo chegar (D70).
-2. **Nomes novos:** Resort Marés de Ouro e Cinema Cosmos servem?
+Nenhuma aberta neste anexo. Em aberto no projeto: a foto da história (`historia.md`).

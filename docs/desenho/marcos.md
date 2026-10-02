@@ -265,5 +265,5 @@ futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torr
 
 ## Pendências (perguntas ao dono)
 
-Os marcos estão confirmados. Em aberto: o espaço no mapa e os nomes novos (`cidade.md`, pendências) e a foto da
-história (`historia.md`).
+Os marcos estão confirmados, com os nomes. O mapa de 8,2 km e a cidade vertical estão em `cidade.md` (D76). Em aberto:
+a foto da história (`historia.md`).
