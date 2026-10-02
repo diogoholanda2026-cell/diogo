@@ -55,6 +55,10 @@ mesmo tempo, mais que o dobro dos moradores, e uns 500 mil quartos de hotel (Las
 turistas são **fluxo estatístico** (contagem, gasto, lotação de hotel, aeroporto e porto), e só uma amostra vira gente
 visível na rua.
 
+**Complexo de lazer e esporte (D69):** nasce em três fases (até jun 2026, até 2029 e até 2032), pelo que mais serve à
+economia e ao conforto de quem vai morar. Detalhe em `marcos.md`. O dono disse que a cidade fica **liberada para morar em
+jun 2026**; a leitura de trabalho é que antes disso moram os pioneiros (operários e famílias de funcionários), pendência 5.
+
 ## 4. Ordem de construção
 
 1. **Parte 2 agora.** O M1 cobre a primeira metade dela (marco 0 a 7 em 5 a 7 h). A segunda metade, de uns 2023 a
@@ -158,3 +162,4 @@ sócios para chegar a 50%.
    Holding fica como pano de fundo?
 4. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3.
 5. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
+5. **Jun 2026:** moradia liberada ao público em jun 2026, com pioneiros antes (de 30 a 38 mil, como o M1 simula). Confirma?

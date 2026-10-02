@@ -1,0 +1,215 @@
+# Marcos do complexo da Holding (D69 e D70)
+
+Decidido pelo dono em 02/10/2026. Este anexo descreve as 13 estruturas do complexo de lazer, esporte e natureza de
+Heldópolis: o que são, de que tamanho, onde ficam, em que ordem nascem e quem as opera. O `docs/PROJETO.md` (D69 e D70)
+manda; aqui está o detalhe. **Nada disto está no código ainda.** Medidas, áreas, contagens e custos são estimativas de
+projeto, para o dono ajustar.
+
+## 1. Decisões do dono
+
+1. **Qualidade (D70):** o jogo é feito para o PC atual, em todas as partes. O que o PC atual não aguenta entra simples
+   e fica pronto para o upgrade; o PC novo vem depois, com uma frente só de melhoria.
+2. **Santuário:** as três esferas **substituem** a cúpula de 240 m da D65.
+3. **F1:** a pista passa **entre as três esferas e por um túnel de vidro acústico sob a base da maior** (opção A).
+4. **Pista mista:** 60% permanente e 40% de avenidas da cidade fechadas no fim de semana do GP.
+5. **Fases:** equilibradas, construindo junto com a cidade o que mais faz sentido para a economia e para o conforto de
+   quem vai morar nela quando for liberada para morar, em **junho de 2026**.
+6. **Estádio de shows (270 mil) e anfiteatro (40 mil):** os dois existem, com focos diferentes.
+7. **Marcas:** nomes fictícios com as características das originais (como os países).
+8. **Parque e shopping:** Mata Atlântica e Amazônia com tecnologia, e as peças precisam ter nexo e conexão entre si
+   (seção 7).
+
+## 2. As 13 estruturas
+
+Pegada é a área do terreno ocupada, sem estacionamento e esplanadas. Gerador é a ferramenta de modelagem que a cobre.
+
+| # | Estrutura | Tamanho | Gerador | Área | Fase |
+|---|---|---|---|---|---|
+| 1 | Esfera Alta, floresta tropical | 160 m de diâmetro + pedestal de 20 m = 180 m | esfera | Vida | 2 |
+| 2 | Esfera Média, savana e deserto | 124 m + 16 m = 140 m | esfera | Vida | 2 |
+| 3 | Esfera Baixa, oceano e polar | 88 m + 12 m = 100 m | esfera | Vida | 1 |
+| 4 | Circuito de F1 | 5 a 7 km, 18 a 22 curvas | pista | entre Vida e Jogo | 1 (avenidas), 2 (permanente) |
+| 5 | Arena de basquete | 35 mil | arena | Jogo | 1 |
+| 6 | Estádio de futebol americano e futebol | 120 mil | arena | Jogo | 3 |
+| 7 | Estádio de shows | 270 mil | arena | Jogo | 3 |
+| 8 | Estádio de tênis e tênis de mesa | 20 mil | arena | Jogo | 2 |
+| 9 | Estádio de jogos virtuais | 50 mil | arena | Jogo | 2 |
+| 10 | Anfiteatro | 40 mil | arena em terreno | Vida | 2 |
+| 11 | Torre dos Sabores (nome provisório) | 300 m, alta gastronomia | torre | Sede, no eixo | 1 |
+| 12 | Shopping | mais de 1 milhão de m² | edifício | Vida | 1, 2 e 3 |
+| 13 | Parque de diversão e aquático | uns 80 ha | parque | Vida | 2 e 3 |
+
+Pegada total estimada: de 4 a 5 km², uns 6 a 7% do mapa jogável (8,2 por 8,2 km).
+
+Dois geradores cobrem 9 das 13 estruturas: o de **arena** (6) e o de **esfera** (3). Isso é o que segura o custo.
+
+## 3. Santuário de animais
+
+### 3.1 Forma
+
+- Três esferas completas de vidro em malha diagonal, cada uma assentada num **pedestal de serviços**. A altura total
+  (180, 140 e 100 m) é a pedida pelo dono.
+- O pedestal tem os serviços que o público não vê: aquário, casa noturna, quarentena, hospital veterinário, cozinha dos
+  animais e a galeria de visita.
+- **O vidro é unidirecional.** Por fora o público vê o interior iluminado; por dentro o animal vê só uma paisagem
+  projetada. As faces têm vidro laminado em câmara dupla com vácuo e absorvente, para o som de fora não entrar. Na vida
+  real isso depende de manter o interior mais claro que o exterior, e no jogo vale como regra.
+
+### 3.2 Quantos animais cabem
+
+Resposta curta: **muitos, se forem do tipo certo**. As esferas ganham em volume (voo e altura), não em chão.
+
+| Esfera | Volume | Chão no equador | Chão com terraços e passarelas |
+|---|---|---|---|
+| Alta, 160 m | 2,1 milhões de m³ | 2,0 ha | uns 3,6 ha |
+| Média, 124 m | 1,0 milhão de m³ | 1,2 ha | uns 2,2 ha |
+| Baixa, 88 m | 0,36 milhão de m³ | 0,6 ha | uns 1,1 ha |
+| Total | 3,5 milhões de m³ | 3,8 ha | uns 7 ha |
+
+Estimativa de ordem de grandeza, por esfera:
+
+- **Alta, floresta tropical** (Amazônia, Mata Atlântica, Congo e sudeste asiático): voo livre e dossel de 60 m.
+  Cerca de **3 mil aves**, 400 mamíferos pequenos e médios (primatas, preguiças, tamanduás, antas, capivaras, 2 a 4
+  onças-pintadas) e 1.000 répteis e anfíbios, mais borboletas aos milhares. Uns 4.500 animais.
+- **Média, savana e deserto, em escala de zoológico:** 6 girafas, 20 zebras, 40 antílopes, 6 leões, 4 guepardos, 2
+  rinocerontes, 500 aves e 300 répteis. Uns 1.000 animais.
+- **Baixa, oceano e polar:** 60 pinguins, 20 focas e leões-marinhos, 10 lontras e, no pedestal, um **aquário de 10 a 20
+  milhões de litros** (como os maiores do mundo) com uns 20 mil peixes, 100 tubarões e raias, tartarugas e peixes-boi.
+
+Soma: perto de **6 mil animais de terra e ar mais uns 20 mil peixes**. Em número, é comparável a um grande zoológico
+(o de San Diego tem uns 12 mil animais em 40 ha), com mais aves e peixes e menos animais de grande porte.
+
+**O que as esferas não dão:** manadas de elefantes e búfalos, e muitos grandes carnívoros juntos. A Holding **recusa
+elefantes e cetáceos por bem-estar**, e isso entra na história (Legado). Se o dono quiser grandes animais, a saída é
+uma reserva externa de 30 a 60 ha (pendência 2).
+
+### 3.3 Bem-estar e Legado
+
+Cada esfera tem um índice de bem-estar animal (espaço, enriquecimento, convivência, saúde). O índice alimenta o Legado
+e a reputação. Programas de reprodução e soltura são metas de história. O hospital veterinário é da Tantra.
+
+## 4. Circuito de F1
+
+- **Padrão:** o da federação mundial fictícia (seção 9), equivalente ao grau 1 da FIA. Largura de 12 a 15 m, reta de
+  uns 1,2 km, 18 a 22 curvas, extensão de 5 a 7 km (meta de 6,2 km), corrida noturna com iluminação de LED.
+- **60 / 40:** uns 3,7 km de pista permanente e 2,5 km de avenidas da cidade. No fim de semana do GP, as avenidas
+  fecham; a simulação redistribui o trânsito (Dia de Evento, seção 8).
+- **O trecho das esferas:** a pista corre no **corredor entre as três esferas** e mergulha num **túnel de vidro
+  acústico** sob o pedestal da esfera maior, de uns 600 m. Quem está nas arquibancadas do pedestal vê carros e
+  animais; os animais nem veem nem ouvem os carros.
+- **Arquibancadas e camarotes:** 120 mil lugares permanentes e até 200 mil com as temporárias (Silverstone passa de 400
+  mil pessoas no fim de semana inteiro). Torre de boxes com o Paddock Club, camarotes em hotel sobre a pista (como o de
+  Yas Marina) e camarotes no pedestal da esfera maior.
+- **Referências:** Marina Bay (corrida noturna), Yas Marina (hotel sobre a pista), Las Vegas (avenidas), Mônaco (túnel).
+
+## 5. Gerador de arena (parâmetros)
+
+Um só gerador, seis versões. A diferença vem da capacidade, do número de anéis, do telhado e do piso.
+
+| Arena | Lugares | Anéis | Telhado | Piso | Marca registrada do desenho |
+|---|---|---|---|---|---|
+| Basquete | 35 mil | 3 | fixo, com tela de LED por dentro | quadra, vira show | anel de LED contínuo |
+| Futebol americano e futebol | 120 mil | 3 | translúcido e retrátil | campo em bandeja que sai e entra | bandeja de campo e fachada em ETFE |
+| Shows | 270 mil | 2 e pista em pé | sem telhado, só um anel de sombra | pista em pé de 120 mil e 150 mil sentados | **bacia escavada no morro**, palco giratório |
+| Tênis e tênis de mesa | 20 mil | 2 | retrátil em pétalas | quadra central e duas de mesa | telhado em pétalas |
+| Jogos virtuais | 50 mil | 2 | fechado, com tela total | palco e cabines | fachada de LED e luz sincronizada |
+| Anfiteatro | 40 mil | encosta | membrana leve | palco com cortina d'água | **leque na encosta**, acústica de ponta |
+
+Referências: Michigan Stadium (107 mil), Allegiant e Tottenham (campo retrátil), Arthur Ashe e Wuhan (telhado em
+pétalas), Strahov (o maior do mundo, de 200 a 250 mil), Hollywood Bowl e Verona (anfiteatros), Sphere (LED total).
+
+## 6. Torre, shopping e parque
+
+- **Torre dos Sabores (provisório):** 300 m, só restaurantes de alta gastronomia, com salões giratórios em anéis
+  empilhados e jardins suspensos. A silhueta é **diferente da Lâmina**, para não competir com as torres de 500 e 452 m.
+  Referências: Sky Tower de Auckland e CN Tower.
+- **Shopping:** o maior do mundo, com mais de 1 milhão de m² (Iran Mall e Dubai Mall passam disso), em 4 a 5 andares,
+  com uma floresta interna sob luz do dia e cachoeiras, como o Jewel Changi. É o jardim que a cúpula antiga prometia.
+- **Parque:** um só, com uma área seca de montanhas-russas e áreas temáticas e uma área molhada de ondas e rios, ligadas
+  por um **rio lento** que cruza as duas. Tema: Mata Atlântica e Amazônia, com tecnologia (atrações em realidade
+  aumentada, robôs, projeção).
+
+## 7. Nexo e conexão: um fio, três áreas
+
+Para as peças não parecerem soltas, tudo obedece a um fio e a uma rede.
+
+- **O fio:** natureza e tecnologia. Cada área mostra um lado, e o Cérebro de Heldópolis (a IA) liga os dois.
+- **Vida (oeste):** as três esferas, o shopping, o parque e o anfiteatro, em volta de um jardim comum. É a área da
+  conservação e da ciência (Legado).
+- **Sede (centro):** o anel, as Torres, o lago e a Torre dos Sabores, no eixo que une as duas áreas.
+- **Jogo (leste):** as cinco arenas ao redor de uma **esplanada**. É a área da performance e da IA (Influência).
+- **Circuito:** a pista une as duas áreas e passa pelo corredor das esferas.
+- **Anel de mobilidade:** um trem leve elevado liga as três áreas aos portões da sede (oeste, norte e leste), e as
+  estações de evento entram na rede de trem pesado que o plano já prevê.
+- **Água e energia:** o lago central da sede alimenta as esferas, o parque e as fontes; a pele solar dos telhados paga
+  parte da energia.
+
+A posição exata de cada peça sai na parcela de implantação, com o terreno real.
+
+## 8. Fases, turismo e economia
+
+Critério do dono: construir junto com a cidade o que mais faz sentido para a economia e para o conforto de quem vai
+morar. Estádios enormes ficam vazios quando há pouca gente, então os maiores chegam por último.
+
+| Fase | Período | Turismo (proposta) | O que nasce |
+|---|---|---|---|
+| 1 | 2020 a jun 2026 (liberação para morar) | uns 300 mil por mês | sede e Torres; Esfera Baixa; Torre dos Sabores; arena de basquete (35 mil); fase 1 do shopping; avenidas do circuito |
+| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Média e Alta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping |
+| 3 | 2029 a 2032 | de 4 a 10 milhões por mês | futebol americano (120 mil); shows (270 mil); shopping e parque completos |
+
+**Cardápio do turismo (proposta para a meta de 10 milhões por mês):** parque e shopping 40%, eventos 35%, santuário e
+Torre 15%, negócios da Holding 10%. A simulação trata a massa como fluxo estatístico, com lotação, gasto e saída.
+
+**Dia de Evento:** cada evento gera um pico (fluxo estatístico) com lotação, tempo de saída e segurança. Esvaziar 270
+mil pessoas em 2 h pede uns 135 mil por hora, ou 3 a 4 linhas de metrô pesado mais ônibus. O metrô hoje está no M4 e
+terá de vir antes.
+
+## 9. Nomes fictícios (proposta, o dono confirma)
+
+Mantêm o formato e as regras reais.
+
+| Real | No jogo | Observação |
+|---|---|---|
+| Fórmula 1 e FIA | **Fórmula Mundial** e **Federação Mundial de Automobilismo** | mesma estrutura de equipes, classes e GP |
+| NBA | **Associação Libertense de Basquete (ALB)** | 30 times, 82 jogos, playoffs e final |
+| NFL | **Liga Libertense de Futebol Americano (LLFA)** | 32 times, 17 jogos, final nacional |
+| Clubes europeus de futebol | clubes fictícios de Albionford, Rheinhaven e Valmonde | pré-temporada no estádio de 120 mil |
+| Torneios de tênis | **Circuito Mundial de Tênis** | quatro torneios principais |
+| Torneios de jogos virtuais | **Campeonato Mundial de Jogos Virtuais** | final no estádio de 50 mil |
+
+## 10. Quem opera (os 9 gigantes)
+
+| Gigante | Opera |
+|---|---|
+| Halcyon Systems | Cérebro de Heldópolis: gêmeo digital, fluxo de multidões |
+| Starlight Media Group | arena de basquete, futebol americano e shows: direitos e transmissão |
+| Maison Valmonde | Torre dos Sabores e hotéis de grife |
+| Hanbit Heavy & Electronics | estádio de jogos virtuais, telas de LED e telhados retráteis |
+| Rheinhaven Werke | circuito, trens de saída e o anel de mobilidade |
+| Terra Roxa S.A. | biomas, jardins e a água do santuário |
+| Tantra Group | hospital veterinário e saúde dos eventos |
+| Libertas Capital Partners | financiamento, nomes de estádios e títulos |
+| Albionford & Lyle Assurance | seguro das estruturas e dos eventos |
+
+## 11. Custo estimado
+
+Soma de uns **US$ 79 bilhões**, cerca de 11% dos US$ 700 bilhões do projeto: esferas 9, circuito 1,5, basquete 3,
+futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torre dos Sabores 2, shopping 25 e parque
+10 (US$ bilhões). O resto do projeto vai para moradia, vias, redes, aeroporto e porto.
+
+## 12. O que muda no plano
+
+- **M1 e onda 3:** não mudam. O santuário substitui a cúpula só quando a parcela dos marcos rodar; até lá, o código da
+  sede continua com a cúpula da D65.
+- **Marcos:** viram uma série depois do M1a (cerca de 45 agentes a mais, estimativa), começando pelos geradores.
+- **Orçamento gráfico (D70):** os tetos da D66 valem para a versão jogável. Esferas de vidro e arenas entram em versão
+  simples (casca fina de longe, interior só de perto) e sobem de qualidade no PC novo.
+- **Metrô e trem:** o que for preciso para a saída de eventos vem antes do M4.
+
+## Pendências (perguntas ao dono)
+
+1. **Junho de 2026:** a cidade fica liberada para morar. Antes disso moram os pioneiros (operários e famílias de
+   funcionários, de 30 a 38 mil, o que o M1 já simula). Confirma essa leitura?
+2. **Grandes animais:** aceitar as esferas como estão (sem elefantes) ou acrescentar uma reserva externa de 30 a 60 ha?
+3. **Nomes:** os da seção 9 e o provisório "Torre dos Sabores" servem?
+4. **Ordem:** os marcos entram depois do M1a, sem mexer na onda 3?

@@ -9,7 +9,8 @@ interface, PWA para PC e para o Poco X7 do dono.
 **O documento que manda é `docs/PROJETO.md`** (decisões, contratos, estrutura, parcelas do M1 e regras de trabalho).
 Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesquisa/*.md` (fontes). `docs/VISAO.md` é a
 visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.md` é a história em três partes (D67: 2005 a
-2019, 2020 a jun 2026 e jun 2026 a 2040), com sócios, calendário, horas e o dólar (D68).
+2019, 2020 a jun 2026 e jun 2026 a 2040), com sócios, calendário, horas e o dólar (D68). `docs/desenho/marcos.md` descreve o complexo de lazer, esporte e
+natureza (D69: santuário de três esferas, F1, arenas, shopping, parque) e o alvo de qualidade no PC atual (D70).
 
 ## Como o dono trabalha
 - Fala português do Brasil; responda em português: resultado primeiro, frases curtas, sem travessão.
