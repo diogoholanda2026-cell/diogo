@@ -50,7 +50,10 @@ Total: **38 a 53 h**, com meta central de **48 h**.
 | jun 2032 | cidade pronta | fim da frente da cidade; o mundo segue |
 | 2040 | fim da parte 3 | final por Influência e Legado (VISAO, 5.7) |
 
-**Escala dos turistas:** 10 milhões por mês, com 4 noites de estadia, são uns **1,3 milhão de visitantes na cidade** ao
+**Atualização (D71):** os 10 milhões são capacidade de pico de visitantes em três classes, e os números abaixo foram
+refeitos em `cidade.md` (uns 700 mil presentes, e não 1,3 milhão).
+
+**Escala dos turistas (conta antiga):** 10 milhões por mês, com 4 noites de estadia, são uns **1,3 milhão de visitantes na cidade** ao
 mesmo tempo, mais que o dobro dos moradores, e uns 500 mil quartos de hotel (Las Vegas tem uns 150 mil). Por isso os
 turistas são **fluxo estatístico** (contagem, gasto, lotação de hotel, aeroporto e porto), e só uma amostra vira gente
 visível na rua.

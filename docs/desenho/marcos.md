@@ -195,7 +195,7 @@ reserva e Torre 15%, negócios da Holding 10%. A simulação trata a massa como 
 
 **Dia de Evento:** cada evento gera um pico (fluxo estatístico) com lotação, tempo de saída e segurança. Esvaziar 270
 mil pessoas em 2 h pede uns 135 mil por hora, ou 3 a 4 linhas de metrô pesado mais ônibus. O metrô hoje está no M4 e
-terá de vir antes.
+terá de vir antes (ver `cidade.md`).
 
 ## 9. Nomes fictícios (confirmados pelo dono em 02/10/2026)
 
@@ -242,12 +242,5 @@ futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torr
 
 ## Pendências (perguntas ao dono)
 
-Tudo o que era dos marcos foi confirmado em 02/10/2026 (reserva dentro do mapa, nomes e orcas). Em aberto:
-
-1. **O que conta como "10 milhões de turistas por mês".** São 120 milhões por ano, mais que Orlando (uns 75 milhões) e
-   que a França inteira em visitantes internacionais. Recomendação: contar **visitas** (inclui quem vem de dia, de
-   trem, da região), e tratar os 10 milhões como **capacidade de pico**, com ocupação média de 55 a 60%.
-2. **Quem atende os turistas.** Com uns 1,3 milhão de visitantes presentes, são uns 400 mil trabalhadores do turismo,
-   quase o total de moradores. Recomendação: metade mora na cidade, em vilas de trabalhadores e moradia acessível, e
-   metade vem de trem da região (fluxo estatístico de pendulares).
-3. **A foto da história** que o dono vai mandar (ver `historia.md`).
+Tudo o que era dos marcos foi confirmado em 02/10/2026 (reserva dentro do mapa, nomes e orcas). O turismo e os
+trabalhadores foram resolvidos em `cidade.md` (D71 e D72). Em aberto: a foto da história (ver `historia.md`).
