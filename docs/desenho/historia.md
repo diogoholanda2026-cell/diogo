@@ -19,7 +19,8 @@ uma startup. Daí nasce o grupo. O jogador é ele.
 | 2008 a 2010 | a crise financeira: a empresa **cresce de forma absurda** |
 | 2012 | cria **3 fintechs** sob uma **Holding guarda-chuva**: tecnologia, agroindústria e clientes VIP de alto padrão |
 | 2014 | a crise da Crimeia (nome fictício): cresce de novo. Começa a investir em IA e cria, sob a guarda-chuva, a startup do **Super Cérebro**, com 10 engenheiros do mais alto nível: uma IA que reproduz a estrutura completa do cérebro humano, com neurônios e conexões super complexas e eficientes |
-| 2018 | a crise China x EUA, no 1º mandato de um presidente de Nova Libertas (nomes fictícios): o grupo atua no mesmo mercado de 2005 e em outros. De forma **silenciosa**, compra **terras raras, ouro** e empresas com o direito de minerar e refinar, no Brasil do jogo, por entender a importância para os componentes da IA |
+| 2017 | começa o **estudo de IA mais avançado** (como na vida real), que vira a IA multimodal do grupo (seção 5.5) |
+| 2018 | a crise China x EUA, no 1º mandato de um presidente de Nova Libertas (nomes fictícios): o grupo atua no mesmo mercado de 2005 e em outros. De forma **silenciosa**, compra **terras raras, ouro** e empresas com o direito de minerar e refinar, **principalmente no Brasil do jogo** (o país sede) e também na **Tailândia** e em **países africanos** (só citados no jogo; o jogador administra o que chega de lá), por entender a importância para os componentes da IA |
 | 2018 em diante | por **holdings intermediárias**, compra para a guarda-chuva portos, ferrovias, silos, transportadoras terrestres, navais e aéreas de commodities e de bens de luxo. **Só a infraestrutura, nunca administrando.** Também recebe infraestrutura como compensação de calote da fintech agroindustrial |
 
 O padrão é claro: **o grupo cresce em cada crise.** É a ideia de "anticrise" que o caderno repete.
@@ -47,6 +48,11 @@ O padrão é claro: **o grupo cresce em cada crise.** É a ideia de "anticrise" 
   Gestor tem **US$ 4,3 trilhões** sob gestão (dinheiro dos 14 sócios, ver 5.2).
 - **Gente:** **45 mil funcionários** em 3 turnos de 15 mil na sede, e **1 mil na parte subterrânea**, em projetos
   privados e para governos.
+- **Parte subterrânea da sede:** o **data center dos projetos secretos** e das partes mais essenciais da IA da Holding. Os
+  projetos são **militares, patentes e avanço da IA** (1 mil pessoas, privados e para governos).
+- **Duas IAs:** o **Super Cérebro**, de uso interno e dos projetos (no subsolo), e uma **IA multimodal de verdade**, em que
+  um só modelo cria o prompt, interpreta, gera a imagem estática e a transforma em vídeo, e que também faz o que o Claude faz.
+  A multimodal é o **modelo de IA líder de mercado**.
 - **Faculdade:** uns 10 mil estudantes (2 turnos de 8 h, 5 mil cada). **Escola:** 17 mil alunos de 10 a 17 anos (2
   turnos de 6 h, de 10 mil e de 7 mil). **Tudo grátis, e o "pagamento extremamente inteligente" é a inteligência:** para entrar basta ter um alto nível de
   inteligência, e não se paga mais nada, nem o estudo nem a moradia (a moradia é gratuita para quem comprova que não
@@ -172,8 +178,10 @@ A **Holding Held guarda-chuva** é totalmente privada:
   bilhões em 2020, passou a 372 em um ano e recebeu os gigantes de 2021 a 2025. (Um retorno de 40% em trilhões não
   existe na vida real. No jogo ele é obra do Super Cérebro.)
 - **Daqui para a frente:** a meta é de **5 a 7% ao ano**, porque o valor é astronômico e o Fundo **move o mercado
-  financeiro** e outros setores no mundo todo. Cinco por cento de 4,3 trilhões são **US$ 215 bilhões**, o lucro líquido
-  do último ano; sete por cento são uns US$ 300 bilhões por ano.
+  financeiro** e outros setores no mundo todo. Cinco a sete por cento de 4,3 trilhões são de US$ 215 a 300 bilhões por ano **para os
+  sócios**.
+- **O lucro de US$ 215 bilhões do grupo não vem só do Fundo:** o Fundo responde por **27%** (uns **US$ 58 bilhões**, 1,35%
+  dos 4,3 trilhões, como taxa de gestão e de desempenho). Os outros **73%** (uns US$ 157 bilhões) vêm das outras áreas.
 - **O projeto da cidade** (US$ 500 a 900 bilhões) é uma fatia de uns 12 a 21% desse fundo.
 - **Na parte 3,** o Fundo é o **motor da expansão ao mundo**: o jogador decide quanto vai para a cidade e quanto abre
   filiais nas outras metrópoles.
@@ -219,13 +227,16 @@ A **Holding Held guarda-chuva** controla **4 holdings intermediárias** (decidid
 | Intermediária (nome proposto) | O que é |
 |---|---|
 | **Held Capital** | a **fintech financeira**, unificada em 2022, com **5 departamentos**: tecnologia, agroindústria, clientes VIP de alto padrão, construções de grande porte, e alimentícia, siderurgia e sucroalcooleira |
-| **Held Litos** | **terras raras** (e ouro): empresas e direitos de minerar e refinar |
-| **Held Silício** | **semicondutores e hardware para IA e uso interno**: chips, placas de vídeo, memória, software |
+| **Held Litos** | **terras raras** (e ouro): empresas e direitos de minerar e refinar, **principalmente no país sede** e também na Tailândia e em países africanos (só citados; o jogador administra o que chega de lá) |
+| **Held Silício** | **semicondutores e hardware**: chips, placas de vídeo, memória RAM e software, em **3 destinos**: IA interna, IA multimodal e **venda comercial** |
 | **Held Pórtico** | **infraestrutura física**: portos, silos, ferrovias e transportadoras terrestres, aéreas e marítimas, **sempre só a infraestrutura, nunca a gestão do negócio** que funciona nela |
 
-- **Super Cérebro:** a IA do grupo, criada em 2014 sob a guarda-chuva. É também a IA da cidade e a conselheira do jogador.
-- **Parte subterrânea da sede** (1 mil pessoas, projetos privados e para governos): sem resposta do dono, **fica de
-  fora por ora**.
+- **As duas IAs:** o **Super Cérebro** (2014), de uso interno, dos projetos e da cidade, e a conselheira do jogador; e a
+  **IA multimodal** (pesquisa desde 2017), líder de mercado, vendida ao mundo. Nome proposto para a multimodal: **Mosaico**.
+- **Parte subterrânea da sede:** o data center dos projetos secretos e do essencial da IA do grupo. Projetos militares, patentes e
+  avanço da IA, com 1 mil pessoas. Fica **fechada ao público**, e o jogador a vê só por telas e relatórios.
+- **De onde vem o lucro de US$ 215 bilhões:** 27% do Fundo e 73% das outras áreas. Proposta de divisão dos 73% (o robô
+  calibra): Held Silício com a IA multimodal 30%, Held Capital 20%, Held Litos 12% e Held Pórtico 11%.
 - **Os 20 executivos (0,5% cada):** o topo e de alta confiança. Os conselheiros já existentes (Íris, Tomé, Nara, Caio,
   Dona Cida e Lívia) entram nessa lista. Nomes ficam para o roteirista.
 
@@ -250,7 +261,7 @@ licenças de tecnologia e voz na segurança. O país anfitrião concede o territ
 - **Preços base:** em dólar de mercado por unidade do item. Para os preços fazerem sentido ao lado de bilhões, a unidade
   do item vira a carga de caminhão ou o lote industrial (a S3a fecha a tabela).
 
-## 7. Nomes fictícios (proposta, o dono aprova ou troca)
+## 7. Nomes fictícios (aprovados pelo dono em 02/10/2026)
 
 | Real | No jogo |
 |---|---|
@@ -269,15 +280,16 @@ licenças de tecnologia e voz na segurança. O país anfitrião concede o territ
 | fundo soberano tipo Noruega | **Fundo Soberano do Norte** |
 | intermediárias | **Held Capital, Held Litos, Held Silício e Held Pórtico** |
 
+Nomes novos, em proposta: a IA multimodal **Mosaico**; a Tailândia do jogo, **Reino de Sukhara**; os países africanos,
+**Federação de Zuberia** e **República de Mbalanga**.
+
 ## Pendências (perguntas ao dono)
 
-1. **Nomes fictícios** da seção 7: aprova ou troca?
-2. **Parte subterrânea da sede** (1 mil pessoas, projetos privados e para governos): o que é? Proposta: o Super Cérebro e
-   laboratórios, com contratos de governo como gancho de história.
+1. **Nomes novos** acima (Mosaico, Sukhara, Zuberia e Mbalanga): aprova ou troca?
+2. **Divisão do lucro** de 73% entre as 4 intermediárias (proposta na seção 5.5).
 3. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3 (a meta de retorno do Fundo é de 5 a 7% ao ano).
 4. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
 
-Resolvidas em 02/10/2026: controle (ações de 10 a 20 votos), Reorganização (não existe), país (Vera Cruz do Leste), pico
-mensal de 10 milhões, Torre de 300 m, 70 mil moradores em jun 2026, educação grátis por inteligência, as 4 intermediárias,
-o Fundo (dinheiro dos 14 sócios, retorno de 5 a 7%), o Conselheiro de Estratégia, o fundo tipo Noruega, os anos dos
-gigantes. A frase "PC mais fraco divide em 10 versões de 2,5 GB" foi dispensada.
+Resolvidas em 02/10/2026: nomes fictícios da seção 7; subsolo (data center secreto, militar, patentes e IA); duas IAs;
+a conta do lucro (Fundo 27%); terras raras em 3 regiões; chips em 3 destinos; e as anteriores (controle, país, pico
+mensal, Torre de 300 m, 70 mil moradores, educação por inteligência, intermediárias, Conselheiro de Estratégia).

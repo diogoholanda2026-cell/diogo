@@ -32,9 +32,9 @@ Pegada é a área do terreno ocupada, sem estacionamento e esplanadas. Gerador �
 
 | # | Estrutura | Tamanho | Gerador | Área | Fase |
 |---|---|---|---|---|---|
-| 1 | Esfera Alta, floresta tropical | 160 m de diâmetro + pedestal de 20 m = 180 m | esfera | Vida | 2 |
-| 2 | Esfera Média, savana e deserto | 124 m + 16 m = 140 m | esfera | Vida | 2 |
-| 3 | Esfera Baixa, oceano e polar | 88 m + 12 m = 100 m | esfera | Vida | 1 |
+| 1 | Esfera Floresta (Santuário Gaia), floresta tropical | 160 m de diâmetro + pedestal de 20 m = 180 m | esfera | Vida | 2 |
+| 2 | Esfera Savana (Santuário Gaia), savana e deserto | 124 m + 16 m = 140 m | esfera | Vida | 2 |
+| 3 | Esfera Oceano (Santuário Gaia), oceano e polar | 88 m + 12 m = 100 m | esfera | Vida | 1 |
 | 4 | Circuito de F1 | 5 a 7 km, 18 a 22 curvas | pista | entre Vida e Jogo | 1 (avenidas), 2 (permanente) |
 | 5 | Arena de basquete | 35 mil | arena | Jogo | 1 |
 | 6 | Estádio de futebol americano e futebol | 120 mil | arena | Jogo | 3 |
@@ -59,6 +59,21 @@ Dois geradores cobrem 10 das 19 estruturas: o de **arena** (6) e o de **esfera**
 
 ## 3. Santuário de animais
 
+### 3.0 Diálogo do Santuário (02/10/2026, regra D78)
+
+Decidido com o dono:
+
+- **Nome:** **Santuário Gaia**, com as esferas **Floresta** (180 m), **Savana** (140 m) e **Oceano** (100 m).
+- **Estilo:** malha diagonal (diagrid) de aço branco e vidro, a mesma aprovada na cúpula.
+- **Arranjo:** as três esferas **em S**, decrescentes, ao longo de uma curva, a uns 250 a 300 m umas das outras. A pista
+  de F1 serpenteia entre elas, no mesmo S, e entra no túnel de vidro acústico sob o pedestal da Floresta. É a silhueta
+  vista do mar.
+- **Visita:** **as duas formas.** Galeria no pedestal e passarelas elevadas dentro das esferas (dossel, túnel
+  submarino), com horários limitados e **refúgios sem visita** para os animais.
+- **Fases:** a Esfera Oceano na fase 1; a Savana e a Floresta na fase 2.
+- **Fica para o diálogo seguinte:** o **Circuito de F1**, que depende do arranjo em S.
+
+
 ### 3.1 Forma
 
 - Três esferas completas de vidro em malha diagonal, cada uma assentada num **pedestal de serviços**. A altura total
@@ -75,19 +90,19 @@ Resposta curta: **muitos, se forem do tipo certo**. As esferas ganham em volume 
 
 | Esfera | Volume | Chão no equador | Chão com terraços e passarelas |
 |---|---|---|---|
-| Alta, 160 m | 2,1 milhões de m³ | 2,0 ha | uns 3,6 ha |
-| Média, 124 m | 1,0 milhão de m³ | 1,2 ha | uns 2,2 ha |
-| Baixa, 88 m | 0,36 milhão de m³ | 0,6 ha | uns 1,1 ha |
+| Floresta, 160 m | 2,1 milhões de m³ | 2,0 ha | uns 3,6 ha |
+| Savana, 124 m | 1,0 milhão de m³ | 1,2 ha | uns 2,2 ha |
+| Oceano, 88 m | 0,36 milhão de m³ | 0,6 ha | uns 1,1 ha |
 | Total | 3,5 milhões de m³ | 3,8 ha | uns 7 ha |
 
 Estimativa de ordem de grandeza, por esfera:
 
-- **Alta, floresta tropical** (Amazônia, Mata Atlântica, Congo e sudeste asiático): voo livre e dossel de 60 m.
+- **Floresta, tropical** (Amazônia, Mata Atlântica, Congo e sudeste asiático): voo livre e dossel de 60 m.
   Cerca de **3 mil aves**, 400 mamíferos pequenos e médios (primatas, preguiças, tamanduás, antas, capivaras, 2 a 4
   onças-pintadas) e 1.000 répteis e anfíbios, mais borboletas aos milhares. Uns 4.500 animais.
-- **Média, savana e deserto, em escala de zoológico:** 6 girafas, 20 zebras, 40 antílopes, 6 leões, 4 guepardos, 2
+- **Savana e deserto, em escala de zoológico:** 6 girafas, 20 zebras, 40 antílopes, 6 leões, 4 guepardos, 2
   rinocerontes, 500 aves e 300 répteis. Uns 1.000 animais.
-- **Baixa, oceano e polar:** 60 pinguins, 20 focas e leões-marinhos, 10 lontras e, no pedestal, um **aquário de 10 a 20
+- **Oceano e polar:** 60 pinguins, 20 focas e leões-marinhos, 10 lontras e, no pedestal, um **aquário de 10 a 20
   milhões de litros** (como os maiores do mundo) com uns 20 mil peixes, 100 tubarões e raias, tartarugas e peixes-boi.
 
 Soma: perto de **6 mil animais de terra e ar mais uns 20 mil peixes**. Em número, é comparável a um grande zoológico
@@ -209,8 +224,8 @@ morar. Estádios enormes ficam vazios quando há pouca gente, então os maiores 
 
 | Fase | Período | Turismo (proposta) | O que nasce |
 |---|---|---|---|
-| 1 | 2020 a jun 2026 (liberação para morar) | uns 300 mil por mês | sede e Torres; Esfera Baixa; Torre Lúculo; arena de basquete (35 mil); fase 1 do shopping; avenidas do circuito; marina de iates |
-| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Média e Alta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping; Reserva da Transformação em terra (primeiros resgates); resort Marés de Ouro; Cinema Cosmos; centro de convenções; porto de cruzeiros; hospital de turismo de saúde |
+| 1 | 2020 a jun 2026 (liberação para morar) | uns 300 mil por mês | sede e Torres; Esfera Oceano; Torre Lúculo; arena de basquete (35 mil); fase 1 do shopping; avenidas do circuito; marina de iates |
+| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Savana e Floresta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping; Reserva da Transformação em terra (primeiros resgates); resort Marés de Ouro; Cinema Cosmos; centro de convenções; porto de cruzeiros; hospital de turismo de saúde |
 | 3 | 2029 a 2032 | de 4 a 10 milhões por mês | futebol americano (120 mil); shows (270 mil); shopping e parque completos; baía-santuário, elefantes e orcas resgatadas |
 
 **Cardápio do turismo (proposta para a meta de 10 milhões por mês):** parque e shopping 40%, eventos 35%, santuário,
