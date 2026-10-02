@@ -20,7 +20,7 @@ projeto, para o dono ajustar.
    (seção 7).
 9. **Reserva externa:** as esferas ficam como estão (perto da cidade e da pista de F1) e entra uma reserva externa para
    animais de grande porte (elefantes, rinocerontes, búfalos, orcas e tubarões), só de animais **ameaçados de extinção
-   ou vítimas de maus tratos e perseguição** (seção 3.4).
+   ou vítimas de maus tratos e perseguição** (seção 3.4). A reserva fica **dentro do mapa jogável** e se chama **Reserva da Transformação**.
 10. **Nome da torre:** mais imponente e menos genérico, **Torre Lúculo** (seção 6).
 11. **Ordem:** os marcos entram depois do M1a, sem mexer na onda 3.
 12. **Junho de 2026:** antes moram os pioneiros (operários e famílias de funcionários, de 30 a 38 mil) e a moradia abre
@@ -45,9 +45,9 @@ Pegada é a área do terreno ocupada, sem estacionamento e esplanadas. Gerador �
 | 11 | Torre Lúculo | 300 m, alta gastronomia | torre | Sede, no eixo | 1 |
 | 12 | Shopping | mais de 1 milhão de m² | edifício | Vida | 1, 2 e 3 |
 | 13 | Parque de diversão e aquático | uns 80 ha | parque | Vida | 2 e 3 |
-| 14 | Reserva Anhangá (terra e baía) | uns 500 ha de terra e 100 ha de baía | reserva | à parte, longe do Jogo | 2 (terra) e 3 (baía) |
+| 14 | Reserva da Transformação (terra e baía) | uns 500 ha de terra e 100 ha de baía | reserva | à parte, longe do Jogo | 2 (terra) e 3 (baía) |
 
-Pegada das estruturas 1 a 13: de 4 a 5 km², uns 6 a 7% do mapa jogável (8,2 por 8,2 km). A Reserva Anhangá soma
+Pegada das estruturas 1 a 13: de 4 a 5 km², uns 6 a 7% do mapa jogável (8,2 por 8,2 km). A Reserva da Transformação soma
 mais uns 5 km² de terra (7%) e 1 km² de baía.
 
 Dois geradores cobrem 9 das 14 estruturas: o de **arena** (6) e o de **esfera** (3). Isso é o que segura o custo.
@@ -89,18 +89,18 @@ Soma: perto de **6 mil animais de terra e ar mais uns 20 mil peixes**. Em númer
 (o de San Diego tem uns 12 mil animais em 40 ha), com mais aves e peixes e menos animais de grande porte.
 
 **O que as esferas não dão:** manadas de elefantes e búfalos, rinocerontes, orcas e tubarões grandes. As esferas ficam
-perto da cidade e da pista de F1, e por isso só abrigam animais pequenos e médios. Os grandes vão para a **Reserva
-Anhangá** (seção 3.4), longe do barulho do circuito e das arenas.
+perto da cidade e da pista de F1, e por isso só abrigam animais pequenos e médios. Os grandes vão para a **Reserva da
+Transformação** (seção 3.4), longe do barulho do circuito e das arenas.
 
 ### 3.3 Bem-estar e Legado
 
 Cada esfera tem um índice de bem-estar animal (espaço, enriquecimento, convivência, saúde). O índice alimenta o Legado
 e a reputação. Programas de reprodução e soltura são metas de história. O hospital veterinário é da Tantra.
 
-### 3.4 Reserva Anhangá (grandes animais)
+### 3.4 Reserva da Transformação (grandes animais)
 
 - **O que é:** reserva externa, a pelo menos 3 km do circuito e das arenas e com morros no meio, para os animais que as
-  esferas não comportam. O nome vem de Anhangá, o espírito da mata na tradição tupi que protege os animais da caça.
+  esferas não comportam. O nome diz o que ela faz: o animal chega ferido ou ameaçado e sai refeito.
 - **Quem entra:** só animais **ameaçados de extinção ou vítimas de maus tratos e perseguição**, resgatados de circos,
   zoológicos fechados, parques marinhos e caça ilegal. Não se compra animal, não há espetáculo e não há reprodução
   comercial. Há programas de reprodução só para espécies ameaçadas, com soltura quando for possível.
@@ -116,7 +116,7 @@ e a reputação. Programas de reprodução e soltura são metas de história. O 
   uma decisão do Conselho que custa dinheiro e rende Legado e reputação.
 - **Quem opera:** a **Fundação Held**, braço da Holding, com a Terra Roxa (terra e água) e a Tantra (veterinária). Dá
   pouco lucro de propósito: é obra de Legado.
-- **Posição:** sai na implantação, com o terreno real, no extremo oposto ao Jogo e perto da costa, para a baía.
+- **Posição:** dentro do mapa jogável (o jogador constrói); sai na implantação, com o terreno real, no extremo oposto ao Jogo e perto da costa, para a baía.
 
 ## 4. Circuito de F1
 
@@ -170,7 +170,7 @@ Para as peças não parecerem soltas, tudo obedece a um fio e a uma rede.
 - **Sede (centro):** o anel, as Torres, o lago e a Torre Lúculo, no eixo que une as duas áreas.
 - **Jogo (leste):** as cinco arenas ao redor de uma **esplanada**. É a área da performance e da IA (Influência).
 - **Circuito:** a pista une as duas áreas e passa pelo corredor das esferas.
-- **Reserva Anhangá:** fica à parte, longe do barulho, e se liga ao santuário pelo Corredor de Resgate (via de serviço
+- **Reserva da Transformação:** fica à parte, longe do barulho, e se liga ao santuário pelo Corredor de Resgate (via de serviço
   com quarentena nos pedestais) e por uma linha de safári elétrico.
 - **Anel de mobilidade:** um trem leve elevado liga as três áreas aos portões da sede (oeste, norte e leste), e as
   estações de evento entram na rede de trem pesado que o plano já prevê.
@@ -187,7 +187,7 @@ morar. Estádios enormes ficam vazios quando há pouca gente, então os maiores 
 | Fase | Período | Turismo (proposta) | O que nasce |
 |---|---|---|---|
 | 1 | 2020 a jun 2026 (liberação para morar) | uns 300 mil por mês | sede e Torres; Esfera Baixa; Torre Lúculo; arena de basquete (35 mil); fase 1 do shopping; avenidas do circuito |
-| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Média e Alta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping; Reserva Anhangá em terra (primeiros resgates) |
+| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Média e Alta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping; Reserva da Transformação em terra (primeiros resgates) |
 | 3 | 2029 a 2032 | de 4 a 10 milhões por mês | futebol americano (120 mil); shows (270 mil); shopping e parque completos; baía-santuário, elefantes e orcas resgatadas |
 
 **Cardápio do turismo (proposta para a meta de 10 milhões por mês):** parque e shopping 40%, eventos 35%, santuário,
@@ -197,7 +197,7 @@ reserva e Torre 15%, negócios da Holding 10%. A simulação trata a massa como 
 mil pessoas em 2 h pede uns 135 mil por hora, ou 3 a 4 linhas de metrô pesado mais ônibus. O metrô hoje está no M4 e
 terá de vir antes.
 
-## 9. Nomes fictícios (proposta, o dono confirma)
+## 9. Nomes fictícios (confirmados pelo dono em 02/10/2026)
 
 Mantêm o formato e as regras reais.
 
@@ -221,7 +221,7 @@ Mantêm o formato e as regras reais.
 | Rheinhaven Werke | circuito, trens de saída e o anel de mobilidade |
 | Terra Roxa S.A. | biomas, jardins e a água do santuário |
 | Tantra Group | hospital veterinário e saúde dos eventos |
-| Fundação Held, com Terra Roxa e Tantra | Reserva Anhangá e a baía-santuário |
+| Fundação Held, com Terra Roxa e Tantra | Reserva da Transformação e a baía-santuário |
 | Libertas Capital Partners | financiamento, nomes de estádios e títulos |
 | Albionford & Lyle Assurance | seguro das estruturas e dos eventos |
 
@@ -229,7 +229,7 @@ Mantêm o formato e as regras reais.
 
 Soma de uns **US$ 81 bilhões**, cerca de 12% dos US$ 700 bilhões do projeto: esferas 9, circuito 1,5, basquete 3,
 futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torre Lúculo 2, shopping 25, parque
-10 e Reserva Anhangá 2 (US$ bilhões). O resto do projeto vai para moradia, vias, redes, aeroporto e porto.
+10 e Reserva da Transformação 2 (US$ bilhões). O resto do projeto vai para moradia, vias, redes, aeroporto e porto.
 
 ## 12. O que muda no plano
 
@@ -242,7 +242,12 @@ futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torr
 
 ## Pendências (perguntas ao dono)
 
-1. **Reserva Anhangá dentro do mapa jogável** (uns 500 ha de terra e 100 ha de baía, o jogador constrói) ou fora dele
-   (na moldura, só visitável por câmera e tela)? Recomendação: dentro.
-2. **Nomes:** Torre Lúculo, Reserva Anhangá, Fundação Held e os da seção 9 servem?
-3. **Orcas:** só resgatadas, em baía-santuário, sem espetáculo e sem reprodução. Confirma?
+Tudo o que era dos marcos foi confirmado em 02/10/2026 (reserva dentro do mapa, nomes e orcas). Em aberto:
+
+1. **O que conta como "10 milhões de turistas por mês".** São 120 milhões por ano, mais que Orlando (uns 75 milhões) e
+   que a França inteira em visitantes internacionais. Recomendação: contar **visitas** (inclui quem vem de dia, de
+   trem, da região), e tratar os 10 milhões como **capacidade de pico**, com ocupação média de 55 a 60%.
+2. **Quem atende os turistas.** Com uns 1,3 milhão de visitantes presentes, são uns 400 mil trabalhadores do turismo,
+   quase o total de moradores. Recomendação: metade mora na cidade, em vilas de trabalhadores e moradia acessível, e
+   metade vem de trem da região (fluxo estatístico de pendulares).
+3. **A foto da história** que o dono vai mandar (ver `historia.md`).
