@@ -280,16 +280,16 @@ licenças de tecnologia e voz na segurança. O país anfitrião concede o territ
 | fundo soberano tipo Noruega | **Fundo Soberano do Norte** |
 | intermediárias | **Held Capital, Held Litos, Held Silício e Held Pórtico** |
 
-Nomes novos, em proposta: a IA multimodal **Mosaico**; a Tailândia do jogo, **Reino de Sukhara**; os países africanos,
+Nomes novos, aprovados em 02/10/2026: a IA multimodal **Mosaico**; a Tailândia do jogo, **Reino de Sukhara**; os países africanos,
 **Federação de Zuberia** e **República de Mbalanga**.
 
 ## Pendências (perguntas ao dono)
 
-1. **Nomes novos** acima (Mosaico, Sukhara, Zuberia e Mbalanga): aprova ou troca?
-2. **Divisão do lucro** de 73% entre as 4 intermediárias (proposta na seção 5.5).
-3. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3 (a meta de retorno do Fundo é de 5 a 7% ao ano).
-4. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
+1. **Divisão do lucro** de 73% entre as 4 intermediárias (proposta na seção 5.5).
+2. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3 (a meta de retorno do Fundo é de 5 a 7% ao ano).
+3. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
 
-Resolvidas em 02/10/2026: nomes fictícios da seção 7; subsolo (data center secreto, militar, patentes e IA); duas IAs;
-a conta do lucro (Fundo 27%); terras raras em 3 regiões; chips em 3 destinos; e as anteriores (controle, país, pico
-mensal, Torre de 300 m, 70 mil moradores, educação por inteligência, intermediárias, Conselheiro de Estratégia).
+Resolvidas em 02/10/2026: nomes fictícios da seção 7 e os novos (Mosaico, Sukhara, Zuberia e Mbalanga); subsolo (data
+center secreto, militar, patentes e IA); duas IAs; a conta do lucro (Fundo 27%); terras raras em 3 regiões; chips em 3
+destinos; e as anteriores (controle, país, pico mensal, Torre de 300 m, 70 mil moradores, educação por inteligência,
+intermediárias, Conselheiro de Estratégia).

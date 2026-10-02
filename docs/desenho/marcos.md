@@ -140,6 +140,19 @@ e a reputação. Programas de reprodução e soltura são metas de história. O 
 
 ## 4. Circuito de F1
 
+### 4.0 Diálogo do Circuito (02/10/2026, regra D78)
+
+Decidido com o dono:
+
+- **Traçado:** **6,2 km**, cerca de **20 curvas**, reta de **1,2 km** e **corrida noturna** com iluminação de LED. **60%
+  permanente** (uns 3,7 km) e **40% de avenidas** da cidade (uns 2,5 km), fechadas no fim de semana de GP.
+- **Resort sobre a pista:** o **Resort Marés de Ouro cruza a pista** com uma ponte-hotel, como o Yas Viceroy de Abu Dhabi,
+  com camarotes sobre os carros.
+- **Nome e data:** **Grande Prêmio de Heldópolis**, da **Fórmula Mundial**, em **novembro**, à noite.
+- **Esferas:** a pista serpenteia entre as três esferas, em S, e entra no túnel de vidro acústico sob o pedestal da
+  Floresta (D80).
+
+
 - **Padrão:** o da federação mundial fictícia (seção 9), equivalente ao grau 1 da FIA. Largura de 12 a 15 m, reta de
   uns 1,2 km, 18 a 22 curvas, extensão de 5 a 7 km (meta de 6,2 km), corrida noturna com iluminação de LED.
 - **60 / 40:** uns 3,7 km de pista permanente e 2,5 km de avenidas da cidade. No fim de semana do GP, as avenidas
