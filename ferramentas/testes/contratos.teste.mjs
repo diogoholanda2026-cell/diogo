@@ -241,10 +241,14 @@ test('Torre Lâmina (D27, D64): as contas das cotas fecham', () => {
   // os andares de vento ficam no topo das lâminas 3 e 2
   assert.equal(T.andaresDeVento[0].base, T.laminas[2].topo);
   assert.equal(T.andaresDeVento[1].base + T.andaresDeVento[1].altura, T.laminas[1].topo);
-  // a Torre fica dentro do envelope da gleba, que fica dentro da área inicial de 4 x 4 ladrilhos
+  // a Torre fica dentro do disco da gleba (a sede v3, D90), que fica dentro da área inicial de 6 x 5 ladrilhos
+  // (x de -1.024 a 2.048, z de -1.536 a 1.024)
   const [x0, z0, x1, z1] = GLEBA_ENVELOPE.caixa;
   assert.ok(TORRE_POSICAO.x > x0 && TORRE_POSICAO.x < x1 && TORRE_POSICAO.z > z0 && TORRE_POSICAO.z < z1);
-  for (const v of GLEBA_ENVELOPE.contorno) assert.ok(v >= -1024 && v <= 1024);
+  const [cx, cz] = GLEBA_ENVELOPE.centro;
+  assert.ok(Math.hypot(TORRE_POSICAO.x - cx, TORRE_POSICAO.z - cz) < GLEBA_ENVELOPE.raio);
+  const C = GLEBA_ENVELOPE.contorno;
+  for (let k = 0; k < C.length; k += 2) assert.ok(C[k] >= -1024 && C[k] <= 2048 && C[k + 1] >= -1536 && C[k + 1] <= 1024);
 });
 
 test('espelho: convenções e invariantes (que pegam erro)', () => {

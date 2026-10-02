@@ -1,24 +1,23 @@
 # Estado do jogo novo (28/09/2026)
 
-## ONDE PAROU (02/10/2026)
+## ONDE PAROU (02/10/2026, pausa pedida pelo dono)
 
-**Onda 3 em andamento. Etapa 1 pronta, revisada e gravada** (notas nas fichas e em `docs/entregas/onda3/`;
-casca corrigida; JS principal em 1.897 KB, acima do teto de 1.638, decisão da C1).
-**Etapa 2 rodando** (SEDE3 e R5, base `32b7805`). O contêiner reiniciou no meio da primeira tentativa (run
-wf_8bda00a0-172): o trabalho parcial ficou no repositório sem commit, e a retomada (workflow w2t5sz6tx, run wf_0e02a348-e13)
-continua dele, com um aviso RETOMADA no topo das cópias de SEDE3.txt e R5.txt em `scratchpad/cs2/parcelas/`. Ao terminar: ler os
-resultados, `simular.mjs --testes`, `montar.mjs`, juntar as notas nas fichas (`docs/entregas/onda3/`), gravar e lançar a
-etapa 3 (R3b, U2a, X1b, X3a) com a base nova. Não use resumeFromRunId; relance só o que faltar. O dono escolheu voltar ao jogo (fase 1 do complexo toda dialogada, D86). Textos das parcelas
-em `parcelas/` (comum da onda em `_comum4.txt`; D87 decide o dinheiro). Etapa 1: S2a, S3a, R2b, R4b, U1b, com a base no
-commit "Onda 3: textos das parcelas". Depois, **etapa 2: SEDE3 e R5** (a SEDE3 faz a área inicial de 6 x 5 e a
-sede v3, D88 a D90) e **etapa 3: R3b, U2a, X1b e X3a** (dependem do mapa novo). Textos prontos em `parcelas/` e copiados
-para `scratchpad/cs2/parcelas/`. Por último a C1 (texto a escrever com o que as etapas deixarem). As notas de
-entrega ficam em `scratchpad/novo/<parcela>/nota.md`; o integrador junta nas fichas. Commit de segurança depois de cada
-etapa revisada.
+**Onda 3 pausada no meio da etapa 2.** Nada rodando. A etapa 1 (S2a, S3a, R2b, R4b, U1b) está pronta, revisada e
+gravada (`32b7805`; notas nas fichas e em `docs/entregas/onda3/`). A etapa 2 (SEDE3 e R5, base `32b7805`) foi
+interrompida duas vezes (reinício do contêiner e a pausa) **sem nota e sem revisão**: o trabalho parcial está no commit
+"Pausa: SEDE3 e R5 em andamento", com os testes vermelhos (arcologia-render, bemestar, casca, celulas, crescimento,
+geracao-vias, redes, servicos, vias e zonas), porque o mapa e a área inicial novos (D90) estão pela metade.
 
-Nada rodando. PC2 pronta, revisada e publicada na previa/ (Prévia 1c). Aguardando a medição do dono na página de
-teste. Pendências da PC2: prédios ainda acima de 6 ms (o peso está nos ganchos: sombra, neblina, noite, camadas), levar
-a CAS perceptiva de pos.js para pos.glsl.js, mapa de cor do terreno do Alta em 4096 (+85 MB), pacote JS em 1.608 de 1.638 KB.
+**Para retomar:**
+1. Se o contêiner foi reciclado, copie `.claude/orquestracao/*` para `scratchpad/cs2/` (regra 1 abaixo).
+2. Relance a etapa 2 com `onda.js`: `{nome: 'Onda 3, etapa 2 (retomada)', base: '32b7805b337155c389c6546d694034b66adb75fd',
+   etapas: [[{id: 'SEDE3'}, {id: 'R5'}]]}`. Os textos de SEDE3 e R5 já começam com ONDE PAROU (continuar, não recomeçar).
+3. Ao terminar: ler os resultados, `simular.mjs --testes` verde, `montar.mjs`, juntar as notas nas fichas
+   (`docs/entregas/onda3/`), gravar e lançar a etapa 3 (R3b, U2a, X1b, X3a) com a base nova. Depois a C1 (texto a
+   escrever: JS principal em 1.897 KB contra o teto de 1.638, calibração do começo, bancada no PC do dono).
+
+Decisões até a D90 registradas (sede v3, nomes em inglês, área inicial de 6 x 5). `previa/` continua a Prévia 1c
+publicada (nada montado depois dela). Aguardando também a medição do dono na página de teste da Prévia 1c.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).

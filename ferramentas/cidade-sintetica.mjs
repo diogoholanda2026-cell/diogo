@@ -1,8 +1,9 @@
 // Cidade sintética: espelho gerado PELAS APIS da simulação (addAresta do grafo, alocar() das tabelas, o substituto de
 // células da S1b e o de crescimento da S2a, que põe o prédio de frente para a célula). 4 x 4 km com ruas e avenidas em
 // curva, 12 mil prédios de todas as zonas e níveis em lotes geminados (cada bairro cheio do centro para a borda, com
-// quintais e loteamentos por ocupar na vegetação), mata, mar, rio, lagoa e a Torre. Serve ao render e à UI antes da
-// cidade de verdade existir (?sintetica=1 no navegador) e aos testes dos invariantes do espelho.
+// quintais e loteamentos por ocupar na vegetação), mata, mar, rio, lagoa e a sede v3 (D88 a D90): o disco da gleba no
+// platô, com o anel viário e as avenidas internas, e a cidade em volta dele. Serve ao render e à UI antes da cidade de
+// verdade existir (?sintetica=1 no navegador) e aos testes dos invariantes do espelho.
 //
 // No navegador:  import { gerarCidadeSintetica } from '../../ferramentas/cidade-sintetica.mjs';
 //                const { sim } = gerarCidadeSintetica();            // ou gerarCidadeSintetica({ sim }) numa já criada
@@ -83,8 +84,11 @@ function distRio(x, z) {
   return m;
 }
 
-const [GX0, GZ0, GX1, GZ1] = GLEBA_ENVELOPE.caixa;
-const naGleba = (x, z, folga = 0) => x >= GX0 - folga && x <= GX1 + folga && z >= GZ0 - folga && z <= GZ1 + folga;
+// a gleba é o disco da sede v3 (D90): a cidade fica fora dele
+const [GCX, GCZ] = GLEBA_ENVELOPE.centro;
+const GR = GLEBA_ENVELOPE.raio;
+const distGleba = (x, z) => hipot(x - GCX, z - GCZ) - GR;
+const naGleba = (x, z, folga = 0) => distGleba(x, z) <= folga;
 
 /** Altura e água do relevo sintético num ponto. */
 function relevo(x, z, s) {
@@ -93,8 +97,8 @@ function relevo(x, z, s) {
   const oeste = smoothstep(-1850, -2900, x);
   if (norte > 0) h += 260 * norte * (0.55 + 0.6 * fbm(x / 500, z / 500, s + 5, 3));
   if (oeste > 0) h += 200 * oeste * (0.5 + 0.6 * fbm(x / 450, z / 450, s + 9, 3));
-  // platô da gleba
-  const dg = Math.max(GX0 - x, x - GX1, GZ0 - z, z - GZ1, 0);
+  // platô em disco da sede
+  const dg = Math.max(distGleba(x, z) - 40, 0);
   if (dg < 120) h += (GLEBA_ENVELOPE.cota - h) * (1 - smoothstep(0, 120, dg));
   let agua = AGUA.TERRA;
   // mar
@@ -171,14 +175,16 @@ function torcer(x, z, ondula = 0) {
 // (menos uma faixa de 50 m na divisa, onde correm as avenidas grandes). Os `vazio` não têm ruas (a várzea do rio, a
 // lagoa e o pé dos morros): cerca de 12 mil prédios enchem os seis bairros de ruas em vez de espalhar em nove. Com um
 // teto de prédios menor (--predios), `cresce` abaixo de 1 adianta o bairro na ordem de crescimento.
+// O Centro, que ficava onde hoje é o disco da sede (D90), foi para a faixa entre a sede e a rodovia, ao norte; o
+// Sudoeste, entre o rio e a sede, passou a ter ruas: a cidade fica com os mesmos ~12 mil prédios em volta do disco.
 const BAIRROS = [
-  { nome: 'Centro', c: [-230, -470], rot: 0, passo: [224, 128], mistura: [0, 2, 3, 1, 3, 3, 0], cresce: 0.5 },
+  { nome: 'Centro', c: [-160, -1020], rot: 0, passo: [224, 128], mistura: [0, 2, 3, 1, 3, 3, 0], cresce: 0.5 },
   { nome: 'Norte', ondula: 8, c: [700, -1300], rot: 0.18, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
   { nome: 'Noroeste', vazio: true, c: [-700, -1450], rot: -0.09, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
   { nome: 'Leste', c: [1400, -350], rot: -0.12, passo: [128, 208], mistura: [0, 1, 0, 1, 0, 0, 5] },
   { nome: 'Sudeste', c: [1250, 520], rot: 0.03, passo: [88, 88], mistura: [2, 3, 1, 3, 1, 1, 0] },
   { nome: 'Orla', c: [1050, 1400], rot: 0.34, passo: [208, 128], mistura: [0, 2, 4, 1, 2, 1, 0], cresce: 0.6 },
-  { nome: 'Sudoeste', vazio: true, ondula: 8, c: [-620, 780], rot: 0.05, passo: [88, 88], mistura: [5, 2, 0, 3, 0, 0, 0] },
+  { nome: 'Sudoeste', ondula: 8, c: [-640, 760], rot: 0.05, passo: [144, 144], mistura: [5, 2, 0, 3, 0, 0, 0] },
   { nome: 'Poente', c: [-1650, -620], rot: -0.2, passo: [88, 88], mistura: [5, 1, 0, 3, 0, 0, 1] },
   { nome: 'Lagoa', vazio: true, ondula: 8, c: [-1700, 500], rot: 0.12, passo: [88, 88], mistura: [5, 2, 0, 2, 0, 0, 0] },
 ];
@@ -420,26 +426,33 @@ function gerarVias(sim, T, rng) {
       }
     }
   }
-  // vias internas da Arcologia: o anel viário do plano A (D63), em volta do centro do par de torres
-  const anel = [];
-  const cx = PLANOS[PLANO_ESCOLHIDO].torre.x;
-  const cz = PLANOS[PLANO_ESCOLHIDO].torre.z;
-  const raio = 281;
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2;
-    anel.push(addNo(G, cx + cos(a) * raio, cz + sen(a) * raio, GLEBA_ENVELOPE.cota));
+  // vias internas da Arcologia (sede v3, D88): o anel viário em 8 arcos entre as avenidas, com os trechos curtos até
+  // os portões e as 8 avenidas radiais até a praça do pódio, marcadas ARCOLOGIA (as cenas da Arcologia tiram)
+  const plano = PLANOS[PLANO_ESCOLHIDO];
+  const doPlano = (x, z) => addNo(G, x, z, GLEBA_ENVELOPE.cota);
+  const nosAnel = [];
+  for (const v of plano.vias.filter((q) => q.anel)) {
+    const { cx, cz, r, de, ate } = v.arco;
+    const a0 = (de * Math.PI) / 180;
+    const a1 = (ate * Math.PI) / 180;
+    const k = (4 / 3) * Math.tan((a1 - a0) / 4) * r;
+    if (!nosAnel.length) nosAnel.push(doPlano(cx + cos(a0) * r, cz + sen(a0) * r));
+    const fim = nosAnel.length === 8 ? nosAnel[0] : doPlano(cx + cos(a1) * r, cz + sen(a1) * r);
+    const a = nosAnel[nosAnel.length - 1];
+    const p1 = [cx + cos(a0) * r - sen(a0) * k, cz + sen(a0) * r + cos(a0) * k];
+    const p2 = [cx + cos(a1) * r + sen(a1) * k, cz + sen(a1) * r - cos(a1) * k];
+    addAresta(G, a, fim, 'avenida', p1, p2, { flags: ARESTA.ARCOLOGIA });
+    if (nosAnel.length < 8) nosAnel.push(fim);
   }
-  const kappa = 0.5523 * raio;
-  for (let k = 0; k < 4; k++) {
-    const a0 = (k / 4) * Math.PI * 2;
-    const a1 = ((k + 1) / 4) * Math.PI * 2;
-    const p1 = [cx + cos(a0) * raio - sen(a0) * kappa, cz + sen(a0) * raio + cos(a0) * kappa];
-    const p2 = [cx + cos(a1) * raio + sen(a1) * kappa, cz + sen(a1) * raio - cos(a1) * kappa];
-    addAresta(G, anel[k], anel[(k + 1) % 4], 'avenida', p1, p2, { flags: ARESTA.ARCOLOGIA });
-  }
-  // ruas de terra de uma vila na foz do rio (só onde não bate em outra via)
+  const reta = (a, b) => {
+    const [ax, az, bx, bz] = [G.nos.x[a], G.nos.z[a], G.nos.x[b], G.nos.z[b]];
+    addAresta(G, a, b, 'avenida', [ax + (bx - ax) / 3, az + (bz - az) / 3], [ax + ((bx - ax) * 2) / 3, az + ((bz - az) * 2) / 3], { flags: ARESTA.ARCOLOGIA });
+  };
+  plano.vias.filter((q) => q.radial).forEach((v, k) => reta(nosAnel[k], doPlano(v.pontos[2], v.pontos[3])));
+  plano.vias.filter((q) => q.portao).forEach((v, k) => reta(doPlano(v.pontos[0], v.pontos[1]), nosAnel[k]));
+  // ruas de terra de uma vila entre a lagoa e a serra do poente (só onde não bate em outra via)
   const vila = [];
-  for (let j = 0; j < 3; j++) for (let i = 0; i < 4; i++) vila.push(addNo(G, -600 + i * 70, 1560 + j * 60));
+  for (let j = 0; j < 3; j++) for (let i = 0; i < 4; i++) vila.push(addNo(G, -1800 + i * 70, 880 + j * 60));
   const terra = (a, b) => {
     const p = [G.nos.x[a], G.nos.z[a], 0, 0, 0, 0, G.nos.x[b], G.nos.z[b]];
     p[2] = p[0] + (p[6] - p[0]) / 3;

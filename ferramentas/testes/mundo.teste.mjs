@@ -19,6 +19,7 @@ import { normalizarForma } from '../../fonte/sim/formas.js';
 import { montarSave, lerSave, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { VIAS_ORDEM } from '../../fonte/data/vias.js';
 import { MAPA_HELDOPOLIS } from '../../fonte/data/mapa-heldopolis.js';
+import { GLEBA_ENVELOPE, PLANOS, PLANO_ESCOLHIDO } from '../../fonte/data/arcologia-plano.js';
 import { gerarTerreno, esquecerTerreno, terrenoBase, rioEm, aguaEm, costaEm } from '../../fonte/sim/mundo/terreno.js';
 import { aplainar, aplainarTudo, formaDaAresta } from '../../fonte/sim/mundo/aplainar.js';
 import { concederLicencas, preco, ladrilhoDe } from '../../fonte/sim/mundo/ladrilhos.js';
@@ -217,7 +218,7 @@ test('rio: meandros na várzea (sinuosidade acima de 1,25) e a foz na linha da c
   assert.ok(Math.abs(sd) < 40, `foz a ${sd.toFixed(0)} m da costa`);
 });
 
-test('mapa: morros de 150 a 400 m, Pedra do Farol perto de 396 m, platô da gleba na cota do envelope', () => {
+test('mapa: morros de 150 a 400 m, Pedra do Farol perto de 396 m, platô em disco da sede na cota da gleba (D90)', () => {
   const T = gerarTerreno();
   const topo = (m) => {
     let h = -Infinity;
@@ -228,9 +229,14 @@ test('mapa: morros de 150 a 400 m, Pedra do Farol perto de 396 m, platô da gleb
     const h = topo(m);
     assert.ok(Math.abs(h - m.h) < Math.max(18, m.h * 0.12), `${m.id}: topo ${h.toFixed(0)} m, esperado ${m.h}`);
   }
-  const [x0, z0, x1, z1] = MAPA_HELDOPOLIS.plato.caixa;
-  for (const [x, z] of [[x0 + 60, z0 + 60], [(x0 + x1) / 2, (z0 + z1) / 2], [x1 - 60, z0 + 60]]) {
-    assert.ok(Math.abs(alturaEm(T, x, z) - MAPA_HELDOPOLIS.plato.cota) < 0.01, `platô em (${x}, ${z})`);
+  // o platô é um disco que cobre o anel viário (até 807 m do centro); a borda desce suave até o terreno natural
+  const { cx, cz } = MAPA_HELDOPOLIS.plato.disco;
+  for (let a = 0; a < 360; a += 15) {
+    for (const r of [0, 300, 600, 810]) {
+      const x = cx + r * Math.cos((a * Math.PI) / 180);
+      const z = cz + r * Math.sin((a * Math.PI) / 180);
+      assert.ok(Math.abs(alturaEm(T, x, z) - MAPA_HELDOPOLIS.plato.cota) < 0.01, `platô em (${x.toFixed(0)}, ${z.toFixed(0)})`);
+    }
   }
 });
 
@@ -314,8 +320,9 @@ test('mapa: área inicial num componente só de terra (D53); rocha, areia e argi
   let rioLonge = 0;
   let rioMargem = 0;
   let rioFora = 0;
-  for (let z = -1024; z < 1024; z += 8) {
-    for (let x = -1024; x < 1024; x += 8) {
+  const [, z0Ini, x1Ini, z1Ini] = limitesInicio();
+  for (let z = z0Ini; z < z1Ini; z += 8) {
+    for (let x = -1024; x < x1Ini; x += 8) {
       if (aguaEm(T, x, z) !== AGUA.RIO) continue;
       if (x < -994) rioMargem++;
       else rioLonge++;
@@ -325,6 +332,27 @@ test('mapa: área inicial num componente só de terra (D53); rocha, areia e argi
   assert.equal(rioLonge, 0);
   assert.ok(rioMargem > 20, 'a margem leste do rio chega na área inicial');
   assert.ok(rioFora > rioMargem * 3);
+});
+
+/** Limites da área inicial no mundo [x0, z0, x1, z1] (D90: 6 x 5 ladrilhos, de x -1.024 a 2.048 e de z -1.536 a 1.024). */
+function limitesInicio(mapa = MAPA_HELDOPOLIS) {
+  const [[i0, j0], [i1, j1]] = mapa.inicio;
+  const L = mapa.ladrilho;
+  return [mapa.origem[0] + i0 * L, mapa.origem[1] + j0 * L, mapa.origem[0] + (i1 + 1) * L, mapa.origem[1] + (j1 + 1) * L];
+}
+
+test('área inicial (D90): 6 x 5 ladrilhos de x -1.024 a 2.048 e de z -1.536 a 1.024, com o disco da sede dentro', () => {
+  assert.deepEqual(limitesInicio(), [-1024, -1536, 2048, 1024]);
+  const { centro, raio, contorno } = GLEBA_ENVELOPE;
+  for (let k = 0; k < contorno.length; k += 2) {
+    const [x, z] = [contorno[k], contorno[k + 1]];
+    assert.ok(x > -1024 && x < 2048 && z > -1536 && z < 1024, `gleba fora da área inicial em ${x}, ${z}`);
+  }
+  // o disco e o platô no mesmo centro; o nó de entrada fica fora do disco, ao norte do portão norte
+  assert.deepEqual([MAPA_HELDOPOLIS.plato.disco.cx, MAPA_HELDOPOLIS.plato.disco.cz], centro);
+  assert.ok(MAPA_HELDOPOLIS.plato.disco.r >= raio + 40);
+  const { x, z } = MAPA_HELDOPOLIS.entrada;
+  assert.ok(Math.hypot(x - centro[0], z - centro[1]) > raio + 40 && z < centro[1] - raio);
 });
 
 // ------------------------------------------------------------------------------------------------ aplainar
@@ -465,7 +493,7 @@ test('Vila e rodovia: ~60 prédios e ~350 moradores, rua principal e terra, pont
 
 // ------------------------------------------------------------------------------------------------ ladrilhos
 
-test('ladrilhos (D3): 4 x 4 iniciais, vizinhos à venda, licença, preço, crédito, Influência e o evento', () => {
+test('ladrilhos (D3, D90): 6 x 5 iniciais, vizinhos à venda, licença, preço, crédito, Influência e o evento', () => {
   const sim = simDoMapa('ladrilhos');
   const L = sim.espelho.ladrilhos;
   let holding = 0;
@@ -474,31 +502,32 @@ test('ladrilhos (D3): 4 x 4 iniciais, vizinhos à venda, licença, preço, créd
     if (L.estado[k] === LADRILHO.HOLDING) holding++;
     if (L.estado[k] === LADRILHO.COMPRAVEL) compraveis++;
   }
-  assert.equal(holding, 16);
-  assert.equal(compraveis, 16);
-  assert.equal(L.estado[6 * 16 + 6], LADRILHO.HOLDING);
-  assert.equal(L.estado[7 * 16 + 10], LADRILHO.COMPRAVEL);
-  assert.equal(L.preco[7 * 16 + 10], 40000);
-  assert.equal(sim.cmd('ladrilho.comprar', { i: 10, j: 7 }).codigo, 'licenca');
+  assert.equal(holding, 30);
+  assert.equal(compraveis, 22);
+  assert.equal(L.estado[5 * 16 + 6], LADRILHO.HOLDING);
+  assert.equal(L.estado[9 * 16 + 11], LADRILHO.HOLDING);
+  assert.equal(L.estado[7 * 16 + 12], LADRILHO.COMPRAVEL);
+  assert.equal(L.preco[7 * 16 + 12], 40000);
+  assert.equal(sim.cmd('ladrilho.comprar', { i: 12, j: 7 }).codigo, 'licenca');
   concederLicencas(sim, 2);
   assert.equal(sim.q.ladrilhos().licencas, 2);
-  assert.equal(sim.cmd('ladrilho.comprar', { i: 12, j: 7 }).codigo, 'vizinho');
+  assert.equal(sim.cmd('ladrilho.comprar', { i: 14, j: 7 }).codigo, 'vizinho');
   assert.equal(sim.cmd('ladrilho.comprar', { i: 7, j: 7 }).codigo, 'comprado');
   assert.equal(sim.cmd('ladrilho.comprar', { i: 99, j: 7 }).codigo, 'valor');
   const caixa = sim.holding.caixa();
   const eventos = [];
   sim.on('ladrilho', (d) => eventos.push(d));
-  assert.equal(sim.cmd('ladrilho.comprar', { i: 10, j: 7 }).ok, true);
+  assert.equal(sim.cmd('ladrilho.comprar', { i: 12, j: 7 }).ok, true);
   assert.equal(caixa - sim.holding.caixa(), 40000);
-  assert.deepEqual(eventos, [{ i: 10, j: 7 }]);
-  assert.equal(L.estado[7 * 16 + 11], LADRILHO.COMPRAVEL, 'o vizinho do novo passa a estar à venda');
+  assert.deepEqual(eventos, [{ i: 12, j: 7 }]);
+  assert.equal(L.estado[7 * 16 + 13], LADRILHO.COMPRAVEL, 'o vizinho do novo passa a estar à venda');
   assert.equal(preco(sim), 46000, 'o segundo custa 15% mais');
   // Influência 50 tira 10% (S3a publica q.holding; aqui um substituto)
   sim.registrarConsulta('holding', () => ({ influencia: 50 }));
   assert.equal(preco(sim), 41400);
   // sem crédito
   sim.holding.pagar(sim.holding.caixa(), 'teste');
-  assert.equal(sim.cmd('ladrilho.comprar', { i: 11, j: 7 }).codigo, 'creditos');
+  assert.equal(sim.cmd('ladrilho.comprar', { i: 13, j: 7 }).codigo, 'creditos');
   assert.equal(sim.q.ladrilhos().licencas, 1, 'a recusa não gasta a licença');
   // Modo livre: sem licença e sem preço
   const livre = criarSimulacao({ semente: 'ladrilhos-livre', modo: 'livre' });
@@ -506,7 +535,7 @@ test('ladrilhos (D3): 4 x 4 iniciais, vizinhos à venda, licença, preço, créd
   // save: a posse e as licenças voltam
   const nova = criarSimulacao({ semente: 'ladrilhos' });
   aplicarSave(nova, lerSave(montarSave(sim)));
-  assert.equal(nova.espelho.ladrilhos.estado[7 * 16 + 10], LADRILHO.HOLDING);
+  assert.equal(nova.espelho.ladrilhos.estado[7 * 16 + 12], LADRILHO.HOLDING);
   assert.equal(nova.q.ladrilhos().licencas, 1);
 });
 
@@ -528,7 +557,8 @@ test('floresta (D6): mata fechada nas serras, praia sem mata, cidade aberta; des
   };
   assert.ok(media(-1500, -2500, 1500, -2000) > 0.7, 'serra do Held coberta');
   assert.ok(media(-300, -300, 300, 100) < 0.3, 'planície da cidade aberta');
-  assert.ok(media(-300, 998, 300, 1000) < 0.1, 'praia sem mata');
+  // a praia da frente da sede (D90): a costa avançou para o sul, até uns 1.110 m
+  assert.ok(media(-300, 1100, 300, 1102) < 0.1, 'praia sem mata');
   // desmate: uma plataforma nova limpa a mata sob ela e marca o diário
   const v = sim.mudancas.desde(-1).versao;
   const x = -1000;
@@ -572,7 +602,7 @@ test('recursos: grades 256², extração baixa o valor e a camada Recursos segue
 
 // ------------------------------------------------------------------------------------------------ áreas e sugestões
 
-test('áreas (D55) e sugestões (D36): formato, dentro da área inicial, avenida do nó de entrada ao portão norte', () => {
+test('áreas (D55) e sugestões (D36, D90): formato, dentro da área inicial, avenida do nó de entrada ao portão norte', () => {
   const sim = simDoMapa('sugestoes');
   const ids = sim.espelho.areas.map((a) => a.id).sort();
   assert.deepEqual(ids, ['gleba', 'morros', 'orla', 'varzea', 'vila']);
@@ -588,17 +618,52 @@ test('áreas (D55) e sugestões (D36): formato, dentro da área inicial, avenida
   assert.deepEqual(porId.avenida.pontos[0], [N.x[ent], N.z[ent]]);
   assert.equal(porId.entrada.ref, sim.json.mapa.entrada);
   const T = sim.espelho.terreno;
+  const [x0, z0, x1, z1] = limitesInicio();
+  const { centro, raio } = GLEBA_ENVELOPE;
   for (const s of S) {
     const pts = s.pontos ?? [[s.x, s.z]];
     for (const [x, z] of pts) {
-      assert.ok(x >= -1024 && x <= 1024 && z >= -1024 && z <= 1024, `${s.id} fora da área inicial`);
+      assert.ok(x >= x0 && x <= x1 && z >= z0 && z <= z1, `${s.id} fora da área inicial`);
       assert.equal(aguaEm(T, x, z), AGUA.TERRA, `${s.id} na água`);
+      // nada da primeira hora dentro do disco da sede (a avenida chega ao portão, na borda)
+      if (s.id !== 'avenida') assert.ok(Math.hypot(x - centro[0], z - centro[1]) > raio + 10, `${s.id} na gleba`);
     }
   }
+  // a primeira avenida termina no portão norte da sede
+  const fim = porId.avenida.pontos.at(-1);
+  const norte = PLANOS[PLANO_ESCOLHIDO].portoes.find((p) => p.id === 'norte');
+  assert.deepEqual(fim, [norte.x, norte.z]);
   // a captação fica na beira do rio, acima da Vila
   const r = rioEm(terrenoBase(sim).base, porId.captacao.x, porId.captacao.z);
   assert.ok(r.a - r.hw < 60, 'captação na margem');
   assert.ok(porId.captacao.z < 560, 'rio acima da Vila');
+  // a captação e a usina (o id do catálogo é 'solar') ficam na rua principal da Vila, com rede: a prévia aceita e a
+  // frente dá para uma via com canos e cabos (a S2a mostrou a Vila abandonando com as duas na estrada de terra)
+  assert.equal(porId.usina.construir, 'solar');
+  const A = sim.tabelas.arestas;
+  for (const id of ['captacao', 'usina']) {
+    const s = porId[id];
+    const pv = sim.q.construir.previa({ tipo: s.construir, x: s.x, z: s.z, rot: s.rot });
+    assert.ok(pv.ok, `${id}: ${pv.codigo}`);
+    let melhor = Infinity;
+    let tipo = null;
+    for (let e = 0; e < A.n; e++) {
+      if (!A.viva[e]) continue;
+      const p = A.p;
+      for (let t = 0; t <= 8; t++) {
+        const u = t / 8;
+        const v = 1 - u;
+        const x = v * v * v * p[8 * e] + 3 * v * v * u * p[8 * e + 2] + 3 * v * u * u * p[8 * e + 4] + u * u * u * p[8 * e + 6];
+        const z = v * v * v * p[8 * e + 1] + 3 * v * v * u * p[8 * e + 3] + 3 * v * u * u * p[8 * e + 5] + u * u * u * p[8 * e + 7];
+        const d = Math.hypot(x - pv.x, z - pv.z);
+        if (d < melhor) {
+          melhor = d;
+          tipo = VIAS_ORDEM[A.tipo[e]];
+        }
+      }
+    }
+    assert.equal(tipo, 'rua', `${id} de frente para ${tipo}`);
+  }
 });
 
 // ------------------------------------------------------------------------------------------------ save

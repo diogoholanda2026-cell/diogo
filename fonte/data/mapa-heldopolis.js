@@ -6,16 +6,16 @@
 // vales largos entre eles e a Pedra do Held, um monólito de granito sobre a crista, como a Gávea); a oeste, a Serra
 // do Poente e os Morros Irmãos na praia. Na cidade, os morros da Pedreira e do Mirante, cristas curtas de mata. O Rio
 // Held desce da serra a noroeste, serpenteia em meandros na várzea (com lagoas marginais, os meandros abandonados) e
-// é a borda oeste da área inicial até a foz, onde fica a Vila de Santa Cida; a lagoa costeira atrás da restinga; o
-// platô da gleba entre a lagoa e a baía; a rodovia entra pelo oeste, cruza o rio na ponte pronta, passa ao pé do
-// maciço ao norte da área inicial (com o acesso até o nó de entrada), contorna a enseada por trás da orla e sai a
-// leste pela planície.
+// é a borda oeste da área inicial até a foz, onde fica a Vila de Santa Cida; a lagoa costeira atrás da restinga; no sul
+// da área inicial, de frente para o mar, o platô em disco da sede v3 (D90), entre a lagoa e a baía; a rodovia entra
+// pelo oeste, cruza o rio na ponte pronta, passa ao pé do maciço ao norte da área inicial (com o acesso até o nó de
+// entrada, ao norte do portão norte da sede), contorna a enseada por trás da orla e sai a leste pela planície.
 //
 // Metros; x leste, z sul (norte em -z), origem no centro. Tudo aqui é dado: fonte/sim/mundo/* gera a grade de alturas,
 // a água, os recursos, a mata, a Vila e a rodovia a partir deste arquivo, sempre igual (semente fixa do mapa). A forma
 // fina dos maciços (vales, espigões, grotas) sai da erosão assada por `node ferramentas/mapa.mjs --assar`: mudou
 // serras, morros, planaltos, costa, rio, lagoas, córregos, planície ou rodovia, asse de novo (o teste do mundo acusa).
-// A gleba vem de arcologia-plano.js (D59: o integrador grava o plano escolhido no portão 1).
+// A gleba vem de arcologia-plano.js: o disco da sede v3 (D88 a D90).
 import { congelar, cos, sen } from '../comum/util.js';
 import { GLEBA_ENVELOPE } from './arcologia-plano.js';
 
@@ -31,12 +31,15 @@ const COSTA = [
   [-3140, 1470, 0, 0], [-2960, 1370, 1, 0.3], [-2760, 1335, 1, 0.3], [-2570, 1385, 0, 0], [-2390, 1310, 0, 0],
   [-2210, 1255, 0, 0], [-2040, 1205, 1, 0.5], [-1820, 1175, 1, 0.8], [-1580, 1150, 1, 0.8], [-1380, 1125, 1, 0.5],
   [-1210, 1100, 1, 0], [-1060, 1082, 1, 0.3], [-910, 1064, 1, 0.8], [-760, 1050, 1, 1], [-610, 1040, 1, 1],
-  [-470, 1030, 1, 0.8], [-340, 1012, 1, 0.2], [-160, 1004, 1, 0], [40, 1000, 1, 0], [240, 998, 1, 0], [420, 996, 1, 0],
-  // costão do canto sudeste da gleba: o platô inteiro fica em terra, com uns 60 m de barranco até a água
-  [540, 1000, 0.5, 0], [640, 1002, 0, 0], [725, 990, 0, 0], [780, 950, 0, 0], [808, 890, 0, 0], [835, 820, 0.3, 0],
-  [872, 768, 0, 0], [935, 738, 0, 0], [1010, 722, 0.3, 0],
-  // Enseada da Praia Grande (a baía a leste da cidade, fora da área inicial): praia em meia-lua do costão da gleba até
-  // o pé do Morro do Vigia, como a enseada de Botafogo
+  [-470, 1030, 1, 0.8],
+  // a frente da sede v3 (D90): a praia avança para o sul em meia-lua, e o anel viário fica a mais de 40 m da areia
+  [-350, 1040, 1, 0.3], [-220, 1072, 1, 0.1], [-80, 1098, 1, 0], [60, 1112, 1, 0], [200, 1118, 1, 0], [340, 1114, 1, 0],
+  [460, 1100, 1, 0],
+  // costão do canto sudeste: a ponta de pedra que fecha a praia da sede e vira para a enseada
+  [560, 1078, 0.6, 0], [650, 1048, 0.2, 0], [730, 1008, 0, 0], [800, 955, 0, 0], [845, 895, 0, 0], [880, 835, 0.3, 0],
+  [915, 785, 0, 0], [965, 752, 0, 0], [1010, 722, 0.3, 0],
+  // Enseada da Praia Grande (a baía a leste da cidade; a orla entrou na área inicial com a D90): praia em meia-lua do
+  // costão da sede até o pé do Morro do Vigia, como a enseada de Botafogo
   [1082, 676, 1, 0.2], [1128, 590, 1, 0.4], [1152, 480, 1, 0.5], [1170, 360, 1, 0.6], [1196, 236, 1, 0.6],
   [1244, 118, 1, 0.6], [1320, 16, 1, 0.6], [1430, -62, 1, 0.6], [1570, -112, 1, 0.6], [1720, -128, 1, 0.6],
   [1870, -112, 1, 0.5], [2000, -66, 1, 0.4], [2110, 6, 1, 0.2], [2190, 96, 0.4, 0],
@@ -130,9 +133,10 @@ const SERRAS = [
  */
 const MORROS = [
   { id: 'pedreira', forma: 'morro', x: -470, z: -820, rx: 420, rz: 320, ang: 0.15, h: 236, face: 1.7, forte: 0.7 },
-  { id: 'mirante', forma: 'morro', x: 485, z: -870, rx: 400, rz: 300, ang: -0.25, h: 205, face: 1.3, forte: 0.6 },
-  { id: 'lagoaNorte', forma: 'morro', x: -650, z: 330, rx: 150, rz: 130, ang: 0.6, h: 50 },
-  { id: 'leste', forma: 'morro', x: 880, z: -230, rx: 230, rz: 200, ang: 0.2, h: 78 },
+  { id: 'mirante', forma: 'morro', x: 485, z: -880, rx: 390, rz: 285, ang: -0.25, h: 205, face: 1.3, forte: 0.6 },
+  // os dois morros baixos da planície do leste, fora do disco da sede (D90), com a rodovia ao norte e a enseada ao sul
+  { id: 'leste', forma: 'morro', x: 1260, z: -560, rx: 230, rz: 200, ang: 0.2, h: 78 },
+  { id: 'morrinho', forma: 'morro', x: 1640, z: -380, rx: 120, rz: 105, ang: 0.6, h: 45 },
   // Pedra do Held: o monólito de granito sobre a crista do maciço, visto de toda a cidade (a Pedra da Gávea do Rio)
   { id: 'pedraHeld', forma: 'pao', x: -1230, z: -2110, rx: 360, rz: 270, ang: 0.15, h: 495, face: 1.57, forte: 1.3 },
   { id: 'enseada', forma: 'pao', x: 2440, z: 865, rx: 230, rz: 170, ang: 0.55, h: 218, face: 2.4, forte: 1 },
@@ -239,8 +243,16 @@ const RIO_VALE = [
  * demais para 8 m; a mata ciliar marca o traçado). [x, z]; profundidade e meia largura do vale em metros.
  */
 const CORREGOS = [
-  { id: 'pedreira', profundidade: 2.6, largura: 55, pontos: [[-470, -560], [-520, -300], [-548, -40], [-520, 180], [-520, 420], [-566, 540], [-604, 650]] },
-  { id: 'mirante', profundidade: 2.4, largura: 55, pontos: [[470, -610], [560, -330], [690, -70], [850, 160], [1010, 330], [1150, 420]] },
+  // os dois que desciam pela gleba contornam o disco da sede (D90): o da Pedreira pelo oeste até a lagoa, o do Mirante
+  // pelo leste até a enseada, a mais de 90 m do anel viário
+  {
+    id: 'pedreira', profundidade: 2.6, largura: 55,
+    pontos: [[-470, -560], [-600, -470], [-760, -330], [-830, -100], [-830, 150], [-800, 350], [-740, 500], [-660, 600], [-604, 650]],
+  },
+  {
+    id: 'mirante', profundidade: 2.4, largura: 55,
+    pontos: [[470, -610], [620, -660], [820, -650], [960, -520], [1010, -330], [1090, -110], [1200, 170]],
+  },
   { id: 'vale', profundidade: 2, largura: 45, pontos: [[-160, -1150], [-260, -1060], [-520, -1080], [-760, -1120], [-980, -1150]] },
 ];
 
@@ -250,10 +262,10 @@ const LAGOA = {
   nivel: 1.1,
   profundidade: 4.2,
   // alongada ao longo da costa, atrás da restinga, com a margem norte recortada e um saco onde chega o córrego da
-  // Pedreira, como as lagoas do litoral fluminense
+  // Pedreira, como as lagoas do litoral fluminense; a ponta leste fica a mais de 70 m do anel viário da sede (D90)
   contorno: [
     [-808, 820], [-790, 760], [-748, 728], [-690, 722], [-650, 700], [-618, 668], [-590, 676], [-584, 716],
-    [-548, 742], [-490, 740], [-440, 764], [-404, 806], [-398, 856], [-428, 894], [-486, 910], [-540, 930],
+    [-548, 742], [-492, 742], [-456, 768], [-430, 808], [-426, 852], [-448, 888], [-494, 908], [-540, 930],
     [-610, 944], [-680, 948], [-742, 934], [-790, 900],
   ],
 };
@@ -288,12 +300,19 @@ const LAGOAS_MARGINAIS = [
 
 // ------------------------------------------------------------------------------------------------ platô e planície
 
-/** Platô da gleba: plano na cota do envelope; ao sul desce em barranco até a praia. */
+/**
+ * Platô da sede (D90): um disco plano na cota da gleba, cobrindo o anel viário, com a borda descendo suave até o
+ * terreno natural (e até a praia, ao sul). A caixa é o ponto do centro: a distância à caixa, que o terreno mede, vira a
+ * distância ao centro, e o platô sai redondo; a borda anda uns 40 m com o ruído lento do terreno, e a margem cobre isso.
+ * disco: o mesmo disco dito por extenso, para quem quiser o círculo (a mata limpa nele, mundo/floresta.js).
+ */
+const [PCX, PCZ] = GLEBA_ENVELOPE.centro;
 const PLATO = {
-  caixa: GLEBA_ENVELOPE.caixa,
+  caixa: [PCX, PCZ, PCX, PCZ],
   cota: GLEBA_ENVELOPE.cota,
-  margem: 24, // plano além da caixa
-  transicao: 170, // volta ao relevo em volta
+  margem: 860, // plano até aqui (o anel viário vai a 807 m do centro)
+  transicao: 160, // volta ao relevo em volta
+  disco: { cx: PCX, cz: PCZ, r: 860 },
 };
 
 /**
@@ -306,13 +325,14 @@ const PLANICIE = { cotaPraia: 2.4, larguraPraia: 70, subida: 0.011, teto: 30, co
 const MORROTES = { altura: 55, raio: [1500, 2900] };
 
 /**
- * Janela do relevo fino (16 m) em volta da área inicial: ali a câmera chega perto, e os morros da cidade ganham a
- * erosão numa grade mais fina (espigões e grotas de 50 a 100 m); fora dela vale a de 32 m. Alinhada à grade de 16 m.
+ * Janela do relevo fino (16 m) em volta da área inicial de 6 x 5 ladrilhos (D90), com 64 a 80 m de margem: ali a câmera
+ * chega perto, e os morros da cidade ganham a erosão numa grade mais fina (espigões e grotas de 50 a 100 m); fora dela
+ * vale a de 32 m. Quadrada e alinhada à grade de 16 m (o mar ao sul não custa: os resíduos nulos comprimem).
  */
-const DETALHE_RELEVO = { x0: -1280, z0: -1440, lado: 2560, passo: 16 };
+const DETALHE_RELEVO = { x0: -1104, z0: -1616, lado: 3216, passo: 16 };
 
-/** Calcário: faixa a noroeste, na encosta sul da Serra do Held, fora da área inicial (D3). Polígono. */
-const CALCARIO = [[-980, -1560], [-420, -1610], [-60, -1500], [-120, -1300], [-560, -1270], [-940, -1330]];
+/** Calcário: faixa a noroeste, na encosta sul da Serra do Held, fora da área inicial (D3, D90). Polígono. */
+const CALCARIO = [[-980, -1880], [-420, -1930], [-60, -1820], [-120, -1600], [-560, -1570], [-940, -1650]];
 
 // ------------------------------------------------------------------------------------------------ rodovia e Vila
 
@@ -328,15 +348,16 @@ const RODOVIA = {
     [420, -1196], [790, -1176], [1060, -1108], [1300, -960], [1520, -780], [1760, -640], [2040, -580], [2360, -520],
     [2700, -430], [3050, -310], [3450, -170], [3800, -60], [4096, 10],
   ],
-  // acesso de 4 faixas da junção até o nó de entrada, pela sela entre o Morro da Pedreira e o do Mirante
-  acesso: [[40, -1203], [32, -1060], [8, -890], [18, -710], [46, -560], [72, -430]],
+  // acesso de 4 faixas da junção até o nó de entrada, pela sela entre o Morro da Pedreira e o do Mirante; o nó fica na
+  // boca da sela, ao norte do portão norte da sede (D90)
+  acesso: [[40, -1203], [32, -1060], [10, -900], [24, -780], [60, -700]],
   declive: 0.055,
   sobreVarzea: 4.5, // folga mínima acima do nível do rio na várzea
   vaoLivre: 7.5, // tabuleiro da ponte acima da água
 };
 
 /** Nó de entrada (D52): fim do acesso; só ele traz energia da rodovia (até 5 MW) para vias com calçada. */
-const ENTRADA = { x: 72, z: -430, energiaMW: 5 };
+const ENTRADA = { x: 60, z: -700, energiaMW: 5 };
 
 /**
  * Vila de Santa Cida (uns 60 prédios de nível 1 e 2, 350 moradores): rua principal ('rua') e ruas de terra na foz,
@@ -348,14 +369,16 @@ const VILA = {
   moradores: 350,
   predios: 60,
   ruas: [
-    { id: 'principal', tipo: 'rua', pontos: [[-972, 560], [-976, 732], [-980, 862], [-986, 990]] },
+    // a rua principal sobe até a beira do rio ao norte da Vila (D90): a captação e a usina da primeira hora ficam nela,
+    // com rede, e não na estrada de terra
+    { id: 'principal', tipo: 'rua', pontos: [[-935, 300], [-944, 400], [-972, 560], [-976, 732], [-980, 862], [-986, 990]] },
     { id: 'praia', tipo: 'terra', pontos: [[-986, 990], [-880, 992], [-780, 992], [-680, 990]] },
     { id: 'deCima', tipo: 'terra', pontos: [[-972, 560], [-900, 598], [-872, 724], [-868, 856], [-880, 992]] },
     { id: 'travessaNorte', tipo: 'terra', pontos: [[-976, 732], [-872, 724]] },
     { id: 'travessaSul', tipo: 'terra', pontos: [[-980, 862], [-868, 856]] },
     {
       id: 'estrada', tipo: 'terra',
-      pontos: [[-972, 560], [-944, 400], [-926, 200], [-918, -60], [-916, -380], [-928, -700], [-962, -990], [-1010, -1190]],
+      pontos: [[-935, 300], [-926, 200], [-918, -60], [-916, -380], [-928, -700], [-962, -990], [-1010, -1190]],
     },
   ],
   // área onde nascem os prédios, com a planta inteira dentro dela (fora, só as ruas)
@@ -370,10 +393,11 @@ const AREAS = [
     id: 'vila', nome: 'Vila de Santa Cida',
     contorno: [[-1036, 380], [-895, 365], [-870, 495], [-805, 590], [-800, 950], [-650, 955], [-650, 1040], [-1060, 1060], [-1044, 800]],
   },
+  // o disco da sede v3 (D90)
   { id: 'gleba', nome: 'Gleba da Arcologia', contorno: GLEBA_ENVELOPE.contorno },
   {
     id: 'orla', nome: 'Orla da Praia Grande',
-    // a meia-lua da Enseada da Praia Grande, da linha d'água até uns 280 m para dentro (ladrilhos vizinhos, D3)
+    // a meia-lua da Enseada da Praia Grande, da linha d'água até uns 280 m para dentro (na área inicial desde a D90)
     contorno: [
       [1060, 700], [1112, 596], [1140, 480], [1158, 360], [1182, 232], [1232, 108], [1310, 2], [1424, -78],
       [1568, -128], [1720, -144], [1874, -128], [2008, -80], [2124, -6], [2210, 90], [2140, -250], [1900, -400],
@@ -389,25 +413,27 @@ const AREAS = [
   },
   {
     id: 'morros', nome: 'Morros do Norte',
-    contorno: [[-1000, -1040], [1000, -1040], [1010, -600], [640, -560], [260, -620], [-180, -560], [-600, -480], [-880, -560]],
+    // os morros da Pedreira e do Mirante e a sela entre eles, até o pé, fora do disco da sede
+    contorno: [[-1000, -1040], [1000, -1040], [1010, -640], [640, -620], [260, -680], [-180, -640], [-600, -560], [-880, -560]],
   },
 ];
 
 /**
- * Sugestões da primeira hora (D36): a primeira avenida do nó de entrada até a gleba, as primeiras quadras dos dois
- * lados dela, os lugares da captação (no rio acima da Vila) e da usina solar, e os primeiros prédios da Holding.
- * O fim da avenida é o portão norte do plano escolhido (areas.js acerta pelo plano; aqui vale o do envelope).
+ * Sugestões da primeira hora (D36, D90): a primeira avenida do nó de entrada até o portão norte da sede, as primeiras
+ * quadras na faixa plana entre os morros e o disco da sede e a oeste dele, a captação e a usina solar na rua principal
+ * da Vila (com rede: a Vila e as duas ficam na mesma rede de água e energia), e os primeiros prédios da Holding. O fim
+ * da avenida é o portão norte do plano escolhido (areas.js acerta pelo plano).
  */
 const SUGESTOES = {
-  avenida: { via: 'avenida', pontos: [[72, -430], [96, -230], [140, -40], [160, 180]] },
+  avenida: { via: 'avenida', pontos: [[60, -700], [130, -662], [200, -622]] },
   quadras: [
-    { zona: 'resBaixa', contorno: [[-236, -330], [58, -350], [100, -140], [-196, -120]] },
-    { zona: 'comBaixa', contorno: [[132, -330], [370, -300], [372, -90], [170, -100]] },
-    { zona: 'resBaixa', contorno: [[-180, -40], [120, -30], [140, 150], [-150, 150]] },
+    { zona: 'resBaixa', contorno: [[-745, -250], [-575, -250], [-640, 90], [-745, 90]] },
+    { zona: 'comBaixa', contorno: [[575, -585], [830, -585], [850, -430], [795, -410]] },
+    { zona: 'resBaixa', contorno: [[-745, 120], [-650, 120], [-635, 300], [-745, 300]] },
   ],
-  captacao: { construir: 'captacao', x: -1004, z: 320, rot: -1.5708 },
-  usina: { construir: 'usinaSolar', x: -842, z: 470, rot: 0 },
-  escritorio: { construir: 'escritorioObra', x: 250, z: -470, rot: 0 },
+  captacao: { construir: 'captacao', x: -965, z: 350, rot: 0 },
+  usina: { construir: 'solar', x: -905, z: 350, rot: 0 },
+  escritorio: { construir: 'escritorioObra', x: -120, z: -598, rot: 0 },
   pedreira: { construir: 'pedreira', x: -480, z: -558, rot: 3.1416 },
   areal: { construir: 'areal', x: -1000, z: -240, rot: -1.5708 },
   olaria: { construir: 'olaria', x: -998, z: 80, rot: -1.5708 },
@@ -442,7 +468,9 @@ const LUGARES = [
 
 /**
  * O mapa de Heldópolis. `semente` é a do mapa (fixa): a mesma para toda partida; a da partida só rege os sorteios do
- * jogo. `inicio`: ladrilhos 6 a 9 nos dois eixos (D3).
+ * jogo. `inicio`: os ladrilhos [i, j] dos cantos da área inicial, i em x e j em z: 6 x 5 ladrilhos (D90), de x -1.024 a
+ * 2.048 e de z -1.536 a 1.024, com a sede no sul, de frente para o mar, a faixa da rodovia ao norte e a planície e a
+ * orla da baía a leste, inteira na margem leste do rio (D53).
  */
 export const MAPA_HELDOPOLIS = congelar({
   id: 'heldopolis',
@@ -454,7 +482,7 @@ export const MAPA_HELDOPOLIS = congelar({
   passo: 8,
   ladrilho: 512,
   ladrilhos: 16,
-  inicio: [[6, 6], [9, 9]],
+  inicio: [[6, 5], [11, 9]],
   nivelMar: 0,
   latitude: -23.5,
   costa: COSTA,

@@ -1,7 +1,8 @@
 // Mapa de Heldópolis sem navegador (dona: S1a): PNG do relevo, da água, dos recursos, das áreas e das sugestões, e as
 // conferências do mapa autoral:
-//  - a área inicial de 4 x 4 ladrilhos é um componente só de terra firme (D53: o rio fica na borda, não a corta);
-//  - rocha, areia e argila dentro da área inicial; calcário só fora dela (D3); a orla nobre fora dela;
+//  - a área inicial de 6 x 5 ladrilhos (D90) é um componente só de terra firme (D53: o rio fica na borda, não a corta);
+//  - rocha, areia e argila dentro da área inicial; calcário só fora dela (D3); a orla da baía dentro dela (D90);
+//  - a gleba (o disco da sede v3) inteira na área inicial e em terra, com 40 m de terra em volta (D90);
 //  - a Vila com uns 60 prédios e 350 moradores, inteira na área inicial; a rodovia ligada ao nó de entrada; sem erro.
 //
 // Uso: node ferramentas/mapa.mjs [--saida pasta] [--semente s] [--so-conferir] [--vista]
@@ -629,20 +630,38 @@ export function conferirMapa(sim) {
   for (const tipo of ['rocha', 'areia', 'argila']) if (maxDentro[tipo] < 150) falhas.push(`pouca ${tipo} na área inicial (${maxDentro[tipo]})`);
   if (maxDentro.calcario > 0) falhas.push('calcário dentro da área inicial');
   if (maxFora.calcario < 150) falhas.push('calcário faltando fora da área inicial');
+  // a orla da baía entrou na área inicial com a D90 (a ponta leste da enseada fica no ladrilho vizinho)
   const orla = sim.espelho.areas.find((a) => a.id === 'orla');
   if (orla) {
+    let dentroOrla = 0;
     for (let k = 0; k < orla.contorno.length; k += 2) {
       const x = orla.contorno[k];
       const z = orla.contorno[k + 1];
-      if (x > x0 && x < x1 && z > z0 && z < z1) falhas.push('orla nobre dentro da área inicial');
+      if (x > x0 && x < x1 && z > z0 && z < z1) dentroOrla++;
+    }
+    if (dentroOrla < 0.75 * (orla.contorno.length / 2)) falhas.push('orla da baía fora da área inicial (D90)');
+  }
+  // a gleba (o disco da sede) inteira na área inicial e em terra, com 40 m de terra em volta, sem a praia (D90)
+  let glebaRuim = 0;
+  const g = GLEBA_ENVELOPE;
+  for (let k = 0; k < 360; k++) {
+    const a = (k * Math.PI) / 180;
+    for (const d of [0, 40]) {
+      const x = g.centro[0] + (g.raio + d) * Math.cos(a);
+      const z = g.centro[1] + (g.raio + d) * Math.sin(a);
+      if (d === 0 && !(x > x0 && x < x1 && z > z0 && z < z1)) glebaRuim++;
+      const i = Math.round((x - T.origem[0]) / T.passo);
+      const j = Math.round((z - T.origem[1]) / T.passo);
+      if (T.agua[j * T.n + i] !== AGUA.TERRA) glebaRuim++;
     }
   }
+  if (glebaRuim) falhas.push(`gleba fora da área inicial ou a menos de 40 m da água (${glebaRuim} amostras)`);
   // Vila e rodovia
   const M = sim.json.mapa;
   const nPredios = M.predios.length;
   if (nPredios < 50 || nPredios > 75) falhas.push(`Vila com ${nPredios} prédios (esperado ~60)`);
   if (M.moradores < 330 || M.moradores > 380) falhas.push(`Vila com ${M.moradores} moradores (esperado ~350)`);
-  // a Vila inteira na área inicial (D3: os 4 x 4 ficam em volta da gleba, da Vila e da entrada): plantas e ruas
+  // a Vila inteira na área inicial (D3, D90: os 6 x 5 ficam em volta da gleba, da Vila e da entrada): plantas e ruas
   const P = sim.tabelas.predios;
   const A = sim.tabelas.arestas;
   const dentroInicio = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;

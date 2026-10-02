@@ -1,50 +1,65 @@
-// Partes da Arcologia (D26, D59, D63 a D65): a Sede em anel e as Torres do Conselho, o Anel de moradia, a Biblioteca,
-// a Vida (a cúpula de vidro e as Supertrees), a Escola, a Universidade, a Física, as fontes, o pódio de quarteirão e a
-// barragem. Cada peça do plano (data/arcologia-plano.js) vira volumes com a fachada no shader (material vidro, tipo por
-// vértice) e acabamentos (material opaco), em coordenadas do mundo, assentados no relevo por chao(x, z). A Sede em anel
-// e a cúpula têm LOD0 (marquises e barras da malha em geometria) e LOD1 (no shader): g.lod escolhe; as outras peças são
-// iguais nos dois. O LOD1 serve também ao fantasma do jogo (fantasma.js) e ao volume de sombra (g.sombra).
+// Partes da sede v3, Park of Future Dreams (D88 a D90): o pódio redondo das torres, os dois anéis (o Horizon Ring em 8
+// trechos e o Meridian Ring), a Codex Tower, as torres ovais (Helix Labs e Compass Tower), o lago e as Dream Falls, as
+// fontes, o anel de floresta, o parque com as Supertrees e a passarela. Cada peça do plano (data/arcologia-plano.js)
+// vira volumes com a fachada no shader (material vidro, tipo por vértice) e acabamentos (material opaco), em
+// coordenadas do mundo, assentados no relevo por chao(x, z).
 //
-// Referências: Torres do Conselho (Tencent Seafront, Bloomberg London), Sede (Apple Park, Google Bay View), Anel
-// (Marina One, The Interlace, Tietgen), Biblioteca (Biblioteca Nacional do Catar, Tianjin Binhai), Vida (Jewel
-// Changi, Gardens by the Bay), Escola (CEU), Universidade (Rolex Learning Center), Física (CERN Science Gateway,
-// MAX IV), pódio (Hudson Yards), barragem (Marina Barrage).
+// LOD (D66): os anéis e as torres ovais têm a casca (vidro curvo, cobertura, pórticos) em comum e as marquises de cada
+// andar em geometria só no LOD0, por setor (g.setor(s) dá as malhas do setor; os 16 trechos de anel e as 2 ovais); no
+// LOD1 as marquises saem do shader do vidro, que sabe pelo uniforme uLodSetor onde já há geometria. As outras peças
+// são iguais nos dois. A casca serve também ao fantasma (fantasma.js) e ao volume de sombra (g.sombra).
+//
+// Referências: Apple Park e McLaren Technology Centre (os anéis de vidro curvo com a marquise branca em cada laje), as
+// Petronas (o pódio com as torres), Black Diamond e a Biblioteca de Tianjin Binhai (a Codex), a Torre Generali e o The
+// Shard (as ovais), Gardens by the Bay (as Supertrees e a OCBC Skyway), Dubai Fountain (as fontes).
 import {
-  Malha, acab, vid, VIDRO, PADRAO, LUZ, prisma, tampa, caixa, cilindro, torno, arvore, hashF, orientar, barra, anelPlano,
-  cascaEfeito, CASCATA,
+  Malha, acab, vid, vidAnel, VIDRO, PADRAO, LUZ, tampa, caixa, cilindro, torno, hashF, orientar, barra, cascaEfeito,
+  CASCATA,
 } from './torre.js';
-import { rotParaOlhar } from '../../data/arcologia-plano.js';
+import { PAR, LAGO } from '../../data/arcologia-plano.js';
 
-// acabamentos das partes
+const RAD = Math.PI / 180;
+
+// acabamentos das partes (albedo real: nada acima de 0,80)
 const K = {
   pedra: acab('#c3b79f', { rugo: 0.72, padrao: PADRAO.pedra }),
-  concreto: acab('#a9a397', { rugo: 0.8 }),
-  concretoClaro: acab('#c8c2b6', { rugo: 0.75 }),
-  champanhe: acab('#b8a684', { rugo: 0.32, metal: 1, padrao: PADRAO.metal }),
-  // aço inox acetinado dos tubos da Física: com 0,35 o tubo espelhava o céu e lia como cano de plástico azul e branco
-  metalClaro: acab('#b9b8b3', { rugo: 0.55, metal: 1, padrao: PADRAO.metal }),
-  metalEscuro: acab('#3a3c40', { rugo: 0.5, metal: 0.6 }),
-  // painel solar de vidro escuro sobre a moldura clara: reflete o céu, de cima lê cinza-azulado (a cobertura da Apple
-  // Park), nunca a rosca preta
-  solar: acab('#3b4450', { rugo: 0.3, metal: 0.5, padrao: PADRAO.solar }),
-  telhadoVerde: acab('#435031', { rugo: 0.95, padrao: PADRAO.grama }),
-  jardim: acab('#3d4a2c', { rugo: 0.9, padrao: PADRAO.folha }),
-  grama: acab('#4f5c36', { rugo: 0.95, padrao: PADRAO.grama }),
-  gramado: acab('#3f5a33', { rugo: 0.9, padrao: PADRAO.grama }),
-  pista: acab('#7a5b4c', { rugo: 0.9 }),
+  pisoClaro: acab('#c4baa8', { rugo: 0.78, padrao: PADRAO.piso }),
   piso: acab('#b1a797', { rugo: 0.8, padrao: PADRAO.piso }),
   granito: acab('#6a655f', { rugo: 0.6, padrao: PADRAO.pedra }),
-  arenito: acab('#b39a78', { rugo: 0.85, padrao: PADRAO.pedra }),
-  cobertura: acab('#8e8a84', { rugo: 0.7 }),
-  // Supertrees: o tronco é jardim vertical (bromélias, samambaias), a copa é a treliça de aço cor de ferrugem
+  granitoEscuro: acab('#3e3c3a', { rugo: 0.35, padrao: PADRAO.pedra }),
+  concretoClaro: acab('#c8c2b6', { rugo: 0.75 }),
+  metalClaro: acab('#b9b8b3', { rugo: 0.45, metal: 1, padrao: PADRAO.metal }),
+  // a marquise branca de cada laje (a assinatura da Apple Park): alumínio pintado, fosco
+  marquise: acab('#e4e2dc', { rugo: 0.55 }),
+  // o forro da marquise recebe a luz dos escritórios à noite: brilho baixo (a luz é do vidro, não da marquise)
+  forro: acab('#dcd8cf', { rugo: 0.6, luz: LUZ.reflexo }),
+  forroAceso: acab('#d6cdbd', { rugo: 0.7, luz: LUZ.forro }),
+  // painel solar de vidro escuro sobre a moldura clara: reflete o céu, de cima lê cinza-azulado (a cobertura da Apple
+  // Park)
+  solar: acab('#3b4450', { rugo: 0.3, metal: 0.5, padrao: PADRAO.solar }),
+  telhadoVerde: acab('#435031', { rugo: 0.95, padrao: PADRAO.grama }),
+  pista: acab('#9a5a45', { rugo: 0.9, padrao: PADRAO.pista }),
+  quadra: acab('#3f6466', { rugo: 0.7, padrao: PADRAO.quadra }),
+  deck: acab('#8a7158', { rugo: 0.8 }),
+  piscina: acab('#1f3d45', { rugo: 0.05, metal: 0.2, luz: LUZ.piscina, padrao: PADRAO.agua }),
+  aguaRasa: acab('#24363a', { rugo: 0.05, metal: 0.2, padrao: PADRAO.agua }),
+  jardim: acab('#3d4a2c', { rugo: 0.9, padrao: PADRAO.folha }),
+  grama: acab('#5b6a3a', { rugo: 0.95, padrao: PADRAO.grama }),
+  gramaEscura: acab('#46532f', { rugo: 0.95, padrao: PADRAO.grama }),
+  led: acab('#e6dfd2', { rugo: 0.3, metal: 0.3, luz: LUZ.led }),
+  livros: acab('#6b4a32', { rugo: 0.85, luz: LUZ.livros, padrao: PADRAO.livros }),
+  bronze: acab('#cbbb9d', { rugo: 0.45, metal: 0.8, padrao: PADRAO.metal }),
+  obstaculo: acab('#7a1a14', { rugo: 0.4, luz: LUZ.obstaculo }),
+  // Supertrees: o tronco é jardim vertical (bromélias, samambaias), a treliça é de aço cor de ferrugem, acesa à noite
   tronco: acab('#4a5a30', { rugo: 0.9, padrao: PADRAO.folha }),
-  copaSuper: acab('#7a5c44', { rugo: 0.6, metal: 0.35, luz: LUZ.arvoreLuz, padrao: PADRAO.metal }),
-  vortice: acab('#9fb9c0', { rugo: 0.1, metal: 0.1, luz: LUZ.esfera }),
-  comporta: acab('#4a4d52', { rugo: 0.45, metal: 0.8, padrao: PADRAO.metal }),
+  trelica: acab('#7a5c44', { rugo: 0.6, metal: 0.35, luz: LUZ.arvoreLuz, padrao: PADRAO.metal }),
 };
 
-/** Ponto de um arco em graus (0 leste, 90 sul). */
-const noArco = (cx, cz, r, g) => [cx + r * Math.cos((g * Math.PI) / 180), cz + r * Math.sin((g * Math.PI) / 180)];
+/** Ponto de um círculo em graus (0 leste, 90 sul). */
+const noArco = (cx, cz, r, g) => [cx + r * Math.cos(g * RAD), cz + r * Math.sin(g * RAD)];
+
+/** Diferença entre dois ângulos em graus, em [-180, 180). */
+export const difGraus = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
 
 /** Leva um polígono local (pares) ao mundo: gira por rot (convenção do three) e soma (x, z). */
 export function aoMundo(poly, x, z, rot) {
@@ -53,19 +68,6 @@ export function aoMundo(poly, x, z, rot) {
   const out = [];
   for (let i = 0; i < poly.length; i += 2) out.push(x + c * poly[i] + s * poly[i + 1], z - s * poly[i] + c * poly[i + 1]);
   return out;
-}
-
-/** Retângulo de cantos arredondados (w x d, raio r), centrado na origem. */
-export function retArredondado(w, d, r, seg = 4) {
-  const P = [];
-  const cantos = [[w / 2 - r, d / 2 - r, 0], [-w / 2 + r, d / 2 - r, 90], [-w / 2 + r, -d / 2 + r, 180], [w / 2 - r, -d / 2 + r, 270]];
-  for (const [cx, cz, a0] of cantos) {
-    for (let s = 0; s <= seg; s++) {
-      const a = ((a0 + (90 * s) / seg) * Math.PI) / 180;
-      P.push(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
-    }
-  }
-  return orientar(P);
 }
 
 /** Elipse de semi-eixos a (x) e b (z) em seg pontos. */
@@ -116,984 +118,937 @@ export function faixaEntre(m, A, B, y, k, cima = true, yB = y) {
   }
 }
 
-/** Paredes de um polígono (todas as arestas) de y0 a y1, com v medido desde vBase; fora = normal para fora. */
-function paredes(m, poly, y0, y1, k, vBase = y0, fora = true) {
-  const P = orientar(poly);
-  const n = P.length / 2;
-  let u = 0;
-  for (let i = 0; i < n; i++) {
-    let ax = P[2 * i], az = P[2 * i + 1];
-    let bx = P[2 * ((i + 1) % n)], bz = P[2 * ((i + 1) % n) + 1];
-    const l = Math.hypot(bx - ax, bz - az);
-    if (!fora) [ax, az, bx, bz] = [bx, bz, ax, az];
-    const nn = [(bz - az) / (l || 1), 0, -(bx - ax) / (l || 1)];
-    m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], nn, [u, y0 - vBase], [u + l, y0 - vBase], [u + l, y1 - vBase], [u, y1 - vBase], k);
-    u += l;
-  }
-}
-
-// ================================================================================================ peças
-
-/** Torre do Conselho: 36 x 26 com cantos de 6 m, saguão recuado, corpo em moldura de pedra e coroa com aba. */
-function conselho(g, p) {
-  const rot = p.olhar ? rotParaOlhar(p.x, p.z, p.olhar[0], p.olhar[1]) : p.rot ?? 0;
-  const y = g.chao(p.x, p.z);
-  const H = p.altura;
-  const sem = hashF(Math.round(p.x), Math.round(p.z));
-  const k = vid(VIDRO.escritorio, sem);
-  const ret = (d) => aoMundo(retArredondado(36 + 2 * d, 26 + 2 * d, Math.max(1, 6 + d), 4), p.x, p.z, rot);
-  prisma(g.opaco, ret(1), y - 3, y + 0.6, { paredes: K.granito, topo: K.piso });
-  paredes(g.vidro, ret(-1.6), y + 0.6, y + 9, vid(VIDRO.saguao, sem), y);
-  // pilares do saguão nos cantos
-  tampa(g.opaco, ret(0), y + 9, K.concretoClaro, false);
-  paredes(g.vidro, ret(0), y + 9, y + H - 8.4, k, y);
-  // coroa: dois andares recuados e a aba fina de pedra
-  paredes(g.vidro, ret(-1.2), y + H - 8.4, y + H, k, y);
-  tampa(g.opaco, ret(0), y + H - 8.4, K.concretoClaro, true);
-  prisma(g.opaco, ret(1.2), y + H, y + H + 0.9, { paredes: K.pedra, topo: K.cobertura, base: K.pedra });
-  prisma(g.opaco, aoMundo(retArredondado(16, 10, 2, 2), p.x, p.z, rot), y + H + 0.9, y + H + 5, { paredes: K.metalEscuro, topo: K.cobertura });
-  g.caixa([p.x, y, p.z], 26, H + 5);
-}
+// ------------------------------------------------------------------------------------------------ arcos
 
 /**
- * Sede: faixa curva ao longo de um arco (Apple Park), moldura de pedra de dois andares (Bloomberg) e a cobertura
- * solar em escamas que avança sobre as fachadas (Google Bay View), com o térreo recuado.
+ * Parede curva de raio r entre os ângulos a0 e a1 (graus), de y0 a y1 acima de yb: normal radial por vértice (a face lê
+ * redonda, não facetada; sinal -1 vira para o centro), u em metros ao longo do arco, v a altura acima de yb.
  */
-function sede(g, p) {
-  const { cx, cz, r, de, ate } = p.arco;
-  const f = p.fundo;
-  const H = p.altura;
-  const passo = 3;
-  const n = Math.max(4, Math.ceil(Math.abs(ate - de) / passo));
-  const sem = hashF(Math.round(cx), Math.round(r));
-  const k = vid(VIDRO.escritorio, sem);
-  const y = g.chao(...noArco(cx, cz, r, (de + ate) / 2));
-  const faixa = (r0, r1) => {
-    const P = [];
-    for (let s = 0; s <= n; s++) P.push(...noArco(cx, cz, r1, de + ((ate - de) * s) / n));
-    for (let s = n; s >= 0; s--) P.push(...noArco(cx, cz, r0, de + ((ate - de) * s) / n));
-    return P;
-  };
-  const r0 = r - f / 2;
-  const r1 = r + f / 2;
-  prisma(g.opaco, faixa(r0 - 3, r1 + 3), y - 2, y + 0.5, { paredes: K.granito, topo: K.piso });
-  paredes(g.vidro, faixa(r0 + 2, r1 - 2), y + 0.5, y + 6, vid(VIDRO.saguao, sem), y);
-  tampa(g.opaco, faixa(r0, r1), y + 6, K.concretoClaro, false);
-  paredes(g.vidro, faixa(r0, r1), y + 6, y + H, k, y);
-  tampa(g.opaco, faixa(r0, r1), y + H, K.cobertura, true);
-  // escamas: um vão de cobertura a cada ~6 graus, cumeeira no eixo e beirais de 3 m; alturas alternadas
-  const vaos = Math.max(3, Math.round(Math.abs(ate - de) / 6));
-  for (let v = 0; v < vaos; v++) {
-    const a0 = de + ((ate - de) * v) / vaos;
-    const a1 = de + ((ate - de) * (v + 1)) / vaos;
-    // alturas alternadas por pouco: a fresta de vidro entre as escamas é fina (de cima, sem listras de céu refletido)
-    const hc = H + (v % 2 ? 3.8 : 4.6);
-    const q = 6;
-    for (let s = 0; s < q; s++) {
-      const b0 = a0 + ((a1 - a0) * s) / q;
-      const b1 = a0 + ((a1 - a0) * (s + 1)) / q;
-      const Pa = (rr, b) => [...noArco(cx, cz, rr, b)];
-      const [xo0, zo0] = Pa(r1 + 3, b0), [xo1, zo1] = Pa(r1 + 3, b1);
-      const [xi0, zi0] = Pa(r0 - 3, b0), [xi1, zi1] = Pa(r0 - 3, b1);
-      const [xm0, zm0] = Pa(r, b0), [xm1, zm1] = Pa(r, b1);
-      const nf = [xo0 - xm0, 0, zo0 - zm0];
-      const l = Math.hypot(nf[0], nf[2]) || 1;
-      const inc = (hc - H) / (f / 2 + 3);
-      const n1 = [(nf[0] / l) * inc, 1, (nf[2] / l) * inc];
-      const n2 = [-(nf[0] / l) * inc, 1, -(nf[2] / l) * inc];
-      g.opaco.quad([xm0, y + hc, zm0], [xm1, y + hc, zm1], [xo1, y + H + 0.6, zo1], [xo0, y + H + 0.6, zo0], n1, [xm0, zm0], [xm1, zm1], [xo1, zo1], [xo0, zo0], K.solar);
-      g.opaco.quad([xm0, y + hc, zm0], [xm1, y + hc, zm1], [xi1, y + H + 0.6, zi1], [xi0, y + H + 0.6, zi0], n2, [xm0, zm0], [xm1, zm1], [xi1, zi1], [xi0, zi0], K.solar);
-      g.opaco.quad([xm0, y + hc - 0.4, zm0], [xm1, y + hc - 0.4, zm1], [xo1, y + H + 0.2, zo1], [xo0, y + H + 0.2, zo0], [0, -1, 0], [0, 0], [1, 0], [1, 1], [0, 1], K.champanhe);
-      g.opaco.quad([xm0, y + hc - 0.4, zm0], [xm1, y + hc - 0.4, zm1], [xi1, y + H + 0.2, zi1], [xi0, y + H + 0.2, zi0], [0, -1, 0], [0, 0], [1, 0], [1, 1], [0, 1], K.champanhe);
-    }
-    // oitão de vidro entre dois vãos (a luz entra pela diferença de altura das escamas)
-    const [xa, za] = noArco(cx, cz, r0 - 3, a1);
-    const [xb, zb] = noArco(cx, cz, r, a1);
-    const [xc, zc] = noArco(cx, cz, r1 + 3, a1);
-    const h2 = H + (v % 2 ? 4.6 : 3.8);
-    const hMin = Math.min(hc, h2);
-    const nn = [Math.cos((a1 * Math.PI) / 180 + Math.PI / 2), 0, Math.sin((a1 * Math.PI) / 180 + Math.PI / 2)];
-    if (v < vaos - 1) {
-      const i0 = g.vidro.v(xa, y + H + 0.6, za, ...nn, 0, H, k);
-      const i1 = g.vidro.v(xb, y + hMin, zb, ...nn, f / 2, hMin, k);
-      const i2 = g.vidro.v(xb, y + Math.max(hc, h2), zb, ...nn, f / 2, Math.max(hc, h2), k);
-      const i3 = g.vidro.v(xc, y + H + 0.6, zc, ...nn, f + 6, H, k);
-      g.vidro.tri(i0, i1, i2);
-      g.vidro.tri(i2, i1, i3);
-    }
-  }
-  g.caixa([...noArco(cx, cz, r, (de + ate) / 2)].reduce((a, v, i) => (i ? [a[0], y, v] : [v]), []), Math.abs(ate - de) * (Math.PI / 180) * r * 0.55 + f, H + 5);
+function paredeArco(m, cx, cz, yb, r, a0, a1, y0, y1, k, sinal = 1) {
+  const c0 = Math.cos(a0 * RAD), s0 = Math.sin(a0 * RAD);
+  const c1 = Math.cos(a1 * RAD), s1 = Math.sin(a1 * RAD);
+  const u0 = r * a0 * RAD;
+  const u1 = r * a1 * RAD;
+  const i0 = m.v(cx + r * c0, yb + y0, cz + r * s0, c0 * sinal, 0, s0 * sinal, u0, y0, k);
+  const i1 = m.v(cx + r * c1, yb + y0, cz + r * s1, c1 * sinal, 0, s1 * sinal, u1, y0, k);
+  const i2 = m.v(cx + r * c1, yb + y1, cz + r * s1, c1 * sinal, 0, s1 * sinal, u1, y1, k);
+  const i3 = m.v(cx + r * c0, yb + y1, cz + r * s0, c0 * sinal, 0, s0 * sinal, u0, y1, k);
+  m.tri(i0, i1, i2);
+  m.tri(i0, i2, i3);
 }
 
 /**
- * Anel de moradia em anfiteatro (Marina One, Interlace, Tietgen): módulos ao longo de um arco ou de um caminho, com
- * fendas de vidro entre eles; por fora a cortina de vidro, por dentro (para o coração do plano) terraços verdes a
- * cada 4 andares. As alturas vão de alturas[0] a alturas[1] ao longo da peça.
+ * Faixa horizontal entre os raios r0 e r1 de a0 a a1 (graus) na cota y, para cima ou para baixo. uv = (x, z), ou
+ * (metros ao longo do arco em r0, distância a r0) com arco = true (a pista, a película de água).
+ */
+function faixaArco(m, cx, cz, r0, r1, a0, a1, y, k, cima = true, arco = false) {
+  const P = [[r0, a0], [r0, a1], [r1, a1], [r1, a0]].map(([r, a]) => noArco(cx, cz, r, a));
+  const uv = arco
+    ? [[r0 * a0 * RAD, 0], [r0 * a1 * RAD, 0], [r0 * a1 * RAD, r1 - r0], [r0 * a0 * RAD, r1 - r0]]
+    : P.map(([x, z]) => [x, z]);
+  m.quad(...P.map(([x, z]) => [x, y, z]), [0, cima ? 1 : -1, 0], ...uv, k);
+}
+
+/** Testa vertical (a borda de uma marquise ou da cobertura) no raio r, de a0 a a1, normal radial (sinal). */
+function testaArco(m, cx, cz, r, a0, a1, y0, y1, k, sinal = 1) {
+  const [x0, z0] = noArco(cx, cz, r, a0);
+  const [x1, z1] = noArco(cx, cz, r, a1);
+  const am = ((a0 + a1) / 2) * RAD;
+  m.quad([x0, y0, z0], [x1, y0, z1], [x1, y1, z1], [x0, y1, z0], [Math.cos(am) * sinal, 0, Math.sin(am) * sinal], [r * a0 * RAD, y0], [r * a1 * RAD, y0], [r * a1 * RAD, y1], [r * a0 * RAD, y1], k);
+}
+
+/**
+ * Ângulos (graus) de um arco de raio r de `de` a `ate` a cada ~passo graus, com as bordas dos portais somadas: cada
+ * portal é uma passagem reta de largura vao no eixo do ângulo q (os lados dela são paralelos ao eixo, não radiais).
+ */
+function angulosDoArco(r, de, ate, passo, portais, vao) {
+  const meio = Math.asin(Math.min(1, vao / 2 / r)) / RAD;
+  const n = Math.max(1, Math.ceil((ate - de) / passo));
+  const A = [];
+  for (let i = 0; i <= n; i++) A.push(de + ((ate - de) * i) / n);
+  for (const q of portais) {
+    for (const s of [-1, 1]) {
+      // o lado do portal na volta deste arco (o portal em 0 grau também é o de 360)
+      for (const v of [-360, 0, 360]) {
+        const a = q + v + s * meio;
+        if (a > de + 1e-6 && a < ate - 1e-6) A.push(a);
+      }
+    }
+  }
+  A.sort((x, y) => x - y);
+  const out = [];
+  for (const a of A) if (!out.length || a - out[out.length - 1] > 0.01) out.push(a);
+  return { A: out, meio };
+}
+
+const noPortal = (a, portais, meio) => portais.some((q) => Math.abs(difGraus(a, q)) < meio - 1e-6);
+
+// ------------------------------------------------------------------------------------------------ setores do LOD0
+
+/** Setor de um ponto de anel (graus): os 8 trechos do Horizon Ring são 0 a 7, os do Meridian Ring 8 a 15. */
+export function setorDoAnel(p, a) {
+  if (p.id?.startsWith('horizon.')) return Number(p.id.slice(8)) - 1;
+  return 8 + Math.min(7, Math.floor((((a % 360) + 360) % 360) / 45));
+}
+/** Setor das torres ovais (16 a Helix, 17 a Compass); o 19 nunca tem geometria (o pódio). */
+export const SETOR_OVAL = Object.freeze({ helix: 16, compass: 17 });
+const SETOR_SEM = 19;
+
+// ------------------------------------------------------------------------------------------------ os anéis
+
+/**
+ * Trecho de anel (Apple Park, McLaren): vidro curvo do chão ao teto por fora e por dentro (o vidro do eixo a fundo/2),
+ * a marquise branca em cada laje (2,4 m de balanço), a faixa de LED de dois andares no meio da altura (no shader), a
+ * cobertura com a borda branca, os painéis solares e, no Horizon Ring, a pista de 4,6 km no eixo com as quadras e as
+ * piscinas; no Meridian, a faixa de jardim no meio. Onde uma avenida cruza, o anel passa por cima num pórtico de vao por
+ * pe metros. Casca no LOD1 (g.lod = 1); as marquises por setor no LOD0.
  */
 function anel(g, p) {
-  // eixo da peça em pontos com a direção "de dentro" (para onde os terraços olham)
-  const eixo = [];
-  if (p.arco) {
-    const { cx, cz, r, de, ate } = p.arco;
-    const n = Math.max(6, Math.ceil(Math.abs(ate - de) / 1.5));
-    for (let s = 0; s <= n; s++) {
-      const a = de + ((ate - de) * s) / n;
-      const [x, z] = noArco(cx, cz, r, a);
-      let dx = cx - x;
-      let dz = cz - z;
-      const l = Math.hypot(dx, dz) || 1;
-      dx /= l;
-      dz /= l;
-      if (p.degrausParaFora) {
-        dx = -dx;
-        dz = -dz;
-      }
-      eixo.push({ x, z, dx, dz });
-    }
-  } else {
-    const C = p.caminho;
-    const lado = p.lado === 'direita' ? 1 : -1;
-    const pts = [];
-    for (let i = 0; i + 2 < C.length; i += 2) {
-      const ax = C[i], az = C[i + 1], bx = C[i + 2], bz = C[i + 3];
-      const l = Math.hypot(bx - ax, bz - az);
-      const q = Math.max(1, Math.ceil(l / 8));
-      for (let s = 0; s < q; s++) pts.push([ax + ((bx - ax) * s) / q, az + ((bz - az) * s) / q, (bx - ax) / l, (bz - az) / l]);
-    }
-    const u = C.length;
-    pts.push([C[u - 2], C[u - 1], pts[pts.length - 1][2], pts[pts.length - 1][3]]);
-    for (const [x, z, tx, tz] of pts) eixo.push({ x, z, dx: -tz * lado, dz: tx * lado });
-  }
-  // comprimento acumulado e vãos de 24 a 36 m separados por juntas de vidro de 3 m: de longe o anel é uma faixa
-  // contínua (Marina One, Tietgen), de perto cada vão tem a sua altura
-  const acum = [0];
-  for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1] + Math.hypot(eixo[i].x - eixo[i - 1].x, eixo[i].z - eixo[i - 1].z));
-  const total = acum[acum.length - 1];
-  const nMod = Math.max(2, Math.round(total / 31));
-  const fenda = 3;
-  const pesos = [];
-  for (let i = 0; i < nMod; i++) pesos.push(0.8 + 0.4 * hashF(i, Math.round(total), 41));
-  const somaP = pesos.reduce((a, b) => a + b, 0);
-  const lMods = pesos.map((w) => ((total - fenda * (nMod - 1)) * w) / somaP);
-  const inicio = [];
-  let acc = 0;
-  for (let i = 0; i < nMod; i++) {
-    inicio.push(acc);
-    acc += lMods[i] + fenda;
-  }
-  const fundoBase = p.fundo;
-  const PE = 3.15;
-  const sem = hashF(Math.round(eixo[0].x), Math.round(eixo[0].z));
-  const k = vid(VIDRO.moradia, sem);
-  const at = (s) => {
-    let i = 1;
-    while (i < acum.length - 1 && acum[i] < s) i++;
-    const t = (s - acum[i - 1]) / Math.max(1e-6, acum[i] - acum[i - 1]);
-    const a = eixo[i - 1];
-    const b = eixo[i];
-    const dx = a.dx + (b.dx - a.dx) * t;
-    const dz = a.dz + (b.dz - a.dz) * t;
-    const l = Math.hypot(dx, dz) || 1;
-    return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, dx: dx / l, dz: dz / l };
-  };
-  // portais: vãos abertos de ~40 m (p.portais, frações do comprimento) por onde o parque atravessa o anel
-  const portais = (p.portais ?? []).map((f) => f * total);
-  const topos = [];
-  for (let mIdx = 0; mIdx < nMod; mIdx++) {
-    const s0 = inicio[mIdx];
-    const s1 = s0 + lMods[mIdx];
-    if (portais.some((c) => Math.abs((s0 + s1) / 2 - c) < 20)) continue;
-    const t = nMod > 1 ? mIdx / (nMod - 1) : 0;
-    // o perfil sobe de alturas[0] a alturas[1] numa curva macia (a plateia do anfiteatro) com uma onda larga por cima
-    // (uma serra, não uma escada): vãos vizinhos diferem de 0 a 2 andares
-    const suave = t * t * (3 - 2 * t);
-    // contínuo (a moradia da sede v2): a cobertura corre sem a onda e as juntas sobem até ela; lê como um prédio só
-    const onda = p.continuo ? 0 : 0.1 * Math.sin(t * Math.PI * 3 + sem * 6.28);
-    const alvo = (p.alturas[0] + (p.alturas[1] - p.alturas[0]) * suave) * (1 + onda);
-    const pav = Math.max(6, Math.round(alvo / PE));
-    const H = pav * PE;
-    const fundo = fundoBase;
-    topos.push({ s0, s1, H });
-    const meio = at((s0 + s1) / 2);
-    const y = g.chao(meio.x, meio.z);
-    // degraus: a cada 4 andares o lado de dentro recua 3,5 m (terraço verde), até sobrar 10 m de fundo
-    const degraus = [];
-    let d = fundo;
-    for (let yy = 0; yy < H - 1e-6; yy += 4 * PE) {
-      degraus.push({ y0: yy, y1: Math.min(H, yy + 4 * PE), d });
-      d = Math.max(10, d - 3.5);
-    }
-    const q = Math.max(2, Math.ceil((s1 - s0) / 6));
-    const seg = [];
-    for (let s = 0; s <= q; s++) seg.push(at(s0 + ((s1 - s0) * s) / q));
-    // cada degrau é um prisma curvo: de fora (-fundo/2 do eixo, para longe de dentro) até fora + d
-    degraus.forEach((dg, i) => {
-      const fora = (e) => [e.x - (e.dx * fundo) / 2, e.z - (e.dz * fundo) / 2];
-      const dentro = (e) => [e.x - (e.dx * fundo) / 2 + e.dx * dg.d, e.z - (e.dz * fundo) / 2 + e.dz * dg.d];
-      const poly = [];
-      for (const e of seg) poly.push(...fora(e));
-      for (let s = seg.length - 1; s >= 0; s--) poly.push(...dentro(seg[s]));
-      paredes(g.vidro, poly, y + dg.y0, y + dg.y1, k, y);
-      const ult = i === degraus.length - 1;
-      tampa(g.opaco, poly, y + dg.y1, ult ? K.telhadoVerde : K.jardim, true);
-      // árvores no terraço (o vale verde por dentro)
-      if (!ult && g.arvores) {
-        const larg = degraus[i].d - degraus[i + 1].d;
-        if (larg > 2) {
-          for (let a = 1; a < seg.length - 1; a += 2) {
-            const e = seg[a];
-            const [px, pz] = dentro(e);
-            const tx = px - e.dx * larg * 0.5;
-            const tz = pz - e.dz * larg * 0.5;
-            if (hashF(a, i, mIdx * 13 + sem * 50) < 0.55) arvore(g.arvores, tx, y + dg.y1, tz, { altura: 5 + 2 * hashF(a, i), raio: 1.8, semente: a + i * 31 + mIdx * 7, detalhe: 0 });
-          }
+  const { cx, cz, raio, fundo, altura: H, andares, de, ate, portais = [], vao = 40, pe: pePortal = 18, led, teto } = p;
+  const lod = g.lod ?? 1;
+  const peA = H / andares;
+  const meio = (led.y0 + led.y1) / 2;
+  const rF = raio + fundo / 2;
+  const rD = raio - fundo / 2;
+  const bal = 2.4;
+  const am = (de + ate) / 2;
+  const yb = g.chao(...noArco(cx, cz, raio, am));
+  const sem = hashF(Math.round(raio), Math.round(de), 13);
+  const kv = (a) => vidAnel(VIDRO.anel, sem, meio, peA, setorDoAnel(p, a));
+  const passoParede = 2;
+  const passoTeto = 3;
+
+  if (lod === 0) {
+    // marquises em geometria (o LOD0 de cada setor): topo branco, forro e testa, por fora e por dentro, em todas as
+    // lajes menos a do meio da faixa de LED; nos pórticos, só acima da passagem
+    for (const [r, sinal] of [[rF, 1], [rD, -1]]) {
+      const { A, meio: mp } = angulosDoArco(r, de, ate, passoParede, portais, vao);
+      for (let i = 0; i + 1 < A.length; i++) {
+        const a0 = A[i];
+        const a1 = A[i + 1];
+        const alvo = g.setor ? g.setor(setorDoAnel(p, (a0 + a1) / 2)).opaco : g.opaco;
+        const portal = noPortal((a0 + a1) / 2, portais, mp);
+        const rb = r + sinal * bal;
+        for (let l = 1; l < andares; l++) {
+          const yl = l * peA;
+          if (Math.abs(yl - meio) < peA - 0.01) continue;
+          if (portal && yl < pePortal + 0.5) continue;
+          const [ri, re] = sinal > 0 ? [r, rb] : [rb, r];
+          faixaArco(alvo, cx, cz, ri, re, a0, a1, yb + yl + 0.25, K.marquise, true);
+          faixaArco(alvo, cx, cz, ri, re, a0, a1, yb + yl - 0.25, K.forro, false);
+          testaArco(alvo, cx, cz, rb, a0, a1, yb + yl - 0.25, yb + yl + 0.25, K.marquise, sinal);
         }
       }
-    });
-    prisma(g.opaco, (() => {
-      const P = [];
-      for (const e of seg) P.push(e.x - (e.dx * (fundo / 2 + 2)), e.z - (e.dz * (fundo / 2 + 2)));
-      for (let s = seg.length - 1; s >= 0; s--) P.push(seg[s].x + (seg[s].dx * (fundo / 2 + 2)), seg[s].z + (seg[s].dz * (fundo / 2 + 2)));
-      return P;
-    })(), y - 2.5, y + 0.4, { paredes: K.granito, topo: K.piso });
-    g.caixa([meio.x, y, meio.z], (s1 - s0) / 2 + fundo / 2, H);
+    }
+    return;
   }
-  // juntas de vidro entre os vãos: 3 m, recuadas 1,2 m da face de fora e da de dentro, um andar abaixo do vão mais
-  // baixo. Sem elas as juntas eram vãos abertos e, do alto, o anel lia como uma fila de lâminas soltas (formas
-  // robóticas); com elas lê como a faixa contínua de Marina One e Tietgen. Os portais continuam abertos
-  const f0 = -fundoBase / 2 + 1.2;
-  const f1 = -fundoBase / 2 + 10 - 1.2;
-  for (let i = 0; i + 1 < topos.length; i++) {
-    const a = topos[i];
-    const b = topos[i + 1];
-    if (b.s0 - a.s1 > fenda + 1) continue; // portal
-    const hJ = Math.min(a.H, b.H) - (p.continuo ? 0 : PE);
-    if (hJ < 2 * PE) continue;
-    const q = [at(a.s1 - 0.3), at((a.s1 + b.s0) / 2), at(b.s0 + 0.3)];
-    const poly = [];
-    for (const e of q) poly.push(e.x + e.dx * f0, e.z + e.dz * f0);
-    for (let s = q.length - 1; s >= 0; s--) poly.push(q[s].x + q[s].dx * f1, q[s].z + q[s].dz * f1);
-    const y = g.chao(q[1].x, q[1].z);
-    paredes(g.vidro, poly, y, y + hJ, k, y);
-    tampa(g.opaco, poly, y + hJ, K.telhadoVerde, true);
+
+  if (g.sombra) {
+    // volume fechado: as duas paredes e o teto, em trechos de 4 graus
+    const n = Math.max(1, Math.ceil((ate - de) / 4));
+    for (let i = 0; i < n; i++) {
+      const a0 = de + ((ate - de) * i) / n;
+      const a1 = de + ((ate - de) * (i + 1)) / n;
+      paredeArco(g.opaco, cx, cz, yb, rF, a0, a1, 0, H, K.marquise, 1);
+      paredeArco(g.opaco, cx, cz, yb, rD, a0, a1, 0, H, K.marquise, -1);
+      faixaArco(g.opaco, cx, cz, rD, rF, a0, a1, yb + H, K.marquise, true);
+    }
+    return;
+  }
+
+  const yTeto = H - 1.0; // o forro da cobertura (a laje de 1 m com a borda branca)
+  // vidro curvo das duas faces; nos pórticos, só acima da passagem
+  for (const [r, sinal] of [[rF, 1], [rD, -1]]) {
+    const { A, meio: mp } = angulosDoArco(r, de, ate, passoParede, portais, vao);
+    for (let i = 0; i + 1 < A.length; i++) {
+      const a0 = A[i];
+      const a1 = A[i + 1];
+      const portal = noPortal((a0 + a1) / 2, portais, mp);
+      paredeArco(g.vidro, cx, cz, yb, r, a0, a1, portal ? pePortal : 0, yTeto, kv((a0 + a1) / 2), sinal);
+      if (g.fantasma) continue;
+      // calçada de pedra junto das faces (os balanços fazem a varanda coberta), fora das passagens
+      if (!portal && !noPortal((a0 + a1) / 2, portais, mp + 1.2)) {
+        const [ri, re] = sinal > 0 ? [r - 0.5, r + 6] : [r - 6, r + 0.5];
+        faixaArco(g.opaco, cx, cz, ri, re, a0, a1, yb + 0.18, K.piso, true);
+      }
+    }
+  }
+  // cobertura: as faixas em trechos de 3 graus; o balanço com o forro aceso por baixo e a testa branca
+  {
+    const { A } = angulosDoArco(rF, de, ate, passoTeto, [], vao);
+    const esporte = teto === 'esporte';
+    const faixas = esporte
+      ? [[rD - bal, rD + 3, K.marquise], [rD + 3, raio - 4.66, K.solar], [raio - 4.66, raio - 3.66, K.marquise], [raio + 3.66, raio + 4.66, K.marquise], [raio + 4.66, rF - 3, K.solar], [rF - 3, rF + bal, K.marquise]]
+      : [[rD - bal, rD + 3, K.marquise], [rD + 3, raio - 4, K.solar], [raio - 4, raio + 4, K.telhadoVerde], [raio + 4, rF - 3, K.solar], [rF - 3, rF + bal, K.marquise]];
+    for (let i = 0; i + 1 < A.length; i++) {
+      const a0 = A[i];
+      const a1 = A[i + 1];
+      if (g.fantasma) {
+        faixaArco(g.vidro, cx, cz, rD - bal, rF + bal, a0, a1, yb + H, K.marquise, true);
+        continue;
+      }
+      for (const [r0, r1, k] of faixas) faixaArco(g.opaco, cx, cz, r0, r1, a0, a1, yb + H - (k === K.solar ? 0.05 : 0), k, true);
+      // a pista de atletismo no eixo (uv: metros ao longo dela, distância à borda de dentro)
+      if (esporte) faixaArco(g.opaco, cx, cz, raio - 3.66, raio + 3.66, a0, a1, yb + H, K.pista, true, true);
+      testaArco(g.opaco, cx, cz, rF + bal, a0, a1, yb + yTeto, yb + H + 0.6, K.marquise, 1);
+      testaArco(g.opaco, cx, cz, rD - bal, a0, a1, yb + yTeto, yb + H + 0.6, K.marquise, -1);
+      faixaArco(g.opaco, cx, cz, rF, rF + bal, a0, a1, yb + yTeto, K.forro, false);
+      faixaArco(g.opaco, cx, cz, rD - bal, rD, a0, a1, yb + yTeto, K.forro, false);
+    }
+    if (esporte) quadrasEPiscinas(g, p, yb + H, rD + 3, raio - 4.66, raio + 4.66, rF - 3);
+  }
+  // pórticos: os lados da passagem em vidro de saguão e o teto aceso a pe metros
+  const mF = Math.asin(vao / 2 / rF) / RAD;
+  const mD = Math.asin(vao / 2 / rD) / RAD;
+  const qs = portais.flatMap((q0) => [q0 - 360, q0, q0 + 360]).filter((v) => v > de - mF + 1e-6 && v < ate + mF - 1e-6);
+  for (const q of qs) {
+    for (const s of [-1, 1]) {
+      const aF = q + s * mF;
+      const aD = q + s * mD;
+      if (aF < de - 1e-6 || aF > ate + 1e-6) continue;
+      const [xF, zF] = noArco(cx, cz, rF, aF);
+      const [xD, zD] = noArco(cx, cz, rD, aD);
+      // a normal olha para dentro da passagem (para o eixo)
+      const nx = Math.sin(q * RAD) * s;
+      const nz = -Math.cos(q * RAD) * s;
+      const L = Math.hypot(xD - xF, zD - zF);
+      g.vidro.quad([xF, yb, zF], [xD, yb, zD], [xD, yb + pePortal, zD], [xF, yb + pePortal, zF], [nx, 0, nz], [0, 0], [L, 0], [L, pePortal], [0, pePortal], vid(VIDRO.saguao, sem));
+    }
+    if (g.fantasma) continue;
+    // o teto da passagem (a parte dele que cabe neste trecho)
+    const t0 = Math.max(de, q - mF);
+    const t1 = Math.min(ate, q + mF);
+    const u0 = Math.max(de, q - mD);
+    const u1 = Math.min(ate, q + mD);
+    if (t1 - t0 < 1e-6) continue;
+    const P = [];
+    for (let i = 0; i <= 4; i++) P.push(...noArco(cx, cz, rF, t0 + ((t1 - t0) * i) / 4));
+    for (let i = 4; i >= 0; i--) P.push(...noArco(cx, cz, rD, u0 + ((u1 - u0) * i) / 4));
+    tampa(g.opaco, P, yb + pePortal, K.forroAceso, false);
+  }
+  // caixas de seleção que seguem a curva (~70 m cada)
+  const L = ((ate - de) * RAD) * raio;
+  const nC = Math.max(2, Math.round(L / 70));
+  const passoC = (ate - de) / nC;
+  const meiaC = Math.max(fundo / 2 + bal, raio * Math.sin((passoC * RAD) / 2)) + 2;
+  for (let q = 0; q < nC; q++) {
+    const [mx, mz] = noArco(cx, cz, raio, de + passoC * (q + 0.5));
+    g.caixa([mx, yb, mz], meiaC, H, meiaC, p.id);
   }
 }
 
 /**
- * Biblioteca em diamante (Biblioteca Nacional do Catar, Tianjin): quadrado de 76 m com uma quina apontada para quem
- * chega; a placa do teto se dobra na diagonal, levantando as quinas da frente e do fundo a 55 m; a esfera de 36 m
- * atravessa a dobra (o olho); o pináculo sobe da quina do fundo a 75 m.
+ * Teto esportivo do Horizon Ring: quadras de tênis (36,6 x 18,3 m com a área em volta) e piscinas de 50 m (com o deck),
+ * em sequência ao longo das duas faixas ao lado da pista, entre campos de painéis solares. Cada peça é um retângulo
+ * tangente ao arco, 6 a 8 cm acima da cobertura.
  */
-function biblioteca(g, p) {
-  const rot = p.olhar ? rotParaOlhar(p.x, p.z, p.olhar[0], p.olhar[1]) : p.rot ?? 0;
-  const y = g.chao(p.x, p.z);
-  const e = (p.lado ?? 76) / 76; // escala (o plano A v2 pede 64 m, no eixo leste entre o anel viário e a borda)
-  const L = (76 * e) / Math.SQRT2; // meia diagonal
-  const alto = 55 * e;
-  const baixo = 18 * e;
-  const sem = hashF(Math.round(p.x), Math.round(p.z), 3);
-  const k = vid(VIDRO.biblioteca, sem);
-  // quinas em volta: A frente (+z local), B direita, C fundo, D esquerda
-  const loc = [[0, L], [L, 0], [0, -L], [-L, 0]];
-  const Q = aoMundo(loc.flat(), p.x, p.z, rot);
-  const H = [alto, baixo, alto, baixo];
-  const pt = (i) => [Q[2 * i], Q[2 * i + 1]];
-  prisma(g.opaco, aoMundo([0, L + 8, L + 8, 0, 0, -L - 8, -L - 8, 0], p.x, p.z, rot), y - 2, y + 0.6, { paredes: K.granito, topo: K.piso });
-  for (let i = 0; i < 4; i++) {
-    const [ax, az] = pt(i);
-    const [bx, bz] = pt((i + 1) % 4);
-    const l = Math.hypot(bx - ax, bz - az);
-    const nn = [(bz - az) / l, 0, -(bx - ax) / l];
-    // parede com o topo inclinado (de H[i] a H[i+1]); a quina alta da frente fica aberta em vidro (entrada)
-    const i0 = g.vidro.v(ax, y + 0.6, az, ...nn, 0, 0.6, k);
-    const i1 = g.vidro.v(bx, y + 0.6, bz, ...nn, l, 0.6, k);
-    const i2 = g.vidro.v(bx, y + H[(i + 1) % 4], bz, ...nn, l, H[(i + 1) % 4], k);
-    const i3 = g.vidro.v(ax, y + H[i], az, ...nn, 0, H[i], k);
-    g.vidro.tri(i0, i1, i2);
-    g.vidro.tri(i0, i2, i3);
-  }
-  // placa dobrada: duas águas da diagonal B-D (baixa) às quinas A e C (altas), com 1,5 m de espessura
-  const P = (i, dy = 0) => [Q[2 * i], y + H[i] + dy, Q[2 * i + 1]];
-  const faceTri = (a, b, c, dy, kk) => {
-    const A = P(a, dy), B = P(b, dy), C = P(c, dy);
-    const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2];
-    const vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    if (ny < 0) [nx, ny, nz] = [-nx, -ny, -nz];
-    const l = Math.hypot(nx, ny, nz) || 1;
-    const i0 = g.opaco.v(A[0], A[1], A[2], nx / l, ny / l, nz / l, A[0], A[2], kk);
-    const i1 = g.opaco.v(B[0], B[1], B[2], nx / l, ny / l, nz / l, B[0], B[2], kk);
-    const i2 = g.opaco.v(C[0], C[1], C[2], nx / l, ny / l, nz / l, C[0], C[2], kk);
-    g.opaco.tri(i0, i1, i2);
+function quadrasEPiscinas(g, p, y, rA0, rA1, rB0, rB1) {
+  const { cx, cz, de, ate } = p;
+  const ret = (r, a, L, W, yy, k, uvLocal) => {
+    const t = [-Math.sin(a * RAD), Math.cos(a * RAD)];
+    const n = [Math.cos(a * RAD), Math.sin(a * RAD)];
+    const [ox, oz] = noArco(cx, cz, r, a);
+    const c = (sl, sw) => [ox + t[0] * sl * L / 2 + n[0] * sw * W / 2, yy, oz + t[1] * sl * L / 2 + n[1] * sw * W / 2];
+    const P = [c(-1, -1), c(1, -1), c(1, 1), c(-1, 1)];
+    const uv = uvLocal ? [[-L / 2, -W / 2], [L / 2, -W / 2], [L / 2, W / 2], [-L / 2, W / 2]] : P.map((q) => [q[0], q[2]]);
+    g.opaco.quad(...P, [0, 1, 0], ...uv, k);
   };
-  faceTri(0, 1, 3, 1.5, K.pedra);
-  faceTri(2, 3, 1, 1.5, K.pedra);
-  for (let i = 0; i < 4; i++) {
-    const a = P(i, 0), b = P((i + 1) % 4, 0);
-    const a2 = P(i, 1.5), b2 = P((i + 1) % 4, 1.5);
-    const l = Math.hypot(b[0] - a[0], b[2] - a[2]);
-    const nn = [(b[2] - a[2]) / l, 0, -(b[0] - a[0]) / l];
-    g.opaco.quad(a, b, b2, a2, nn, [0, 0], [l, 0], [l, 1.5], [0, 1.5], K.champanhe);
+  // padrões das duas faixas (Q quadra, P piscina, S campo solar de 60 m): a de dentro com as piscinas, a de fora com as
+  // quadras em fila
+  const seq = { dentro: ['Q', 'Q', 'P', 'S', 'Q', 'P', 'S'], fora: ['Q', 'Q', 'Q', 'S', 'Q', 'Q', 'S'] };
+  const comp = { Q: 36.6, P: 54, S: 60 };
+  for (const [faixa, r0, r1] of [['dentro', rA0, rA1], ['fora', rB0, rB1]]) {
+    const r = (r0 + r1) / 2;
+    const W = r1 - r0 - 2;
+    const margem = (48 / r) / RAD; // longe dos pórticos
+    let s = 0;
+    let k = Math.floor(hashF(Math.round(de), faixa === 'dentro' ? 1 : 2) * 3);
+    let a = de + margem;
+    while (true) {
+      const tipo = seq[faixa][k % seq[faixa].length];
+      const L = comp[tipo];
+      const da = (L / r) / RAD;
+      if (a + da > ate - margem) break;
+      const ac = a + da / 2;
+      if (tipo === 'Q') ret(r, ac, L, Math.min(W, 18.3), y + 0.06, K.quadra, true);
+      else if (tipo === 'P') {
+        ret(r, ac, L, Math.min(W, 20), y + 0.05, K.deck, false);
+        ret(r, ac, 50, Math.min(W - 4, 15), y + 0.08, K.piscina, false);
+      }
+      a += da + (8 / r) / RAD;
+      k++;
+      if (++s > 40) break;
+    }
   }
-  // esfera de 36 m (o olho) atravessando a dobra, acesa à noite
-  const perfil = [];
-  for (let j = 0; j <= 10; j++) {
-    const t = -Math.PI / 2 + (j / 10) * Math.PI;
-    perfil.push([18 * e * Math.cos(t), y + 20 * e + 18 * e * Math.sin(t)]);
-  }
-  torno(g.vidro, p.x, p.z, perfil, 18, vid(VIDRO.lanterna, sem));
-  // pináculo da quina do fundo até 75 m
-  const [cx, cz] = pt(2);
-  barra(g.opaco, [cx, y + alto + 1.5, cz], [cx, y + 75 * e, cz], 0.9, 6, K.champanhe);
-  g.caixa([p.x, y, p.z], L + 8, 75 * e);
 }
 
-/** Vida: casca de vidro em gota (Jewel Changi) com óculo e o vórtice de água, e as Supertrees em volta. */
-function vida(g, p) {
-  const y = g.chao(p.x, p.z);
-  const R = p.diametro / 2;
-  const H = p.altura;
-  const sem = hashF(Math.round(p.x), Math.round(p.z), 5);
-  const perfil = [[R * 0.98, 0], [R, 5], [R * 0.99, 14], [R * 0.92, 27], [R * 0.78, 41], [R * 0.58, 54], [R * 0.34, 64], [R * 0.14, 69.2], [6, H]].map(([r, h]) => [r, y + (h * H) / 70]);
-  torno(g.vidro, p.x, p.z, perfil, 32, vid(VIDRO.cupula, sem), { ex: 1, ez: 0.84, rot: p.rot ?? 0 });
-  prisma(g.opaco, aoMundo(elipse(R + 6, (R + 6) * 0.84, 32), p.x, p.z, p.rot ?? 0), y - 2, y + 0.8, { paredes: K.granito, topo: K.piso });
-  // anel do óculo e o vórtice (a cascata de 40 m que cai pelo óculo)
-  cilindro(g.opaco, p.x, p.z, y + H - 0.8, y + H + 0.6, 6.4, 6.4, 16, K.champanhe, { topo: false });
-  cilindro(g.opaco, p.x, p.z, y + H - 40, y + H + 0.2, 3.2, 4.4, 10, K.vortice, { topo: true });
-  g.caixa([p.x, y, p.z], R, H);
+// ------------------------------------------------------------------------------------------------ o pódio
+
+/**
+ * Pódio redondo das torres (D89, as Petronas): tambor de 40 m com o vidro curvo e as marquises do shader (a mesma
+ * língua dos anéis), embasamento de granito que desce ao leito do lago, a cornija branca com a linha de LED, a praça no
+ * topo com as jardineiras, o guarda-corpo de vidro e, nos arcos das Dream Falls, a parede de granito escuro e o canal
+ * raso de onde a água escorre. Quatro escadas rolantes em tubos de vidro sobem da praça do chão (raio 152) ao topo.
+ */
+function podio(g, p) {
+  const { cx, cz, raio: R, altura: H, escadas = [], cachoeiras = [], abertura = 60 } = p;
+  const y = g.chao(cx, cz);
+  const yBase = y + LAGO.fundo - 0.4;
+  const n = 96;
+  const naQueda = (a) => cachoeiras.some((q) => Math.abs(difGraus(a, q)) < abertura / 2);
+  if (g.sombra) {
+    cilindro(g.opaco, cx, cz, y, y + H, R, R, 32, K.granito, { topo: true });
+    return;
+  }
+  const kv = vidAnel(VIDRO.anel, 0.41, 900, 5, SETOR_SEM);
+  for (let i = 0; i < n; i++) {
+    const a0 = (360 * i) / n;
+    const a1 = (360 * (i + 1)) / n;
+    if (naQueda((a0 + a1) / 2) && !g.fantasma) {
+      paredeArco(g.opaco, cx, cz, yBase, R, a0, a1, 0, y + H - yBase, K.granitoEscuro, 1);
+      continue;
+    }
+    if (!g.fantasma) paredeArco(g.opaco, cx, cz, yBase, R, a0, a1, 0, y + 1.2 - yBase, K.granito, 1);
+    paredeArco(g.vidro, cx, cz, y, R - 0.4, a0, a1, 1.2, H - 1.6, kv, 1);
+  }
+  if (!g.fantasma) {
+    // cornija branca com a linha de LED, o mesmo traço dos anéis
+    cilindro(g.opaco, cx, cz, y + H - 1.6, y + H + 0.3, R + 0.6, R + 0.6, n, K.marquise, { topo: false });
+    cilindro(g.opaco, cx, cz, y + H - 1.0, y + H - 0.6, R + 0.65, R + 0.65, n, K.led, { topo: false });
+  }
+  // a praça do topo (a pedra clara das Petronas) e as jardineiras com árvores em volta das torres
+  tampa(g.opaco, aoMundo(elipse(R + 0.6, R + 0.6, n), cx, cz, 0), y + H + 0.3, g.fantasma ? K.marquise : K.pisoClaro, true);
+  if (g.fantasma) {
+    g.caixa([cx, y, cz], R, H);
+    return;
+  }
+  const noPar = (x, z) => {
+    const c = Math.cos(PAR.rot);
+    const s = Math.sin(PAR.rot);
+    const dx = x - cx;
+    const dz = z - cz;
+    const lx = c * dx - s * dz;
+    const lz = s * dx + c * dz;
+    return Math.abs(lx) < 54 && Math.abs(lz) < 30;
+  };
+  const nJ = 48;
+  for (let i = 0; i < nJ; i++) {
+    const a0 = (360 * i) / nJ;
+    const a1 = (360 * (i + 0.72)) / nJ;
+    const am = (a0 + a1) / 2;
+    if (escadas.some((q) => Math.abs(difGraus(am, q)) < 6) || naQueda(am)) continue;
+    const [mx, mz] = noArco(cx, cz, 69, am);
+    if (noPar(mx, mz)) continue;
+    paredeArco(g.opaco, cx, cz, y + H + 0.3, 73, a0, a1, 0, 0.7, K.pedra, 1);
+    paredeArco(g.opaco, cx, cz, y + H + 0.3, 65, a0, a1, 0, 0.7, K.pedra, -1);
+    faixaArco(g.opaco, cx, cz, 65, 73, a0, a1, y + H + 0.95, K.jardim, true);
+    g.arvores?.push({ x: mx, y: y + H + 1, z: mz, especie: 'oiti', altura: 8 + 2 * hashF(i, 3), giro: hashF(i, 5) * 6.28 });
+  }
+  // guarda-corpo de vidro na borda (fora dos canais das quedas)
+  for (let i = 0; i < n; i++) {
+    const a0 = (360 * i) / n;
+    const a1 = (360 * (i + 1)) / n;
+    if (naQueda((a0 + a1) / 2)) continue;
+    paredeArco(g.vidro, cx, cz, y + H + 0.3, R - 0.2, a0, a1, 0, 1.2, vid(VIDRO.parapeito, 0.5), 1);
+  }
+  // canais das Dream Falls: o espelho raso de onde a água escorre para a borda e a soleira de bronze
+  for (const q of cachoeiras) {
+    const a0 = q - abertura / 2;
+    const a1 = q + abertura / 2;
+    const m = 12;
+    for (let i = 0; i < m; i++) {
+      const b0 = a0 + ((a1 - a0) * i) / m;
+      const b1 = a0 + ((a1 - a0) * (i + 1)) / m;
+      faixaArco(g.opaco, cx, cz, 70, R, b0, b1, y + H + 0.32, K.aguaRasa, true);
+      faixaArco(g.opaco, cx, cz, R, R + 0.6, b0, b1, y + H + 0.1, K.bronze, true);
+      testaArco(g.opaco, cx, cz, 70, b0, b1, y + H + 0.3, y + H + 0.6, K.granito, -1);
+    }
+  }
+  // escadas rolantes: tubos de vidro do chão (raio 152) ao topo (raio 80), com a viga branca por baixo e o pavilhão de
+  // entrada
+  for (const q of escadas) {
+    const t = [Math.cos(q * RAD), Math.sin(q * RAD)];
+    const lat = [-t[1], t[0]];
+    const ra = 152;
+    const rb = 80;
+    const ya = y + 0.3;
+    const yt = y + H + 0.3;
+    const L = Math.hypot(ra - rb, yt - ya);
+    const P = (r, yy, w, h) => [cx + t[0] * r + lat[0] * w, yy + h, cz + t[1] * r + lat[1] * w];
+    const w = 2.1;
+    const h = 3.6;
+    const kE = vid(VIDRO.escada, 0.3);
+    // as duas laterais e o teto do tubo (uv: metros ao longo dele, altura acima do piso)
+    for (const s of [-1, 1]) g.vidro.quad(P(ra, ya, s * w, 0), P(rb, yt, s * w, 0), P(rb, yt, s * w, h), P(ra, ya, s * w, h), [lat[0] * s, 0, lat[1] * s], [0, 0], [L, 0], [L, h], [0, h], kE);
+    const nTeto = [t[0] * (yt - ya) / L, (ra - rb) / L, t[1] * (yt - ya) / L];
+    g.vidro.quad(P(ra, ya, -w, h), P(rb, yt, -w, h), P(rb, yt, w, h), P(ra, ya, w, h), nTeto, [0, h], [L, h], [L, h], [0, h], kE);
+    // a viga branca por baixo e as bordas
+    const nBaixo = nTeto.map((v) => -v);
+    g.opaco.quad(P(ra, ya - 0.9, -w - 0.2, 0), P(rb, yt - 0.9, -w - 0.2, 0), P(rb, yt - 0.9, w + 0.2, 0), P(ra, ya - 0.9, w + 0.2, 0), nBaixo, [0, 0], [L, 0], [L, 4], [0, 4], K.marquise);
+    for (const s of [-1, 1]) g.opaco.quad(P(ra, ya - 0.9, s * (w + 0.2), 0), P(rb, yt - 0.9, s * (w + 0.2), 0), P(rb, yt, s * (w + 0.2), 0), P(ra, ya, s * (w + 0.2), 0), [lat[0] * s, 0, lat[1] * s], [0, 0], [L, 0], [L, 1], [0, 1], K.marquise);
+    // dois pilares finos (na praça e na floresta) e o pavilhão de vidro da entrada
+    for (const r of [134, 108]) {
+      const yy = ya + ((yt - ya) * (ra - r)) / (ra - rb);
+      cilindro(g.opaco, cx + t[0] * r, cz + t[1] * r, y - 0.5, yy - 0.9, 0.7, 0.7, 8, K.marquise, { topo: false });
+    }
+    const [px, pz] = noArco(cx, cz, ra + 5, q);
+    caixa(g.vidro, px, pz, 5, 4.5, y + 0.3, y + 5, vid(VIDRO.saguao, 0.6), { ux: t[0], uz: t[1], topo: false });
+    caixa(g.opaco, px, pz, 5.6, 5.1, y + 5, y + 5.6, K.marquise, { ux: t[0], uz: t[1] });
+  }
+  g.caixa([cx, y, cz], R, H);
+}
+
+// ------------------------------------------------------------------------------------------------ água
+
+/**
+ * Dream Falls (D89): duas quedas de 40 m da borda do pódio para o Mirror Lake, em arcos de `abertura` graus. A lâmina
+ * cai numa curva que se afasta da parede, a película corre no canal do topo até a borda, a névoa sobe onde a água bate e
+ * a espuma se espalha no lago. Tudo no material 'cascata' (o shader anima).
+ */
+function cachoeira(g, p) {
+  const { cx, cz, raio: R, altura: H, angulos, abertura } = p;
+  const y = g.chao(cx, cz);
+  const nivel = g.nivelAgua ?? y + LAGO.nivel;
+  if (g.fantasma || g.sombra || !g.efeitos) {
+    for (const q of angulos) {
+      const [x, z] = noArco(cx, cz, R + 6, q);
+      g.caixa([x, nivel, z], 10, H, 10);
+    }
+    return;
+  }
+  const lod = g.lod ?? 1;
+  for (const [k, q] of angulos.entries()) {
+    const a0 = q - abertura / 2;
+    const a1 = q + abertura / 2;
+    const nA = 30;
+    const nV = 7;
+    const fase = 0.37 * k;
+    // a lâmina: do topo (y + H) ao lago; o raio cresce com o quadrado da queda (a parábola da água que sai da borda)
+    const base = g.efeitos.vertices;
+    for (let j = 0; j <= nV; j++) {
+      const t = j / nV;
+      const yy = y + H + 0.2 - (y + H + 0.2 - nivel) * t;
+      const r = R + 0.7 + 2.2 * t * t;
+      for (let i = 0; i <= nA; i++) {
+        const a = a0 + ((a1 - a0) * i) / nA;
+        const c = Math.cos(a * RAD);
+        const s = Math.sin(a * RAD);
+        g.efeitos.v(cx + r * c, yy, cz + r * s, c, 0, s, R * a * RAD, y + H + 0.2 - yy, [CASCATA.lamina, fase, 0, 0]);
+      }
+    }
+    const Lv = nA + 1;
+    for (let j = 0; j < nV; j++) for (let i = 0; i < nA; i++) {
+      const a = base + j * Lv + i;
+      g.efeitos.tri(a, a + 1, a + Lv + 1);
+      g.efeitos.tri(a, a + Lv + 1, a + Lv);
+    }
+    // a película do canal do topo e a espuma no lago (uv: metros ao longo, distância à linha de partida)
+    for (let i = 0; i < 12; i++) {
+      const b0 = a0 + ((a1 - a0) * i) / 12;
+      const b1 = a0 + ((a1 - a0) * (i + 1)) / 12;
+      const w = [CASCATA.faixa, fase, 0, 0];
+      const P = [[70, b0], [70, b1], [R + 0.7, b1], [R + 0.7, b0]].map(([r, a]) => noArco(cx, cz, r, a));
+      g.efeitos.quad(...P.map(([x, z]) => [x, y + H + 0.42, z]), [0, 1, 0], [70 * b0 * RAD, 0], [70 * b1 * RAD, 0], [70 * b1 * RAD, R + 0.7 - 70], [70 * b0 * RAD, R + 0.7 - 70], w);
+      const e = [CASCATA.espuma, fase, 0, 0];
+      const Q = [[R + 0.3, b0], [R + 0.3, b1], [R + 13, b1], [R + 13, b0]].map(([r, a]) => noArco(cx, cz, r, a));
+      g.efeitos.quad(...Q.map(([x, z]) => [x, nivel + 0.06, z]), [0, 1, 0], [R * b0 * RAD, -2.6], [R * b1 * RAD, -2.6], [R * b1 * RAD, 10.1], [R * b0 * RAD, 10.1], e);
+    }
+    // a névoa: duas cascas que se abrem para fora
+    cascaEfeito(g.efeitos, cx, cz, nivel, nivel + 18, R + 1.6, R + 10, lod === 0 ? 24 : 16, CASCATA.nevoa, 3, fase, a0 * RAD, a1 * RAD);
+    cascaEfeito(g.efeitos, cx, cz, nivel, nivel + 9, R + 3, R + 13, 16, CASCATA.nevoa, 2, fase + 0.5, a0 * RAD, a1 * RAD);
+    const [x, z] = noArco(cx, cz, R + 6, q);
+    g.caixa([x, nivel, z], R * Math.sin((abertura / 2) * RAD) + 6, H + 2, R * Math.sin((abertura / 2) * RAD) + 6);
+  }
 }
 
 /**
- * Supertree de Gardens by the Bay: o tronco de jardim vertical nasce largo, afina e se abre num hiperboloide até a
- * copa de aço (nunca a haste fina com um prato em cima, que lia como taça ou guarda-chuva), acesa à noite.
+ * Fontes dançantes no Mirror Lake (Dubai Fountain): os jatos grandes no meio do anel de água, os pequenos 3,5 m para
+ * dentro e para fora, intercalados, fora das quedas e das escadas rolantes. A coreografia é do sombreador (torre.js).
+ */
+function fontes(g, p) {
+  const { cx, cz, r, n, evitar = [] } = p;
+  const livre = (a) => !evitar.some(([a0, a1]) => a >= a0 - 1e-6 && a <= a1 + 1e-6);
+  const angs = [];
+  for (let i = 0; i < n; i++) {
+    const a = (360 * (i + 0.5)) / n;
+    if (livre(a)) angs.push(a);
+  }
+  const lista = [];
+  angs.forEach((a, i) => {
+    const f = angs.length > 1 ? i / (angs.length - 1) : 0.5;
+    const [x, z] = noArco(cx, cz, r, a);
+    lista.push({ x, z, f, tipo: 0 });
+    if (i % 2 === 0) {
+      const [x2, z2] = noArco(cx, cz, r + (i % 4 === 0 ? 3.5 : -3.5), a + 180 / n);
+      lista.push({ x: x2, z: z2, f, tipo: 1 });
+    }
+  });
+  if (g.jatos && !g.fantasma) g.jatos.push(...lista);
+  // caixas de seleção em volta do anel de água (uma por grupo de jatos)
+  const y = g.chao(cx, cz);
+  for (let q = 0; q < 8; q++) {
+    const [x, z] = noArco(cx, cz, r, 22.5 + 45 * q);
+    g.caixa([x, y - 1, z], 14, 20, 14);
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ as torres do bosque
+
+/**
+ * Codex Tower (D89): 300 m de prisma facetado de vidro quase preto (o Black Diamond de Copenhague), em seis lances que
+ * giram e afinam, cada um torcido contra o de baixo, e a crista no alto; as arestas dos lances com a linha de LED. Na
+ * base, 36 m de átrio de livros (a Biblioteca de Tianjin Binhai): os terraços de estantes em curva, abertos para o
+ * centro sob o balanço do prisma, com a esfera acesa no meio, e o vidro escuro atrás.
+ */
+function codex(g, p) {
+  const { x, z, altura: H, rot = 0 } = p;
+  const y = g.chao(x, z);
+  const sem = hashF(Math.round(x), Math.round(z), 21);
+  const kv = vid(VIDRO.codex, sem);
+  const local = (lx, lz) => [x + Math.cos(rot) * lx + Math.sin(rot) * lz, z - Math.sin(rot) * lx + Math.cos(rot) * lz];
+  // os lances: planta hexagonal alongada (58 x 36), cada um girado e encolhido, com o lado de dentro (o -z local) mais
+  // recuado no alto: a silhueta lê como um cristal que se inclina para o parque
+  const BASE = 36;
+  const niveis = [BASE, 92, 150, 204, 252, 284];
+  const escala = [1, 0.95, 0.88, 0.8, 0.7, 0.58];
+  const giro = [0, 6, -4, 7, -5, 8];
+  const hexa = (k) => {
+    const s = escala[k];
+    const a = giro[k] * RAD;
+    const pts = [[29, 0], [14, 18], [-14, 18], [-29, 0], [-14, -18], [14, -18]];
+    return pts.map(([px, pz]) => {
+      const lx = px * s;
+      const lz = pz * s;
+      return [Math.cos(a) * lx - Math.sin(a) * lz + 2.5 * k, Math.sin(a) * lx + Math.cos(a) * lz - 1.5 * k];
+    });
+  };
+  const aneis = niveis.map((_, k) => hexa(k));
+  // faceta: triângulo com a normal dele (vértices próprios), u ao longo do perímetro, v a altura acima do pé
+  const faceta = (m, A, B, C, uA, uB, uC, k) => {
+    const pA = [...local(A[0], A[2])], pB = [...local(B[0], B[2])], pC = [...local(C[0], C[2])];
+    const P = [[pA[0], y + A[1], pA[1]], [pB[0], y + B[1], pB[1]], [pC[0], y + C[1], pC[1]]];
+    const e1 = [P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]];
+    const e2 = [P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]];
+    let nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const l = Math.hypot(...nn) || 1;
+    nn = nn.map((v) => v / l);
+    // virada para fora: o eixo do prisma fica atrás (5 m abaixo, para as facetas da crista olharem para cima)
+    const [ccx, ccz] = local(6.25, -3.75);
+    const mx = (P[0][0] + P[1][0] + P[2][0]) / 3 - ccx;
+    const my = (P[0][1] + P[1][1] + P[2][1]) / 3 - ((P[0][1] + P[1][1] + P[2][1]) / 3 - 5);
+    const mz = (P[0][2] + P[1][2] + P[2][2]) / 3 - ccz;
+    if (nn[0] * mx + nn[1] * my + nn[2] * mz < 0) nn = nn.map((v) => -v);
+    const i0 = m.v(...P[0], ...nn, uA, A[1] - BASE, k);
+    const i1 = m.v(...P[1], ...nn, uB, B[1] - BASE, k);
+    const i2 = m.v(...P[2], ...nn, uC, C[1] - BASE, k);
+    m.tri(i0, i1, i2);
+  };
+  const perim = (k, i) => {
+    let u = 0;
+    for (let j = 0; j < i; j++) {
+      const [ax, az] = aneis[k][j];
+      const [bx, bz] = aneis[k][(j + 1) % 6];
+      u += Math.hypot(bx - ax, bz - az);
+    }
+    return u;
+  };
+  const alvo = g.sombra ? g.opaco : g.vidro;
+  const kk = g.sombra ? K.granito : kv;
+  for (let k = 0; k + 1 < aneis.length; k++) {
+    for (let i = 0; i < 6; i++) {
+      const j = (i + 1) % 6;
+      const A = [aneis[k][i][0], niveis[k], aneis[k][i][1]];
+      const B = [aneis[k][j][0], niveis[k], aneis[k][j][1]];
+      const C = [aneis[k + 1][i][0], niveis[k + 1], aneis[k + 1][i][1]];
+      const D = [aneis[k + 1][j][0], niveis[k + 1], aneis[k + 1][j][1]];
+      const uA = perim(k, i), uB = j ? perim(k, j) : perim(k, 6);
+      faceta(alvo, A, B, D, uA, uB, uB, kk);
+      faceta(alvo, A, D, C, uA, uB, uA, kk);
+    }
+  }
+  // a crista: o último lance fecha numa aresta de 22 m a 300 m
+  const top = aneis[aneis.length - 1];
+  const yTop = niveis[niveis.length - 1];
+  const R1 = [-11 + 12.5, H, -7.5];
+  const R2 = [11 + 12.5, H, -7.5];
+  // cada vértice do último lance sobe para a ponta mais perto da crista; onde a ponta muda, a faceta é um quadrilátero
+  const ponta = [R2, R2, R1, R1, R1, R2];
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6;
+    const A = [top[i][0], yTop, top[i][1]];
+    const B = [top[j][0], yTop, top[j][1]];
+    const uA = perim(5, i);
+    const uB = j ? perim(5, j) : perim(5, 6);
+    faceta(alvo, A, B, ponta[j], uA, uB, uB, kk);
+    if (ponta[i] !== ponta[j]) faceta(alvo, A, ponta[j], ponta[i], uA, uB, uA, kk);
+  }
+  // o fundo do prisma (o forro aceso sobre o átrio)
+  const base = aneis[0].flatMap(([px, pz]) => local(px, pz));
+  tampa(g.opaco, base, y + BASE, g.sombra ? K.granito : K.forroAceso, false);
+  if (g.sombra) {
+    // o átrio como um bloco
+    tampa(g.opaco, aoMundo(elipse(27, 15, 16), x, z, rot), y, K.granito, false);
+    return;
+  }
+  if (!g.fantasma) {
+    // linhas de LED nas arestas de cada lance (os cortes do cristal acesos à noite)
+    for (let k = 1; k < aneis.length; k++) {
+      for (let i = 0; i < 6; i++) {
+        const j = (i + 1) % 6;
+        const [ax, az] = local(...aneis[k][i]);
+        const [bx, bz] = local(...aneis[k][j]);
+        const [mx, mz] = local(2.5 * k, -1.5 * k);
+        const ox = (ax + bx) / 2 - mx;
+        const oz = (az + bz) / 2 - mz;
+        const ol = Math.hypot(ox, oz) || 1;
+        const d = 0.25;
+        const yy = y + niveis[k];
+        g.opaco.quad([ax + (ox / ol) * d, yy - 0.3, az + (oz / ol) * d], [bx + (ox / ol) * d, yy - 0.3, bz + (oz / ol) * d], [bx + (ox / ol) * d, yy + 0.3, bz + (oz / ol) * d], [ax + (ox / ol) * d, yy + 0.3, az + (oz / ol) * d], [ox / ol, 0, oz / ol], [0, 0], [1, 0], [1, 30], [0, 30], K.led);
+      }
+    }
+  }
+  // o átrio: vidro escuro atrás (a metade +z local, para o anel de fora) e os terraços de livros abertos para o centro
+  const A0 = 27;
+  const B0 = 15;
+  const nE = 24;
+  const pE = (a, b, t) => local(a * Math.cos(t), b * Math.sin(t));
+  for (let i = 0; i < nE; i++) {
+    const t0 = (Math.PI * i) / nE;
+    const t1 = (Math.PI * (i + 1)) / nE;
+    const [x0, z0] = pE(A0, B0, t0);
+    const [x1, z1] = pE(A0, B0, t1);
+    const L = Math.hypot(x1 - x0, z1 - z0);
+    const nx = (z1 - z0) / L;
+    const nz = -(x1 - x0) / L;
+    const [cx0, cz0] = local(0, 0);
+    const fora = ((x0 + x1) / 2 - cx0) * nx + ((z0 + z1) / 2 - cz0) * nz > 0 ? 1 : -1;
+    g.vidro.quad([x0, y, z0], [x1, y, z1], [x1, y + BASE, z1], [x0, y + BASE, z0], [nx * fora, 0, nz * fora], [i * L, 0], [(i + 1) * L, 0], [(i + 1) * L, BASE], [i * L, BASE], kv);
+  }
+  if (!g.fantasma) {
+    const nT = 7;
+    for (let k = 0; k < nT; k++) {
+      const a = A0 - 1 - 2.4 * k;
+      const b = B0 - 1 - 1.7 * k;
+      const a2 = a - 2.4;
+      const b2 = b - 1.7;
+      const y0 = y + 4.5 * k;
+      const y1 = y0 + 4.5;
+      for (let i = 0; i < nE; i++) {
+        const t0 = Math.PI + (Math.PI * i) / nE;
+        const t1 = Math.PI + (Math.PI * (i + 1)) / nE;
+        const [x0, z0] = pE(a, b, t0);
+        const [x1, z1] = pE(a, b, t1);
+        const [cx0, cz0] = local(0, 0);
+        const L = Math.hypot(x1 - x0, z1 - z0) || 1;
+        let nx = (z1 - z0) / L;
+        let nz = -(x1 - x0) / L;
+        if (((x0 + x1) / 2 - cx0) * nx + ((z0 + z1) / 2 - cz0) * nz < 0) {
+          nx = -nx;
+          nz = -nz;
+        }
+        // a estante (o espelho do terraço, virado para fora) e o piso do terraço de cima
+        g.opaco.quad([x0, y0, z0], [x1, y0, z1], [x1, y1, z1], [x0, y1, z0], [nx, 0, nz], [i * L, 0], [(i + 1) * L, 0], [(i + 1) * L, 4.5], [i * L, 4.5], K.livros);
+        const [x2, z2] = pE(a2, b2, t0);
+        const [x3, z3] = pE(a2, b2, t1);
+        g.opaco.quad([x0, y1, z0], [x1, y1, z1], [x3, y1, z3], [x2, y1, z2], [0, 1, 0], [x0, z0], [x1, z1], [x3, z3], [x2, z2], K.marquise);
+      }
+    }
+    // o piso do átrio e a esfera acesa no meio (o "olho" de Tianjin)
+    tampa(g.opaco, aoMundo(elipse(A0, B0, nE * 2), x, z, rot), y + 0.15, K.pisoClaro, true);
+    const [sx, sz] = local(0, -12);
+    const perfil = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = -Math.PI / 2 + (Math.PI * i) / 10;
+      perfil.push([Math.max(0.01, 8 * Math.cos(t)), y + 10 + 8 * Math.sin(t)]);
+    }
+    torno(g.vidro, sx, sz, perfil, 18, [VIDRO.lanterna, 0.4, 0, 0]);
+  }
+  g.caixa([x, y, z], 32, H, 32);
+}
+
+/**
+ * Torre oval (Helix Labs e Compass Tower, D89): planta elíptica, vidro do chão ao teto com a marquise branca em cada
+ * laje (a língua dos anéis) e a faixa de LED na mesma altura da do Horizon Ring; a Helix gira `torcao` graus do pé ao
+ * topo (a Torre Generali), a Compass sobe reta com a agulha. Casca no LOD1 (em faixas de 2 andares quando gira), as
+ * marquises no LOD0 do setor dela.
+ */
+function oval(g, p, setor) {
+  const { x, z, altura: H, a, b, torcao = 0, rot = 0, led, coroa } = p;
+  const y = g.chao(x, z);
+  const andares = Math.round(H / 6.43);
+  const peA = H / andares;
+  const meio = (led.y0 + led.y1) / 2;
+  const lod = g.lod ?? 1;
+  const nE = 48;
+  const bal = 2.2;
+  const giroEm = (yy) => rot + torcao * RAD * (yy / H);
+  const pto = (t, yy, d = 0) => {
+    const th = giroEm(yy);
+    const lx = (a + d) * Math.cos(t);
+    const lz = (b + d) * Math.sin(t);
+    return [x + Math.cos(th) * lx + Math.sin(th) * lz, y + yy, z - Math.sin(th) * lx + Math.cos(th) * lz];
+  };
+  const nrm = (t, yy) => {
+    const th = giroEm(yy);
+    let nx = Math.cos(t) / a;
+    let nz = Math.sin(t) / b;
+    const l = Math.hypot(nx, nz);
+    nx /= l;
+    nz /= l;
+    return [Math.cos(th) * nx + Math.sin(th) * nz, 0, -Math.sin(th) * nx + Math.cos(th) * nz];
+  };
+  // u ao longo do contorno (metros)
+  const U = [0];
+  for (let i = 1; i <= nE; i++) {
+    const t0 = (2 * Math.PI * (i - 1)) / nE;
+    const t1 = (2 * Math.PI * i) / nE;
+    U.push(U[i - 1] + Math.hypot(a * (Math.cos(t1) - Math.cos(t0)), b * (Math.sin(t1) - Math.sin(t0))));
+  }
+  if (lod === 0) {
+    const alvo = g.setor ? g.setor(setor).opaco : g.opaco;
+    for (let l = 1; l < andares; l++) {
+      const yl = l * peA;
+      if (Math.abs(yl - meio) < peA - 0.01) continue;
+      for (let i = 0; i < nE; i++) {
+        const t0 = (2 * Math.PI * i) / nE;
+        const t1 = (2 * Math.PI * (i + 1)) / nE;
+        for (const [dy, k, cima] of [[0.25, K.marquise, true], [-0.25, K.forro, false]]) {
+          const P = [pto(t0, yl + dy), pto(t1, yl + dy), pto(t1, yl + dy, bal), pto(t0, yl + dy, bal)];
+          alvo.quad(...P, [0, cima ? 1 : -1, 0], ...P.map((q) => [q[0], q[2]]), k);
+        }
+        const P = [pto(t0, yl - 0.25, bal), pto(t1, yl - 0.25, bal), pto(t1, yl + 0.25, bal), pto(t0, yl + 0.25, bal)];
+        alvo.quad(...P, nrm((t0 + t1) / 2, yl), [U[i], 0], [U[i + 1], 0], [U[i + 1], 0.5], [U[i], 0.5], K.marquise);
+      }
+    }
+    return;
+  }
+  const kv = vidAnel(VIDRO.oval, hashF(Math.round(x), Math.round(z), 31), meio, peA, setor);
+  const faixas = torcao ? Math.ceil(andares / 2) : 1;
+  const ys = Array.from({ length: faixas + 1 }, (_, j) => ((H - 1) * j) / faixas);
+  const alvo = g.sombra ? g.opaco : g.vidro;
+  const base = alvo.vertices;
+  for (const yy of ys) for (let i = 0; i <= nE; i++) {
+    const t = (2 * Math.PI * i) / nE;
+    alvo.v(...pto(t, yy), ...nrm(t, yy), U[i], yy, g.sombra ? K.granito : kv);
+  }
+  const L = nE + 1;
+  for (let j = 0; j < faixas; j++) for (let i = 0; i < nE; i++) {
+    const q = base + j * L + i;
+    alvo.tri(q, q + 1, q + L + 1);
+    alvo.tri(q, q + L + 1, q + L);
+  }
+  // cobertura: a laje branca com o balanço das marquises, o campo solar e a coroa
+  const topo = [];
+  for (let i = 0; i < nE; i++) {
+    const q = pto((2 * Math.PI * i) / nE, H, bal);
+    topo.push(q[0], q[2]);
+  }
+  tampa(g.opaco, topo, y + H, g.fantasma || g.sombra ? K.marquise : K.solar, true);
+  if (g.sombra) return;
+  if (!g.fantasma) {
+    for (let i = 0; i < nE; i++) {
+      const t0 = (2 * Math.PI * i) / nE;
+      const t1 = (2 * Math.PI * (i + 1)) / nE;
+      const P = [pto(t0, H - 1, bal), pto(t1, H - 1, bal), pto(t1, H + 1.4, bal), pto(t0, H + 1.4, bal)];
+      g.opaco.quad(...P, nrm((t0 + t1) / 2, H), [U[i], 0], [U[i + 1], 0], [U[i + 1], 2.4], [U[i], 2.4], K.marquise);
+      const F = [pto(t0, H - 1), pto(t1, H - 1), pto(t1, H - 1, bal), pto(t0, H - 1, bal)];
+      g.opaco.quad(...F, [0, -1, 0], ...F.map((q) => [q[0], q[2]]), K.forro);
+    }
+    // embasamento de pedra e a praça em volta
+    tampa(g.opaco, aoMundo(elipse(a + 22, b + 22, 40), x, z, rot), y + 0.16, K.pisoClaro, true);
+  }
+  if (coroa === 'agulha') {
+    cilindro(g.opaco, x, z, y + H + 1.4, y + H + 46, 2.4, 0.18, 8, K.metalClaro, { topo: false });
+    if (!g.fantasma) cilindro(g.opaco, x, z, y + H + 45, y + H + 46.5, 0.5, 0.3, 6, K.obstaculo, { topo: true });
+  }
+  g.caixa([x, y, z], a + bal + 2, H + (coroa === 'agulha' ? 46 : 2), a + bal + 2);
+}
+
+// ------------------------------------------------------------------------------------------------ o parque
+
+/**
+ * Anel de floresta em volta do lago (D88): o chão de mata escura; as árvores (a mata densa de copa redonda, as
+ * emergentes e as embaúbas) vão para a vegetação (g.arvores), marcadas `mata` (o domínio deixa de fora as que a grade
+ * da mata já desenha).
+ */
+function floresta(g, p) {
+  const { cx, cz, r0, r1 } = p;
+  const y = g.chao(cx + r1, cz);
+  if (g.sombra) return;
+  const n = 64;
+  for (let i = 0; i < n; i++) faixaArco(g.opaco, cx, cz, r0, r1, (360 * i) / n, (360 * (i + 1)) / n, y + 0.12, K.gramaEscura, true);
+  if (!g.arvores || g.fantasma) return;
+  const passo = 6.5;
+  for (let r = r0 + passo / 2; r < r1; r += passo) {
+    const nA = Math.floor((2 * Math.PI * r) / passo);
+    for (let i = 0; i < nA; i++) {
+      const t = ((i + 0.6 * hashF(i, Math.round(r), 3)) / nA) * 360;
+      const rr = r + (hashF(i, Math.round(r), 4) - 0.5) * passo * 0.5;
+      const [x, z] = noArco(cx, cz, rr, t);
+      const h = hashF(i, Math.round(r), 5);
+      const especie = h < 0.12 ? 'embauba' : h < 0.3 ? 'mata1' : h < 0.75 ? 'mata2' : 'mata3';
+      g.arvores.push({ x, y: y + 0.1, z, especie, mata: true });
+    }
+  }
+}
+
+/**
+ * O parque dentro do Meridian Ring (Burle Marx): o gramado deitado do anel da praça até o jardim do Meridian, o
+ * caminho em anel de 8 m a 290 m e os caminhos que ligam as Supertrees; os maciços de árvores vêm da mata do parque
+ * (mataDaSede, na grade da mata) e, sem ela, das árvores de g.arvores.
+ */
+function jardim(g, p, mata) {
+  const { cx, cz, r0, r1 } = p;
+  const y = g.chao(cx + r0, cz);
+  if (g.sombra) return;
+  const n = 120;
+  const nr = Math.max(1, Math.ceil((r1 - r0) / 45));
+  for (let j = 0; j < nr; j++) {
+    const ra = r0 + ((r1 - r0) * j) / nr;
+    const rb = r0 + ((r1 - r0) * (j + 1)) / nr;
+    for (let i = 0; i < n; i++) faixaArco(g.opaco, cx, cz, ra, rb, (360 * i) / n, (360 * (i + 1)) / n, y + 0.12, K.grama, true);
+  }
+  if (g.fantasma) return;
+  for (let i = 0; i < n; i++) faixaArco(g.opaco, cx, cz, 286, 294, (360 * i) / n, (360 * (i + 1)) / n, y + 0.2, K.piso, true);
+  // os maciços (a mata do parque) como árvores, para quando a grade da mata não os desenha
+  if (g.arvores && mata) {
+    for (let r = r0 + 6; r < r1 - 4; r += 11) {
+      const nA = Math.floor((2 * Math.PI * r) / 11);
+      for (let i = 0; i < nA; i++) {
+        const t = ((i + 0.7 * hashF(i, Math.round(r), 6)) / nA) * 360;
+        const [x, z] = noArco(cx, cz, r + (hashF(i, Math.round(r), 7) - 0.5) * 6, t);
+        if ((mata(x, z) ?? 0) < 0.6) continue;
+        const h = hashF(i, Math.round(r), 8);
+        g.arvores.push({ x, y: y + 0.1, z, especie: h < 0.5 ? 'oiti' : h < 0.8 ? 'mata2' : 'mata1', mata: true });
+      }
+    }
+  }
+}
+
+/**
+ * Supertree (Gardens by the Bay): o tronco de jardim vertical nasce largo e afina, com a treliça de aço em hélice por
+ * fora, e se abre no funil de nervuras até o aro (de lado, o céu passa entre as nervuras: nunca a taça ou o cogumelo
+ * chapado). A treliça acende à noite.
  */
 function supertree(g, p) {
   const y = g.chao(p.x, p.z);
   const h = p.altura;
-  const alvo = g.arvores ?? g.opaco;
-  const rb = Math.max(2.6, h * 0.075); // raio da base
-  const rm = rb * 0.55; // cintura
-  const tronco = [[rb, 0], [rb * 0.8, 0.12], [rm, 0.38], [rm * 1.05, 0.52], [rm * 1.5, 0.64]].map(([r, t]) => [r, y + h * t]);
-  torno(alvo, p.x, p.z, tronco, 10, K.tronco);
-  // copa: a treliça abre em curva do fim do tronco até 0,3 h de raio, com o aro no topo
-  const copa = [[rm * 1.5, 0.64], [h * 0.09, 0.74], [h * 0.17, 0.84], [h * 0.25, 0.93], [h * 0.3, 1.0]].map(([r, t]) => [r, y + h * t]);
-  torno(alvo, p.x, p.z, copa, 14, K.copaSuper);
-  // o aro do topo e a treliça aberta por cima: um anel, o cubo no meio e os raios (de cima lê a estrutura de aço
-  // com o chão aparecendo entre as barras, não o prato chapado de um cogumelo)
+  const m = g.opaco;
+  const rb = Math.max(2.4, h * 0.07);
+  const rm = rb * 0.55;
+  const tronco = [[rb, 0], [rb * 0.8, 0.12], [rm, 0.4], [rm * 1.1, 0.56], [rm * 1.5, 0.66]].map(([r, t]) => [r, y + h * t]);
+  if (g.sombra || g.fantasma) {
+    torno(m, p.x, p.z, tronco, 8, g.sombra ? K.granito : K.tronco);
+    torno(m, p.x, p.z, [[rm * 1.5, y + h * 0.66], [h * 0.3, y + h]], 10, K.trelica);
+    g.caixa([p.x, y, p.z], h * 0.3, h);
+    return;
+  }
+  torno(m, p.x, p.z, tronco, 8, K.tronco);
+  // a treliça em hélice por fora do tronco (6 barras de 3 lances)
+  const raioEm = (t) => {
+    for (let j = 0; j + 1 < tronco.length; j++) {
+      const [ra, ya] = tronco[j];
+      const [rbb, yb2] = tronco[j + 1];
+      if (y + h * t <= yb2 + 1e-6) return ra + ((rbb - ra) * (y + h * t - ya)) / Math.max(1e-6, yb2 - ya);
+    }
+    return tronco[tronco.length - 1][0];
+  };
+  for (let s = 0; s < 6; s++) {
+    const pts = [0, 0.22, 0.44, 0.66].map((t, j) => {
+      const ang = (s / 6) * Math.PI * 2 + j * 0.7;
+      const r = raioEm(t) + 0.25;
+      return [p.x + Math.cos(ang) * r, y + h * t, p.z + Math.sin(ang) * r];
+    });
+    for (let j = 0; j + 1 < pts.length; j++) barra(m, pts[j], pts[j + 1], 0.16, 3, K.trelica);
+  }
+  // o funil: 12 nervuras curvas do pescoço ao aro, o anel do meio e o aro do topo
   const R = h * 0.3;
-  torno(alvo, p.x, p.z, [[R, y + h - 0.2], [R, y + h + 0.5]], 14, K.copaSuper);
-  anelPlano(alvo, p.x, y + h + 0.5, p.z, R * 0.82, R, 14, K.copaSuper);
-  cilindro(alvo, p.x, p.z, y + h * 0.9, y + h + 0.5, R * 0.18, R * 0.22, 8, K.copaSuper, { topo: true });
-  for (let s = 0; s < 8; s++) {
-    const a = (s / 8) * Math.PI * 2 + 0.2;
-    barra(alvo, [p.x + Math.cos(a) * R * 0.2, y + h + 0.3, p.z + Math.sin(a) * R * 0.2], [p.x + Math.cos(a) * R * 0.84, y + h + 0.3, p.z + Math.sin(a) * R * 0.84], 0.22, 3, K.copaSuper);
+  const perfil = [[rm * 1.5, 0.66], [h * 0.11, 0.76], [h * 0.2, 0.87], [R, 1.0]];
+  const nN = 12;
+  for (let s = 0; s < nN; s++) {
+    const ang = (s / nN) * Math.PI * 2;
+    const pts = perfil.map(([r, t]) => [p.x + Math.cos(ang) * r, y + h * t, p.z + Math.sin(ang) * r]);
+    for (let j = 0; j + 1 < pts.length; j++) barra(m, pts[j], pts[j + 1], 0.22, 3, K.trelica);
   }
-  // a face de dentro do funil (a treliça vista de cima, entre os raios)
-  torno(alvo, p.x, p.z, [[R * 0.98, y + h + 0.1], [rm * 1.4, y + h * 0.66]], 14, K.copaSuper);
-  g.caixa([p.x, y, p.z], h * 0.3, h);
-}
-
-/** Escola (CEU): prédio baixo em anel oval em volta do campo, com a cobertura em anel que avança 3 m. */
-function escola(g, p) {
-  const rot = p.rot ?? 0;
-  const y = g.chao(p.x, p.z);
-  const sem = hashF(Math.round(p.x), Math.round(p.z), 7);
-  const k = vid(VIDRO.laboratorio, sem);
-  const fora = aoMundo(elipse(58, 42, 36), p.x, p.z, rot);
-  const dentro = aoMundo(elipse(36, 22, 36), p.x, p.z, rot);
-  const H = 13.5;
-  prisma(g.opaco, aoMundo(elipse(62, 46, 36), p.x, p.z, rot), y - 2, y + 0.4, { paredes: K.granito, topo: K.piso });
-  paredes(g.vidro, fora, y + 0.4, y + H, k, y);
-  paredes(g.vidro, dentro, y + 0.4, y + H, k, y, false);
-  // cobertura em anel com beiral de 3 m para fora e para dentro
-  const cf = aoMundo(elipse(61, 45, 36), p.x, p.z, rot);
-  const cd = aoMundo(elipse(33, 19, 36), p.x, p.z, rot);
-  faixaEntre(g.opaco, cf, cd, y + H + 0.9, K.concretoClaro, true);
-  faixaEntre(g.opaco, cf, cd, y + H, K.concretoClaro, false);
-  paredes(g.opaco, cf, y + H, y + H + 0.9, K.concretoClaro, y);
-  paredes(g.opaco, cd, y + H, y + H + 0.9, K.concretoClaro, y, false);
-  // campo, pista e as linhas
-  tampa(g.opaco, aoMundo(elipse(33, 19, 36), p.x, p.z, rot), y + 0.45, K.pista, true);
-  tampa(g.opaco, aoMundo(elipse(28, 14, 36), p.x, p.z, rot), y + 0.5, K.gramado, true);
-  g.caixa([p.x, y, p.z], 60, H + 1);
+  torno(m, p.x, p.z, [[h * 0.2, y + h * 0.87 - 0.3], [h * 0.2, y + h * 0.87 + 0.3]], 12, K.trelica);
+  torno(m, p.x, p.z, [[R, y + h - 0.5], [R, y + h + 0.4]], 16, K.trelica);
+  // o jardim do pé
+  cilindro(m, p.x, p.z, y - 0.2, y + 0.6, rb + 2.2, rb + 2.2, 12, K.pedra, { topo: false });
+  tampa(m, aoMundo(elipse(rb + 2.2, rb + 2.2, 12), p.x, p.z, 0), y + 0.55, K.jardim, true);
+  g.caixa([p.x, y, p.z], R, h);
 }
 
 /**
- * Universidade: laje ondulada de 150 x 90 m (Rolex Learning Center) com pátios redondos no teto verde, e duas torres
- * de laboratório com aletas de alumínio numa ponta.
+ * Passarela entre as Supertrees (a OCBC Skyway): tabuleiro de 2,6 m a `cota` metros, com a viga branca, o piso de
+ * madeira e o guarda-corpo de vidro, de tronco em tronco.
  */
-function universidade(g, p) {
-  const rot = p.rot ?? 0;
-  const y = g.chao(p.x, p.z);
-  const sem = hashF(Math.round(p.x), Math.round(p.z), 11);
-  const W = 150;
-  const D = 90;
-  const alt = (lx, lz) => 9 + 3.2 * Math.sin(lx / 22 + 0.8) * Math.cos(lz / 26) + 2 * Math.sin((lx + lz) / 31);
-  const contorno = retArredondado(W, D, 14, 5);
-  const Pm = aoMundo(contorno, p.x, p.z, rot);
-  prisma(g.opaco, aoMundo(retArredondado(W + 10, D + 10, 18, 5), p.x, p.z, rot), y - 2, y + 0.4, { paredes: K.granito, topo: K.piso });
-  // paredes de vidro com o topo seguindo a onda
-  const n = Pm.length / 2;
-  const kv = vid(VIDRO.escritorio, sem);
-  let u = 0;
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const [lax, laz] = [contorno[2 * i], contorno[2 * i + 1]];
-    const [lbx, lbz] = [contorno[2 * j], contorno[2 * j + 1]];
-    const [ax, az, bx, bz] = [Pm[2 * i], Pm[2 * i + 1], Pm[2 * j], Pm[2 * j + 1]];
-    const l = Math.hypot(bx - ax, bz - az);
-    const nn = [(bz - az) / l, 0, -(bx - ax) / l];
-    const ha = alt(lax, laz);
-    const hb = alt(lbx, lbz);
-    g.vidro.quad([ax, y + 0.4, az], [bx, y + 0.4, bz], [bx, y + hb, bz], [ax, y + ha, az], nn, [u, 0.4], [u + l, 0.4], [u + l, hb], [u, ha], kv);
-    u += l;
-  }
-  // teto: grade que segue a onda, recortada pelo contorno arredondado (os cantos ficam no raio)
-  const nx = 15;
-  const nz = 9;
-  const base = g.opaco.vertices;
-  const idx = [];
-  const dentro = (lx, lz) => {
-    const qx = Math.max(0, Math.abs(lx) - (W / 2 - 14));
-    const qz = Math.max(0, Math.abs(lz) - (D / 2 - 14));
-    return Math.hypot(qx, qz) <= 14.01;
-  };
-  const cr = Math.cos(rot);
-  const sr = Math.sin(rot);
-  for (let j = 0; j <= nz; j++) {
-    for (let i = 0; i <= nx; i++) {
-      let lx = -W / 2 + (W * i) / nx;
-      let lz = -D / 2 + (D * j) / nz;
-      if (!dentro(lx, lz)) {
-        // puxa o ponto para o contorno arredondado
-        const cx0 = Math.sign(lx) * (W / 2 - 14);
-        const cz0 = Math.sign(lz) * (D / 2 - 14);
-        const a = Math.atan2(lz - cz0, lx - cx0);
-        lx = cx0 + Math.cos(a) * 14;
-        lz = cz0 + Math.sin(a) * 14;
-      }
-      const h = alt(lx, lz);
-      const e = 1.5;
-      const gx = (alt(lx + e, lz) - alt(lx - e, lz)) / (2 * e);
-      const gz = (alt(lx, lz + e) - alt(lx, lz - e)) / (2 * e);
-      const nl = Math.hypot(gx, 1, gz);
-      const wx = p.x + cr * lx + sr * lz;
-      const wz = p.z - sr * lx + cr * lz;
-      const nwx = cr * (-gx / nl) + sr * (-gz / nl);
-      const nwz = -sr * (-gx / nl) + cr * (-gz / nl);
-      g.opaco.v(wx, y + h, wz, nwx, 1 / nl, nwz, wx, wz, K.telhadoVerde);
-    }
-  }
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-    const a = base + j * (nx + 1) + i;
-    idx.push([a, a + 1, a + nx + 2], [a, a + nx + 2, a + nx + 1]);
-  }
-  for (const [a, b, c] of idx) g.opaco.tri(a, b, c);
-  // pátios redondos (claraboias de vidro no teto verde)
-  for (const [lx, lz, r] of [[-30, -10, 11], [18, 16, 9], [45, -18, 8]]) {
-    const wx = p.x + cr * lx + sr * lz;
-    const wz = p.z - sr * lx + cr * lz;
-    cilindro(g.vidro, wx, wz, y + alt(lx, lz) - 0.5, y + alt(lx, lz) + 0.6, r, r, 14, vid(VIDRO.cupula, sem), { topo: true });
-  }
-  // torres de laboratório na ponta leste
-  for (const [lx, lz, h] of [[W / 2 + 26, -22, 60], [W / 2 + 30, 22, 48]]) {
-    const wx = p.x + cr * lx + sr * lz;
-    const wz = p.z - sr * lx + cr * lz;
-    const poly = aoMundo(retArredondado(34, 22, 3, 2), wx, wz, rot);
-    prisma(g.opaco, aoMundo(retArredondado(38, 26, 4, 2), wx, wz, rot), y - 2, y + 0.4, { paredes: K.granito, topo: K.piso });
-    paredes(g.vidro, poly, y + 0.4, y + h, vid(VIDRO.laboratorio, sem + lx), y);
-    tampa(g.opaco, poly, y + h, K.cobertura, true);
-    prisma(g.opaco, aoMundo(retArredondado(20, 12, 2, 2), wx, wz, rot), y + h, y + h + 4.5, { paredes: K.metalClaro, topo: K.cobertura });
-    g.caixa([wx, y, wz], 20, h + 5);
-  }
-  g.caixa([p.x, y, p.z], W / 2, 16);
-}
-
-/** Centro de Física: dois tubos de aço de 14 m sobre pilares em V ao longo de um arco (CERN) e ondas de terra (MAX IV). */
-function fisica(g, p) {
-  const { cx, cz, r, de, ate } = p.arco;
-  const rt = p.raioTubo;
-  // trechos de ~6 m de arco (o anel fechado de 44 m não pede os 360 trechos de um grau)
-  const comprimento = (Math.abs(ate - de) * Math.PI * (r + 11)) / 180;
-  const n = Math.max(12, Math.min(120, Math.ceil(comprimento / 6)));
-  const y0 = g.chao(...noArco(cx, cz, r, (de + ate) / 2));
-  for (const dr of [-11, 11]) {
-    const rr = r + dr;
-    const yc = y0 + p.altura + rt;
-    const seg = 12;
-    for (let s = 0; s < n; s++) {
-      const a0 = de + ((ate - de) * s) / n;
-      const a1 = de + ((ate - de) * (s + 1)) / n;
-      for (let q = 0; q < seg; q++) {
-        const t0 = (q / seg) * Math.PI * 2;
-        const t1 = ((q + 1) / seg) * Math.PI * 2;
-        const P = (a, t) => {
-          const [x, z] = noArco(cx, cz, rr + Math.cos(t) * rt, a);
-          return [x, yc + Math.sin(t) * rt, z];
-        };
-        const tm = (t0 + t1) / 2;
-        const am = ((a0 + a1) / 2) * (Math.PI / 180);
-        const nn = [Math.cos(am) * Math.cos(tm), Math.sin(tm), Math.sin(am) * Math.cos(tm)];
-        g.opaco.quad(P(a0, t0), P(a1, t0), P(a1, t1), P(a0, t1), nn, [a0, t0], [a1, t0], [a1, t1], [a0, t1], K.metalClaro);
-      }
-    }
-    // tampas das pontas (vidro) e pilares em V a cada ~24 m
-    for (const a of [de, ate]) {
-      const [x, z] = noArco(cx, cz, rr, a);
-      const poly = [];
-      const tang = ((a + 90) * Math.PI) / 180;
-      for (let q = 0; q < 14; q++) {
-        const t = (q / 14) * Math.PI * 2;
-        poly.push([x + Math.cos((a * Math.PI) / 180) * Math.cos(t) * rt, yc + Math.sin(t) * rt, z + Math.sin((a * Math.PI) / 180) * Math.cos(t) * rt]);
-      }
-      const nn = [Math.cos(tang) * (a === de ? -1 : 1), 0, Math.sin(tang) * (a === de ? -1 : 1)];
-      const b = g.vidro.vertices;
-      for (const q of poly) g.vidro.v(q[0], q[1], q[2], ...nn, q[0], q[1] - y0, vid(VIDRO.laboratorio, 0.3));
-      for (let q = 1; q + 1 < poly.length; q++) g.vidro.tri(b, b + q, b + q + 1);
-    }
-    const comp = (Math.abs(ate - de) * Math.PI * rr) / 180;
-    const nv = Math.max(2, Math.round(comp / 24));
-    for (let v = 0; v <= nv; v++) {
-      const a = de + ((ate - de) * v) / nv;
-      const [x, z] = noArco(cx, cz, rr, a);
-      const [xa, za] = noArco(cx, cz, rr - 3, a);
-      const [xb, zb] = noArco(cx, cz, rr + 3, a);
-      const yb = y0 + p.altura + 0.5;
-      barra(g.opaco, [x, y0, z], [xa, yb, za], 0.5, 6, K.metalClaro);
-      barra(g.opaco, [x, y0, z], [xb, yb, zb], 0.5, 6, K.metalClaro);
-    }
-  }
-  // ondas de terra do lado de dentro do arco (grama), comprimento de onda de 36 m (MAX IV)
-  const nOnda = Math.max(8, Math.min(120, Math.ceil(comprimento / 4)));
-  const larg = p.ondasLargura ?? 70; // no anel fechado (o síncrotron do plano A) as ondas cabem no miolo
-  const nl = 7;
-  const lado = p.ondas === 'fora' ? 1 : -1;
-  const base = g.opaco.vertices;
-  for (let s = 0; s <= nOnda; s++) {
-    const a = de + ((ate - de) * s) / nOnda;
-    const comp = (Math.abs(a - de) * Math.PI * r) / 180;
-    for (let j = 0; j <= nl; j++) {
-      const rr = r + lado * (24 + (larg * j) / nl);
-      const [x, z] = noArco(cx, cz, rr, a);
-      const env = Math.sin((Math.PI * j) / nl);
-      const h = env * 4.5 * (0.5 + 0.5 * Math.sin(comp / 5.7 + j * 0.9));
-      g.opaco.v(x, g.chao(x, z) + 0.2 + h, z, 0, 1, 0, x, z, K.grama);
-    }
-  }
-  for (let s = 0; s < nOnda; s++) for (let j = 0; j < nl; j++) {
-    const a = base + s * (nl + 1) + j;
-    g.opaco.tri(a, a + 1, a + nl + 2);
-    g.opaco.tri(a, a + nl + 2, a + nl + 1);
-  }
-  const [mx, mz] = noArco(cx, cz, r, (de + ate) / 2);
-  g.caixa([mx, y0, mz], (Math.abs(ate - de) * Math.PI * r) / 360 + 20, p.altura + 2 * rt);
-}
-
-/** Pódio de quarteirão (Hudson Yards): lojas em vidro alto com faixas de pedra e a praça no teto. */
-function podio(g, p) {
-  const P = orientar(p.contorno);
-  let cx = 0;
-  let cz = 0;
-  for (let i = 0; i < P.length; i += 2) {
-    cx += P[i];
-    cz += P[i + 1];
-  }
-  cx /= P.length / 2;
-  cz /= P.length / 2;
-  const y = g.chao(cx, cz);
-  prisma(g.opaco, deslocar(P, 2), y - 2, y + 0.5, { paredes: K.granito, topo: K.piso });
-  paredes(g.vidro, P, y + 0.5, y + p.altura, vid(VIDRO.podio, 0.4), y);
-  prisma(g.opaco, deslocar(P, 0.6), y + p.altura, y + p.altura + 1.2, { paredes: K.pedra, topo: K.piso });
-  g.caixa([cx, y, cz], 90, p.altura);
-}
-
-/** Marina Barrage: barragem baixa com o teto verde caminhável e a fila de comportas do lado do mar. */
-function barragem(g, p, nivelAgua) {
-  const [ax, az] = p.de;
-  const [bx, bz] = p.ate;
-  const L = Math.hypot(bx - ax, bz - az);
-  const ux = (bx - ax) / L;
-  const uz = (bz - az) / L;
-  const px = -uz;
-  const pz = ux;
-  const w = p.largura / 2;
-  const y = g.chao((ax + bx) / 2, (az + bz) / 2);
-  const cx = (ax + bx) / 2;
-  const cz = (az + bz) / 2;
-  caixa(g.opaco, cx, cz, L / 2, w, nivelAgua - 3, y + 2.2, K.concretoClaro, { ux, uz, topo: false });
-  // teto verde em rampa suave (sobe para o lado do reservatório)
-  const c = (sa, sb, h) => [cx + ux * (L / 2) * sa + px * w * sb, y + h, cz + uz * (L / 2) * sa + pz * w * sb];
-  g.opaco.quad(c(-1, -1, 2.2), c(1, -1, 2.2), c(1, 1, 5.2), c(-1, 1, 5.2), [0, 1, 0], [0, 0], [L, 0], [L, 1], [0, 1], K.telhadoVerde);
-  g.opaco.quad(c(-1, 1, 2.2), c(1, 1, 2.2), c(1, 1, 5.2), c(-1, 1, 5.2), [px, 0, pz], [0, 0], [L, 0], [L, 3], [0, 3], K.concretoClaro);
-  // comportas: pilares a cada 12 m e as placas de aço entre eles
-  const nP = Math.max(2, Math.floor(L / 12));
-  for (let i = 0; i <= nP; i++) {
-    const t = -1 + (2 * i) / nP;
-    const [x, , z] = c(t * 0.96, -1, 0);
-    caixa(g.opaco, x - px * 2, z - pz * 2, 1.2, 2.5, nivelAgua - 2, y + 7.5, K.concretoClaro, { ux, uz });
-    if (i < nP) {
-      const [x2, , z2] = c((-1 + (2 * (i + 0.5)) / nP) * 0.96, -1, 0);
-      caixa(g.opaco, x2 - px * 2.5, z2 - pz * 2.5, (L / nP) * 0.42, 0.4, nivelAgua - 1.5, y + 1.2, K.comporta, { ux, uz });
-    }
-  }
-  g.caixa([cx, y, cz], L / 2, 8);
-}
-
-
-// ------------------------------------------------------------------------------------------------ sede v2 (D63 a D65)
-
-const KS = {
-  // marquise branca de cada laje (a assinatura da Apple Park): alumínio pintado, fosco, e o forro aceso à noite
-  marquise: acab('#e4e2dc', { rugo: 0.55 }),
-  // o forro da marquise recebe a luz dos escritórios à noite: brilho baixo (a luz é do vidro, não da marquise)
-  marquiseForro: acab('#dcd8cf', { rugo: 0.6, luz: LUZ.reflexo }),
-  // estrutura da cúpula: aço pintado de branco quente
-  estrutura: acab('#dcd6c8', { rugo: 0.45, metal: 0.5, padrao: PADRAO.metal }),
-  pedraClara: acab('#cfc6b3', { rugo: 0.7, padrao: PADRAO.pedra }),
-  muroVerde: acab('#3a4a2c', { rugo: 0.9, padrao: PADRAO.folha }),
-  terraco: acab('#46562f', { rugo: 0.92, padrao: PADRAO.folha }),
-  aguaFundo: acab('#1f3d45', { rugo: 0.05, metal: 0.2, luz: LUZ.piscina, padrao: PADRAO.agua }),
-};
-
-/** Diferença entre dois ângulos em graus, em [-180, 180). */
-const difGraus = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
-
-/**
- * Ângulos (graus, de 0 a 360) de um arco de raio r em n trechos iguais, com as bordas dos portais somadas: cada
- * portal é uma passagem reta de largura vao no eixo do ângulo a (os lados dela são paralelos ao eixo, não radiais).
- */
-function angulosComPortais(r, n, portais, vao) {
-  const meio = (Math.asin(Math.min(1, vao / 2 / r)) * 180) / Math.PI;
-  const A = [];
-  for (let i = 0; i <= n; i++) A.push((360 * i) / n);
-  for (const a of portais) for (const s of [-1, 1]) A.push((((a + s * meio) % 360) + 360) % 360);
-  A.sort((x, y) => x - y);
-  const out = [];
-  for (const a of A) if (!out.length || a - out[out.length - 1] > 0.02) out.push(a);
-  return { A: out, meio };
-}
-
-/**
- * Sede em anel fechado (D63, Apple Park medida no OpenStreetMap): 481 m por fora e 358 m por dentro nas bordas das
- * marquises, 4 andares em 30 m. Vidro curvo do chão ao teto por fora e por dentro, com a marquise branca contínua em
- * cada laje (3,2 m de balanço) e a cobertura de painéis solares com a borda branca; nos quatro eixos o anel passa por
- * cima de um pórtico de 40 m por 18 m. No LOD0 as marquises são geometria; no LOD1 saem do shader do vidro (a faixa
- * branca que cresce com o ângulo de vista) e o anel tem menos trechos.
- */
-function sedeAnel(g, p) {
-  const { cx, cz, rFora, rDentro, altura, andares, portais = [], vao = 40, pe = 18 } = p;
-  const lod = g.lod ?? 1;
-  const balanco = 3.2;
-  const rgF = rFora - balanco;
-  const rgD = rDentro + balanco;
-  const peAndar = altura / andares;
-  const yTeto = altura - 1.4;
-  // a cota no próprio anel (o centro é o lago, cavado)
-  const y = g.chao(cx + (rFora + rDentro) / 2, cz);
-  const nSeg = lod === 0 ? 320 : 128;
-  const sem = hashF(Math.round(cx), Math.round(rFora), 13);
-  const kv = vid(VIDRO.sede, sem);
-  const rad = Math.PI / 180;
-  const pt = (r, a) => [cx + r * Math.cos(a * rad), cz + r * Math.sin(a * rad)];
-  const noPortal = (a, meio) => portais.some((q) => Math.abs(difGraus(a, q)) < meio - 1e-6);
-  const fora = angulosComPortais(rgF, nSeg, portais, vao);
-  const dentro = angulosComPortais(rgD, Math.round(nSeg * 0.8), portais, vao);
-  // vidro curvo: normal radial por vértice (a face lê redonda, não facetada); u em metros ao longo da face
-  const parede = (r, a0, a1, y0, y1, sinal) => {
-    const [x0, z0] = pt(r, a0);
-    const [x1, z1] = pt(r, a1);
-    const n0 = [Math.cos(a0 * rad) * sinal, 0, Math.sin(a0 * rad) * sinal];
-    const n1 = [Math.cos(a1 * rad) * sinal, 0, Math.sin(a1 * rad) * sinal];
-    const u0 = r * a0 * rad;
-    const u1 = r * a1 * rad;
-    const i0 = g.vidro.v(x0, y + y0, z0, ...n0, u0, y0, kv);
-    const i1 = g.vidro.v(x1, y + y0, z1, ...n1, u1, y0, kv);
-    const i2 = g.vidro.v(x1, y + y1, z1, ...n1, u1, y1, kv);
-    const i3 = g.vidro.v(x0, y + y1, z0, ...n0, u0, y1, kv);
-    g.vidro.tri(i0, i1, i2);
-    g.vidro.tri(i0, i2, i3);
-  };
-  // faixa horizontal entre dois raios num trecho de arco (topo ou fundo de marquise e cobertura); uv = (x, z)
-  const faixa = (r0, r1, a0, a1, yy, k, cima) => {
-    const P = [pt(r0, a0), pt(r0, a1), pt(r1, a1), pt(r1, a0)];
-    g.opaco.quad(...P.map(([x, z]) => [x, y + yy, z]), [0, cima ? 1 : -1, 0], ...P.map(([x, z]) => [x, z]), k);
-  };
-  // borda vertical de uma faixa (a testa da marquise ou da cobertura)
-  const testa = (r, a0, a1, y0, y1, k, sinal) => {
-    const [x0, z0] = pt(r, a0);
-    const [x1, z1] = pt(r, a1);
-    const am = ((a0 + a1) / 2) * rad;
-    g.opaco.quad([x0, y + y0, z0], [x1, y + y0, z1], [x1, y + y1, z1], [x0, y + y1, z0], [Math.cos(am) * sinal, 0, Math.sin(am) * sinal], [r * a0 * rad, y0], [r * a1 * rad, y0], [r * a1 * rad, y1], [r * a0 * rad, y1], k);
-  };
-  const lajes = [];
-  for (let i = 1; i < andares; i++) lajes.push(peAndar * i);
-  for (const [lista, rg, rb, sinal] of [[fora, rgF, rFora, 1], [dentro, rgD, rDentro, -1]]) {
-    const { A, meio } = lista;
-    for (let i = 0; i + 1 < A.length; i++) {
-      const a0 = A[i];
-      const a1 = A[i + 1];
-      const portal = noPortal((a0 + a1) / 2, meio);
-      if (!g.sombra || !portal) parede(rg, a0, a1, portal ? pe : 0, yTeto, sinal);
-      if (g.sombra) continue;
-      // cobertura: a borda branca de 4 m e o balanço com o forro aceso por baixo
-      faixa(rg, rb, a0, a1, yTeto, KS.marquiseForro, false);
-      testa(rb, a0, a1, yTeto, altura, KS.marquise, sinal);
-      if (lod === 0) {
-        for (const yl of lajes) {
-          if (portal && yl < pe) continue;
-          faixa(rg, rb, a0, a1, yl + 0.25, KS.marquise, true);
-          faixa(rg, rb, a0, a1, yl - 0.25, KS.marquiseForro, false);
-          testa(rb, a0, a1, yl - 0.25, yl + 0.25, KS.marquise, sinal);
-        }
-      }
-    }
-  }
-  // cobertura: o campo de painéis solares entre as bordas brancas (as faixas seguem os ângulos de fora)
-  {
-    const { A } = fora;
-    const rSolF = rFora - 4;
-    const rSolD = rDentro + 4;
-    for (let i = 0; i + 1 < A.length; i++) {
-      const [a0, a1] = [A[i], A[i + 1]];
-      if (g.sombra) {
-        faixa(rDentro, rFora, a0, a1, altura, KS.marquise, true);
-        continue;
-      }
-      faixa(rSolF, rFora, a0, a1, altura, KS.marquise, true);
-      faixa(rDentro, rSolD, a0, a1, altura, KS.marquise, true);
-      faixa(rSolD, rSolF, a0, a1, altura - 0.05, K.solar, true);
-    }
-  }
-  // pórticos: os lados da passagem em vidro (saguões) e o teto aceso a 18 m
-  for (const a of portais) {
+function passarela(g, p) {
+  const { pontos, cota, largura } = p;
+  if (g.sombra) return;
+  const w = largura / 2;
+  for (let i = 0; i + 3 < pontos.length; i += 2) {
+    const ax = pontos[i], az = pontos[i + 1], bx = pontos[i + 2], bz = pontos[i + 3];
+    const L = Math.hypot(bx - ax, bz - az);
+    if (L < 1e-6) continue;
+    const ux = (bx - ax) / L;
+    const uz = (bz - az) / L;
+    const ya = g.chao(ax, az) + cota;
+    const yb = g.chao(bx, bz) + cota;
+    const ym = (ya + yb) / 2;
+    caixa(g.opaco, (ax + bx) / 2, (az + bz) / 2, L / 2, w, ym - 0.8, ym, K.marquise, { ux, uz, base: true });
+    if (g.fantasma) continue;
+    caixa(g.opaco, (ax + bx) / 2, (az + bz) / 2, L / 2, w - 0.1, ym, ym + 0.05, K.deck, { ux, uz });
     for (const s of [-1, 1]) {
-      const aF = a + s * fora.meio;
-      const aD = a + s * dentro.meio;
-      const [xF, zF] = pt(rgF, aF);
-      const [xD, zD] = pt(rgD, aD);
-      // a normal olha para dentro da passagem (para o eixo)
-      const nx = -Math.sin(a * rad) * -s;
-      const nz = Math.cos(a * rad) * -s;
-      const ks = vid(VIDRO.saguao, sem);
-      const L = Math.hypot(xD - xF, zD - zF);
-      if (g.sombra) continue;
-      g.vidro.quad([xF, y, zF], [xD, y, zD], [xD, y + pe, zD], [xF, y + pe, zF], [nx, 0, nz], [0, 0], [L, 0], [L, pe], [0, pe], ks);
+      const ox = -uz * s * (w - 0.05);
+      const oz = ux * s * (w - 0.05);
+      g.vidro.quad([ax + ox, ym, az + oz], [bx + ox, ym, bz + oz], [bx + ox, ym + 1.1, bz + oz], [ax + ox, ym + 1.1, az + oz], [-uz * s, 0, ux * s], [0, 0], [L, 0], [L, 1.1], [0, 1.1], vid(VIDRO.parapeito, 0.2));
     }
-    if (g.sombra) continue;
-    const P = [];
-    const nF = 8;
-    for (let i = 0; i <= nF; i++) P.push(...pt(rgF, a - fora.meio + (2 * fora.meio * i) / nF));
-    for (let i = nF; i >= 0; i--) P.push(...pt(rgD, a - dentro.meio + (2 * dentro.meio * i) / nF));
-    tampa(g.opaco, P, y + pe, KS.marquiseForro, false);
-    // piso de pedra da passagem
-    tampa(g.opaco, P, y + 0.3, K.piso, true);
-  }
-  if (!g.sombra) {
-    // calçada de pedra junto das duas faces (os balanços fazem a varanda coberta)
-    const n = lod === 0 ? 160 : 72;
-    const anelPiso = (r0, r1) => {
-      for (let i = 0; i < n; i++) faixa(r0, r1, (360 * i) / n, (360 * (i + 1)) / n, 0.18, K.piso, true);
-    };
-    anelPiso(rgF - 0.5, rFora + 5);
-    anelPiso(rDentro - 5, rgD + 0.5);
-  }
-  // caixas de seleção: 24 ao longo do anel, que seguem a curva (quatro caixas de um quarto do anel cada cobriam o lago
-  // e o pátio, e o toque na água escolhia a Sede)
-  const nC = 24;
-  const rm = (rFora + rDentro) / 2;
-  const meiaC = Math.max((rFora - rDentro) / 2, rm * Math.sin(Math.PI / nC)) + 2;
-  for (let q = 0; q < nC; q++) {
-    const [mx, mz] = pt(rm, (360 * (q + 0.5)) / nC);
-    g.caixa([mx, y, mz], meiaC, altura);
+    g.caixa([(ax + bx) / 2, ym - 1, (az + bz) / 2], L / 2 + 2, 3, L / 2 + 2);
   }
 }
 
-/**
- * Cúpula de vidro (D65; Jewel Changi, Eden Project, o Cloud Forest dos Gardens by the Bay): calota esférica de 240 m
- * por 80 m com o óculo no alto e a malha diagonal de verdade (barras de aço branco nas loxodromias a 45 graus, que
- * fazem losangos de lado igual do pé ao óculo: no plano de Mercator da esfera são retas). Por dentro, a montanha de
- * floresta em terraços com o vórtice de água que cai do óculo num lago no topo dela. O vidro é transparente (material
- * 'claro'): a floresta aparece por ele. LOD0: as barras em geometria; LOD1: no shader do vidro (as mesmas retas).
- */
-function cupula(g, p) {
-  const lod = g.lod ?? 1;
-  const y = g.chao(p.x, p.z);
-  const R = p.diametro / 2;
-  const H = p.altura;
-  const Rs = (R * R + H * H) / (2 * H);
-  const yc = H - Rs;
-  const aBase = Math.acos(Math.max(-1, Math.min(1, -yc / Rs)));
-  const aOculo = Math.asin(Math.min(1, (p.oculo ?? 14) / Rs));
-  const N = 32; // losangos em volta (malha principal)
-  const k2 = N / (2 * Math.PI);
-  const tBase = Math.tan(aBase / 2);
-  const sTopo = k2 * Math.log(tBase / Math.tan(aOculo / 2));
-  const alfa = (s) => 2 * Math.atan(tBase * Math.exp(-s / k2));
-  const ponto = (u, s, dr = 0) => {
-    const a = alfa(s);
-    const f = u / k2;
-    const r = (Rs + dr) * Math.sin(a);
-    return [p.x + r * Math.cos(f), y + yc + (Rs + dr) * Math.cos(a), p.z + r * Math.sin(f)];
-  };
-  const normal = (u, s) => {
-    const a = alfa(s);
-    const f = u / k2;
-    return [Math.sin(a) * Math.cos(f), Math.cos(a), Math.sin(a) * Math.sin(f)];
-  };
-  const alvoVidro = g.claro ?? g.vidro;
-  if (!g.sombra) {
-    // o vidro: faixas em s (meio losango cada) e segmentos em u; vC.x leva o lado da célula principal em metros
-    const nU = lod === 0 ? 96 : 48;
-    const passoS = lod === 0 ? 0.5 : 1;
-    const linhasS = [];
-    for (let s = 0; s < sTopo - 1e-6; s += passoS) linhasS.push(s);
-    linhasS.push(sTopo);
-    const L = nU + 1;
-    const base = alvoVidro.vertices;
-    for (const s of linhasS) {
-      const cel = (2 * Math.PI * Rs * Math.sin(alfa(s))) / N;
-      for (let i = 0; i <= nU; i++) {
-        const u = (N * i) / nU;
-        alvoVidro.v(...ponto(u, s), ...normal(u, s), u, s, [cel, 0, 0, 0]);
-      }
-    }
-    for (let j = 0; j + 1 < linhasS.length; j++) {
-      for (let i = 0; i < nU; i++) {
-        const a = base + j * L + i;
-        alvoVidro.tri(a, a + 1, a + L + 1);
-        alvoVidro.tri(a, a + L + 1, a + L);
-      }
-    }
-  }
-  // barras da malha principal (LOD0): de nó a nó nas duas famílias, um pouco por fora do vidro
-  if (lod === 0 && !g.sombra) {
-    for (let j = 0; j + 0.5 <= sTopo + 1e-6; j += 0.5) {
-      const s0 = j;
-      const s1 = Math.min(sTopo, j + 0.5);
-      for (let k = 0; k < N; k++) {
-        const u0 = k + (j % 1 ? 0.5 : 0);
-        const r = 0.28 + 0.34 * Math.sin(alfa(s0)); // mais grossas no pé
-        barra(g.opaco, ponto(u0, s0, 0.6), ponto(u0 + (s1 - s0), s1, 0.6), r, 3, KS.estrutura);
-        barra(g.opaco, ponto(u0, s0, 0.6), ponto(u0 - (s1 - s0), s1, 0.6), r, 3, KS.estrutura);
-      }
-    }
-  }
-  // anel do óculo e o anel do pé (concreto claro com as quatro entradas nos eixos)
-  const rOc = Rs * Math.sin(aOculo);
-  const yOc = y + yc + Rs * Math.cos(aOculo);
-  cilindro(g.opaco, p.x, p.z, yOc - 1.2, yOc + 0.8, rOc + 1.4, rOc + 1.4, 32, KS.estrutura, { topo: false });
-  if (!g.sombra) anelPlano(g.opaco, p.x, yOc + 0.8, p.z, rOc, rOc + 1.4, 32, KS.estrutura);
-  const segP = lod === 0 ? 72 : 36;
-  for (let s = 0; s < segP; s++) {
-    const a0 = (s / segP) * Math.PI * 2;
-    const a1 = ((s + 1) / segP) * Math.PI * 2;
-    const am = (a0 + a1) / 2;
-    const entrada = [0, Math.PI / 2, Math.PI, 1.5 * Math.PI].some((q) => Math.abs(Math.atan2(Math.sin(am - q), Math.cos(am - q))) < 0.06);
-    const P = [
-      p.x + (R + 0.5) * Math.cos(a0), p.z + (R + 0.5) * Math.sin(a0), p.x + (R + 0.5) * Math.cos(a1), p.z + (R + 0.5) * Math.sin(a1),
-      p.x + (R - 3) * Math.cos(a1), p.z + (R - 3) * Math.sin(a1), p.x + (R - 3) * Math.cos(a0), p.z + (R - 3) * Math.sin(a0),
-    ];
-    prisma(g.opaco, P, y - 2, y + (entrada ? 0.3 : 3.2), { paredes: KS.pedraClara, topo: K.piso });
-  }
-  if (!g.sombra) prisma(g.opaco, aoMundo(elipse(R + 10, R + 10, segP), p.x, p.z, 0), y - 2, y + 0.2, { paredes: K.granito, topo: K.piso });
+/** Tipos de peça que viram volumes aqui (o reservatório é do lago.js; a torre, do torre.js). */
+export const PECAS = Object.freeze({ podio, anel, cachoeira, fontes, codex, oval, floresta, jardim, supertree, passarela });
 
-  // por dentro: a montanha de floresta em terraços, com o lago no topo onde cai o vórtice (fora do fantasma)
-  if (!g.sombra && !g.fantasma) {
-    const nT = 7;
-    const rPe = R * 0.74;
-    const rTopo = R * 0.2;
-    const hTopo = H * 0.47;
-    const seg = lod === 0 ? 48 : 28;
-    tampa(g.opaco, aoMundo(elipse(R - 3, R - 3, seg), p.x, p.z, 0), y + 0.25, K.grama, true);
-    for (let i = 0; i < nT; i++) {
-      const r = rPe - ((rPe - rTopo) * i) / nT;
-      const r1 = rPe - ((rPe - rTopo) * (i + 1)) / nT;
-      const y0 = y + (hTopo * i) / nT;
-      const y1 = y + (hTopo * (i + 1)) / nT;
-      // muro verde do degrau (plantas pendentes) e o terraço plantado por cima
-      cilindro(g.opaco, p.x, p.z, y0, y1, r, r, seg, KS.muroVerde, { topo: false, a0: i * 0.37 });
-      const Pa = aoMundo(elipse(r, r, seg), p.x, p.z, i * 0.37);
-      const Pb = aoMundo(elipse(r1, r1, seg), p.x, p.z, i * 0.37);
-      faixaEntre(g.opaco, Pa, Pb, y1, KS.terraco, true);
-      if (g.arvores) {
-        const nA = lod === 0 ? Math.round(r / 5) : Math.round(r / 12);
-        for (let a = 0; a < nA; a++) {
-          const ang = (a / nA) * Math.PI * 2 + i * 0.9;
-          const rr = (r + r1) / 2 + (hashF(a, i, 21) - 0.5) * (r - r1) * 0.5;
-          arvore(g.arvores, p.x + Math.cos(ang) * rr, y1, p.z + Math.sin(ang) * rr, { altura: 7 + 5 * hashF(a, i), raio: 2.6 + 1.4 * hashF(i, a), semente: 900 + i * 50 + a, tipo: hashF(a, i, 4) < 0.18 ? 'palmeira' : 'copa', detalhe: 0 });
-        }
-      }
-    }
-    // o lago do topo e o vórtice que cai do óculo
-    tampa(g.opaco, aoMundo(elipse(rTopo, rTopo, seg), p.x, p.z, 0), y + hTopo - 0.4, KS.aguaFundo, true);
-    if (g.efeitos) cascaEfeito(g.efeitos, p.x, p.z, y + hTopo - 0.4, yOc, 4.2, 6.5, lod === 0 ? 20 : 10, CASCATA.vortice, lod === 0 ? 8 : 3, 0.4);
-  }
-  g.caixa([p.x, y, p.z], R, H);
-}
-
-/**
- * Fontes dançantes em arco (Dubai Fountain): as posições dos jatos (os grandes no arco, os pequenos 7 m para dentro,
- * intercalados) para o InstancedMesh; a coreografia é do sombreador (torre.js, materialJato).
- */
-function fontes(g, p) {
-  const { cx, cz, r, de, ate, n } = p;
-  const lista = [];
-  for (let i = 0; i < n; i++) {
-    const f = n > 1 ? i / (n - 1) : 0.5;
-    const [x, z] = noArco(cx, cz, r, de + (ate - de) * f);
-    lista.push({ x, z, f, tipo: 0 });
-    if (i + 1 < n && i % 2 === 0) {
-      const f2 = (i + 0.5) / (n - 1);
-      const [x2, z2] = noArco(cx, cz, r - 7, de + (ate - de) * f2);
-      lista.push({ x: x2, z: z2, f: f2, tipo: 1 });
-    }
-  }
-  if (g.jatos) g.jatos.push(...lista);
-  if (!lista.length) return;
-  // caixa justa do arco de jatos (a de um quadrado de 0,9 r cobria a ilha e a face de dentro da Sede)
-  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-  for (const j of lista) {
-    x0 = Math.min(x0, j.x);
-    x1 = Math.max(x1, j.x);
-    z0 = Math.min(z0, j.z);
-    z1 = Math.max(z1, j.z);
-  }
-  g.caixa([(x0 + x1) / 2, g.chao(cx, cz), (z0 + z1) / 2], (x1 - x0) / 2 + 4, 20, (z1 - z0) / 2 + 4);
-}
-
-/** Tipos de peça que viram volumes aqui (o reservatório é do lago.js; a Torre, do torre.js). */
-export const PECAS = Object.freeze({ conselho, sede, anel, biblioteca, vida, supertree, escola, universidade, fisica, podio, barragem, sedeAnel, cupula, fontes });
-
-/** Peças que mudam do LOD0 para o LOD1 (as outras saem iguais nos dois). */
-export const PECAS_COM_LOD = Object.freeze(new Set(['sedeAnel', 'cupula']));
+/** Peças com marquises em geometria no LOD0 (por setor); as outras saem iguais nos dois LODs. */
+export const PECAS_COM_LOD = Object.freeze(new Set(['anel', 'oval']));
 
 /**
  * Monta as peças de uma parte nas malhas do destino.
  * @param {{ id: string, pecas: object[] }} parte
- * @param {{ chao: (x: number, z: number) => number, vidro: Malha, opaco: Malha, arvores?: Malha, claro?: Malha,
- *   efeitos?: Malha, jatos?: object[], nivelAgua?: number, lod?: 0 | 1, sombra?: boolean, so?: (p) => boolean }} destino
- *   lod: o detalhe das peças com LOD; sombra: só o volume que projeta; so: filtro de peças
- * @returns {{ caixas: number[][] }}  caixas [x0, y0, z0, x1, y1, z1] por peça (a seleção e a câmera usam)
+ * @param {{ chao: (x: number, z: number) => number, vidro: Malha, opaco: Malha, efeitos?: Malha, jatos?: object[],
+ *   arvores?: object[], nivelAgua?: number, lod?: 0 | 1, sombra?: boolean, fantasma?: boolean, so?: (p) => boolean,
+ *   setor?: (s: number) => { opaco: Malha }, mata?: (x, z) => number | null }} destino
+ *   lod 1: a casca e o resto; lod 0: só as marquises dos setores (em setor(s), ou em opaco). sombra: só o volume que
+ *   projeta. arvores: a lista de árvores para a vegetação ({ x, y, z, especie, altura?, mata? }).
+ * @returns {{ caixas: number[][], trechos: (string | null)[] }}  caixas [x0, y0, z0, x1, y1, z1] por peça (a seleção e a
+ *   câmera usam) e o id do trecho de cada uma (os do Horizon Ring)
  */
 export function montarParte(parte, destino) {
   const caixas = [];
+  const trechos = [];
   const g = {
     lod: 1,
     ...destino,
     // caixa alinhada aos eixos: meia largura em x (e em z, se meiaZ não vier), altura h a partir de c[1]
-    caixa: (c, meia, h, meiaZ = meia) => caixas.push([c[0] - meia, c[1], c[2] - meiaZ, c[0] + meia, c[1] + h, c[2] + meiaZ]),
+    caixa: (c, meia, h, meiaZ = meia, trecho = null) => {
+      caixas.push([c[0] - meia, c[1], c[2] - meiaZ, c[0] + meia, c[1] + h, c[2] + meiaZ]);
+      trechos.push(trecho?.startsWith?.('horizon.') ? trecho : null);
+    },
   };
   for (const p of parte.pecas) {
     if (destino.so && !destino.so(p)) continue;
     const fn = PECAS[p.tipo];
-    if (fn === barragem) fn(g, p, destino.nivelAgua ?? g.chao(...p.de) - 2);
-    else if (fn) fn(g, p);
+    if (!fn) continue;
+    if (g.lod === 0 && !PECAS_COM_LOD.has(p.tipo)) continue;
+    if (fn === oval) fn(g, p, SETOR_OVAL[parte.id] ?? 18);
+    else if (fn === jardim) fn(g, p, destino.mata ?? null);
+    else fn(g, p);
   }
-  return { caixas };
+  return { caixas, trechos };
 }
 
 /** Malhas novas para montar partes (atalho dos testes e do fantasma). */
 export function malhasNovas() {
-  return { vidro: new Malha('vidro'), opaco: new Malha('opaco'), arvores: new Malha('opaco'), claro: new Malha('claro'), efeitos: new Malha('cascata'), jatos: [] };
+  return { vidro: new Malha('vidro'), opaco: new Malha('opaco'), efeitos: new Malha('cascata'), jatos: [], arvores: [] };
 }
-
