@@ -167,6 +167,18 @@ Decidido com o dono:
 
 ## 5. Gerador de arena (parâmetros)
 
+### 5.0 Diálogo da arena de basquete (02/10/2026, regra D78)
+
+Decidido com o dono:
+
+- **Forma:** **bacia oval com um anel de LED contínuo** na fachada e telhado translúcido, em **lâminas verticais de aço e
+  vidro**. Bem diferente do Cinema Cosmos, que é esférico.
+- **Time da casa:** os **Cometas de Heldópolis**, na Associação Libertense de Basquete, pertencente à **Holding guarda-chuva
+  e à Starlight Media** (direitos de mídia).
+- **Uso:** basquete, shows e eventos corporativos da Holding, com o piso virando palco. **Sem gelo** (só esses usos).
+- **Fase:** 1 (até jun 2026).
+
+
 Um só gerador, seis versões. A diferença vem da capacidade, do número de anéis, do telhado e do piso.
 
 | Arena | Lugares | Anéis | Telhado | Piso | Marca registrada do desenho |
