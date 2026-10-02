@@ -4,7 +4,9 @@
 
 **Onda 3 em andamento. Etapa 1 pronta, revisada e gravada** (notas nas fichas e em `docs/entregas/onda3/`;
 casca corrigida; JS principal em 1.897 KB, acima do teto de 1.638, decisão da C1).
-**Etapa 2 rodando** (SEDE3 e R5; workflow wdpypc1av, run wf_8bda00a0-172, base `32b7805`). Ao terminar: ler os
+**Etapa 2 rodando** (SEDE3 e R5, base `32b7805`). O contêiner reiniciou no meio da primeira tentativa (run
+wf_8bda00a0-172): o trabalho parcial ficou no repositório sem commit, e a retomada (workflow w2t5sz6tx, run wf_0e02a348-e13)
+continua dele, com um aviso RETOMADA no topo das cópias de SEDE3.txt e R5.txt em `scratchpad/cs2/parcelas/`. Ao terminar: ler os
 resultados, `simular.mjs --testes`, `montar.mjs`, juntar as notas nas fichas (`docs/entregas/onda3/`), gravar e lançar a
 etapa 3 (R3b, U2a, X1b, X3a) com a base nova. Não use resumeFromRunId; relance só o que faltar. O dono escolheu voltar ao jogo (fase 1 do complexo toda dialogada, D86). Textos das parcelas
 em `parcelas/` (comum da onda em `_comum4.txt`; D87 decide o dinheiro). Etapa 1: S2a, S3a, R2b, R4b, U1b, com a base no
