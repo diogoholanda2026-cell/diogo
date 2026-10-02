@@ -23,7 +23,7 @@ projeto, para o dono ajustar.
    ou vítimas de maus tratos e perseguição** (seção 3.4). A reserva fica **dentro do mapa jogável** e se chama **Reserva da Transformação**.
 10. **Nome da torre:** mais imponente e menos genérico, **Torre Lúculo** (seção 6).
 11. **Ordem:** os marcos entram depois do M1a, sem mexer na onda 3.
-12. **Junho de 2026:** antes moram os pioneiros (operários e famílias de funcionários, de 30 a 38 mil) e a moradia abre
+12. **Junho de 2026:** antes moram os pioneiros (operários e funcionários que chegam; o caderno pede moradia para a Holding) e a moradia abre
     ao público em jun 2026.
 
 ## 2. As 19 estruturas
@@ -175,7 +175,7 @@ pétalas), Strahov (o maior do mundo, de 200 a 250 mil), Hollywood Bowl e Verona
 - **Cinema Cosmos:** totalmente fechado, com **50 mil lugares**, maior e mais tecnológico que o Sphere de Las Vegas (20
   mil lugares, 112 m de altura, tela interna de LED de uns 15 mil m²). Uns 220 m de diâmetro e 150 m de altura, com uma
   tela interna de uns 30 mil m² em que **o teto é a extensão do telão**, som direcional por feixe, assentos hápticos,
-  efeitos de vento, aroma e névoa, conteúdo gerado por IA (Halcyon) e fachada de LED. Usa o gerador de esfera.
+  efeitos de vento, aroma e névoa, conteúdo gerado pelo Super Cérebro e fachada de LED. Usa o gerador de esfera.
 - **Centro de Convenções e Feiras:** o maior do mundo, com 1 milhão de m² e 500 mil de exposição, para o turismo de
   negócios (Xangai e Hannover são as referências). Fica no eixo da Estação Central do trem-bala.
 - **Marina de iates e porto de cruzeiros:** 1.500 vagas de iate e 5 berços para navios de até 7 mil passageiros. A
@@ -187,7 +187,7 @@ pétalas), Strahov (o maior do mundo, de 200 a 250 mil), Hollywood Bowl e Verona
 
 Para as peças não parecerem soltas, tudo obedece a um fio e a uma rede.
 
-- **O fio:** natureza e tecnologia. Cada área mostra um lado, e o Cérebro de Heldópolis (a IA) liga os dois.
+- **O fio:** natureza e tecnologia. Cada área mostra um lado, e o **Super Cérebro** (a IA da Holding, de 2014) liga os dois.
 - **Vida (oeste):** as três esferas, o shopping, o parque e o anfiteatro, em volta de um jardim comum. É a área da
   conservação e da ciência (Legado).
 - **Sede (centro):** o anel, as Torres, o lago e a Torre Lúculo, no eixo que une as duas áreas.
@@ -237,7 +237,7 @@ Mantêm o formato e as regras reais.
 
 | Gigante | Opera |
 |---|---|
-| Halcyon Systems | Cérebro de Heldópolis: gêmeo digital, fluxo de multidões |
+| Halcyon Systems | nuvem e chips do Super Cérebro (a IA da própria Holding, que roda o gêmeo digital e o fluxo de multidões) |
 | Starlight Media Group | arena de basquete, futebol americano, shows e Cinema Cosmos: direitos e transmissão |
 | Maison Valmonde | Torre Lúculo, hotéis de grife e o resort Marés de Ouro |
 | Hanbit Heavy & Electronics | estádio de jogos virtuais, telas de LED (inclusive a do Cinema Cosmos) e telhados retráteis |

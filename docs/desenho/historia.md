@@ -1,23 +1,65 @@
-# História em três partes (D67 e D68)
+# História em três partes (D67, D77 e D78)
 
-Decidido pelo dono em 30/09/2026. Este anexo diz **quando** cada coisa acontece, **quem** paga e **quanto dura**.
-O `docs/PROJETO.md` (D67 e D68) manda; aqui está o detalhe. Onde este anexo ficar em dúvida, as perguntas estão no
-fim, em "Pendências".
+Decidido pelo dono em 30/09 e 02/10/2026. Este anexo diz **quando** cada coisa acontece, **quem** paga e **quanto
+dura**. A fonte principal é o **caderno do dono** (quatro páginas, em `docs/pesquisa/historia-dono/`, com a leitura em
+`transcricao.md`). O `docs/PROJETO.md` (D67, D77 e D78) manda; aqui está o detalhe. Onde o caderno e a conversa
+discordam, as perguntas estão no fim, em "Pendências".
 
 ## 1. O fio da história
 
-**Diogo Holanda**, nascido em 1980, tem doutorado em ciência da computação, física e matemática e é um gênio
-intelectual. Em 2005, aos 25 anos, deixa um departamento do laboratório de buscas **The Axion Evergreen** (nome
-fictício, escolhido pelo dono) e funda a Holding Held. Em 2020 a Holding já é grande o bastante para propor uma cidade
-nova, e em janeiro daquele ano começa a construir, com dois tipos de sócio de projeto:
+**Diogo Holanda**, nascido em 1980, é engenheiro de ciência da computação com doutorado e um gênio intelectual. Em
+2005, aos 25 anos, sai de uma divisão do laboratório de buscas **The Axion Evergreen** (nome fictício, do dono) e cria
+uma startup. Daí nasce o grupo. O jogador é ele.
 
-- a **Federação de Nova Libertas** (os EUA do jogo);
-- **cinco fundos soberanos** (seção 5).
+### 1.1 Parte 1: 2005 a 2019
 
-A cidade é Heldópolis. Quando pronta, terá **500 mil moradores** e capacidade para **10 milhões de turistas por mês**.
-A meta de investimento é de **US$ 500 a 900 bilhões**, no ponto médio US$ 700 bilhões, pagos em tranches de 2020 a 2032.
-A sede da Holding nasce no mesmo dia e fica pronta em junho de 2026, com parte da cidade já operando para a Holding e
-para alguns turistas.
+| Ano | O que acontece |
+|---|---|
+| 2005 | a startup nasce com uns US$ 3 milhões (número rasurado no caderno) e 3 amigos como funcionários. O foco é um **algoritmo estável** para tornar mais rápidas e estáveis as transações do sistema financeiro "Swift" (nome fictício a definir) |
+| 2008 a 2010 | a crise financeira: a empresa **cresce de forma absurda** |
+| 2012 | cria **3 fintechs** sob uma **Holding guarda-chuva**: tecnologia, agroindústria e clientes VIP de alto padrão |
+| 2014 | a crise da Crimeia (nome fictício): cresce de novo. Começa a investir em IA e cria, sob a guarda-chuva, a startup do **Super Cérebro**, com 10 engenheiros do mais alto nível: uma IA que reproduz a estrutura completa do cérebro humano, com neurônios e conexões super complexas e eficientes |
+| 2018 | a crise China x EUA, no 1º mandato de um presidente de Nova Libertas (nomes fictícios): o grupo atua no mesmo mercado de 2005 e em outros. De forma **silenciosa**, compra **terras raras, ouro** e empresas com o direito de minerar e refinar, no Brasil do jogo, por entender a importância para os componentes da IA |
+| 2018 em diante | por **holdings intermediárias**, compra para a guarda-chuva portos, ferrovias, silos, transportadoras terrestres, navais e aéreas de commodities e de bens de luxo. **Só a infraestrutura, nunca administrando.** Também recebe infraestrutura como compensação de calote da fintech agroindustrial |
+
+O padrão é claro: **o grupo cresce em cada crise.** É a ideia de "anticrise" que o caderno repete.
+
+### 1.2 Parte 2: 2020 a junho de 2026
+
+| Quando | O que acontece |
+|---|---|
+| jan 2020 | começa a construção do **super complexo Sede** da Holding guarda-chuva (a obra que o jogador faz), **24 horas por dia, 7 dias por semana**, e, junto, uma **cidade** para os funcionários, os alunos e as famílias |
+| 2020 | a **pandemia** (nome fictício): nova expansão "louca", em que o grupo compra muita infraestrutura física **a preço de banana** |
+| 2020 | cria um **Fundo Gestor de Grandes Players** com **5 fundos soberanos**. Cada um aloca US$ 50 bilhões (250 bilhões no total) e recebe **5% da guarda-chuva**, para ficarem juntos |
+| início de 2021 | o Fundo tem US$ 372 bilhões (+48,8% em um ano). Entram **3 gigantes**, que recebem 5% cada e alocam US$ 100 bilhões cada |
+| 2022 | as 3 fintechs viram uma só, com 5 departamentos: os 3 mercados de antes, mais **Construções de grande porte** e **Alimentícia, Siderurgia e Sucroalcooleira** |
+| 2023 | começa a pesquisa e o desenvolvimento para uso próprio (semicondutores, placas de vídeo, hardware, software, memória RAM), para o grupo ficar **independente e anticrises**. Entram **2 novos gigantes** (5% cada) |
+| 2024 e 2025 | entram **mais 2 e mais 2 gigantes** (anos a confirmar), chegando a 9. O criador fica com 20% e distribui 10% a 20 executivos de topo e de alta confiança |
+| 2020 a 2026 | o Fundo rende **uma média de 40% ao ano** (o motor é o Super Cérebro) |
+| jun 2026 | a **sede fica pronta**. Parte da cidade já opera para a demanda de **moradia da Holding** |
+
+### 1.3 "Hoje", outubro de 2026
+
+- **Dono:** a Holding guarda-chuva é **100% privada**. O criador tem **20%**, em ações de **10 a 20 votos cada**: é o
+  majoritário e dita o rumo. **70%** está com **14 sócios de 5%** (5 fundos e 9 gigantes) e **10%** com **20 altos
+  executivos** (0,5% cada).
+- **Valor:** US$ **5,53 trilhões** de mercado e lucro líquido de US$ **215 bilhões** no último ano fiscal fechado. O Fundo
+  Gestor tem **US$ 4,3 trilhões** sob gestão.
+- **Gente:** **45 mil funcionários** em 3 turnos de 15 mil na sede, e **1 mil na parte subterrânea**, em projetos
+  privados e para governos.
+- **Faculdade:** uns 10 mil estudantes (2 turnos de 8 h, 5 mil cada). **Escola:** 17 mil alunos de 10 a 17 anos (2
+  turnos de 6 h, de 10 mil e de 7 mil). **Tudo grátis, com um "pagamento extremamente inteligente"** (pendência 4).
+
+### 1.4 O projeto da cidade
+
+- **O que é:** uma **parceria para investir US$ 500 bilhões** (no caderno há um número pequeno por cima, talvez 800; na
+  conversa foram 500 a 900) ao longo de **12 anos, 2020 a 2032**, para ter uma **cidade de 500 mil habitantes** e uma
+  **cidade turística** que comporte **até 10 milhões de visitantes**.
+- **Envolvidos:** o criador, os **EUA** (Nova Libertas) e os **5 fundos soberanos** ("tipo da Noruega, Arábia").
+- **Modelo comercial:** **parcerias com marcas de topo**, com exclusividade no nível de atuação e no tamanho, e **venda e
+  aluguel de cotas** para médias e pequenas, em cada setor de que uma cidade precisa para existir de forma contínua.
+- **O complexo:** o santuário de 3 esferas com a pista de F1, o parque de diversão e aquático, as arenas de 35 mil, 20
+  mil, 120 mil e 270 mil e a torre de restaurantes. Está em `marcos.md`.
 
 **O país:** Heldópolis fica na **República de Vera Cruz do Leste** (o Brasil do jogo, nome escolhido pelo dono em
 02/10/2026), que concede o território. Os voos nacionais são os de dentro dela, e os internacionais vêm de fora.
@@ -26,9 +68,9 @@ para alguns turistas.
 
 | Parte | Período | Papel | Como se joga | Horas (melhor faixa) |
 |---|---|---|---|---|
-| 1 | jan 2005 a dez 2019 (15 anos) | como tudo começou: saída do laboratório, a primeira empresa, os primeiros aportes | capítulos curtos por ano, decisões e pequenas telas de gestão; sem cidade | **4 a 7 h** (central 6 h) |
+| 1 | 2005 a 2019 (15 anos) | como tudo começou (seção 1.1): a startup, a crise de 2008, as 3 fintechs, o Super Cérebro, as compras silenciosas | capítulos curtos por marco (2005, 2008, 2012, 2014, 2018), decisões e pequenas telas de gestão; sem cidade | **4 a 7 h** (central 6 h) |
 | 2 | jan 2020 a jun 2026 (6,5 anos) | a sede da Holding nasce e uma parte da cidade opera | o jogo em construção agora: vias, zonas, serviços, cadeias de produção, Arcologia | **12 a 16 h** (central 14 h) |
-| 3 | jun 2026 a 2040 (14 anos) | **em paralelo**: a cidade cresce até 500 mil em 2032 e a Holding se espalha pelo mundo | duas frentes: Heldópolis (turismo, 10 milhões por mês) e o mundo (negócios, geopolítica, as outras metrópoles) | **22 a 30 h** (central 28 h) |
+| 3 | out 2026 a 2040 (14 anos) | **em paralelo**: a cidade cresce até 500 mil em 2032 e a Holding se espalha pelo mundo | duas frentes: Heldópolis (turismo, 10 milhões por mês) e o mundo (negócios, geopolítica, as outras metrópoles) | **22 a 30 h** (central 28 h) |
 
 Total: **38 a 53 h**, com meta central de **48 h**.
 
@@ -48,7 +90,7 @@ Total: **38 a 53 h**, com meta central de **48 h**.
 | Data | Marco | Metas de estado (de partida, o robô calibra) |
 |---|---|---|
 | jan 2020 | início da obra da sede e da cidade | Vila de Santa Cida, rodovia, gleba; caixa da primeira tranche |
-| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, Torre de 500 m e irmã de 452 m; o santuário é do complexo, D69); cidade parcial de **30 a 38 mil moradores** (o marco 7 da D51); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
+| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, Torre de 500 m e irmã de 452 m; o santuário é do complexo, D69); cidade parcial para a **moradia da Holding** (conta de trabalho: uns **130 a 150 mil moradores** se os 45 mil funcionários e as famílias vivem nela; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
 | 2026 a 2032 | a cidade cresce | 500 mil moradores e 10 milhões de turistas por mês até **jun 2032** |
 | jun 2032 | cidade pronta | fim da frente da cidade; o mundo segue |
 | 2040 | fim da parte 3 | final por Influência e Legado (VISAO, 5.7) |
@@ -63,19 +105,20 @@ visível na rua.
 
 **Complexo de lazer e esporte (D69):** nasce em três fases (até jun 2026, até 2029 e até 2032), pelo que mais serve à
 economia e ao conforto de quem vai morar. Detalhe em `marcos.md`. O dono disse que a cidade fica **liberada para morar em
-jun 2026**; confirmado: antes disso moram os pioneiros (operários e famílias de funcionários).
+jun 2026**, para a demanda de moradia da Holding (caderno). Antes disso moram os pioneiros: operários e funcionários
+que chegam (pendência 3).
 
-### Eventos reais de 2020 a 2026 e o BOOM (rascunho até as fotos)
+### Eventos reais de 2008 a 2026 e o BOOM
 
 Decidido pelo dono em 02/10/2026: os **eventos reais entram**, com nome fictício e características reais, e são o que dá
-o **BOOM** de crescimento da Holding guarda-chuva e das holdings intermediárias. Leitura de trabalho: a pandemia acelera
-o digital e a **onda de IA** a partir de fins de 2022 dá o salto, o que leva o grupo ao valuation de US$ 5,53 trilhões e
-ao lucro de US$ 215 bilhões em 2025. Cada evento vira um choque com data marcada (eventos com memória, M3).
+o **BOOM** de crescimento da Holding guarda-chuva e das holdings intermediárias. O caderno mostra o padrão: **o grupo cresce em cada crise** (2008, Crimeia, China x EUA, pandemia) e, com a **IA**, o
+Fundo rende 40% ao ano e chega a US$ 4,3 trilhões. Cada evento vira um choque com data marcada, que o jogador pode
+transformar em **oportunidade** (eventos com memória, M3).
 
 | Quando | Evento real | No jogo (nome fictício a definir) e efeito |
 |---|---|---|
 | jan 2020 | início da obra | Vila de Santa Cida, rodovia, gleba; primeira tranche |
-| mar 2020 | pandemia | a obra pára por semanas e o canteiro tem restrições; a demanda por nuvem e IA dispara, o que começa o crescimento do grupo |
+| mar 2020 | pandemia | o grupo **compra infraestrutura física a preço de banana**; a obra segue 24/7 com protocolos e a logística sofre; a demanda por nuvem e IA dispara |
 | 2020 a 2021 | trabalho remoto, dinheiro barato | a divisão de tecnologia cresce; crédito fácil para o projeto |
 | mar 2021 | bloqueio de um canal de navegação e falta de chips | atraso nas importações da cadeia de materiais |
 | fev 2022 | guerra no leste europeu e crise de energia | energia, aço e fertilizantes sobem de preço |
@@ -83,9 +126,10 @@ ao lucro de US$ 215 bilhões em 2025. Cada evento vira um choque com data marcad
 | fim de 2022 em diante | assistentes de IA e a corrida da IA | **o BOOM**: valuation e lucro do grupo disparam, entram os fundos e os gigantes |
 | 2024 e 2025 | corrida por data centers e energia | demanda de energia e água sobe, e a Holding vende tecnologia e energia |
 | 2025 | tarifas comerciais entre as grandes economias | a cadeia de materiais encarece, câmbio e importação se movem |
-| jun 2026 | sede pronta | Reorganização da Holding (seção 5.5) |
+| jun 2026 | sede pronta | cidade parcial para a moradia da Holding |
 
-A pandemia entra como obstáculo de obra e de logística, sem cenas de doença.
+A pandemia entra como oportunidade de compra e obstáculo de logística, sem cenas de doença. Os eventos de 2008, 2014 e
+2018 são da parte 1.
 
 ## 4. Ordem de construção
 
@@ -99,75 +143,84 @@ fase inicial" e a sede completa de jun 2026 passa a pedir mais etapas (pendênci
 
 ## 5. Quem paga e quem é dono
 
-São duas camadas, e é fácil confundir.
+Fonte: o caderno (seção 1). São duas camadas, e é fácil confundir.
 
-### 5.1 O dono da Holding em junho de 2026 (decidido pelo dono)
+### 5.1 O dono da Holding em outubro de 2026
 
-A **Holding Held guarda-chuva** é totalmente privada. Em junho de 2026 (fecho da parte 2) seu capital fica assim:
+A **Holding Held guarda-chuva** é totalmente privada:
 
 | Quem | Fatia | Em dólares (valuation de US$ 5,53 trilhões) |
 |---|---|---|
-| Diogo Holanda, o criador | 20% | US$ 1,106 trilhão |
-| 20 altos executivos e chefes de departamento | 10% no total, 0,5% cada | US$ 27,65 bilhões cada |
+| Diogo Holanda, o criador | 20%, com ações de **10 a 20 votos** | US$ 1,106 trilhão |
+| 20 altos executivos (top tier) | 10% no total, 0,5% cada | US$ 27,65 bilhões cada |
 | 5 fundos soberanos | 5% cada, 25% no total | US$ 276,5 bilhões cada |
 | 9 gigantes mundiais | 5% cada, 45% no total | US$ 276,5 bilhões cada |
 
-- **Valuation:** US$ 5,53 trilhões. **Lucro líquido do ano fiscal fechado de 2025:** US$ 215 bilhões (preço sobre lucro
-  de 25,7 vezes, na faixa das maiores empresas de tecnologia).
-- **Conta:** 20% + 10% + 70% (14 sócios x 5%) = 100%.
+- **Controle:** as ações do criador valem de 10 a 20 votos. Com 20% do capital, ele tem a maioria dos votos e dita o
+  rumo de tudo. Isso responde à pergunta do controle.
+- **Valuation e lucro:** US$ 5,53 trilhões e US$ 215 bilhões líquidos no último ano fiscal fechado (preço sobre lucro de
+  25,7 vezes).
+- **Entradas:** os 5 fundos em 2020 e os 9 gigantes de 2021 a 2025. **Não houve "Reorganização" em jun 2026**: o capital
+  se formou aos poucos, por venda de 5% de cada vez. O criador foi de 100% a 20% até 2025.
 
-### 5.2 Os 5 fundos soberanos (5% cada)
+### 5.2 O Fundo Gestor de Grandes Players
 
-Os países são os que a VISAO já tem, com nome fictício. Cada um traz uma vocação e uma exigência.
+- **O que é:** o fundo criado em 2020, em que os 14 sócios alocam dinheiro, gerido pelo grupo. Começou com US$ 250
+  bilhões, passou a 372 em um ano, e hoje tem **US$ 4,3 trilhões**, a 40% ao ano de média. (Um retorno desses, em
+  trilhões, não existe na vida real. No jogo ele é a razão de ser do Super Cérebro.)
+- **O projeto da cidade** (US$ 500 a 900 bilhões) é uma fatia de uns 12 a 21% desse fundo.
+- **Na parte 3,** é o **motor da expansão ao mundo**: o jogador decide quanto do Fundo vai para a cidade e quanto vai
+  abrir filiais nas outras metrópoles (pendência 6).
 
-| Fundo | Metrópole (país de referência) | Perfil e o que exige |
+### 5.3 Os 5 fundos soberanos (5% cada)
+
+Os países são os que a VISAO já tem, com nome fictício. O caderno diz "tipo da Noruega, Arábia". Proposta, com um fundo
+tipo Noruega no lugar do de pensões japonês:
+
+| Fundo | Referência | Perfil e o que exige |
 |---|---|---|
-| Autoridade de Investimento de Qasr al-Noor | Qasr al-Noor (Emirados) | turismo de luxo e aviação; hotéis de grife, aeroporto e marco arquitetônico |
-| Fundo de Megaprojetos de Rimal | Rimal (Arábia Saudita) | energia e cidades novas; energia própria e ritmo de obra |
-| Companhia Soberana de Singara | Singara (Singapura) | porto, finanças e hub aéreo; planejamento rigoroso, porto e aeroporto operados por ela |
-| Fundo Estratégico de Jinhai | Jinhai (China) | manufatura e infraestrutura; contratos de fornecimento e turismo de massa |
-| Fundo de Pensões de Hoshimura | Hoshimura (Japão) | paciente, quer retorno estável; governança, qualidade de vida e residências |
+| Autoridade de Investimento de Qasr al-Noor | Emirados | turismo de luxo e aviação; hotéis de grife, aeroporto e marco arquitetônico |
+| Fundo de Megaprojetos de Rimal | Arábia Saudita | energia e cidades novas; energia própria e ritmo de obra |
+| Companhia Soberana de Singara | Singapura | porto, finanças e hub aéreo; planejamento rigoroso |
+| Fundo Estratégico de Jinhai | China | manufatura e infraestrutura; contratos de fornecimento |
+| **Fundo Soberano do Norte** (novo, no lugar de Hoshimura) | Noruega | o maior fundo do mundo, paciente e ético; governança, sustentabilidade e retorno estável |
 
-### 5.3 Os 9 gigantes mundiais (5% cada), especificação proposta
+### 5.4 Os 9 gigantes mundiais (5% cada), especificação proposta
 
-Sete metrópoles da VISAO, com três gigantes de Nova Libertas (os EUA concentram quase metade do valor das maiores
-empresas do mundo). Todos os nomes são fictícios.
+Entram em **2021 (3), 2023 (2), 2024 (2) e 2025 (2)**. Sete metrópoles da VISAO, com três de Nova Libertas. Nomes
+fictícios. A ordem de entrada abaixo é minha proposta.
 
-| Gigante | Metrópole | Setor | O que traz | O que quer (gancho de história) |
-|---|---|---|---|---|
-| Halcyon Systems | Nova Libertas | nuvem, IA e chips de projeto | gêmeo digital da cidade, dados e automação | dados dos moradores (conflito de privacidade) |
-| Libertas Capital Partners | Nova Libertas | gestora de ativos e banco de investimento | crédito, a bolsa e uma futura abertura de capital | retorno rápido e liquidez para sair |
-| Starlight Media Group | Nova Libertas | mídia, streaming e esportes | atenção do mundo e eventos de massa | espetáculos e direitos de imagem da cidade |
-| Albionford & Lyle Assurance | Albionford | seguros e resseguros | seguro das mega-obras e prêmios menores | normas conservadoras e vistorias |
-| Rheinhaven Werke AG | Rheinhaven | indústria pesada, veículos e trens | máquinas, caminhões, trens e fábricas | disputa a manufatura com Jinhai |
-| Maison Valmonde | Valmonde | luxo, moda e hotelaria | hotéis de grife e o padrão de luxo da Torre | disputa o luxo com Qasr al-Noor |
-| Hanbit Heavy & Electronics | Hanbit | estaleiros, semicondutores e eletrônicos | navios, cruzeiros, telões e chips | encomendas de longo prazo |
-| Tantra Group | Suryapur | serviços de TI, saúde e farmácia | hospitais, centros de operação e mão de obra técnica | isenções e contratos de serviço |
-| Terra Roxa S.A. | Heldópolis | alimentos, minério e energia | alimentos, biocombustível e energia da região | licenças ambientais e terra |
+| Gigante | Entra | Metrópole | Setor | O que traz | O que quer |
+|---|---|---|---|---|---|
+| Libertas Capital Partners | 2021 | Nova Libertas | gestora de ativos e banco de investimento | crédito, a bolsa e uma futura abertura de capital | retorno rápido e liquidez para sair |
+| Halcyon Systems | 2021 | Nova Libertas | nuvem e chips de projeto | nuvem e chips para o Super Cérebro | dados dos moradores (conflito de privacidade) |
+| Albionford & Lyle Assurance | 2021 | Albionford | seguros e resseguros | seguro das mega-obras | normas conservadoras e vistorias |
+| Rheinhaven Werke AG | 2023 | Rheinhaven | indústria pesada, veículos e trens | máquinas, caminhões, trens e fábricas | disputa a manufatura com Jinhai |
+| Terra Roxa S.A. | 2023 | Heldópolis | alimentos, minério e energia | alimentos, biocombustível e energia | licenças ambientais e terra |
+| Maison Valmonde | 2024 | Valmonde | luxo, moda e hotelaria | hotéis de grife e o padrão da Torre | disputa o luxo com Qasr al-Noor |
+| Hanbit Heavy & Electronics | 2024 | Hanbit | estaleiros, semicondutores e eletrônicos | navios, cruzeiros, telões e chips | encomendas de longo prazo |
+| Starlight Media Group | 2025 | Nova Libertas | mídia, streaming e esportes | atenção do mundo e eventos de massa | espetáculos e direitos de imagem |
+| Tantra Group | 2025 | Suryapur | serviços de TI, saúde e farmácia | hospitais e mão de obra técnica | isenções e contratos de serviço |
 
-### 5.4 Guarda-chuva, holdings intermediárias e os 20 executivos (proposta)
+### 5.5 Estrutura do grupo e os 20 executivos
 
-- **Estrutura:** a **Holding Held guarda-chuva** controla **holdings intermediárias**, uma por divisão, e cada uma é dona
-  das empresas operacionais do ramo. As **10 divisões** da `VISAO.md` (5.2) são as intermediárias: Construção,
-  Imobiliário, Indústria, Logística, Finanças, Energia, Tecnologia, Mídia, Hotelaria e luxo, Aviação e navegação.
-- **Os 20 executivos (0,5% cada):** **2 por divisão**, um diretor e um chefe de departamento. Os departamentos de cada
-  divisão são as funções do dia a dia (obras, produção, turismo, saúde, serviços urbanos, segurança, cultura, e assim
-  por diante). Os conselheiros já existentes (Íris, Tomé, Nara, Caio, Dona Cida e Lívia) entram nessa lista.
-- **Nomes:** ficam para o roteirista, no momento de cada parte.
+- **Guarda-chuva:** a Holding Held controla **holdings intermediárias**, usadas para **adquirir** empresas e
+  infraestrutura (mineração e terras raras, portos, ferrovias, silos, transporte, e assim por diante). A regra é
+  **comprar só a infraestrutura e nunca administrá-la**.
+- **Fintech unificada (2022):** 5 departamentos: tecnologia, agroindústria, clientes VIP, construções de grande porte e
+  alimentícia, siderurgia e sucroalcooleira.
+- **Super Cérebro:** a IA do grupo, criada em 2014. Roda na **parte subterrânea da sede**, com 1 mil pessoas em projetos
+  privados e para governos (pendência 5). É também a IA da cidade.
+- **Os 20 executivos (0,5% cada):** o topo e de alta confiança. Os conselheiros já existentes (Íris, Tomé, Nara, Caio,
+  Dona Cida e Lívia) entram nessa lista. Nomes ficam para o roteirista.
+- **A proposta antiga** (10 divisões da `VISAO.md` como intermediárias) **fica suspensa** até o dono dizer quais são as
+  intermediárias (pendência 5).
 
-### 5.5 Nova Libertas e o projeto da cidade
+### 5.6 Nova Libertas e o projeto da cidade
 
-A **Federação de Nova Libertas não tem ações**. É sócia do **projeto da cidade** (US$ 500 a 900 bilhões em tranches),
-com garantias, crédito público, licenças de tecnologia e voz na segurança. O país anfitrião concede o território, como
-na premissa de concessão do `PROJETO.md`.
-
-**Como as duas camadas se ligam (proposta):** de 2020 a 2026 o projeto é pago pelos lucros da Holding, pelas tranches
-de Nova Libertas e pelos aportes dos 5 fundos. Em junho de 2026, na **Reorganização**, os aportes dos fundos viram os
-5% de cada um, os 9 gigantes entram trocando ações por contratos globais e os executivos recebem seus 10%. O criador
-cai de 100% para 20%, o preço da ambição e o fecho da parte 2.
-
-**Governo da Holding (a decidir):** com 20% e 30% se os executivos votarem juntos, o criador precisa de mais 4 dos 14
-sócios para chegar a 50%.
+A **Federação de Nova Libertas não tem ações**. É sócia do **projeto da cidade**, com garantias, crédito público,
+licenças de tecnologia e voz na segurança. O país anfitrião concede o território, como na premissa de concessão do
+`PROJETO.md`.
 
 ## 6. Dinheiro (D68)
 
@@ -186,15 +239,19 @@ sócios para chegar a 50%.
 
 ## Pendências (perguntas ao dono)
 
-Aguardam as fotos do dono:
+Do caderno (02/10/2026):
 
-1. **Controle:** ações com voto reforçado para o criador, ou controle por alianças?
-2. **Reorganização de junho de 2026:** a conversão dos aportes em 5% por sócio e a entrada dos 9 gigantes servem?
-3. **Caixa do jogo:** o jogador administra o caixa do projeto da cidade (tranches), e o lucro de US$ 215 bilhões da
-   Holding fica como pano de fundo?
-4. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3.
-5. **Eventos e estrutura:** o BOOM é a onda de IA de fins de 2022 em diante, depois do impulso digital da pandemia? As 10
-   divisões são as holdings intermediárias, com 2 executivos cada?
-6. **Nomes fictícios dos eventos** da tabela de 2020 a 2026.
+1. **"10 milhões de visitantes diários"** no caderno, e **"mensais"** na conversa. O jogo usa **por mês, como capacidade de
+   pico** (D71). Confirma?
+2. **Torre de 250 m** no caderno e **300 m** (Torre Lúculo) na conversa. Qual vale?
+3. **Moradia em jun 2026:** quantos dos 45 mil funcionários e famílias moram na cidade? A conta de trabalho é 130 a 150
+   mil moradores, bem acima dos 30 a 38 mil do M1.
+4. **Faculdade e escola grátis, "pagamento extremamente inteligente":** qual é o pagamento?
+5. **Holdings intermediárias:** quais são? E o que é a **parte subterrânea** da sede (1 mil pessoas, projetos privados e
+   para governos)?
+6. **Fundo Gestor:** o jogador o administra na parte 3, decidindo quanto vai para a cidade e quanto para o mundo?
+7. **Fundo tipo Noruega** no lugar do de pensões japonês, e anos das entradas dos gigantes (2023, 2024, 2025)?
+8. **Nomes fictícios** do "Swift", da pandemia, das crises e do presidente de Nova Libertas.
+9. **"PC mais fraco divide em 10 versões de 2,5 GB":** o que significa?
 
-Resolvidas: moradia liberada em jun 2026, com pioneiros antes (02/10/2026); país anfitrião (Vera Cruz do Leste).
+Resolvidas: controle da Holding (ações de 10 a 20 votos), Reorganização (não existe), país (Vera Cruz do Leste).

@@ -106,7 +106,7 @@ Três classes, todas "estadia temporária", na composição do pico de 10 milhõ
   - **Jewel Changi** (Safdie, Singapura): um toro de vidro e aço com um **bosque dentro do terminal**, mais de 2 mil
     árvores e palmeiras e 100 mil arbustos, e a cachoeira **Rain Vortex**, de 40 m, a mais alta interna do mundo.
 - **O que se vê dentro:** saguão central com a **Cachoeira do Portal** (40 m) e um **Jardim do Portal** de Mata
-  Atlântica e Amazônia, com passarelas no dossel; check-in e segurança biométrica (Halcyon); os cinco braços de
+  Atlântica e Amazônia, com passarelas no dossel; check-in e segurança biométrica (Super Cérebro); os cinco braços de
   embarque; lojas e duty-free; um trem interno; mirantes para as pistas e hotel de grife dentro do terminal.
 - **Aeroporto Nacional Flores da Vida:** mais compacto e eficiente (Haneda), com um **bioma de flores, plantas e
   árvores** (o Flower Dome de Gardens by the Bay e o Jewel como referências), também visitável por dentro.

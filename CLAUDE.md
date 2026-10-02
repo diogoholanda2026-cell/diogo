@@ -8,7 +8,7 @@ interface, PWA para PC e para o Poco X7 do dono.
 
 **O documento que manda é `docs/PROJETO.md`** (decisões, contratos, estrutura, parcelas do M1 e regras de trabalho).
 Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesquisa/*.md` (fontes). `docs/VISAO.md` é a
-visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.md` é a história em três partes (D67 e D77: 2005 a
+visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.md` é a história em três partes (D67, D77 e D78; a fonte é o caderno do dono em `docs/pesquisa/historia-dono/`: 2005 a
 2019, 2020 a jun 2026 e jun 2026 a 2040), com sócios, calendário, horas e o dólar (D68). `docs/desenho/marcos.md` descreve o complexo de lazer, esporte e
 natureza (D69: santuário de três esferas, F1, arenas, shopping, parque) e o alvo de qualidade no PC atual (D70). `docs/desenho/cidade.md` trata dos visitantes, do trem-bala, da moradia social,
 dos aeroportos e do gasto dos visitantes (D71 a D76).
@@ -35,6 +35,8 @@ dos aeroportos e do gasto dos visitantes (D71 a D76).
 - `previa/`: montagem do jogo novo durante o M1; só o integrador monta.
 
 ## Regras de trabalho
+- **Cada construção do complexo e da sede é dialogada com o dono antes de ser feita** (D78): pergunta curta com
+  recomendação, resposta dele, e só então a ficha e a parcela.
 - Cada parcela edita só os arquivos dela (tabela da seção 3.1 do PROJETO); tudo entra por registro; ninguém edita
   índice, `sim/nucleo.js`, `app/` ou `contratos/` sem ser o integrador.
 - Textos em `ui/textos/<parcela>.js`, português do Brasil, sem travessão, unidades da D42 ("/h" de jogo).
