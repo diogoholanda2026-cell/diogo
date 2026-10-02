@@ -1,6 +1,6 @@
 # Marcos do complexo da Holding (D69 e D70)
 
-Decidido pelo dono em 02/10/2026. Este anexo descreve as 14 estruturas do complexo de lazer, esporte e natureza de
+Decidido pelo dono em 02/10/2026. Este anexo descreve as 19 estruturas do complexo de lazer, esporte e natureza de
 Heldópolis: o que são, de que tamanho, onde ficam, em que ordem nascem e quem as opera. O `docs/PROJETO.md` (D69 e D70)
 manda; aqui está o detalhe. **Nada disto está no código ainda.** Medidas, áreas, contagens e custos são estimativas de
 projeto, para o dono ajustar.
@@ -26,7 +26,7 @@ projeto, para o dono ajustar.
 12. **Junho de 2026:** antes moram os pioneiros (operários e famílias de funcionários, de 30 a 38 mil) e a moradia abre
     ao público em jun 2026.
 
-## 2. As 14 estruturas
+## 2. As 19 estruturas
 
 Pegada é a área do terreno ocupada, sem estacionamento e esplanadas. Gerador é a ferramenta de modelagem que a cobre.
 
@@ -46,11 +46,16 @@ Pegada é a área do terreno ocupada, sem estacionamento e esplanadas. Gerador �
 | 12 | Shopping | mais de 1 milhão de m² | edifício | Vida | 1, 2 e 3 |
 | 13 | Parque de diversão e aquático | uns 80 ha | parque | Vida | 2 e 3 |
 | 14 | Reserva da Transformação (terra e baía) | uns 500 ha de terra e 100 ha de baía | reserva | à parte, longe do Jogo | 2 (terra) e 3 (baía) |
+| 15 | Resort Marés de Ouro | uns 6 mil quartos em 3 torres, com SkyPark e laguna | torre | Vida, na orla | 2 |
+| 16 | Cinema Cosmos | 50 mil lugares, uns 220 m de diâmetro | esfera | Jogo | 2 |
+| 17 | Centro de Convenções e Feiras | 1 milhão de m², 500 mil de exposição | edifício | Sede, no eixo da estação | 2 |
+| 18 | Marina de iates e porto de cruzeiros | 1.500 vagas de iate e 5 berços de cruzeiro | porto | orla | 1 (marina) e 2 (cruzeiros) |
+| 19 | Hospital de turismo de saúde | uns 1.200 leitos, com spa e bem-estar | edifício | Vida | 2 |
 
 Pegada das estruturas 1 a 13: de 4 a 5 km², uns 6 a 7% do mapa jogável (8,2 por 8,2 km). A Reserva da Transformação soma
-mais uns 5 km² de terra (7%) e 1 km² de baía.
+mais uns 5 km² de terra (7%) e 1 km² de baía. As estruturas 15 a 19 somam mais uns 2 km² (3%).
 
-Dois geradores cobrem 9 das 14 estruturas: o de **arena** (6) e o de **esfera** (3). Isso é o que segura o custo.
+Dois geradores cobrem 10 das 19 estruturas: o de **arena** (6) e o de **esfera** (4, com o Cinema Cosmos). Isso é o que segura o custo.
 
 ## 3. Santuário de animais
 
@@ -160,6 +165,24 @@ pétalas), Strahov (o maior do mundo, de 200 a 250 mil), Hollywood Bowl e Verona
   por um **rio lento** que cruza as duas. Tema: Mata Atlântica e Amazônia, com tecnologia (atrações em realidade
   aumentada, robôs, projeção).
 
+## 6.1 Ampliações (estruturas 15 a 19, D75)
+
+- **Resort Marés de Ouro:** o super resort de luxo, na orla. Três torres de uns 60 andares ligadas por um **SkyPark** com
+  piscina de borda infinita e uma **laguna** com praia artificial, com uns 6 mil quartos. Referências: Marina Bay Sands
+  (três torres e o SkyPark de 340 m), Atlantis The Palm (parque aquático e aquário) e o Venetian de Macau. Faixas: ultra
+  luxo (10%), premium (40%) e acessível (50%), mais o **Passe do Dia**, com **preço dinâmico e promoção agressiva nos
+  dias de menor movimento** (`cidade.md`, 6.6), para o público que não é ultra rico também ir. Sem cassino.
+- **Cinema Cosmos:** totalmente fechado, com **50 mil lugares**, maior e mais tecnológico que o Sphere de Las Vegas (20
+  mil lugares, 112 m de altura, tela interna de LED de uns 15 mil m²). Uns 220 m de diâmetro e 150 m de altura, com uma
+  tela interna de uns 30 mil m² em que **o teto é a extensão do telão**, som direcional por feixe, assentos hápticos,
+  efeitos de vento, aroma e névoa, conteúdo gerado por IA (Halcyon) e fachada de LED. Usa o gerador de esfera.
+- **Centro de Convenções e Feiras:** o maior do mundo, com 1 milhão de m² e 500 mil de exposição, para o turismo de
+  negócios (Xangai e Hannover são as referências). Fica no eixo da Estação Central do trem-bala.
+- **Marina de iates e porto de cruzeiros:** 1.500 vagas de iate e 5 berços para navios de até 7 mil passageiros. A
+  marina é da fase 1 e os cruzeiros da fase 2.
+- **Hospital de turismo de saúde:** uns 1.200 leitos, com spa e bem-estar, operado pela Tantra (Bumrungrad e a Cleveland
+  Clinic Abu Dhabi são as referências), para estadias longas.
+
 ## 7. Nexo e conexão: um fio, três áreas
 
 Para as peças não parecerem soltas, tudo obedece a um fio e a uma rede.
@@ -186,8 +209,8 @@ morar. Estádios enormes ficam vazios quando há pouca gente, então os maiores 
 
 | Fase | Período | Turismo (proposta) | O que nasce |
 |---|---|---|---|
-| 1 | 2020 a jun 2026 (liberação para morar) | uns 300 mil por mês | sede e Torres; Esfera Baixa; Torre Lúculo; arena de basquete (35 mil); fase 1 do shopping; avenidas do circuito |
-| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Média e Alta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping; Reserva da Transformação em terra (primeiros resgates) |
+| 1 | 2020 a jun 2026 (liberação para morar) | uns 300 mil por mês | sede e Torres; Esfera Baixa; Torre Lúculo; arena de basquete (35 mil); fase 1 do shopping; avenidas do circuito; marina de iates |
+| 2 | jun 2026 a 2029 | de 0,3 a 4 milhões por mês | Esferas Média e Alta; parque (fase 1); tênis; jogos virtuais; anfiteatro; pista permanente e GP inaugural; fase 2 do shopping; Reserva da Transformação em terra (primeiros resgates); resort Marés de Ouro; Cinema Cosmos; centro de convenções; porto de cruzeiros; hospital de turismo de saúde |
 | 3 | 2029 a 2032 | de 4 a 10 milhões por mês | futebol americano (120 mil); shows (270 mil); shopping e parque completos; baía-santuário, elefantes e orcas resgatadas |
 
 **Cardápio do turismo (proposta para a meta de 10 milhões por mês):** parque e shopping 40%, eventos 35%, santuário,
@@ -215,32 +238,32 @@ Mantêm o formato e as regras reais.
 | Gigante | Opera |
 |---|---|
 | Halcyon Systems | Cérebro de Heldópolis: gêmeo digital, fluxo de multidões |
-| Starlight Media Group | arena de basquete, futebol americano e shows: direitos e transmissão |
-| Maison Valmonde | Torre Lúculo e hotéis de grife |
-| Hanbit Heavy & Electronics | estádio de jogos virtuais, telas de LED e telhados retráteis |
+| Starlight Media Group | arena de basquete, futebol americano, shows e Cinema Cosmos: direitos e transmissão |
+| Maison Valmonde | Torre Lúculo, hotéis de grife e o resort Marés de Ouro |
+| Hanbit Heavy & Electronics | estádio de jogos virtuais, telas de LED (inclusive a do Cinema Cosmos) e telhados retráteis |
 | Rheinhaven Werke | circuito, trens de saída e o anel de mobilidade |
 | Terra Roxa S.A. | biomas, jardins e a água do santuário |
-| Tantra Group | hospital veterinário e saúde dos eventos |
+| Tantra Group | hospital veterinário, saúde dos eventos e hospital de turismo de saúde |
 | Fundação Held, com Terra Roxa e Tantra | Reserva da Transformação e a baía-santuário |
 | Libertas Capital Partners | financiamento, nomes de estádios e títulos |
 | Albionford & Lyle Assurance | seguro das estruturas e dos eventos |
 
 ## 11. Custo estimado
 
-Soma de uns **US$ 81 bilhões**, cerca de 12% dos US$ 700 bilhões do projeto: esferas 9, circuito 1,5, basquete 3,
+Soma de uns **US$ 110 bilhões**, cerca de 16% dos US$ 700 bilhões do projeto: esferas 9, circuito 1,5, basquete 3,
 futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torre Lúculo 2, shopping 25, parque
-10 e Reserva da Transformação 2 (US$ bilhões). O resto do projeto vai para moradia, vias, redes, aeroporto e porto.
+10 Reserva da Transformação 2, resort 10, Cinema Cosmos 5, convenções 6, marina e porto 3 e saúde 5 (US$ bilhões). O resto do projeto vai para moradia, vias, redes, aeroporto e porto.
 
 ## 12. O que muda no plano
 
 - **M1 e onda 3:** não mudam. O santuário substitui a cúpula só quando a parcela dos marcos rodar; até lá, o código da
   sede continua com a cúpula da D65.
-- **Marcos:** viram uma série depois do M1a (confirmado pelo dono) (uns 48 agentes a mais, estimativa), começando pelos geradores.
+- **Marcos:** viram uma série depois do M1a (confirmado pelo dono) (uns 60 agentes a mais, estimativa), começando pelos geradores.
 - **Orçamento gráfico (D70):** os tetos da D66 valem para a versão jogável. Esferas de vidro e arenas entram em versão
   simples (casca fina de longe, interior só de perto) e sobem de qualidade no PC novo.
 - **Metrô e trem:** o que for preciso para a saída de eventos vem antes do M4.
 
 ## Pendências (perguntas ao dono)
 
-Tudo o que era dos marcos foi confirmado em 02/10/2026 (reserva dentro do mapa, nomes e orcas). O turismo e os
-trabalhadores foram resolvidos em `cidade.md` (D71 e D72). Em aberto: a foto da história (ver `historia.md`).
+Os marcos estão confirmados. Em aberto: o espaço no mapa e os nomes novos (`cidade.md`, pendências) e a foto da
+história (`historia.md`).

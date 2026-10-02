@@ -1,7 +1,7 @@
-# A cidade de 500 mil e o fluxo de pessoas (D71 a D74)
+# A cidade de 500 mil e o fluxo de pessoas (D71 a D75)
 
 Decidido pelo dono em 02/10/2026. Este anexo trata de quem vive, trabalha e passa por Heldópolis: os visitantes, o que
-eles gastam, os trabalhadores que vêm de fora, a moradia social e os aeroportos. O `docs/PROJETO.md` (D71 a D74) manda;
+eles gastam, os trabalhadores que vêm de fora, a moradia social e os aeroportos. O `docs/PROJETO.md` (D71 a D75) manda;
 aqui está o detalhe. **Nada disto está no código ainda.** Números são estimativas de projeto, para o dono ajustar.
 
 ## 1. Decisões do dono
@@ -11,12 +11,19 @@ aqui está o detalhe. **Nada disto está no código ainda.** Números são estim
 2. **Trem-bala em túneis, como no Japão**, para trabalhadores de outras cidades irem e virem todo dia.
 3. **Moradia social:** das habitações dos 500 mil moradores, as de **100 mil** pessoas são sociais: **50 mil em extrema
    pobreza** e **50 mil de baixa renda**, que compram ou alugam a preços simbólicos.
-4. **Dois aeroportos:** um **Internacional** (visitas de fora do país) e um **Nacional** (visitas do país).
+4. **Dois aeroportos:** o **Aeroporto Internacional Estrelas do Leste** (visitas de fora do país) e o **Aeroporto
+   Nacional Flores da Vida** (visitas do país).
 5. **Aeroportos na moldura do mapa, mas visíveis por dentro**, com o maior aeroporto do mundo e o Jewel Changi, de
    Singapura (o bioma de flores, plantas e árvores), como referências.
 6. **A composição do pico (40, 45 e 15%) fica.** A cidade precisa de **lugares que façam o visitante gastar muito e
    movimentem a economia**, e de um **fluxo rotineiro o mais perto possível dos 10 milhões**, de forma realista,
    chegando ao teto em **datas específicas**.
+7. **Sem cassino.**
+8. **Entram** o centro de convenções e feiras, a marina de iates com o porto de cruzeiros e o hospital de turismo de
+   saúde, e **dois acréscimos do dono**: um **super resort de luxo** com **ingressos promocionais agressivos nos dias de
+   menor movimento**, para o público que não é ultra rico também ir, e um **cinema maior e mais tecnológico que o Sphere
+   de Las Vegas**, totalmente fechado, com o teto como extensão do telão e **50 mil lugares** (D75, em `marcos.md`).
+9. **Modo Visita nos dois aeroportos**, e depois estendido a outras estruturas conforme fizer sentido para a cidade.
 
 ## 2. Visitantes
 
@@ -82,24 +89,26 @@ Três classes, todas "estadia temporária", na composição do pico de 10 milhõ
 - **Capacidade:** Internacional de 80 a 100 milhões de passageiros por ano (como Dubai ou Atlanta), com 3 pistas
   paralelas; Nacional de 40 a 60 milhões, com 2 pistas (como Haneda, o aeroporto nacional de Tóquio, que tem o Narita
   como internacional).
-- **Nomes (proposta):** Aeroporto Internacional **Cruzeiro do Sul** e Aeroporto Nacional **Ipê**.
+- **Nomes (dono, 02/10/2026):** Aeroporto Internacional **Estrelas do Leste** e Aeroporto Nacional **Flores da Vida**.
 
 ### 5.2 Modo Visita: ver o aeroporto por dentro
 
 - Um botão na tela do aeroporto abre o **Modo Visita**: a câmera entra no terminal e anda ou voa por dentro. É uma
   cena própria, carregada na hora, e não faz parte do mapa (por isso cabe no PC atual, D70).
 - A **lotação segue a simulação**: o número de pessoas no saguão e nas filas vem dos passageiros por hora do momento.
-- **Aeroporto Internacional Cruzeiro do Sul, as referências:**
+- **Aeroporto Internacional Estrelas do Leste, as referências:**
   - **Beijing Daxing** (Zaha Hadid e ADP, 2019, terminal de uns 700 mil m², o maior terminal de prédio único): o plano
-    radial, com cinco braços saindo de um saguão central, de onde nenhum portão passa de uns 8 minutos a pé.
+    radial em estrela (o "estrela-do-mar" de Daxing), com cinco braços saindo de um saguão central, de onde nenhum portão passa de uns 8 minutos a pé.
   - **Dubai Terminal 3** (uns 1,7 milhão de m², um dos maiores prédios do mundo): a escala do saguão e das lojas.
   - **Jewel Changi** (Safdie, Singapura): um toro de vidro e aço com um **bosque dentro do terminal**, mais de 2 mil
     árvores e palmeiras e 100 mil arbustos, e a cachoeira **Rain Vortex**, de 40 m, a mais alta interna do mundo.
 - **O que se vê dentro:** saguão central com a **Cachoeira do Portal** (40 m) e um **Jardim do Portal** de Mata
   Atlântica e Amazônia, com passarelas no dossel; check-in e segurança biométrica (Halcyon); os cinco braços de
   embarque; lojas e duty-free; um trem interno; mirantes para as pistas e hotel de grife dentro do terminal.
-- **Aeroporto Nacional Ipê:** mais compacto e eficiente (Haneda), com um jardim de ipês, também visitável por dentro.
-- **Mais adiante:** o Modo Visita pode se estender ao shopping, às esferas e às arenas, depois do aeroporto.
+- **Aeroporto Nacional Flores da Vida:** mais compacto e eficiente (Haneda), com um **bioma de flores, plantas e
+  árvores** (o Flower Dome de Gardens by the Bay e o Jewel como referências), também visitável por dentro.
+- **Os dois aeroportos têm Modo Visita desde o início.** Depois ele se estende ao shopping, às esferas, às arenas e
+  ao Cinema Cosmos, conforme fizer sentido para a cidade.
 - **Custo estimado dos dois aeroportos:** de US$ 30 a 50 bilhões.
 
 ## 6. Gasto dos visitantes e calendário de picos (D74)
@@ -143,19 +152,30 @@ Réveillon de Heldópolis, Carnaval, Grande Prêmio de F1, final da liga de fute
 virtuais, festival de shows de 270 mil, férias de julho e de dezembro. Nesses dias o jogo vai ao teto, e o jogador
 precisa ter trem, vias, segurança e hotéis para aguentar. Aguentar o pico sem colapso dá Influência e o recorde vira meta.
 
-### 6.5 Sugestões de lugares para gastar mais (aguardam o OK do dono)
+### 6.5 Lugares para gastar mais (aprovados em 02/10/2026)
 
 1. **Centro de Convenções e Feiras:** o maior do mundo (Xangai tem uns 1,5 milhão de m²), para o turismo de negócios, que
    gasta muito e enche os dias úteis.
 2. **Marina de iates e porto de cruzeiros:** o luxo náutico e os passageiros de cruzeiro.
 3. **Hospital de turismo de saúde:** o Tantra recebe pacientes do mundo todo, em estadias longas.
-4. **Resorts integrados** de grife (Marina Bay Sands é a referência), com ou sem cassino (pendência 1).
+4. **Resort Marés de Ouro:** o super resort de luxo, com preço dinâmico (seção 6.6).
+5. **Cinema Cosmos:** 50 mil lugares, para estreias, shows e eventos imersivos.
+6. **Sem cassino.** O gasto vem dos outros motores.
+
+### 6.6 Preço dinâmico: o público que não é ultra rico também vai
+
+- Hotéis, o resort, o parque e os ingressos têm **preço por ocupação projetada**. Abaixo de 50%, o desconto chega a
+  **60%**; acima de 90%, o ágio chega a **100%**. É a regra dos hotéis e das companhias aéreas.
+- No **resort**, três faixas: ultra luxo (10% dos quartos), premium (40%) e acessível (50%), mais o **Passe do Dia**
+  (piscinas, praia da laguna e spa), com promoção agressiva nos dias vazios.
+- O efeito: o vale vira promoção e enche, o pico paga mais, e a rotina fica entre 75 e 85% do pico.
+- Valores de partida, o robô calibra (A4).
 
 ## 7. Dinheiro, em resumo
 
-Somando o complexo (D69, US$ 81 bilhões), o trem-bala (50 a 100), os aeroportos (30 a 50) e a moradia social (4), são
-uns **US$ 200 bilhões**, cerca de 29% dos US$ 700 bilhões do projeto. O resto vai para as moradias dos outros 400 mil,
-as vias, as redes e os serviços. Do lado da receita, os visitantes rendem uns US$ 100 a 125 bilhões por ano no pico.
+Somando o complexo (D69 e D75, uns US$ 110 bilhões), o trem-bala (50 a 100), os aeroportos (30 a 50) e a moradia social
+(4), são uns **US$ 230 bilhões**, cerca de 33% dos US$ 700 bilhões do projeto. O resto vai para as moradias dos outros
+400 mil, as vias, as redes e os serviços. Do lado da receita, os visitantes rendem uns US$ 100 a 125 bilhões por ano.
 
 ## 8. O que muda no plano
 
@@ -164,11 +184,12 @@ as vias, as redes e os serviços. Do lado da receita, os visitantes rendem uns U
 - **Simulação:** classes de visitantes, gasto por classe, calendário de eventos com picos, pendulares por trem, duas
   zonas de moradia social, o Fundo de Moradia e as metas de Legado da escada social.
 - **Aeroportos:** na moldura, com estação, aviões no céu, tela de gestão e o Modo Visita (cena de interior própria; o M1
-  deixou "interiores falsos" de fora). O Modo Visita entra depois do M1a, começando pelo aeroporto Internacional.
+  deixou "interiores falsos" de fora). O Modo Visita entra depois do M1a, começando pelos dois aeroportos.
 
 ## Pendências (perguntas ao dono)
 
-1. **Cassino:** sem cassino, como motor de gasto (recomendo, combina com esporte, natureza e família), ou um resort
-   integrado com cassino, desligável?
-2. **Sugestões da seção 6.5** (centro de convenções, marina e porto de cruzeiros, turismo de saúde): entram?
-3. **Modo Visita:** só no aeroporto Internacional primeiro e depois shopping, esferas e arenas?
+1. **Cabe tudo no mapa jogável de 8,2 km (67 km²)?** O complexo passa a ocupar uns 6 a 7 km², a Reserva da Transformação
+   uns 6 km² e a cidade de 500 mil de 20 a 35 km². Dá uns 32 a 48 km², fora o mar, os morros e o rio. Recomendação:
+   manter o mapa e **verticalizar a cidade** (500 mil em uns 20 km², como Singapura), e **ampliar o mapa para 12 km**
+   quando o PC novo chegar (D70).
+2. **Nomes novos:** Resort Marés de Ouro e Cinema Cosmos servem?
