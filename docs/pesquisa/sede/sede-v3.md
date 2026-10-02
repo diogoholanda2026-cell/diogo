@@ -82,8 +82,8 @@ vidraçaria e a faixa de LED** do modelo.
 - **Lucullus Tower (Torre Lúculo):** fora do anel externo, na avenida da Heldópolis Central Station, à beira de um
   espelho d'água como o lago da McLaren, à vista da reta da F1 no anel viário.
 
-Falta só a posição da sede no mapa e o tamanho da área inicial (seção 5). Depois disso a parcela SEDE3 refaz
-`fonte/data/arcologia-plano.js` e `fonte/render/arcologia/`.
+A posição no mapa e a área inicial foram decididas na D90 (seção 5). A parcela SEDE3 refaz
+`fonte/data/mapa-heldopolis.js`, `fonte/data/arcologia-plano.js` e `fonte/render/arcologia/`.
 
 ## 5. Onde a sede cabe no mapa (medido em 02/10/2026)
 
@@ -98,3 +98,6 @@ centro perto de (150, 190), com o anel indo de x -640 a 940 e de z -600 a 980 (a
 `sede-v3-no-mapa.jpg`: a sede v3 desenhada no mapa real (4 m por pixel, de -2.048 a 2.048), com a área inicial de hoje
 (amarelo) e a proposta de 6 x 5 ladrilhos (laranja: de x -1.024 a 2.048 e de z -1.536 a 1.024, ganhando a faixa da
 rodovia ao norte e a planície e a orla da baía a leste, ainda inteira numa margem do rio, D53).
+
+**Decidido (D90):** a sede fica no sul da área inicial, de frente para o mar, e a área inicial passa de 4 x 4 para 6 x 5
+ladrilhos (o retângulo laranja da imagem).
