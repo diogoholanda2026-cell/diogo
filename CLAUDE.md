@@ -11,7 +11,8 @@ Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesqui
 visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.md` é a história em três partes (D67, D77 a D86; a fonte é o caderno do dono em `docs/pesquisa/historia-dono/`: 2005 a
 2019, 2020 a jun 2026 e jun 2026 a 2040), com sócios, calendário, horas e o dólar (D68). `docs/desenho/marcos.md` descreve o complexo de lazer, esporte e
 natureza (D69: santuário de três esferas, F1, arenas, shopping, parque) e o alvo de qualidade no PC atual (D70). `docs/desenho/cidade.md` trata dos visitantes, do trem-bala, da moradia social,
-dos aeroportos e do gasto dos visitantes (D71 a D76).
+dos aeroportos e do gasto dos visitantes (D71 a D76). `docs/pesquisa/sede/sede-v3.md` é a sede v3, o Park of Future
+Dreams do modelo do dono (D88).
 
 ## Como o dono trabalha
 - Fala português do Brasil; responda em português: resultado primeiro, frases curtas, sem travessão.
@@ -36,7 +37,8 @@ dos aeroportos e do gasto dos visitantes (D71 a D76).
 
 ## Regras de trabalho
 - **Cada construção do complexo e da sede é dialogada com o dono antes de ser feita** (D78): pergunta curta com
-  recomendação, resposta dele, e só então a ficha e a parcela.
+  recomendação, resposta dele, e só então a ficha e a parcela. Toda construção tem nome próprio em inglês (D88); os textos da
+  interface seguem em português.
 - Cada parcela edita só os arquivos dela (tabela da seção 3.1 do PROJETO); tudo entra por registro; ninguém edita
   índice, `sim/nucleo.js`, `app/` ou `contratos/` sem ser o integrador.
 - Textos em `ui/textos/<parcela>.js`, português do Brasil, sem travessão, unidades da D42 ("/h" de jogo).

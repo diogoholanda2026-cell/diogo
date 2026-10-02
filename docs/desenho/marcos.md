@@ -151,6 +151,8 @@ Decidido com o dono:
 - **Nome e data:** **Grande Prêmio de Heldópolis**, da **Fórmula Mundial**, em **novembro**, à noite.
 - **Esferas:** a pista serpenteia entre as três esferas, em S, e entra no túnel de vidro acústico sob o pedestal da
   Floresta (D80).
+- **Anel da sede (D88):** o trecho de avenidas (40%, uns 2,5 km) corre num arco do anel viário em volta do anel externo
+  da sede, com a faixa de LED da fachada ao lado da pista à noite. A volta continua com 6,2 km.
 
 
 - **Padrão:** o da federação mundial fictícia (seção 9), equivalente ao grau 1 da FIA. Largura de 12 a 15 m, reta de
@@ -204,7 +206,7 @@ Decidido com o dono:
 - **Experiência:** uns **12 restaurantes** de alta gastronomia, com cerca de **1.800 lugares** no total, operados pela
   **Maison Valmonde**. As reservas e a lista de espera ficam com o **Super Cérebro**.
 - **Posição:** **à beira do lago**, no eixo entre a Sede e a Estação Central do trem-bala, com uma **praça e um espelho
-  d'água**. Aparece na reta dos boxes da F1.
+  d'água**. Aparece na reta dos boxes da F1. Com a sede v3 (D88) o lago da v2 saiu, e a posição volta ao diálogo.
 - **Fase:** 1 (até jun 2026).
 
 
@@ -267,12 +269,14 @@ Para as peças não parecerem soltas, tudo obedece a um fio e a uma rede.
 - **O fio:** natureza e tecnologia. Cada área mostra um lado, e o **Super Cérebro** (a IA da Holding, de 2014) liga os dois.
 - **Vida (oeste):** as três esferas, o shopping, o parque e o anfiteatro, em volta de um jardim comum. É a área da
   conservação e da ciência (Legado).
-- **Sede (centro):** o anel, as Torres, o lago e a Torre Lúculo, no eixo que une as duas áreas.
+- **Sede (centro):** o **Park of Future Dreams** (D88, `docs/pesquisa/sede/sede-v3.md`): o anel externo da faculdade e
+  da escola, o anel interno da Holding, as torres da biblioteca, dos laboratórios e da administração entre os dois, e no
+  centro as torres de 500 e 452 m com as cachoeiras e o lago em anel. As 8 avenidas radiais levam às outras áreas.
 - **Jogo (leste):** as cinco arenas ao redor de uma **esplanada**. É a área da performance e da IA (Influência).
 - **Circuito:** a pista une as duas áreas e passa pelo corredor das esferas.
 - **Reserva da Transformação:** fica à parte, longe do barulho, e se liga ao santuário pelo Corredor de Resgate (via de serviço
   com quarentena nos pedestais) e por uma linha de safári elétrico.
-- **Anel de mobilidade:** um trem leve elevado liga as três áreas aos portões da sede (oeste, norte e leste), e as
+- **Anel de mobilidade:** um trem leve elevado liga as três áreas às avenidas radiais da sede, e as
   estações de evento entram na rede de trem pesado que o plano já prevê.
 - **Água e energia:** o lago central da sede alimenta as esferas, o parque e as fontes; a pele solar dos telhados paga
   parte da energia.
@@ -335,6 +339,7 @@ futebol americano 10, shows 12, tênis 1,5, jogos virtuais 3, anfiteatro 2, Torr
 
 - **M1 e onda 3:** não mudam. O santuário substitui a cúpula só quando a parcela dos marcos rodar; até lá, o código da
   sede continua com a cúpula da D65.
+- **Sede v3 (D88):** o modelo do dono substitui a sede v2. A X1b espera a parcela SEDE3, depois do diálogo.
 - **Marcos:** viram uma série depois do M1a (confirmado pelo dono) (uns 60 agentes a mais, estimativa), começando pelos geradores.
 - **Orçamento gráfico (D70):** os tetos da D66 valem para a versão jogável. Esferas de vidro e arenas entram em versão
   simples (casca fina de longe, interior só de perto) e sobem de qualidade no PC novo.

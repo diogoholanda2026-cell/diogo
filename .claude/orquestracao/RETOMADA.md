@@ -4,8 +4,10 @@
 
 **Onda 3 em andamento.** O dono escolheu voltar ao jogo (fase 1 do complexo toda dialogada, D86). Textos das parcelas
 em `parcelas/` (comum da onda em `_comum4.txt`; D87 decide o dinheiro). Etapa 1: S2a, S3a, R2b, R4b, U1b, com a base no
-commit "Onda 3: textos das parcelas". Etapa 2 depois: R3b, R5, U2a, X1b, X3a (antes dela, ver se o dono respondeu sobre a
-Universidade e a Escola da sede, regra D78). Por último a C1 (texto a escrever com o que as etapas deixarem). As notas de
+commit "Onda 3: textos das parcelas". Etapa 2 depois: R3b, R5, U2a, X3a. **A X1b espera a sede v3 (D88,
+`docs/pesquisa/sede/sede-v3.md`)**: depois do diálogo com o dono (nomes em inglês, torres, fases do anel externo e Torre
+Lúculo), escrever a parcela SEDE3 (refaz `data/arcologia-plano.js` e `render/arcologia/`) e reescrever a X1b e a X3a
+sobre ela. Por último a C1 (texto a escrever com o que as etapas deixarem). As notas de
 entrega ficam em `scratchpad/novo/<parcela>/nota.md`; o integrador junta nas fichas. Commit de segurança depois de cada
 etapa revisada.
 
@@ -18,7 +20,7 @@ a CAS perceptiva de pos.js para pos.glsl.js, mapa de cor do terreno do Alta em 4
 - Onda 2 (S1b, R1b, R3a, X2) revisada (`7ccca28`, `ed81c43`) e integrada pela I1 (`424d396`, `2f82e7f`).
 - Prévia 1 "via no polegar" montada e publicada em `previa/` (`cc8856d`); o site publica `previa/` (`5c50624`).
 
-## Decisões novas do dono (D63 a D86)
+## Decisões novas do dono (D63 a D88)
 - Sede em anel como a Apple Park, lago central com fontes e cachoeira em ciclo, torres de 500 e 452 m quase encostadas,
   cúpula de vidro de 240 m; PC primeiro (RX 550, medido em `docs/pesquisa/pc-dono/`).
 - D67 a D70 (30/09 e 02/10/2026): história em três partes e dólar (`docs/desenho/historia.md`); complexo de lazer e esporte,
@@ -27,6 +29,7 @@ a CAS perceptiva de pos.js para pos.glsl.js, mapa de cor do terreno do Alta em 4
 - D77 a D86 (02/10/2026): país Vera Cruz do Leste, eventos reais e a história do caderno do dono (`historia.md` e
   `docs/pesquisa/historia-dono/`). Cada construção é dialogada com o dono antes de ser feita.
   Nada disso está no código; o M1 e a onda 3 não mudam.
+- D87 (dinheiro em unidades, exibido em dólar) e D88 (sede v3, Park of Future Dreams, nomes de construção em inglês).
 
 ## Próximo passo
 - Portão 2: o dono roda o roteiro de 5 min e a página de teste da Prévia 1b (previa/cenas.html) no PC dele.

@@ -49,14 +49,16 @@ O padrão é claro: **o grupo cresce em cada crise.** É a ideia de "anticrise" 
 - **Gente:** **45 mil funcionários** em 3 turnos de 15 mil na sede, e **1 mil na parte subterrânea**, em projetos
   privados e para governos.
 - **Parte subterrânea da sede:** o **data center dos projetos secretos** e das partes mais essenciais da IA da Holding. Os
-  projetos são **militares, patentes e avanço da IA** (1 mil pessoas, privados e para governos).
+  projetos são **militares, patentes e avanço da IA** (1 mil pessoas, privados e para governos). Ali fica também o
+  **acelerador de partículas** (660 m de diâmetro, a 48 m de profundidade), projeto secreto do Caio Montenegro (D88).
 - **Duas IAs:** o **Super Cérebro**, de uso interno e dos projetos (no subsolo), e uma **IA multimodal de verdade**, em que
   um só modelo cria o prompt, interpreta, gera a imagem estática e a transforma em vídeo, e que também faz o que o Claude faz.
   A multimodal é o **modelo de IA líder de mercado**.
 - **Faculdade:** uns 10 mil estudantes (2 turnos de 8 h, 5 mil cada). **Escola:** 17 mil alunos de 10 a 17 anos (2
   turnos de 6 h, de 10 mil e de 7 mil). **Tudo grátis, e o "pagamento extremamente inteligente" é a inteligência:** para entrar basta ter um alto nível de
   inteligência, e não se paga mais nada, nem o estudo nem a moradia (a moradia é gratuita para quem comprova que não
-  tem condições). O Super Cérebro aplica a seleção.
+  tem condições). O Super Cérebro aplica a seleção. As duas ficam no **anel externo da sede** (D88), com refeitórios,
+  quadras, piscinas e dormitórios de descanso.
 
 ### 1.4 O projeto da cidade
 
@@ -98,7 +100,7 @@ Total: **38 a 53 h**, com meta central de **48 h**.
 | Data | Marco | Metas de estado (de partida, o robô calibra) |
 |---|---|---|
 | jan 2020 | início da obra da sede e da cidade | Vila de Santa Cida, rodovia, gleba; caixa da primeira tranche |
-| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (anel, Torre de 500 m e irmã de 452 m; o santuário é do complexo, D69); cidade parcial com **70 mil moradores** (decidido em 02/10/2026; o restante dos 45 mil funcionários e dos alunos vem de **trem-bala**; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
+| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (sede v3, D88: os dois anéis, as torres de 500 e 452 m, a biblioteca, os laboratórios e a administração; o santuário é do complexo, D69); cidade parcial com **70 mil moradores** (decidido em 02/10/2026; o restante dos 45 mil funcionários e dos alunos vem de **trem-bala**; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
 | 2026 a 2032 | a cidade cresce | 500 mil moradores e 10 milhões de turistas por mês até **jun 2032** |
 | jun 2032 | cidade pronta | fim da frente da cidade; o mundo segue |
 | 2040 | fim da parte 3 | final por Influência e Legado (VISAO, 5.7) |

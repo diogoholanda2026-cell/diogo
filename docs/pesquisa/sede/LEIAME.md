@@ -19,6 +19,11 @@ Não vieram do servidor (sobrecarregado): Amazon Spheres, Jewel Changi e o préd
 Fonte dos contornos: © colaboradores do OpenStreetMap, dados sob a licença ODbL (openstreetmap.org/copyright), baixados
 pela Overpass API. Os scripts `desenhar.py`, `costa.py` e `proposta.py` refazem as pranchas a partir do JSON da Overpass.
 
+## Versão 3 (D88, 02/10/2026)
+
+- `sede-v3.md`: o **Park of Future Dreams**, modelo 3D do dono, com a geometria lida no modelo e as mudanças das
+  respostas dele. Substitui a versão 2.
+
 ## Versão 2 (decisões do dono, D63 a D66)
 
 - `proposta-sede-v2.png`: anel fechado como a Apple Park (481 m por fora, 4 andares), lago central com fontes e a
