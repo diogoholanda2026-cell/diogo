@@ -100,7 +100,7 @@ Total: **38 a 53 h**, com meta central de **48 h**.
 | Data | Marco | Metas de estado (de partida, o robô calibra) |
 |---|---|---|
 | jan 2020 | início da obra da sede e da cidade | Vila de Santa Cida, rodovia, gleba; caixa da primeira tranche |
-| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (sede v3, D88: os dois anéis, as torres de 500 e 452 m, a biblioteca, os laboratórios e a administração; o santuário é do complexo, D69); cidade parcial com **70 mil moradores** (decidido em 02/10/2026; o restante dos 45 mil funcionários e dos alunos vem de **trem-bala**; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
+| jun 2026 | **sede pronta** (fim da parte 2) | Arcologia completa (sede v3, D88 e D89: o Meridian Ring, 2 dos 8 trechos do Horizon Ring, a Blade Tower e a Legacy Tower, a Codex Tower, a Helix Labs e a Compass Tower; os outros 6 trechos até 2032; o santuário é do complexo, D69); cidade parcial com **70 mil moradores** (decidido em 02/10/2026; o restante dos 45 mil funcionários e dos alunos vem de **trem-bala**; o marco 7 do M1 é só o meio do caminho, de 25 a 40 mil); uns **300 mil turistas por mês** (3% da meta); aeroporto e hotéis do primeiro anel |
 | 2026 a 2032 | a cidade cresce | 500 mil moradores e 10 milhões de turistas por mês até **jun 2032** |
 | jun 2032 | cidade pronta | fim da frente da cidade; o mundo segue |
 | 2040 | fim da parte 3 | final por Influência e Legado (VISAO, 5.7) |

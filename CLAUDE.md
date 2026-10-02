@@ -3,7 +3,8 @@
 O jogo está sendo refeito do zero, no nível do **Cities: Skylines II** (referência máxima) com o que o **Highrise City**
 acrescenta: você é a Holding Held, concessionária que planeja Heldópolis (vias livres, zonas com demanda, serviços,
 redes, trânsito), produz os materiais da cidade em cadeias com lotes de 1 a 10 e ergue a Arcologia de Held, o
-megaprojeto de assinatura (a Torre Lâmina, retangular de alto luxo, primeiro). three.js r186 em WebGL2, Preact na
+megaprojeto de assinatura (a Blade Tower, a Torre Lâmina retangular de alto luxo, primeiro; a sede v3 é o Park of
+Future Dreams, D88 e D89). three.js r186 em WebGL2, Preact na
 interface, PWA para PC e para o Poco X7 do dono.
 
 **O documento que manda é `docs/PROJETO.md`** (decisões, contratos, estrutura, parcelas do M1 e regras de trabalho).
@@ -37,8 +38,8 @@ Dreams do modelo do dono (D88).
 
 ## Regras de trabalho
 - **Cada construção do complexo e da sede é dialogada com o dono antes de ser feita** (D78): pergunta curta com
-  recomendação, resposta dele, e só então a ficha e a parcela. Toda construção tem nome próprio em inglês (D88); os textos da
-  interface seguem em português.
+  recomendação, resposta dele, e só então a ficha e a parcela. Toda construção tem nome próprio em inglês (D88; tabela em
+  `docs/desenho/marcos.md`, 9b); os textos da interface seguem em português.
 - Cada parcela edita só os arquivos dela (tabela da seção 3.1 do PROJETO); tudo entra por registro; ninguém edita
   índice, `sim/nucleo.js`, `app/` ou `contratos/` sem ser o integrador.
 - Textos em `ui/textos/<parcela>.js`, português do Brasil, sem travessão, unidades da D42 ("/h" de jogo).

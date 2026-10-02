@@ -205,8 +205,8 @@ Decidido com o dono:
   em níveis e um **jardim-observatório** no topo. Bem diferente da Lâmina, que é retangular.
 - **Experiência:** uns **12 restaurantes** de alta gastronomia, com cerca de **1.800 lugares** no total, operados pela
   **Maison Valmonde**. As reservas e a lista de espera ficam com o **Super Cérebro**.
-- **Posição:** **à beira do lago**, no eixo entre a Sede e a Estação Central do trem-bala, com uma **praça e um espelho
-  d'água**. Aparece na reta dos boxes da F1. Com a sede v3 (D88) o lago da v2 saiu, e a posição volta ao diálogo.
+- **Posição (D89):** fora do anel externo da sede v3, na avenida que leva à Heldópolis Central Station, **à beira de um
+  espelho d'água** como o lago da McLaren, com uma praça. Aparece na reta da F1 no anel viário.
 - **Fase:** 1 (até jun 2026).
 
 
@@ -313,6 +313,46 @@ Mantêm o formato e as regras reais.
 | Clubes europeus de futebol | clubes fictícios de Albionford, Rheinhaven e Valmonde | pré-temporada no estádio de 120 mil |
 | Torneios de tênis | **Circuito Mundial de Tênis** | quatro torneios principais |
 | Torneios de jogos virtuais | **Campeonato Mundial de Jogos Virtuais** | final no estádio de 50 mil |
+
+## 9b. Nomes das construções em inglês (D88 e D89)
+
+Aprovados pelo dono em 02/10/2026. Toda construção tem nome próprio em inglês; os tipos genéricos (escola, hospital,
+delegacia), os times, as ligas e os eventos ficam como estão, e os textos da interface seguem em português. Os
+documentos podem continuar usando o nome de trabalho em português ao lado.
+
+| Nome de trabalho | Nome no jogo |
+|---|---|
+| Sede da Holding (sede v3) | **Park of Future Dreams** |
+| Anel externo (faculdade e escola) | **Horizon Ring**, com a **Held University** (faculdade) e a **Held Academy** (escola) |
+| Anel interno (escritórios da Holding) | **Meridian Ring** |
+| Torre de 500 m (a Torre Lâmina) | **Blade Tower** |
+| Torre irmã de 452 m | **Legacy Tower** |
+| SkyPark a 330 m | **Dream Bridge** |
+| Biblioteca, 300 m | **Codex Tower** |
+| Laboratórios, 180 m | **Helix Labs** |
+| Administração, 180 m | **Compass Tower** |
+| Cachoeiras e fontes / lago em anel | **Dream Falls** / **Mirror Lake** |
+| Data center do subsolo / acelerador de partículas | **Deep Core** / **Lumen Collider** |
+| Santuário Gaia e as esferas | **Gaia Sanctuary**: **Forest Sphere**, **Savanna Sphere** e **Ocean Sphere** |
+| Circuito de F1 | **Heldópolis Circuit** |
+| Arena de basquete (35 mil) | **Comet Arena** |
+| Estádio de futebol americano e futebol (120 mil) | **Libertas Stadium** |
+| Estádio de shows (270 mil) | **The Crater** |
+| Estádio de tênis e tênis de mesa (20 mil) | **Lotus Court** |
+| Estádio de jogos virtuais (50 mil) | **Nexus Arena** |
+| Anfiteatro (40 mil) | **Cascade Amphitheater** |
+| Torre Lúculo | **Lucullus Tower** |
+| Shopping Floresta Cintilante | **Shimmering Forest** |
+| Parque de diversão e aquático | **Emerald Park** |
+| Reserva da Transformação (e a baía-santuário) | **Transformation Reserve** (e **Transformation Bay**) |
+| Resort Marés de Ouro | **Golden Tides Resort** |
+| Cinema Cosmos | **Cosmos Cinema** |
+| Centro de Convenções e Feiras | **Held Expo Center** |
+| Marina Aurum (e o porto de cruzeiros) | **Aurum Marina** (e **Aurum Cruise Terminal**) |
+| Hospital de turismo de saúde | **Tantra Clinic Heldópolis** |
+| Aeroporto Internacional Estrelas do Leste | **Eastern Stars International Airport** |
+| Aeroporto Nacional Flores da Vida | **Flowers of Life National Airport** |
+| Estação Central do trem-bala | **Heldópolis Central Station** |
 
 ## 10. Quem opera (os 9 gigantes)
 

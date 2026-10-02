@@ -65,8 +65,36 @@ vidraçaria e a faixa de LED** do modelo.
   anel e o anel de resfriamento do subsolo fazem o papel do lago da McLaren. Nada de cantos retos: a leitura é de
   linhas horizontais longas e curvas, o oposto das formas "quadradas e robóticas" que o dono proibiu.
 
-## 4. Em diálogo (regra D78)
+## 4. Aprovado em seguida (D89)
 
-Nomes em inglês de todas as construções, o desenho das torres (500, 452, biblioteca, laboratórios e administração), as
-fases do anel externo e a nova posição da Torre Lúculo (o lago da v2 saiu). Só depois disso a parcela SEDE3 refaz
+- **Nomes em inglês:** tabela em `docs/desenho/marcos.md`, seção 9b (Horizon Ring, Meridian Ring, Blade Tower, Legacy
+  Tower, Dream Bridge, Codex Tower, Helix Labs, Compass Tower, Dream Falls, Mirror Lake, Deep Core, Lumen Collider).
+- **Blade Tower (500 m) e Legacy Tower (452 m):** a Torre Lâmina da D27 e da D64 (três lâminas retangulares, recuos a
+  49%, 70% e 91%, aletas de bronze, coroa-lanterna) e a irmã da mesma família, no pódio central, ligadas pela Dream
+  Bridge a 330 m. Uma linha de LED nas quinas conversa com a faixa dos anéis. As verticais das torres contrastam com as
+  horizontais dos anéis.
+- **Codex Tower (biblioteca, 300 m):** prisma facetado de vidro escuro, como o Black Diamond de Copenhague, com um átrio
+  de livros na base, como a biblioteca de Tianjin Binhai.
+- **Helix Labs e Compass Tower (180 m):** planta oval, com as marquises brancas por andar e a faixa de LED dos anéis,
+  como pedaços do anel em pé.
+- **Horizon Ring em 8 trechos** (entre as avenidas): 2 até jun 2026, junto com o Meridian Ring e as torres; os outros 6
+  até 2032, com mais vagas e centros de pesquisa. No teto: quadras, piscinas e uma pista de corrida de 4,6 km.
+- **Lucullus Tower (Torre Lúculo):** fora do anel externo, na avenida da Heldópolis Central Station, à beira de um
+  espelho d'água como o lago da McLaren, à vista da reta da F1 no anel viário.
+
+Falta só a posição da sede no mapa e o tamanho da área inicial (seção 5). Depois disso a parcela SEDE3 refaz
 `fonte/data/arcologia-plano.js` e `fonte/render/arcologia/`.
+
+## 5. Onde a sede cabe no mapa (medido em 02/10/2026)
+
+O mapa tem 8.192 m; a área inicial tem 4 x 4 ladrilhos (2.048 m, de -1.024 a 1.024 nos dois eixos) e a gleba atual
+tem 1.000 x 760 m. A terra plana é uma faixa costeira de uns 2,5 km de fundo entre a serra (norte) e o mar (sul), com o
+rio a oeste da área inicial e a baía a leste. O anel viário da sede v3 tem uns 1,58 km de diâmetro (2 km²), quase
+metade da área inicial (4,2 km²). O único lugar plano em que ele cabe é o sul da área inicial, de frente para o mar:
+centro perto de (150, 190), com o anel indo de x -640 a 940 e de z -600 a 980 (a praia fica em z 984, a baía em x
+1.064 e os dois morros do norte começam em z -576). Sobram para a cidade, dentro da área inicial, as faixas a oeste
+(com a Vila) e os cantos do norte, perto de 1 km².
+
+`sede-v3-no-mapa.jpg`: a sede v3 desenhada no mapa real (4 m por pixel, de -2.048 a 2.048), com a área inicial de hoje
+(amarelo) e a proposta de 6 x 5 ladrilhos (laranja: de x -1.024 a 2.048 e de z -1.536 a 1.024, ganhando a faixa da
+rodovia ao norte e a planície e a orla da baía a leste, ainda inteira numa margem do rio, D53).

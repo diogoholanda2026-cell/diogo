@@ -95,6 +95,8 @@ Três classes, todas "estadia temporária", na composição do pico de 10 milhõ
   paralelas; Nacional de 40 a 60 milhões, com 2 pistas (como Haneda, o aeroporto nacional de Tóquio, que tem o Narita
   como internacional).
 - **Nomes (dono, 02/10/2026):** Aeroporto Internacional **Estrelas do Leste** e Aeroporto Nacional **Flores da Vida**.
+  No jogo, em inglês (D89): **Eastern Stars International Airport** e **Flowers of Life National Airport**; a estação do
+  trem-bala é a **Heldópolis Central Station**.
 
 ### 5.2 Modo Visita: ver o aeroporto por dentro
 
