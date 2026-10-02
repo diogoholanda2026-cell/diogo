@@ -208,6 +208,18 @@ Decidido com o dono:
 - **Fase:** 1 (até jun 2026).
 
 
+### 6.0b Diálogo do Shopping (02/10/2026, regra D78)
+
+Decidido com o dono:
+
+- **Forma:** um **grande anel de arcos** sob cobertura de vidro. Dentro, uma **floresta interna** e **4 avenidas
+  temáticas** (Luxo, Tecnologia, Natureza e Família) que convergem numa **praça central com cachoeira**. Referências:
+  Jewel Changi e Dubai Mall.
+- **Crescimento por alas:** a fase 1 tem uns **250 mil m²** (um quinto) e cresce por alas até mais de 1 milhão de m² em 2032.
+- **Mix de lojas:** **20% de marcas de topo** com exclusividade, **50% de médias** e **30% de pequenas** (cotas de venda
+  e aluguel, como no caderno). Um **showroom imersivo da Held Silício e do Mosaico** é a vitrine da tecnologia.
+- **Posição:** na área Vida, **ao lado da estação do trem-bala** e ligado ao Santuário Gaia por um **jardim comum**.
+
 - **Torre Lúculo:** 300 m, só restaurantes de alta gastronomia. O nome vem de Lúculo, general romano célebre pelos
   banquetes (de onde sai "banquete lucúlico"). Salões giratórios em anéis
   empilhados e jardins suspensos. A silhueta é **diferente da Lâmina**, para não competir com as torres de 500 e 452 m.
