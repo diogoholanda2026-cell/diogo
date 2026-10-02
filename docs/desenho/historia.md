@@ -235,10 +235,10 @@ A **Holding Held guarda-chuva** controla **4 holdings intermediárias** (decidid
   **IA multimodal** (pesquisa desde 2017), líder de mercado, vendida ao mundo. Nome proposto para a multimodal: **Mosaico**.
 - **Parte subterrânea da sede:** o data center dos projetos secretos e do essencial da IA do grupo. Projetos militares, patentes e
   avanço da IA, com 1 mil pessoas. Fica **fechada ao público**, e o jogador a vê só por telas e relatórios.
-- **De onde vem o lucro de US$ 215 bilhões:** 27% do Fundo e 73% das outras áreas. Proposta de divisão dos 73% (o robô
+- **De onde vem o lucro de US$ 215 bilhões:** 27% do Fundo e 73% das outras áreas. Divisão dos 73% (aprovada em 02/10/2026; o robô
   calibra): Held Silício com a IA multimodal 30%, Held Capital 20%, Held Litos 12% e Held Pórtico 11%.
-- **Os 20 executivos (0,5% cada):** o topo e de alta confiança. Os conselheiros já existentes (Íris, Tomé, Nara, Caio,
-  Dona Cida e Lívia) entram nessa lista. Nomes ficam para o roteirista.
+- **Os 20 executivos (0,5% cada):** o topo e de alta confiança, com nomes e cargos na seção 8. Os conselheiros que já
+  existiam (Íris, Tomé, Nara, Caio, Dona Cida e Lívia) estão entre eles.
 
 ### 5.6 Nova Libertas e o projeto da cidade
 
@@ -283,13 +283,55 @@ licenças de tecnologia e voz na segurança. O país anfitrião concede o territ
 Nomes novos, aprovados em 02/10/2026: a IA multimodal **Mosaico**; a Tailândia do jogo, **Reino de Sukhara**; os países africanos,
 **Federação de Zuberia** e **República de Mbalanga**.
 
+## 8. Os 20 executivos (nomes propostos; o dono delegou a escolha)
+
+Cada um tem 0,5% da Holding guarda-chuva (US$ 27,65 bilhões). **Em negrito, os seis conselheiros que já existiam.**
+
+| # | Cargo | Nome |
+|---|---|---|
+| 1 | Diretora financeira | **Lívia Andrade** |
+| 2 | Diretor jurídico | Otávio Brandão |
+| 3 | Chefe de relações públicas e governo | Helena Duarte |
+| 4 | Diretor de pessoas e educação (faculdade e escola) | Anselmo Vidal |
+| 5 | Diretor de segurança e inteligência | Rodrigo Valadares |
+| 6 | Presidente da Held Capital (a fintech) | Beatriz Camargo |
+| 7 | Chefe do Fundo Atlas (o Fundo Gestor) | Sven Lindqvist |
+| 8 | Chefe de agroindústria | Joaquim Prado |
+| 9 | Chefe de clientes VIP | Camille Fontaine |
+| 10 | Chefe de construções de grande porte (obras e logística) | **Tomé Carvalho** |
+| 11 | Chefe de alimentícia, siderurgia e sucroalcooleira | Wagner Takahashi |
+| 12 | Presidente da Held Litos (terras raras) | Amara Okonkwo |
+| 13 | Presidente da Held Silício (chips e hardware) | Mei-Lin Zhao |
+| 14 | Diretor da IA multimodal Mosaico | Arjun Mehta |
+| 15 | Diretor científico do Super Cérebro, de energia e ciência | **Caio Montenegro** |
+| 16 | Presidente da Held Pórtico (infraestrutura física) | Ibrahim Al-Rashid |
+| 17 | Arquiteta-chefe e diretora de Heldópolis (urbanismo e Arcologia) | **Íris Valverde** |
+| 18 | Diretora de comunidade e moradia (voz dos moradores) | **Dona Cida (Aparecida Moura)** |
+| 19 | Diretora de meio ambiente, Santuário e Legado | **Nara Guimarães** |
+| 20 | Diretora de turismo, eventos e hotelaria | Isabela Cordeiro |
+
+O jogador é o criador, **Diogo Holanda**.
+
+## 9. Curva até 2040 (proposta; o dono delegou)
+
+Parte de US$ 5,53 trilhões e US$ 215 bilhões de lucro (preço sobre lucro de 25,7) em out 2026, e cresce **6% ao ano**, no
+meio da meta de 5 a 7% do Fundo. É a **curva base**; o robô calibra.
+
+| Ano | Lucro líquido | Valor de mercado | O que marca |
+|---|---|---|---|
+| 2026 | US$ 215 bi | US$ 5,5 tri | sede pronta, 70 mil moradores |
+| 2028 | US$ 242 bi | US$ 6,2 tri | |
+| 2030 | US$ 271 bi | US$ 7,0 tri | metade da cidade |
+| 2032 | US$ 305 bi | US$ 7,8 tri | **cidade pronta**, 500 mil moradores |
+| 2034 | US$ 343 bi | US$ 8,8 tri | |
+| 2036 | US$ 385 bi | US$ 9,9 tri | |
+| 2038 | US$ 433 bi | US$ 11,1 tri | |
+| 2040 | US$ 486 bi | US$ 12,5 tri | fim da parte 3 |
+
+- **Cenários:** alto (9% ao ano) chega a US$ 700 bilhões e 18 trilhões; baixo (3% ao ano), a US$ 325 bilhões e 8,4 trilhões.
+- **Final do jogo:** por Influência e Legado (`VISAO.md`, 5.7), com o valor de 2040 como régua de sucesso.
+
 ## Pendências (perguntas ao dono)
 
-1. **Divisão do lucro** de 73% entre as 4 intermediárias (proposta na seção 5.5).
-2. **Curva até 2040:** metas de valuation e de lucro no fim da parte 3 (a meta de retorno do Fundo é de 5 a 7% ao ano).
-3. **Nomes dos 20 executivos:** o roteirista escreve agora ou na hora de cada parte?
-
-Resolvidas em 02/10/2026: nomes fictícios da seção 7 e os novos (Mosaico, Sukhara, Zuberia e Mbalanga); subsolo (data
-center secreto, militar, patentes e IA); duas IAs; a conta do lucro (Fundo 27%); terras raras em 3 regiões; chips em 3
-destinos; e as anteriores (controle, país, pico mensal, Torre de 300 m, 70 mil moradores, educação por inteligência,
-intermediárias, Conselheiro de Estratégia).
+Nenhuma aberta na história. Foram resolvidos em 02/10/2026 a divisão do lucro dos 73%, os 20 executivos e a curva até
+2040 (esses dois por delegação do dono; valem até ele trocar).

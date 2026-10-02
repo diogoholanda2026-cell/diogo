@@ -183,6 +183,19 @@ pétalas), Strahov (o maior do mundo, de 200 a 250 mil), Hollywood Bowl e Verona
 
 ## 6. Torre, shopping e parque
 
+### 6.0 Diálogo da Torre Lúculo (02/10/2026, regra D78)
+
+Decidido com o dono:
+
+- **Silhueta:** torre **esbelta e torcida** (como a Shanghai Tower), de 300 m, com **6 anéis de restaurantes giratórios**
+  em níveis e um **jardim-observatório** no topo. Bem diferente da Lâmina, que é retangular.
+- **Experiência:** uns **12 restaurantes** de alta gastronomia, com cerca de **1.800 lugares** no total, operados pela
+  **Maison Valmonde**. As reservas e a lista de espera ficam com o **Super Cérebro**.
+- **Posição:** **à beira do lago**, no eixo entre a Sede e a Estação Central do trem-bala, com uma **praça e um espelho
+  d'água**. Aparece na reta dos boxes da F1.
+- **Fase:** 1 (até jun 2026).
+
+
 - **Torre Lúculo:** 300 m, só restaurantes de alta gastronomia. O nome vem de Lúculo, general romano célebre pelos
   banquetes (de onde sai "banquete lucúlico"). Salões giratórios em anéis
   empilhados e jardins suspensos. A silhueta é **diferente da Lâmina**, para não competir com as torres de 500 e 452 m.
