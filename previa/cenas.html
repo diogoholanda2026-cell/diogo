@@ -7,10 +7,11 @@
 <meta name="color-scheme" content="dark">
 <title>Prévia do jogo novo</title>
 <link rel="icon" href="icones/icone-192.png">
-<!-- Índice da prévia (PROJETO 4.6 e 5.3): o jogo, o roteiro de 5 min, as cenas fixas e a página de teste, para o dono
-     abrir no PC e no celular. O montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo
-     (index.html), sem nada ou com ?cena=. Em destaque a Prévia 1b (sede v2 e o PC do dono, D63 a D66); a Prévia 1 e a
-     Prévia 0 continuam abaixo. Os links marcados data-auto não levam o perfil: a escolha automática vale. -->
+<!-- Índice da prévia (PROJETO 4.6 e 5.3): o jogo, as cenas fixas e as páginas de teste, para o dono abrir no PC. O
+     montar.mjs copia esta página para <saida>/cenas.html. Os links abrem o jogo (index.html), sem nada ou com ?cena=.
+     Em destaque a Prévia 2, M1a jogável (onda 3: a sede v3, Park of Future Dreams, D88 a D90, a obra da Blade Tower e
+     da Legacy Tower, os colocáveis, a rua com gente e caminhões, as camadas e o jogo do começo); a Prévia 1 e a Prévia
+     0 continuam abaixo. Os links marcados data-auto não levam o perfil: a escolha automática vale. -->
 <style>
 :root{--fundo:#0B0F14;--vidro:#121821;--borda:rgba(255,255,255,.10);--texto:#EEF2F6;--fraco:#A7B1BD;--ouro:#D9BD84;--azul:#5AB0FF}
 *{box-sizing:border-box}
@@ -47,7 +48,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 <main>
 <header>
   <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="#D9BD84" stroke-width="3"/><path fill="#D9BD84" d="M34 30h7v17h18V30h7v40h-7V53H41v17h-7z"/></svg>
-  <div><h1>Prévia 1b: sede v2 e o PC do dono</h1><p>A sede em anel com as torres gêmeas no lago, e o jogo afinado para o seu PC.</p></div>
+  <div><h1>Prévia 2: M1a jogável</h1><p>Heldópolis nasce: jogue do começo, com o Park of Future Dreams, a Blade Tower, a economia da Holding e as camadas.</p></div>
 </header>
 
 <div class="perfil" role="group" aria-label="Perfil gráfico">
@@ -61,25 +62,63 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 </div>
 
 <section>
-  <h2>Sede v2 <small>(o anel de 481 m, o lago com as torres de 500 e 452 m, a cachoeira na fenda e a cúpula)</small></h2>
+  <h2>Jogar <small>(o jogo do começo, em jan. 2020)</small></h2>
   <div class="grade">
-    <a class="c pri" href="index.html?cena=planos&amp;vista=aerea"><b>Aérea</b><span>o anel inteiro às 17h30, do sul-sudoeste</span></a>
-    <a class="c pri" href="index.html?cena=planos&amp;vista=eixo"><b>Eixo norte</b><span>do portão, pelo eixo, até a fenda com a cachoeira</span></a>
-    <a class="c pri" href="index.html?cena=planos&amp;vista=mar"><b>Do mar</b><span>da praia, olhando o pórtico sul ao entardecer</span></a>
-    <a class="c pri" href="index.html?cena=planos&amp;vista=noite"><b>Noite</b><span>as fontes e a cachoeira acesas, da margem do lago</span></a>
-    <a class="c" href="index.html?cena=torre&amp;prancha=1&amp;hora=17.5"><b>Prancha das torres às 17h30</b><span>4 azimutes, a fenda e as duas coroas</span></a>
-    <a class="c" href="index.html?cena=torre&amp;prancha=1&amp;hora=21"><b>Prancha das torres às 21h</b><span>as coroas-lanterna e o heliponto aceso</span></a>
-    <a class="c" href="index.html?cena=planos&amp;plano=A"><b>Sede v2, câmera livre</b><span>arraste e aproxime à vontade</span></a>
+    <a class="c pri jogo" href="index.html?menu=nova"><b>Nova partida</b><span>direto no começo: a Vila, a gleba, a sede no sul e os primeiros objetivos</span></a>
+    <a class="c pri jogo" href="index.html"><b>Abrir o jogo</b><span>a entrada e o menu inicial: Continuar, Nova partida, Carregar e Configurações</span></a>
   </div>
 </section>
 
 <section>
-  <h2>Página de teste do PC <small>(mande o texto de "Copiar resultado")</small></h2>
+  <h2>Park of Future Dreams <small>(a sede v3: Horizon Ring, Meridian Ring, Blade Tower e Legacy Tower no Mirror Lake)</small></h2>
   <div class="grade">
-    <a class="c pri" data-auto href="index.html?cena=aberta&amp;painel=1"><b>Página de teste: aberta</b><span>perfil escolhido e o motivo, resolução interna, tempo de placa por passe, compilações depois de pronto</span></a>
-    <a class="c" data-auto href="index.html?painel=1"><b>Jogo com a página de teste</b><span>os mesmos números sobre o jogo</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=aerea"><b>Aérea</b><span>o disco inteiro às 17h30, do sul-sudoeste, sobre o mar</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=avenida"><b>Avenida</b><span>da avenida do portão oeste, pelo pórtico do Horizon Ring</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=mar"><b>Do mar</b><span>da praia da restinga ao entardecer, com a lagoa na frente</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;vista=noite"><b>Noite</b><span>a faixa de LED dos anéis, as Dream Falls e as fontes acesas</span></a>
+    <a class="c" href="index.html?cena=torre&amp;prancha=1&amp;hora=17.5"><b>Blade Tower e Legacy Tower às 17h30</b><span>prancha de 4 azimutes, a Dream Bridge e as duas coroas</span></a>
+    <a class="c" href="index.html?cena=torre&amp;prancha=1&amp;hora=21"><b>As torres às 21h</b><span>a linha de LED nas quinas e as coroas acesas</span></a>
+    <a class="c" href="index.html?cena=planos"><b>Câmera livre</b><span>arraste e aproxime à vontade</span></a>
   </div>
-  <p class="nota">Estes links abrem sem perfil: vale a escolha automática (no seu PC, a RX 550 deve cair no perfil PC). Depois da aberta, toque em <b>Cena estresse</b> na própria página: ela leva o mesmo perfil, e "Copiar resultado" junta as duas cenas.</p>
+</section>
+
+<section>
+  <h2>A obra das torres <small>(as etapas da Arcologia no jogo)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=planos&amp;etapas=torre.e2:0.55&amp;vista=obra"><b>Obra da Blade e da Legacy</b><span>as torres cortadas a 55%, as gruas e o canteiro no pódio</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;etapas=todas&amp;vista=ponte"><b>Dream Bridge</b><span>a ponte a 330 m entre as duas torres prontas</span></a>
+    <a class="c pri" href="index.html?cena=planos&amp;etapas=todas&amp;heli=50&amp;vista=heli"><b>Helicóptero</b><span>o pouso no heliponto da Blade Tower</span></a>
+    <a class="c" href="index.html?cena=planos&amp;etapas=todas&amp;vista=noiteAerea"><b>As 5 etapas à noite</b><span>o par aceso, o lago e o resto da sede em fantasma</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>A cidade da onda 3 <small>(na cidade sintética)</small></h2>
+  <div class="grade">
+    <a class="c pri" href="index.html?cena=servicos"><b>Colocáveis: serviços</b><span>clínica, escola, captação, ETE e os outros, de dia</span></a>
+    <a class="c pri" href="index.html?cena=servicos&amp;vista=holding"><b>Colocáveis: Holding</b><span>pedreira, areal, olaria, concreteira e cimenteira</span></a>
+    <a class="c" href="index.html?cena=servicos&amp;vista=noite&amp;hora=21"><b>Colocáveis à noite</b><span>os serviços acesos, mais perto</span></a>
+    <a class="c pri" href="index.html?cena=rua&amp;hora=18"><b>Rua às 18h</b><span>a avenida com gente nas calçadas, carros e caminhões</span></a>
+    <a class="c" href="index.html?cena=rua&amp;vista=caminhao"><b>Comboio da Holding</b><span>caminhões com brita, tijolo, areia e concreto</span></a>
+    <a class="c" href="index.html?cena=rua&amp;vista=fila"><b>Fila no semáforo</b><span>os carros no vermelho e a gente na faixa</span></a>
+    <a class="c pri" href="index.html?cena=camadas&amp;camada=zonas"><b>Camada Zonas</b><span>a cidade pintada pela zona, com os avisos</span></a>
+    <a class="c" href="index.html?cena=camadas&amp;camada=bemEstar&amp;ui=1"><b>Camada Bem-estar com a legenda</b><span>a rampa, a legenda e o filtro de avisos do jogo</span></a>
+    <a class="c" href="index.html?cena=camadas&amp;camada=agua"><b>Camada Água</b><span>atendido, racionado e sem rede</span></a>
+    <a class="c" href="index.html?cena=obra"><b>Obras da cidade</b><span>canteiro, fundação, estrutura e fechamento, com gruas</span></a>
+    <a class="c" href="index.html?cena=bairro&amp;crescer=4"><b>Bairro crescendo</b><span>prédios nascendo e subindo de nível em 4x</span></a>
+    <a class="c" href="index.html?cena=costa&amp;vista=mata"><b>Mata de perto</b><span>as espécies novas das árvores</span></a>
+  </div>
+</section>
+
+<section>
+  <h2>Páginas de teste do PC <small>(mande o texto de "Copiar resultado")</small></h2>
+  <div class="grade">
+    <a class="c pri" data-auto href="index.html?menu=0&amp;tela=testeDesempenho"><b>Teste de desempenho</b><span>o teste das Configurações: mede e sugere a qualidade</span></a>
+    <a class="c pri" data-auto href="index.html?cena=aberta&amp;painel=1"><b>Página de teste: aberta</b><span>perfil escolhido sozinho e o motivo, resolução interna, tempo de placa por passe, compilações depois de pronto</span></a>
+    <a class="c" href="index.html?cena=aberta&amp;painel=1"><b>Página de teste no perfil escolhido</b><span>a mesma página com o perfil marcado acima (?q=)</span></a>
+    <a class="c" data-auto href="index.html?menu=0&amp;painel=1"><b>Jogo com a página de teste</b><span>os mesmos números sobre o jogo</span></a>
+  </div>
+  <p class="nota">Os links marcados como automáticos abrem sem perfil: vale a escolha automática (no seu PC, a RX 550 deve cair no perfil PC). Depois da aberta, toque em <b>Cena estresse</b> na própria página: ela leva o mesmo perfil, e "Copiar resultado" junta as duas cenas.</p>
 </section>
 
 <div class="anterior">
@@ -90,15 +129,15 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 <section>
   <h2>Jogar</h2>
   <div class="grade">
-    <a class="c pri jogo" href="index.html"><b>Abrir o jogo</b><span>o mapa autoral: relevo, Rio Held, Vila de Santa Cida e a rodovia</span></a>
-    <a class="c" href="index.html?painel=1"><b>Jogo com a página de teste</b><span>sonda e bancada sobre o jogo</span></a>
+    <a class="c pri" href="index.html?menu=0"><b>O jogo sem o menu inicial</b><span>o mapa autoral: relevo, Rio Held, Vila de Santa Cida e a rodovia</span></a>
+    <a class="c" href="index.html?menu=0&amp;painel=1"><b>Jogo com a página de teste</b><span>sonda e bancada sobre o jogo</span></a>
   </div>
 </section>
 
 <section>
   <h2>Roteiro de 5 minutos <small>(depois mande o print)</small></h2>
   <ol class="roteiro">
-    <li>Abra <b>Sonda e bancada: aberta</b> e depois <b>estresse</b> (lá embaixo) e toque em <b>Copiar resultado</b>. <span>O Teste de desempenho nas Configurações chega no M1a.</span></li>
+    <li>Abra <b>Sonda e bancada: aberta</b> e depois <b>estresse</b> (lá embaixo) e toque em <b>Copiar resultado</b>. <span>No M1a há também o <b>Teste de desempenho</b>, lá em cima e nas Configurações.</span></li>
     <li>Abra o jogo, toque em <b>4x</b> e deixe correr 5 minutos. <span>No 4x o sol dá uma volta inteira em 2,5 minutos: dá para ver a tarde e a noite.</span></li>
     <li><b>Vias &gt; Avenida</b>: toque no começo, toque no fim e arraste a alça do meio para curvar; toque em <b>Construir</b>. <span>A mira fica acima do dedo e a lupa mostra o encaixe.</span></li>
     <li>Cruze a avenida com uma <b>Rua</b>, melhore uma rua de terra da Vila (<b>Melhorar</b>) e experimente <b>Demolir</b> e <b>Desfazer</b>.</li>
@@ -123,25 +162,17 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
 
 <div class="anterior">
 <header>
-  <div><h1>Prévia 0: vitrine visual</h1><p>Continua valendo: a Torre, os planos, a cidade sintética e os materiais.</p></div>
+  <div><h1>Prévia 0: vitrine visual</h1><p>Continua valendo: a Blade Tower, a cidade sintética e os materiais. Os planos diretores A, B e C deram lugar à sede v3 (D88).</p></div>
 </header>
 
 <section>
-  <h2>Torre Lâmina <small>(prancha de 4 azimutes e 2 closes)</small></h2>
+  <h2>Blade Tower <small>(no pódio da sede v3, com a Legacy Tower; prancha de 4 azimutes e 2 closes)</small></h2>
   <div class="grade">
     <a class="c pri" href="index.html?cena=torre&amp;prancha=1&amp;hora=17.5"><b>Prancha às 17h30</b><span>fim de tarde</span></a>
-    <a class="c pri" href="index.html?cena=torre&amp;prancha=1&amp;hora=21"><b>Prancha às 21h</b><span>noite: lanterna, andares de vento, heliponto</span></a>
-    <a class="c" href="index.html?cena=torre"><b>Vista livre</b><span>a Torre no platô, a 1 km</span></a>
+    <a class="c pri" href="index.html?cena=torre&amp;prancha=1&amp;hora=21"><b>Prancha às 21h</b><span>noite: coroas acesas e heliponto</span></a>
+    <a class="c" href="index.html?cena=torre"><b>Vista livre</b><span>as duas torres no pódio, a 1,3 km</span></a>
     <a class="c" href="index.html?cena=torre&amp;hora=10"><b>Vista livre às 10h</b><span>luz da manhã</span></a>
-  </div>
-</section>
-
-<section>
-  <h2>Planos diretores <small>(o A, Baía, foi adotado no portão 1; os três seguem para comparar)</small></h2>
-  <div class="grade">
-    <a class="c pri" href="index.html?cena=planos&amp;plano=A"><b>A. Baía</b><span>vista aérea às 17h30</span></a>
-    <a class="c pri" href="index.html?cena=planos&amp;plano=B"><b>B. Parque-canal</b><span>vista aérea às 17h30</span></a>
-    <a class="c pri" href="index.html?cena=planos&amp;plano=C"><b>C. Orla</b><span>vista aérea às 17h30</span></a>
+    <a class="c" href="index.html?cena=torre&amp;contexto=0"><b>Só o par no pódio</b><span>sem o resto da sede</span></a>
   </div>
 </section>
 
@@ -189,7 +220,7 @@ footer{color:var(--fraco);font-size:12px;margin-top:8px}
   </div>
 </section>
 
-<footer>Abra as duas páginas de teste na mesma aba: "Copiar resultado" junta as duas cenas. O perfil escolhido acima vale para todos os links, menos os da página de teste do PC.</footer>
+<footer>Abra as duas páginas de teste na mesma aba: "Copiar resultado" junta as duas cenas. O perfil escolhido acima vale para todos os links, menos os marcados como automáticos.</footer>
 </main>
 <script>
 /* Perfil gráfico nos links (?q=); lembrado neste aparelho. */
