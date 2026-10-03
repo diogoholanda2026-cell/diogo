@@ -502,11 +502,35 @@ class Impostores {
 }
 
 /**
+ * Material, cena e câmera do assado dos impostores (PC3): criados uma vez, quando o GLSL das árvores chega, para o
+ * programa compilar em paralelo antes do assado (Aquecimento.compilar) e servir aos assados seguintes (a troca de
+ * qualidade). Antes o material nascia no próprio assado e o primeiro desenho esperava a compilação, atrás da fila do
+ * aquecimento (no Direct3D do PC do dono, uns 2 s).
+ */
+function criarAssadorImpostores(U, geo) {
+  const { GLSL_IMP_ASSAR } = F;
+  const mat = new THREE.ShaderMaterial({
+    name: 'arvores:assar-impostores',
+    uniforms: { ...U, uModoNormal: { value: 0 } },
+    vertexShader: GLSL_IMP_ASSAR.vertice,
+    fragmentShader: GLSL_IMP_ASSAR.fragmento,
+    vertexColors: true,
+    side: THREE.DoubleSide,
+  });
+  const cena = new THREE.Scene();
+  const malha = new THREE.Mesh(geo, mat);
+  malha.frustumCulled = false;
+  cena.add(malha);
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+  return { mat, cena, malha, cam };
+}
+
+/**
  * Assa as vistas de todas as espécies (LOD0) nos dois atlas: albedo (raiz quadrada) com alfa, e a normal da copa no
  * espaço da árvore. Cada vista é uma câmera ortográfica na esfera do modelo (geracao/impostor.js). Os mipmaps saem
- * uma vez só, no fim.
+ * uma vez só, no fim. assador: criarAssadorImpostores (o programa já compilado).
  */
-function assarImpostores(renderer, modelos0, U, lado) {
+function assarImpostores(renderer, modelos0, U, lado, assador) {
   const nE = modelos0.length;
   const D = dispor(nE, lado);
   const criar = () => {
@@ -518,20 +542,7 @@ function assarImpostores(renderer, modelos0, U, lado) {
     return a;
   };
   const alvos = [criar(), criar()];
-  const { GLSL_IMP_ASSAR } = F;
-  const mat = new THREE.ShaderMaterial({
-    name: 'arvores:assar-impostores',
-    uniforms: { ...U, uModoNormal: { value: 0 } },
-    vertexShader: GLSL_IMP_ASSAR.vertice,
-    fragmentShader: GLSL_IMP_ASSAR.fragmento,
-    vertexColors: true,
-    side: THREE.DoubleSide,
-  });
-  const cena = new THREE.Scene();
-  const malha = new THREE.Mesh(modelos0[0].geo, mat);
-  malha.frustumCulled = false;
-  cena.add(malha);
-  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+  const { mat, cena, malha, cam } = assador;
   const antes = renderer.getRenderTarget();
   const corAntes = renderer.getClearColor(new THREE.Color());
   const alfaAntes = renderer.getClearAlpha();
@@ -577,7 +588,6 @@ function assarImpostores(renderer, modelos0, U, lado) {
   renderer.setRenderTarget(antes);
   renderer.setClearColor(corAntes, alfaAntes);
   renderer.autoClear = autoAntes;
-  mat.dispose();
   return { alvos, D };
 }
 
@@ -672,6 +682,10 @@ function criarVegetacao(ctx) {
   let sombras = null;
   let imp = null;
   let assado = null;
+  let assador = null;
+  // os programas das árvores, da sombra delas e do assado compilados (Aquecimento.compilar): só então as árvores
+  // entram no quadro e o assado roda (PC3)
+  let programasProntos = false;
   let comGlsl = false;
   let prepararDepois = false;
   let morto = false;
@@ -688,13 +702,42 @@ function criarVegetacao(ctx) {
     baldes = [0, 1].map((lod) => modelos[lod].map((M, e) => new Balde(ctx, M.geo, mats[lod], `arvores:${ESPECIES[e].id}:${lod}`)));
     sombras = modelos[1].map((M, e) => new Balde(ctx, M.geo, matSombra, `arvores:${ESPECIES[e].id}:sombra`, matSombra, false));
     imp = new Impostores(ctx, matImp);
+    assador = criarAssadorImpostores(U, modelos[0][0].geo);
     // chegou depois do aquecimento: uma rodada a mais compila os programas das árvores (nada compila no meio do jogo)
     const aq = ctx.quadro?.aquecer;
     if (aq?.pronto) {
       aq.delete?.(fonteAquecer);
       aq.add?.(fonteAquecer);
     }
+    compilarProgramas(aq);
     if (prepararDepois) api.preparar();
+  }
+
+  /**
+   * Os programas das árvores (os dois LODs e os impostores na cena, o gêmeo da sombra própria e o assado dos
+   * impostores, num alvo próprio) compilam já, em paralelo; até ficarem prontos as árvores não entram e o assado não
+   * roda. Sem isto o primeiro desenho da sombra das árvores ou o assado esperavam a compilação dentro do quadro (no
+   * PC do dono, 'arvore-sombra' e 'arvores:assar-impostores' com uns 2,2 s cada, atrás da fila do aquecimento).
+   */
+  function compilarProgramas(aq) {
+    if (typeof aq?.compilar !== 'function') {
+      programasProntos = true;
+      return;
+    }
+    const alvoAssar = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true });
+    const ps = [
+      aq.compilar([...baldes[0].map((b) => b.malha), ...baldes[1].map((b) => b.malha), imp.malha]),
+      aq.compilar(sombras.map((b) => b.malha), { sombra: true }),
+      aq.compilar([assador.cena], { alvo: alvoAssar, cena: assador.cena }),
+    ];
+    const fim = () => {
+      alvoAssar.dispose();
+      programasProntos = true;
+    };
+    Promise.all(ps).then(fim, (e) => {
+      console.warn('vegetação: a compilação adiantada falhou; segue sem ela', e);
+      fim();
+    });
   }
   const fonteAquecer = () => (comGlsl ? [...baldes[0].map((b) => b.malha), ...baldes[1].map((b) => b.malha), imp.malha] : []);
 
@@ -982,11 +1025,11 @@ function criarVegetacao(ctx) {
       const v = Math.hypot(vx, vz) || 1;
       const forca = Math.min(1.6, 0.4 + v * 0.12);
       U.gArvVento.value.set((vx / v) * forca, (vz / v) * forca);
-      if (!comGlsl) return;
+      if (!comGlsl || !programasProntos) return;
       if (!assado) {
         if (!U.gArvFolhas.value) return;
         try {
-          assado = assarImpostores(c.renderer, modelos[0], U, pv.impostor);
+          assado = assarImpostores(c.renderer, modelos[0], U, pv.impostor, assador);
           U.gImpCor.value = assado.alvos[0].texture;
           U.gImpNormal.value = assado.alvos[1].texture;
           ligarChao(true);
@@ -1022,7 +1065,7 @@ function criarVegetacao(ctx) {
       }
     },
     /** O GLSL das árvores chegou (ou falhou): o aquecimento da carga espera por ele (motor/quadro.js, D66). */
-    pronto: () => comGlsl || glslFalhou || morto,
+    pronto: () => (comGlsl && programasProntos) || glslFalhou || morto,
     /** Para as cenas e as capturas: gera todos os ladrilhos do alcance de uma vez e monta. */
     preparar() {
       if (!comGlsl) {
@@ -1051,6 +1094,7 @@ function criarVegetacao(ctx) {
       imp?.descartar();
       for (const lod of [0, 1]) for (const M of modelos[lod]) M.geo.dispose();
       for (const m of [...mats, matSombra, matImp]) m.dispose();
+      assador?.mat.dispose();
       for (const a of assado?.alvos ?? []) a.dispose();
     },
   };

@@ -94,6 +94,19 @@ export function criarMaterialVia(ganchos, U) {
   return ganchos.aplicar(m, ganchos.nomes().filter((n) => n !== 'camada'));
 }
 
+/**
+ * Geometria do aquecimento do material 'via' (PC3): os mesmos atributos de um setor (geometriaDaMalha), com um
+ * triângulo; o three tira do atributo de posição a chave do programa, e o ANGLE, do tipo dos atributos.
+ */
+export function geometriaAquecerVia() {
+  return geometriaDaMalha({
+    atributos: {
+      posicao: new Int16Array(9), normal: new Int8Array(6), uv: new Float32Array(12), dados: new Uint8Array(12), id: new Uint32Array(3),
+    },
+    indices: new Uint16Array([0, 1, 2]),
+  });
+}
+
 // depois do envio à GPU a cópia JS sai; fica o tamanho (medidas.js conta a memória de geometria)
 function soltarCopia() {
   this.array = { byteLength: this.array.byteLength, length: this.array.length };
@@ -492,6 +505,12 @@ function criarVias(ctx) {
   const mascara = typeof location !== 'undefined' && new URLSearchParams(location.search).get('passe') === 'mascara';
   U.gViaMascara.value = mascara ? 1 : 0;
   const material = criarMaterialVia(ctx.ganchos, U);
+  // aquecimento (D66, PC3): o programa 'via' compila na carga mesmo sem nenhuma via no alcance da câmera (a abertura
+  // do jogo vê o mapa de 2 km de altura: sem isto ele compilava ao chegar perto da Vila ou na primeira via construída)
+  const aquecerVia = new THREE.Mesh(geometriaAquecerVia(), material);
+  aquecerVia.name = 'vias:aquecer';
+  aquecerVia.receiveShadow = true;
+  ctx.quadro?.aquecer?.add?.(aquecerVia);
   let chao = ligarChao(ctx);
 
   const setores = new Map();
@@ -835,6 +854,8 @@ function criarVias(ctx) {
     },
     descartar() {
       for (const f of paraDesligar) f?.();
+      ctx.quadro?.aquecer?.delete?.(aquecerVia);
+      aquecerVia.geometry.dispose();
       for (const st of setores.values()) soltarMalha(st);
       tabela.dispose();
       material.dispose();

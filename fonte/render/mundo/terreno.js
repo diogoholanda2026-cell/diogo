@@ -13,7 +13,10 @@
 // Publica em ctx.chao (e no domínio): uniformes (a água usa os mesmos), texturas, ab(bool), usoSolo e a leitura das
 // alturas para os testes.
 import * as THREE from 'three';
-import { GLSL_TER_VERTICE, GLSL_TER_FRAGMENTO, GLSL_ASSAR, NIVEIS_CDLOD, GRADE_NO, N_CAMADAS, MORPH_INICIO } from '../materiais/shaders/terreno.glsl.js';
+import {
+  GLSL_TER_VERTICE, GLSL_TER_FRAGMENTO, GLSL_ASSAR, GLSL_ASSAR_RELEVO, GLSL_AMB_PASSE, GLSL_AMB_CHAO, AMB_LADO, AMB_NIVEIS, NIVEIS_CDLOD, GRADE_NO, N_CAMADAS,
+  MORPH_INICIO,
+} from '../materiais/shaders/terreno.glsl.js';
 import { modoMateriais, carregarCC0 } from '../materiais/texturas-chao.js';
 import { AGUA, PREDIO, TIPO_PREDIO, CELULA } from '../../contratos/flags.js';
 import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
@@ -27,21 +30,45 @@ import { porPerfil } from '../motor/perfis.js';
 /**
  * Por perfil: primeiro alcance do CDLOD, lado do mapa de cor, alcance do detalhe e relevo das copas (m) e o caminho de
  * longe do sombreador (PC2): longe = [início, fim] mínimos em metros (limitesLonge empurra para onde o pixel da tela
- * já passou do texel do assado: de perto fica tudo). O Alta (e o PC, que herda dele) assa o mapa a 2 m por texel; o
- * chão de longe inteiro sai dele, com as manchas do campo e a vegetação.
+ * já passou do texel do assado: de perto fica tudo). O chão de longe inteiro sai do assado, com as manchas do campo e a
+ * vegetação. O Ultra e o Alta (e o 'pc', que herda do Alta) assam a 1 m por texel (8.192², PC3; antes 2 m): o caminho
+ * barato vale a partir de metade da distância (na vista do jogo, a tela inteira), e o relevo das copas grandes, que
+ * antes só o caminho completo desenhava, vem do assado de relevo (relevo: lado dele) até o alcance que tinha com o de
+ * 2 m. O Média segue a 4 m por texel, sem o assado de relevo.
  */
 export const PERFIL_TERRENO = Object.freeze({
-  ultra: { r0: 1000, cor: 4096, cor16: true, detalhe: 600, faixa: 150, copaRelevo: 4000, aniso: 8, longe: [900, 1200] },
-  alta: { r0: 800, cor: 4096, cor16: true, detalhe: 400, faixa: 120, copaRelevo: 3000, aniso: 8, longe: [600, 800] },
+  ultra: { r0: 1000, cor: 8192, cor16: true, relevo: 8192, encosta: 0.45, detalhe: 600, faixa: 150, copaRelevo: 4000, aniso: 8, longe: [900, 1200] },
+  alta: { r0: 800, cor: 8192, cor16: true, relevo: 8192, encosta: 0.45, detalhe: 400, faixa: 120, copaRelevo: 3000, aniso: 8, longe: [600, 800] },
   media: { r0: 600, cor: 2048, detalhe: 180, faixa: 60, copaRelevo: 2000, aniso: 4, longe: [400, 550] },
   leve: { r0: 320, cor: 1024, detalhe: 0, faixa: 1, copaRelevo: 800, aniso: 1, longe: [250, 350] },
 });
 /**
  * Memória do mapa de cor assado em MB (com os mipmaps): RGBA8 tem 4 bytes por texel; com cor16 (R2b), RGB565 com 2,
  * pontilhado no assado (o degrau de 5 e 6 bits vira grão fino, que os mipmaps e a distância apagam) e a rugosidade de
- * longe fixa (sem alfa). No Alta e no 'pc' (4.096²): de 85,3 para 42,7 MiB.
+ * longe fixa (sem alfa). A 4.096²: de 85,3 para 42,7 MiB. Mais o assado de relevo (R8, 1 byte por texel): no Alta e
+ * no 'pc' (8.192² e 8.192², PC3), 170,7 + 85,3 MiB.
  */
-export const memoriaAssadoMB = (pt) => ((pt.cor * pt.cor * (pt.cor16 ? 2 : 4)) / 1048576) * (4 / 3);
+export const memoriaAssadoMB = (pt) => (((pt.cor * pt.cor * (pt.cor16 ? 2 : 4)) + (pt.relevo ?? 0) ** 2) / 1048576) * (4 / 3);
+
+/**
+ * O perfil do terreno dentro do que a placa aceita (PC3): o assado de 8.192² pede MAX_TEXTURE_SIZE de 8.192 (o WebGL2
+ * só garante 2.048). Numa placa menor o mapa de cor cai para o maior lado que ela aceita; com 2 m por texel ou mais
+ * grosso, sem o assado de relevo (que só vale além do de 2 m) e com a encosta de antes (a das paredes só vale com o de
+ * 1 m). Sem o limite (ou dentro dele), o próprio perfil.
+ */
+export function limitarAssado(pt, maxTex) {
+  if (!(maxTex > 0) || (pt.cor <= maxTex && (pt.relevo ?? 0) <= maxTex)) return pt;
+  const lado = 2 ** Math.floor(Math.log2(maxTex));
+  const cor = Math.min(pt.cor, lado);
+  const fino = cor > LADO_ALCANCE_RELEVO;
+  return { ...pt, cor, relevo: fino ? Math.min(pt.relevo ?? 0, lado) : 0, encosta: fino ? pt.encosta : undefined };
+}
+
+/**
+ * Lado do assado que define o alcance do relevo das copas (PC3): com o assado mais fino o caminho barato começa mais
+ * perto, mas o relevo das copas grandes vai até onde ia com o de 2 m por texel (a cara de longe fica a mesma).
+ */
+export const LADO_ALCANCE_RELEVO = 4096;
 
 /**
  * O caminho de longe começa onde o pixel da tela, visto de frente, cobre 0,6 texel do assado no chão e fica inteiro
@@ -160,11 +187,20 @@ export function distanciaAgua(agua, n) {
  * Limites do caminho de longe (uTerLonge.xy, m): o maior entre o do perfil e a distância em que o pixel da tela, visto
  * de frente, cobre LONGE_PIXEL texels do assado (a tela mais fina empurra o longe para mais longe).
  * @param {number} pxAng  ângulo de um pixel (rad): 2 tan(fov / 2) / altura do desenho em pixels (0: só o do perfil)
- * @example limitesLonge(PERFIL_TERRENO.alta, 8192, 2 * Math.tan(Math.PI / 9) / 1001) // [~1650, ~2476] no PC do dono
+ * @example limitesLonge(PERFIL_TERRENO.alta, 8192, 2 * Math.tan(Math.PI / 9) / 1001) // [~825, ~1238] no PC do dono
  */
 export function limitesLonge(pt, ladoMapa = 8192, pxAng = 0) {
   const k = pxAng > 0 ? ladoMapa / pt.cor / pxAng : 0;
   return [Math.max(pt.longe[0], LONGE_PIXEL[0] * k), Math.max(pt.longe[1], LONGE_PIXEL[1] * k)];
+}
+
+/**
+ * Alcance do relevo das copas (uTerLonge.zw): o do caminho completo de um assado de LADO_ALCANCE_RELEVO. Sem o assado
+ * de relevo (ou com o assado de 2 m ou mais grosso) é o próprio caminho completo: o peso do relevo assado fica zero.
+ */
+export function alcanceRelevo(pt, ladoMapa = 8192, pxAng = 0) {
+  if (!pt.relevo || pt.cor <= LADO_ALCANCE_RELEVO) return limitesLonge(pt, ladoMapa, pxAng);
+  return limitesLonge({ ...pt, cor: LADO_ALCANCE_RELEVO }, ladoMapa, pxAng);
 }
 
 /**
@@ -178,36 +214,68 @@ export function pesoCompleto(dist, lim, dentro = true) {
   return 1 - t * t * (3 - 2 * t);
 }
 
-/** Inclinação (1 - normal y) a partir da qual o sombreador pinta a mata e a pedra na projeção lateral (GLSL: tEncosta). */
+/**
+ * Inclinação (1 - normal y) a partir da qual o sombreador pinta a mata e a pedra na projeção lateral também de longe
+ * (GLSL: tEncosta, TER_INCL_ENCOSTA). Com o assado de 1 m por texel (PERFIL_TERRENO.encosta, PC3), só nas paredes:
+ * a encosta de uns 37 a 57 graus (inclinação de 0,2 a 0,45) de longe fica com o assado, sem listras.
+ */
 export const INCL_ENCOSTA = 0.2;
+export const inclEncosta = (pt) => pt?.encosta ?? INCL_ENCOSTA;
+
+/** Chaves da ordem dos nós (distância e índice), sem alocar por quadro. */
+const CHAVES_NOS = new Float64Array(MAX_NOS);
 
 /**
- * Divide os nós escolhidos (4 por nó: x0, z0, lado, nível) entre a malha de perto (o sombreador completo, com a
- * transição) e a de longe (só o caminho barato, TER_LONGE): de longe vai o nó inteiro dentro do mapa, sem encosta
- * íngreme (P: a pirâmide com as inclinações), cujo ponto mais perto da câmera, no chão, passa do corte (o fim da
- * transição; a distância em 3D só é maior).
- * @returns {{ perto: number, longe: number }} nós escritos em cada saída
+ * Divide os nós escolhidos (4 por nó: x0, z0, lado, nível) entre as malhas: de longe (só o caminho barato, TER_LONGE)
+ * vai o nó inteiro dentro do mapa, sem encosta íngreme (P: a pirâmide com as inclinações), cujo ponto mais perto da
+ * câmera passa do corte (o fim da transição); os outros vão para a de perto (com as camadas do chão, TER_DETALHE) se
+ * algum ponto deles fica a menos de corteDetalhe, senão para a média (sem as camadas, que lá dariam peso zero; PC3).
+ * Sem a saída média, tudo que não é de longe vai para a de perto. A distância é em 3D, como a do sombreador (vTer.z):
+ * com a câmera acima do topo do nó (o máximo da pirâmide; o chão desenhado só desce dele, perto d'água), a altura
+ * dela sobre o topo entra na conta. Na vista do jogo, a 1,3 km de altura, o chão da frente da tela já passou do corte
+ * e vai inteiro para a malha barata (antes ia para a média, com o programa grande e o peso do caminho completo zero).
+ * Cada saída sai da frente para trás (o teste de profundidade da placa descarta o chão coberto antes do sombreador).
+ * @returns {{ perto: number, longe: number, medio: number }} nós escritos em cada saída
  */
-export function dividirNos(nos, n, cam, mapa, corte, perto, longe, P = null) {
+export function dividirNos(nos, n, cam, mapa, corte, perto, longe, P = null, corteDetalhe = 0, medio = null, incl = INCL_ENCOSTA) {
   let a = 0;
   let b = 0;
+  let m = 0;
   const c2 = corte * corte;
-  for (let k = 0; k < n; k++) {
+  const d2 = corteDetalhe * corteDetalhe;
+  const nn = Math.min(n, MAX_NOS);
+  // da frente para trás: a distância ao quadrado (inteira) e o índice numa chave só, ordenada como número
+  for (let k = 0; k < nn; k++) {
     const x0 = nos[4 * k];
     const z0 = nos[4 * k + 1];
     const s = nos[4 * k + 2];
     const dx = Math.max(x0 - cam.x, 0, cam.x - x0 - s);
     const dz = Math.max(z0 - cam.z, 0, cam.z - z0 - s);
+    let dy = 0;
+    if (P && Number.isFinite(cam.y)) {
+      const h = limitesAltura(P, x0, z0, x0 + s, z0 + s, true);
+      if (h && cam.y > h[1]) dy = cam.y - h[1];
+    }
+    CHAVES_NOS[k] = Math.floor(dx * dx + dy * dy + dz * dz) * MAX_NOS + k;
+  }
+  const chaves = CHAVES_NOS.subarray(0, nn).sort();
+  for (let q = 0; q < nn; q++) {
+    const k = chaves[q] % MAX_NOS;
+    const dist2 = (chaves[q] - k) / MAX_NOS;
+    const x0 = nos[4 * k];
+    const z0 = nos[4 * k + 1];
+    const s = nos[4 * k + 2];
     const dentro = !!mapa && x0 >= mapa.ox && z0 >= mapa.oz && x0 + s <= mapa.ox + mapa.lado && z0 + s <= mapa.oz + mapa.lado;
-    const vaiLonge = dentro && dx * dx + dz * dz >= c2 && !(P && inclinacaoMaxima(P, x0, z0, x0 + s, z0 + s) > INCL_ENCOSTA - 0.01);
-    const saida = vaiLonge ? longe : perto;
-    const o = vaiLonge ? 4 * b++ : 4 * a++;
+    const vaiLonge = dentro && dist2 >= c2 && !(P && inclinacaoMaxima(P, x0, z0, x0 + s, z0 + s) > incl - 0.01);
+    const vaiMedio = !vaiLonge && !!medio && dist2 >= d2;
+    const saida = vaiLonge ? longe : vaiMedio ? medio : perto;
+    const o = vaiLonge ? 4 * b++ : vaiMedio ? 4 * m++ : 4 * a++;
     saida[o] = x0;
     saida[o + 1] = z0;
     saida[o + 2] = s;
     saida[o + 3] = nos[4 * k + 3];
   }
-  return { perto: a, longe: b };
+  return { perto: a, longe: b, medio: m };
 }
 
 /** Byte da distância à água: passos de 2 m (0 a 127, até 254 m) mais 128 se a água que conta é o mar. */
@@ -840,7 +908,7 @@ export function criarUniformes() {
     uTerMorph: v(Array.from({ length: NIVEIS_CDLOD }, () => new THREE.Vector2())),
     uTerCopaV: v(new THREE.Vector4(COPA_ALTURA, 0, 150, 0.8)),
     uTerDetalhe: v(new THREE.Vector4(180, 60, 1, 2000)),
-    uTerLonge: v(new THREE.Vector4(400, 550, 0, 0)),
+    uTerLonge: v(new THREE.Vector4(400, 550, 400, 550)),
     uTerVegPerto: v(new THREE.Vector4(0, 1, 0, 1)),
     uTerGanho: v(Array.from({ length: N_CAMADAS }, () => new THREE.Vector3(1, 1, 1))),
     uTerGanhoB: v(Array.from({ length: N_CAMADAS }, () => new THREE.Vector3(1, 1, 1))),
@@ -852,6 +920,8 @@ export function criarUniformes() {
     uTerLadrilho: v(new THREE.Vector4(0, -4096, -4096, 512)),
     uTerMascara: v(0),
     uTerAssado16: v(0),
+    uTerAmb: v(null),
+    uTerRelevo: v(null),
   };
 }
 
@@ -862,15 +932,21 @@ function trocar(src, alvo, novo) {
 
 /**
  * Material do terreno: MeshStandardMaterial com os trechos do CDLOD e das camadas; os ganchos entram por cima. longe:
- * a variante dos nós de longe (TER_LONGE, PC2), só com o caminho barato do sombreador.
+ * a variante dos nós de longe (TER_LONGE, PC2), só com o caminho barato do sombreador. mestre: a variante média (PC3,
+ * sem as camadas do chão) segue o material de perto, com tudo o que os outros domínios penduraram nele depois (a
+ * pintura da via apagada perto da câmera, R3a): o mesmo onBeforeCompile e a mesma chave, só os defines mudam.
  */
-export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false, longe = false } = {}) {
+export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false, longe = false, mestre = null, encosta = INCL_ENCOSTA, relevo = false } = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
-  mat.name = longe ? 'terreno-longe' : 'terreno';
+  mat.name = longe ? 'terreno-longe' : mestre ? 'terreno-medio' : 'terreno';
   mat.defines = { ...mat.defines }; // mantém o STANDARD do three (IBL difusa e oclusão especular)
   if (detalhe && !longe) mat.defines.TER_DETALHE = '';
   if (ab && !longe) mat.defines.TER_AB = '';
   if (longe) mat.defines.TER_LONGE = '';
+  if (encosta !== INCL_ENCOSTA) mat.defines.TER_INCL_ENCOSTA = encosta.toFixed(3);
+  // o assado de relevo das copas só no do meio e no de longe (o de perto faz o relevo por pixel até onde ele chega):
+  // um amostrador a menos no de perto e nenhum no perfil sem o assado (a guarda do Mali, 12 por estágio)
+  if (relevo && (longe || !detalhe)) mat.defines.TER_RELEVO_ASSADO = '';
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U);
     let vs = shader.vertexShader;
@@ -880,7 +956,12 @@ export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false, l
     // depois dos ganchos (eles entram logo depois do fog_vertex; este trecho fica depois deles)
     vs = trocar(vs, '#include <fog_vertex>', `#include <fog_vertex>\n${GLSL_TER_VERTICE.fim}`);
     let fs = shader.fragmentShader;
-    fs = trocar(fs, '#include <common>', `#include <common>\n${GLSL_TER_FRAGMENTO.pars}`);
+    fs = trocar(fs, '#include <common>', `#include <common>\n${GLSL_TER_FRAGMENTO.pars}\n${GLSL_AMB_CHAO.pars}`);
+    // a luz do ambiente pelo atlas do quadro (AmbienteChao), no lugar das contas do cubo UV por pixel (PC3); o envMap
+    // do three fica sem uso, então sai a declaração dele (um amostrador a menos)
+    fs = trocar(fs, '#include <lights_fragment_maps>', GLSL_AMB_CHAO.luz);
+    fs = trocar(fs, '#include <envmap_common_pars_fragment>', '');
+    fs = trocar(fs, '#include <envmap_physical_pars_fragment>', '');
     fs = trocar(fs, '#include <map_fragment>', GLSL_TER_FRAGMENTO.cor);
     fs = trocar(fs, '#include <roughnessmap_fragment>', GLSL_TER_FRAGMENTO.rugosidade);
     fs = trocar(fs, '#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${GLSL_TER_FRAGMENTO.normal}`);
@@ -891,7 +972,36 @@ export function criarMaterialTerreno(ganchos, U, { detalhe = true, ab = false, l
   };
   mat.customProgramCacheKey = () => `terreno|${Object.keys(mat.defines).sort().join(',')}`;
   // a sombra, a neblina e o resto dos ganchos comuns por cima (o 'camada' não: o chão pinta a camada ele mesmo)
-  return ganchos.aplicar(mat, ['sombra', 'sombraLonge', 'hao', 'noite', 'neblina']);
+  const m = ganchos.aplicar(mat, ['sombra', 'sombraLonge', 'hao', 'noite', 'neblina']);
+  if (mestre) seguirMestre(m, mestre);
+  return m;
+}
+
+/**
+ * A variante média segue a de perto: o onBeforeCompile e a chave do programa dela (com os ganchos e o que outros
+ * domínios acrescentarem depois). Quando o mestre muda (needsUpdate), seguirVersao refaz a média também. Com os
+ * mesmos defines (o Leve, sem as camadas do chão nem o assado de relevo) a chave é a do mestre: o three usa o mesmo
+ * programa, sem compilar outro igual na carga do aparelho mais fraco.
+ */
+const chaveDefines = (m) => Object.entries(m.defines ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join(',');
+export function seguirMestre(mat, mestre) {
+  mat.onBeforeCompile = (sh, r) => mestre.onBeforeCompile.call(mestre, sh, r);
+  mat.customProgramCacheKey = () => {
+    const d = chaveDefines(mat);
+    return d === chaveDefines(mestre) ? mestre.customProgramCacheKey() : `${mestre.customProgramCacheKey()}|medio|${d}`;
+  };
+  mat.userData.mestre = mestre;
+  mat.userData.versaoMestre = mestre.version;
+  return mat;
+}
+
+/** Refaz o programa da variante média se o mestre mudou desde a última vez (true se refez). */
+export function seguirVersao(mat) {
+  const m = mat?.userData?.mestre;
+  if (!m || mat.userData.versaoMestre === m.version) return false;
+  mat.userData.versaoMestre = m.version;
+  mat.needsUpdate = true;
+  return true;
 }
 
 /** A grade de 16 x 16 quadrados (17 x 17 vértices em coordenadas de grade 0 a 16), instanciada por nó. */
@@ -930,14 +1040,96 @@ export function geometriaNo() {
   return g;
 }
 
+// ------------------------------------------------------------------------------------------------ luz do ambiente
+
+/**
+ * Defines do cubo UV de um PMREM pela altura da textura (generateCubeUVSize do three): o passe do atlas lê o cubo
+ * com a mesma conta do textureCubeUV.
+ */
+export function definesCuboUV(altura) {
+  const maxMip = Math.log2(altura) - 2;
+  return {
+    ENVMAP_TYPE_CUBE_UV: '',
+    CUBEUV_TEXEL_WIDTH: 1 / (3 * Math.max(2 ** maxMip, 7 * 16)),
+    CUBEUV_TEXEL_HEIGHT: 1 / altura,
+    CUBEUV_MAX_MIP: `${maxMip}.0`,
+  };
+}
+
+const _euler = new THREE.Matrix4();
+
+/**
+ * Atlas da luz do ambiente do chão (PC3): a cada quadro, antes da cena, os AMB_NIVEIS níveis de desfoque do PMREM da
+ * cena (cena.environment) num atlas de AMB_LADO x AMB_LADO por nível (GLSL_AMB_PASSE); o chão lê três vezes dele no
+ * lugar das contas do cubo UV (GLSL_AMB_CHAO). Uns 5 mil pixels por quadro.
+ */
+export class AmbienteChao {
+  constructor(U) {
+    this.alvo = new THREE.WebGLRenderTarget(AMB_LADO * AMB_NIVEIS, AMB_LADO, {
+      type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false,
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping,
+    });
+    this.alvo.texture.colorSpace = THREE.NoColorSpace;
+    this.mat = new THREE.ShaderMaterial({
+      name: 'terreno:ambiente',
+      uniforms: { envMap: { value: null }, envMapRotation: { value: new THREE.Matrix3() }, envMapIntensity: { value: 1 } },
+      vertexShader: GLSL_AMB_PASSE.vertice,
+      fragmentShader: GLSL_AMB_PASSE.fragmento,
+      defines: definesCuboUV(512),
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.altura = 512;
+    this.cena = new THREE.Scene();
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mat);
+    q.frustumCulled = false;
+    this.cena.add(q);
+    this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.vezes = 0;
+    U.uTerAmb.value = this.alvo.texture;
+  }
+
+  /** Lê o PMREM da cena no atlas (false sem um PMREM em cubo UV: o chão fica sem o ambiente, como o three). */
+  passe(renderer, cena) {
+    const env = cena?.environment;
+    if (!env?.isTexture || env.mapping !== THREE.CubeUVReflectionMapping) return false;
+    const h = env.image?.height;
+    if (h && h !== this.altura) {
+      this.mat.defines = definesCuboUV(h);
+      this.mat.needsUpdate = true;
+      this.altura = h;
+    }
+    const u = this.mat.uniforms;
+    u.envMap.value = env;
+    u.envMapRotation.value.setFromMatrix4(_euler.makeRotationFromEuler(cena.environmentRotation)).transpose();
+    u.envMapIntensity.value = cena.environmentIntensity ?? 1;
+    const antes = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.alvo);
+    renderer.render(this.cena, this.cam);
+    renderer.setRenderTarget(antes);
+    this.vezes++;
+    return true;
+  }
+
+  descartar() {
+    this.alvo.dispose();
+    this.mat.dispose();
+    for (const m of this.cena.children) m.geometry.dispose();
+  }
+}
+
 // ------------------------------------------------------------------------------------------------ assado
 
-/** Mapa de cor assado na GPU (RGBA8, sqrt do albedo e a rugosidade), com mipmaps; refaz por retângulo. */
+/**
+ * Mapa de cor assado na GPU (RGBA8, sqrt do albedo e a rugosidade), com mipmaps; refaz por retângulo. Com ladoRelevo,
+ * também o assado do relevo das copas (R8, GLSL_ASSAR_RELEVO), refeito nos mesmos retângulos.
+ */
 class Assador {
-  constructor(renderer, U, lado, aniso, cor16 = false) {
+  constructor(renderer, U, lado, aniso, cor16 = false, ladoRelevo = 0) {
     this.renderer = renderer;
     this.lado = lado;
     this.cor16 = cor16;
+    this.ladoRelevo = ladoRelevo;
     this.alvo = new THREE.WebGLRenderTarget(lado, lado, {
       // 16 bits: RGB565 (o verde, que é quase todo o brilho, com 6 bits; o alfa de 1 bit do RGB5_A1 não servia)
       ...(cor16 ? { format: THREE.RGBFormat, type: THREE.UnsignedByteType, internalFormat: 'RGB565' } : {}),
@@ -963,44 +1155,75 @@ class Assador {
     this.cena.add(q);
     this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.vezes = 0;
+    this.relevo = null;
+    if (ladoRelevo > 0) {
+      const alvo = new THREE.WebGLRenderTarget(ladoRelevo, ladoRelevo, {
+        format: THREE.RedFormat, type: THREE.UnsignedByteType, depthBuffer: false, generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+        wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping, anisotropy: aniso,
+      });
+      alvo.texture.colorSpace = THREE.NoColorSpace;
+      const mat = new THREE.ShaderMaterial({
+        name: 'terreno:assar-relevo',
+        uniforms: U,
+        vertexShader: GLSL_ASSAR_RELEVO.vertice,
+        fragmentShader: GLSL_ASSAR_RELEVO.fragmento,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const cena = new THREE.Scene();
+      const m = new THREE.Mesh(q.geometry, mat);
+      m.frustumCulled = false;
+      cena.add(m);
+      this.relevo = { alvo, mat, cena };
+    }
   }
 
-  /** Assa o retângulo [x0, z0, x1, z1] do mundo (ou tudo). */
-  assar(mapa, ret = null) {
+  /** Desenha uma cena de assado num alvo, no retângulo do mundo (ou nele todo). */
+  _desenhar(alvo, cena, lado, mapa, ret) {
     const r = this.renderer;
-    const a = this.alvo;
     if (ret) {
-      const k = this.lado / mapa.lado;
+      const k = lado / mapa.lado;
       const x0 = Math.max(0, Math.floor((ret[0] - mapa.ox) * k) - 2);
       const y0 = Math.max(0, Math.floor((ret[1] - mapa.oz) * k) - 2);
-      const x1 = Math.min(this.lado, Math.ceil((ret[2] - mapa.ox) * k) + 2);
-      const y1 = Math.min(this.lado, Math.ceil((ret[3] - mapa.oz) * k) + 2);
+      const x1 = Math.min(lado, Math.ceil((ret[2] - mapa.ox) * k) + 2);
+      const y1 = Math.min(lado, Math.ceil((ret[3] - mapa.oz) * k) + 2);
       if (x1 <= x0 || y1 <= y0) return;
-      a.scissor.set(x0, y0, x1 - x0, y1 - y0);
-      a.scissorTest = true;
-    } else a.scissorTest = false;
+      alvo.scissor.set(x0, y0, x1 - x0, y1 - y0);
+      alvo.scissorTest = true;
+    } else alvo.scissorTest = false;
     const antes = r.getRenderTarget();
-    r.setRenderTarget(a);
-    r.render(this.cena, this.cam);
+    r.setRenderTarget(alvo);
+    r.render(cena, this.cam);
     r.setRenderTarget(antes);
-    a.scissorTest = false;
+    alvo.scissorTest = false;
+  }
+
+  /** Assa o retângulo [x0, z0, x1, z1] do mundo (ou tudo): a cor e, se houver, o relevo das copas. */
+  assar(mapa, ret = null) {
+    this._desenhar(this.alvo, this.cena, this.lado, mapa, ret);
+    if (this.relevo) this._desenhar(this.relevo.alvo, this.relevo.cena, this.ladoRelevo, mapa, ret);
     this.vezes++;
   }
 
   /** Assa vários retângulos; os mipmaps saem uma vez só, no último (o three os refaz a cada render no alvo). */
   assarVarios(mapa, rets) {
-    const tex = this.alvo.texture;
+    const texs = [this.alvo.texture, this.relevo?.alvo.texture].filter(Boolean);
     rets.forEach((r, k) => {
-      tex.generateMipmaps = k === rets.length - 1;
+      for (const t of texs) t.generateMipmaps = k === rets.length - 1;
       this.assar(mapa, r);
     });
-    tex.generateMipmaps = true;
+    for (const t of texs) t.generateMipmaps = true;
   }
 
   descartar() {
     this.alvo.dispose();
     this.mat.dispose();
     for (const m of this.cena.children) m.geometry.dispose();
+    if (this.relevo) {
+      this.relevo.alvo.dispose();
+      this.relevo.mat.dispose();
+    }
   }
 }
 
@@ -1048,7 +1271,7 @@ function criarTerreno(ctx) {
   U.uTerMascara.value = lerPasse() === 'mascara' ? 1 : 0;
 
   function ligarDetalhe() {
-    pt = porPerfil(PERFIL_TERRENO, ctx.perfil);
+    pt = limitarAssado(porPerfil(PERFIL_TERRENO, ctx.perfil), ctx.renderer?.capabilities?.maxTextureSize);
     U.uTerDetalhe.value.set(pt.detalhe, pt.faixa, 1, pt.copaRelevo);
     estado.faixas = faixasCDLOD(pt.r0);
     estado.faixas.forEach((r, l) => U.uTerMorph.value[l].set(MORPH.inicio * r, 1 / ((MORPH.fim - MORPH.inicio) * r)));
@@ -1079,22 +1302,34 @@ function criarTerreno(ctx) {
   ligarDetalhe();
   espelharB();
 
-  let mat = criarMaterialTerreno(ctx.ganchos, U, { detalhe: pt.detalhe > 0, ab: modo === 'ab' });
-  let matLonge = criarMaterialTerreno(ctx.ganchos, U, { longe: true });
+  let mat = criarMaterialTerreno(ctx.ganchos, U, { detalhe: pt.detalhe > 0, ab: modo === 'ab', encosta: inclEncosta(pt) });
+  let matMedio = criarMaterialTerreno(ctx.ganchos, U, { detalhe: false, mestre: mat, encosta: inclEncosta(pt), relevo: !!pt.relevo });
+  let matLonge = criarMaterialTerreno(ctx.ganchos, U, { longe: true, relevo: !!pt.relevo });
   const geo = geometriaNo();
+  const geoMedio = geometriaNo();
   const geoLonge = geometriaNo();
-  // duas malhas da mesma grade instanciada (PC2): os nós de perto com o sombreador completo e os de longe só com o
-  // caminho barato; as duas por último entre os opacos (prédios, água e o resto na frente descartam o chão coberto
-  // antes do sombreador)
+  // três malhas da mesma grade instanciada: os nós de perto com as camadas do chão (PC3), os do meio sem elas e os de
+  // longe só com o caminho barato (PC2); todas por último entre os opacos (prédios, água e o resto na frente descartam
+  // o chão coberto antes do sombreador), de perto para longe
   const malha = ctx.medidas.familia(new THREE.Mesh(geo, mat), 'terreno');
+  const malhaMedio = ctx.medidas.familia(new THREE.Mesh(geoMedio, matMedio), 'terreno');
   const malhaLonge = ctx.medidas.familia(new THREE.Mesh(geoLonge, matLonge), 'terreno');
   malha.name = 'terreno';
+  malhaMedio.name = 'terreno:medio';
   malhaLonge.name = 'terreno:longe';
-  for (const m of [malha, malhaLonge]) {
+  [malha, malhaMedio, malhaLonge].forEach((m, k) => {
     m.frustumCulled = false;
-    m.renderOrder = ORDEM_TERRENO;
+    m.renderOrder = ORDEM_TERRENO + k * 0.01;
     ctx.cena.add(m);
-  }
+  });
+  // a luz do ambiente do chão, lida do PMREM antes da cena a cada quadro (o programa dele compila na carga)
+  const ambiente = new AmbienteChao(U);
+  const passeAmbiente = (renderer, medidas) => {
+    if (medidas) medidas.passe(() => ambiente.passe(renderer, ctx.cena));
+    else ambiente.passe(renderer, ctx.cena);
+  };
+  ctx.quadro?.antes?.add(passeAmbiente);
+  ctx.quadro?.aquecer?.add?.(ambiente.cena);
   const nosTodos = new Float32Array(MAX_NOS * 4);
   const tamDesenho = new THREE.Vector2();
 
@@ -1155,10 +1390,12 @@ function criarTerreno(ctx) {
     // mapa de cor
     const ladoCor = pt.cor;
     const cor16 = !!pt.cor16 && lerParam('assado') !== '8';
-    if (!estado.assador || estado.assador.lado !== ladoCor || estado.assador.cor16 !== cor16) {
+    const ladoRelevo = pt.relevo ?? 0;
+    if (!estado.assador || estado.assador.lado !== ladoCor || estado.assador.cor16 !== cor16 || estado.assador.ladoRelevo !== ladoRelevo) {
       estado.assador?.descartar();
-      estado.assador = new Assador(ctx.renderer, U, ladoCor, pt.aniso, cor16);
+      estado.assador = new Assador(ctx.renderer, U, ladoCor, pt.aniso, cor16, ladoRelevo);
       U.uTerCor.value = estado.assador.alvo.texture;
+      U.uTerRelevo.value = estado.assador.relevo?.alvo.texture ?? null;
       U.uTerAssado16.value = cor16 ? 1 : 0;
     }
     estado.sujoCor = [];
@@ -1350,11 +1587,15 @@ function criarTerreno(ctx) {
       if (!estado.camadasCC0) U.uTerCamadasB.value = ctx.textura('chao.cc0');
       ligarDetalhe();
       espelharB();
-      const novo = criarMaterialTerreno(ctx.ganchos, U, { detalhe: pt.detalhe > 0, ab: modo === 'ab' || estado.ab });
+      const novo = criarMaterialTerreno(ctx.ganchos, U, { detalhe: pt.detalhe > 0, ab: modo === 'ab' || estado.ab, encosta: inclEncosta(pt) });
       malha.material = novo;
       mat.dispose();
       mat = novo;
-      const novoLonge = criarMaterialTerreno(ctx.ganchos, U, { longe: true });
+      const novoMedio = criarMaterialTerreno(ctx.ganchos, U, { detalhe: false, mestre: novo, encosta: inclEncosta(pt), relevo: !!pt.relevo });
+      malhaMedio.material = novoMedio;
+      matMedio.dispose();
+      matMedio = novoMedio;
+      const novoLonge = criarMaterialTerreno(ctx.ganchos, U, { longe: true, relevo: !!pt.relevo });
       malhaLonge.material = novoLonge;
       matLonge.dispose();
       matLonge = novoLonge;
@@ -1385,19 +1626,24 @@ function criarTerreno(ctx) {
     } else m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     frustum.setFromProjectionMatrix(m4);
     const nos = selecionarNos({ cam: cam.position, visivel, faixas: estado.faixas, P: estado.P, fora: U.uTerFora.value.x > 0.5, saida: nosTodos });
-    // de longe o nó inteiro além do fim da transição (o passe da máscara quer o caminho completo em tudo); escreve
-    // direto nos atributos (sem um Float32Array novo por quadro)
+    // de longe o nó inteiro além do fim da transição; do meio o que fica todo além do alcance das camadas do chão (o
+    // passe da máscara quer o caminho completo em tudo); escreve direto nos atributos (sem um Float32Array novo por
+    // quadro), da frente para trás
     const aP = geo.getAttribute('aNo');
+    const aM = geoMedio.getAttribute('aNo');
     const aL = geoLonge.getAttribute('aNo');
-    const corte = U.uTerMascara.value > 0.5 ? Infinity : U.uTerLonge.value.y;
-    const d = dividirNos(nos, nos.n, cam.position, estado.mapa, corte, aP.array, aL.array, estado.P);
-    for (const [g, a, k] of [[geo, aP, d.perto], [geoLonge, aL, d.longe]]) {
+    const mascara = U.uTerMascara.value > 0.5;
+    const corte = mascara ? Infinity : U.uTerLonge.value.y;
+    const corteDetalhe = mascara ? Infinity : U.uTerDetalhe.value.x;
+    const d = dividirNos(nos, nos.n, cam.position, estado.mapa, corte, aP.array, aL.array, estado.P, corteDetalhe, aM.array, inclEncosta(pt));
+    for (const [g, a, k] of [[geo, aP, d.perto], [geoMedio, aM, d.medio], [geoLonge, aL, d.longe]]) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, k * 4);
       a.needsUpdate = true;
       g.instanceCount = k;
     }
     estado.nos = nos.n;
+    estado.nosMedio = d.medio;
     estado.nosLonge = d.longe;
   }
 
@@ -1407,7 +1653,8 @@ function criarTerreno(ctx) {
     const h = c.renderer?.getDrawingBufferSize?.(tamDesenho).y ?? 0;
     const pxAng = cam?.isPerspectiveCamera && h > 0 ? (2 * Math.tan((cam.fov * Math.PI) / 360)) / (cam.zoom || 1) / h : 0;
     const [l0, l1] = limitesLonge(pt, estado.mapa?.lado, pxAng);
-    U.uTerLonge.value.set(l0, l1, 0, 0);
+    const [r0, r1] = alcanceRelevo(pt, estado.mapa?.lado, pxAng);
+    U.uTerLonge.value.set(l0, l1, r0, r1);
   }
 
   /** Lê de volta a textura de ruído (o alvo dela) uma vez: as árvores de perto usam os mesmos números do chão. */
@@ -1467,16 +1714,24 @@ function criarTerreno(ctx) {
       // a elevação do sol (rad) decide onde a sombra de longe lê o chão (GLSL_TER_VERTICE, a folga da sombra)
       U.uTerCopaV.value.w = c.ambiente?.ast?.sol?.elevacao ?? 0.8;
       atualizarLonge(c);
+      // a variante média refaz o programa quando a de perto ganha um gancho (a pintura da via, R3a)
+      seguirVersao(matMedio);
       escolherNos(c.camera);
       if (U.uTerAB.value.y > 0.5 && estado.abX !== undefined) U.uTerAB.value.x = estado.abX * c.renderer.getPixelRatio();
     },
     descartar() {
       for (const f of soltar) f();
+      ctx.quadro?.antes?.delete(passeAmbiente);
+      ctx.quadro?.aquecer?.delete?.(ambiente.cena);
+      ambiente.descartar();
       ctx.cena.remove(malha);
+      ctx.cena.remove(malhaMedio);
       ctx.cena.remove(malhaLonge);
       geo.dispose();
+      geoMedio.dispose();
       geoLonge.dispose();
       mat.dispose();
+      matMedio.dispose();
       matLonge.dispose();
       estado.texAlt?.dispose();
       estado.texDados?.dispose();
@@ -1495,11 +1750,16 @@ function criarTerreno(ctx) {
     get nos() {
       return estado.nos ?? 0;
     },
+    /** Nós na malha do meio (sem as camadas do chão). */
+    get nosMedio() {
+      return estado.nosMedio ?? 0;
+    },
     /** Nós na malha de longe (só o caminho barato do sombreador). */
     get nosLonge() {
       return estado.nosLonge ?? 0;
     },
-    /** A malha dos nós de longe (TER_LONGE). */
+    /** As malhas dos nós do meio e de longe (TER_LONGE). */
+    malhaMedio,
     malhaLonge,
     get assados() {
       return estado.assador?.vezes ?? 0;

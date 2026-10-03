@@ -17,15 +17,17 @@ import {
   alturaComoGLSL, distanciaAgua, codificarAgua, prepararDados, piramideAlturas, limitesAltura, mipsDeMinimos,
   selecionarNos, faixasCDLOD, rasterizarUso, rasterizarCelulas, estacaoSeca, caixaCelula, PERFIL_TERRENO, RAIZ_CDLOD,
   COPA_ALTURA, COPA_MAX, limitesLonge, pesoCompleto, dividirNos, inclinacaoMaxima, INCL_ENCOSTA, LONGE_PIXEL,
-  ORDEM_TERRENO, criarMaterialTerreno, criarUniformes,
+  ORDEM_TERRENO, criarMaterialTerreno, criarUniformes, alcanceRelevo, LADO_ALCANCE_RELEVO, memoriaAssadoMB, definesCuboUV,
+  seguirVersao, inclEncosta, limitarAssado,
 } from '../../fonte/render/mundo/terreno.js';
-import { preprocessar } from '../../fonte/render/motor/capacidades.js';
+import { preprocessar, contarPrograma } from '../../fonte/render/motor/capacidades.js';
 import { ORDEM_FUNDO } from '../../fonte/render/ambiente/ceu.js';
 import { lerManifesto, conferirLicencas, normalizarFatia, TETO_BYTES } from '../codificar-texturas.mjs';
 import { geometriaAgua, faixasDeMar, curvaDoRio, abrirContorno } from '../../fonte/render/mundo/agua.js';
 import {
   PALETA_CHAO, CORES_APOIO, GLSL_TER_VERTICE, GLSL_TER_FRAGMENTO, GLSL_ASSAR, GLSL_GERAR_CAMADAS, GLSL_GERAR_RUIDO,
-  NIVEIS_CDLOD, GRADE_NO,
+  NIVEIS_CDLOD, GRADE_NO, GLSL_TER_CAMADAS, GLSL_ASSAR_RELEVO, GLSL_AMB_CHAO, GLSL_AMB_PASSE, AMB_LADO, AMB_NIVEIS,
+  TER_RELEVO_MAX,
 } from '../../fonte/render/materiais/shaders/terreno.glsl.js';
 import { GLSL_AGUA_FRAGMENTO, AGUAS } from '../../fonte/render/materiais/shaders/agua.glsl.js';
 import { soltarComAlvo } from '../../fonte/render/materiais/texturas-chao.js';
@@ -399,14 +401,17 @@ test('relevo fino do fragmento: cada termo some pelo pixel em 3D (na encosta a p
   const cor = GLSL_TER_FRAGMENTO.cor;
   assert.match(cor, /float tPix = max\( length\( tPx \), length\( tPy \) \);/);
   // os termos que entram em terRelevo por derivada de tela: sem o corte pelo pixel viram quadradinhos de 2 x 2 pixels
+  // (o das copas, assado ou por pixel, pelo fator comum tFatorCopa, que tem o corte)
+  assert.match(cor, /float tFatorCopa = [^;]*tPix[^;]*;/);
   for (const termo of ['tRelVeg', 'tRelRocha', 'tCopaRel']) {
-    const atribs = [...cor.matchAll(new RegExp(`(?:float )?${termo} = ([^;]+);`, 'g'))].filter((m) => m[1].trim() !== '0.0');
+    const atribs = [...cor.matchAll(new RegExp(`(?:float )?${termo} \\+?= ([^;]+);`, 'g'))].filter((m) => m[1].trim() !== '0.0');
     assert.ok(atribs.length > 0, `${termo} atribuído no fragmento`);
-    for (const a of atribs) assert.ok(a[1].includes('tPix'), `${termo} sem o corte pelo tamanho do pixel`);
+    for (const a of atribs) assert.ok(/tPix|tFatorCopa|tWAssado/.test(a[1]), `${termo} sem o corte pelo tamanho do pixel`);
   }
   assert.ok(!/length\( abs\( tDx \) \+ abs\( tDy \) \)/.test(cor), 'corte pelo pixel só em x e z (falha na encosta)');
-  assert.match(cor, /tRelH = tRel \+ tCopaRel \* 0\.65 \+ tRelRocha \+ tRelVeg;/);
-  assert.match(cor, /terRelevo\( tN, tRelH \* uTerDetalhe\.z \)/);
+  assert.match(cor, /tRelH = tRel \+ tRelRocha \+ tRelVeg;/);
+  assert.match(cor, /tRelH \+= tCopaRel \* 0\.65;/);
+  assert.match(cor, /terRelevo\( tN, tRelH \* uTerDetalhe\.z, tPx, tPy \)/);
 });
 
 test('relevo fino: inclinação limitada e sem NaN (a parede da copa levantada leva o det a zero)', () => {
@@ -444,7 +449,8 @@ test('vegetação: na borda (cobertura parcial) o vão escuro entre as copas mos
   const cam = GLSL_TER_FRAGMENTO.pars;
   assert.match(cam, /float terCobVeg\( float cob, vec3 cor \)/);
   // a mesma regra no assado e no pintado por pixel (senão o perto e o longe mudam de cor na troca)
-  assert.match(cam, /float vegBruta = terVegetacao\( e, cv \);[\s\S]*float veg = terCobVeg\( vegBruta, cv \);/);
+  assert.match(cam, /float vegBruta = terVegetacao\( e, cv \);/);
+  assert.match(cam, /float veg = terCobVeg\( vegBruta, cv \);/);
   assert.match(GLSL_TER_FRAGMENTO.cor, /tAlb = mix\( tAlb, cVeg, terCobVeg\( tVeg, cVeg \) \* tMed \* max\( kP, tIngreme \) \);/);
   // a conta em JavaScript: vão (luminância 0,01) com cobertura 1 continua; com cobertura 0,5 quase some
   const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -535,8 +541,8 @@ test('CC0: arte/materiais/chao-camadas.ktx2 é um KTX2 de 8 fatias de 1024, até
 // ------------------------------------------------------------------------------------------------ LOD do sombreador (PC2)
 
 test('LOD do sombreador: o caminho barato é escolhido de longe e o completo de perto, pela distância e pela tela', () => {
-  const pc = PERFIL_TERRENO.alta; // o 'pc' herda do Alta (porPerfil)
-  assert.equal(pc.cor, 4096, 'o PC assa o chão a 2 m por texel');
+  // um assado de 2 m por texel (o do PC antes do PC3; o de 1 m está no teste do PC3)
+  const pc = { ...PERFIL_TERRENO.alta, cor: 4096, relevo: 0 };
   // no PC do dono (2070 x 1001, 40 graus): o pixel visto de frente cobre 0,6 texel de 2 m a ~1,65 km
   const ang = (2 * Math.tan(Math.PI / 9)) / 1001;
   const [l0, l1] = limitesLonge(pc, 8192, ang);
@@ -610,12 +616,12 @@ test('LOD do sombreador: os nós além da transição vão para a malha barata; 
   const longe = new Float32Array(16);
   // com a câmera no nó plano, ele fica perto
   let r = dividirNos(nos, 1, { x: plano[0] + 64, y: 300, z: plano[1] + 64 }, mapa, 2000, perto, longe, P);
-  assert.deepEqual(r, { perto: 1, longe: 0 });
+  assert.deepEqual(r, { perto: 1, longe: 0, medio: 0 });
   // a 9 km dele: o plano vai para a barata; o de fora do mapa e o da encosta íngreme ficam na completa (a mata e a
   // pedra na projeção lateral)
   const c = { x: plano[0] + 9000, y: 300, z: plano[1] };
   r = dividirNos(nos.subarray(4), 3, c, mapa, 2000, perto, longe, P);
-  assert.deepEqual(r, { perto: 2, longe: 1 });
+  assert.deepEqual(r, { perto: 2, longe: 1, medio: 0 });
   assert.deepEqual([...longe.subarray(0, 4)], [plano[0], plano[1], 128, 0]);
   assert.ok(INCL_ENCOSTA > 0.15 && INCL_ENCOSTA < 0.3);
   // o corte infinito (o passe da máscara) põe tudo perto
@@ -652,4 +658,310 @@ test('assado: o mapa de cor leva as manchas do campo (o chão de longe não as p
   assert.match(GLSL_TER_FRAGMENTO.cor, /mA = textureGrad\( uTerRuido, TER_ROT_A \* tW \* \( 1\.0 \/ 23\.0 \) \+ vec2\( 0\.13, 0\.71 \)/);
   // de perto as manchas só na parte pintada pelas camadas (a do assado já as tem)
   assert.match(GLSL_TER_FRAGMENTO.cor, /tAlb \+= aPerto \* \( terManchas\( p, asf, tVeg, mA, mB \) - 1\.0 \) \* \( tPerto \* tMed \);/);
+});
+
+// ------------------------------------------------------------------------------------------------ PC3
+
+/**
+ * O corpo do fragmento do terreno de um dos três programas, com o pré-processador (os defines de cada malha): as
+ * chamadas que cada um faz (as funções sem chamada o compilador tira).
+ */
+const programaTerreno = (defines) => preprocessar(`${defines.map((d) => `#define ${d}\n`).join('')}${GLSL_TER_FRAGMENTO.cor}`).texto;
+
+test('PC3: três programas do chão, de perto com as camadas, do meio sem elas e de longe só o assado e o relevo assado', () => {
+  const perto = programaTerreno(['TER_DETALHE']);
+  const medio = programaTerreno([]);
+  const longe = programaTerreno(['TER_LONGE', 'TER_RELEVO_ASSADO']);
+  // de perto: as camadas do chão, as manchas por pixel e a escolha das duas camadas
+  for (const t of ['terDetalhe( k1', 'terManchas( p, asf, tVeg, mA, mB )', 'terPesos( tE, p, asf, jar )']) assert.ok(perto.includes(t), `perto sem ${t}`);
+  // o meio não carrega nada que dê peso zero fora do alcance do detalhe (as camadas, as manchas por pixel)
+  for (const t of ['terDetalhe(', 'terManchas(', 'terCores(', 'uTerCamadas']) assert.ok(!medio.includes(t), `meio com ${t}`);
+  // mas tem a mata nítida, os tufos, a pedra e o relevo das copas por pixel
+  for (const t of ['tVeg = terVegetacao( tE, cVeg )', 'tufoV', 'granito', 'copaRelevo( terR2, terR3, terR1']) assert.ok(medio.includes(t), `meio sem ${t}`);
+  // de longe: nem o ruído nem a vegetação por pixel; o relevo das copas vem do assado de relevo
+  for (const t of ['terRuidosGrad', 'terVegetacao( tE', 'copaCor(', 'terAguaExata( tW )']) assert.ok(!longe.includes(t), `longe com ${t}`);
+  assert.match(longe, /textureGrad\( uTerRelevo, tUVM/);
+  assert.match(longe, /float tWAssado = max\( tWRel - kP, 0\.0 \) \* tFatorCopa;/);
+  // o de perto não lê o assado de relevo: o pixel faz a parte dele (a mesma soma de pesos, kP + max( tWRel - kP, 0 ))
+  assert.ok(!perto.includes('uTerRelevo') && !medio.includes('uTerRelevo'), 'relevo assado sem TER_RELEVO_ASSADO');
+  assert.match(perto, /float tPesoCopa = max\( kP, tWRel \);/);
+  assert.match(programaTerreno(['TER_RELEVO_ASSADO']), /float tPesoCopa = kP;/);
+  // nenhum vetor local indexado por variável (no Direct3D vai para a memória temporária): as duas camadas de perto
+  // saem de um laço desenrolado com índices fixos
+  assert.ok(!/\b(?:c|p|TER_RUG|TER_RELEVO|TER_ESC|uTerGanho)\[ i[12] \]/.test(perto), 'índice variável no vetor das camadas');
+  // a vegetação pintada sai uma vez por pixel (antes: no detalhe de perto e de novo na mata nítida)
+  assert.equal((perto.match(/terVegetacao\( tE, cVeg \)/g) ?? []).length, 1);
+  assert.ok(!perto.includes('terAcabamento( tE'), 'o detalhe reusa a vegetação (terAcabamentoV)');
+});
+
+test('PC3: os ramos caros do chão só rodam onde o peso deles não é zero (a mesma imagem)', () => {
+  const cor = GLSL_TER_FRAGMENTO.cor;
+  // os tufos (pixel até 1,4 m) e o relevo das copas (até 2,5 m) pelo tamanho do pixel
+  assert.match(cor, /bool tComManchas = kP > 0\.0 && tPix < 1\.4;/);
+  assert.match(cor, /float pertoV = \( 1\.0 - smoothstep\( 0\.4, 1\.4, tPix \) \)/);
+  assert.match(cor, /if \( kP > 0\.0 && tPix < 2\.5 \) \{/);
+  assert.match(cor, /tFatorCopa = tMed \* \( 1\.0 - smoothstep\( 0\.9, 2\.5, tPix \) \)/);
+  // a água exata só perto da água (a distância satura em 254 m; longe dela a filtrada é a mesma)
+  assert.match(cor, /if \( tDentro && tAgua\.x < 250\.0 \) tAgua = terAguaExata\( tW \);/);
+  // a restinga, a mata ciliar e a encosta do mar zeram a 200 m da água: o ramo longe dela dá o mesmo
+  const veg = GLSL_TER_CAMADAS.slice(GLSL_TER_CAMADAS.indexOf('float terVegetacao('));
+  assert.match(veg, /bool pertoAgua = e\.agua < 200\.0;/);
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let k = 0; k < 50; k++) {
+    const r2x = hashF(k, 1, 7);
+    const r3x = hashF(k, 2, 7);
+    const lim = 16 + 30 * r2x + 10 * hashF(k, 3, 7);
+    // restinga, ciliar, encosta e areal a 200 m da água
+    assert.equal(1 - ss(lim + 40 + 45 * r2x, lim + 80 + 60 * r2x, 200), 0);
+    assert.equal(1 - ss(22 + 20 * r3x, 40 + 30 * r3x, 200), 0);
+    assert.equal(1 - ss(70, 170, 200), 0);
+    assert.equal(1 - ss(25, 90, 200), 0);
+  }
+  // o costão, o fim da praia e a margem saem uma vez (terPreparar), não em cada função
+  assert.equal((GLSL_TER_CAMADAS.match(/terCostaoBase\(/g) ?? []).length, 1);
+});
+
+test('PC3: o assado de 1 m do PC e o alcance do relevo das copas, o mesmo de antes', () => {
+  const pc = PERFIL_TERRENO.alta; // o 'pc' herda do Alta (porPerfil)
+  assert.equal(pc.cor, 8192, 'o PC assa o chão a 1 m por texel');
+  const media = PERFIL_TERRENO.media; // sem o assado de relevo
+  const ang = (2 * Math.tan(Math.PI / 9)) / 1001; // o PC do dono: 2070 x 1001, 40 graus
+  const [l0, l1] = limitesLonge(pc, 8192, ang);
+  // o caminho barato começa na metade da distância (texel de 1 m): na abertura do jogo (1,6 km) a tela inteira
+  assert.ok(Math.abs(l0 - 825) < 3 && Math.abs(l1 - 1238) < 3, `${l0} ${l1}`);
+  // o relevo das copas vai até onde ia com o assado de 2 m
+  const [r0, r1] = alcanceRelevo(pc, 8192, ang);
+  const [a0, a1] = limitesLonge({ ...pc, cor: LADO_ALCANCE_RELEVO }, 8192, ang);
+  assert.deepEqual([r0, r1], [a0, a1]);
+  assert.ok(Math.abs(r0 - 1651) < 5 && Math.abs(r1 - 2477) < 5);
+  // no Média (sem o assado de relevo) o alcance é o próprio caminho completo: o peso do relevo assado fica zero
+  assert.deepEqual(alcanceRelevo(media, 8192, ang), limitesLonge(media, 8192, ang));
+  // a memória: 8.192² em RGB565 e o relevo em R8, com os mipmaps (256 MiB); o Média segue com 21,3
+  assert.ok(Math.abs(memoriaAssadoMB(pc) - 256) < 0.1, `${memoriaAssadoMB(pc)}`);
+  assert.ok(Math.abs(memoriaAssadoMB(media) - 21.33) < 0.05);
+  // a soma dos pesos do relevo das copas (por pixel e assado) é a de antes: kP + max(antes - kP, 0)
+  for (const d of [300, 900, 1200, 1700, 2100, 2400, 3000]) {
+    const kP = pesoCompleto(d, [l0, l1]);
+    const antes = pesoCompleto(d, [r0, r1]);
+    assert.ok(Math.abs(kP + Math.max(antes - kP, 0) - antes) < 1e-9, `${d} m`);
+  }
+  // a encosta de uns 37 a 57 graus (1 - normal y de 0,2 a 0,45) de longe fica com o assado de 1 m (só as paredes no
+  // caminho completo)
+  assert.equal(inclEncosta(pc), 0.45);
+  assert.equal(inclEncosta(media), INCL_ENCOSTA);
+  // o assado de relevo: a mesma altura das copas grandes e a mesma cobertura do fragmento, na escala do R8
+  const f = GLSL_ASSAR_RELEVO.fragmento;
+  assert.match(f, /copaRelevo\( terR2, terR3, terR1, 0\.0 \) \* cob \/ 4\.0/);
+  assert.match(f, /max\( terCopa\( e\.mata \) \* \( 1\.0 - smoothstep\( 0\.35, 0\.8, terCst \) \) \* \( 1\.0 - terParedao\( 1\.0 - e\.n\.y, terR3\.x \) \), veg \* 0\.8 \)/);
+  assert.match(GLSL_TER_FRAGMENTO.cor, /max\( terCopa\( tE\.mata \) \* \( 1\.0 - smoothstep\( 0\.35, 0\.8, tCostaoP \) \) \* \( 1\.0 - tParedao \), tVeg \* 0\.8 \)/);
+  assert.equal(TER_RELEVO_MAX, 4);
+  // a maior altura das copas grandes cabe: 2,6 x 1,4
+  assert.ok(2.6 * 1.4 <= TER_RELEVO_MAX);
+});
+
+test('PC3: a luz do ambiente do chão pelo atlas é a mesma conta do textureCubeUV do three', () => {
+  // os mips do PMREM (roughnessToMip do three) nos trechos de 1 a 0,4, contados do nível 0 do atlas (mip -2)
+  const mipThree = (r) => (r >= 0.8 ? ((1 - r) * (-1 - -2)) / (1 - 0.8) + -2 : ((0.8 - r) * (2 - -1)) / (0.8 - 0.4) + -1);
+  const nivel = (r) => Math.min(AMB_NIVEIS - 1, Math.max(0, r >= 0.8 ? (1 - r) * 5 : (0.8 - r) * 7.5 + 1));
+  for (let r = 0.4; r <= 1.0001; r += 0.01) assert.ok(Math.abs(nivel(r) - (mipThree(r) + 2)) < 1e-9, `rugosidade ${r}`);
+  assert.match(GLSL_AMB_CHAO.pars, /r >= 0\.8 \? \( 1\.0 - r \) \* 5\.0 : \( 0\.8 - r \) \* 7\.5 \+ 1\.0/);
+  // irradiância: pi vezes o mip -2 (nível 0); reflexão: dois níveis vizinhos misturados pela fração do mip
+  assert.match(GLSL_AMB_CHAO.luz, /iblIrradiance \+= 3\.141592653589793 \* terAmb\(/);
+  assert.match(GLSL_AMB_CHAO.luz, /radiance \+= mix\( terAmb\( tRefl, tN0 \), terAmb\( tRefl, min\( tN0 \+ 1\.0/);
+  // o passe lê o cubo UV pela mesma função do three, nos mips -2 a 2
+  assert.match(GLSL_AMB_PASSE.fragmento, /bilinearCubeUV\( envMap, envMapRotation \* terOctDir\( o \), nivel - 2\.0 \) \* envMapIntensity/);
+  // os defines do cubo UV como o generateCubeUVSize do three (PMREM de 128: 384 x 512)
+  const d = definesCuboUV(512);
+  assert.equal(d.CUBEUV_TEXEL_HEIGHT, 1 / 512);
+  assert.equal(d.CUBEUV_TEXEL_WIDTH, 1 / 384);
+  assert.equal(d.CUBEUV_MAX_MIP, '7.0');
+  // o octaedro (y para cima no centro) volta à mesma direção: a conta do GLSL em JavaScript
+  const sinal = (v) => (v >= 0 ? 1 : -1);
+  const oct = ([x, y, z]) => {
+    const l = Math.abs(x) + Math.abs(y) + Math.abs(z);
+    let p = [x / l, z / l];
+    if (y < 0) p = [(1 - Math.abs(p[1])) * sinal(p[0]), (1 - Math.abs(p[0])) * sinal(p[1])];
+    return [p[0] * 0.5 + 0.5, p[1] * 0.5 + 0.5];
+  };
+  const dir = ([u, v]) => {
+    const p = [u * 2 - 1, v * 2 - 1];
+    const d3 = [p[0], 1 - Math.abs(p[0]) - Math.abs(p[1]), p[1]];
+    if (d3[1] < 0) [d3[0], d3[2]] = [(1 - Math.abs(d3[2])) * sinal(d3[0]), (1 - Math.abs(d3[0])) * sinal(d3[2])];
+    const l = Math.hypot(...d3);
+    return d3.map((c) => c / l);
+  };
+  for (let k = 0; k < 200; k++) {
+    const a = hashF(k, 4, 9) * 2 * Math.PI;
+    const y = hashF(k, 5, 9) * 2 - 1;
+    const r = Math.sqrt(1 - y * y);
+    const d0 = [r * Math.cos(a), y, r * Math.sin(a)];
+    const d1 = dir(oct(d0));
+    assert.ok(Math.hypot(d1[0] - d0[0], d1[1] - d0[1], d1[2] - d0[2]) < 1e-9, `direção ${d0}`);
+  }
+  // o atlas: um ladrilho por nível, o centro do texel nas bordas (o passe e o chão leem igual)
+  assert.equal(AMB_NIVEIS, 5);
+  assert.ok(AMB_LADO >= 32);
+  assert.match(GLSL_AMB_CHAO.pars, new RegExp(`terOct\\( d \\) \\* ${AMB_LADO - 1}\\.0 \\+ 0\\.5 \\) / ${AMB_LADO}\\.0`));
+});
+
+test('PC3: a malha do meio da frente para trás e o material do meio segue o de perto (a pintura da via, R3a)', () => {
+  const T = espelhoSintetico().terreno;
+  const dados = prepararDados(T, espelhoSintetico().floresta, distanciaAgua(T.agua, T.n));
+  const P = piramideAlturas(T, dados);
+  const mapa = { ox: T.origem[0], oz: T.origem[1], lado: T.passo * (T.n - 1) };
+  // nós planos em fila, do mais longe ao mais perto da câmera: saem na ordem da distância, e cada um na malha do
+  // seu alcance (perto do detalhe, no meio e de longe)
+  let plano = null;
+  for (let bj = 0; bj < P.niveis[0].lado && !plano; bj++) {
+    for (let bi = 0; bi < P.niveis[0].lado - 40; bi++) {
+      let ok = true;
+      for (let q = 0; q < 40 && ok; q++) ok = P.niveis[0].incl[bj * P.niveis[0].lado + bi + q] < 0.15;
+      if (ok) {
+        plano = [mapa.ox + bi * P.bloco, mapa.oz + bj * P.bloco];
+        break;
+      }
+    }
+  }
+  assert.ok(plano, 'uma fila de blocos planos na cidade sintética');
+  const xs = [30, 12, 4, 0, 20, 2];
+  const nos = new Float32Array(xs.flatMap((k) => [plano[0] + k * 128, plano[1], 128, 0]));
+  const cam = { x: plano[0] + 64, y: 300, z: plano[1] + 64 };
+  const perto = new Float32Array(32);
+  const medio = new Float32Array(32);
+  const longe = new Float32Array(32);
+  const r = dividirNos(nos, xs.length, cam, mapa, 2000, perto, longe, P, 400, medio);
+  // perto: 0 e 2 (a menos de 400 m); meio: 4 e 12 (até 2 km); longe: 20 e 30
+  assert.deepEqual(r, { perto: 2, longe: 2, medio: 2 });
+  const ordem = (saida, n) => Array.from({ length: n }, (_, k) => Math.round((saida[4 * k] - plano[0]) / 128));
+  assert.deepEqual(ordem(perto, 2), [0, 2]);
+  assert.deepEqual(ordem(medio, 2), [4, 12]);
+  assert.deepEqual(ordem(longe, 2), [20, 30]);
+  // o material do meio: os mesmos trechos do de perto (com o que outro domínio pendurou nele depois), sem o detalhe
+  const U = criarUniformes();
+  const ganchos = { aplicar: (m) => m };
+  const mestre = criarMaterialTerreno(ganchos, U, { detalhe: true });
+  const meio = criarMaterialTerreno(ganchos, U, { detalhe: false, mestre });
+  assert.ok(!('TER_DETALHE' in meio.defines) && 'TER_DETALHE' in mestre.defines);
+  const antes = mestre.onBeforeCompile;
+  mestre.onBeforeCompile = (sh, rz) => {
+    antes.call(mestre, sh, rz);
+    sh.fragmentShader += '\n// gancho de outro domínio';
+  };
+  const chave = mestre.customProgramCacheKey.bind(mestre);
+  mestre.customProgramCacheKey = () => `${chave()}|outro`;
+  mestre.needsUpdate = true;
+  const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+  meio.onBeforeCompile(sh);
+  assert.ok(sh.fragmentShader.includes('gancho de outro domínio'), 'o meio segue o onBeforeCompile do mestre');
+  assert.ok(meio.customProgramCacheKey().includes('|outro') && meio.customProgramCacheKey() !== mestre.customProgramCacheKey());
+  // o mestre mudou depois: o meio refaz o programa uma vez
+  const v0 = meio.version;
+  assert.equal(seguirVersao(meio), true);
+  assert.ok(meio.version > v0);
+  assert.equal(seguirVersao(meio), false);
+  // no Leve (sem as camadas do chão) o meio tem os mesmos defines do de perto: a mesma chave, o mesmo programa
+  const mestreLeve = criarMaterialTerreno(ganchos, U, { detalhe: false });
+  const meioLeve = criarMaterialTerreno(ganchos, U, { detalhe: false, mestre: mestreLeve });
+  assert.equal(meioLeve.customProgramCacheKey(), mestreLeve.customProgramCacheKey());
+  // com o assado de relevo só no meio (o 'pc' sem as camadas, se um dia), a chave volta a ser outra
+  const meioRel = criarMaterialTerreno(ganchos, U, { detalhe: false, mestre: mestreLeve, relevo: true });
+  assert.notEqual(meioRel.customProgramCacheKey(), mestreLeve.customProgramCacheKey());
+  // a luz do ambiente pelo atlas e o relevo assado entram nos três
+  for (const m of [mestre, meio, criarMaterialTerreno(ganchos, U, { longe: true })]) {
+    const s2 = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+    m.onBeforeCompile(s2);
+    assert.ok(!s2.fragmentShader.includes('#include <lights_fragment_maps>') && s2.fragmentShader.includes('terAmb('), m.name);
+    assert.ok('uTerAmb' in s2.uniforms && 'uTerRelevo' in s2.uniforms, m.name);
+  }
+});
+
+test('PC3: os programas do chão não passam os amostradores de antes (a guarda do Mali, 12 por estágio)', () => {
+  // o fragmento do chão com os trechos do three resolvidos (sem os ganchos, que somam o mesmo nos três): antes do PC3,
+  // 8 no de perto e 7 no de longe; com os ganchos, 12 e 11 no navegador
+  const resolver = (t) => t.replace(/^[ \t]*#include +<([\w./]+)>/gm, (_, n) => resolver(THREE.ShaderChunk[n] ?? ''));
+  const U = criarUniformes();
+  const ganchos = { aplicar: (m) => m };
+  const contar = (op) => {
+    const m = criarMaterialTerreno(ganchos, U, op);
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+    m.onBeforeCompile(sh);
+    const defs = { ...m.defines, USE_ENVMAP: '', ENVMAP_TYPE_CUBE_UV: '', CUBEUV_TEXEL_WIDTH: '0.0', CUBEUV_TEXEL_HEIGHT: '0.0', CUBEUV_MAX_MIP: '8.0' };
+    const pre = Object.entries(defs).map(([k, v]) => `#define ${k} ${v}`).join('\n');
+    const c = contarPrograma(`${pre}\n${resolver(sh.vertexShader)}`, `${pre}\n${resolver(sh.fragmentShader)}`);
+    return { m, sh, f: c.amostradores.f };
+  };
+  const perto = contar({ detalhe: true, relevo: true });
+  assert.ok(!('TER_RELEVO_ASSADO' in perto.m.defines), 'o de perto sem o assado de relevo');
+  assert.ok(perto.f <= 8, `perto: ${perto.f}`);
+  assert.ok(!/uniform\s+sampler2D\s+envMap/.test(resolver(perto.sh.fragmentShader)), 'o envMap do three sem uso sai');
+  for (const op of [{ detalhe: false, relevo: true }, { longe: true, relevo: true }]) {
+    const r = contar(op);
+    assert.ok('TER_RELEVO_ASSADO' in r.m.defines, r.m.name);
+    assert.ok(r.f <= 8, `${r.m.name}: ${r.f}`);
+  }
+  // sem o assado de relevo (o Média, o celular): os de antes
+  for (const op of [{ detalhe: false }, { longe: true }]) assert.ok(contar(op).f <= 7, JSON.stringify(op));
+});
+
+test('PC3: a divisão dos nós mede em 3D, como o sombreador (a câmera alta manda o chão da frente para a malha barata)', () => {
+  const T = espelhoSintetico().terreno;
+  const dados = prepararDados(T, espelhoSintetico().floresta, distanciaAgua(T.agua, T.n));
+  const P = piramideAlturas(T, dados);
+  const mapa = { ox: T.origem[0], oz: T.origem[1], lado: T.passo * (T.n - 1) };
+  // um bloco plano dentro do mapa
+  let no = null;
+  for (let bj = 0; bj < P.niveis[0].lado && !no; bj++) {
+    for (let bi = 0; bi < P.niveis[0].lado && !no; bi++) {
+      if (P.niveis[0].incl[bj * P.niveis[0].lado + bi] < 0.1) no = [mapa.ox + bi * P.bloco, mapa.oz + bj * P.bloco];
+    }
+  }
+  assert.ok(no, 'um bloco plano na cidade sintética');
+  const [, topo] = limitesAltura(P, no[0], no[1], no[0] + 128, no[1] + 128, true);
+  const nos = new Float32Array([no[0], no[1], 128, 0]);
+  const saidas = () => [new Float32Array(4), new Float32Array(4), new Float32Array(4)];
+  // a 900 m no chão e 1.300 m acima do topo (a vista do jogo): o ponto mais perto fica a ~1.581 m em 3D, além do
+  // corte de 1.238 m; medido só no chão (900 m) ia para a do meio, com o peso do caminho completo zero em todo pixel
+  const alto = { x: no[0] + 128 + 900, y: topo + 1300, z: no[1] + 64 };
+  let [pe, lo, me] = saidas();
+  assert.deepEqual(dividirNos(nos, 1, alto, mapa, 1238, pe, lo, P, 400, me, 0.45), { perto: 0, longe: 1, medio: 0 });
+  // a mesma posição no chão, com a câmera baixa: fica na do meio (o sombreador ainda desenha o caminho completo)
+  [pe, lo, me] = saidas();
+  assert.deepEqual(dividirNos(nos, 1, { ...alto, y: topo + 20 }, mapa, 1238, pe, lo, P, 400, me, 0.45), { perto: 0, longe: 0, medio: 1 });
+  // e o detalhe pela mesma conta: em cima do nó a 300 m de altura fica perto; a 500 m, o detalhe (400 m) já é zero
+  const sobre = { x: no[0] + 64, z: no[1] + 64 };
+  [pe, lo, me] = saidas();
+  assert.deepEqual(dividirNos(nos, 1, { ...sobre, y: topo + 300 }, mapa, 1238, pe, lo, P, 400, me, 0.45), { perto: 1, longe: 0, medio: 0 });
+  [pe, lo, me] = saidas();
+  assert.deepEqual(dividirNos(nos, 1, { ...sobre, y: topo + 500 }, mapa, 1238, pe, lo, P, 400, me, 0.45), { perto: 0, longe: 0, medio: 1 });
+  // a câmera abaixo do nó (num vale olhando o morro) não conta a altura: o chão desenhado pode descer abaixo do
+  // mínimo da pirâmide perto d'água, então só a distância no chão (conservadora)
+  [pe, lo, me] = saidas();
+  assert.deepEqual(dividirNos(nos, 1, { ...sobre, y: -5000 }, mapa, 1238, pe, lo, P, 400, me, 0.45), { perto: 1, longe: 0, medio: 0 });
+  // o sombreador mede a distância do chão (sem a copa) até a câmera: nunca menos que a conta da divisão
+  for (const y of [topo + 50, topo + 400, topo + 1300]) {
+    const cam = { ...alto, y };
+    const dx = cam.x - (no[0] + 128);
+    const limite = Math.hypot(dx, Math.max(0, y - topo));
+    for (let k = 0; k < 20; k++) {
+      const px = no[0] + 128 * hashF(k, 1, 3);
+      const pz = no[1] + 128 * hashF(k, 2, 3);
+      const h = alturaComoGLSL(T, px, pz);
+      assert.ok(h <= topo + 1e-3, 'o chão do nó abaixo do topo da pirâmide');
+      assert.ok(Math.hypot(cam.x - px, cam.y - h, cam.z - pz) >= limite - 1e-6);
+    }
+  }
+});
+
+test('PC3: o assado de 8.192² só com a placa que aceita a textura (MAX_TEXTURE_SIZE)', () => {
+  const pc = PERFIL_TERRENO.alta;
+  assert.equal(limitarAssado(pc, 16384), pc);
+  assert.equal(limitarAssado(pc, 8192), pc);
+  assert.equal(limitarAssado(pc, undefined), pc);
+  // numa placa de 4.096 o mapa de cor volta aos 2 m por texel, sem o assado de relevo e com a encosta de antes
+  const p4 = limitarAssado(pc, 4096);
+  assert.deepEqual([p4.cor, p4.relevo, inclEncosta(p4)], [4096, 0, INCL_ENCOSTA]);
+  assert.ok(Math.abs(memoriaAssadoMB(p4) - 42.67) < 0.05);
+  assert.deepEqual(alcanceRelevo(p4, 8192, 0.001), limitesLonge(p4, 8192, 0.001));
+  // o Média (2.048) cabe em qualquer placa WebGL2
+  assert.equal(limitarAssado(PERFIL_TERRENO.media, 2048), PERFIL_TERRENO.media);
 });

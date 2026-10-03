@@ -233,6 +233,18 @@ void main() {
 }
 `;
 
+/**
+ * Geometria vazia com o atributo de posição (aquecimento, D66): o three põe "tem posição" na chave do programa, então o
+ * programa que o aquecimento compila com a geometria vazia sem posição não serve para a de verdade e o jogo compilava
+ * de novo na primeira prévia de via, no primeiro fantasma e no primeiro demolir de via (PC3).
+ */
+export function geometriaVazia(cores = false) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+  if (cores) g.setAttribute('color', new THREE.Float32BufferAttribute([], 3));
+  return g;
+}
+
 function materialTranslucido(cor, opacidade = 0.5) {
   const m = new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: opacidade, depthWrite: false, fog: false, side: THREE.DoubleSide });
   m.name = 'sobreposicao';
@@ -282,14 +294,14 @@ function criarFerramentas(ctx) {
   // ---------------- via: fita e linhas
   const matFita = materialTranslucido(0xffffff, 0.5);
   matFita.vertexColors = true;
-  const fita = ctx.medidas.familia(new THREE.Mesh(new THREE.BufferGeometry(), matFita), 'resto');
+  const fita = ctx.medidas.familia(new THREE.Mesh(geometriaVazia(true), matFita), 'resto');
   fita.name = 'ferramentas:fita';
   fita.frustumCulled = false;
   fita.renderOrder = 20;
   fita.visible = false;
   const matLinha = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
   matLinha.name = 'sobreposicao:linhas';
-  const linhas = ctx.medidas.familia(new THREE.LineSegments(new THREE.BufferGeometry(), matLinha), 'resto');
+  const linhas = ctx.medidas.familia(new THREE.LineSegments(geometriaVazia(true), matLinha), 'resto');
   linhas.name = 'ferramentas:linhas';
   linhas.frustumCulled = false;
   linhas.renderOrder = 21;
@@ -472,7 +484,7 @@ function criarFerramentas(ctx) {
   fant.visible = false;
   const matAnel = new THREE.LineBasicMaterial({ color: 0xd9bd84, transparent: true, opacity: 0.95, depthWrite: false, fog: false });
   matAnel.name = 'sobreposicao:alcance';
-  const anel = ctx.medidas.familia(new THREE.LineSegments(new THREE.BufferGeometry(), matAnel), 'resto');
+  const anel = ctx.medidas.familia(new THREE.LineSegments(geometriaVazia(), matAnel), 'resto');
   anel.name = 'ferramentas:alcance';
   anel.frustumCulled = false;
   anel.renderOrder = 23;
@@ -515,7 +527,7 @@ function criarFerramentas(ctx) {
   caixasDem.renderOrder = 22;
   caixasDem.count = 0;
   caixasDem.visible = false;
-  const fitaDem = ctx.medidas.familia(new THREE.Mesh(new THREE.BufferGeometry(), materialTranslucido(0xff5a4a, 0.6)), 'resto');
+  const fitaDem = ctx.medidas.familia(new THREE.Mesh(geometriaVazia(), materialTranslucido(0xff5a4a, 0.6)), 'resto');
   fitaDem.name = 'ferramentas:demolirVias';
   fitaDem.frustumCulled = false;
   fitaDem.renderOrder = 22;

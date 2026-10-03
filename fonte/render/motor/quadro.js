@@ -139,6 +139,46 @@ export class Aquecimento {
     return this.estado === 'pronto';
   }
 
+  /**
+   * Compila já, em paralelo (KHR_parallel_shader_compile), sem esperar a rodada: para o que um domínio vai desenhar
+   * logo depois de criar (as árvores quando o GLSL delas chega, o assado dos impostores). Os objetos compilam na cena
+   * da vista (com as luzes dela) e no alvo e no tom do quadro; com sombra, na cena e no alvo da sombra própria; com
+   * alvo (e cena), num alvo próprio (um passe fora da cena). Devolve uma promessa que resolve quando a placa terminou
+   * (o domínio só desenha depois dela: nada espera a compilação no meio de um quadro, nem a fila das outras, PC3).
+   * Pedida antes do primeiro quadro, espera por ele: antes dele não há o alvo e o tom da cena nem a luz do ambiente
+   * (que entram na chave do programa), e o programa compilado seria outro (o uso compilaria de novo, na hora).
+   * @param {THREE.Object3D[]} objetos
+   * @param {{ sombra?: boolean, alvo?: THREE.WebGLRenderTarget | null, cena?: THREE.Scene }} op
+   */
+  compilar(objetos, op = {}) {
+    const lista = (objetos ?? []).filter((o) => o?.isObject3D);
+    if (typeof this.ctx.renderer?.compileAsync !== 'function' || !lista.length) return Promise.resolve([]);
+    if (!this._alvo) return new Promise((ok) => (this._adiados ??= []).push(() => ok(this._compilarJa(lista, op))));
+    return this._compilarJa(lista, op);
+  }
+
+  _compilarJa(lista, { sombra = false, alvo, cena } = {}) {
+    const { renderer, camera } = this.ctx;
+    const s = this.ctx.sombra;
+    const proprio = alvo !== undefined;
+    const destino = sombra ? s?.alvo ?? null : proprio ? alvo : this._alvo?.alvo ?? null;
+    const alvoCena = sombra ? s?.cena ?? this.ctx.cena : cena ?? this.ctx.cena;
+    const antesAlvo = renderer.getRenderTarget();
+    const antesTom = renderer.toneMapping;
+    const ps = [];
+    try {
+      renderer.setRenderTarget(destino);
+      if (!sombra && !proprio && this._alvo?.tom !== undefined) renderer.toneMapping = this._alvo.tom;
+      for (const o of lista) ps.push(Promise.resolve(renderer.compileAsync(o, camera, o.isScene ? o : alvoCena)));
+    } catch (e) {
+      console.warn('render: compilação adiantada falhou:', e);
+    } finally {
+      renderer.setRenderTarget(antesAlvo);
+      renderer.toneMapping = antesTom;
+    }
+    return Promise.all(ps);
+  }
+
   /** Relatório para R.stats e a página de teste. */
   relatorio() {
     return { estado: this.estado, rodadas: this.rodadas, ms: Math.round(this.ms), msThread: Math.round(this.msThread), programas: this.programas, fontes: this.fontes.size, grupos: this.grupos, esperando: this._esperando ?? [], final: this._final ?? null };
@@ -150,6 +190,13 @@ export class Aquecimento {
    */
   quadro(tMs, alvo) {
     const ctx = this.ctx;
+    this._alvo = alvo;
+    // as compilações adiantadas pedidas antes do primeiro quadro (compilar)
+    if (this._adiados?.length) {
+      const adiados = this._adiados;
+      this._adiados = [];
+      for (const f of adiados) f();
+    }
     if (ctx.perfil !== this._perfil) {
       const troca = this._perfil !== null;
       this._perfil = ctx.perfil;

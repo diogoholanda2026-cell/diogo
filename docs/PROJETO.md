@@ -1078,6 +1078,16 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   ficava sem o laranja até a troca de cubo); um salto de hora ou de brilho refaz o cubo inteiro (`Ceu.refazer`). A
   reordenação das instâncias travava uns 20 ms de CPU a cada 22,5 graus de giro: agora é uma ordenação nativa por
   chave empacotada, com no máximo 6 mil instâncias por quadro.
+- **PC3, entregue em 03/10/2026** (revisada), pela medida do dono na Prévia 2 (`docs/pesquisa/pc-dono/medida-2026-10-03.md`:
+  21 qps na vista do jogo, terreno em 36 ms de 46). Terreno com o caminho barato, o do meio e o completo escolhidos pela
+  distância em 3D, mais coisas no mapa de cor assado (agora 8.192² no 'pc' e no Alta, +213 MiB, com o lado limitado ao
+  MAX_TEXTURE_SIZE da placa) e a sombra com PCF de Vogel em constantes: o passe do terreno caiu 52% na vista do jogo e
+  uns 34% na aberta (proporção no SwiftShader; na RX 550 daria uns 17 ms, ainda acima da meta de 12). Programas das
+  ferramentas, da prévia de via e das sobreposições no aquecimento (0 compilações depois de pronto usando as
+  ferramentas); compilação adiantada das árvores esperando o primeiro quadro. Pendências: medir de novo no PC do dono;
+  próximos cortes (PCF longe da câmera, 17%; luz do ambiente, 11%; neblina, 6%); o assado roda 2 vezes na Nova partida
+  porque o espelho troca o terreno duas vezes; os 2,2 s de compilação das árvores no Direct3D 11 só medem no PC dele.
+  Nota completa em `docs/entregas/onda3/PC3.md`.
 
 #### R2a. Chão, mar e lagoa; A/B de materiais (onda 1; 2 sessões)
 - **Arquivos:** `render/mundo/{terreno,agua}.js`, `render/geracao/ruido.js`, `render/materiais/texturas-chao.js`,

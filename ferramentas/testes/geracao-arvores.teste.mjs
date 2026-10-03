@@ -5,6 +5,7 @@
 // do mundo de fora; o assado de 16 bits e os ajustes do terreno de longe.
 // Roda sozinho: node ferramentas/testes/geracao-arvores.teste.mjs (o simular --testes descobre e roda).
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   ESPECIES, ESPECIE, N_ESPECIES, CELULA, TETO_TRIS, gerarArvore, gerarTodas, gerarParaOficina, hashGPU, copaDaCelula,
@@ -472,8 +473,10 @@ test('mundo de fora: serra nas direções de terra, mar nas de mar, anel virado 
 });
 
 test('terreno: assado de 16 bits no Alta e no PC (metade da memória), a vegetação pintada some perto, longe sem buracos', () => {
-  assert.ok(Math.abs(memoriaAssadoMB(PERFIL_TERRENO.alta) - 42.67) < 0.05);
-  assert.ok(Math.abs(memoriaAssadoMB({ ...PERFIL_TERRENO.alta, cor16: false }) - 85.33) < 0.05);
+  const a4k = { ...PERFIL_TERRENO.alta, cor: 4096, relevo: 0 }; // o assado de 2 m por texel (o Alta antes do PC3)
+  assert.ok(Math.abs(memoriaAssadoMB(a4k) - 42.67) < 0.05);
+  assert.ok(Math.abs(memoriaAssadoMB({ ...a4k, cor16: false }) - 85.33) < 0.05);
+  assert.ok(PERFIL_TERRENO.alta.cor16);
   assert.ok(!PERFIL_TERRENO.media.cor16);
   const U = criarUniformes();
   assert.ok(U.uTerVegPerto && U.uTerAssado16);
@@ -494,7 +497,6 @@ test('terreno: assado de 16 bits no Alta e no PC (metade da memória), a vegeta�
 });
 
 test('A1: o GLSL das árvores vem sob demanda (só o domínio o importa, por import dinâmico)', async () => {
-  const { readFileSync } = await import('node:fs');
   const ler = (p) => readFileSync(new URL(`../../fonte/render/${p}`, import.meta.url), 'utf8');
   const estatico = /^import[^;]*from '[^']*folha\.glsl\.js'/m;
   for (const p of ['materiais/shaders/terreno.glsl.js', 'materiais/shaders/agua.glsl.js', 'mundo/vegetacao.js', 'mundo/terreno.js', 'mundo/agua.js']) {
@@ -506,4 +508,31 @@ test('A1: o GLSL das árvores vem sob demanda (só o domínio o importa, por imp
   const T = await import('../../fonte/render/materiais/shaders/terreno.glsl.js');
   assert.equal(F.CORES_COPA, T.CORES_COPA);
   assert.equal(F.GLSL_COPA, T.GLSL_COPA);
+});
+
+test('PC3: os programas da sombra das árvores e do assado dos impostores são pequenos e compilam antes do uso', async () => {
+  // no PC do dono, 'arvore-sombra' e 'arvores:assar-impostores' mediam uns 2,2 s cada (um ou outro por rodada): o
+  // primeiro programa usado de forma síncrona logo depois do aquecimento esperava a fila dele. Os dois são pequenos
+  // (sem laço, sem vetor indexado, sem derivada em ramo que muda por pixel) e compilam em paralelo antes do primeiro
+  // desenho
+  const sombra = Object.values(GLSL_ARV_SOMBRA).join('\n');
+  const assar = Object.values(GLSL_IMP_ASSAR).join('\n');
+  for (const [nome, t] of [['arvore-sombra', sombra], ['arvores:assar-impostores', assar]]) {
+    assert.ok(!/\bfor\s*\(|\bwhile\s*\(/.test(t), `${nome} com laço`);
+    assert.ok(!/\w\[\s*[a-z]\w*\s*\]/.test(t), `${nome} com vetor indexado por variável`);
+    assert.ok(t.length < 2200, `${nome} com ${t.length} caracteres`);
+    // as derivadas só no começo da folha (arvFolha), antes de qualquer ramo
+    const corpo = t.slice(t.indexOf('vec4 arvFolha('));
+    const i = corpo.indexOf('dFdx');
+    assert.ok(i > 0 && i < corpo.indexOf('?'), `${nome}: derivada depois de um ramo`);
+  }
+  const fonte = readFileSync(new URL('../../fonte/render/mundo/vegetacao.js', import.meta.url), 'utf8');
+  // o material do assado nasce com o GLSL (não no próprio assado) e os três grupos compilam já, cada um no seu alvo
+  assert.match(fonte, /assador = criarAssadorImpostores\(U, modelos\[0\]\[0\]\.geo\);/);
+  assert.match(fonte, /aq\.compilar\(sombras\.map\(\(b\) => b\.malha\), \{ sombra: true \}\)/);
+  assert.match(fonte, /aq\.compilar\(\[assador\.cena\], \{ alvo: alvoAssar, cena: assador\.cena \}\)/);
+  // e nada desenha antes de prontos: nem as árvores (a sombra delas) nem o assado; o aquecimento final espera
+  assert.match(fonte, /if \(!comGlsl \|\| !programasProntos\) return;/);
+  assert.match(fonte, /pronto: \(\) => \(comGlsl && programasProntos\) \|\| glslFalhou \|\| morto,/);
+  assert.ok(!/function assarImpostores[\s\S]*?new THREE\.ShaderMaterial[\s\S]*?\n}\n/.test(fonte.slice(fonte.indexOf('function assarImpostores'), fonte.indexOf('// ----', fonte.indexOf('function assarImpostores')))), 'o assado não cria o material');
 });

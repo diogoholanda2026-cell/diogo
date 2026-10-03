@@ -55,6 +55,9 @@ uniform sampler2D gNuvemMapa;
 uniform vec4 gNuvemParams;
 uniform vec4 gNuvemDesloc;
 
+// disco de Vogel: a amostra i no ângulo i vezes o ângulo de ouro e no raio sqrt( i + 0,5 ) (PC3: constante; o pixel só
+// gira o disco pela fase do texel e escala por 1 / sqrt( n ), sem um seno e um cosseno por amostra)
+const vec2 G_VOGEL[ 8 ] = vec2[ 8 ]( vec2( 0.70710678, 0.00000000 ), vec2( -0.90308875, 0.82730327 ), vec2( 0.13823221, -1.57508471 ), vec2( 1.13828488, 1.48469106 ), vec2( -2.08889275, -0.36949572 ), vec2( 1.97878157, -1.25873886 ), vec2( -0.66186371, 2.46210000 ), vec2( -1.26224587, -2.43037762 ) );
 // PCF num disco de Vogel; s em [0, 1]³ da cascata c (0 ou 1), dentro do atlas de n cascatas lado a lado
 float gSombraPcf( vec3 s, float c, float n ) {
   float z = s.z - gSombraVies;
@@ -64,14 +67,15 @@ float gSombraPcf( vec3 s, float c, float n ) {
   vec2 uv = vec2( ( s.x + c ) / n, s.y );
   vec2 cel = floor( s.xy / gSombraTexel );
   float fase = fract( 52.9829189 * fract( dot( cel, vec2( 0.06711056, 0.00583715 ) ) ) ) * 6.2831853;
-  vec2 raio = texel * gSombraRaioPcf;
+  float cf = cos( fase );
+  float sf = sin( fase );
+  mat2 giro = mat2( cf, sf, -sf, cf );
+  vec2 raio = texel * gSombraRaioPcf * inversesqrt( gSombraAmostras );
   float soma = 0.0;
   float k = 0.0;
   for ( int i = 0; i < 8; i ++ ) {
     if ( float( i ) >= gSombraAmostras ) break;
-    float r = sqrt( ( float( i ) + 0.5 ) / gSombraAmostras );
-    float a = float( i ) * 2.39996323 + fase;
-    vec2 o = vec2( cos( a ), sin( a ) ) * r * raio;
+    vec2 o = ( giro * G_VOGEL[ i ] ) * raio;
     soma += texture( gSombraMapa, vec3( clamp( uv + o, lim0, lim1 ), z ) );
     k += 1.0;
   }

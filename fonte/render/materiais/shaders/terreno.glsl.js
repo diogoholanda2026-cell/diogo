@@ -98,6 +98,8 @@ export const NIVEIS_CDLOD = 9;
 export const GRADE_NO = 16;
 /** Folga da leitura da sombra acima da malha grossa, por metro do passo do vértice (até 16 m), só ao sol. */
 export const TER_SOMBRA_FOLGA = 0.12;
+/** A maior altura das copas grandes (m) que o assado de relevo guarda (copaRelevo sem as pequenas: até 2,6 x 1,4). */
+export const TER_RELEVO_MAX = 4;
 /** O morph de cada nível começa em 0,65 do alcance (terreno.js usa o mesmo número). */
 export const MORPH_INICIO = 0.65;
 const MORPH_INICIO_GLSL = MORPH_INICIO.toFixed(2);
@@ -224,7 +226,12 @@ float terAltura( vec2 w ) {
 const PAL = PALETA_CHAO;
 const cores = PAL.map((c) => vec3Linear(c.cor));
 
-/** Paleta, pesos e mistura (fragmento do terreno e passe do assado). */
+/**
+ * Paleta, pesos e mistura (fragmento do terreno e passe do assado). O que depende só da entrada e do ruído (o costão,
+ * o fim da praia, a margem, a parte urbana) sai uma vez por pixel em terPreparar (PC3): antes cada função refazia a
+ * conta (o costão, quatro vezes por pixel). A vegetação pintada sai uma vez e vale para o detalhe de perto e para a
+ * mata nítida.
+ */
 export const GLSL_TER_CAMADAS = /* glsl */ `
 ${GLSL_COPA}
 const vec3 TER_COR[ ${N_CAMADAS} ] = vec3[ ${N_CAMADAS} ]( ${cores.join(', ')} );
@@ -249,17 +256,24 @@ struct TerEntrada {
 vec4 terR1;  // manchas de 2,3 km
 vec4 terR2;  // manchas de 263 m (e as copas, de 16 m)
 vec4 terR3;  // manchas de 71 m (e o grão das copas)
-// o topo do costão recortado em três escalas: manchas de 263 e 71 m e as copas de 4 m (pedra e moita alternando)
-float terCostao( TerEntrada e ) { return terCostaoBase( e.mar, e.agua, 1.0 - e.n.y, e.h, terR3.x * 0.4 + terR2.y * 0.3 + terR3.z * 0.3 ); }
+// o que terPreparar deixa pronto para o pixel (depois de terRuidos)
+float terUrb;    // parte urbana do uso do solo (0 a 1)
+float terCst;    // costão: o topo recortado em três escalas (manchas de 263 e 71 m e as copas de 4 m)
+float terLimP;   // onde a areia da praia acaba (m da água): de 16 a 56 m, recortado em manchas de 263 e 71 m
+float terCotaP;  // e a cota em que ela acaba (m), recortada do mesmo jeito
 float terMargem; // margem de rio ou lagoa (lodo e capim molhado)
 // vegetação pintada que as árvores de perto trocam (R2b): 1 pinta, 0 some (o fragmento acerta pela distância; o
 // assado e o longe pintam tudo)
 float terKArv = 1.0;
 float terKMoita = 1.0;
-// onde a areia da praia acaba (m da água): de 16 a 56 m, recortado em manchas de 263 e 71 m (depois de terRuidos)
-float terLimitePraia() { return 16.0 + 30.0 * terR2.x + 10.0 * terR3.y; }
-// e a cota em que ela acaba (m), recortada do mesmo jeito
-float terCotaPraia() { return 3.0 + 2.6 * terR3.y + 1.2 * terR2.w; }
+
+void terPreparar( TerEntrada e ) {
+  terUrb = clamp( e.uso.r + e.uso.g + e.uso.b + e.uso.a, 0.0, 1.0 );
+  terCst = terCostaoBase( e.mar, e.agua, 1.0 - e.n.y, e.h, terR3.x * 0.4 + terR2.y * 0.3 + terR3.z * 0.3 );
+  terLimP = 16.0 + 30.0 * terR2.x + 10.0 * terR3.y;
+  terCotaP = 3.0 + 2.6 * terR3.y + 1.2 * terR2.w;
+  terMargem = ( 1.0 - e.mar ) * ( 1.0 - smoothstep( 2.0, 7.0 + 7.0 * terR3.x, e.agua ) ) * ( 1.0 - smoothstep( 1.5, 5.0, e.h ) );
+}
 
 void terRuidos( vec2 w ) {
   terR1 = texture( uTerRuido, w * ( 1.0 / 2300.0 ) );
@@ -277,18 +291,13 @@ void terRuidosGrad( vec2 w, vec2 dx, vec2 dy ) {
 void terPesos( TerEntrada e, out float p[ ${N_CAMADAS} ], out float asf, out float jar ) {
   float incl = 1.0 - e.n.y;
   float sub = 1.0 - smoothstep( -0.6, 0.4, e.h );
-  float cst = terCostao( e );
   // praia: a areia acaba numa linha (a frente do jundu), pela distância ou pela cota, não num degradê (vista de
   // cima, 30 m de areia misturada no capim parecem poeira); some onde o costão desce até a água
-  float lim = terLimitePraia();
-  float cotaPraia = terCotaPraia();
-  float praia = e.mar * ( 1.0 - smoothstep( lim - 2.5, lim + 2.5, e.agua ) )
-    * ( 1.0 - smoothstep( cotaPraia - 0.35, cotaPraia + 0.35, e.h ) ) * ( 1.0 - smoothstep( 0.3, 0.7, cst ) );
-  // margem de rio e lagoa: uma faixa estreita de lodo molhado (não uma praia de areia clara)
-  terMargem = ( 1.0 - e.mar ) * ( 1.0 - smoothstep( 2.0, 7.0 + 7.0 * terR3.x, e.agua ) ) * ( 1.0 - smoothstep( 1.5, 5.0, e.h ) );
+  float praia = e.mar * ( 1.0 - smoothstep( terLimP - 2.5, terLimP + 2.5, e.agua ) )
+    * ( 1.0 - smoothstep( terCotaP - 0.35, terCotaP + 0.35, e.h ) ) * ( 1.0 - smoothstep( 0.3, 0.7, terCst ) );
   float rocha = smoothstep( 0.29, 0.45, incl + ( terR3.x - 0.5 ) * 0.16 )
     + smoothstep( 140.0, 280.0, e.h ) * smoothstep( 0.5, 0.74, terR2.y ) * 0.8;
-  rocha = clamp( rocha + cst * 1.3, 0.0, 1.0 );
+  rocha = clamp( rocha + terCst * 1.3, 0.0, 1.0 );
   // terra exposta na encosta: em manchas (voçorocas, trilhas de gado), não uma faixa contínua
   float erosao = smoothstep( 0.12, 0.3, incl ) * ( 1.0 - rocha ) * smoothstep( 0.5, 0.75, terR2.x * 0.6 + terR3.y * 0.4 );
   // terra roxa exposta: rara, em manchas de pasto gasto (não em pintas por todo o campo)
@@ -304,7 +313,7 @@ void terPesos( TerEntrada e, out float p[ ${N_CAMADAS} ], out float asf, out flo
   p[ 3 ] += sub * 4.0 * ( 1.0 - e.mar );
   p[ 6 ] = folhico * 2.2;
   p[ 7 ] = 0.0;
-  float urb = clamp( e.uso.r + e.uso.g + e.uso.b + e.uso.a, 0.0, 1.0 ) * ( 1.0 - sub );
+  float urb = terUrb * ( 1.0 - sub );
   for ( int i = 0; i < 7; i ++ ) p[ i ] *= 1.0 - urb;
   asf = e.uso.r * 4.0;
   jar = e.uso.a * 4.0;
@@ -330,7 +339,7 @@ void terCores( TerEntrada e, float p[ ${N_CAMADAS} ], float asf, float jar, out 
   c[ 4 ] = TER_COR[ 4 ] * mix( 0.85, 0.6 + 0.55 * smoothstep( 0.05, 0.7, terR3.z ), plano4 ) * ( 0.8 + 0.34 * terR2.w );
   // costão: granito mais escuro e pardo (maresia, ferrugem) e a faixa preta de liquens e cianobactérias logo acima da
   // água, de 2 a 5 m conforme a batida das ondas
-  float cst = smoothstep( 0.3, 0.7, terCostao( e ) );
+  float cst = smoothstep( 0.3, 0.7, terCst );
   c[ 4 ] *= mix( vec3( 1.0 ), vec3( 0.78, 0.74, 0.68 ) * ( 0.85 + 0.3 * terR3.y ), cst );
   c[ 4 ] *= 1.0 - 0.62 * cst * ( 1.0 - smoothstep( 1.5 + 1.5 * terR3.x, 3.5 + 2.5 * terR3.x, e.h ) );
   c[ 5 ] = TER_COR[ 5 ] * ( 0.93 + 0.1 * terR2.y );
@@ -340,41 +349,49 @@ void terCores( TerEntrada e, float p[ ${N_CAMADAS} ], float asf, float jar, out 
 
 // vegetação pintada no chão (sem instância): a copa da mata, a capoeira da borda, as moitas e as árvores soltas do
 // pasto, a restinga atrás da praia e a mata ciliar. Devolve a cobertura (0 a 1) e a cor (albedo linear) em cor; a
-// cobertura também decide o relevo das copas no fragmento.
+// cobertura também decide o relevo das copas no fragmento. A restinga, a mata ciliar e a encosta do mar só existem a
+// menos de 200 m da água: longe dela (quase todo o mapa) o ramo não roda e o resultado é o mesmo.
 float terVegetacao( TerEntrada e, out vec3 cor ) {
-  float urb = clamp( e.uso.r + e.uso.g + e.uso.b + e.uso.a, 0.0, 1.0 );
-  float costao = terCostao( e );
+  float urb = terUrb;
+  float costao = terCst;
   float incl = 1.0 - e.n.y;
   float copa = terCopa( e.mata ) * ( 1.0 - urb ) * ( 1.0 - smoothstep( 0.35, 0.8, costao ) ) * ( 1.0 - terParedao( incl, terR3.x ) );
   // borda da mata: capoeira (moitas e arvoretas soltas no capim), não uma faixa de folhiço
   float arb = max( smoothstep( 0.06, 0.42, e.mata ), costao * 0.6 * step( 0.2, e.mata ) ) * ( 1.0 - copa ) * ( 1.0 - urb );
   float moita = arb * smoothstep( 0.5, 0.72, terR3.z * 0.4 + terR3.w * 0.25 + terR2.x * 0.2 + arb * 0.35 );
   // pasto com moitas e arvoretas soltas em manchas (a textura que a foto aérea tem entre 5 e 30 m)
-  float areal = e.mar * ( 1.0 - smoothstep( 25.0, 90.0, e.agua ) );
+  float areal = 0.0;
+  float restinga = 0.0;
+  float ciliar = 0.0;
+  float encosta = 0.0;
+  bool pertoAgua = e.agua < 200.0;
+  if ( pertoAgua ) areal = e.mar * ( 1.0 - smoothstep( 25.0, 90.0, e.agua ) );
   float pasto = ( 1.0 - urb ) * ( 1.0 - copa ) * ( 1.0 - areal ) * ( 1.0 - smoothstep( 0.2, 0.35, incl ) ) * step( 0.5, e.h );
   moita = max( moita, pasto * smoothstep( 0.6, 0.76, terR3.z * 0.45 + terR3.w * 0.35 + terR2.w * 0.2 ) * smoothstep( 0.35, 0.75, terR1.y * 0.6 + terR2.x * 0.5 ) );
   // árvores soltas no pasto (copas de 10 a 16 m, em grupos): o que dá escala ao campo visto do alto
   // só as copas mais altas do canal B e só onde as manchas grandes juntam um grupo
   float grupo = smoothstep( 0.5, 0.82, terR1.x * 0.5 + terR2.y * 0.5 );
   float arvore = pasto * grupo * smoothstep( 0.72, 0.84, terR2.z );
-  // restinga atrás da praia: começa quase fechada na linha em que a areia acaba (o jundu, moitas baixas de 2 a 5 m)
-  // e vai abrindo em moitas soltas no capim até uns 60 a 140 m da água (o ruído tem média ~0,45: o corte em volta
-  // dela deixa clareiras de capim entre as moitas)
-  float lim = terLimitePraia();
-  float cota = terCotaPraia();
-  // começa onde a areia acaba, pela distância ou pela cota (o que vier antes)
-  float fimAreia = max( smoothstep( lim - 1.5, lim + 2.5, e.agua ), smoothstep( cota - 0.35, cota + 0.35, e.h ) );
-  float faixaR = e.mar * fimAreia * ( 1.0 - smoothstep( lim + 40.0 + 45.0 * terR2.x, lim + 80.0 + 60.0 * terR2.x, e.agua ) );
-  float frente = ( 1.0 - smoothstep( lim + 3.0, lim + 22.0, e.agua ) ) * ( 1.0 - smoothstep( cota + 0.5, cota + 4.0, e.h ) );
-  float restinga = faixaR * ( 1.0 - urb ) * ( 1.0 - copa ) * step( 0.6, e.h ) * ( 1.0 - smoothstep( 9.0, 16.0, e.h ) )
-    * ( 1.0 - smoothstep( 0.25, 0.45, incl ) )
-    * smoothstep( 0.4, 0.56, terR3.x * 0.45 + terR2.w * 0.35 + terR3.z * 0.2 + frente * 0.12 - ( 1.0 - faixaR ) * 0.25 );
-  // mata ciliar: rio e lagoa margeados de mata (a margem de lodo fica de fora)
-  float ciliar = ( 1.0 - e.mar ) * smoothstep( 4.0, 9.0, e.agua ) * ( 1.0 - smoothstep( 22.0 + 20.0 * terR3.x, 40.0 + 30.0 * terR3.x, e.agua ) )
-    * ( 1.0 - urb ) * ( 1.0 - copa ) * step( 0.2, e.h ) * smoothstep( 0.35, 0.6, terR3.z * 0.6 + terR2.y * 0.5 );
-  // encosta do mar acima do costão: capoeira e mata baixa fechadas até a pedra (sem a faixa de capim entre as duas)
-  float encosta = e.mar * ( 1.0 - smoothstep( 70.0, 170.0, e.agua ) ) * smoothstep( 0.1, 0.26, incl ) * ( 1.0 - urb )
-    * ( 1.0 - smoothstep( 0.2, 0.55, costao ) ) * ( 1.0 - terParedao( incl, terR3.x ) ) * step( 0.5, e.h );
+  if ( pertoAgua ) {
+    // restinga atrás da praia: começa quase fechada na linha em que a areia acaba (o jundu, moitas baixas de 2 a 5 m)
+    // e vai abrindo em moitas soltas no capim até uns 60 a 140 m da água (o ruído tem média ~0,45: o corte em volta
+    // dela deixa clareiras de capim entre as moitas); começa onde a areia acaba, pela distância ou pela cota (o que
+    // vier antes)
+    float lim = terLimP;
+    float cota = terCotaP;
+    float fimAreia = max( smoothstep( lim - 1.5, lim + 2.5, e.agua ), smoothstep( cota - 0.35, cota + 0.35, e.h ) );
+    float faixaR = e.mar * fimAreia * ( 1.0 - smoothstep( lim + 40.0 + 45.0 * terR2.x, lim + 80.0 + 60.0 * terR2.x, e.agua ) );
+    float frente = ( 1.0 - smoothstep( lim + 3.0, lim + 22.0, e.agua ) ) * ( 1.0 - smoothstep( cota + 0.5, cota + 4.0, e.h ) );
+    restinga = faixaR * ( 1.0 - urb ) * ( 1.0 - copa ) * step( 0.6, e.h ) * ( 1.0 - smoothstep( 9.0, 16.0, e.h ) )
+      * ( 1.0 - smoothstep( 0.25, 0.45, incl ) )
+      * smoothstep( 0.4, 0.56, terR3.x * 0.45 + terR2.w * 0.35 + terR3.z * 0.2 + frente * 0.12 - ( 1.0 - faixaR ) * 0.25 );
+    // mata ciliar: rio e lagoa margeados de mata (a margem de lodo fica de fora)
+    ciliar = ( 1.0 - e.mar ) * smoothstep( 4.0, 9.0, e.agua ) * ( 1.0 - smoothstep( 22.0 + 20.0 * terR3.x, 40.0 + 30.0 * terR3.x, e.agua ) )
+      * ( 1.0 - urb ) * ( 1.0 - copa ) * step( 0.2, e.h ) * smoothstep( 0.35, 0.6, terR3.z * 0.6 + terR2.y * 0.5 );
+    // encosta do mar acima do costão: capoeira e mata baixa fechadas até a pedra (sem a faixa de capim entre as duas)
+    encosta = e.mar * ( 1.0 - smoothstep( 70.0, 170.0, e.agua ) ) * smoothstep( 0.1, 0.26, incl ) * ( 1.0 - urb )
+      * ( 1.0 - smoothstep( 0.2, 0.55, costao ) ) * ( 1.0 - terParedao( incl, terR3.x ) ) * step( 0.5, e.h );
+  }
   // de perto as árvores e as moitas de verdade tomam o lugar das pintadas; a copa da mata fica como o sub-bosque
   // escuro entre os troncos (o vértice já baixou a copa) e a encosta, como capoeira rala
   moita *= terKMoita;
@@ -425,30 +442,30 @@ vec3 terManchas( float p[ ${N_CAMADAS} ], float asf, float veg, vec4 mA, vec4 mB
     * mix( vec3( 1.0 ), mAreia, areia );
 }
 
-// areia molhada na linha da água e a vegetação por cima de tudo; manchas (o assado): as do campo antes da vegetação
-void terAcabamentoM( TerEntrada e, inout vec3 alb, inout float rug, bool manchas, float p[ ${N_CAMADAS} ], float asf, vec4 mA, vec4 mB ) {
+// areia molhada na linha da água e a vegetação por cima de tudo (vegBruta e cv: terVegetacao, já feita); manchas (o
+// assado): as do campo antes da vegetação
+void terAcabamentoV( TerEntrada e, inout vec3 alb, inout float rug, bool manchas, float p[ ${N_CAMADAS} ], float asf, vec4 mA, vec4 mB, float vegBruta, vec3 cv ) {
   float sub = 1.0 - smoothstep( -0.6, 0.4, e.h );
   // areia molhada: pela cota junto do mar (a linha d'água da malha não segue a grade de 8 m) e pela distância à água
   float molhado = max( ( 1.0 - smoothstep( 1.5, 9.0, e.agua ) ) * ( 1.0 - smoothstep( 0.3, 1.6, e.h ) ),
     e.mar * ( 1.0 - smoothstep( 20.0, 40.0, e.agua ) ) * ( 1.0 - smoothstep( 0.5, 1.3, e.h ) ) ) * ( 1.0 - sub );
   alb *= 1.0 - 0.36 * molhado;
   rug = mix( rug, 0.4, molhado );
-  vec3 cv;
-  float vegBruta = terVegetacao( e, cv );
   if ( manchas ) alb *= terManchas( p, asf, vegBruta, mA, mB );
   float veg = terCobVeg( vegBruta, cv );
   alb = mix( alb, cv, veg );
   rug = mix( rug, 0.82, veg );
 }
-void terAcabamento( TerEntrada e, inout vec3 alb, inout float rug ) {
-  float p[ ${N_CAMADAS} ];
-  for ( int i = 0; i < ${N_CAMADAS}; i ++ ) p[ i ] = 0.0;
-  terAcabamentoM( e, alb, rug, false, p, 0.0, vec4( 0.5 ), vec4( 0.5 ) );
+void terAcabamentoM( TerEntrada e, inout vec3 alb, inout float rug, bool manchas, float p[ ${N_CAMADAS} ], float asf, vec4 mA, vec4 mB ) {
+  vec3 cv;
+  float vegBruta = terVegetacao( e, cv );
+  terAcabamentoV( e, alb, rug, manchas, p, asf, mA, mB, vegBruta, cv );
 }
 
 // mistura de todas as camadas pelos pesos (o longe e o assado): rgb albedo linear, a rugosidade; com as manchas do
-// campo (o assado: o chão de longe não as pinta por pixel)
+// campo (o assado: o chão de longe não as pinta por pixel). Chama terPreparar (quem chama já leu o ruído)
 vec4 terMistura( TerEntrada e, bool manchas, vec4 mA, vec4 mB ) {
+  terPreparar( e );
   float p[ ${N_CAMADAS} ];
   vec3 c[ ${N_CAMADAS} ];
   float asf;
@@ -470,7 +487,7 @@ vec4 terMistura( TerEntrada e, bool manchas, vec4 mA, vec4 mB ) {
 }
 vec4 terMisturaLinear( TerEntrada e ) { return terMistura( e, false, vec4( 0.5 ), vec4( 0.5 ) ); }
 
-// fração de gramado (grama e capim, sem copa): a máscara do aceite de cor
+// fração de gramado (grama e capim, sem copa): a máscara do aceite de cor (terPreparar já feito)
 float terGramado( TerEntrada e ) {
   float p[ ${N_CAMADAS} ];
   float asf;
@@ -596,7 +613,13 @@ vGPosMundo.y += vTer.w - vTer.y;
 `,
 };
 
-/** Trechos do fragmento (pars e os pedaços que entram no MeshStandardMaterial). */
+/**
+ * Trechos do fragmento (pars e os pedaços que entram no MeshStandardMaterial). Três programas (PC3), um por malha do
+ * CDLOD (terreno.js): o de perto (TER_DETALHE, nós a menos de uTerDetalhe.x da câmera) com as camadas do chão e as
+ * manchas por pixel; o médio (sem TER_DETALHE) com a mata nítida, os tufos, o relevo das copas, a encosta e a pedra; e
+ * o de longe (TER_LONGE) só com o mapa assado. O de perto e o médio dão a mesma imagem onde os dois valem: o médio só
+ * não carrega o que é zero fora do alcance do detalhe.
+ */
 export const GLSL_TER_FRAGMENTO = {
   pars: /* glsl */ `
 ${GLSL_TER_COMUM}
@@ -605,7 +628,10 @@ uniform highp sampler2D uTerCor;        // mapa de cor assado (sqrt do albedo, r
 uniform highp sampler2D uTerUso;        // uso do solo a 4 m: via, piso, terra batida, gramado
 uniform highp sampler2D uTerSobre;      // sobreposição: células de zona, campo de camada ou ladrilhos
 uniform vec4 uTerDetalhe;               // distância do detalhe, faixa, força do relevo, distância do relevo da copa
-uniform vec4 uTerLonge;                 // caminho de longe: distância (m) em que começa e em que fica inteiro, 0, 0
+uniform vec4 uTerLonge;                 // caminho de longe: distância (m) em que começa e em que fica inteiro; alcance do relevo das copas (início, fim)
+#ifdef TER_RELEVO_ASSADO
+uniform highp sampler2D uTerRelevo;     // altura das copas grandes assada (vezes 1 / TER_RELEVO_MAX), para onde o caminho completo não chega
+#endif
 uniform vec4 uTerVegPerto;              // árvores de perto (R2b): alcance e faixa das árvores, alcance e faixa das moitas (0: nada)
 uniform vec3 uTerGanho[ ${N_CAMADAS} ]; // corrige a média de cada fatia do detalhe para 1
 uniform vec4 uTerSobreModo;             // modo (0 nada, 1 zonas, 2 contínuo, 3 categorias, 4 ladrilhos), n cores, neutro, 0
@@ -623,6 +649,12 @@ uniform vec3 uTerGanhoB[ ${N_CAMADAS} ];
 uniform vec4 uTerAB;                        // x da divisa em pixels do alvo, ligado
 #endif
 varying vec4 vTer;
+const float TER_RELEVO_MAX = ${f(TER_RELEVO_MAX)};
+// inclinação (1 - normal y) a partir da qual o caminho completo roda também de longe (a mata e a pedra na projeção
+// lateral); o perfil com o assado de 1 m por texel só precisa disso nas paredes (terreno.js, PERFIL_TERRENO.encosta)
+#ifndef TER_INCL_ENCOSTA
+#define TER_INCL_ENCOSTA 0.2
+#endif
 
 vec3 terNormalFinal;
 vec3 terPos; // a posição desenhada (com a copa): vGPosMundo é a do chão (GLSL_TER_VERTICE.fim)
@@ -633,12 +665,12 @@ vec3 terLinha;
 // relevo fino por derivadas de tela (Mikkelsen), no espaço do mundo. A inclinação fica em até ~50 graus: onde a malha
 // fica de lado para a normal do chão (a parede da copa levantada na borda da mata, a quina do costão) o det vai a zero
 // e qualquer degrau do relevo dentro de um pixel deitaria a normal de vez; com det zero e relevo zero, o normalize de
-// um vetor nulo dava NaN
-vec3 terRelevo( vec3 n, float h ) {
-  vec3 dpx = dFdx( terPos );
-  vec3 dpy = dFdy( terPos );
+// um vetor nulo dava NaN. dpx e dpy: as derivadas de terPos, já feitas no começo do fragmento
+vec3 terRelevo( vec3 n, float h, vec3 dpx, vec3 dpy ) {
   float dhx = dFdx( h );
   float dhy = dFdy( h );
+  // sem relevo na quadra de pixels (o longe, o campo raso), a normal fica a do chão (a mesma conta daria n)
+  if ( dhx == 0.0 && dhy == 0.0 ) return n;
   vec3 r1 = cross( dpy, n );
   vec3 r2 = cross( n, dpx );
   float det = dot( dpx, r1 );
@@ -651,8 +683,9 @@ vec3 terRelevo( vec3 n, float h ) {
 }
 
 #ifdef TER_DETALHE
-vec4 terDetalhe( int i, vec2 w, vec2 dx, vec2 dy, bool ladoB ) {
-  float s = 1.0 / TER_ESC[ i ];
+// detalhe de uma camada (índice da fatia, metros por repetição e o ganho que leva a média a 1)
+vec4 terDetalhe( float fatia, float esc, vec3 ganho, vec3 ganhoB, vec2 w, vec2 dx, vec2 dy, bool ladoB ) {
+  float s = 1.0 / esc;
   vec2 uv1 = w * s;
   mat2 rot = mat2( 0.8, -0.6, 0.6, 0.8 );
   float s2 = s * 0.38;
@@ -661,16 +694,16 @@ vec4 terDetalhe( int i, vec2 w, vec2 dx, vec2 dy, bool ladoB ) {
   vec4 b;
 #ifdef TER_AB
   if ( ladoB ) {
-    a = textureGrad( uTerCamadasB, vec3( uv1, float( i ) ), dx * s, dy * s );
-    b = textureGrad( uTerCamadasB, vec3( uv2, float( i ) ), rot * dx * s2, rot * dy * s2 );
+    a = textureGrad( uTerCamadasB, vec3( uv1, fatia ), dx * s, dy * s );
+    b = textureGrad( uTerCamadasB, vec3( uv2, fatia ), rot * dx * s2, rot * dy * s2 );
     vec4 m = mix( a, b, smoothstep( 0.3, 0.7, terR3.w ) );
-    return vec4( m.rgb * 2.0 * uTerGanhoB[ i ], m.a );
+    return vec4( m.rgb * 2.0 * ganhoB, m.a );
   }
 #endif
-  a = textureGrad( uTerCamadas, vec3( uv1, float( i ) ), dx * s, dy * s );
-  b = textureGrad( uTerCamadas, vec3( uv2, float( i ) ), rot * dx * s2, rot * dy * s2 );
+  a = textureGrad( uTerCamadas, vec3( uv1, fatia ), dx * s, dy * s );
+  b = textureGrad( uTerCamadas, vec3( uv2, fatia ), rot * dx * s2, rot * dy * s2 );
   vec4 m = mix( a, b, smoothstep( 0.3, 0.7, terR3.w ) );
-  return vec4( m.rgb * 2.0 * uTerGanho[ i ], m.a );
+  return vec4( m.rgb * 2.0 * ganho, m.a );
 }
 #endif
 
@@ -687,7 +720,8 @@ vec3 terRampa( float t ) {
   // distância (PC2): o caminho completo perto; de longe (de uTerLonge.x a uTerLonge.y, onde o pixel no chão já passou
   // do texel do assado) só o mapa assado, a normal dos dados, as encostas íngremes (mata e pedra na projeção lateral,
   // que de cima virariam listras) e as sobreposições. O que só existe perto (detalhe, tufos, relevo das copas e dos
-  // matacões, a mata nítida, as manchas por pixel) entra com o peso kP, que cai a zero de longe.
+  // matacões, a mata nítida, as manchas por pixel) entra com o peso kP, que cai a zero de longe. Cada parte cara fica
+  // num ramo pela distância ou pelo tamanho do pixel (PC3): onde o peso dela é zero ela não roda, com a mesma imagem.
   cor: /* glsl */ `
 terPos = vGPosMundo + vec3( 0.0, vTer.y - vTer.w, 0.0 );
 vec2 tW = terPos.xz;
@@ -707,8 +741,9 @@ vec3 tNFc = cross( tPx, tPy );
 float tNFq = dot( tNFc, tNFc );
 vec3 tNF = tNFq > 1e-24 && tNFq < 1e30 ? tNFc * inversesqrt( tNFq ) : tN;
 tNF *= sign( tNF.y + 1e-5 );
+// fora do mapa (a moldura de serra e mar) a normal vem do vértice
 float tFora = smoothstep( 0.0, 200.0, terDistFora( tW ) );
-tN = normalize( mix( tN, inverseTransformDirection( normalize( vNormal ), viewMatrix ), tFora ) );
+if ( tFora > 0.0 ) tN = normalize( mix( tN, inverseTransformDirection( normalize( vNormal ), viewMatrix ), tFora ) );
 float tIncl = 1.0 - tN.y;
 // tamanho do pixel no chão em 3D (na encosta, a projeção em x e z subestima o pixel): decide até onde entra o relevo
 // fino, que só vale com uns 4 pixels por forma (a normal por derivada é uma só em cada quadra de 2 x 2 pixels; com
@@ -734,61 +769,119 @@ float tMedR = 1.0 - smoothstep( uTerDetalhe.w * 1.5, uTerDetalhe.w * 2.5, tDist 
 #ifdef TER_LONGE
 const bool tEncosta = false;
 #else
-bool tEncosta = tDentro && tIncl > 0.2 && tMedR > 0.0;
+bool tEncosta = tDentro && tIncl > TER_INCL_ENCOSTA && tMedR > 0.0;
 #endif
 // a copa levantada faz paredes na borda da mata: ali (a normal da malha bem mais em pé que a do chão), tom de sombra e
 // sem o relevo das copas (que esticaria); a encosta natural, mesmo íngreme, não entra
 float tParede = smoothstep( 0.12, 0.35, tN.y - tNF.y ) * smoothstep( 0.5, 3.0, vTer.y );
 float tRelH = 0.0; // altura do relevo fino (m) para a normal por derivadas lá embaixo
 terMasc = 0.0;
+// relevo das copas: os fatores que não dependem do caminho (só até a média, nada com o pixel acima de 2,5 m, nem na
+// encosta íngreme, onde a projeção de cima as esticaria em riscos, nem na parede da copa levantada). Onde o caminho
+// completo não chega (o assado do perfil é mais fino que o alcance do relevo, PC3: uTerLonge.zw vai além de .xy), a
+// altura das copas grandes vem do assado de relevo, com o peso que falta até o alcance de antes; sem o assado de
+// relevo, zw = xy e o peso dele é zero
+float tFatorCopa = tMed * ( 1.0 - smoothstep( 0.9, 2.5, tPix ) ) * ( 1.0 - smoothstep( 0.22, 0.45, tIncl ) ) * ( 1.0 - tParede );
+float tWRel = tDentro && uTerMascara < 0.5 ? 1.0 - smoothstep( uTerLonge.z, uTerLonge.w, tDist ) : 0.0;
+float tCopaRel = 0.0;
+#ifdef TER_RELEVO_ASSADO
+float tWAssado = max( tWRel - kP, 0.0 ) * tFatorCopa;
+if ( tWAssado > 0.0 ) tCopaRel = textureGrad( uTerRelevo, tUVM, tDx * uTerMapa.w, tDy * uTerMapa.w ).r * TER_RELEVO_MAX * tWAssado;
+#endif
 #ifndef TER_LONGE
 if ( uTerVegPerto.x > 0.0 && uTerMascara < 0.5 ) {
   terKArv = smoothstep( uTerVegPerto.x - uTerVegPerto.y, uTerVegPerto.x, tDist );
   terKMoita = smoothstep( uTerVegPerto.z - uTerVegPerto.w, uTerVegPerto.z, tDist );
 }
-#endif
 if ( kP > 0.0 || tEncosta ) {
   terRuidosGrad( tW, tDx, tDy );
   // (sem mipmaps: a leitura não depende das derivadas; a R3a reconhece esta linha para apagar a via perto da câmera)
   vec4 tUso = texture( uTerUso, tUVM );
-  // a água filtrada serve de longe; onde o chão é pintado por pixel (até a camada média) a leitura é a exata
+  // a água filtrada serve longe dela (a distância satura em 254 m); perto da água, e onde a filtragem mistura a marca
+  // do mar com a distância (a linha de "mar a 126 m" no meio do campo), a leitura é a exata
   vec2 tAgua = terAgua( tDados.a );
-  if ( tDentro && tDist < uTerDetalhe.w ) tAgua = terAguaExata( tW );
+  if ( tDentro && tAgua.x < 250.0 ) tAgua = terAguaExata( tW );
   TerEntrada tE = TerEntrada( tW, vTer.x, tN, tDados.b, tAgua.x, tAgua.y, tDentro ? tUso : vec4( 0.0 ) );
-  float urb = clamp( tE.uso.r + tE.uso.g + tE.uso.b + tE.uso.a, 0.0, 1.0 );
+  terPreparar( tE );
   float tParedao = terParedao( tIncl, terR3.x );
-  float tCostaoP = terCostao( tE );
-#ifndef TER_LONGE
   if ( !tDentro ) {
     vec4 tm = terMisturaLinear( tE );
     tAlb = tm.rgb;
     tRug = tm.a;
   }
-#endif
+  // a vegetação pintada, uma vez: o detalhe de perto e a mata nítida usam a mesma
+  bool tComVeg = tMed > 0.0 && tDentro;
+  vec3 cVeg = vec3( 0.0 );
+  float tVeg = 0.0;
+  if ( tComVeg ) tVeg = terVegetacao( tE, cVeg );
   float tRel = 0.0;
   float tPerto = 0.0;
   vec3 aPerto = vec3( 0.0 );
 #ifdef TER_DETALHE
+  float p[ ${N_CAMADAS} ];
+  vec3 c[ ${N_CAMADAS} ];
+  float asf = 0.0;
+  float jar = 0.0;
   tPerto = ( 1.0 - smoothstep( uTerDetalhe.x - uTerDetalhe.y, uTerDetalhe.x, tDist ) ) * kP;
   if ( tPerto > 0.0 && tDentro ) {
-    float p[ ${N_CAMADAS} ];
-    vec3 c[ ${N_CAMADAS} ];
-    float asf;
-    float jar;
     terPesos( tE, p, asf, jar );
     terCores( tE, p, asf, jar, c );
-    int i1 = 0;
+    // as duas camadas de maior peso, escolhidas com índices fixos (o laço desenrolado vira seleção; sem vetor indexado
+    // por variável, que no Direct3D vai para a memória temporária): a primeira com o maior peso, a segunda com o
+    // maior entre as outras (empate: a de menor índice, como antes)
     float m1 = p[ 0 ];
-    for ( int i = 1; i < ${N_CAMADAS}; i ++ ) if ( p[ i ] > m1 ) { m1 = p[ i ]; i1 = i; }
-    int i2 = i1 == 0 ? 1 : 0;
-    float m2 = p[ i2 ];
-    for ( int i = 0; i < ${N_CAMADAS}; i ++ ) if ( i != i1 && p[ i ] > m2 ) { m2 = p[ i ]; i2 = i; }
+    float k1 = 0.0;
+    vec3 c1 = c[ 0 ];
+    float rug1 = TER_RUG[ 0 ];
+    float rel1 = TER_RELEVO[ 0 ];
+    float esc1 = TER_ESC[ 0 ];
+    vec3 g1 = uTerGanho[ 0 ];
+    vec3 gB1 = vec3( 1.0 );
+#ifdef TER_AB
+    gB1 = uTerGanhoB[ 0 ];
+#endif
+    for ( int i = 1; i < ${N_CAMADAS}; i ++ ) {
+      if ( p[ i ] > m1 ) {
+        m1 = p[ i ];
+        k1 = float( i );
+        c1 = c[ i ];
+        rug1 = TER_RUG[ i ];
+        rel1 = TER_RELEVO[ i ];
+        esc1 = TER_ESC[ i ];
+        g1 = uTerGanho[ i ];
+#ifdef TER_AB
+        gB1 = uTerGanhoB[ i ];
+#endif
+      }
+    }
+    float m2 = -1.0;
+    float k2 = 0.0;
+    vec3 c2 = vec3( 0.0 );
+    float rug2 = 0.0;
+    float rel2 = 0.0;
+    float esc2 = 1.0;
+    vec3 g2 = vec3( 1.0 );
+    vec3 gB2 = vec3( 1.0 );
+    for ( int i = 0; i < ${N_CAMADAS}; i ++ ) {
+      if ( float( i ) != k1 && p[ i ] > m2 ) {
+        m2 = p[ i ];
+        k2 = float( i );
+        c2 = c[ i ];
+        rug2 = TER_RUG[ i ];
+        rel2 = TER_RELEVO[ i ];
+        esc2 = TER_ESC[ i ];
+        g2 = uTerGanho[ i ];
+#ifdef TER_AB
+        gB2 = uTerGanhoB[ i ];
+#endif
+      }
+    }
     bool ladoB = false;
 #ifdef TER_AB
     ladoB = uTerAB.y > 0.5 && gl_FragCoord.x > uTerAB.x;
 #endif
-    vec4 d1 = terDetalhe( i1, tW, tDx, tDy, ladoB );
-    vec4 d2 = terDetalhe( i2, tW, tDx, tDy, ladoB );
+    vec4 d1 = terDetalhe( k1, esc1, g1, gB1, tW, tDx, tDy, ladoB );
+    vec4 d2 = terDetalhe( k2, esc2, g2, gB2, tW, tDx, tDy, ladoB );
     float q = m1 + m2;
     float a1 = m1 / q + d1.a * 0.6;
     float a2 = m2 / q + d2.a * 0.6;
@@ -796,26 +889,19 @@ if ( kP > 0.0 || tEncosta ) {
     float b1 = max( a1 - corte, 0.0 );
     float b2 = max( a2 - corte, 0.0 );
     float bs = b1 + b2;
-    aPerto = ( c[ i1 ] * d1.rgb * b1 + c[ i2 ] * d2.rgb * b2 ) / bs;
-    float rPerto = ( TER_RUG[ i1 ] * b1 + TER_RUG[ i2 ] * b2 ) / bs;
-    terAcabamento( tE, aPerto, rPerto );
+    aPerto = ( c1 * d1.rgb * b1 + c2 * d2.rgb * b2 ) / bs;
+    float rPerto = ( rug1 * b1 + rug2 * b2 ) / bs;
+    terAcabamentoV( tE, aPerto, rPerto, false, p, 0.0, vec4( 0.5 ), vec4( 0.5 ), tVeg, cVeg );
     float copaP = terCopa( tE.mata );
-    tRel = mix( ( d1.a * TER_RELEVO[ i1 ] * b1 + d2.a * TER_RELEVO[ i2 ] * b2 ) / bs, 0.0, copaP ) * tPerto;
+    tRel = mix( ( d1.a * rel1 * b1 + d2.a * rel2 * b2 ) / bs, 0.0, copaP ) * tPerto;
     tAlb = mix( tAlb, aPerto, tPerto );
     tRug = mix( tRug, rPerto, tPerto );
   }
 #endif
   // médio: por pixel entram a mata nítida (o assado a borra), as copas e, de perto, a textura do campo entre 1 e 25 m e
   // os tufos; de longe, só nas encostas íngremes (a mata na projeção lateral)
-  float tVeg = 0.0;
   float tRelVeg = 0.0; // relevo dos tufos da vegetação de perto (m)
-  if ( tMed > 0.0 && tDentro ) {
-    float p[ ${N_CAMADAS} ];
-    float asf;
-    float jar;
-    terPesos( tE, p, asf, jar );
-    vec3 cVeg;
-    tVeg = terVegetacao( tE, cVeg );
+  if ( tComVeg ) {
     // mata na encosta íngreme: a cor das copas numa projeção lateral pelas duas faces (de cima ela esticaria em
     // manchas verticais, como tinta escorrendo); 4 leituras só nesses pixels, com as derivadas de fora do "if"
     float tIngreme = smoothstep( 0.22, 0.42, tIncl ) * step( 0.001, tVeg );
@@ -829,12 +915,21 @@ if ( kP > 0.0 || tEncosta ) {
         textureGrad( uTerRuido, terPos.zy * e3 + vec2( 0.57, 0.83 ), tPx.zy * e3, tPy.zy * e3 ), lx );
       cVeg = mix( cVeg, copaCor( r2, r3, terR1 ), tIngreme );
     }
-    if ( kP > 0.0 ) {
-      // as manchas do campo, do solo, da areia e dos pisos já estão no assado: por pixel só na parte pintada pelas
-      // camadas de perto
+    // os tufos (até o pixel de 1,4 m) e, no alcance do detalhe, as manchas do campo: as duas leituras do ruído fino só
+    // onde uma delas vale
+#ifdef TER_DETALHE
+    bool tComManchas = kP > 0.0 && ( tPix < 1.4 || tPerto > 0.0 );
+#else
+    bool tComManchas = kP > 0.0 && tPix < 1.4;
+#endif
+    if ( tComManchas ) {
       vec4 mA = textureGrad( uTerRuido, TER_ROT_A * tW * ( 1.0 / 23.0 ) + vec2( 0.13, 0.71 ), TER_ROT_A * tDx * ( 1.0 / 23.0 ), TER_ROT_A * tDy * ( 1.0 / 23.0 ) );
       vec4 mB = textureGrad( uTerRuido, TER_ROT_B * tW * ( 1.0 / 8.3 ) + vec2( 0.52, 0.09 ), TER_ROT_B * tDx * ( 1.0 / 8.3 ), TER_ROT_B * tDy * ( 1.0 / 8.3 ) );
-      tAlb += aPerto * ( terManchas( p, asf, tVeg, mA, mB ) - 1.0 ) * ( tPerto * tMed );
+#ifdef TER_DETALHE
+      // as manchas do campo, do solo, da areia e dos pisos já estão no assado: por pixel só na parte pintada pelas
+      // camadas de perto
+      if ( tPerto > 0.0 ) tAlb += aPerto * ( terManchas( p, asf, tVeg, mA, mB ) - 1.0 ) * ( tPerto * tMed );
+#endif
       // de perto, os tufos de 1 a 2 m das moitas e das copas, com o vão escuro entre eles (senão a moita pintada vira
       // um feltro liso); vêm de cima: na encosta íngreme esticariam em riscos, então ali saem
       float tufoV = smoothstep( 0.0, 0.55, mA.z ) * ( 0.8 + 0.4 * mB.w );
@@ -849,7 +944,8 @@ if ( kP > 0.0 || tEncosta ) {
   }
   // granito do paredão e do costão: projeção lateral onde é íngreme (riscos verticais da chuva, líquen, mato nas
   // fendas) e de cima onde é suave (matacões de 1 a 3 m); a faixa molhada escurece junto da água
-  float pr = max( tParedao * tMedR, smoothstep( 0.3, 0.7, tCostaoP ) * tMed * kP ) * ( 1.0 - urb ) * ( tDentro ? 1.0 : 0.0 );
+  float tCostaoP = terCst;
+  float pr = max( tParedao * tMedR, smoothstep( 0.3, 0.7, tCostaoP ) * tMed * kP ) * ( 1.0 - terUrb ) * ( tDentro ? 1.0 : 0.0 );
   float tRelRocha = 0.0; // relevo dos matacões do costão (m)
   if ( pr > 0.0 ) {
     vec3 an = abs( tN );
@@ -893,20 +989,25 @@ if ( kP > 0.0 || tEncosta ) {
   // serrilharia com o sol baixo); na encosta a projeção de cima estica as copas em riscos (escamas com o sol rasante):
   // ali o relevo delas some; as copas pequenas (4 m) só com o pixel abaixo de ~0,5 m (a 700 m, com o sol baixo, a
   // normal por quadra de 2 x 2 pixels desenhava um xadrez claro e escuro na encosta); as grandes (16 m) seguem até o
-  // pixel de ~2 m
-  float tCopaRel = 0.0;
-  if ( kP > 0.0 ) {
-    tCopaRel = copaRelevo( terR2, terR3, terR1, 1.0 - smoothstep( 0.3, 0.8, tPix ) ) * max( terCopa( tE.mata ) * ( 1.0 - smoothstep( 0.35, 0.8, tCostaoP ) ) * ( 1.0 - tParedao ), tVeg * 0.8 )
-      * tMed * ( 1.0 - smoothstep( 0.9, 2.5, tPix ) ) * ( 1.0 - smoothstep( 0.22, 0.45, tIncl ) ) * ( 1.0 - tParede ) * kP;
-  }
-  // o relevo por derivada não faz sombra própria: as copas ficam em 0,65 da altura para não virarem escamas no sol baixo
-  tRelH = tRel + tCopaRel * 0.65 + tRelRocha + tRelVeg;
-#ifndef TER_LONGE
-  if ( uTerMascara > 0.5 ) terMasc = terGramado( tE );
+  // pixel de ~2 m (de 2,5 m para cima o peso é zero e a conta não roda)
+  // sem o assado de relevo (o de perto e os perfis sem ele) o pixel faz também a parte do assado: kP + max( tWRel - kP, 0 )
+  if ( kP > 0.0 && tPix < 2.5 ) {
+#ifdef TER_RELEVO_ASSADO
+    float tPesoCopa = kP;
+#else
+    float tPesoCopa = max( kP, tWRel );
 #endif
+    tCopaRel += copaRelevo( terR2, terR3, terR1, 1.0 - smoothstep( 0.3, 0.8, tPix ) ) * max( terCopa( tE.mata ) * ( 1.0 - smoothstep( 0.35, 0.8, tCostaoP ) ) * ( 1.0 - tParedao ), tVeg * 0.8 )
+      * tFatorCopa * tPesoCopa;
+  }
+  tRelH = tRel + tRelRocha + tRelVeg;
+  if ( uTerMascara > 0.5 ) terMasc = terGramado( tE );
 }
+#endif
+// o relevo por derivada não faz sombra própria: as copas ficam em 0,65 da altura para não virarem escamas no sol baixo
+tRelH += tCopaRel * 0.65;
 tAlb *= 1.0 - 0.45 * tParede;
-terNormalFinal = terRelevo( tN, tRelH * uTerDetalhe.z );
+terNormalFinal = terRelevo( tN, tRelH * uTerDetalhe.z, tPx, tPy );
 terRug = tRug;
 
 // sobreposições no chão (0 chamadas: tudo por uniforme e textura; nada lido sem uma ligada)
@@ -974,6 +1075,97 @@ if ( uTerMascara > 0.5 ) gl_FragColor = vec4( vec3( step( 0.5, terMasc ) ), 1.0 
 `,
 };
 
+/** Vértice dos passes em tela cheia (assado, ambiente, geração). */
+const GLSL_ASSAR_VERTICE = /* glsl */ `
+out vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4( position.xy, 0.0, 1.0 );
+}
+`;
+
+// ------------------------------------------------------------------------------------------------ luz do ambiente
+
+/**
+ * Luz do ambiente do chão (PC3): a mesma conta do three (getIBLIrradiance e getIBLRadiance sobre o PMREM em cubo UV),
+ * com o cubo lido antes, uma vez por quadro, num atlas pequeno: AMB_NIVEIS níveis de desfoque do PMREM (os mips -2 a 2
+ * do textureCubeUV, as rugosidades de 1 a 0,4 que o chão usa) em octaedros de AMB_LADO x AMB_LADO (y para cima no
+ * centro). No pixel ficam três leituras simples (a irradiância e os dois níveis da reflexão) no lugar das contas de
+ * face e de mip do cubo UV, com a mesma imagem.
+ */
+export const AMB_LADO = 32;
+export const AMB_NIVEIS = 5;
+
+/** Direção do octaedro (y para cima no centro) e o caminho de volta, iguais no passe e no chão. */
+const GLSL_OCTAEDRO = /* glsl */ `
+vec2 terOct( vec3 d ) {
+  vec3 a = abs( d );
+  vec2 p = d.xz / ( a.x + a.y + a.z );
+  if ( d.y < 0.0 ) p = ( 1.0 - abs( p.yx ) ) * vec2( p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0 );
+  return p * 0.5 + 0.5;
+}
+vec3 terOctDir( vec2 o ) {
+  vec2 p = o * 2.0 - 1.0;
+  vec3 d = vec3( p.x, 1.0 - abs( p.x ) - abs( p.y ), p.y );
+  if ( d.y < 0.0 ) d.xz = ( 1.0 - abs( d.zx ) ) * vec2( d.x >= 0.0 ? 1.0 : -1.0, d.z >= 0.0 ? 1.0 : -1.0 );
+  return normalize( d );
+}
+`;
+
+/** Passe do atlas (ShaderMaterial em tela cheia; os defines do cubo UV vêm do PMREM, como no three). */
+export const GLSL_AMB_PASSE = {
+  vertice: GLSL_ASSAR_VERTICE,
+  fragmento: /* glsl */ `
+uniform sampler2D envMap;
+uniform mat3 envMapRotation;
+uniform float envMapIntensity;
+in vec2 vUv;
+#include <cube_uv_reflection_fragment>
+${GLSL_OCTAEDRO}
+void main() {
+  float x = vUv.x * ${f(AMB_NIVEIS)};
+  float nivel = floor( x );
+  // centro do texel nas bordas do octaedro (o chão lê do mesmo jeito)
+  vec2 t = vec2( x - nivel, vUv.y ) * ${f(AMB_LADO)};
+  vec2 o = clamp( ( t - 0.5 ) / ${f(AMB_LADO - 1)}, 0.0, 1.0 );
+  vec3 c = bilinearCubeUV( envMap, envMapRotation * terOctDir( o ), nivel - 2.0 ) * envMapIntensity;
+  gl_FragColor = vec4( c, 1.0 );
+}
+`,
+};
+
+/** O que o chão lê do atlas (no lugar de lights_fragment_maps do MeshStandardMaterial). */
+export const GLSL_AMB_CHAO = {
+  pars: /* glsl */ `
+uniform highp sampler2D uTerAmb;  // atlas da luz do ambiente (GLSL_AMB_PASSE)
+${GLSL_OCTAEDRO}
+vec3 terAmb( vec3 d, float nivel ) {
+  vec2 t = ( terOct( d ) * ${f(AMB_LADO - 1)} + 0.5 ) / ${f(AMB_LADO)};
+  return textureLod( uTerAmb, vec2( ( nivel + t.x ) / ${f(AMB_NIVEIS)}, t.y ), 0.0 ).rgb;
+}
+// o mip do PMREM pela rugosidade (roughnessToMip do three, nos trechos de 1 a 0,4), contado do nível 0 do atlas
+float terAmbNivel( float r ) {
+  return clamp( r >= 0.8 ? ( 1.0 - r ) * 5.0 : ( 0.8 - r ) * 7.5 + 1.0, 0.0, ${f(AMB_NIVEIS - 1)} );
+}
+`,
+  luz: /* glsl */ `
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+#if defined( RE_IndirectDiffuse )
+iblIrradiance += 3.141592653589793 * terAmb( inverseTransformDirection( geometryNormal, viewMatrix ), 0.0 );
+#endif
+#if defined( RE_IndirectSpecular )
+{
+  vec3 tRefl = reflect( - geometryViewDir, geometryNormal );
+  tRefl = inverseTransformDirection( normalize( mix( tRefl, geometryNormal, pow4( material.roughness ) ) ), viewMatrix );
+  float tNv = terAmbNivel( material.roughness );
+  float tN0 = floor( tNv );
+  radiance += mix( terAmb( tRefl, tN0 ), terAmb( tRefl, min( tN0 + 1.0, ${f(AMB_NIVEIS - 1)} ) ), tNv - tN0 );
+}
+#endif
+#endif
+`,
+};
+
 // ------------------------------------------------------------------------------------------------ passe do assado
 
 /**
@@ -981,13 +1173,7 @@ if ( uTerMascara > 0.5 ) gl_FragColor = vec4( vec3( step( 0.5, terMasc ) ), 1.0 
  * com as camadas, a vegetação e as manchas do campo: é o chão de longe inteiro (PC2).
  */
 export const GLSL_ASSAR = {
-  vertice: /* glsl */ `
-out vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = vec4( position.xy, 0.0, 1.0 );
-}
-`,
+  vertice: GLSL_ASSAR_VERTICE,
   fragmento: /* glsl */ `
 ${GLSL_TER_COMUM}
 ${GLSL_TER_ALTURA}
@@ -1011,6 +1197,34 @@ void main() {
     c = clamp( c + hd * vec3( 1.0 / 31.0, 1.0 / 63.0, 1.0 / 31.0 ), 0.0, 1.0 );
   }
   gl_FragColor = vec4( c, m.a );
+}
+`,
+};
+
+/**
+ * Assado do relevo das copas (PC3): a altura das copas grandes (16 m) onde a vegetação cobre, a mesma conta do
+ * caminho completo sem as copas pequenas (que só valem com o pixel abaixo de 0,8 m, sempre no caminho completo). O
+ * caminho barato lê dela o relevo das copas até o alcance que ele tinha (uTerLonge.zw).
+ */
+export const GLSL_ASSAR_RELEVO = {
+  vertice: GLSL_ASSAR_VERTICE,
+  fragmento: /* glsl */ `
+${GLSL_TER_COMUM}
+${GLSL_TER_ALTURA}
+${GLSL_TER_CAMADAS}
+uniform highp sampler2D uTerUso;
+in vec2 vUv;
+void main() {
+  vec2 w = uTerMapa.xy + vUv * uTerMapa.z;
+  vec4 d = texture( uTerDados, terUVDados( w ) );
+  terRuidos( w );
+  vec2 ag = terAguaExata( w );
+  TerEntrada e = TerEntrada( w, terAlturaBase( w ), terNormalDados( d ), d.b, ag.x, ag.y, texture( uTerUso, vUv ) );
+  terPreparar( e );
+  vec3 cv;
+  float veg = terVegetacao( e, cv );
+  float cob = max( terCopa( e.mata ) * ( 1.0 - smoothstep( 0.35, 0.8, terCst ) ) * ( 1.0 - terParedao( 1.0 - e.n.y, terR3.x ) ), veg * 0.8 );
+  gl_FragColor = vec4( clamp( copaRelevo( terR2, terR3, terR1, 0.0 ) * cob / ${f(TER_RELEVO_MAX)}, 0.0, 1.0 ), 0.0, 0.0, 1.0 );
 }
 `,
 };

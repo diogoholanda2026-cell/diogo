@@ -1610,3 +1610,112 @@ test('céu em cubo: um salto no estado (hora pulada, brilho da cidade que chega)
   direto.refazer();
   assert.equal(direto.assar(renderer, null), 0);
 });
+
+// ------------------------------------------------------------------------------------------------ PC3
+
+test('PC3: compilação adiantada (Aquecimento.compilar) na cena e no alvo de cada uso, sem esperar a rodada', async () => {
+  const chamadas = [];
+  const renderer = {
+    alvo: 'tela',
+    toneMapping: 'agx',
+    getRenderTarget() {
+      return this.alvo;
+    },
+    setRenderTarget(a) {
+      this.alvo = a;
+    },
+    compileAsync(obj, cam, destino) {
+      chamadas.push({ nome: obj.name, alvo: this.alvo, tom: this.toneMapping, destino });
+      return Promise.resolve(obj);
+    },
+  };
+  const obj = (name, extra = {}) => ({ isObject3D: true, name, userData: {}, ...extra });
+  const cena = obj('cena', { isScene: true });
+  const sombra = { cena: obj('cenaSombra', { isScene: true }), alvo: 'alvoSombra' };
+  const a = new Aquecimento({ renderer, cena, camera: 'camera', perfil: PERFIS.pc, medidas: { stats: {} }, sombra }, { minQuadros: 1 });
+  // o alvo e o tom do quadro vêm do primeiro quadro desenhado
+  a._alvo = { alvo: 'alvoHdr', tom: 'nenhum' };
+  // as árvores: na cena da vista, no alvo HDR com o tom do quadro
+  await a.compilar([obj('arvores:oiti:0'), obj('arvores:impostores'), null]);
+  assert.deepEqual(chamadas.map((c) => [c.nome, c.alvo, c.tom, c.destino.name]), [
+    ['arvores:oiti:0', 'alvoHdr', 'nenhum', 'cena'], ['arvores:impostores', 'alvoHdr', 'nenhum', 'cena'],
+  ]);
+  // o gêmeo da sombra própria: no alvo e na cena da sombra
+  chamadas.length = 0;
+  await a.compilar([obj('arvores:oiti:sombra')], { sombra: true });
+  assert.deepEqual(chamadas.map((c) => [c.alvo, c.tom, c.destino.name]), [['alvoSombra', 'agx', 'cenaSombra']]);
+  // um passe fora da cena (o assado dos impostores): no alvo dele, com a cena dele
+  chamadas.length = 0;
+  const cenaAssar = obj('assar', { isScene: true });
+  await a.compilar([cenaAssar], { alvo: 'alvoAssar', cena: cenaAssar });
+  assert.deepEqual(chamadas.map((c) => [c.alvo, c.destino.name]), [['alvoAssar', 'assar']]);
+  // o estado do renderer volta; sem compileAsync (render falso) resolve sem quebrar
+  assert.deepEqual([renderer.alvo, renderer.toneMapping], ['tela', 'agx']);
+  assert.deepEqual(await new Aquecimento({ renderer: {}, cena, perfil: PERFIS.pc }).compilar([obj('x')]), []);
+  // pedida antes do primeiro quadro (o GLSL das árvores chegou cedo): espera por ele, para compilar no alvo e no tom
+  // da cena (na tela, com outro tom, o programa seria outro e o primeiro desenho compilaria de novo)
+  chamadas.length = 0;
+  const b = new Aquecimento({ renderer, cena: { ...cena, children: [] }, camera: 'camera', perfil: PERFIS.pc, medidas: { stats: {} }, sombra }, { minQuadros: 1 });
+  let resolveu = false;
+  const p = b.compilar([obj('arvores:oiti:1')]).then(() => (resolveu = true));
+  await new Promise((ok) => setTimeout(ok, 5));
+  assert.equal(chamadas.length, 0, 'compilou antes do primeiro quadro');
+  assert.equal(resolveu, false);
+  b.quadro(0, { alvo: 'alvoHdr', tom: 'nenhum' });
+  await p;
+  assert.deepEqual(chamadas.filter((c) => c.nome === 'arvores:oiti:1').map((c) => [c.alvo, c.tom]), [['alvoHdr', 'nenhum']]);
+});
+
+test('PC3: as ferramentas nascem com a geometria que terão (o programa do aquecimento é o do uso, D66)', async () => {
+  // o three põe "tem atributo de posição" na chave do programa: a geometria vazia sem posição compilava outro programa
+  // e a primeira prévia de via, o primeiro fantasma e o primeiro demolir de via compilavam depois de pronto
+  const { geometriaVazia, registrar } = await import('../../fonte/render/sobreposicoes/ferramentas.js');
+  const g = geometriaVazia(true);
+  assert.ok(g.getAttribute('position') && g.getAttribute('color'));
+  let fabrica = null;
+  registrar({ registrarDominio: (n, f) => (fabrica = f) });
+  const cena = new THREE.Scene();
+  const ctx = { cena, medidas: { familia: (o) => o }, ouvir: () => () => {}, sim: { espelho: {} } };
+  const dom = fabrica(ctx);
+  const grupo = cena.getObjectByName('ferramentas');
+  const objetos = [];
+  grupo.traverse((o) => (o.isMesh || o.isLine) && objetos.push(o));
+  assert.ok(objetos.length >= 7);
+  for (const o of objetos) assert.ok(o.geometry.getAttribute('position'), `${o.name} sem posição no aquecimento`);
+  // a de cor por vértice já tem a cor (a chave das cores por vértice com alfa sai do atributo)
+  for (const nome of ['ferramentas:fita', 'ferramentas:linhas']) assert.ok(cena.getObjectByName(nome).geometry.getAttribute('color'), nome);
+  dom.descartar();
+  // a via: o aquecimento leva uma malha com os atributos de um setor (o programa 'via' compila na carga)
+  const { geometriaAquecerVia } = await import('../../fonte/render/mundo/vias.js');
+  const gv = geometriaAquecerVia();
+  for (const k of ['position', 'normal', 'aUV', 'aDados', 'aId']) assert.ok(gv.getAttribute(k), k);
+  assert.equal(gv.index.count, 3);
+  const fonteVias = readFileSync(new URL('../../fonte/render/mundo/vias.js', import.meta.url), 'utf8');
+  assert.match(fonteVias, /ctx\.quadro\?\.aquecer\?\.add\?\.\(aquecerVia\)/);
+});
+
+test('PC3: o disco de Vogel constante do PCF dá as mesmas amostras (giro da fase uma vez por pixel)', async () => {
+  const { SOMBRA_PARS } = await import('../../fonte/render/materiais/shaders/sombra.glsl.js');
+  const m = SOMBRA_PARS.match(/const vec2 G_VOGEL\[ 8 \] = vec2\[ 8 \]\( ([^;]+) \);/);
+  assert.ok(m, 'tabela do disco');
+  const v = [...m[1].matchAll(/vec2\( ([-\d.]+), ([-\d.]+) \)/g)].map((x) => [Number(x[1]), Number(x[2])]);
+  assert.equal(v.length, 8);
+  for (const n of [5, 8]) {
+    for (const fase of [0, 0.7, 2.9, 5.5]) {
+      const cf = Math.cos(fase);
+      const sf = Math.sin(fase);
+      for (let i = 0; i < n; i++) {
+        // antes: o ângulo e o raio de cada amostra no pixel
+        const r = Math.sqrt((i + 0.5) / n);
+        const a = i * 2.39996323 + fase;
+        const antes = [Math.cos(a) * r, Math.sin(a) * r];
+        // agora: a tabela girada pela fase (mat2( cf, sf, -sf, cf ) do GLSL) e escalada por 1 / sqrt( n )
+        const k = 1 / Math.sqrt(n);
+        const agora = [(cf * v[i][0] - sf * v[i][1]) * k, (sf * v[i][0] + cf * v[i][1]) * k];
+        assert.ok(Math.hypot(agora[0] - antes[0], agora[1] - antes[1]) < 1e-7, `n ${n}, fase ${fase}, amostra ${i}`);
+      }
+    }
+  }
+  assert.ok(!/cos\( a \)|sin\( a \)/.test(SOMBRA_PARS), 'sem seno e cosseno por amostra');
+  assert.match(SOMBRA_PARS, /mat2 giro = mat2\( cf, sf, -sf, cf \);/);
+});
