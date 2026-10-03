@@ -2,19 +2,17 @@
 
 ## ONDE PAROU (03/10/2026)
 
-**Onda 3: as três etapas prontas, revisadas, integradas e gravadas** (etapa 1 em `32b7805`, etapa 2 em `d81dcf0` e
-`9b001b5`, etapa 3 em `7a930af`; notas completas em `docs/entregas/onda3/`). D91: teto do JS principal em 2,3 MB
-(PC primeiro); a montagem fica sem aviso. Testes: tudo verde menos o A2 da arcologia (a Arcologia ainda não se paga).
+**Onda 3 fechada e revisada** (etapas em `32b7805`, `d81dcf0`, `9b001b5`, `7a930af`; fechamento C1a e C1b em
+`ce46785`; notas em `docs/entregas/onda3/`). Falta antes da Prévia 2: dois agentes avulsos rodando ao mesmo tempo, um
+calibrando a Arcologia para o A2 ficar verde (D92; nota em `scratchpad/novo/C1c/nota.md`) e outro nas pendências do
+guia da primeira hora e das camadas (nota em `scratchpad/novo/C1d/nota.md`). Ao terminarem: testes verdes, montar em
+`previa/` (o integrador; a C1b já deixou a Prévia 2 conferida em `scratchpad/novo/C1b/previa2`), publicar em dois
+commits (fonte e "Montagem ..."), conferir o GitHub Pages e mandar o link ao dono com as capturas
+(`scratchpad/novo/C1b/capturas/`) e o que ele julga: anéis da sede como muralha listrada sem sombra no chão, Helix Labs
+e Compass Tower como silos, parque central ralo, cabine do caminhão lisa, gente low-poly, primeira quadra sugerida de
+indústria, manutenção das 24 avenidas da sede, cor da Holding nos caixilhos, 307 px livres com alerta em 986 x 443.
 
-**Fechamento retomado em 03/10/2026** (o resto deste parágrafo vale até ele terminar). **Fechamento pausado pelo dono em 03/10/2026** (base `187a17d`). A C1b parou no meio: o parcial está no commit "Pausa:
-C1b em andamento", sem nota e sem revisão. A C1a parou no começo, sem mudar arquivo. Na pausa, os testes falhavam só no
-A2 da arcologia (da C1a). Para retomar: relance `onda.js` com `{nome: 'Onda 3, fechamento (retomada)', base:
-'187a17d9b4de434316fe8b217c04c09912b274d9', etapas: [[{id: 'C1a'}, {id: 'C1b'}]]}` (os dois textos começam com ONDE
-PAROU). Ao terminar: ler os resultados, testes verdes, montar em `previa/` (o integrador), juntar as notas nas fichas e
-publicar em dois commits (fonte e "Montagem ..."); conferir o GitHub Pages; mandar o link ao dono com as capturas e as
-pendências para ele julgar.
-
-Decisões até a D91 registradas. Aguardando também a medição do dono na página de teste da Prévia 1c.
+Decisões até a D92 registradas. Aguardando também a medição do dono na página de teste da Prévia 1c.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
