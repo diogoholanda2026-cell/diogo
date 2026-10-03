@@ -2,26 +2,17 @@
 
 ## ONDE PAROU (03/10/2026)
 
-**Onda 3: etapas 1 e 2 prontas, revisadas, integradas e gravadas.** Etapa 1 (S2a, S3a, R2b, R4b, U1b) em `32b7805`;
-etapa 2 (SEDE3 e R5: área inicial de 6 x 5, sede v3 e os 24 colocáveis) em `d81dcf0`, com a integração depois (testes
-de outras parcelas fora do disco da sede, cena rua no cruzamento novo, plataformas da Vila abaixo do chão da rua em
-`sim/mundo/vila.js`, domínio dos colocáveis no índice, mata fora do disco, teto da sede na vista aberta de 60 mil).
-Notas completas em `docs/entregas/onda3/`. Testes: tudo verde menos o subteste 14 de geracao-vias (tráfego), um
-defeito da fila em `render/mundo/trafego.js` passado à R3b. Montagem: só o aviso A1 (JS principal em 1.892 KB).
+**Onda 3: as três etapas prontas, revisadas, integradas e gravadas** (etapa 1 em `32b7805`, etapa 2 em `d81dcf0` e
+`9b001b5`, etapa 3 em `7a930af`; notas completas em `docs/entregas/onda3/`). D91: teto do JS principal em 2,3 MB
+(PC primeiro); a montagem fica sem aviso. Testes: tudo verde menos o A2 da arcologia (a Arcologia ainda não se paga).
 
-**Etapa 3 retomada em 03/10/2026** (workflow wjgbdsjw5, run wf_a19386c5-cff; o resto deste parágrafo vale até ela
-terminar). **Etapa 3 pausada pelo dono em 03/10/2026** (base `9b001b5`). Com 2 agentes por vez na máquina de 4 núcleos, só a R3b e
-a U2a tinham começado: o parcial delas está no commit "Pausa: R3b e U2a em andamento", sem nota e sem revisão, com os
-testes verdes na pausa (inclusive o tráfego da geracao-vias). A X1b e a X3a não começaram. Para retomar: relance
-`onda.js` com `{nome: 'Onda 3, etapa 3 (retomada)', base: '9b001b543c45e10801ec414cd87210936724f816', etapas: [[{id:
-'R3b'}, {id: 'U2a'}, {id: 'X1b'}, {id: 'X3a'}]]}` (os textos da R3b e da U2a começam com ONDE PAROU). Ao terminar:
-ler os resultados, testes verdes, `montar.mjs`, juntar as notas nas fichas, gravar e escrever a C1 (JS principal acima
-do teto, calibração do começo, robô com a coroa de quadras dentro do disco, greide do nó de entrada, os dois
-'ShaderMaterial' sem dono, bancada no PC do dono). Para o dono ver na prévia: Helix Labs e Compass Tower lendo como
-silos, fachada do Horizon Ring monótona de perto, parque central ralo, anéis acinzentados à noite.
+**Fechamento rodando:** C1a (calibração e contratos da simulação) e C1b (integração do render e do app, aquecimento,
+Prévia 2 numa pasta temporária), ao mesmo tempo, com a base no commit "Fechamento da onda 3: C1a e C1b". Se parar no
+meio, grave o parcial e relance com ONDE PAROU no topo dos textos, como nas etapas 2 e 3. Ao terminar: ler os
+resultados, testes verdes, montar em `previa/` (o integrador), juntar as notas nas fichas e publicar em dois commits
+(fonte e "Montagem ..."); conferir o GitHub Pages; mandar o link ao dono com as capturas e as pendências para ele julgar.
 
-Decisões até a D90 registradas. `previa/` continua a Prévia 1c. Aguardando também a medição do dono na página de teste
-da Prévia 1c.
+Decisões até a D91 registradas. Aguardando também a medição do dono na página de teste da Prévia 1c.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).

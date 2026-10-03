@@ -40,7 +40,7 @@ export const WORKERS = [
   { nome: 'tarefas', entrada: 'fonte/sim/trabalhador.js', teto: 150 * KB },
   { nome: 'oficina', entrada: 'fonte/render/mundo/oficina.worker.js', teto: 250 * KB },
 ];
-export const TETO_JS = 1.6 * KB * KB;
+export const TETO_JS = 2.3 * KB * KB; // D91: 2,3 MB enquanto o PC é o alvo (D66); era 1,6 MB pelo Poco X7
 export const TETO_TEXTURAS = 8 * KB * KB;
 // id do manifesto: o app mantém o id do jogo instalado (o manifesto antigo usava '/diogo/'), então a publicação do
 // M1 troca o app no lugar; a prévia tem id próprio e não toma o lugar do jogo instalado
