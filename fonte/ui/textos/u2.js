@@ -1,2 +1,50 @@
-// Textos da parcela U2. Esqueleto da F0 (dona: U2a e U2b); registrar(registrarTextos) vem de ui/textos.js.
-export function registrar() {}
+// Textos da parcela U2 (donas: U2a e U2b) que a carga precisa: entrada, avisos do salvamento, dicas e sugestões da
+// primeira hora, painel de desempenho e os títulos das telas sob demanda. Os das telas (menu inicial, nova partida,
+// saves, configurações e teste de desempenho) vêm com elas, de u2-telas.js. Português do Brasil, frases curtas, sem
+// travessão, unidades da D42 ("/h" de jogo; o calendário é real, D67). registrar(registrarTextos) vem de ui/textos.js.
+export function registrar(registrarTextos) {
+  registrarTextos('u2', {
+    'u2.jogo': 'Arcologia de Held',
+    'u2.cidade': 'Heldópolis',
+    'u2.entrar.clique': 'Clique para entrar',
+    'u2.entrar.toque': 'Toque para entrar',
+    'u2.entrar.notaMouse': 'Enter também entra',
+    'u2.entrar.notaToque': 'O jogo abre em tela cheia, em paisagem',
+    'u2.girar': 'Gire o celular: o jogo é em paisagem',
+    'u2.carregar.titulo': 'Partidas salvas',
+    'u2.carregar.danificado': '{n} save danificado foi guardado à parte; abri o anterior.',
+    'u2.salvar.semEspaco': 'Os 8 espaços estão ocupados: salvei no automático.',
+    'u2.salvar.outraPagina': 'Outra aba gravou esta partida depois desta. Esta aba parou de salvar; recarregue para seguir.',
+    'u2.cfg.titulo': 'Configurações',
+    'u2.q.auto': 'Auto',
+    'u2.q.ultra': 'Ultra',
+    'u2.q.alta': 'Alta',
+    'u2.q.pc': 'PC',
+    'u2.q.media': 'Média',
+    'u2.q.leve': 'Leve',
+    'u2.td.titulo': 'Teste de desempenho',
+    'u2.td.comeca': 'O teste começa em',
+    'u2.td.voando': 'Medindo, faltam',
+    'u2.painel.perfil': 'qualidade',
+    'u2.painel.qps': 'qps',
+    'u2.painel.ms': 'ms',
+    'u2.painel.placa': 'placa',
+    'u2.painel.chamadas': 'chamadas',
+    'u2.painel.triangulos': 'triângulos',
+    'u2.painel.resolucao': 'resolução',
+    'u2.painel.memoria': 'vídeo',
+    'u2.dica.entendi': 'Entendi',
+    'u2.dica.desligar': 'Não mostrar dicas',
+    'u2.dica.via': 'Toque no começo e no fim. Arraste a bolinha do meio para curvar.',
+    'u2.dica.via.mouse': 'Clique no começo e no fim. Arraste a bolinha do meio para curvar.',
+    'u2.dica.zona': 'Toque numa quadra para preencher, ou arraste para pintar.',
+    'u2.dica.zona.mouse': 'Clique numa quadra para preencher, ou arraste para pintar.',
+    'u2.dica.colocar': 'Toque no lugar, gire se precisar e confirme. O prédio precisa de frente para uma via.',
+    'u2.dica.colocar.mouse': 'Clique no lugar; vírgula e ponto giram. O prédio precisa de frente para uma via.',
+    'u2.dica.avisos': 'Esses sinais mostram o que falta. Toque num deles.',
+    'u2.dica.velocidade': 'Espaço pausa e volta; 1, 2 e 3 mudam a velocidade.',
+    'u2.dica.numeros': 'Toque nos números lá em cima para ver os detalhes.',
+    'u2.dica.emprestimo': 'O caixa está baixo. A Economia tem o empréstimo, com as regras escritas.',
+    'u2.sug.usar': 'Usar sugestão',
+  });
+}

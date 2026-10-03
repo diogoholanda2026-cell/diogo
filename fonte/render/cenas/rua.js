@@ -1,10 +1,19 @@
 // Cena 'rua' (desenho do render 15.2, A6 e A10: 16h): a avenida comercial do bairro Sudeste da cidade sintética, com
-// canteiro de palmeiras, cruzamento com semáforo, faixas do CTB, calçadas, postes, árvores e carros. ?vista= troca a
-// câmera sem sair do lugar: rasante (padrão: no nível da rua, olhando a avenida), 300 (a vista de 300 m do bairro),
-// cruzamento (de cima, a 45 graus: meio-fio, zebras e retenção) e orla (a avenida da orla com pedra portuguesa);
-// ?hora= a hora do céu (21 dá a noite com a luz da rua e os faróis).
-// A cena espera a oficina entregar os setores de vias e de prédios da vista, povoa o tráfego e deixa os carros
-// andando; o resultado traz as medidas das vias, dos objetos e dos carros e as famílias do quadro.
+// canteiro de palmeiras, cruzamento com semáforo, faixas do CTB, calçadas, postes, árvores, carros, gente e caminhões.
+// ?vista= troca a câmera sem sair do lugar: rasante (padrão: no nível da rua, olhando a avenida), 300 (a vista de
+// 300 m do bairro), cruzamento (de cima, a 45 graus: meio-fio, zebras e retenção), fila (a chegada ao cruzamento,
+// com a fila no vermelho e a gente na faixa), caminhao (um comboio de caminhões da Holding pela avenida, com brita,
+// tijolo, areia e concreto, a câmera indo junto) e orla (a avenida da orla com pedra portuguesa); ?hora= a hora do
+// céu (21 dá a noite com a luz da rua e os faróis).
+// A cena espera a oficina entregar os setores de vias e de prédios da vista, povoa o tráfego e a gente, adianta a rua
+// 40 s (as filas se formam e a gente se espalha antes da primeira imagem) e deixa tudo andando; o resultado traz as
+// medidas das vias, dos objetos, dos carros, da gente e dos caminhões e as famílias do quadro.
+
+import { Rede } from '../mundo/vias.js';
+import { GradeSetores } from '../mundo/setores.js';
+import { planoDaRota, distanciaDaViagem, poseDaViagem } from '../mundo/caminhoes.js';
+import { faseSemaforo, restaVermelho } from '../mundo/trafego.js';
+import { grupoSemaforo, defasagemSemaforo } from '../geracao/cruzamento.js';
 
 /**
  * O cruzamento da avenida com a rua no Sudeste da cidade sintética (nó 336) e as vistas. Com a área inicial da D90 o
@@ -17,8 +26,64 @@ export const VISTAS_RUA = Object.freeze({
   rasante: { x: 1055.3, z: 534.3, dist: 16, inclinacao: 4, guinada: 92 },
   300: { x: 1087.3, z: 523.1, dist: 300, inclinacao: 32, guinada: 38 },
   cruzamento: { x: 1082.3, z: 529.4, dist: 70, inclinacao: 48, guinada: 62 },
+  // a chegada pela avenida (as faixas para leste), de cima e de trás da fila: a retenção, a zebra e quem atravessa
+  fila: { x: 1063, z: 535, dist: 34, inclinacao: 26, guinada: 90 },
+  // o comboio (a câmera vai junto do segundo caminhão; esta é a de partida)
+  caminhao: { x: 1040, z: 534, dist: 26, inclinacao: 14, guinada: 92 },
   orla: { x: 1543, z: 1570, dist: 30, inclinacao: 5, guinada: 110 },
 });
+
+/** O comboio da vista caminhao: as cargas da Holding do M1a, uma por caminhão. */
+export const COMBOIO = Object.freeze([['brita', 10], ['tijolo', 8], ['areia', 10], ['concreto', 10]]);
+
+/**
+ * Caminho de entrega pela avenida a partir de um nó, seguindo em frente (o braço mais alinhado) por uns `metros`:
+ * Int32Array no formato de espelho.entregas (idx de a para b, ~idx de b para a). Também serve aos testes.
+ */
+export function caminhoEmFrente(rede, n0, metros = 600, direcao = null) {
+  const refs = [];
+  let n = n0;
+  let dir = direcao;
+  let total = 0;
+  let veio = -1;
+  for (let k = 0; k < 40 && total < metros; k++) {
+    const no = rede.nos.get(n);
+    if (!no) break;
+    let melhor = null;
+    for (const b of no.analise.bracos) {
+      if (b.e === veio) continue;
+      const ar = rede.arestas.get(b.e);
+      if (!ar || ar.mao === (b.inverte ? 1 : -1)) continue;
+      const alinhado = dir ? b.dx * dir[0] + b.dz * dir[1] : b.P.velocidade / 100;
+      if (!melhor || alinhado > melhor.alinhado) melhor = { b, ar, alinhado };
+    }
+    // em frente quando dá; senão, a virada mais suave (a avenida pode acabar numa rua)
+    if (!melhor || (dir && melhor.alinhado < -0.3)) break;
+    const { b, ar } = melhor;
+    refs.push(b.inverte ? ~ar.e : ar.e);
+    total += ar.L;
+    veio = ar.e;
+    n = b.inverte ? ar.a : ar.b;
+    // a direção de chegada no nó seguinte (a tangente da aresta no fim)
+    const p = ar.p;
+    const [fx, fz] = b.inverte ? [p[0] - p[2], p[1] - p[3]] : [p[6] - p[4], p[7] - p[5]];
+    const l = Math.hypot(fx, fz) || 1;
+    dir = [fx / l, fz / l];
+  }
+  return Int32Array.from(refs);
+}
+
+/** Segundos de rua (40 a 80) até o meio do vermelho de quem chega ao cruzamento da cena pelo oeste (a fila formada). */
+export function segundosAteFila(rede) {
+  const no = rede && [...rede.nos.values()].find((n) => Math.hypot(n.x - RUA.x, n.z - RUA.z) < 1);
+  const b = no?.analise.bracos.find((x) => x.dx < -0.9);
+  if (!b || !no.semaforos) return 40;
+  const g = grupoSemaforo(b.theta);
+  for (let t = 40; t < 80; t += 0.5) {
+    if (faseSemaforo(t, g, defasagemSemaforo(no.n)) === 2 && restaVermelho(t, g, defasagemSemaforo(no.n)) <= 9) return t;
+  }
+  return 40;
+}
 
 export function registrar(registrarCena) {
   registrarCena('rua', {
@@ -34,16 +99,66 @@ export function registrar(registrarCena) {
       const vias = ctx.dominio('vias');
       const predios = ctx.dominio('predios');
       const trafego = ctx.dominio('trafego');
+      const pedestres = ctx.dominio('pedestres');
+      const caminhoes = ctx.dominio('caminhoes');
       if (!vias?.preparar) falhas.push('o domínio vias é o substituto da F0 (a R3a não registrou)');
+      // o comboio: quatro caminhões pela avenida, vindo do leste, passando o cruzamento da cena e seguindo. A rota sai
+      // de uma rede lida aqui (a mesma conta da de vias.js), para a câmera já começar junto do comboio
+      const ids = [];
+      if (nome === 'caminhao' && caminhoes?.amostras) {
+        const esp = ctx.sim.espelho;
+        const rede = new Rede(new GradeSetores({ tam: esp.mapa?.tam ?? 8192, origem: esp.mapa?.origem ?? [-4096, -4096] }));
+        rede.tudo(esp);
+        const no = [...rede.nos.values()].find((n) => Math.hypot(n.x - RUA.x, n.z - RUA.z) < 1);
+        const ida = no ? caminhoEmFrente(rede, no.n, 700, [1, 0]) : new Int32Array(0);
+        // o mesmo caminho ao contrário (do leste para o cruzamento) e depois para oeste
+        const volta = Int32Array.from([...ida].reverse().map((r) => ~r));
+        const oeste = no ? caminhoEmFrente(rede, no.n, 300, [-1, 0]) : new Int32Array(0);
+        const caminho = Int32Array.from([...volta, ...oeste]);
+        const pl = planoDaRota(rede, caminho);
+        if (!pl) falhas.push('a avenida da cena não tem caminho para o comboio');
+        const agora = caminhoes.agora(ctx);
+        const lista = COMBOIO.map(([item, n], k) => {
+          const id = 900001 + k;
+          ids.push(id);
+          // espaçados uns 50 m (4 s a 45 km/h); a viagem leva o tempo da rua mais 20 s de pontas fora da via
+          const tIni = agora - 30 + k * 4.2;
+          return { id, item, n, caminho, tIni, tFim: tIni + (pl?.T ?? 90) + 20, visual: false };
+        });
+        caminhoes.amostras(lista);
+        if (pl) {
+          const d = distanciaDaViagem(lista[1], pl, agora) ?? 0;
+          const p = poseDaViagem(pl, d);
+          ctx.cameraApi.definir({ x: p.x, z: p.z, dist: v.dist, inclinacao: v.inclinacao, guinada: (Math.atan2(p.hx, -p.hz) * 180) / Math.PI + 180 - 32 });
+        }
+      }
       try {
-        await Promise.all([vias?.preparar?.({ teto: 180000 }), predios?.preparar?.({ teto: 180000 })]);
+        await Promise.all([vias?.preparar?.({ teto: 180000 }), predios?.preparar?.({ teto: 180000 }), pedestres?.preparar?.(), caminhoes?.preparar?.()]);
         if (vias?.pronto && !vias.pronto()) falhas.push('a oficina não entregou todos os setores de vias da vista a tempo');
       } catch (e) {
         falhas.push(`preparar falhou: ${e?.message ?? e}`);
       }
       trafego?.povoar?.(ctx);
+      await pedestres?.povoar?.(ctx);
+      // 40 s de rua antes da primeira imagem; na vista da fila, até o vermelho de quem chega pelo oeste estar na
+      // metade (a fila formada)
+      trafego?.avancar?.(nome === 'fila' ? segundosAteFila(vias?.rede) : 40, ctx);
       trafego?.animar?.(true);
+      pedestres?.animar?.(true);
+      caminhoes?.animar?.(true);
       return {
+        quadro() {
+          if (nome !== 'caminhao' || !caminhoes?.estado) return;
+          // a câmera vai junto do segundo caminhão, de frente, um pouco de lado
+          const st = caminhoes.estado(ids[1]);
+          if (!st) return;
+          const ant = this._ant ?? st;
+          const hx = st.x - ant.x;
+          const hz = st.z - ant.z;
+          if (Math.hypot(hx, hz) > 0.05) this._guinada = (Math.atan2(hx, -hz) * 180) / Math.PI + 180 - 32;
+          this._ant = st;
+          ctx.cameraApi.definir({ x: st.x, z: st.z, dist: v.dist, inclinacao: v.inclinacao, guinada: this._guinada ?? v.guinada });
+        },
         resultado() {
           const s = ctx.stats;
           const mv = vias?.medidas?.() ?? null;
@@ -57,6 +172,8 @@ export function registrar(registrarCena) {
             vias: mv,
             objetos: ctx.dominio('props')?.medidas?.() ?? null,
             carros: trafego?.medidas?.() ?? null,
+            pessoas: pedestres?.medidas?.() ?? null,
+            caminhoes: caminhoes?.medidas?.() ?? null,
             luzRua: ctx.luzRua ? { luzes: ctx.luzRua.luzes, versao: ctx.luzRua.versao } : null,
             quadro: { calls: s.calls, tris: s.tris, callsSombra: s.callsSombra, trisSombra: s.trisSombra, familias: { ...s.familias } },
           };

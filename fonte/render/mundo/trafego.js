@@ -1,8 +1,23 @@
-// Carros (desenho do render 8, D37): no M1a, sem o trânsito agregado (S1c), uma amostra pela heurística: a
-// densidade de cada aresta sai do tipo de via, da hora do céu (picos de manhã e no fim da tarde, madrugada vazia) e
-// das zonas das células vizinhas (comércio e escritório puxam mais, indústria traz caminhões). Os carros andam nas
-// faixas pela curva da aresta, com o sentido da mão, guardam distância do da frente, param no vermelho dos
-// semáforos (o mesmo ciclo dos focos, props.js) e atravessam o cruzamento por uma curva até a faixa da próxima aresta.
+// Carros (desenho do render 8, D37). Sem o trânsito agregado (S1c, M1b), uma amostra pela heurística: a densidade de
+// cada aresta sai do tipo de via, da hora do céu (picos de manhã e no fim da tarde, madrugada vazia) e das zonas das
+// células vizinhas (comércio e escritório puxam mais, indústria traz caminhões). Com espelho.fluxos (veículos por
+// hora no pico, por sentido, e o fator de velocidade), a densidade vem do fluxo: carros por km = fluxo / velocidade.
+//
+// Como andam (R3b):
+//   fila     cada faixa é uma fila ordenada; quem faz a curva de um cruzamento está nas duas filas (a da faixa de onde
+//            saiu, à frente da boca, e a da faixa para onde vai, atrás da boca). A velocidade sai da distância ao da
+//            frente (a que ainda para com a frenagem de conforto, contando a velocidade dele) e o passo nunca passa da
+//            distância de fila: um carro não entra no outro nem com um quadro longo
+//   cruzamento  a vez é uma reserva no nó: o carro só cruza se a curva dele não chega perto da curva de quem já está
+//            lá dentro (ou já reservou) e se ninguém que pediu antes, com a curva cruzando a dele, espera a vez. A
+//            ordem de chegada manda, com a via principal na frente (sem semáforo) e a conversão à esquerda atrás;
+//            no semáforo só pede quem tem o verde, e quem ainda para antes da retenção desiste no amarelo
+//   faixa    a faixa de destino segue a virada (direita para a faixa da direita, esquerda para a da esquerda, em frente
+//            na mesma posição); o carro só sai para uma faixa com lugar
+//   gente    pedestre na faixa de pedestres (pedestres.js): o carro não entra nem sai pelo braço dela e para na
+//            retenção
+//   externos os caminhões das entregas (caminhoes.js) andam aqui como carros com rota fixa, no ritmo da viagem da
+//            simulação; quem desenha é caminhoes.js
 // Faróis e lanternas acesos à noite, luz de freio. Os carros estacionados vêm do setor de vias (as vagas). Tetos por
 // perfil (Média 120 andando); 6 modelos em 2 LODs, uma chamada por modelo e LOD (família 'vida').
 import * as THREE from 'three';
@@ -28,6 +43,8 @@ export const PERFIL_TRAFEGO = Object.freeze({
 export const BASE_TIPO = Object.freeze({ rua: 0.45, ruaMao: 0.5, avenida: 1.1, avenidaG: 1.35, rodovia: 1.3, terra: 0.08 });
 /** Peso de cada família de zona na atração de carros. */
 const PESO_ZONA = Object.freeze({ res: 1, com: 2.2, esc: 2.6, ind: 1.5 });
+/** Teto da densidade pelo fluxo (carros por 100 m de faixa): a fila parada tem uns 15. */
+export const DENSIDADE_MAX = 9;
 
 /** Fator da hora do céu (0 a 1): picos às 7h30 e às 18h, almoço, madrugada quase vazia. */
 export function fatorHora(h) {
@@ -49,13 +66,40 @@ export function densidade(tipo, hora, contagem, comprimento) {
   return (BASE_TIPO[id] ?? 0.3) * fatorHora(hora) * fatorZona(contagem, comprimento);
 }
 
+/**
+ * Carros por 100 m de faixa pelo fluxo (S1c): q veículos por hora no pico no sentido, repartidos nas faixas dele, na
+ * velocidade da via vezes o fator (0 a 1, congestionamento), na hora do céu.
+ */
+export function densidadeFluxo(tipo, q, faixas, vel, hora) {
+  if (!(q > 0) || !(faixas > 0)) return 0;
+  const vKmh = Math.max(5, perfilVia(tipo).velocidade * Math.max(0.15, Math.min(1, vel || 1)));
+  return Math.min(DENSIDADE_MAX, ((q / faixas / vKmh) * fatorHora(hora)) / 10);
+}
+
 /** Onde o carro para no vermelho: a frente a 0,5 m antes da retenção (m da boca; a retenção do shader vai de 6,4 a 6,8). */
 export const PARADA = 7.3;
 /** Folga entre o para-choque de um e o do outro na fila (m). */
 export const FOLGA_FILA = 2;
+/** Frenagem de conforto (m/s²): a velocidade que ainda para no espaço livre. */
+export const A_PLANO = 3;
+/** Frenagem forte (m/s²): a correção quando o plano não bastou. */
+export const A_MAX = 7;
+/** Velocidades na curva do nó (m/s): cruzamento, curva de duas vias e retorno na ponta. */
+export const V_NO = Object.freeze({ cruzamento: 7, curva: 10, retorno: 5 });
+/** Até onde (m da boca) o carro escolhe a saída e pede a vez. */
+const OLHAR = 45;
+/** Amostras da curva do nó para o teste de conflito. */
+const N_CURVA = 8;
+/** Parado na fila (s) além disso, o carro sai da amostra (trava de laço de vias curtas). */
+export const DESISTE = 50;
 
 /** Distância mínima entre os centros de dois carros na mesma faixa (m): meio comprimento de cada um e a folga. */
 export const distanciaNaFila = (miTras, miFrente) => (MODELOS[miTras].c + MODELOS[miFrente].c) / 2 + FOLGA_FILA;
+/** A mesma conta pelos comprimentos dos dois (os caminhões das entregas não estão em MODELOS). */
+const distFila = (a, b) => (a.c + b.c) / 2 + FOLGA_FILA;
+
+/** Velocidade que ainda para em g metros com a frenagem de conforto, contando a do da frente (vL). */
+export const velSegura = (g, vL = 0) => Math.sqrt(Math.max(0, 2 * A_PLANO * g + 0.6 * vL * vL));
 
 /** Fase do semáforo (0 verde, 1 amarelo, 2 vermelho) do grupo g: a mesma conta do shader (via.glsl.js, objFase). */
 export function faseSemaforo(tempo, g, defas) {
@@ -64,6 +108,139 @@ export function faseSemaforo(tempo, g, defas) {
   return m < 16 ? 0 : m < 19 ? 1 : 2;
 }
 
+/** Segundos que faltam do vermelho do grupo g (0 fora do vermelho): a gente atravessa no vermelho dos carros. */
+export function restaVermelho(tempo, g, defas) {
+  const t = (((tempo + defas * 0.16) % 40) + 40) % 40;
+  const m = g < 0.5 ? t : (t + 20) % 40;
+  return m >= 19 ? 40 - m : 0;
+}
+
+/** Virada de (hx, hz) para (gx, gz), olhando de cima: 1 à direita, -1 à esquerda, 0 em frente (até 35 graus). */
+export function virada(hx, hz, gx, gz) {
+  const ang = Math.atan2(hx * gz - hz * gx, hx * gx + hz * gz);
+  return Math.abs(ang) < 0.61 ? 0 : ang > 0 ? 1 : -1;
+}
+
+/** Faixas de um sentido da aresta, da esquerda para a direita de quem anda nele (u vezes o sentido crescente). */
+const cacheFaixas = new Map();
+export function faixasOrdenadas(tipo, mao, sentido) {
+  const k = `${tipo}:${mao}:${sentido}`;
+  let l = cacheFaixas.get(k);
+  if (!l) {
+    l = faixasDeTransito(tipo, mao).filter((f) => f.sentido === sentido).sort((a, b) => a.u * sentido - b.u * sentido);
+    cacheFaixas.set(k, l);
+  }
+  return l;
+}
+
+/**
+ * Faixa de destino pela virada: à direita, a da direita; à esquerda, a da esquerda; em frente, a mesma posição (de
+ * `rank` em `n` faixas de origem). `direita`: em frente pela faixa da direita (caminhões).
+ */
+export function faixaDestino(fx, rank, n, vir, direita = false) {
+  if (!fx.length) return null;
+  if (vir > 0 || (vir === 0 && direita)) return fx[fx.length - 1];
+  if (vir < 0) return fx[0];
+  return fx[n <= 1 ? fx.length - 1 : Math.round((rank / (n - 1)) * (fx.length - 1))];
+}
+
+/** Distância entre os segmentos ab e cd no plano. */
+function distSeg(ax, az, bx, bz, cx, cz, dx, dz) {
+  const ux = bx - ax;
+  const uz = bz - az;
+  const vx = dx - cx;
+  const vz = dz - cz;
+  const wx = ax - cx;
+  const wz = az - cz;
+  const den = ux * vz - uz * vx;
+  // cruzam?
+  if (Math.abs(den) > 1e-12) {
+    const s = (vx * wz - vz * wx) / den;
+    const t = (ux * wz - uz * wx) / den;
+    if (s >= 0 && s <= 1 && t >= 0 && t <= 1) return 0;
+  }
+  const pt = (px, pz, qx, qz, rx, rz) => {
+    const lx = rx - qx;
+    const lz = rz - qz;
+    const l2 = lx * lx + lz * lz;
+    const f = l2 > 0 ? Math.max(0, Math.min(1, ((px - qx) * lx + (pz - qz) * lz) / l2)) : 0;
+    return Math.hypot(px - qx - f * lx, pz - qz - f * lz);
+  };
+  return Math.min(pt(ax, az, cx, cz, dx, dz), pt(bx, bz, cx, cz, dx, dz), pt(cx, cz, ax, az, bx, bz), pt(dx, dz, ax, az, bx, bz));
+}
+
+/** Menor distância entre duas poligonais (x, z intercalados), a partir dos índices ia e ib. */
+export function distPoligonais(A, ia, B, ib) {
+  let m = Infinity;
+  const na = A.length / 2 - 1;
+  const nb = B.length / 2 - 1;
+  for (let i = ia; i < na; i++) {
+    for (let j = ib; j < nb; j++) {
+      const d = distSeg(A[2 * i], A[2 * i + 1], A[2 * i + 2], A[2 * i + 3], B[2 * j], B[2 * j + 1], B[2 * j + 2], B[2 * j + 3]);
+      if (d < m) m = d;
+    }
+  }
+  return m;
+}
+
+/** Ponto e tangente da cúbica p (8 números) em t. */
+export function pontoCurva(p, t, out) {
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const d = 3 * u * t * t;
+  const e = t * t * t;
+  out.x = a * p[0] + b * p[2] + d * p[4] + e * p[6];
+  out.z = a * p[1] + b * p[3] + d * p[5] + e * p[7];
+  const dx = 3 * u * u * (p[2] - p[0]) + 6 * u * t * (p[4] - p[2]) + 3 * t * t * (p[6] - p[4]);
+  const dz = 3 * u * u * (p[3] - p[1]) + 6 * u * t * (p[5] - p[3]) + 3 * t * t * (p[7] - p[5]);
+  const l = Math.hypot(dx, dz) || 1;
+  out.hx = dx / l;
+  out.hz = dz / l;
+  return out;
+}
+
+/** Posição na faixa: ponto e direção de viagem. */
+const EST = { x: 0, z: 0, tx: 1, tz: 0, t: 0 };
+export function naFaixa(ar, u, s, sentido, out) {
+  estacao(ar.p, ar.tab, s, EST);
+  out.x = EST.x - EST.tz * u;
+  out.z = EST.z + EST.tx * u;
+  out.hx = EST.tx * sentido;
+  out.hz = EST.tz * sentido;
+  return out;
+}
+
+/** s onde a faixa de um sentido acaba (a boca do nó da frente) e onde começa. */
+export const fimDaFaixa = (ar, sentido) => (sentido > 0 ? ar.L - ar.cFim : ar.cIni);
+export const inicioDaFaixa = (ar, sentido) => (sentido > 0 ? ar.cIni : ar.L - ar.cFim);
+
+const QA = { x: 0, z: 0, hx: 1, hz: 0 };
+const QB = { x: 0, z: 0, hx: 1, hz: 0 };
+
+/**
+ * A curva do nó entre o fim de uma faixa (ar, u, sentido) e o começo de outra (ar2, u2, sentido2): a cúbica com as
+ * alças nas direções das faixas (o retorno avança pelo miolo redondo da ponta antes de voltar), o comprimento e a
+ * poligonal de N_CURVA trechos para o teste de conflito.
+ */
+export function curvaEntre(ar, u, sentido, ar2, u2, sentido2, retorno = false) {
+  naFaixa(ar, u, fimDaFaixa(ar, sentido), sentido, QA);
+  naFaixa(ar2, u2, inicioDaFaixa(ar2, sentido2), sentido2, QB);
+  const L = Math.hypot(QB.x - QA.x, QB.z - QA.z);
+  const h = retorno ? Math.max(3, L * 0.9) : L * 0.42;
+  const p = [QA.x, QA.z, QA.x + QA.hx * h, QA.z + QA.hz * h, QB.x - QB.hx * h, QB.z - QB.hz * h, QB.x, QB.z];
+  // comprimento da cúbica: a média da corda e do polígono de controle (o retorno anda mais que a corda)
+  const rede = Math.hypot(p[2] - p[0], p[3] - p[1]) + Math.hypot(p[4] - p[2], p[5] - p[3]) + Math.hypot(p[6] - p[4], p[7] - p[5]);
+  const poli = new Float64Array(2 * (N_CURVA + 1));
+  const q = { x: 0, z: 0, hx: 0, hz: 0 };
+  for (let k = 0; k <= N_CURVA; k++) {
+    pontoCurva(p, k / N_CURVA, q);
+    poli[2 * k] = q.x;
+    poli[2 * k + 1] = q.z;
+  }
+  const ang = Math.abs(Math.atan2(QA.hx * QB.hz - QA.hz * QB.hx, QA.hx * QB.hx + QA.hz * QB.hz));
+  return { p, L: Math.max(1, (L + rede) / 2), poli, vir: retorno ? 0 : virada(QA.hx, QA.hz, QB.hx, QB.hz), ang: retorno ? Math.PI : ang };
+}
 
 /** Modelo de um carro andando: passeio na maioria, ônibus nas avenidas, caminhão perto da indústria e na rodovia. */
 function modeloDe(tipoId, h, ind) {
@@ -107,6 +284,8 @@ export function criarMaterialCarro(ganchos, U) {
 }
 
 // ------------------------------------------------------------------------------------------------ domínio
+
+const chave = (e, u, sentido) => `${e}:${u}:${sentido}`;
 
 function criarTrafego(ctx) {
   const { cena, medidas } = ctx;
@@ -153,6 +332,10 @@ function criarTrafego(ctx) {
 
   // ---------------------------------------------------------------------------------------------- estado
   const carros = [];
+  /** Caminhões das entregas (caminhoes.js) andando aqui: id da entrega → carro. */
+  const externos = new Map();
+  /** Entregas cujo caminhão chegou ao fim da rota aqui (antes de a simulação tirar a entrega do espelho). */
+  const fins = new Set();
   let candidatos = [];
   let somaPeso = 0;
   let alvoCand = null;
@@ -164,6 +347,11 @@ function criarTrafego(ctx) {
   let animar = null; // cenas podem forçar (true) ou parar (false); null: anda com o jogo
   const alvo = new THREE.Vector3();
   const est = { x: 0, z: 0, tx: 1, tz: 0, t: 0 };
+  // por quadro: as filas por faixa, os carros com a vez em cada nó e os que pediram a vez
+  const filas = new Map();
+  const ativos = new Map();
+  const pedidos = new Map();
+  let relogio = 0;
 
   /** Contagem das zonas vizinhas por aresta (células ocupadas). */
   function contarZonas(esp) {
@@ -182,9 +370,19 @@ function criarTrafego(ctx) {
     return mapa;
   }
 
-  /** Arestas perto do alvo da câmera, com o peso (carros esperados) de cada uma. */
-  function escolherCandidatos(vias, hora) {
+  /** Fluxo de um sentido da aresta (veículos por hora no pico) e o fator de velocidade, se espelho.fluxos existe. */
+  function fluxoDe(F, ar, sentido, temFaixa) {
+    if (!F?.ida || ar.e >= F.ida.length) return null;
+    let q = sentido > 0 ? F.ida[ar.e] : F.volta?.[ar.e] ?? 0;
+    // a mão única pode vir com o fluxo no outro sentido
+    if (!(q > 0) && !temFaixa(-sentido)) q = sentido > 0 ? F.volta?.[ar.e] ?? 0 : F.ida[ar.e];
+    return { q: q || 0, vel: F.vel?.[ar.e] ?? 1 };
+  }
+
+  /** Arestas perto do alvo da câmera, com o peso (carros esperados) de cada faixa. */
+  function escolherCandidatos(vias, hora, esp) {
     const R = perfil().raio;
+    const F = esp?.fluxos ?? null;
     candidatos = [];
     somaPeso = 0;
     for (const ar of vias.rede.arestas.values()) {
@@ -195,24 +393,58 @@ function criarTrafego(ctx) {
       if (d > R + ar.L / 2) continue;
       const faixas = faixasDeTransito(ar.tipo, ar.mao);
       if (!faixas.length) continue;
-      const w = (densidade(ar.tipo, hora, zonas?.get(ar.e), ar.L) * faixas.length * L) / 100;
-      candidatos.push({ ar, faixas, w, ind: (zonas?.get(ar.e)?.ind ?? 0) / Math.max(1, L / 8) });
+      const nSent = { 1: 0, '-1': 0 };
+      for (const f of faixas) nSent[f.sentido]++;
+      const tem = (s) => nSent[s] > 0;
+      const ind = (zonas?.get(ar.e)?.ind ?? 0) / Math.max(1, L / 8);
+      const pesos = faixas.map((f) => {
+        const fl = F ? fluxoDe(F, ar, f.sentido, tem) : null;
+        const dens = fl ? densidadeFluxo(ar.tipo, fl.q, nSent[f.sentido], fl.vel, hora) : densidade(ar.tipo, hora, zonas?.get(ar.e), ar.L);
+        return (dens * L) / 100;
+      });
+      const w = pesos.reduce((a, b) => a + b, 0);
+      if (w <= 0) continue;
+      candidatos.push({ ar, faixas, pesos, w, ind });
       somaPeso += w;
     }
     alvoCand = alvo.clone();
   }
 
-  /** Posição na faixa: ponto, direção de viagem. */
-  function naFaixa(ar, u, s, sentido, out) {
-    estacao(ar.p, ar.tab, s, est);
-    out.x = est.x - est.tz * u;
-    out.z = est.z + est.tx * u;
-    out.hx = est.tx * sentido;
-    out.hz = est.tz * sentido;
-    return out;
+  /** Posição de um carro numa fila (faixa): a da faixa, ou a da curva que sai dela ou entra nela. */
+  function entrarNaFila(k, c, pos) {
+    let f = filas.get(k);
+    if (!f) filas.set(k, (f = []));
+    f.push({ c, pos });
   }
 
-  function nascer(h) {
+  /** Lugar livre numa faixa para um carro de comprimento cc em s (pelas filas do último quadro). */
+  function lugarLivre(ar, u, sentido, s, cc, folga = 0) {
+    const f = filas.get(chave(ar.e, u, sentido));
+    if (!f) return true;
+    const pos = s * sentido;
+    for (const o of f) if (Math.abs(o.pos - pos) < (cc + o.c.c) / 2 + FOLGA_FILA + folga) return false;
+    return true;
+  }
+
+  function novoCarro(ar, f, s, mi, { c = MODELOS[mi].c, l = MODELOS[mi].l, vMax, cor, externo = null } = {}) {
+    const id = seq++;
+    const P = perfilVia(ar.tipo);
+    const vm = vMax ?? (P.velocidade / 3.6) * (0.72 + 0.25 * hashF(id, 5));
+    const car = {
+      id, e: ar.e, u: f.u, sentido: f.sentido, s, v: 0, vMax: vm, mi, c, l,
+      cor: cor ?? CORES[porPeso(FROTA_CORES.map(([, w], k) => [k, w]), hashF(id, 6))],
+      curva: null, prox: null, reserva: null, tPedido: null, quer: false, espera: 0, parado: 0, freio: false,
+      x: 0, y: 0, z: 0, hx: 1, hz: 0, idade: 0, externo,
+    };
+    // começa na velocidade que ainda para antes da boca
+    const resta = (fimDaFaixa(ar, f.sentido) - s) * f.sentido;
+    car.v = Math.min(vm * 0.8, velSegura(Math.max(0, resta - PARADA - c / 2)));
+    naFaixa(ar, car.u, car.s, car.sentido, QA);
+    Object.assign(car, { x: QA.x, z: QA.z, hx: QA.hx, hz: QA.hz });
+    return car;
+  }
+
+  function nascer() {
     if (!candidatos.length || somaPeso <= 0) return null;
     let a = hashF(seq, 1) * somaPeso;
     let c = candidatos[candidatos.length - 1];
@@ -223,44 +455,92 @@ function criarTrafego(ctx) {
         break;
       }
     }
-    const f = c.faixas[Math.floor(hashF(seq, 2) * c.faixas.length) % c.faixas.length];
+    let b = hashF(seq, 2) * c.w;
+    let f = c.faixas[c.faixas.length - 1];
+    for (let k = 0; k < c.faixas.length; k++) {
+      b -= c.pesos[k];
+      if (b < 0) {
+        f = c.faixas[k];
+        break;
+      }
+    }
     const ar = c.ar;
-    const s = ar.cIni + 2 + hashF(seq, 3) * Math.max(1, ar.L - ar.cIni - ar.cFim - 4);
-    // não nasce em cima de outro (nem de um ônibus de 12 m)
-    if (carros.some((o) => o.e === ar.e && o.u === f.u && Math.abs(o.s - s) < 15)) return null;
-    const id = seq++;
+    // longe das bocas: nem em cima da retenção, nem saindo de um cruzamento
+    const s0 = ar.cIni + 6;
+    const s1 = ar.L - ar.cFim - 6;
+    const s = s1 - s0 > 30 ? (f.sentido > 0 ? s0 + hashF(seq, 3) * (s1 - s0 - 24) : s0 + 24 + hashF(seq, 3) * (s1 - s0 - 24)) : (s0 + s1) / 2;
     const P = perfilVia(ar.tipo);
-    const mi = modeloDe(P.id, hashF(id, 4), c.ind);
-    const vMax = (P.velocidade / 3.6) * (0.72 + 0.25 * hashF(id, 5));
-    const cor = CORES[porPeso(FROTA_CORES.map(([, w], k) => [k, w]), hashF(id, 6))];
-    return { id, e: ar.e, u: f.u, sentido: f.sentido, s, v: vMax * 0.8, vMax, mi, cor, curva: null, freio: false, x: 0, y: 0, z: 0, hx: 1, hz: 0, idade: h };
+    const mi = modeloDe(P.id, hashF(seq, 4), c.ind);
+    // não nasce em cima de outro (nem de um ônibus de 12 m), nem numa fila parada (não alimenta o congestionamento)
+    if (!lugarLivre(ar, f.u, f.sentido, s, MODELOS[mi].c, 8)) return null;
+    for (const o of filas.get(chave(ar.e, f.u, f.sentido)) ?? []) if (o.c.parado > 15) return null;
+    return novoCarro(ar, f, s, mi);
   }
 
-  /** Próxima aresta na ponta: um braço do nó que aceite a direção de saída (sem voltar pela mesma). */
+  /** Rank da faixa do carro entre as do sentido dele (0 a mais à esquerda) e quantas são. */
+  function rankDe(ar, car) {
+    const fx = faixasOrdenadas(ar.tipo, ar.mao, car.sentido);
+    return { rank: Math.max(0, fx.findIndex((f) => f.u === car.u)), n: fx.length };
+  }
+
+  /** Prepara a saída: a curva do fim da faixa do carro até a boca da faixa escolhida. */
+  function saida(car, ar, a2, sentido, f, no, n, extra = {}) {
+    const retorno = !!extra.retorno;
+    const cv = curvaEntre(ar, car.u, car.sentido, a2, f.u, sentido, retorno);
+    const vLim = retorno ? V_NO.retorno : no.tipo === 'cruzamento' ? V_NO.cruzamento : no.tipo === 'curva' ? V_NO.curva : car.vMax;
+    return { ar: a2, sentido, u: f.u, s: inicioDaFaixa(a2, sentido), no, n, de: ar, ...cv, vLim, retorno, ...extra };
+  }
+
+  /** Próxima aresta na ponta: a rota do caminhão, ou um braço do nó que aceite a direção (sem voltar pela mesma). */
   function proxima(vias, car, ar) {
     const n = car.sentido > 0 ? ar.b : ar.a;
     const no = vias.rede.nos.get(n);
     if (!no) return null;
+    estacao(ar.p, ar.tab, fimDaFaixa(ar, car.sentido), est);
+    const hx = est.tx * car.sentido;
+    const hz = est.tz * car.sentido;
+    const { rank, n: nf } = rankDe(ar, car);
+    const ext = car.externo;
+    if (ext) {
+      // o caminhão segue a rota da entrega; chegou ao fim (ou a rota quebrou): sai
+      const k = ext.k + 1;
+      const passo = ext.plano.passos[k];
+      if (!passo) return null;
+      const a2 = vias.rede.arestas.get(passo.e);
+      if (!a2 || (passo.sentido > 0 ? a2.a : a2.b) !== n) return null;
+      const fx = faixasOrdenadas(a2.tipo, a2.mao, passo.sentido);
+      if (!fx.length) return null;
+      estacao(a2.p, a2.tab, inicioDaFaixa(a2, passo.sentido), est);
+      const vir = virada(hx, hz, est.tx * passo.sentido, est.tz * passo.sentido);
+      return saida(car, ar, a2, passo.sentido, faixaDestino(fx, rank, nf, vir, true), no, n, { k });
+    }
     const saidas = [];
     for (const b of no.analise.bracos) {
-      if (b.e === car.e && (b.inverte === car.sentido > 0)) continue;
+      if (b.e === car.e && b.inverte === car.sentido > 0) continue;
       const a2 = vias.rede.arestas.get(b.e);
       if (!a2) continue;
       const sentido = b.inverte ? -1 : 1;
-      const fx = faixasDeTransito(a2.tipo, a2.mao).filter((f) => f.sentido === sentido);
+      const fx = faixasOrdenadas(a2.tipo, a2.mao, sentido);
       if (!fx.length) continue;
-      const P2 = perfilVia(a2.tipo);
-      saidas.push({ a2, sentido, fx, w: (BASE_TIPO[P2.id] ?? 0.3) + 0.2 });
+      const vir = virada(hx, hz, b.dx, b.dz);
+      // a faixa da direita vira à direita, a da esquerda à esquerda; das outras a conversão é rara
+      let w = (BASE_TIPO[perfilVia(a2.tipo).id] ?? 0.3) + 0.2;
+      // toco curto sem saída: o retorno caberia dentro do cruzamento; só entra se não houver outra saída
+      const outro = vias.rede.nos.get(sentido > 0 ? a2.b : a2.a);
+      if (outro?.tipo === 'ponta' && a2.L < 40) w *= 0.001;
+      if (nf > 1 && vir > 0 && rank < nf - 1) w *= 0.15;
+      if (nf > 1 && vir < 0 && rank > 0) w *= 0.15;
+      saidas.push({ a2, sentido, fx, w, vir });
     }
     if (!saidas.length) {
       // sem saída: faz o retorno na ponta, para a faixa do outro sentido da mesma via; a rodovia que acaba na ponta
       // sai do mapa (o carro some)
       if (no.tipo !== 'ponta' || perfilVia(ar.tipo).id === 'rodovia') return null;
       const volta = -car.sentido;
-      const fx = faixasDeTransito(ar.tipo, ar.mao).filter((f) => f.sentido === volta);
+      const fx = faixasOrdenadas(ar.tipo, ar.mao, volta);
       if (!fx.length) return null;
-      const f = fx.reduce((m, x) => (Math.abs(x.u - car.u) < Math.abs(m.u - car.u) ? x : m), fx[0]);
-      return { ar, sentido: volta, u: f.u, s: volta > 0 ? ar.cIni : ar.L - ar.cFim, no, n, retorno: true };
+      // a faixa mais perto da que o carro está: a da esquerda de quem volta
+      return saida(car, ar, ar, volta, fx[0], no, n, { retorno: true });
     }
     const soma = saidas.reduce((q, x) => q + x.w, 0);
     let h = hashF(car.id, car.idade++ + 11) * soma;
@@ -272,162 +552,423 @@ function criarTrafego(ctx) {
         break;
       }
     }
-    // a faixa mais perto da que o carro está (pela ordem das faixas)
-    const f = esc.fx[Math.floor(hashF(car.id, car.idade + 3) * esc.fx.length) % esc.fx.length];
-    return { ar: esc.a2, sentido: esc.sentido, u: f.u, s: esc.sentido > 0 ? esc.a2.cIni : esc.a2.L - esc.a2.cFim, no, n };
+    return saida(car, ar, esc.a2, esc.sentido, faixaDestino(esc.fx, rank, nf, esc.vir), no, n);
   }
 
-  /** Luz do semáforo para quem chega pelo braço (e, sentido) no nó: true se pode entrar. */
-  function podeEntrar(no, e, sentido, tempo) {
-    if (!no?.semaforos) return true;
+  /** Fase do semáforo (0 verde, 1 amarelo, 2 vermelho) para quem chega pelo braço (e, sentido) no nó; sem semáforo, 0. */
+  function faseDoBraco(no, e, sentido, tempo) {
+    if (!no?.semaforos) return 0;
     const b = no.analise.bracos.find((x) => x.e === e && x.inverte === sentido > 0);
-    if (!b) return true;
-    return faseSemaforo(tempo, grupoSemaforo(b.theta), defasagemSemaforo(no.n)) === 0;
+    if (!b) return 0;
+    return faseSemaforo(tempo, grupoSemaforo(b.theta), defasagemSemaforo(no.n));
   }
 
   /**
-   * A faixa de destino tem lugar para o carro entrar? Ninguém na boca dela (a menos da distância de fila) e ninguém
-   * fazendo a curva para ela agora. Sem isso, dois carros saem do cruzamento um dentro do outro.
+   * A faixa de destino tem lugar para o carro entrar? Ninguém fazendo a curva para ela agora e ninguém na boca dela
+   * (a menos da distância de fila). Paciência: parado há mais de 15 s fora de cruzamento (um laço de vias curtas),
+   * entra assim mesmo (a fila segura o passo dentro da curva).
    */
   function entradaLivre(px, car) {
-    // paciência: parado há mais de 10 s na boca (um laço de vias curtas travado), entra assim mesmo
-    if (car.espera > 10) return true;
-    for (const o of carros) {
-      if (o === car) continue;
-      const alvo = o.curva ? o.curva.prox : o;
-      const e = o.curva ? alvo.ar.e : o.e;
-      if (e !== px.ar.e || alvo.u !== px.u || alvo.sentido !== px.sentido) continue;
-      if (o.curva) return false;
-      if ((o.s - px.s) * px.sentido < distanciaNaFila(car.mi, o.mi)) return false;
+    const f = filas.get(chave(px.ar.e, px.u, px.sentido));
+    if (!f) return true;
+    const boca = px.s * px.sentido;
+    for (const o of f) {
+      if (o.c === car) continue;
+      if (o.c.curva && o.c.curva.prox.ar.e === px.ar.e && o.c.curva.prox.u === px.u && o.c.curva.prox.sentido === px.sentido) return false;
+      if (o.pos - boca < distFila(car, o.c)) return false;
     }
     return true;
   }
 
-  const pA = { x: 0, z: 0, hx: 1, hz: 0 };
-  const pB = { x: 0, z: 0, hx: 1, hz: 0 };
+  /**
+   * Quanto a carroceria rígida sai da curva para dentro no meio (m): a flecha da corda do comprimento do carro no raio
+   * da curva (c² / 8R, o raio pelo comprimento da curva e o ângulo virado). Ônibus numa esquina fechada varre a outra faixa.
+   */
+  const varre = (c, px) => {
+    const ang = px.ang ?? 0;
+    if (ang < 0.2) return 0;
+    return Math.min(3, (c.c * c.c * ang) / (8 * px.L));
+  };
 
-  function andar(vias, dt, tempo) {
-    // fila por faixa: o carro da frente limita a velocidade. Quem está na curva já entra na fila da faixa de destino,
-    // atrás da boca pelo que falta da curva: dois carros que convergem para a mesma faixa não saem um dentro do outro
-    const filas = new Map();
+  /** Prioridade de quem pede a vez (menor passa antes): a chegada, a principal na frente, a esquerda atrás. */
+  const prioridade = (c) => (c.tPedido ?? relogio) + (c.prox?.vir < 0 ? 2 : 0) - (c.prox?.principal ? 3 : 0);
+
+  /**
+   * A curva px do carro c (no nó px.n) chega perto da curva de o no mesmo nó, do ponto onde o está em diante? Quem
+   * já saiu da curva mas ainda tem a traseira no nó conta pelo último trecho dela.
+   */
+  function conflita(c, px, o) {
+    if (o === c) return false;
+    const saindo = o.saindoNo === px.n && !o.curva;
+    const naBoca = o.naBoca === px.n && o.reserva !== px.n;
+    // da mesma faixa de origem: a fila já os separa
+    if (!saindo && o.e === c.e && o.u === c.u && o.sentido === c.sentido) return false;
+    const op = saindo ? o.saindo : o.curva ? o.curva.prox : o.reserva === px.n ? o.reservaPx : o.prox;
+    if (!op?.poli) return false;
+    const i0 = saindo ? N_CURVA - 1 : o.curva ? Math.max(0, Math.floor((o.curva.t - (o.c / 2 + 0.5) / o.curva.L) * N_CURVA)) : 0;
+    // quem espera na boca ocupa só o começo da curva dele
+    const lim = (c.l + o.l) / 2 + 0.7 + varre(c, px) + (naBoca ? 0 : varre(o, op));
+    return distPoligonais(px.poli, 0, naBoca ? op.poli.subarray(0, 4) : op.poli, naBoca ? 0 : Math.min(N_CURVA - 1, i0)) < lim;
+  }
+
+  /** O carro pode cruzar agora? Ninguém dentro no caminho, ninguém antes dele na fila da vez, ninguém na faixa. */
+  function podeReservar(c, px, ped) {
+    for (const o of ativos.get(px.n) ?? []) if (conflita(c, px, o)) return false;
+    const pc = prioridade(c);
+    for (const r of pedidos.get(px.n) ?? []) {
+      if (r === c || r.reserva != null || !r.prox || r.prox.n !== px.n) continue;
+      // quem espera lugar na saída só segura quem vai para a mesma faixa (a ordem dela); não trava o cruzamento
+      const rp = r.prox;
+      if (!r.livre && (rp.ar.e !== px.ar.e || rp.u !== px.u || rp.sentido !== px.sentido)) continue;
+      const pr = prioridade(r);
+      if ((pr < pc || (pr === pc && r.id < c.id)) && conflita(c, px, r)) return false;
+    }
+    if (ped?.faixaOcupada && (ped.faixaOcupada(px.n, px.ar.e) || ped.faixaOcupada(px.n, c.e))) return false;
+    return true;
+  }
+
+  function soltarReserva(c) {
+    if (c.reserva == null) return;
+    const l = ativos.get(c.reserva);
+    if (l) {
+      const i = l.indexOf(c);
+      if (i >= 0) l.splice(i, 1);
+    }
+    c.reserva = null;
+  }
+
+  /** Acelera para vAlvo (aceleração do modelo, frenagem até A_MAX). */
+  function acelerar(c, vAlvo, dt) {
+    const antes = c.v;
+    const acel = c.c > 9 ? 1.2 : c.c > 6 ? 1.6 : 2.4;
+    c.v = Math.max(0, c.v + Math.max(-A_MAX * dt, Math.min(acel * dt, vAlvo - c.v)));
+    c.freio = c.v < antes - 0.05 * dt || c.v < 0.3;
+  }
+
+  /** Velocidade do caminhão no ritmo da viagem: atrasado acelera um pouco, adiantado segura. */
+  function vExterno(c, ar) {
+    const P = perfilVia(ar.tipo);
+    const vVia = (P.velocidade / 3.6) * 0.9;
+    const ext = c.externo;
+    const atraso = Number.isFinite(ext.alvoD) ? ext.alvoD - distanciaNaRota(c) : 0;
+    return Math.max(0.35 * vVia, Math.min(1.2 * vVia, vVia * (1 + atraso / 80)));
+  }
+
+  /** Distância do caminhão ao longo da rota (m), na mesma conta de caminhoes.js (comprimentos das arestas do render). */
+  function distanciaNaRota(c) {
+    const ext = c.externo;
+    const pl = ext.plano;
+    const k = ext.k;
+    const ar = pl.ars[k];
+    if (!ar) return 0;
+    const dentro = (s, sentido, a) => (sentido > 0 ? s : a.L - s);
+    if (c.curva) {
+      const d0 = pl.cum[k] + dentro(fimDaFaixa(ar, c.sentido), c.sentido, ar);
+      const a2 = pl.ars[k + 1];
+      const d1 = a2 ? pl.cum[k + 1] + dentro(inicioDaFaixa(a2, pl.passos[k + 1].sentido), pl.passos[k + 1].sentido, a2) : d0;
+      return d0 + (d1 - d0) * c.curva.t;
+    }
+    return pl.cum[k] + dentro(c.s, c.sentido, ar);
+  }
+
+  const pA = { x: 0, z: 0, hx: 1, hz: 0 };
+
+  function andar(vias, dt, tempo, ped) {
+    const rede = vias.rede;
+    const cam = ctx.camera.position;
+    relogio = tempo;
+    filas.clear();
+    ativos.clear();
+    pedidos.clear();
     for (const c of carros) {
-      c.lider = null;
-      const px = c.curva?.prox;
-      const k = px ? `${px.ar.e}:${px.u}:${px.sentido}` : `${c.e}:${c.u}:${c.sentido}`;
-      c.naFila = px ? px.s * px.sentido - (1 - c.curva.t) * c.curva.L : c.s * c.sentido;
-      if (!filas.has(k)) filas.set(k, []);
-      filas.get(k).push(c);
-    }
-    for (const fila of filas.values()) {
-      fila.sort((a, b) => a.naFila - b.naFila || !!b.curva - !!a.curva);
-      for (let i = 0; i < fila.length; i++) fila[i].lider = fila[i + 1] ?? null;
-    }
-    for (let i = carros.length - 1; i >= 0; i--) {
-      const c = carros[i];
-      const ar = vias.rede.arestas.get(c.e);
-      if (!ar) {
-        carros.splice(i, 1);
-        continue;
-      }
+      c.gap = Infinity;
+      c.vL = 0;
       if (c.curva) {
+        const ar = rede.arestas.get(c.e);
         const cv = c.curva;
-        // na curva o da frente também segura: o passo não passa da distância de fila
-        const folga = c.lider ? c.lider.naFila - c.naFila - distanciaNaFila(c.mi, c.lider.mi) : Infinity;
-        const passo = Math.min(c.v * dt, Math.max(0, folga));
-        cv.t += passo / Math.max(1, cv.L);
-        c.v = passo < c.v * dt ? passo / dt : Math.min(c.vMax * 0.6, c.v + 2 * dt);
-        if (cv.t >= 1) {
-          c.e = cv.prox.ar.e;
-          c.u = cv.prox.u;
-          c.sentido = cv.prox.sentido;
-          c.s = cv.prox.s;
-          c.curva = null;
+        const px = cv.prox;
+        // na curva a carroceria varre por dentro e a corda é menor que o arco: guarda uns metros a mais nas duas filas
+        const m = px.vir || px.retorno ? 1 + 0.12 * c.c : 0.5;
+        if (ar) entrarNaFila(chave(c.e, c.u, c.sentido), c, fimDaFaixa(ar, c.sentido) * c.sentido + cv.t * cv.L + m);
+        entrarNaFila(chave(px.ar.e, px.u, px.sentido), c, px.s * px.sentido - (1 - cv.t) * cv.L - m);
+      } else entrarNaFila(chave(c.e, c.u, c.sentido), c, c.s * c.sentido);
+      if (c.saindoNo != null) {
+        let l = ativos.get(c.saindoNo);
+        if (!l) ativos.set(c.saindoNo, (l = []));
+        l.push(c);
+      }
+      // parado depois da retenção sem a vez (via curta): a frente já está no miolo e conta como quem está lá
+      c.naBoca = null;
+      if (!c.curva && c.reserva == null && c.prox && c.prox.de === rede.arestas.get(c.e)) {
+        const resta = (fimDaFaixa(c.prox.de, c.sentido) - c.s) * c.sentido;
+        if (resta < PARADA + c.c / 2 - 0.5) {
+          c.naBoca = c.prox.n;
+          let l = ativos.get(c.naBoca);
+          if (!l) ativos.set(c.naBoca, (l = []));
+          l.push(c);
+        }
+      }
+      if (c.reserva != null) {
+        let l = ativos.get(c.reserva);
+        if (!l) ativos.set(c.reserva, (l = []));
+        l.push(c);
+      } else if (c.quer && c.prox) {
+        let l = pedidos.get(c.prox.n);
+        if (!l) pedidos.set(c.prox.n, (l = []));
+        l.push(c);
+      }
+    }
+    // o da frente de cada um, em todas as filas em que ele está: a menor folga manda
+    for (const f of filas.values()) {
+      f.sort((a, b) => a.pos - b.pos || a.c.id - b.c.id);
+      for (let i = 0; i + 1 < f.length; i++) {
+        const a = f[i];
+        const b = f[i + 1];
+        const g = b.pos - a.pos - distFila(a.c, b.c);
+        if (g < a.c.gap) {
+          a.c.gap = g;
+          a.c.vL = b.c.v;
+        }
+      }
+    }
+    const sair = new Set();
+    for (const c of carros) {
+      if (c.curva) andarNaCurva(c, dt);
+      else if (!andarNaFaixa(vias, c, dt, tempo, ped)) sair.add(c);
+      c.parado = c.v < 0.1 ? c.parado + dt : 0;
+      // travado (um laço de vias curtas, o congestionamento da hora do pico): sai da amostra, longe da câmera
+      if (c.parado > DESISTE && !c.externo && Math.hypot(c.x - cam.x, c.z - cam.z) > 60) sair.add(c);
+    }
+    if (sair.size) {
+      for (const c of sair) {
+        soltarReserva(c);
+        if (c.externo) {
+          c.externo.chegou = true;
+          externos.delete(c.externo.id);
+          fins.add(c.externo.id);
+        }
+      }
+      for (let i = carros.length - 1; i >= 0; i--) if (sair.has(carros[i])) carros.splice(i, 1);
+    }
+  }
+
+  function andarNaCurva(c, dt) {
+    const cv = c.curva;
+    const px = cv.prox;
+    acelerar(c, Math.min(px.vLim, c.vMax, velSegura(c.gap, c.vL)), dt);
+    // o passo nunca passa da folga de nenhuma das duas filas
+    const passo = Math.min(c.v * dt, Math.max(0, c.gap));
+    if (passo < c.v * dt) c.v = dt > 0 ? passo / dt : 0;
+    cv.t += passo / cv.L;
+    if (cv.t >= 1) {
+      c.e = px.ar.e;
+      c.u = px.u;
+      c.sentido = px.sentido;
+      c.s = px.s;
+      c.curva = null;
+      c.prox = null;
+      // a vez no nó fica até a traseira sair dele (parado logo na boca, ainda ocupa o miolo)
+      if (c.reserva != null) {
+        c.saindo = px;
+        c.saindoNo = c.reserva;
+        c.reserva = null;
+      }
+      c.espera = 0;
+      if (c.externo) c.externo.k = px.k;
+      naFaixa(px.ar, c.u, c.s, c.sentido, pA);
+      Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+      return;
+    }
+    pontoCurva(px.p, cv.t, pA);
+    Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+  }
+
+  /** Um passo na faixa. Devolve false se o carro sai (sem saída, fim da rota, aresta que sumiu). */
+  function andarNaFaixa(vias, c, dt, tempo, ped) {
+    const rede = vias.rede;
+    const ar = rede.arestas.get(c.e);
+    if (!ar) return false;
+    if (c.saindo && (c.s - inicioDaFaixa(ar, c.sentido)) * c.sentido > c.c / 2 + 1) {
+      c.saindo = null;
+      c.saindoNo = null;
+    }
+    const fim = fimDaFaixa(ar, c.sentido);
+    const resta = (fim - c.s) * c.sentido;
+    const n = c.sentido > 0 ? ar.b : ar.a;
+    const no = rede.nos.get(n);
+    let vAlvo = c.externo ? vExterno(c, ar) : c.vMax;
+    vAlvo = Math.min(vAlvo, velSegura(c.gap, c.vL));
+    // perto do fim escolhe a saída (de novo, se a rede mudou embaixo dela)
+    if (c.prox && (rede.arestas.get(c.prox.ar.e) !== c.prox.ar || c.prox.de !== ar || rede.nos.get(c.prox.n) !== c.prox.no)) {
+      c.prox = null;
+      soltarReserva(c);
+    }
+    if (resta < OLHAR && c.prox == null) c.prox = proxima(vias, c, ar) ?? false;
+    const px = c.prox || null;
+    const parar = PARADA + c.c / 2;
+    let pode = !!px;
+    c.quer = false;
+    if (px) {
+      // chega à boca na velocidade da curva
+      vAlvo = Math.min(vAlvo, Math.sqrt(px.vLim * px.vLim + 2 * A_PLANO * Math.max(0, resta)));
+      if (resta < OLHAR) {
+        const livre = entradaLivre(px, c) || (c.espera > 15 && no?.tipo !== 'cruzamento');
+        const naFaixaGente = ped?.faixaOcupada?.(n, c.e) ?? false;
+        // a vez no nó: cruzamento e curva de duas vias (o ônibus varre a outra faixa na esquina fechada)
+        const cruz = (no?.tipo === 'cruzamento' || no?.tipo === 'curva') && !px.retorno;
+        if (cruz) {
+          const fase = faseDoBraco(no, c.e, c.sentido, tempo);
+          const verde = fase === 0;
+          // no amarelo, quem já espera na retenção para converter (o bolsão) ainda sai, se o miolo estiver livre
+          const naRetencao = resta < parar + 1 && c.v < 0.5;
+          const podePedir = verde || (fase === 1 && naRetencao && c.espera > 3);
+          // a principal (sem semáforo): a via mais rápida do nó, se houver uma mais lenta
+          if (px.principal === undefined) {
+            const vs = no.analise.bracos.map((b) => b.P.velocidade);
+            const minha = perfilVia(ar.tipo).velocidade;
+            px.principal = !no.semaforos && minha >= Math.max(...vs) && Math.min(...vs) < minha;
+          }
+          if (c.reserva != null && (!podePedir || !livre || naFaixaGente) && resta - parar > (c.v * c.v) / (2 * A_MAX) + 0.5) soltarReserva(c);
+          if (c.reserva == null) {
+            const decide = resta - parar <= (c.v * c.v) / (2 * A_PLANO) + 4 || resta < parar + 1;
+            if (podePedir && decide) {
+              // a ordem é a da chegada à retenção (quem vem andando conta quando chega, não quando pede); o pedido
+              // fica de pé no verde, mesmo com a saída cheia por um instante
+              c.tPedido ??= tempo + Math.max(0, resta - parar) / Math.max(1, c.v);
+              c.quer = true;
+              c.livre = livre && !naFaixaGente;
+              if (livre && !naFaixaGente && podeReservar(c, px, ped)) {
+                c.reserva = n;
+                c.reservaPx = px;
+                let l = ativos.get(n);
+                if (!l) ativos.set(n, (l = []));
+                l.push(c);
+                c.tPedido = null;
+                c.quer = false;
+              }
+            } else if (!podePedir) c.tPedido = null;
+          }
+          pode = c.reserva != null;
         } else {
-          const t = cv.t;
-          const u = 1 - t;
-          const a = u * u * u;
-          const b = 3 * u * u * t;
-          const d = 3 * u * t * t;
-          const e = t * t * t;
-          c.x = a * cv.p[0] + b * cv.p[2] + d * cv.p[4] + e * cv.p[6];
-          c.z = a * cv.p[1] + b * cv.p[3] + d * cv.p[5] + e * cv.p[7];
-          const dx = 3 * u * u * (cv.p[2] - cv.p[0]) + 6 * u * t * (cv.p[4] - cv.p[2]) + 3 * t * t * (cv.p[6] - cv.p[4]);
-          const dz = 3 * u * u * (cv.p[3] - cv.p[1]) + 6 * u * t * (cv.p[5] - cv.p[3]) + 3 * t * t * (cv.p[7] - cv.p[5]);
-          const l = Math.hypot(dx, dz) || 1;
-          c.hx = dx / l;
-          c.hz = dz / l;
-          continue;
+          pode = livre && !naFaixaGente;
+        }
+        if (!pode) {
+          // espera a vez na retenção ou, se já passou dela, na boca
+          const g = resta >= parar - 0.5 ? resta - parar : resta - 0.3;
+          vAlvo = Math.min(vAlvo, velSegura(Math.max(0, g)));
         }
       }
-      const arA = vias.rede.arestas.get(c.e);
-      const fim = c.sentido > 0 ? arA.L - arA.cFim : arA.cIni;
-      const resta = (fim - c.s) * c.sentido;
-      const n = c.sentido > 0 ? arA.b : arA.a;
-      const no = vias.rede.nos.get(n);
-      let vAlvo = c.vMax;
-      // o da frente: para-choque a para-choque (um ônibus de 12 m pede mais fila que um hatch)
-      if (c.lider) {
-        const gap = c.lider.naFila - c.naFila - distanciaNaFila(c.mi, c.lider.mi);
-        vAlvo = Math.min(vAlvo, Math.max(0, gap * 0.9));
-      }
-      // semáforo: a frente para antes da retenção; quem já passou da linha no amarelo segue
-      const parar = PARADA + MODELOS[c.mi].c / 2;
-      if (resta < 40 && resta > parar - 1 && !podeEntrar(no, c.e, c.sentido, tempo)) vAlvo = Math.min(vAlvo, Math.max(0, (resta - parar) * 0.7));
-      // curva fechada, cruzamento ou retorno na ponta: reduz
-      if (resta < 18 && no?.tipo === 'cruzamento') vAlvo = Math.min(vAlvo, 7);
-      if (resta < 25 && c.prox?.retorno) vAlvo = Math.min(vAlvo, 5);
-      // perto do fim já escolhe a saída e espera a vez: a faixa de destino precisa ter lugar
-      if (resta < 30) {
-        if (c.prox && vias.rede.arestas.get(c.prox.ar.e) !== c.prox.ar) c.prox = null;
-        c.prox ??= proxima(vias, c, arA) ?? false;
-        if (c.prox && !entradaLivre(c.prox, c)) {
-          vAlvo = Math.min(vAlvo, Math.max(0, (resta - 1) * 0.7));
-          if (c.v < 0.3) c.espera = (c.espera ?? 0) + dt;
-        }
-      }
-      const antes = c.v;
-      c.v += Math.max(-6 * dt, Math.min(2.2 * dt, vAlvo - c.v));
-      c.freio = c.v < antes - 0.05 * dt || c.v < 0.3;
-      c.s += c.v * dt * c.sentido;
-      if ((fim - c.s) * c.sentido <= 0) {
-        const px = c.prox === undefined || c.prox === null ? proxima(vias, c, arA) : c.prox;
-        if (!px) {
-          carros.splice(i, 1);
-          continue;
-        }
-        // a faixa de destino fechou (outro carro entrou na curva): segura na boca, se ainda dá para parar sem
-        // empilhar quem vem atrás (no cruzamento todos chegam a 7 m/s ou menos)
-        if (c.v <= (no?.tipo === 'cruzamento' ? 7.5 : 3) && !entradaLivre(px, c)) {
-          c.espera = (c.espera ?? 0) + dt;
-          c.s = fim - 0.05 * c.sentido;
-          c.v = 0;
-          c.freio = true;
-          c.prox = px;
-          naFaixa(arA, c.u, c.s, c.sentido, pA);
-          Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
-          continue;
-        }
+    }
+    acelerar(c, vAlvo, dt);
+    let passo = Math.min(c.v * dt, Math.max(0, c.gap));
+    // sem a vez, a boca é uma parede
+    if (px && !pode) passo = Math.min(passo, Math.max(0, resta - 0.05));
+    if (passo < c.v * dt) c.v = dt > 0 ? passo / dt : 0;
+    c.espera = c.v < 0.3 ? c.espera + dt : 0;
+    c.s += passo * c.sentido;
+    if ((fim - c.s) * c.sentido <= 1e-6) {
+      if (!px) return false; // sem saída, fim da rota do caminhão ou a rodovia que sai do mapa
+      if (pode) {
+        c.s = fim;
+        c.curva = { t: 0, L: px.L, prox: px };
         c.prox = null;
-        c.espera = 0;
-        naFaixa(arA, c.u, fim, c.sentido, pA);
-        naFaixa(px.ar, px.u, px.s, px.sentido, pB);
-        const L = Math.hypot(pB.x - pA.x, pB.z - pA.z);
-        // o retorno avança pelo miolo redondo da ponta antes de voltar (o controle à frente dos dois pontos)
-        const h = px.retorno ? Math.max(3, L * 0.9) : L * 0.42;
-        const p = [pA.x, pA.z, pA.x + pA.hx * h, pA.z + pA.hz * h, pB.x - pB.hx * h, pB.z - pB.hz * h, pB.x, pB.z];
-        // comprimento da cúbica: a média da corda e do polígono de controle (o retorno anda mais que a corda)
-        const rede = Math.hypot(p[2] - p[0], p[3] - p[1]) + Math.hypot(p[4] - p[2], p[5] - p[3]) + Math.hypot(p[6] - p[4], p[7] - p[5]);
-        c.curva = { t: 0, L: Math.max(1, (L + rede) / 2), prox: px, p };
-        c.x = pA.x;
-        c.z = pA.z;
+        pontoCurva(px.p, 0, pA);
+        Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+        return true;
+      }
+      c.s = fim;
+    }
+    naFaixa(ar, c.u, c.s, c.sentido, pA);
+    Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------------------------- caminhões
+
+  /**
+   * Põe (ou atualiza) o caminhão de uma entrega na rua. plano: { passos: [{ e, sentido }], ars, cum } (caminhoes.js);
+   * alvoD: onde a viagem da simulação está agora (m ao longo da rota); modelo: { c, l }. Só entra numa faixa (fora
+   * das curvas dos nós), dentro do raio da amostra, e tira da frente os carros comuns. Devolve o carro ou null.
+   */
+  function seguir(id, plano, alvoD, modelo) {
+    const ja = externos.get(id);
+    if (ja) {
+      ja.externo.alvoD = alvoD;
+      ja.externo.visto = relogio;
+      return ja;
+    }
+    const vias = ctx.dominio('vias');
+    if (!vias?.rede || !plano?.passos?.length) return null;
+    // a aresta e a posição do alvo, numa faixa
+    let k = 0;
+    while (k + 1 < plano.passos.length && plano.cum[k + 1] <= alvoD) k++;
+    const passo = plano.passos[k];
+    const ar = vias.rede.arestas.get(passo.e);
+    if (!ar || ar !== plano.ars[k]) return null;
+    const d = alvoD - plano.cum[k];
+    const s = passo.sentido > 0 ? d : ar.L - d;
+    const ini = inicioDaFaixa(ar, passo.sentido);
+    const fimF = fimDaFaixa(ar, passo.sentido);
+    if ((s - ini) * passo.sentido < 1 || (fimF - s) * passo.sentido < 8) return null;
+    estacao(ar.p, ar.tab, s, est);
+    if (Math.hypot(est.x - alvo.x, est.z - alvo.z) > perfil().raio) return null;
+    const fx = faixasOrdenadas(ar.tipo, ar.mao, passo.sentido);
+    if (!fx.length) return null;
+    const f = fx[fx.length - 1];
+    // os comuns na frente saem da amostra; outro caminhão ali, espera
+    const fl = filas.get(chave(ar.e, f.u, passo.sentido)) ?? [];
+    const pos = s * passo.sentido;
+    const tirar = [];
+    for (const o of fl) {
+      if (Math.abs(o.pos - pos) >= (modelo.c + o.c.c) / 2 + FOLGA_FILA + 4) continue;
+      if (o.c.externo) return null;
+      tirar.push(o.c);
+    }
+    for (const o of tirar) {
+      soltarReserva(o);
+      const i = carros.indexOf(o);
+      if (i >= 0) carros.splice(i, 1);
+    }
+    const car = novoCarro(ar, f, s, 5, { c: modelo.c, l: modelo.l, vMax: (perfilVia(ar.tipo).velocidade / 3.6) * 0.9, externo: { id, plano, k, alvoD, visto: relogio, chegou: false } });
+    carros.push(car);
+    externos.set(id, car);
+    return car;
+  }
+
+  /** Tira o caminhão da entrega da rua. */
+  function soltarExterno(id) {
+    const c = externos.get(id);
+    if (!c) return;
+    externos.delete(id);
+    soltarReserva(c);
+    const i = carros.indexOf(c);
+    if (i >= 0) carros.splice(i, 1);
+  }
+
+  /**
+   * A faixa de pedestres do braço e no nó n tem carro passando ou por passar? Quem tem a vez no nó saindo ou entrando
+   * por ela, quem já passou da retenção, quem acabou de sair do nó por ela e, sem semáforo, quem chega andando.
+   */
+  function cruzandoFaixa(n, e, semSinal = false) {
+    for (const c of ativos.get(n) ?? []) {
+      if (c.saindoNo === n && !c.curva) {
+        if (c.e === e) return true;
         continue;
       }
-      naFaixa(arA, c.u, c.s, c.sentido, pA);
-      c.x = pA.x;
-      c.z = pA.z;
-      c.hx = pA.hx;
-      c.hz = pA.hz;
+      const px = c.curva ? c.curva.prox : c.reservaPx;
+      if (px && (px.ar.e === e || c.e === e)) return true;
     }
+    const ar = ctx.dominio('vias')?.rede?.arestas.get(e);
+    if (!ar) return false;
+    for (const c of carros) {
+      if (c.curva || c.e !== e) continue;
+      if ((c.sentido > 0 ? ar.b : ar.a) === n) {
+        const resta = (fimDaFaixa(ar, c.sentido) - c.s) * c.sentido;
+        if (resta < PARADA + c.c / 2 - 0.5) return true;
+        if (semSinal && resta < 30 && c.v > 1.5) return true;
+      } else if ((c.s - inicioDaFaixa(ar, c.sentido)) * c.sentido < 5.3 + c.c / 2) return true;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------------------------------------- desenho
@@ -437,6 +978,12 @@ function criarTrafego(ctx) {
   const eixoY = new THREE.Vector3(0, 1, 0);
   const pos = new THREE.Vector3();
   const esc = new THREE.Vector3(1, 1, 1);
+
+  /** Cota da roda: a superfície da faixa (com o abaulamento) ou, no miolo do nó, a do polígono da pista. */
+  function cotaDe(c, ar, T) {
+    const dy = c.curva || !ar ? ALTURA.pista + 0.03 : alturaNaSecao(perfilVia(ar.tipo), c.u);
+    return ar?.ponte && !c.curva ? ar.cotas[0] + ((ar.cotas[1] - ar.cotas[0]) * c.s) / ar.L + dy - ALTURA.pista : (T ? alturaEm(T, c.x, c.z) : 0) + dy;
+  }
 
   function desenhar(vias, esp, noite) {
     const P = perfil();
@@ -458,10 +1005,8 @@ function criarTrafego(ctx) {
     };
     const farol = noite > 0.25 ? 1 : 0;
     for (const c of carros) {
-      const ar = vias.rede.arestas.get(c.e);
-      // a roda na superfície da faixa (com o abaulamento); no miolo do cruzamento, a cota do polígono da pista
-      const dy = c.curva || !ar ? ALTURA.pista + 0.03 : alturaNaSecao(perfilVia(ar.tipo), c.u);
-      c.y = ar?.ponte && !c.curva ? ar.cotas[0] + ((ar.cotas[1] - ar.cotas[0]) * c.s) / ar.L + dy - ALTURA.pista : (T ? alturaEm(T, c.x, c.z) : 0) + dy;
+      c.y = cotaDe(c, vias.rede.arestas.get(c.e), T);
+      if (c.externo) continue; // caminhoes.js desenha
       pos.set(c.x, c.y, c.z);
       q.setFromAxisAngle(eixoY, Math.atan2(c.hx, c.hz));
       m4.compose(pos, q, esc);
@@ -496,8 +1041,19 @@ function criarTrafego(ctx) {
       M.cor.addUpdateRange(0, n * 4);
       M.cor.needsUpdate = true;
     });
-    ctx.stats.instancias.carros = carros.length + parados;
+    ctx.stats.instancias.carros = carros.length - externos.size + parados;
     return parados;
+  }
+
+  /** Povoa até o alvo de carros (o nascimento recusa lugar ocupado). */
+  function encher(alvoN, tentativas) {
+    for (let k = 0; k < tentativas && carros.length - externos.size < alvoN; k++) {
+      const car = nascer();
+      if (car) {
+        carros.push(car);
+        entrarNaFila(chave(car.e, car.u, car.sentido), car, car.s * car.sentido);
+      } else seq++;
+    }
   }
 
   let tAnt = null;
@@ -514,6 +1070,7 @@ function criarTrafego(ctx) {
         perfilMontado = c.perfil.id;
         montarMalhas();
         carros.length = 0;
+        externos.clear();
       }
       const esp = c.sim.espelho;
       const P = perfil();
@@ -534,27 +1091,30 @@ function criarTrafego(ctx) {
       }
       c.cameraApi?.alvo?.(alvo);
       if (versaoRede !== vias.rede.versao || !alvoCand || alvo.distanceTo(alvoCand) > 60 || tMs - tCand > 2000) {
-        escolherCandidatos(vias, hora);
+        escolherCandidatos(vias, hora, esp);
         versaoRede = vias.rede.versao;
         tCand = tMs;
       }
       // população: a soma dos pesos até o teto
       const alvoN = Math.min(P.carros, Math.round(somaPeso));
-      for (let k = 0; k < 4 && carros.length < alvoN; k++) {
-        const car = nascer(tMs);
-        if (car) {
-          const ar = vias.rede.arestas.get(car.e);
-          naFaixa(ar, car.u, car.s, car.sentido, pA);
-          Object.assign(car, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
-          carros.push(car);
-        } else seq++;
-      }
-      // saem os que ficaram longe (e os que passam do alvo)
+      encher(alvoN, 4);
+      // saem os que ficaram longe (e os que passam do alvo); o caminhão que ficou longe volta para caminhoes.js
+      let sobra = carros.length - externos.size - (alvoN + 4);
       for (let i = carros.length - 1; i >= 0; i--) {
         const car = carros[i];
-        if (Math.hypot(car.x - alvo.x, car.z - alvo.z) > P.raio + 80 || carros.length > alvoN + 4) carros.splice(i, 1);
+        const longe = Math.hypot(car.x - alvo.x, car.z - alvo.z) > P.raio + 80;
+        if (car.externo) {
+          // longe, ou sem notícia da entrega há 90 s (a viagem acabou): sai
+          if (longe || relogio - car.externo.visto > 90) soltarExterno(car.externo.id);
+          continue;
+        }
+        if (longe || sobra > 0) {
+          if (!longe) sobra--;
+          soltarReserva(car);
+          carros.splice(i, 1);
+        }
       }
-      if (dt > 0) andar(vias, dt, c.relogioRua);
+      if (dt > 0) andar(vias, dt, c.relogioRua, c.dominio('pedestres'));
       parados = desenhar(vias, esp, noite);
     },
     /** Cenas: força o tráfego a andar (true), parar (false) ou seguir o jogo (null); e povoa de uma vez. */
@@ -569,30 +1129,49 @@ function criarTrafego(ctx) {
         zonas = contarZonas(ctxQ.sim.espelho);
         zonasSujas = false;
       }
-      escolherCandidatos(vias, ctxQ.horaDoCeu());
+      escolherCandidatos(vias, ctxQ.horaDoCeu(), ctxQ.sim.espelho);
       versaoRede = vias.rede.versao;
       const alvoN = Math.min(perfil().carros, Math.round(somaPeso));
-      for (let k = 0; k < alvoN * 4 && carros.length < alvoN; k++) {
-        const car = nascer(0);
-        if (!car) {
-          seq++;
-          continue;
-        }
-        const ar = vias.rede.arestas.get(car.e);
-        naFaixa(ar, car.u, car.s, car.sentido, pA);
-        Object.assign(car, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
-        carros.push(car);
-      }
+      encher(alvoN, alvoN * 4);
       return carros.length;
     },
+    /** Cenas: adianta o tráfego e a gente `seg` segundos sem desenhar (as filas se formam antes da primeira imagem). */
+    avancar(seg, ctxQ = ctx) {
+      const vias = ctxQ.dominio('vias');
+      if (!vias?.rede) return;
+      for (let t = 0; t < seg; t += 0.1) {
+        ctxQ.relogioRua = (ctxQ.relogioRua ?? 0) + 0.1;
+        andar(vias, 0.1, ctxQ.relogioRua, ctxQ.dominio('pedestres'));
+        ctxQ.dominio('pedestres')?.avancarUm?.(0.1, ctxQ);
+      }
+    },
+    seguir,
+    soltarExterno,
+    /** O caminhão da entrega id na rua (ou null): posição, direção, cota, freio, a aresta e se está numa curva. */
+    externo(id) {
+      return externos.get(id) ?? null;
+    },
+    /** O caminhão da entrega id chegou ao fim da rota aqui? */
+    chegou: (id) => fins.has(id),
+    /** A entrega saiu do espelho: esquece a chegada. */
+    esquecer(id) {
+      fins.delete(id);
+    },
+    cruzandoFaixa,
+    /** Depuração (testes): os carros como estão. */
+    _carros: () => carros,
     medidas() {
       let tris = 0;
       for (const M of malhas) tris += M.mesh.count * M.tris;
-      return { andando: carros.length, parados, tris, alvo: Math.round(somaPeso) };
+      return { andando: carros.length - externos.size, caminhoes: externos.size, parados, tris, alvo: Math.round(somaPeso), fluxo: !!ctx.sim?.espelho?.fluxos?.ida };
     },
     /** Cópia do estado dos carros andando (testes e cenas): aresta, faixa, sentido, s, modelo, velocidade e curva. */
     amostra() {
-      return carros.map((c) => ({ id: c.id, e: c.e, u: c.u, sentido: c.sentido, s: c.s, mi: c.mi, v: c.v, curva: !!c.curva, retorno: !!c.curva?.prox?.retorno, x: c.x, z: c.z }));
+      return carros.map((c) => ({
+        id: c.id, e: c.e, u: c.u, sentido: c.sentido, s: c.s, mi: c.mi, c: c.c, l: c.l, v: c.v, curva: !!c.curva, retorno: !!c.curva?.prox?.retorno,
+        no: c.curva?.prox?.n ?? null, de: c.curva ? c.e : null, para: c.curva?.prox?.ar.e ?? null, x: c.x, z: c.z, hx: c.hx, hz: c.hz,
+        externo: c.externo?.id ?? null, k: c.externo?.k ?? null,
+      }));
     },
     descartar() {
       for (const M of malhas) {

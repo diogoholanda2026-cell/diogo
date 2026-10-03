@@ -1,6 +1,6 @@
 # Estado do jogo novo (28/09/2026)
 
-## ONDE PAROU (03/10/2026)
+## ONDE PAROU (03/10/2026, pausa pedida pelo dono)
 
 **Onda 3: etapas 1 e 2 prontas, revisadas, integradas e gravadas.** Etapa 1 (S2a, S3a, R2b, R4b, U1b) em `32b7805`;
 etapa 2 (SEDE3 e R5: área inicial de 6 x 5, sede v3 e os 24 colocáveis) em `d81dcf0`, com a integração depois (testes
@@ -9,12 +9,15 @@ de outras parcelas fora do disco da sede, cena rua no cruzamento novo, plataform
 Notas completas em `docs/entregas/onda3/`. Testes: tudo verde menos o subteste 14 de geracao-vias (tráfego), um
 defeito da fila em `render/mundo/trafego.js` passado à R3b. Montagem: só o aviso A1 (JS principal em 1.892 KB).
 
-**Etapa 3 rodando** (R3b, U2a, X1b, X3a; workflow wi15fc9td, run wf_9f42c5d7-973, base `9b001b5`). Se parar no
-meio, grave o parcial e relance com ONDE PAROU no topo dos textos, como na etapa 2. Ao terminar: ler os resultados, testes
-verdes, `montar.mjs`, juntar as notas nas fichas, gravar e escrever a C1 (JS principal acima do teto, calibração do
-começo, robô com a coroa de quadras dentro do disco, greide do nó de entrada, os dois 'ShaderMaterial' sem dono,
-bancada no PC do dono). Para o dono ver na prévia: Helix Labs e Compass Tower lendo como silos, fachada do Horizon Ring
-monótona de perto, parque central ralo, anéis acinzentados à noite.
+**Etapa 3 pausada pelo dono em 03/10/2026** (base `9b001b5`). Com 2 agentes por vez na máquina de 4 núcleos, só a R3b e
+a U2a tinham começado: o parcial delas está no commit "Pausa: R3b e U2a em andamento", sem nota e sem revisão, com os
+testes verdes na pausa (inclusive o tráfego da geracao-vias). A X1b e a X3a não começaram. Para retomar: relance
+`onda.js` com `{nome: 'Onda 3, etapa 3 (retomada)', base: '9b001b543c45e10801ec414cd87210936724f816', etapas: [[{id:
+'R3b'}, {id: 'U2a'}, {id: 'X1b'}, {id: 'X3a'}]]}` (os textos da R3b e da U2a começam com ONDE PAROU). Ao terminar:
+ler os resultados, testes verdes, `montar.mjs`, juntar as notas nas fichas, gravar e escrever a C1 (JS principal acima
+do teto, calibração do começo, robô com a coroa de quadras dentro do disco, greide do nó de entrada, os dois
+'ShaderMaterial' sem dono, bancada no PC do dono). Para o dono ver na prévia: Helix Labs e Compass Tower lendo como
+silos, fachada do Horizon Ring monótona de perto, parque central ralo, anéis acinzentados à noite.
 
 Decisões até a D90 registradas. `previa/` continua a Prévia 1c. Aguardando também a medição do dono na página de teste
 da Prévia 1c.

@@ -22,7 +22,7 @@ import { tabelaArco, maisPerto } from '../../comum/bezier.js';
 import { ANO } from '../../comum/relogio.js';
 import { pontoNoPoligono } from '../../comum/vetor.js';
 import { ARESTA, AGUA, MAO } from '../../contratos/flags.js';
-import { refDe } from '../../contratos/espelho.js';
+import { refDe, idxDaRef, gerDaRef } from '../../contratos/espelho.js';
 import { pedeTudo } from '../ponte.js';
 import { PRIORIDADE } from '../camera/selecao.js';
 import { porPerfil } from '../motor/perfis.js';
@@ -149,6 +149,27 @@ export function geometriaDaMalha(m, { soltar = false } = {}) {
   g.setIndex(new THREE.BufferAttribute(m.idx.slice(0, m.ni), 1));
   g.computeBoundingSphere();
   return g;
+}
+
+/** Bit do realce da aresta selecionada no canal G da tabela (o shader soma o brilho, VIA_FRAGMENTO_EMISSIVO). */
+export const BIT_REALCE = 1;
+
+/**
+ * Troca o realce da tabela das arestas (RGBA8, 4 bytes por aresta): apaga o bit da aresta de antes e acende o da nova
+ * (-1: nenhuma). Devolve a nova. Puro (os testes conferem).
+ */
+export function realcarAresta(dados, antes, nova) {
+  const max = dados.length / 4;
+  if (antes >= 0 && antes < max) dados[4 * antes + 1] &= ~BIT_REALCE;
+  if (nova >= 0 && nova < max) dados[4 * nova + 1] |= BIT_REALCE;
+  return nova >= 0 && nova < max ? nova : -1;
+}
+
+/** idx da aresta de uma seleção { tipo: 'aresta', ref } viva no espelho, ou -1. */
+export function arestaDaSelecao(sel, A) {
+  if (!sel || sel.tipo !== 'aresta' || !Number.isFinite(sel.ref) || !A) return -1;
+  const i = idxDaRef(sel.ref);
+  return i < A.n && A.viva[i] && A.ger[i] === gerDaRef(sel.ref) ? i : -1;
 }
 
 // ------------------------------------------------------------------------------------------------ rede
@@ -475,6 +496,7 @@ function criarVias(ctx) {
 
   const setores = new Map();
   const recebidos = [];
+  let realcada = -1;
   let pendentes = 0;
   let iniciado = false;
   let quadros = 0;
@@ -513,6 +535,11 @@ function criarVias(ctx) {
   function aplicar(d, esp) {
     const A = esp.vias?.arestas;
     if (!A || !esp.vias?.nos) return;
+    // a aresta realçada morreu (ou a vaga foi reaproveitada): apaga o realce
+    if (realcada >= 0 && arestaDaSelecao(ctx.sobre.selecao, A) !== realcada) {
+      realcada = realcarAresta(dadosTab, realcada, arestaDaSelecao(ctx.sobre.selecao, A));
+      tabela.needsUpdate = true;
+    }
     const tudo = !iniciado || pedeTudo(d, 'vias') || pedeTudo(d, 'arestas') || pedeTudo(d, 'nos');
     iniciado = true;
     if (tudo) {
@@ -682,6 +709,11 @@ function criarVias(ctx) {
     // a troca de qualidade refaz o material do chão (terreno.js ouve antes): liga o gancho no novo
     ctx.ouvir('qualidade', () => {
       chao = ligarChao(ctx);
+    }),
+    // realce da aresta selecionada (bit G da tabela) pelo evento 'selecao' do render: { tipo: 'aresta', ref }
+    ctx.ouvir('selecao', (sel) => {
+      realcada = realcarAresta(dadosTab, realcada, arestaDaSelecao(sel, ctx.sim.espelho.vias?.arestas));
+      tabela.needsUpdate = true;
     }),
     // camadas por aresta (X3a): o valor no canal R da tabela; qualquer camada deixa a via neutra
     ctx.ouvir('camadas', (c) => {
