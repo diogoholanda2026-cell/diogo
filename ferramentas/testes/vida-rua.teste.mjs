@@ -56,9 +56,12 @@ function sobrepoe(a, b, encolhe = 0.25) {
 
 test('prioridade no cruzamento: em 300 s, nenhum carro dentro do outro (na curva do nó nem na fila), sem trava', async () => {
   const { RUA } = await import('../../fonte/render/cenas/rua.js');
-  // o cruzamento da cena rua (avenida com semáforo) e um bairro de ruas sem semáforo, no pico da manhã
-  for (const [nome, alvo] of [['cruzamento da cena rua', RUA], ['ruas do bairro sul', { x: 1261.5, z: 353.1 }]]) {
-    const { ctx, doms } = await montarRua({ alvo, dominios: ['trafego', 'pedestres'] });
+  // o cruzamento da cena rua (avenida com semáforo) e um bairro de ruas sem semáforo, no pico da manhã; e o cruzamento
+  // sem espelho.fluxos (o M1a não tem a S1c: a amostra pela heurística), no pico da tarde
+  const casos = [['cruzamento da cena rua', RUA, 8, true], ['ruas do bairro sul', { x: 1261.5, z: 353.1 }, 8, true], ['cruzamento sem fluxos', RUA, 18, false]];
+  for (const [nome, alvo, hora, comFluxo] of casos) {
+    const { ctx, doms, esp } = await montarRua({ alvo, hora, dominios: ['trafego', 'pedestres'] });
+    if (!comFluxo) esp.fluxos = null;
     const traf = doms.trafego;
     assert.ok(traf.povoar(ctx) > 50, `${nome}: tráfego vazio`);
     await doms.pedestres.povoar(ctx);
@@ -152,6 +155,29 @@ test('fila e vez: velocidade que ainda para, conflito das curvas, virada, faixa 
     const r = T.restaVermelho(t, 0, 0);
     assert.equal(r > 0, T.faseSemaforo(t, 0, 0) === 2);
   }
+  // a matriz das instâncias (sem o quatérnio) é a do compose do three com o giro em y
+  const THREE = await import('three');
+  const m = new THREE.Matrix4();
+  const arr = new Float32Array(32);
+  for (const [hx, hz, s] of [[0, 1, 1], [1, 0, 1.1], [-0.6, -0.8, 0.95], [0.3, -2, 1]]) {
+    m.compose(new THREE.Vector3(3, 4, 5), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(hx, hz)), new THREE.Vector3(s, s, s));
+    T.matrizGiroY(arr, 16, 3, 4, 5, hx, hz, s);
+    for (let k = 0; k < 16; k++) assert.ok(Math.abs(arr[16 + k] - m.elements[k]) < 1e-5, `matrizGiroY(${hx}, ${hz}) [${k}]`);
+  }
+  // a amostra pesa a distância ao alvo: cheia no miolo, rala na borda, nunca zero
+  assert.equal(T.pesoDistancia(0, 500), 1);
+  assert.equal(T.pesoDistancia(150, 500), 1);
+  assert.ok(Math.abs(T.pesoDistancia(500, 500) - 0.2) < 1e-9 && T.pesoDistancia(900, 500) === 0.2);
+  for (let d = 0; d < 500; d += 25) assert.ok(T.pesoDistancia(d + 25, 500) <= T.pesoDistancia(d, 500));
+  // a faixa de destino em frente vindo de uma faixa só: sorteada (sem sorteio, a da direita)
+  assert.equal(T.faixaDestino(fx, 0, 1, 0, false, 0.1), fx[0]);
+  assert.equal(T.faixaDestino(fx, 0, 1, 0, false, 0.99), fx[2]);
+  assert.equal(T.faixaDestino(fx, 0, 1, 0), fx[2]);
+  // distância entre poligonais com limite: para cedo, mas sempre abaixo do limite quando estão perto
+  const P1 = Float64Array.of(0, 0, 10, 0, 20, 0);
+  const P2 = Float64Array.of(0, 2, 10, 2, 20, 1);
+  assert.ok(T.distPoligonais(P1, 0, P2, 0, 1.5) < 1.5);
+  assert.ok(Math.abs(T.distPoligonais(P1, 0, P2, 0) - 1) < 1e-9);
 });
 
 // ------------------------------------------------------------------------------------------------ caminhões
@@ -351,6 +377,59 @@ test('gente: figura com silhueta (LOD0 e LOD1), faces para fora, juntas iguais �
   assert.ok(amostra.every((a) => !(a.bits & B.SAIA) || a.fem), 'saia só nas mulheres');
 });
 
+test('gente: a caminhada do GLSL tem o braço contrário à perna e os pés no chão', async () => {
+  const G = await import('../../fonte/render/geracao/pessoas.js');
+  const SH = await import('../../fonte/render/materiais/shaders/pessoa.glsl.js');
+  const vs = SH.PESSOA_VERTICE_NORMAL;
+  // os números saem do próprio GLSL: lado de cada membro, coxa, joelho, braço e quanto o corpo desce
+  const num = (re, nome) => {
+    const m = vs.match(re);
+    assert.ok(m, `GLSL sem ${nome}`);
+    return Number(m[1]);
+  };
+  const coxa = num(/float a = (-?[\d.]+) \* amp \* sf \* lado;\s*pessoaPos = pessoaGira\( pessoaPos, PESSOA_QUADRIL/, 'o giro da coxa');
+  const braco = num(/float a = (-?[\d.]+) \* amp \* sf \* lado;\s*pessoaPos = pessoaGira\( pessoaPos, PESSOA_OMBRO/, 'o giro do braço');
+  const joelho = num(/float dobra = ([\d.]+) \* amp/, 'a dobra do joelho');
+  const desce = num(/pessoaPos\.y -= ([\d.]+) \* amp \* sf \* sf;/, 'a descida no apoio duplo');
+  assert.ok(vs.includes('( membro == 1 || membro == 2 || membro == 6 ) ? 1.0 : -1.0'), 'lado A: perna A e braço B');
+  const J = G.JUNTA;
+  const gira = (p, y0, a) => [p[0], y0 + (p[1] - y0) * Math.cos(a) - p[2] * Math.sin(a), (p[1] - y0) * Math.sin(a) + p[2] * Math.cos(a)];
+  const pose = (p, membro, fase) => {
+    const lado = membro === 1 || membro === 2 || membro === 6 ? 1 : -1;
+    const sf = Math.sin(fase * 2 * Math.PI);
+    let q = p;
+    if (membro >= 1 && membro <= 4) {
+      if (membro === 2 || membro === 4) q = gira(q, J.joelho, joelho * Math.max(0, Math.cos(fase * 2 * Math.PI) * lado));
+      q = gira(q, J.quadril, coxa * sf * lado);
+    } else if (membro >= 5) q = gira(q, J.ombro, braco * sf * lado);
+    return [q[0], q[1] - desce * sf * sf, q[2]];
+  };
+  const m = G.malhaPessoa(0);
+  const P = G.PARTE_PESSOA;
+  for (const fase of [0.25, 0.75]) {
+    const pe = { A: -9, B: -9 };
+    const mao = { A: -9, B: -9 };
+    let chao = 9;
+    for (let i = 0; i < m.posicao.length / 3; i++) {
+      const [parte, membro] = [m.corpo[2 * i], m.corpo[2 * i + 1]];
+      const p = [m.posicao[3 * i], m.posicao[3 * i + 1], m.posicao[3 * i + 2]];
+      const q = pose(p, membro, fase);
+      const lado = p[0] > 0 ? 'A' : 'B';
+      if (parte === P.SAPATO) {
+        pe[lado] = Math.max(pe[lado], q[2]);
+        chao = Math.min(chao, q[1]);
+      }
+      if (parte === P.PELE && membro >= 5) mao[lado] = Math.max(mao[lado], q[2]);
+    }
+    // a perna da frente e o braço do outro lado vão juntos (o passo humano, não o do camelo)
+    const frente = pe.A > pe.B ? 'A' : 'B';
+    const outro = frente === 'A' ? 'B' : 'A';
+    assert.ok(mao[outro] > mao[frente] + 0.1, `fase ${fase}: perna ${frente} à frente com o braço do mesmo lado (mãos ${JSON.stringify(mao)})`);
+    // no apoio duplo o pé de trás fica no chão (nem flutuando, nem enterrado)
+    assert.ok(chao > -0.03 && chao < 0.01, `fase ${fase}: pé mais baixo a ${chao.toFixed(3)} m do chão`);
+  }
+});
+
 test('gente na calçada: pela atividade e pela hora, na faixa de andar, atravessando só na faixa com os carros parados', async () => {
   const { RUA } = await import('../../fonte/render/cenas/rua.js');
   const P = await import('../../fonte/render/mundo/pedestres.js');
@@ -429,6 +508,33 @@ test('realce da aresta selecionada: o bit G da tabela pelo evento selecao, e o s
   assert.equal(arestaDaSelecao({ tipo: 'aresta', ref: refDe(2, 0) }, A), -1, 'aresta morta');
   assert.equal(arestaDaSelecao({ tipo: 'predio', ref: 1 }, A), -1);
   assert.equal(arestaDaSelecao(null, A), -1);
+  // no domínio: o evento acende, o realce fica depois de a simulação aplicar outro passo, e a seleção nula apaga
+  const THREE = await import('three');
+  const { gerarCidadeSintetica } = await import('../cidade-sintetica.mjs');
+  const { ganchos } = await import('../../fonte/render/motor/ganchos.js');
+  const { statsVazio } = await import('../../fonte/contratos/render.js');
+  const V = await import('../../fonte/render/mundo/vias.js');
+  const esp = gerarCidadeSintetica().sim.espelho;
+  const ouvintes = new Map();
+  const ctx = {
+    cena: new THREE.Scene(), medidas: { familia: (m) => m }, ganchos, perfil: { id: 'media' }, camera: new THREE.PerspectiveCamera(),
+    stats: statsVazio(), sim: { espelho: esp }, textura: () => null, sobre: {},
+    ouvir: (n, f) => (ouvintes.set(n, f), () => {}), emitir: (n, v) => ouvintes.get(n)?.(v),
+  };
+  let dom = null;
+  V.registrar({ registrarDominio: (n, f) => (dom = f(ctx)), registrarSelecionavel: () => {} });
+  dom.aplicar({ tudo: { vias: true } }, esp);
+  const AE = esp.vias.arestas;
+  let e = 0;
+  while (!AE.viva[e]) e++;
+  const bit = () => dom.tabela.image.data[4 * e + 1] & BIT_REALCE;
+  ctx.emitir('selecao', { tipo: 'aresta', ref: refDe(e, AE.ger[e]) });
+  assert.equal(bit(), BIT_REALCE, 'a aresta selecionada acende');
+  dom.aplicar({}, esp);
+  assert.equal(bit(), BIT_REALCE, 'o realce fica depois de outro passo da simulação');
+  ctx.emitir('selecao', { tipo: 'predio', ref: 3 });
+  assert.equal(bit(), 0, 'selecionar outra coisa apaga');
+  dom.descartar?.();
 });
 
 test('materiais da gente e dos caminhões montam sobre o three, com os ganchos e sem mediump', async () => {

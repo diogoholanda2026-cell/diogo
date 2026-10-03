@@ -496,7 +496,9 @@ function criarVias(ctx) {
 
   const setores = new Map();
   const recebidos = [];
+  /** A aresta realçada (idx, -1 nenhuma) e a última seleção do evento 'selecao' ({ tipo, ref } ou null). */
   let realcada = -1;
+  let selecao = null;
   let pendentes = 0;
   let iniciado = false;
   let quadros = 0;
@@ -536,8 +538,8 @@ function criarVias(ctx) {
     const A = esp.vias?.arestas;
     if (!A || !esp.vias?.nos) return;
     // a aresta realçada morreu (ou a vaga foi reaproveitada): apaga o realce
-    if (realcada >= 0 && arestaDaSelecao(ctx.sobre.selecao, A) !== realcada) {
-      realcada = realcarAresta(dadosTab, realcada, arestaDaSelecao(ctx.sobre.selecao, A));
+    if (realcada >= 0 && arestaDaSelecao(selecao, A) !== realcada) {
+      realcada = realcarAresta(dadosTab, realcada, arestaDaSelecao(selecao, A));
       tabela.needsUpdate = true;
     }
     const tudo = !iniciado || pedeTudo(d, 'vias') || pedeTudo(d, 'arestas') || pedeTudo(d, 'nos');
@@ -712,7 +714,8 @@ function criarVias(ctx) {
     }),
     // realce da aresta selecionada (bit G da tabela) pelo evento 'selecao' do render: { tipo: 'aresta', ref }
     ctx.ouvir('selecao', (sel) => {
-      realcada = realcarAresta(dadosTab, realcada, arestaDaSelecao(sel, ctx.sim.espelho.vias?.arestas));
+      selecao = sel ?? null;
+      realcada = realcarAresta(dadosTab, realcada, arestaDaSelecao(selecao, ctx.sim.espelho.vias?.arestas));
       tabela.needsUpdate = true;
     }),
     // camadas por aresta (X3a): o valor no canal R da tabela; qualquer camada deixa a via neutra

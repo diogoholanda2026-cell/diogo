@@ -17,9 +17,9 @@ export const DICAS = Object.freeze([
   { id: 'via', quem: 'iris', gesto: 'via', alvo: null, mouse: true, quando: (e) => e.ferramenta === 'via' },
   { id: 'zona', quem: 'iris', gesto: 'arrasto', alvo: null, mouse: true, quando: (e) => e.ferramenta === 'zona' },
   { id: 'colocar', quem: 'iris', gesto: 'toque', alvo: null, mouse: true, quando: (e) => e.ferramenta === 'colocar' },
-  { id: 'avisos', quem: 'cida', gesto: 'toque', alvo: null, quando: (e) => !e.ferramenta && e.alertas.some((a) => /sem(Agua|Energia)|agua|energia/i.test(`${a.codigo} ${a.glifo}`)) },
+  { id: 'avisos', quem: 'cida', gesto: 'toque', alvo: null, mouse: true, quando: (e) => !e.ferramenta && e.alertas.some((a) => /sem(Agua|Energia)|agua|energia/i.test(`${a.codigo} ${a.glifo}`)) },
   { id: 'velocidade', quem: 'iris', gesto: 'toque', alvo: '.hud-vel', soMouse: true, quando: (e) => !e.ferramenta && e.velocidade === 0 && e.tique === 0 && e.segundos >= 8 },
-  { id: 'numeros', quem: 'livia', gesto: 'toque', alvo: '[data-a="creditos"]', quando: (e) => !e.ferramenta && e.tique >= 22 * 60 },
+  { id: 'numeros', quem: 'livia', gesto: 'toque', alvo: '[data-a="creditos"]', mouse: true, quando: (e) => !e.ferramenta && e.tique >= 22 * 60 },
   { id: 'emprestimo', quem: 'livia', gesto: 'toque', alvo: '[data-a="creditos"]', quando: (e) => !e.ferramenta && e.caixaBaixo },
 ]);
 
@@ -52,14 +52,12 @@ export function registrar(ui) {
   // a vitrine e as cenas não mostram dica sozinhas (a cena da vitrine abre a sua)
   if (!ui.jogo || ui.jogo.falso || ui.jogo.cena) return;
   let desde = null;
-  let caixaMinimo = Infinity;
   const avaliar = () => {
     const p = prefs.peek() ?? {};
     if (p.dicas === false || inicio.peek() || tela.peek() || dicaAtual.peek()) return;
     const b = barra.peek() ?? {};
     if (desde === null) desde = Date.now();
     const cred = b.creditos ?? Infinity;
-    caixaMinimo = Math.min(caixaMinimo, cred);
     const e = {
       ferramenta: sessao.peek()?.tipo ?? null,
       alertas: b.alertas ?? [],

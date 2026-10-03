@@ -37,7 +37,7 @@ export const TETO_QPS = Object.freeze({ livre: 0, coberto: 10, foto: 0, teste: 0
 const FOLGA_MS = 1;
 
 /** Rodadas do aquecimento: a final depois de esperaMs com os domínios carregados, ou aos tetoMs. */
-export const AQUECER = Object.freeze({ esperaMs: 2500, tetoMs: 12000, dominios: ['predios', 'vias'] });
+export const AQUECER = Object.freeze({ esperaMs: 2500, tetoMs: 12000, dominios: ['predios', 'vias', 'pedestres', 'caminhoes'] });
 
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
 

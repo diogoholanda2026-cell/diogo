@@ -6,7 +6,8 @@
 //   aRoupa    cor de cima (sRGB 0 a 255) e os bits (cabelo, longo, pernas de fora, saia, manga longa, bolsa)
 //   aRoupa2   cor de baixo (sRGB 0 a 255) e o tom de pele (0 claro a 255 escuro)
 // A perna gira no quadril e a canela dobra no joelho quando a perna vem para a frente; o braço balança no ombro, ao
-// contrário da perna do mesmo lado; o corpo sobe e desce um pouco a cada passo. A cor sai pronta do vértice.
+// contrário da perna do mesmo lado (o braço vai à frente com a perna do outro lado); o corpo fica mais alto com a perna
+// de apoio na vertical e desce um pouco com as pernas abertas, no apoio duplo. A cor sai pronta do vértice.
 // As articulações repetem JUNTA de geracao/pessoas.js (o teste confere): o gerador vem sob demanda e o GLSL não.
 
 /** Quadril, joelho e ombro (m, na figura de 1,70 m), iguais a JUNTA de geracao/pessoas.js. */
@@ -65,8 +66,9 @@ vec3 pessoaPos = position + aVar * aPessoa.z;
   int bits = int( aRoupa.a + 0.5 );
   float fase = aPessoa.x * 6.2831853;
   float amp = aPessoa.y;
-  // lado A (perna 1 e 2, braço 6 em fase com ela) e lado B
+  // lado A (perna 1 e 2, braço 6 em fase com ela) e lado B: o braço do lado B vai à frente com a perna do lado A
   float lado = ( membro == 1 || membro == 2 || membro == 6 ) ? 1.0 : -1.0;
+  float sf = sin( fase );
   if ( membro >= 1 && membro <= 4 ) {
     // a canela dobra no joelho enquanto a perna vem para a frente, depois a perna gira no quadril
     if ( membro == 2 || membro == 4 ) {
@@ -74,16 +76,18 @@ vec3 pessoaPos = position + aVar * aPessoa.z;
       pessoaPos = pessoaGira( pessoaPos, PESSOA_JOELHO, dobra );
       objectNormal = pessoaGiraN( objectNormal, dobra );
     }
-    float a = -0.42 * amp * sin( fase ) * lado;
+    float a = -0.42 * amp * sf * lado;
     pessoaPos = pessoaGira( pessoaPos, PESSOA_QUADRIL, a );
     objectNormal = pessoaGiraN( objectNormal, a );
   } else if ( membro >= 5 ) {
-    float a = 0.32 * amp * sin( fase ) * lado;
+    // ângulo negativo leva a mão para a frente (+z), como o da coxa
+    float a = -0.32 * amp * sf * lado;
     pessoaPos = pessoaGira( pessoaPos, PESSOA_OMBRO, a );
     objectNormal = pessoaGiraN( objectNormal, a );
   }
-  // o corpo sobe no meio do passo
-  pessoaPos.y += 0.018 * amp * abs( sin( fase ) );
+  // o corpo desce no apoio duplo (pernas abertas) e fica mais alto com a perna de apoio na vertical: com as pernas
+  // girando no quadril, subir no passo largo tiraria os dois pés do chão
+  pessoaPos.y -= 0.015 * amp * sf * sf;
   // as partes de cada um: cabelo longo, saia e bolsa só em quem tem
   bool some = ( parte == 8 && ( bits & 4 ) == 0 ) || ( parte == 9 && ( bits & 16 ) == 0 ) || ( parte == 10 && ( bits & 64 ) == 0 );
   if ( some ) pessoaPos = vec3( 0.0 );

@@ -51,7 +51,7 @@ function rodoviaLigaGleba(sim) {
   const [px, pz] = portaoNorte(sim);
   const b = noPerto(G, px, pz, 80);
   if (a < 0 || b < 0) return false;
-  const comp = componentes(G);
+  const { comp } = componentes(G);
   return comp[a] >= 0 && comp[a] === comp[b];
 }
 

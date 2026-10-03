@@ -81,9 +81,10 @@ export function caixaDaQuadra(s) {
 
 /**
  * Os comandos que constroem a sugestão, na ordem (o mesmo caminho do robô): a avenida trecho a trecho; a quadra pela
- * grade de ruas da caixa e a pintura do retângulo; o prédio no lugar sugerido.
+ * grade de ruas da caixa e a pintura do retângulo; o prédio no lugar sugerido, encaixado como a ferramenta de colocar
+ * encaixa (previa: a consulta construir.previa, que acerta x, z e o giro de frente para a via; sem ela, o lugar cru).
  */
-export function comandosDaSugestao(s, sessaoVia = 'sugestao') {
+export function comandosDaSugestao(s, sessaoVia = 'sugestao', previa = null) {
   if (s.tipo === 'via') {
     const l = [];
     for (let k = 0; k + 1 < s.pontos.length; k++) l.push(['via.construir', { plano: { modo: 'reta', tipo: s.via ?? 'avenida', pontos: [s.pontos[k], s.pontos[k + 1]], sessao: `${sessaoVia}.${k}` } }]);
@@ -96,7 +97,12 @@ export function comandosDaSugestao(s, sessaoVia = 'sugestao') {
       ['zona.pintar', { pincel: { modo: 'retangulo', x: x0, z: z0, x2: x1, z2: z1 }, zona: indiceZona(s.zona) }],
     ];
   }
-  if (s.tipo === 'construir') return [['construir', { tipo: s.construir, x: s.x, z: s.z, rot: s.rot ?? 0 }]];
+  if (s.tipo === 'construir') {
+    const pedido = { tipo: s.construir, x: s.x, z: s.z, rot: s.rot ?? 0 };
+    const pv = previa ? previa(pedido) : null;
+    const ok = pv && Number.isFinite(pv.x) && Number.isFinite(pv.z) && Number.isFinite(pv.rot);
+    return [['construir', ok ? { ...pedido, x: pv.x, z: pv.z, rot: pv.rot } : pedido]];
+  }
   return [];
 }
 
@@ -107,7 +113,8 @@ export function comandosDaSugestao(s, sessaoVia = 'sugestao') {
 export async function usarSugestao(ui, s) {
   let feitos = 0;
   let ultimo = null;
-  for (const [nome, args] of comandosDaSugestao(s, `${ui.SESSAO ?? 'ui'}.sug`)) {
+  const previa = (pedido) => ui.consultar?.('construir.previa', pedido) ?? null;
+  for (const [nome, args] of comandosDaSugestao(s, `${ui.SESSAO ?? 'ui'}.sug`, previa)) {
     const r = await ui.comando(nome, args, { silencioso: nome === 'via.construir' });
     if (r.ok) feitos++;
     else ultimo = r;

@@ -11,9 +11,13 @@
 //   cruzamento  a vez é uma reserva no nó: o carro só cruza se a curva dele não chega perto da curva de quem já está
 //            lá dentro (ou já reservou) e se ninguém que pediu antes, com a curva cruzando a dele, espera a vez. A
 //            ordem de chegada manda, com a via principal na frente (sem semáforo) e a conversão à esquerda atrás;
-//            no semáforo só pede quem tem o verde, e quem ainda para antes da retenção desiste no amarelo
+//            no semáforo só pede quem tem o verde, e quem ainda para antes da retenção desiste no amarelo. O bolsão:
+//            quem espera na retenção ainda sai no amarelo e, virando à esquerda, nos primeiros 3 s do vermelho
 //   faixa    a faixa de destino segue a virada (direita para a faixa da direita, esquerda para a da esquerda, em frente
-//            na mesma posição); o carro só sai para uma faixa com lugar
+//            na mesma posição ou sorteada, vindo de uma faixa só); o carro só sai para uma faixa com lugar
+//   saída    com espelho.fluxos, o braço de saída é sorteado pelo fluxo dele naquele sentido; sem, pelo tipo da via
+//   amostra  com o teto do perfil abaixo dos carros esperados, nasce mais perto da câmera (fora do LOD0, para não
+//            brotar à vista) e quem está longe do alvo sai aos poucos: a rua da câmera fica com a densidade do fluxo
 //   gente    pedestre na faixa de pedestres (pedestres.js): o carro não entra nem sai pelo braço dela e para na
 //            retenção
 //   externos os caminhões das entregas (caminhoes.js) andam aqui como carros com rota fixa, no ritmo da viagem da
@@ -90,6 +94,12 @@ export const V_NO = Object.freeze({ cruzamento: 7, curva: 10, retorno: 5 });
 const OLHAR = 45;
 /** Amostras da curva do nó para o teste de conflito. */
 const N_CURVA = 8;
+/**
+ * Peso da distância ao alvo na escolha de onde nasce um carro (0,2 a 1): cheio até 30% do raio, caindo até a borda.
+ * Com o teto do perfil abaixo dos carros esperados, a amostra fica cheia perto da câmera e rala longe.
+ */
+export const pesoDistancia = (d, R) => (d <= 0.3 * R ? 1 : Math.max(0.2, 1 - (0.8 * (d - 0.3 * R)) / (0.7 * R)));
+
 /** Parado na fila (s) além disso, o carro sai da amostra (trava de laço de vias curtas). */
 export const DESISTE = 50;
 
@@ -100,6 +110,11 @@ const distFila = (a, b) => (a.c + b.c) / 2 + FOLGA_FILA;
 
 /** Velocidade que ainda para em g metros com a frenagem de conforto, contando a do da frente (vL). */
 export const velSegura = (g, vL = 0) => Math.sqrt(Math.max(0, 2 * A_PLANO * g + 0.6 * vL * vL));
+
+/** Duração do vermelho de cada grupo (s): o ciclo de 40 s com 16 de verde e 3 de amarelo. */
+export const VERMELHO = 21;
+/** O bolsão: quem espera na retenção para virar à esquerda ainda sai até tantos segundos do vermelho (a limpeza). */
+export const LIMPEZA = 3;
 
 /** Fase do semáforo (0 verde, 1 amarelo, 2 vermelho) do grupo g: a mesma conta do shader (via.glsl.js, objFase). */
 export function faseSemaforo(tempo, g, defas) {
@@ -135,17 +150,30 @@ export function faixasOrdenadas(tipo, mao, sentido) {
 
 /**
  * Faixa de destino pela virada: à direita, a da direita; à esquerda, a da esquerda; em frente, a mesma posição (de
- * `rank` em `n` faixas de origem). `direita`: em frente pela faixa da direita (caminhões).
+ * `rank` em `n` faixas de origem) ou, vindo de uma faixa só, a sorteada por h (0 a 1; sem h, a da direita).
+ * `direita`: em frente pela faixa da direita (caminhões).
  */
-export function faixaDestino(fx, rank, n, vir, direita = false) {
+export function faixaDestino(fx, rank, n, vir, direita = false, h = null) {
   if (!fx.length) return null;
   if (vir > 0 || (vir === 0 && direita)) return fx[fx.length - 1];
   if (vir < 0) return fx[0];
-  return fx[n <= 1 ? fx.length - 1 : Math.round((rank / (n - 1)) * (fx.length - 1))];
+  if (n <= 1) return h === null ? fx[fx.length - 1] : fx[Math.min(fx.length - 1, Math.floor(h * fx.length))];
+  return fx[Math.round((rank / (n - 1)) * (fx.length - 1))];
 }
 
-/** Distância entre os segmentos ab e cd no plano. */
-function distSeg(ax, az, bx, bz, cx, cz, dx, dz) {
+/** Quadrado da distância do ponto p ao segmento qr. */
+function dist2PontoSeg(px, pz, qx, qz, rx, rz) {
+  const lx = rx - qx;
+  const lz = rz - qz;
+  const l2 = lx * lx + lz * lz;
+  const f = l2 > 0 ? Math.max(0, Math.min(1, ((px - qx) * lx + (pz - qz) * lz) / l2)) : 0;
+  const dx = px - qx - f * lx;
+  const dz = pz - qz - f * lz;
+  return dx * dx + dz * dz;
+}
+
+/** Quadrado da distância entre os segmentos ab e cd no plano (0 se cruzam). */
+function dist2Seg(ax, az, bx, bz, cx, cz, dx, dz) {
   const ux = bx - ax;
   const uz = bz - az;
   const vx = dx - cx;
@@ -153,34 +181,39 @@ function distSeg(ax, az, bx, bz, cx, cz, dx, dz) {
   const wx = ax - cx;
   const wz = az - cz;
   const den = ux * vz - uz * vx;
-  // cruzam?
   if (Math.abs(den) > 1e-12) {
     const s = (vx * wz - vz * wx) / den;
     const t = (ux * wz - uz * wx) / den;
     if (s >= 0 && s <= 1 && t >= 0 && t <= 1) return 0;
   }
-  const pt = (px, pz, qx, qz, rx, rz) => {
-    const lx = rx - qx;
-    const lz = rz - qz;
-    const l2 = lx * lx + lz * lz;
-    const f = l2 > 0 ? Math.max(0, Math.min(1, ((px - qx) * lx + (pz - qz) * lz) / l2)) : 0;
-    return Math.hypot(px - qx - f * lx, pz - qz - f * lz);
-  };
-  return Math.min(pt(ax, az, cx, cz, dx, dz), pt(bx, bz, cx, cz, dx, dz), pt(cx, cz, ax, az, bx, bz), pt(dx, dz, ax, az, bx, bz));
+  return Math.min(
+    dist2PontoSeg(ax, az, cx, cz, dx, dz),
+    dist2PontoSeg(bx, bz, cx, cz, dx, dz),
+    dist2PontoSeg(cx, cz, ax, az, bx, bz),
+    dist2PontoSeg(dx, dz, ax, az, bx, bz),
+  );
 }
 
-/** Menor distância entre duas poligonais (x, z intercalados), a partir dos índices ia e ib. */
-export function distPoligonais(A, ia, B, ib) {
+/**
+ * Menor distância entre duas poligonais (x, z intercalados), a partir dos índices ia e ib (e, em B, só até o trecho
+ * fimB, exclusive). Com `lim`, para no primeiro par de trechos mais perto que ele (devolve essa distância: basta para
+ * saber que é menor que lim).
+ */
+export function distPoligonais(A, ia, B, ib, lim = 0, fimB = Infinity) {
   let m = Infinity;
+  const l2 = lim * lim;
   const na = A.length / 2 - 1;
-  const nb = B.length / 2 - 1;
+  const nb = Math.min(B.length / 2 - 1, fimB);
   for (let i = ia; i < na; i++) {
     for (let j = ib; j < nb; j++) {
-      const d = distSeg(A[2 * i], A[2 * i + 1], A[2 * i + 2], A[2 * i + 3], B[2 * j], B[2 * j + 1], B[2 * j + 2], B[2 * j + 3]);
-      if (d < m) m = d;
+      const d = dist2Seg(A[2 * i], A[2 * i + 1], A[2 * i + 2], A[2 * i + 3], B[2 * j], B[2 * j + 1], B[2 * j + 2], B[2 * j + 3]);
+      if (d < m) {
+        m = d;
+        if (m < l2) return Math.sqrt(m);
+      }
     }
   }
-  return m;
+  return Math.sqrt(m);
 }
 
 /** Ponto e tangente da cúbica p (8 números) em t. */
@@ -194,10 +227,44 @@ export function pontoCurva(p, t, out) {
   out.z = a * p[1] + b * p[3] + d * p[5] + e * p[7];
   const dx = 3 * u * u * (p[2] - p[0]) + 6 * u * t * (p[4] - p[2]) + 3 * t * t * (p[6] - p[4]);
   const dz = 3 * u * u * (p[3] - p[1]) + 6 * u * t * (p[5] - p[3]) + 3 * t * t * (p[7] - p[5]);
-  const l = Math.hypot(dx, dz) || 1;
+  const l = Math.sqrt(dx * dx + dz * dz) || 1;
   out.hx = dx / l;
   out.hz = dz / l;
   return out;
+}
+
+/**
+ * Matriz da instância (16 números, por coluna, a partir de o) que gira em y para a frente (+z do modelo) olhar para
+ * (hx, hz), escala s e põe em (x, y, z): a mesma de compose(posição, giro em y por atan2(hx, hz), s), sem o quatérnio.
+ */
+export function matrizGiroY(arr, o, x, y, z, hx, hz, s = 1) {
+  const l = Math.sqrt(hx * hx + hz * hz);
+  const sn = l > 1e-9 ? (hx / l) * s : 0;
+  const cs = l > 1e-9 ? (hz / l) * s : s;
+  arr[o] = cs;
+  arr[o + 1] = 0;
+  arr[o + 2] = -sn;
+  arr[o + 3] = 0;
+  arr[o + 4] = 0;
+  arr[o + 5] = s;
+  arr[o + 6] = 0;
+  arr[o + 7] = 0;
+  arr[o + 8] = sn;
+  arr[o + 9] = 0;
+  arr[o + 10] = cs;
+  arr[o + 11] = 0;
+  arr[o + 12] = x;
+  arr[o + 13] = y;
+  arr[o + 14] = z;
+  arr[o + 15] = 1;
+}
+
+/** Copia o ponto e a direção (x, z, hx, hz) de q para o carro, sem objeto novo a cada quadro. */
+function pose(c, q) {
+  c.x = q.x;
+  c.z = q.z;
+  c.hx = q.hx;
+  c.hz = q.hz;
 }
 
 /** Posição na faixa: ponto e direção de viagem. */
@@ -285,7 +352,21 @@ export function criarMaterialCarro(ganchos, U) {
 
 // ------------------------------------------------------------------------------------------------ domínio
 
-const chave = (e, u, sentido) => `${e}:${u}:${sentido}`;
+/** Chave numérica de uma faixa: a aresta, o u (as faixas ficam a mais de 3 m umas das outras, |u| < 64) e o sentido. */
+const chave = (e, u, sentido) => (e * 1024 + Math.round(u * 8) + 512) * 2 + (sentido > 0 ? 1 : 0);
+
+/** Lista de um mapa de listas por quadro (as listas ficam e são esvaziadas no começo do quadro). */
+function listaDe(mapa, k) {
+  let l = mapa.get(k);
+  if (!l) mapa.set(k, (l = []));
+  return l;
+}
+
+/** Esvazia as listas do mapa; de tempos em tempos, esquece as chaves (faixas e nós que saíram da amostra). */
+function esvaziar(mapa, tudo) {
+  if (tudo) mapa.clear();
+  else for (const l of mapa.values()) l.length = 0;
+}
 
 function criarTrafego(ctx) {
   const { cena, medidas } = ctx;
@@ -337,7 +418,8 @@ function criarTrafego(ctx) {
   /** Entregas cujo caminhão chegou ao fim da rota aqui (antes de a simulação tirar a entrega do espelho). */
   const fins = new Set();
   let candidatos = [];
-  let somaPeso = 0;
+  let somaPeso = 0; // carros esperados perto do alvo (pelo fluxo ou pela heurística)
+  let somaSorteio = 0; // a soma dos pesos de sorteio (perto da câmera pesa mais)
   let alvoCand = null;
   let tCand = -1e9;
   let zonas = null;
@@ -347,10 +429,14 @@ function criarTrafego(ctx) {
   let animar = null; // cenas podem forçar (true) ou parar (false); null: anda com o jogo
   const alvo = new THREE.Vector3();
   const est = { x: 0, z: 0, tx: 1, tz: 0, t: 0 };
-  // por quadro: as filas por faixa, os carros com a vez em cada nó e os que pediram a vez
+  // por quadro: as filas por faixa, os carros com a vez em cada nó e os que pediram a vez (as listas e as entradas das
+  // filas, { c, pos }, são reaproveitadas de um quadro para o outro)
   const filas = new Map();
   const ativos = new Map();
   const pedidos = new Map();
+  const entradas = [];
+  let nEntradas = 0;
+  let nQuadros = 0;
   let relogio = 0;
 
   /** Contagem das zonas vizinhas por aresta (células ocupadas). */
@@ -404,17 +490,31 @@ function criarTrafego(ctx) {
       });
       const w = pesos.reduce((a, b) => a + b, 0);
       if (w <= 0) continue;
-      candidatos.push({ ar, faixas, pesos, w, ind });
+      candidatos.push({ ar, faixas, pesos, w, ind, g: pesoDistancia(d, R), ws: 0 });
       somaPeso += w;
+    }
+    // sorteio pelo peso vezes o da distância; se o teto passa da soma disso, mistura com o peso puro (lam) até ela
+    // chegar ao teto: perto da câmera a densidade nunca passa da esperada
+    const alvoN = Math.min(perfil().carros, somaPeso);
+    let somaG = 0;
+    for (const c of candidatos) somaG += c.w * c.g;
+    const lam = somaG >= alvoN || somaPeso <= somaG ? 0 : (alvoN - somaG) / (somaPeso - somaG);
+    somaSorteio = 0;
+    for (const c of candidatos) {
+      c.ws = c.w * (c.g + lam * (1 - c.g));
+      somaSorteio += c.ws;
     }
     alvoCand = alvo.clone();
   }
 
   /** Posição de um carro numa fila (faixa): a da faixa, ou a da curva que sai dela ou entra nela. */
   function entrarNaFila(k, c, pos) {
-    let f = filas.get(k);
-    if (!f) filas.set(k, (f = []));
-    f.push({ c, pos });
+    let o = entradas[nEntradas];
+    if (!o) entradas.push((o = { c: null, pos: 0 }));
+    nEntradas++;
+    o.c = c;
+    o.pos = pos;
+    listaDe(filas, k).push(o);
   }
 
   /** Lugar livre numa faixa para um carro de comprimento cc em s (pelas filas do último quadro). */
@@ -440,16 +540,17 @@ function criarTrafego(ctx) {
     const resta = (fimDaFaixa(ar, f.sentido) - s) * f.sentido;
     car.v = Math.min(vm * 0.8, velSegura(Math.max(0, resta - PARADA - c / 2)));
     naFaixa(ar, car.u, car.s, car.sentido, QA);
-    Object.assign(car, { x: QA.x, z: QA.z, hx: QA.hx, hz: QA.hz });
+    pose(car, QA);
     return car;
   }
 
-  function nascer() {
-    if (!candidatos.length || somaPeso <= 0) return null;
-    let a = hashF(seq, 1) * somaPeso;
+  /** Um carro novo numa faixa sorteada; longeCam: não nasce a menos disso da câmera (o carro não brota à vista). */
+  function nascer(longeCam = 0) {
+    if (!candidatos.length || somaSorteio <= 0) return null;
+    let a = hashF(seq, 1) * somaSorteio;
     let c = candidatos[candidatos.length - 1];
     for (const q of candidatos) {
-      a -= q.w;
+      a -= q.ws;
       if (a < 0) {
         c = q;
         break;
@@ -469,6 +570,11 @@ function criarTrafego(ctx) {
     const s0 = ar.cIni + 6;
     const s1 = ar.L - ar.cFim - 6;
     const s = s1 - s0 > 30 ? (f.sentido > 0 ? s0 + hashF(seq, 3) * (s1 - s0 - 24) : s0 + 24 + hashF(seq, 3) * (s1 - s0 - 24)) : (s0 + s1) / 2;
+    if (longeCam > 0) {
+      estacao(ar.p, ar.tab, s, est);
+      const cam = ctx.camera.position;
+      if ((est.x - cam.x) ** 2 + (est.z - cam.z) ** 2 < longeCam * longeCam) return null;
+    }
     const P = perfilVia(ar.tipo);
     const mi = modeloDe(P.id, hashF(seq, 4), c.ind);
     // não nasce em cima de outro (nem de um ônibus de 12 m), nem numa fila parada (não alimenta o congestionamento)
@@ -515,6 +621,7 @@ function criarTrafego(ctx) {
       return saida(car, ar, a2, passo.sentido, faixaDestino(fx, rank, nf, vir, true), no, n, { k });
     }
     const saidas = [];
+    const F = ctx.sim?.espelho?.fluxos;
     for (const b of no.analise.bracos) {
       if (b.e === car.e && b.inverte === car.sentido > 0) continue;
       const a2 = vias.rede.arestas.get(b.e);
@@ -523,13 +630,20 @@ function criarTrafego(ctx) {
       const fx = faixasOrdenadas(a2.tipo, a2.mao, sentido);
       if (!fx.length) continue;
       const vir = virada(hx, hz, b.dx, b.dz);
-      // a faixa da direita vira à direita, a da esquerda à esquerda; das outras a conversão é rara
+      // pelo fluxo da saída naquele sentido (S1c), se houver; senão, pelo tipo da via
       let w = (BASE_TIPO[perfilVia(a2.tipo).id] ?? 0.3) + 0.2;
+      if (F?.ida && a2.e < F.ida.length) {
+        let q = sentido > 0 ? F.ida[a2.e] : F.volta?.[a2.e] ?? 0;
+        if (!(q > 0) && a2.mao) q = sentido > 0 ? F.volta?.[a2.e] ?? 0 : F.ida[a2.e];
+        w = 0.15 + Math.max(0, q || 0) / 600;
+      }
+      // a faixa da direita vira à direita, a da esquerda à esquerda; das outras a conversão é rara
       // toco curto sem saída: o retorno caberia dentro do cruzamento; só entra se não houver outra saída
       const outro = vias.rede.nos.get(sentido > 0 ? a2.b : a2.a);
       if (outro?.tipo === 'ponta' && a2.L < 40) w *= 0.001;
       if (nf > 1 && vir > 0 && rank < nf - 1) w *= 0.15;
-      if (nf > 1 && vir < 0 && rank > 0) w *= 0.15;
+      // à esquerda da faixa da direita cruza a outra faixa e trava o fluxo contrário: quase nunca
+      if (nf > 1 && vir < 0 && rank > 0) w *= 0.03;
       saidas.push({ a2, sentido, fx, w, vir });
     }
     if (!saidas.length) {
@@ -552,16 +666,25 @@ function criarTrafego(ctx) {
         break;
       }
     }
-    return saida(car, ar, esc.a2, esc.sentido, faixaDestino(esc.fx, rank, nf, esc.vir), no, n);
+    return saida(car, ar, esc.a2, esc.sentido, faixaDestino(esc.fx, rank, nf, esc.vir, false, hashF(car.id, car.idade + 31)), no, n);
   }
 
-  /** Fase do semáforo (0 verde, 1 amarelo, 2 vermelho) para quem chega pelo braço (e, sentido) no nó; sem semáforo, 0. */
-  function faseDoBraco(no, e, sentido, tempo) {
-    if (!no?.semaforos) return 0;
-    const b = no.analise.bracos.find((x) => x.e === e && x.inverte === sentido > 0);
-    if (!b) return 0;
-    return faseSemaforo(tempo, grupoSemaforo(b.theta), defasagemSemaforo(no.n));
+  /**
+   * O semáforo de quem chega pelo braço (e, sentido) ao nó: { grupo, defas }, ou null sem semáforo. Guardado na saída
+   * px (a mesma enquanto o carro se aproxima do nó), para não procurar o braço a cada quadro.
+   */
+  function semaforoDe(px, no, e, sentido) {
+    if (px.sinal !== undefined) return px.sinal;
+    const b = no?.semaforos ? no.analise.bracos.find((x) => x.e === e && x.inverte === sentido > 0) : null;
+    px.sinal = b ? { grupo: grupoSemaforo(b.theta), defas: defasagemSemaforo(no.n) } : null;
+    return px.sinal;
   }
+
+  /** Fase do semáforo (0 verde, 1 amarelo, 2 vermelho) do sinal de semaforoDe; sem semáforo, 0. */
+  const faseDoBraco = (sinal, tempo) => (sinal ? faseSemaforo(tempo, sinal.grupo, sinal.defas) : 0);
+
+  /** Segundos desde que o vermelho do sinal começou (o vermelho dura 21 s); sem semáforo, 0. */
+  const vermelhoHa = (sinal, tempo) => (sinal ? VERMELHO - restaVermelho(tempo, sinal.grupo, sinal.defas) : 0);
 
   /**
    * A faixa de destino tem lugar para o carro entrar? Ninguém fazendo a curva para ela agora e ninguém na boca dela
@@ -608,7 +731,7 @@ function criarTrafego(ctx) {
     const i0 = saindo ? N_CURVA - 1 : o.curva ? Math.max(0, Math.floor((o.curva.t - (o.c / 2 + 0.5) / o.curva.L) * N_CURVA)) : 0;
     // quem espera na boca ocupa só o começo da curva dele
     const lim = (c.l + o.l) / 2 + 0.7 + varre(c, px) + (naBoca ? 0 : varre(o, op));
-    return distPoligonais(px.poli, 0, naBoca ? op.poli.subarray(0, 4) : op.poli, naBoca ? 0 : Math.min(N_CURVA - 1, i0)) < lim;
+    return distPoligonais(px.poli, 0, op.poli, naBoca ? 0 : Math.min(N_CURVA - 1, i0), lim, naBoca ? 1 : Infinity) < lim;
   }
 
   /** O carro pode cruzar agora? Ninguém dentro no caminho, ninguém antes dele na fila da vez, ninguém na faixa. */
@@ -677,9 +800,12 @@ function criarTrafego(ctx) {
     const rede = vias.rede;
     const cam = ctx.camera.position;
     relogio = tempo;
-    filas.clear();
-    ativos.clear();
-    pedidos.clear();
+    // a cada ~1 min de quadros, esquece as faixas e os nós que saíram da amostra
+    const tudo = ++nQuadros % 600 === 0;
+    esvaziar(filas, tudo);
+    esvaziar(ativos, tudo);
+    esvaziar(pedidos, tudo);
+    nEntradas = 0;
     for (const c of carros) {
       c.gap = Infinity;
       c.vL = 0;
@@ -692,31 +818,18 @@ function criarTrafego(ctx) {
         if (ar) entrarNaFila(chave(c.e, c.u, c.sentido), c, fimDaFaixa(ar, c.sentido) * c.sentido + cv.t * cv.L + m);
         entrarNaFila(chave(px.ar.e, px.u, px.sentido), c, px.s * px.sentido - (1 - cv.t) * cv.L - m);
       } else entrarNaFila(chave(c.e, c.u, c.sentido), c, c.s * c.sentido);
-      if (c.saindoNo != null) {
-        let l = ativos.get(c.saindoNo);
-        if (!l) ativos.set(c.saindoNo, (l = []));
-        l.push(c);
-      }
+      if (c.saindoNo != null) listaDe(ativos, c.saindoNo).push(c);
       // parado depois da retenção sem a vez (via curta): a frente já está no miolo e conta como quem está lá
       c.naBoca = null;
       if (!c.curva && c.reserva == null && c.prox && c.prox.de === rede.arestas.get(c.e)) {
         const resta = (fimDaFaixa(c.prox.de, c.sentido) - c.s) * c.sentido;
         if (resta < PARADA + c.c / 2 - 0.5) {
           c.naBoca = c.prox.n;
-          let l = ativos.get(c.naBoca);
-          if (!l) ativos.set(c.naBoca, (l = []));
-          l.push(c);
+          listaDe(ativos, c.naBoca).push(c);
         }
       }
-      if (c.reserva != null) {
-        let l = ativos.get(c.reserva);
-        if (!l) ativos.set(c.reserva, (l = []));
-        l.push(c);
-      } else if (c.quer && c.prox) {
-        let l = pedidos.get(c.prox.n);
-        if (!l) pedidos.set(c.prox.n, (l = []));
-        l.push(c);
-      }
+      if (c.reserva != null) listaDe(ativos, c.reserva).push(c);
+      else if (c.quer && c.prox) listaDe(pedidos, c.prox.n).push(c);
     }
     // o da frente de cada um, em todas as filas em que ele está: a menor folga manda
     for (const f of filas.values()) {
@@ -776,11 +889,11 @@ function criarTrafego(ctx) {
       c.espera = 0;
       if (c.externo) c.externo.k = px.k;
       naFaixa(px.ar, c.u, c.s, c.sentido, pA);
-      Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+      pose(c, pA);
       return;
     }
     pontoCurva(px.p, cv.t, pA);
-    Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+    pose(c, pA);
   }
 
   /** Um passo na faixa. Devolve false se o carro sai (sem saída, fim da rota, aresta que sumiu). */
@@ -817,11 +930,15 @@ function criarTrafego(ctx) {
         // a vez no nó: cruzamento e curva de duas vias (o ônibus varre a outra faixa na esquina fechada)
         const cruz = (no?.tipo === 'cruzamento' || no?.tipo === 'curva') && !px.retorno;
         if (cruz) {
-          const fase = faseDoBraco(no, c.e, c.sentido, tempo);
+          const sinal = semaforoDe(px, no, c.e, c.sentido);
+          const fase = faseDoBraco(sinal, tempo);
           const verde = fase === 0;
           // no amarelo, quem já espera na retenção para converter (o bolsão) ainda sai, se o miolo estiver livre
           const naRetencao = resta < parar + 1 && c.v < 0.5;
-          const podePedir = verde || (fase === 1 && naRetencao && c.espera > 3);
+          // o bolsão: no amarelo, quem já espera na retenção ainda sai; quem vira à esquerda (e esperou o fluxo
+          // contrário passar) também nos primeiros segundos do vermelho, se o miolo estiver livre
+          const limpeza = fase === 1 || (fase === 2 && px.vir < 0 && vermelhoHa(sinal, tempo) < LIMPEZA);
+          const podePedir = verde || (limpeza && naRetencao && c.espera > 3);
           // a principal (sem semáforo): a via mais rápida do nó, se houver uma mais lenta
           if (px.principal === undefined) {
             const vs = no.analise.bracos.map((b) => b.P.velocidade);
@@ -840,9 +957,7 @@ function criarTrafego(ctx) {
               if (livre && !naFaixaGente && podeReservar(c, px, ped)) {
                 c.reserva = n;
                 c.reservaPx = px;
-                let l = ativos.get(n);
-                if (!l) ativos.set(n, (l = []));
-                l.push(c);
+                listaDe(ativos, n).push(c);
                 c.tPedido = null;
                 c.quer = false;
               }
@@ -873,13 +988,13 @@ function criarTrafego(ctx) {
         c.curva = { t: 0, L: px.L, prox: px };
         c.prox = null;
         pontoCurva(px.p, 0, pA);
-        Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+        pose(c, pA);
         return true;
       }
       c.s = fim;
     }
     naFaixa(ar, c.u, c.s, c.sentido, pA);
-    Object.assign(c, { x: pA.x, z: pA.z, hx: pA.hx, hz: pA.hz });
+    pose(c, pA);
     return true;
   }
 
@@ -930,6 +1045,8 @@ function criarTrafego(ctx) {
       if (i >= 0) carros.splice(i, 1);
     }
     const car = novoCarro(ar, f, s, 5, { c: modelo.c, l: modelo.l, vMax: (perfilVia(ar.tipo).velocidade / 3.6) * 0.9, externo: { id, plano, k, alvoD, visto: relogio, chegou: false } });
+    // a cota já no primeiro quadro (caminhoes.js desenha antes de o tráfego andar de novo)
+    car.y = cotaDe(car, ar, ctx.sim.espelho.terreno);
     carros.push(car);
     externos.set(id, car);
     return car;
@@ -973,11 +1090,7 @@ function criarTrafego(ctx) {
 
   // ---------------------------------------------------------------------------------------------- desenho
 
-  const m4 = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const eixoY = new THREE.Vector3(0, 1, 0);
-  const pos = new THREE.Vector3();
-  const esc = new THREE.Vector3(1, 1, 1);
+  const vaga = { arr: null, o: 0 };
 
   /** Cota da roda: a superfície da faixa (com o abaulamento) ou, no miolo do nó, a do polígono da pista. */
   function cotaDe(c, ar, T) {
@@ -991,27 +1104,29 @@ function criarTrafego(ctx) {
     const cont = malhas.map(() => 0);
     const T = esp.terreno;
     const idxMalha = (mi, lod) => mi * 2 + lod;
-    const por = (mi, lod, mat, cor, luz) => {
+    // a vaga da instância na malha do modelo e LOD, com a cor e as luzes; null se a malha está cheia
+    const por = (mi, lod, cor, luz) => {
       const k = idxMalha(mi, lod);
       const M = malhas[k];
       const j = cont[k];
-      if (j >= M.cap) return;
+      if (j >= M.cap) return null;
       cont[k]++;
-      M.mesh.instanceMatrix.array.set(mat, j * 16);
       M.cor.array[4 * j] = cor[0];
       M.cor.array[4 * j + 1] = cor[1];
       M.cor.array[4 * j + 2] = cor[2];
       M.cor.array[4 * j + 3] = luz;
+      vaga.arr = M.mesh.instanceMatrix.array;
+      vaga.o = j * 16;
+      return vaga;
     };
     const farol = noite > 0.25 ? 1 : 0;
+    const lod0 = P.lod0 * P.lod0;
     for (const c of carros) {
       c.y = cotaDe(c, vias.rede.arestas.get(c.e), T);
       if (c.externo) continue; // caminhoes.js desenha
-      pos.set(c.x, c.y, c.z);
-      q.setFromAxisAngle(eixoY, Math.atan2(c.hx, c.hz));
-      m4.compose(pos, q, esc);
-      const d = Math.hypot(c.x - cp.x, c.y - cp.y, c.z - cp.z);
-      por(c.mi, d < P.lod0 ? 0 : 1, m4.elements, c.cor, farol | (c.freio ? 2 : 0));
+      const d2 = (c.x - cp.x) ** 2 + (c.y - cp.y) ** 2 + (c.z - cp.z) ** 2;
+      const v = por(c.mi, d2 < lod0 ? 0 : 1, c.cor, farol | (c.freio ? 2 : 0));
+      if (v) matrizGiroY(v.arr, v.o, c.x, c.y, c.z, c.hx, c.hz);
     }
     let parados = 0;
     if (P.estacionados > 0) {
@@ -1019,10 +1134,14 @@ function criarTrafego(ctx) {
         for (const [mi, l] of st.estacionados ?? []) {
           for (let k = 0; k < l.n && parados < P.estacionados; k++) {
             const o = k * 16;
-            const d = Math.hypot(l.mat[o + 12] - cp.x, l.mat[o + 13] - cp.y, l.mat[o + 14] - cp.z);
+            const dx = l.mat[o + 12] - cp.x;
+            const dy = l.mat[o + 13] - cp.y;
+            const dz = l.mat[o + 14] - cp.z;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d > P.parados) continue;
             const cor = CORES[l.bytes[4 * k]] ?? CORES[0];
-            por(mi, d < P.lod0 ? 0 : 1, l.mat.subarray(o, o + 16), cor, 0);
+            const v = por(mi, d < P.lod0 ? 0 : 1, cor, 0);
+            if (v) v.arr.set(l.mat.subarray(o, o + 16), v.o);
             parados++;
           }
         }
@@ -1046,13 +1165,50 @@ function criarTrafego(ctx) {
   }
 
   /** Povoa até o alvo de carros (o nascimento recusa lugar ocupado). */
-  function encher(alvoN, tentativas) {
+  function encher(alvoN, tentativas, longeCam = 0) {
     for (let k = 0; k < tentativas && carros.length - externos.size < alvoN; k++) {
-      const car = nascer();
+      const car = nascer(longeCam);
       if (car) {
         carros.push(car);
         entrarNaFila(chave(car.e, car.u, car.sentido), car, car.s * car.sentido);
       } else seq++;
+    }
+  }
+
+  /**
+   * A amostra em volta do alvo: nascem carros até o alvo (a soma dos pesos até o teto), longe da câmera (fora do LOD0),
+   * e saem os que ficaram longe do alvo e, se passou do alvo, os que estão fora do LOD0; o caminhão que ficou longe
+   * volta para caminhoes.js. Com o teto abaixo dos carros esperados, quem está fora do miolo sai aos poucos (mais
+   * depressa perto da borda, sempre fora do LOD0) e a vaga volta a nascer perto: a rua da câmera fica com a densidade
+   * do fluxo e a borda, rala.
+   */
+  function manter(P, dt = 0) {
+    const alvoN = Math.min(P.carros, Math.round(somaPeso));
+    encher(alvoN, 4, P.lod0);
+    let sobra = carros.length - externos.size - (alvoN + 4);
+    const rarear = dt > 0 && somaPeso > P.carros;
+    const cam = ctx.camera.position;
+    const lod0 = P.lod0 * P.lod0;
+    for (let i = carros.length - 1; i >= 0; i--) {
+      const car = carros[i];
+      const d2 = (car.x - alvo.x) ** 2 + (car.z - alvo.z) ** 2;
+      const longe = d2 > (P.raio + 80) ** 2;
+      if (car.externo) {
+        // longe, ou sem notícia da entrega há 90 s (a viagem acabou): sai
+        if (longe || relogio - car.externo.visto > 90) soltarExterno(car.externo.id);
+        continue;
+      }
+      const fora = (car.x - cam.x) ** 2 + (car.z - cam.z) ** 2 > lod0;
+      let sai = longe || (sobra > 0 && fora);
+      if (!sai && rarear && fora && !car.curva) {
+        const g = pesoDistancia(Math.sqrt(d2), P.raio);
+        sai = g < 1 && hashF(car.id, nQuadros + 7919) < (dt * (1 - g)) / 20;
+      }
+      if (sai) {
+        if (!longe) sobra--;
+        soltarReserva(car);
+        carros.splice(i, 1);
+      }
     }
   }
 
@@ -1095,25 +1251,7 @@ function criarTrafego(ctx) {
         versaoRede = vias.rede.versao;
         tCand = tMs;
       }
-      // população: a soma dos pesos até o teto
-      const alvoN = Math.min(P.carros, Math.round(somaPeso));
-      encher(alvoN, 4);
-      // saem os que ficaram longe (e os que passam do alvo); o caminhão que ficou longe volta para caminhoes.js
-      let sobra = carros.length - externos.size - (alvoN + 4);
-      for (let i = carros.length - 1; i >= 0; i--) {
-        const car = carros[i];
-        const longe = Math.hypot(car.x - alvo.x, car.z - alvo.z) > P.raio + 80;
-        if (car.externo) {
-          // longe, ou sem notícia da entrega há 90 s (a viagem acabou): sai
-          if (longe || relogio - car.externo.visto > 90) soltarExterno(car.externo.id);
-          continue;
-        }
-        if (longe || sobra > 0) {
-          if (!longe) sobra--;
-          soltarReserva(car);
-          carros.splice(i, 1);
-        }
-      }
+      manter(P, dt);
       if (dt > 0) andar(vias, dt, c.relogioRua, c.dominio('pedestres'));
       parados = desenhar(vias, esp, noite);
     },
@@ -1141,6 +1279,7 @@ function criarTrafego(ctx) {
       if (!vias?.rede) return;
       for (let t = 0; t < seg; t += 0.1) {
         ctxQ.relogioRua = (ctxQ.relogioRua ?? 0) + 0.1;
+        manter(perfil(), 0.1);
         andar(vias, 0.1, ctxQ.relogioRua, ctxQ.dominio('pedestres'));
         ctxQ.dominio('pedestres')?.avancarUm?.(0.1, ctxQ);
       }

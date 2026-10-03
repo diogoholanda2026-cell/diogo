@@ -10,7 +10,7 @@ import { Botao } from '../../comp/Botao.jsx';
 import { Tela, Secao } from '../../comp/Tela.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
 import { Interruptor } from '../../comp/Interruptor.jsx';
-import { saves, irPara, ehToque, teclas, atualizarSaves } from '../estado.js';
+import { saves, continuarResumo, irPara, ehToque, teclas, atualizarSaves } from '../estado.js';
 import { entrarNaPartida } from '../carga.js';
 import { Marca } from '../Entrada.jsx';
 import { CORES_HOLDING, PARTIDA_PADRAO, MAX_NOME, conferirPartida } from '../NovaPartida.jsx';
@@ -61,7 +61,8 @@ function BotaoMenu({ a, titulo, sub = null, tecla, principal = false, desligado 
 
 function Menu({ ui, estado }) {
   const lista = saves.value;
-  const ultimo = lista[0] ?? null;
+  // o que o Continuar abre: a partida do diário (até a que caiu antes do primeiro save) ou o último save
+  const ultimo = continuarResumo.value ?? lista[0] ?? null;
   const raiz = useRef(null);
   const ocupado = estado.ocupado;
   const podeContinuar = !!ultimo || !!ui.jogo?.temDiario?.();
@@ -81,7 +82,13 @@ function Menu({ ui, estado }) {
     raiz.current?.querySelector('.ini-bt')?.focus({ preventScroll: true });
     ui.R?.estado?.('coberto');
   }, []);
-  const sub = ultimo ? [`${ultimo.nome || t('u2.holdingSemNome')} · ${t('u2.moradores', { n: fmt.populacao(ultimo.populacao ?? 0) })}`, `${dataDoSave(ultimo)} · ${t('u2.menu.salvo', { quando: haQuanto(ultimo.data) })}`] : null;
+  const quando = haQuanto(ultimo?.data);
+  const sub = ultimo
+    ? [
+        Number.isFinite(ultimo.populacao) ? `${ultimo.nome || t('u2.holdingSemNome')} · ${t('u2.moradores', { n: fmt.populacao(ultimo.populacao) })}` : ultimo.nome || t('u2.holdingSemNome'),
+        quando ? `${dataDoSave(ultimo)} · ${t('u2.menu.salvo', { quando })}` : dataDoSave(ultimo),
+      ]
+    : null;
   const versao = typeof window !== 'undefined' ? window.__HELD_MONTAGEM__?.versao : null;
   return (
     <div class="ini-menu" ref={raiz} data-hud="inicio">

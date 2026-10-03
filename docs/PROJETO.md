@@ -1443,6 +1443,15 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Herda da I1 (pendências da R3a):** prioridade entre os braços do cruzamento (sem ela, 4 carros se cruzam dentro do
   cruzamento em 300 s, em curvas de braços diferentes); ligar o realce da aresta selecionada (bit G da tabela) pelo
   evento `selecao` do render, que já leva `{ tipo, ref }`.
+- **Entregue em 03/10/2026** (R3b, revisada; onda 3, etapa 3, retomada depois da pausa). Tráfego com fila de
+  velocidade segura (corrige o carro dentro de carro do teste 14 da geracao-vias), reserva no nó com ordem de chegada,
+  principal na frente e bolsão para quem vira à esquerda; gente pela atividade dos prédios e pela hora, com caminhada no
+  vértice (braço contra a perna), 5 tons de pele e roupas variadas, atravessando só na faixa; caminhões da Holding pelo
+  caminho da entrega, com 4 carrocerias pela carga e a cabine na cor da Holding; realce da aresta selecionada. CPU no
+  Alta/'pc' às 18h: tráfego 0,58 ms e gente 0,47 ms (acima do 0,5 ms somado do desenho: medir no PC do dono). Integrador:
+  'pedestres' e 'caminhoes' no aquecimento. Pendências: cabine do caminhão lisa e figura de gente low-poly (o dono julga),
+  traseira dos carros da R3a refletindo o sol baixo como bloco claro, `geracao/pessoas.js` no worker da oficina só por um
+  registrar vazio (C1), +38,8 KB no JS principal. Nota completa em `docs/entregas/onda3/R3b.md`.
 
 #### R4b. Obras, anexos, lote e noite (onda 3; 2 sessões)
 - **Arquivos:** `render/mundo/{obras,anexos,lotes}.js`, `cenas/obra.js`; herda os de R4a.
@@ -1548,6 +1557,16 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   dicas únicas com mão fantasma e traçados sugeridos; sons de interface; vibração. Teste no Chromium: matar a página
   no meio de um save e recarregar sem perder tique.
 - **Testa sem as outras:** vitrine com a simulação falsa; save no Chromium com a simulação da F0. **Depende de:** U1a.
+- **Entregue em 03/10/2026** (U2a, revisada; onda 3, etapa 3, retomada depois da pausa). Save no IndexedDB com 3
+  automáticos e 8 manuais, capa, exportar e importar `.held` com as travas herdadas, automático a cada 5 min e ao sair;
+  diário síncrono que devolve a partida que caiu antes do primeiro save (testado matando a página no meio de um save);
+  API `jogo` da 2.8; entrada "Clique/Toque para entrar"; menu inicial com Continuar e atalhos; nova partida com "Holding
+  Held", "Diogo Holanda", 6 cores e jan. 2020; Configurações com o PC no seletor, resolução dinâmica e nitidez CAS;
+  Teste de desempenho com voo de 20 s; primeira hora com anel de guia e "Usar sugestão". Integrador: o objetivo da
+  primeira avenida não fechava (`componentes(G).comp` em `sim/objetivos.js`), corrigido. Pendências: Escritório,
+  Pedreira, Areal e Olaria sugeridos longe de via (recusa por 'acesso'), `R.resolucao` no R1a (os controles estão
+  prontos e desligados), traçado sugerido espelhado com a câmera rente ao chão, música padrão 0,5 contra 0,35 da F0,
+  "Inspirado em ..." na folha da Holding. Nota completa em `docs/entregas/onda3/U2a.md`.
 
 #### SEDE3. Sede v3 e área inicial (onda 3, etapa 2; 2 sessões)
 - **Arquivos:** `data/arcologia-plano.js`, `data/mapa-heldopolis.js` e o gerado `sim/mundo/relevo-assado.js`,
@@ -1595,6 +1614,18 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   voo de câmera por etapa; teste "o robô que pula a Arcologia termina mais pobre".
 - **Testa sem as outras:** entregas instantâneas do substituto; cena `torre`; vitrine com a simulação falsa.
   **Depende de:** X1a; integra quando S3a e U1b publicarem.
+- **Entregue em 03/10/2026** (X1b, revisada; onda 3, etapa 3). O Ato 1 da Arcologia joga de ponta a ponta: lago.e1
+  (Mirror Lake, cava no aplainar, 24 vias ARCOLOGIA com os portões nas 8 avenidas, reservatório para 6 mil moradores) e
+  torre.e1 a e4 sobre a Blade Tower e a Legacy Tower (licença, +15% de produtividade e 6 caminhões, 1.200 vagas, 400
+  moradores de luxo, +20 de demanda residencial, atratividade, valor, Legado +5 e o helicóptero); `arcologia.iniciar`,
+  `q.arcologia()`, espelho, evento e Mural; o resto da sede em fantasma e as 14 etapas do M2 nos dados; render da obra
+  no par (corte por lado, Legacy um passo atrás, duas gruas até uns 545 m) e o domínio 'helicoptero'; tela do Livro e
+  momentos. **A2 vermelho depois da integração:** com o objetivo da primeira avenida corrigido, o robô que constrói a
+  Arcologia termina 6 h com 143.795 contra 217.876 sem ela; a Arcologia ainda não se paga (o valuation não soma a obra,
+  o robô não importa o aço que falta). É a calibração da C1. Pendências: raio da demanda ignorado pela S2a (vale na
+  cidade toda), raio do valor da torre.e4 (900 contra 1,5 km da D49), manutenção das 24 avenidas internas (decidir),
+  contratos de `q.deposito().importacoes` e dos campos novos, `web/cenas.html` com "Sede v2" e "Torre Lâmina", gruas e
+  helicóptero sem sombra. Nota completa em `docs/entregas/onda3/X1b.md`.
 
 #### X3a. Camadas e avisos, 6 camadas (onda 3; 2 sessões)
 - **Arquivos:** `render/sobreposicoes/{camadas,marcadores,ancoras}.js`, `ui/telas/Camadas.jsx`,
@@ -1608,6 +1639,15 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   por perfil (60 no Média), um por setor de longe; atlas dos glifos; rótulos de áreas, avenidas e marcos no DOM; filtro
   de avisos.
 - **Testa sem as outras:** dados de camada da cidade sintética; cena `camadas`. **Depende de:** R2a, R3a, R4a.
+- **Entregue em 03/10/2026** (X3a, revisada; onda 3, etapa 3). Gancho 'camada' de verdade (`gCamada` e a rampa;
+  desligado custa um desvio por uniforme); domínios 'camadas', 'marcadores' (uma chamada instanciada, forma pela
+  gravidade, oclusão pela profundidade, teto de 200 no pc e Alta e 60 no Média, um por setor de longe) e 'ancoras'
+  (oclusão pelo relevo); `porPredio` no contrato do aviso 'camadas'; popover de Camadas no trilho com as 6 do M1a, o
+  Valor e o filtro de avisos; legenda embaixo ao centro; rótulos da sede em inglês. Pendências: `R.ancoras` ainda usa só
+  `R.projetar` (ligar o domínio no índice, C1), rótulos com contraste 1,82:1 e um saindo da tela, avisos 'info' que a
+  S2a descarta, a Contribuição em unidades nos textos da camada Bem-estar (fere a D68), camadas que só atualizam na
+  rodada, marcador de setor que pode sumir atrás das torres, cores de subtipo da Zonas e o cinza da rampa divergente
+  (o dono confirma). Nota completa em `docs/entregas/onda3/X3a.md`.
 
 #### C1. Calibração e publicação do M1a (onda 3; 2 sessões)
 - **Arquivos:** `ferramentas/{robo-navegador.js,aceite-cor.mjs}`, `ferramentas/saves/`, `README.md`, os números

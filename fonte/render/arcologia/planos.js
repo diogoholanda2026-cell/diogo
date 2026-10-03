@@ -6,7 +6,12 @@
 // só aparece de verdade quando o chão já foi cavado (o aplainar). As cenas pedem outras vistas pelo domínio:
 //   ctx.dominio('arcologia').vitrine({ modo: 'torre' })   o par no pódio, pronto (sem o resto da sede)
 //   ctx.dominio('arcologia').vitrine({ modo: 'plano' })   a sede inteira construída, com a paisagem e as vias internas
+//   ctx.dominio('arcologia').vitrine({ modo: 'jogo', etapas, vias })   o jogo com estas etapas (a obra, as prontas e
+//                                                         os fantasmas); vias desenha as vias internas do plano
 //   ctx.dominio('arcologia').vitrine(null)                volta ao jogo
+// A obra (X1b, obra.js): com o par em obra, as torres aparecem cortadas por lado (a Legacy um passo atrás, a Dream Bridge
+// só quando as duas passam de 330 m), o pódio sobe com elas, o fantasma fica só acima do corte e as gruas acompanham;
+// com a lago.e1 em obra, o leito de terra, o tapume e o canteiro. Com o lago pronto, os portões e a praça do pódio.
 // LOD por setor (D66): os 8 trechos do Horizon Ring, os 8 oitavos do Meridian Ring e as duas torres ovais trocam as
 // marquises do shader pelas de geometria quando a câmera chega perto de cada um (o uniforme uLodSetor avisa o vidro).
 // Desempenho: um material por tipo (o conjunto fixo de torre.js), todos compilados na carga (criarAquecimento); nada
@@ -16,15 +21,16 @@ import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
 import {
   PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, GLEBA_ENVELOPE, TORRE_LAMINA, ANEL_VIARIO, AVENIDAS, mataDaSede,
-  TRECHOS_HORIZON,
+  TRECHOS_HORIZON, TORRE_IRMA,
 } from '../../data/arcologia-plano.js';
 import {
   criarPar, atualizarArcologia, estadoDoCeu, materiais, descartarMateriais, geometriaDe, Malha, acab, PADRAO, tampa,
-  caixa, malhasPar, criarJatos, criarAquecimento, DIST_EFEITOS, UNIFORMES, orientar, hashF,
+  caixa, malhasPar, criarJatos, criarAquecimento, DIST_EFEITOS, UNIFORMES, orientar, hashF, MEIO_VAO_CORTE,
 } from './torre.js';
 import { montarParte, setorDoAnel, SETOR_OVAL, difGraus } from './partes.js';
 import { montarLagoAnel, materialAgua, quadroAgua } from './lago.js';
 import { materialFantasma, malhaFantasma, criarFantasma } from './fantasma.js';
+import { estadoObra, criarObra, alturaVidro } from './obra.js';
 
 const RAD = Math.PI / 180;
 
@@ -241,6 +247,29 @@ export function montarPaisagem(plano, { cota, opaco, arvores = null, vias = true
   }
 }
 
+/**
+ * O que a lago.e1 entrega da paisagem (X1b): a praça de pedra do pódio, onde as avenidas internas acabam, e os portões
+ * nas 8 avenidas; com `vias`, as vias internas do plano (nas cenas, que não têm o grafo do jogo).
+ */
+export function montarPortoes(plano, { cota, opaco, arvores = null, vias = false }) {
+  const P = plano.paisagem;
+  const [cx, cz] = plano.centro;
+  coroa(opaco, cx, cz, P.praca.r0, P.praca.r1, cota + 0.2, KP.pisoClaro, 128);
+  coroa(opaco, cx, cz, P.praca.r1 - 2, P.praca.r1, cota + 0.22, KP.pedra, 128);
+  for (const g of plano.portoes) portao(opaco, g.x, g.z, g.angulo, cota);
+  if (!vias) return;
+  const semPalmas = sobAneis(plano);
+  for (const v of plano.vias) {
+    if (v.anel) avenida(opaco, arvores, cx, cz, cota, v);
+    else {
+      const ra = Math.hypot(v.pontos[0] - cx, v.pontos[1] - cz);
+      const rb = Math.hypot(v.pontos[2] - cx, v.pontos[3] - cz);
+      const a = Math.atan2(v.pontos[1] - cz, v.pontos[0] - cx) / RAD;
+      avenida(opaco, arvores, cx, cz, cota, { ...v, a, r0: ra, r1: rb }, semPalmas);
+    }
+  }
+}
+
 // ================================================================================================ o plano em malhas
 
 /**
@@ -289,7 +318,7 @@ export function distAoSetor(alvo, px, py, pz) {
  *   jatos: object[], arvores: object[], fantasma: { vidro: Malha, opaco: Malha }, sombra: { vidro: Malha, opaco: Malha },
  *   caixas: { parte: string, idx: number, trecho: string | null, caixa: number[] }[], nivelAgua: number, cota: number }}
  */
-export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, paisagem = true, vias = paisagem, so = null, mata = mataDaSede } = {}) {
+export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, paisagem = true, vias = paisagem, so = null, mata = mataDaSede, podioObra = false, lagoObra = false } = {}) {
   const plano = PLANOS[id];
   const pronta = (pid) => prontas === 'todas' || prontas.has(pid);
   const comum = { vidro: new Malha('vidro'), opaco: new Malha('opaco') };
@@ -305,6 +334,8 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
   const fant = { vidro: new Malha('vidro'), opaco: new Malha('opaco') };
   const sombra = { vidro: new Malha('vidro'), opaco: new Malha('opaco') };
   const caixas = [];
+  // o pódio da obra do par (nos materiais das torres, cortado com elas)
+  const podio = podioObra ? { vidro: new Malha('vidro'), opaco: new Malha('opaco') } : null;
   const [cx, cz] = plano.centro;
   const cota = chao(cx, cz);
   const res = reservatorioDe(plano);
@@ -322,10 +353,14 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
         caixas.push({ parte: 'lago', idx: PARTES_ORDEM.indexOf('lago'), trecho: null, caixa: r.caixa });
         juntar('lago', montarParte({ id: 'lago', pecas }, { ...base, ...comum, efeitos, jatos, arvores, lod: 1 }));
       } else {
-        // o espelho prometido: o anel de água em holograma, logo acima do chão
-        tampa(fant.opaco, orientar(res.contorno), cota + 0.4, [0, 0, 0, 0], true);
+        // o espelho prometido: o anel de água em holograma, logo acima do chão (na obra, o leito de terra no lugar)
+        if (!lagoObra) tampa(fant.opaco, orientar(res.contorno), cota + 0.4, [0, 0, 0, 0], true);
         juntar('lago', montarParte({ id: 'lago', pecas }, { ...base, ...fant, fantasma: true }));
       }
+      continue;
+    }
+    if (parte.id === 'torre' && podio && !pronta('torre')) {
+      juntar('torre', montarParte({ id: 'torre', pecas }, { ...base, vidro: podio.vidro, opaco: podio.opaco, efeitos, jatos, arvores, lod: 1 }));
       continue;
     }
     // o Horizon Ring fica pronto trecho a trecho (D89); as outras partes inteiras
@@ -341,8 +376,9 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
       montarParte(sub, { ...base, vidro: sombra.vidro, opaco: sombra.opaco, sombra: true });
     }
   }
-  if (paisagem) montarPaisagem(plano, { cota, opaco: comum.opaco, arvores, vias });
-  return { comum, setores, agua, efeitos, jatos, arvores, fantasma: fant, sombra, caixas, nivelAgua, cota };
+  if (paisagem === 'portoes') montarPortoes(plano, { cota, opaco: comum.opaco, arvores, vias });
+  else if (paisagem) montarPaisagem(plano, { cota, opaco: comum.opaco, arvores, vias });
+  return { comum, setores, agua, efeitos, jatos, arvores, fantasma: fant, sombra, caixas, nivelAgua, cota, podio };
 }
 
 /** Caixa de seleção do par no espaço do par: as duas torres (a Blade em x = -32, a Legacy em +32), do pódio ao mastro. */
@@ -397,8 +433,16 @@ function criarDominio(ctx) {
   const mats = materiais(ctx);
   const matAgua = materialAgua(ctx.ganchos);
   const matFantasma = materialFantasma(ctx.ganchos);
-  const aquecer = criarAquecimento(ctx, [...mats.lista, matAgua, matFantasma]);
+  // o fantasma do par na obra: o mesmo programa, só acima do corte (uAcima)
+  const matFantasmaObra = materialFantasma(ctx.ganchos);
+  matFantasmaObra.uniforms.uAcima.value = 1;
+  const aquecer = criarAquecimento(ctx, [...mats.lista, matAgua, matFantasma, matFantasmaObra]);
   raiz.add(aquecer.grupo);
+  const obra = criarObra(ctx, mats.opaco);
+  raiz.add(obra.grupo);
+  let obraTorre = false; // o par está em obra na montagem atual
+  const corte = { blade: -1, legacy: -1, vao: -1 }; // o corte aplicado (alisado de quadro em quadro)
+  let tAnterior = 0;
   let torre = null;
   let torrePerfil = null; // perfil do LOD0 montado (a troca de qualidade refaz a geometria, nunca o programa)
   let torreFantasma = null;
@@ -420,14 +464,21 @@ function criarDominio(ctx) {
     partes = null;
   };
 
+  /** Etapas que valem: as de uma vitrine de jogo (cena) ou as do espelho. */
+  const etapasAtuais = (esp = ctx.sim?.espelho) => (vitrine?.modo === 'jogo' && vitrine.etapas ? vitrine.etapas : esp?.arcologia?.etapas ?? []);
+
   function montar(esp) {
     const modo = vitrine?.modo ?? 'jogo';
     const plano = planoDoJogo(esp);
     const P = PLANOS[plano];
     const T = esp?.terreno;
     const chao = (x, z) => cotaEm(T, x, z);
-    const prontas = modo === 'jogo' ? partesProntas(esp) : 'todas';
+    const etapas = etapasAtuais(esp);
+    const prontas = modo === 'jogo' ? partesProntas({ arcologia: { etapas } }) : 'todas';
     const torrePronta = prontas === 'todas' || prontas.has('torre');
+    const est = modo === 'jogo' ? estadoObra(etapas) : null;
+    const emObra = !!est?.torre && !torrePronta;
+    const lagoObra = !!est?.lago;
     const res = reservatorioDe(P);
     // o reservatório só aparece de verdade quando o chão já foi cavado (o aplainar do jogo ou a cena)
     const [ccx, ccz] = centroDoPlano(P);
@@ -435,7 +486,7 @@ function criarDominio(ctx) {
     const [ax, az] = pontoNaAgua(res);
     const cavado = chao(ax, az) < cota + res.nivel - 0.5;
     const chaveProntas = prontas === 'todas' ? 'todas' : [...prontas].sort().join(',');
-    const nova = `${modo}|${plano}|${chaveProntas}|${cavado}|${ctx.perfil?.id}|${T?.altura?.length ?? 0}`;
+    const nova = `${modo}|${plano}|${chaveProntas}|${cavado}|${ctx.perfil?.id}|${T?.altura?.length ?? 0}|${emObra}|${lagoObra}|${!!vitrine?.vias}`;
     if (nova === chave && !sujo) return;
     chave = nova;
     sujo = false;
@@ -451,7 +502,11 @@ function criarDominio(ctx) {
       raiz.add(torre.grupo);
     }
     torre.posicionar(P.torre.x, cota, P.torre.z, P.torre.rot);
-    torre.mostrar(torrePronta);
+    // na obra o par aparece cortado (o quadro sobe o corte); pronto ou antes da obra, inteiro ou em fantasma
+    obraTorre = emObra;
+    torre.mostrar(torrePronta || emObra);
+    if (!emObra) torre.corte();
+    corte.blade = corte.legacy = corte.vao = -1;
     if (torreFantasma) {
       raiz.remove(torreFantasma);
       torreFantasma.geometry.dispose();
@@ -459,7 +514,7 @@ function criarDominio(ctx) {
     }
     if (!torrePronta) {
       const m1 = malhasPar({ lod: 1 });
-      torreFantasma = criarFantasma(ctx, malhaFantasma(m1.vidro, m1.opaco), matFantasma);
+      torreFantasma = criarFantasma(ctx, malhaFantasma(m1.vidro, m1.opaco), emObra ? matFantasmaObra : matFantasma);
       torreFantasma.position.set(P.torre.x, cota, P.torre.z);
       torreFantasma.rotation.y = P.torre.rot;
       raiz.add(torreFantasma);
@@ -468,9 +523,12 @@ function criarDominio(ctx) {
     // as partes; no modo 'torre', só o pódio (as torres nascem nele)
     limparPartes();
     const parqueVivo = prontas === 'todas' || prontas.has('parque');
+    const lagoPronto = prontas === 'todas' || prontas.has('lago');
+    // no jogo, o parque pronto traz a paisagem inteira; antes dele, o lago pronto traz a praça e os portões
+    const paisagem = modo === 'plano' || (modo === 'jogo' && parqueVivo) ? true : modo === 'jogo' && lagoPronto ? 'portoes' : false;
     const m = malhasDoPlano(plano, {
-      chao, prontas, lagoReal: cavado, paisagem: modo === 'plano' || (modo === 'jogo' && parqueVivo), vias: modo === 'plano',
-      so: modo === 'torre' ? new Set(['torre']) : null,
+      chao, prontas, lagoReal: cavado, paisagem, vias: modo === 'plano' || !!vitrine?.vias,
+      so: modo === 'torre' ? new Set(['torre']) : null, podioObra: emObra, lagoObra,
     });
     const grupo = new THREE.Group();
     grupo.name = `arcologia:plano-${plano}`;
@@ -485,6 +543,11 @@ function criarDominio(ctx) {
     };
     add(m.comum.vidro, mats.vidroLod1, 'arcologia', 'plano:vidro');
     add(m.comum.opaco, mats.opaco, 'arcologia', 'plano:opaco');
+    // o pódio da obra nos materiais das torres: sobe com o corte delas
+    if (m.podio) {
+      add(m.podio.vidro, mats.torreVidroLod1, 'arcologia', 'obra:podio:vidro');
+      add(m.podio.opaco, mats.torreOpaco, 'arcologia', 'obra:podio:opaco');
+    }
     const alvos = alvosDosSetores(P, cota);
     const setores = [];
     for (const [s, malha] of m.setores) {
@@ -520,7 +583,38 @@ function criarDominio(ctx) {
     const arvores = m.arvores.filter((a) => !a.mata || mataNaGrade(F, a.x, a.z) < 0.5);
     ctx.vegetacao?.plantar('arcologia', arvores);
     partes = { grupo, setores, efeitos, jatos, caixas: m.caixas, volume, plano, arvores: arvores.length, centro: new THREE.Vector3(ccx, cota + 20, ccz) };
+    obra.montar(P, cota);
     quadroPartes();
+    quadroObra(0);
+  }
+
+  /**
+   * A obra a cada quadro: o corte por lado das torres e do fantasma sobe até as alturas das etapas (alisado: a obra
+   * anda de tique em tique, a câmera vê subir sem degraus), as gruas acompanham e os canteiros aparecem.
+   */
+  function quadroObra(tMs) {
+    const est = (vitrine?.modo ?? 'jogo') === 'jogo' ? estadoObra(etapasAtuais()) : null;
+    const dt = Math.min(0.5, Math.max(0, (tMs - tAnterior) / 1000));
+    tAnterior = tMs;
+    if (obraTorre && torre && est) {
+      const k = corte.blade < 0 || dt === 0 ? 1 : Math.min(1, dt * 3);
+      const mover = (atual, alvo) => (atual < 0 ? alvo : atual + (alvo - atual) * k);
+      const nb = mover(corte.blade, est.blade);
+      const nl = mover(corte.legacy, est.legacy);
+      const nv = est.ponte ? Math.min(nb, nl) : Math.min(nb, nl, est.vao);
+      if (Math.abs(nb - corte.blade) > 0.02 || Math.abs(nl - corte.legacy) > 0.02 || Math.abs(nv - corte.vao) > 0.02) {
+        corte.blade = nb;
+        corte.legacy = nl;
+        corte.vao = nv;
+        // o vidro para abaixo da frente de obra (o esqueleto de concreto de 3 pavimentos no topo, obra.js)
+        torre.cortePorLado(alturaVidro(nb, TORRE_LAMINA), alturaVidro(nl, TORRE_IRMA), nv);
+        const g = torre.grupo;
+        const u = matFantasmaObra.uniforms;
+        u.uCorteEixo.value.set(g.position.x, g.position.z, Math.cos(g.rotation.y), -Math.sin(g.rotation.y));
+        u.uCorteH.value.set(g.position.y + nb, g.position.y + nl, g.position.y + nv, MEIO_VAO_CORTE);
+      }
+    }
+    obra.quadro(tMs, obraTorre ? { ...est, blade: corte.blade, legacy: corte.legacy } : { ...est, torre: false });
   }
 
   /** O LOD de cada setor pela distância da câmera a ele (histerese de 5%) e os efeitos de água só de perto. */
@@ -567,8 +661,20 @@ function criarDominio(ctx) {
       atualizarArcologia(c, tMs, estadoCeu);
       quadroAgua(tMs);
       matFantasma.uniforms.uNoiteF.value = estadoCeu.noite;
+      matFantasmaObra.uniforms.uNoiteF.value = estadoCeu.noite;
+      quadroObra(tMs);
       torre?.quadro();
       quadroPartes();
+    },
+    /** As etapas que o domínio desenha (as do espelho ou as da vitrine de jogo): o helicóptero lê. */
+    etapas: () => etapasAtuais(),
+    /** A obra (gruas e canteiros): as cenas e os testes leem. */
+    get obra() {
+      return obra;
+    },
+    /** O corte de agora (metros acima da gleba) da Blade, da Legacy e do vão, ou null fora da obra. */
+    get corte() {
+      return obraTorre ? { ...corte } : null;
     },
     /** Vista pedida por uma cena (null volta ao jogo). */
     vitrine(v) {
@@ -593,7 +699,7 @@ function criarDominio(ctx) {
     },
     /** Os materiais da Arcologia (o conjunto fixo, a água e o fantasma): o teste de programas e a bancada leem. */
     get materiais() {
-      return [...mats.lista, matAgua, matFantasma];
+      return [...mats.lista, matAgua, matFantasma, matFantasmaObra];
     },
     /**
      * Raio da tela contra as caixas das partes e as torres: { tipo: 'arcologia', ref (o id do trecho do Horizon Ring,
@@ -639,10 +745,12 @@ function criarDominio(ctx) {
     descartar() {
       torre?.descartar();
       limparPartes();
+      obra.descartar();
       if (torreFantasma) torreFantasma.geometry.dispose();
       aquecer.descartar();
       matAgua.dispose();
       matFantasma.dispose();
+      matFantasmaObra.dispose();
       // os materiais da Arcologia são deste render
       descartarMateriais(ctx);
       ctx.cena.remove(raiz);

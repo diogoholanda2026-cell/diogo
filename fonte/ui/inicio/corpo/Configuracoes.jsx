@@ -7,6 +7,7 @@
 //   automático, dicas), Acessibilidade, Salvamento (salvar, saves, exportar, importar, armazenamento, recomeçar) e
 //   Sobre (versão, placa, capacidades e licenças).
 // Teclado: Page Up e Page Down (ou [ e ]) trocam a aba; Esc fecha.
+import { signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../../textos.js';
 import * as fmt from '../../formato.js';
@@ -38,6 +39,45 @@ export function orcamentoEscrito(id) {
   return t('u2.cfg.orcamento', { calls: fmt.numero(o.calls), tris: fmt.curto(o.tris) });
 }
 
+/**
+ * "Manter esta qualidade?": { de, para, resta } enquanto a troca não foi confirmada. O relógio é do módulo, não da
+ * aba: trocar de aba ou fechar a tela não confirma a troca; sem "Manter", a qualidade volta sozinha.
+ */
+export const manter = signal(null);
+let relogioManter = null;
+
+function pararManter() {
+  clearInterval(relogioManter);
+  relogioManter = null;
+  manter.value = null;
+}
+
+/** Volta à qualidade de antes (o fim da contagem ou "Voltar"). */
+function voltarQualidade(ui) {
+  const m = manter.peek();
+  pararManter();
+  if (!m) return;
+  mudarPrefs(ui, { qualidade: m.de });
+  avisar({ texto: t('u2.cfg.voltou', { nome: t(`u2.q.${m.de}`) }), gravidade: 'info', glifo: 'ajustes' });
+}
+
+/** Troca a qualidade e começa (ou continua) a contagem; voltar à de antes encerra sem perguntar. */
+export function trocarQualidade(ui, nova) {
+  const q = ui.loja.prefs.peek()?.qualidade ?? 'auto';
+  if (nova === q) return;
+  const de = manter.peek()?.de ?? q;
+  mudarPrefs(ui, { qualidade: nova });
+  if (nova === de) return pararManter();
+  manter.value = { de, para: nova, resta: MANTER_S };
+  if (relogioManter) return;
+  relogioManter = setInterval(() => {
+    const m = manter.peek();
+    if (!m) return pararManter();
+    if (m.resta <= 1) voltarQualidade(ui);
+    else manter.value = { ...m, resta: m.resta - 1 };
+  }, 1000);
+}
+
 /** A próxima aba (passo +1 ou -1, dando a volta). */
 export const abaVizinha = (aba, passo) => ABAS[(ABAS.indexOf(aba) + passo + ABAS.length) % ABAS.length];
 
@@ -54,10 +94,10 @@ function Linha({ rotulo, exp = null, children, k }) {
 }
 
 /** Interruptor da linha: o rótulo já está à esquerda, ao lado do trilho fica só o estado ("ligado"). */
-function Chave({ k, rotulo, ligado, aoTrocar }) {
+function Chave({ k, rotulo, ligado, aoTrocar, desligado = false, dica }) {
   const estado = t(ligado ? 'comp.ligado' : 'comp.desligado');
   return (
-    <Botao a="cfg.liga" k={k} rotulo={`${rotulo}: ${estado}`} role="switch" aria-checked={String(!!ligado)} class={`interruptor${ligado ? ' ligado' : ''}`} onClick={() => aoTrocar(!ligado)}>
+    <Botao a="cfg.liga" k={k} rotulo={`${rotulo}: ${estado}`} role="switch" aria-checked={String(!!ligado)} class={`interruptor${ligado ? ' ligado' : ''}`} desligado={desligado} dica={dica} onClick={() => aoTrocar(!ligado)}>
       <span class="interruptor-trilho" aria-hidden="true">
         <span class="interruptor-bola" />
       </span>
@@ -84,56 +124,49 @@ function Video({ ui, noInicio }) {
   const p = ui.loja.prefs.value ?? {};
   const R = ui.R;
   const perfil = R?.perfil?.() ?? {};
-  const [manter, setManter] = useState(null); // { de, para, resta }
+  const pendente = manter.value;
   const [res, setRes] = useState(() => R?.stats?.resolucao ?? null);
   useEffect(() => {
     const id = setInterval(() => setRes(R?.stats?.resolucao ? { ...R.stats.resolucao } : null), 1000);
     return () => clearInterval(id);
   }, []);
-  useEffect(() => {
-    if (!manter) return undefined;
-    if (manter.resta <= 0) {
-      mudarPrefs(ui, { qualidade: manter.de });
-      setManter(null);
-      avisar({ texto: t('u2.cfg.voltou', { nome: t(`u2.q.${manter.de}`) }), gravidade: 'info', glifo: 'ajustes' });
-      return undefined;
-    }
-    const id = setTimeout(() => setManter({ ...manter, resta: manter.resta - 1 }), 1000);
-    return () => clearTimeout(id);
-  }, [manter]);
   const q = p.qualidade ?? 'auto';
-  const trocar = (nova) => {
-    if (nova === q) return;
-    const de = manter?.de ?? q;
-    mudarPrefs(ui, { qualidade: nova });
-    setManter(nova === de ? null : { de, para: nova, resta: MANTER_S });
-  };
   const sugerido = perfil.sugerido ?? 'media';
   const expQ = q === 'auto' ? t('u2.cfg.qAuto', { nome: t(`u2.q.${sugerido}`), gpu: perfil.gpu || t('u2.cfg.semPlaca'), orcamento: orcamentoEscrito(sugerido) }) : t(`u2.cfg.qExp.${q}`, { orcamento: orcamentoEscrito(q) });
   const dinamica = p.resolucaoDinamica !== false;
+  // o pedido ao render (R.resolucao, pendência da R1a): sem ele os dois controles ficam à vista, desligados e com o
+  // motivo, e a leitura ao vivo continua (nada de controle que parece mudar e não muda)
+  const podeResolucao = typeof R?.resolucao === 'function';
+  const semAjuste = podeResolucao ? '' : ` ${t('u2.cfg.resPendente')}`;
   const pct = res?.nativa?.w ? Math.round((100 * res.w) / res.nativa.w) : null;
   const agora = res && pct ? t('u2.cfg.resAgora', { w: res.w, h: res.h, pct, modo: t(`u2.cfg.resModo.${res.modo ?? 'quadro'}`) }) : t('u2.cfg.resSem');
   return (
     <div class="cfg-corpo">
       <Linha rotulo={t('u2.cfg.qualidade')} exp={expQ} k="qualidade">
-        <Segmentado a="cfg.qualidade" rotulo={t('u2.cfg.qualidade')} valor={q} aoTrocar={trocar} opcoes={QUALIDADES.map((v) => ({ v, rotulo: t(`u2.q.${v}`) }))} />
+        <Segmentado a="cfg.qualidade" rotulo={t('u2.cfg.qualidade')} valor={q} aoTrocar={(nova) => trocarQualidade(ui, nova)} opcoes={QUALIDADES.map((v) => ({ v, rotulo: t(`u2.q.${v}`) }))} />
       </Linha>
-      {manter ? (
+      {pendente ? (
         <div class="cfg-manter" role="alert" data-a="cfg.manter">
-          <b>{t('u2.cfg.manter', { s: manter.resta })}</b>
-          <Botao a="cfg.manterSim" rotulo={t('u2.cfg.manterSim')} class="bt-pri" onClick={() => setManter(null)}>
+          <b>{t('u2.cfg.manter', { s: pendente.resta })}</b>
+          <Botao a="cfg.manterSim" rotulo={t('u2.cfg.manterSim')} class="bt-pri" onClick={pararManter}>
             {t('u2.cfg.manterSim')}
           </Botao>
-          <Botao a="cfg.manterNao" rotulo={t('u2.cfg.manterNao')} class="bt-sec" onClick={() => setManter({ ...manter, resta: 0 })}>
+          <Botao a="cfg.manterNao" rotulo={t('u2.cfg.manterNao')} class="bt-sec" onClick={() => voltarQualidade(ui)}>
             {t('u2.cfg.manterNao')}
           </Botao>
         </div>
       ) : null}
-      <Linha rotulo={t('u2.cfg.dinamica')} exp={`${t('u2.cfg.dinamicaExp')} ${agora}`} k="resolucaoDinamica">
-        <Chave k="resolucaoDinamica" rotulo={t('u2.cfg.dinamica')} ligado={dinamica} aoTrocar={(v) => mudarPrefs(ui, { resolucaoDinamica: v })} />
+      <Linha rotulo={t('u2.cfg.dinamica')} exp={`${t('u2.cfg.dinamicaExp')} ${agora}${semAjuste}`} k="resolucaoDinamica">
+        <Chave k="resolucaoDinamica" rotulo={t('u2.cfg.dinamica')} ligado={dinamica} desligado={!podeResolucao} dica={podeResolucao ? undefined : t('u2.cfg.resPendente')} aoTrocar={(v) => mudarPrefs(ui, { resolucaoDinamica: v })} />
       </Linha>
-      <Linha rotulo={t('u2.cfg.nitidez')} exp={t('u2.cfg.nitidezExp', { cas: res?.cas ? fmt.numero(res.cas, 2) : '0' })} k="nitidez">
-        <Segmentado a="cfg.nitidez" rotulo={t('u2.cfg.nitidez')} valor={p.nitidez ?? 'auto'} aoTrocar={(v) => mudarPrefs(ui, { nitidez: v })} opcoes={[{ v: 'auto', rotulo: t('u2.cfg.nitidezAuto') }, { v: 'desligada', rotulo: t('u2.cfg.nitidezNao') }]} />
+      <Linha rotulo={t('u2.cfg.nitidez')} exp={`${t('u2.cfg.nitidezExp', { cas: res?.cas ? fmt.numero(res.cas, 2) : '0' })}${semAjuste}`} k="nitidez">
+        {podeResolucao ? (
+          <Segmentado a="cfg.nitidez" rotulo={t('u2.cfg.nitidez')} valor={p.nitidez ?? 'auto'} aoTrocar={(v) => mudarPrefs(ui, { nitidez: v })} opcoes={[{ v: 'auto', rotulo: t('u2.cfg.nitidezAuto') }, { v: 'desligada', rotulo: t('u2.cfg.nitidezNao') }]} />
+        ) : (
+          <Botao a="cfg.nitidez" k="auto" rotulo={t('u2.cfg.nitidezAuto')} class="bt-sec" desligado dica={t('u2.cfg.resPendente')}>
+            {t('u2.cfg.nitidezAuto')}
+          </Botao>
+        )}
       </Linha>
       <Liga ui={ui} k="sempreDia" rotulo={t('u2.cfg.sempreDia')} exp={t('u2.cfg.sempreDiaExp')} />
       <Liga ui={ui} k="painel" rotulo={t('u2.cfg.painel')} exp={t('u2.cfg.painelExp')} />

@@ -46,6 +46,22 @@ export function ordemContinuar(metas, d, ultimo = null) {
   return [...daLinhagem.map((m) => ({ meta: m, diario: true })), ...resto.map((m) => ({ meta: m, diario: false }))];
 }
 
+/**
+ * O que o Continuar abre, para o menu inicial mostrar ("Onde você parou"): a partida do diário que caiu antes do
+ * primeiro save, o save da linhagem do diário com a data do tique gravado no diário, ou o último save. null sem nada.
+ */
+export function resumoContinuar(metas, d, ultimo = null) {
+  if (d?.base?.nova) {
+    const c = calendario(d.tique);
+    return { nome: d.base.nova.holding?.nome ?? '', populacao: null, mes: c.mes, ano: c.ano, data: null, partida: d.partida };
+  }
+  const [primeiro] = ordemContinuar(metas, d, ultimo);
+  if (!primeiro) return null;
+  if (!primeiro.diario) return primeiro.meta;
+  const c = calendario(d.tique);
+  return { ...primeiro.meta, mes: c.mes, ano: c.ano };
+}
+
 /** Resumo do save para o menu (meta do IndexedDB, seção 2.9) tirado da simulação. */
 export function metaDaSim(sim, extra = {}) {
   const b = sim.q?.barra?.() ?? {};
@@ -96,7 +112,7 @@ export function criarSalvamento({
     diario.comecar({ partida, ramo, base, cmds, tique: sim.tique, seqVisto: sim.livro?.ultimoSeq ?? 0 });
   }
 
-  async function salvar(slot = 'auto', { comprimido = true, comCapa = true } = {}) {
+  async function salvar(slot = 'auto', { comprimido = true, comCapa = true, evitar = [] } = {}) {
     const sim = obterSim();
     if (!E.ativo || !sim) return { ok: false, codigo: 'nada' };
     if (arm.travado()) return { ok: false, codigo: 'ocupado' };
@@ -116,7 +132,8 @@ export function criarSalvamento({
         alvo = 'auto';
       }
     }
-    if (alvo === 'auto') alvo = proximoAuto(metas, [...E.emCurso]);
+    if (alvo === 'auto') alvo = proximoAuto(metas, [...E.emCurso, ...evitar]);
+    if (evitar.includes(alvo)) return { ok: false, codigo: 'ocupado' };
     if (!ehSlot(alvo)) return { ok: false, codigo: 'valor' };
     if (E.emCurso.has(alvo)) return { ok: false, codigo: 'ocupado' };
     E.emCurso.add(alvo);
@@ -124,6 +141,8 @@ export function criarSalvamento({
       // o diário vai para o disco antes de tudo: se a aba morrer no meio do save, nada se perde
       diario.acompanhar(sim);
       diario.gravar();
+      // outra aba assumiu esta partida agora mesmo: o retrato desta é velho e não pode virar save da mesma linhagem
+      if (diario.parado) return { ok: false, codigo: 'outraPagina' };
       const criado = (E.ultimoCriado = Math.max(agora(), E.ultimoCriado + 1));
       const tique = sim.tique;
       const seq = sim.livro?.ultimoSeq ?? 0;
@@ -222,11 +241,20 @@ export function criarSalvamento({
     E,
     mudou,
     salvar,
-    /** Continuar (menu inicial): a linhagem do diário (com a reprodução) ou o último save. */
+    /**
+     * Continuar (menu inicial): a linhagem do diário (com a reprodução) ou o último save. O diário é sempre da última
+     * partida jogada: se ela caiu antes do primeiro save, volta pela semente e pelos comandos e salva na hora.
+     */
     async continuar() {
-      const metas = await arm.listar();
       const d = diario.ler();
-      if (!metas.length && d?.base?.nova) return api.reconstruirNova(d);
+      if (d?.base?.nova) {
+        const r = api.reconstruirNova(d);
+        if (r.ok) {
+          salvar('auto');
+          return r;
+        }
+      }
+      const metas = await arm.listar();
       return tentar(ordemContinuar(metas, d, arm.ultimo()));
     },
     /** Partida que caiu antes do primeiro save: a semente e a identidade do diário mais os comandos. */
@@ -244,7 +272,8 @@ export function criarSalvamento({
     },
     /** Carregar um espaço escolhido (sem o diário: é uma volta no tempo; a partida de agora é salva antes). */
     async carregar(slot) {
-      if (E.ativo && mudou()) await salvar('auto');
+      // a partida de agora vai para o rodízio, nunca por cima do espaço que vai ser aberto (o automático mais velho)
+      if (E.ativo && mudou()) await salvar('auto', { evitar: [slot] });
       const meta = (await arm.listar()).find((m) => m.slot === slot);
       if (!meta) return { ok: false, codigo: 'nada' };
       return tentar([{ meta, diario: false }]);
@@ -252,7 +281,10 @@ export function criarSalvamento({
     /** Nova partida já trocada pelo app: liga a persistência e grava o primeiro save. */
     async comecarNova({ semente, nome, cor, modo = 'normal', criador = null } = {}) {
       const partida = novoId();
-      assumir({ partida, ramo: novoId(), criador, base: { nova: { semente, holding: { nome, cor }, modo, criador } }, cmds: [], marca: null });
+      // os comandos que a simulação nova já tem (a identidade com o criador, dada pelo app antes daqui) vão para o
+      // diário: a partida que cair antes do primeiro save volta com eles, no mesmo seq e no mesmo hash
+      const cmds = obterSim()?.livro?.desde(0) ?? [];
+      assumir({ partida, ramo: novoId(), criador, base: { nova: { semente, holding: { nome, cor }, modo, criador } }, cmds, marca: null });
       return salvar('auto');
     },
     /** Larga a partida (menu inicial): salva se mudou e para de gravar. */
@@ -270,12 +302,23 @@ export function criarSalvamento({
       }
     },
     async apagarSave(slot) {
-      return arm.apagar(slot);
+      const r = await arm.apagar(slot);
+      // era a base do diário da partida em jogo: um save novo vira a base (senão a aba que cair perde o que andou)
+      if (r.ok && E.ativo && diario.atual?.base?.slot === slot) await salvar('auto', { evitar: [slot] });
+      return r;
     },
-    /** Bytes do save (um espaço, uma cópia da quarentena ou o último) para exportar. */
+    /**
+     * Bytes do save (um espaço, uma cópia da quarentena ou o último) para exportar. Sem espaço e com a partida em
+     * jogo, salva antes: o arquivo leva a partida de agora, não a de até 5 min atrás.
+     */
     async exportar(slot = null) {
+      let agoraSalvo = null;
+      if (!slot && E.ativo && mudou()) {
+        const r = await salvar('auto');
+        if (r.ok) agoraSalvo = r.slot;
+      }
       const metas = await arm.listar();
-      const chave = slot ?? diario.atual?.base?.slot ?? arm.ultimo() ?? metas[0]?.slot;
+      const chave = slot ?? agoraSalvo ?? diario.atual?.base?.slot ?? arm.ultimo() ?? metas[0]?.slot;
       if (!chave) return { ok: false, codigo: 'nada' };
       const bytes = await arm.bytes(chave);
       if (!bytes) return { ok: false, codigo: 'nada' };
@@ -295,6 +338,7 @@ export function criarSalvamento({
           await salvar('auto');
           arm.travar('importacao');
         }
+        if (Number.isFinite(arquivo.size) && (arquivo.size <= 0 || arquivo.size > MAX_IMPORTAR)) return { ok: false, codigo: 'valor' };
         const bytes = arquivo instanceof Uint8Array ? arquivo : new Uint8Array(await arquivo.arrayBuffer());
         if (!bytes.length || bytes.length > MAX_IMPORTAR) return { ok: false, codigo: 'valor' };
         let cab;
@@ -420,8 +464,11 @@ export function registrar(app) {
   app.persistir = () => S.persistir();
   app.temPartida = () => S.E.ativo;
   app.temDiario = () => !!S.diario.ler();
-  /** Sair para o menu inicial: salva, larga a partida e avisa a interface (ui/inicio). */
-  app.sairParaMenu = async () => {
+  app.resumoContinuar = async () => resumoContinuar(await S.listarSaves(), S.diario.ler(), S.arm.ultimo());
+  // Sair para o menu inicial: salva, larga a partida e avisa a interface (ui/inicio). Só onde há menu inicial: com
+  // ?menu=0, nas cenas e na cidade sintética ninguém o abre e o jogo ficaria coberto e parado (o item some do menu)
+  const temMenu = !app.cena && (app.tipo ?? 'partida') === 'partida' && new URLSearchParams(location.search).get('menu') !== '0';
+  if (temMenu) app.sairParaMenu = async () => {
     const r = await S.largar();
     try {
       app.sim?.cmd?.('velocidade', { v: 0 });
@@ -433,7 +480,7 @@ export function registrar(app) {
     return r;
   };
   app.salvamento = {
-    estado: () => ({ ativo: S.E.ativo, partida: S.E.partida, ramo: S.E.ramo, emCurso: [...S.E.emCurso], marca: S.E.marca, parado: S.diario.parado, travado: S.arm.travado(), diario: S.diario.atual }),
+    estado: () => ({ ativo: S.E.ativo, partida: S.E.partida, ramo: S.E.ramo, criador: S.E.criador, emCurso: [...S.E.emCurso], marca: S.E.marca, parado: S.diario.parado, travado: S.arm.travado(), diario: S.diario.atual }),
     /** Gancho de teste: segura a gravação no IndexedDB por ms (o retrato já foi tirado). */
     atrasar: (ms) => (S.E.atraso = Math.max(0, +ms || 0)),
     mudou: () => S.mudou(),
@@ -454,8 +501,9 @@ export function registrar(app) {
       S.E.avisouOutra = true;
       avisar({ texto: t('u2.salvar.outraPagina'), gravidade: 'atencao', glifo: 'salvar' });
     }
+    // um save por vez: o diário cheio esperando o save em curso não dispara outro a cada quadro
     const auto = app.prefs?.autoSalvar !== false;
-    if ((auto && tMs - tAuto >= AUTO_MS && S.mudou()) || S.diario.cheio()) {
+    if (!S.E.emCurso.size && ((auto && tMs - tAuto >= AUTO_MS && S.mudou()) || S.diario.cheio())) {
       tAuto = tMs;
       S.salvar('auto');
     }

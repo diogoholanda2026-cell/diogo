@@ -6,8 +6,9 @@
 // tijolo, areia e concreto, a câmera indo junto) e orla (a avenida da orla com pedra portuguesa); ?hora= a hora do
 // céu (21 dá a noite com a luz da rua e os faróis).
 // A cena espera a oficina entregar os setores de vias e de prédios da vista, povoa o tráfego e a gente, adianta a rua
-// 40 s (as filas se formam e a gente se espalha antes da primeira imagem) e deixa tudo andando; o resultado traz as
-// medidas das vias, dos objetos, dos carros, da gente e dos caminhões e as famílias do quadro.
+// 40 s (as filas se formam e a gente se espalha antes da primeira imagem; na vista fila, até o fim de um vermelho com
+// 3 carros parados na chegada pelo oeste) e deixa tudo andando; o resultado traz as medidas das vias, dos objetos,
+// dos carros, da gente e dos caminhões, a fila e as famílias do quadro.
 
 import { Rede } from '../mundo/vias.js';
 import { GradeSetores } from '../mundo/setores.js';
@@ -73,16 +74,31 @@ export function caminhoEmFrente(rede, n0, metros = 600, direcao = null) {
   return Int32Array.from(refs);
 }
 
-/** Segundos de rua (40 a 80) até o meio do vermelho de quem chega ao cruzamento da cena pelo oeste (a fila formada). */
-export function segundosAteFila(rede) {
+/**
+ * Vista fila: adianta a rua 40 s e depois de meio em meio segundo até o fim de um vermelho de quem chega ao cruzamento
+ * da cena pelo oeste (faltando até 6 s) com a fila formada (3 carros parados na chegada), no máximo `max` s. Devolve
+ * os segundos adiantados e os parados na chegada.
+ */
+export function adiantarAteFila(trafego, rede, ctx, max = 240) {
+  trafego.avancar(40, ctx);
   const no = rede && [...rede.nos.values()].find((n) => Math.hypot(n.x - RUA.x, n.z - RUA.z) < 1);
   const b = no?.analise.bracos.find((x) => x.dx < -0.9);
-  if (!b || !no.semaforos) return 40;
+  const ar = b && rede.arestas.get(b.e);
+  if (!ar || !no.semaforos) return { segundos: 40, parados: 0 };
   const g = grupoSemaforo(b.theta);
-  for (let t = 40; t < 80; t += 0.5) {
-    if (faseSemaforo(t, g, defasagemSemaforo(no.n)) === 2 && restaVermelho(t, g, defasagemSemaforo(no.n)) <= 9) return t;
+  const defas = defasagemSemaforo(no.n);
+  const chega = (c) => c.e === ar.e && !c.curva && (c.sentido > 0 ? ar.b : ar.a) === no.n && c.v < 0.3;
+  let t = 40;
+  let parados = 0;
+  for (; t < max; t += 0.5) {
+    const tempo = ctx.relogioRua ?? 0;
+    if (faseSemaforo(tempo, g, defas) === 2 && restaVermelho(tempo, g, defas) <= 6) {
+      parados = trafego.amostra().filter(chega).length;
+      if (parados >= 3) break;
+    }
+    trafego.avancar(0.5, ctx);
   }
-  return 40;
+  return { segundos: t, parados };
 }
 
 export function registrar(registrarCena) {
@@ -140,9 +156,11 @@ export function registrar(registrarCena) {
       }
       trafego?.povoar?.(ctx);
       await pedestres?.povoar?.(ctx);
-      // 40 s de rua antes da primeira imagem; na vista da fila, até o vermelho de quem chega pelo oeste estar na
-      // metade (a fila formada)
-      trafego?.avancar?.(nome === 'fila' ? segundosAteFila(vias?.rede) : 40, ctx);
+      // 40 s de rua antes da primeira imagem; na vista da fila, até o fim de um vermelho de quem chega pelo oeste com
+      // a fila formada
+      let fila = null;
+      if (nome === 'fila' && trafego?.avancar) fila = adiantarAteFila(trafego, vias?.rede, ctx);
+      else trafego?.avancar?.(40, ctx);
       trafego?.animar?.(true);
       pedestres?.animar?.(true);
       caminhoes?.animar?.(true);
@@ -172,6 +190,7 @@ export function registrar(registrarCena) {
             vias: mv,
             objetos: ctx.dominio('props')?.medidas?.() ?? null,
             carros: trafego?.medidas?.() ?? null,
+            fila,
             pessoas: pedestres?.medidas?.() ?? null,
             caminhoes: caminhoes?.medidas?.() ?? null,
             luzRua: ctx.luzRua ? { luzes: ctx.luzRua.luzes, versao: ctx.luzRua.versao } : null,

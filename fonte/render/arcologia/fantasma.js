@@ -26,6 +26,10 @@ const FRAG = /* glsl */ `
 uniform vec3 uCor;
 uniform float uForca;
 uniform float uNoiteF;
+// só acima da obra (X1b): o mesmo corte por lado das torres (centro e eixo do par; Blade, Legacy, vão e meia largura)
+uniform float uAcima;
+uniform vec4 uCorteEixo;
+uniform vec4 uCorteH;
 varying vec2 vUvM;
 varying vec3 vN;
 varying vec3 vV;
@@ -39,6 +43,11 @@ float gLinhaF( float x, float w ) {
 }
 void main() {
   #include <logdepthbuf_fragment>
+  if ( uAcima > 0.5 ) {
+    float s = dot( vGPosMundo.xz - uCorteEixo.xy, uCorteEixo.zw );
+    float lim = s < -uCorteH.w ? uCorteH.x : ( s > uCorteH.w ? uCorteH.y : uCorteH.z );
+    if ( vGPosMundo.y < lim ) discard;
+  }
   vec3 n = normalize( vN );
   vec3 v = normalize( vV );
   float fr = pow( 1.0 - abs( dot( n, v ) ), 2.2 );
@@ -53,11 +62,17 @@ void main() {
 }
 `;
 
-/** Material do holograma (transparente, sem gravar profundidade, com a neblina dos ganchos). */
+/**
+ * Material do holograma (transparente, sem gravar profundidade, com a neblina dos ganchos). Com uAcima ligado (a obra
+ * do par), só aparece acima do corte por lado das torres: o que falta subir.
+ */
 export function materialFantasma(ganchos, { cor = '#e6c996', forca = 1 } = {}) {
   const t = ganchos.trechos(['neblina']);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...ganchos.uniformes, uCor: { value: new THREE.Color(cor) }, uForca: { value: forca }, uNoiteF: { value: 0 } },
+    uniforms: {
+      ...ganchos.uniformes, uCor: { value: new THREE.Color(cor) }, uForca: { value: forca }, uNoiteF: { value: 0 },
+      uAcima: { value: 0 }, uCorteEixo: { value: new THREE.Vector4(0, 0, 0, 0) }, uCorteH: { value: new THREE.Vector4(-1e6, -1e6, -1e6, 0) },
+    },
     defines: t.defines,
     vertexShader: VERT.replace('#include <common>', `#include <common>\n${t.verticePars}`),
     fragmentShader: FRAG.replace('#include <common>', `#include <common>\n${t.fragmentoPars}`).replace('G_FIM', t.fim),

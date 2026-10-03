@@ -11,7 +11,10 @@ export const inicio = signal(null);
 /** Resumos dos saves (jogo.listarSaves), do mais novo ao mais velho. */
 export const saves = signal([]);
 
-/** Endereço (object URL) da capa do save mais novo, para o fundo do menu. */
+/** O que o Continuar abre (jogo.resumoContinuar: a partida do diário ou o último save), ou null. */
+export const continuarResumo = signal(null);
+
+/** Endereço (object URL) da capa do save que o Continuar abre (ou do mais novo com capa), para o fundo do menu. */
 export const capaFundo = signal(null);
 
 /**
@@ -38,16 +41,19 @@ export function ehToque() {
   }
 }
 
-/** Relê os saves e a capa do mais novo. */
+/** Relê os saves, o que o Continuar abre e a capa dele. */
 export async function atualizarSaves(jogo) {
   let lista = [];
+  let resumo = null;
   try {
     lista = (await jogo?.listarSaves?.()) ?? [];
+    resumo = typeof jogo?.resumoContinuar === 'function' ? await jogo.resumoContinuar() : lista[0] ?? null;
   } catch (e) {
-    lista = [];
+    resumo = lista[0] ?? null;
   }
   saves.value = lista;
-  const comCapa = lista.find((s) => s.capa instanceof Blob);
+  continuarResumo.value = resumo;
+  const comCapa = resumo?.capa instanceof Blob ? resumo : lista.find((s) => s.capa instanceof Blob);
   const antes = capaFundo.peek();
   capaFundo.value = comCapa && typeof URL !== 'undefined' ? URL.createObjectURL(comCapa.capa) : null;
   if (antes) URL.revokeObjectURL(antes);

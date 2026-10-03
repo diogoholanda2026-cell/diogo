@@ -1,2 +1,128 @@
-// Textos da parcela X1. Esqueleto da F0 (dona: X1a e X1b); registrar(registrarTextos) vem de ui/textos.js.
-export function registrar() {}
+// Textos da X1 (Arcologia jogável; dona: X1b, herdados da X1a): o Livro da Arcologia, a folha da parte, os momentos e o
+// Mural das etapas. Português do Brasil, frases curtas, sem travessão; os nomes próprios das construções em inglês
+// (D88, D89: Park of Future Dreams, Blade Tower, Legacy Tower, Dream Bridge, Mirror Lake, Dream Falls), o resto em
+// português ("A Blade Tower chegou a 330 m"). Dinheiro por ui/formato.js (D87); durações em "min de jogo" (D42).
+
+export function registrar(registrarTextos) {
+  registrarTextos('x1', {
+    // o Livro
+    'x1.livro.titulo': 'Livro da Arcologia',
+    'x1.aba.etapas': 'Ato 1',
+    'x1.aba.sede': 'A sede',
+    'x1.sede': 'Park of Future Dreams',
+    'x1.sede.sub': 'A sede da Holding, de frente para o mar',
+    'x1.total': '{n} de {de} etapas do Ato 1 prontas',
+    'x1.investido': 'Investido',
+    'x1.investido.sub': 'créditos pagos e material entregue',
+    'x1.alturas': 'Alturas da obra',
+    'x1.alturas.valor': '{b} m e {l} m',
+    'x1.alturas.sub': 'Blade Tower e Legacy Tower',
+    'x1.ponte.pronta': 'Dream Bridge içada a 330 m',
+    'x1.ponte.espera': 'A Dream Bridge entra quando as duas passam de 330 m',
+    'x1.inaugurada': 'Arcologia inaugurada em fase inicial',
+    'x1.inaugurada.nota': 'O resto da sede segue na história: o Meridian Ring, as torres do bosque, o parque e o Horizon Ring.',
+
+    // partes (os nomes em inglês, D89) e o que cada uma é
+    'x1.parte.torre': 'Blade Tower e Legacy Tower',
+    'x1.parte.lago': 'Mirror Lake',
+    'x1.parte.meridian': 'Meridian Ring',
+    'x1.parte.horizon': 'Horizon Ring',
+    'x1.parte.codex': 'Codex Tower',
+    'x1.parte.helix': 'Helix Labs',
+    'x1.parte.compass': 'Compass Tower',
+    'x1.parte.parque': 'Park of Future Dreams',
+    'x1.faz.torre': 'As torres de 500 e 452 m no pódio, ligadas pela Dream Bridge a 330 m: a sede operacional, as moradias de luxo e o heliponto.',
+    'x1.faz.lago': 'O lago em anel em volta do pódio, com as Dream Falls e as fontes: o reservatório da sede e a água de 6 mil moradores.',
+    'x1.faz.meridian': 'O anel interno, de 120 m e 19 andares: os escritórios da Holding.',
+    'x1.faz.horizon': 'O anel externo, de 160 m e 25 andares, em 8 trechos: a faculdade e a escola, com a pista de corrida no teto.',
+    'x1.faz.codex': 'A biblioteca de 300 m, um prisma de vidro escuro com o átrio de livros.',
+    'x1.faz.helix': 'Os laboratórios, numa torre oval de 180 m.',
+    'x1.faz.compass': 'A administração, numa torre oval de 180 m.',
+    'x1.faz.parque': 'O parque dentro do Meridian Ring, com o anel de floresta e as Supertrees.',
+    'x1.trecho': 'Trecho {n} de 8 do Horizon Ring',
+    'x1.situacao': 'Situação',
+    'x1.estadoParte.pronta': 'Construída',
+    'x1.estadoParte.obra': 'Em obra',
+    'x1.estadoParte.fantasma': 'Em fantasma: ainda no papel',
+
+    // etapas do Ato 1 (D49)
+    'x1.etapa.lago.e1': 'Reservatório e portões',
+    'x1.etapa.torre.e1': 'Fundações e pódio',
+    'x1.etapa.torre.e2': 'Sede operacional',
+    'x1.etapa.torre.e3': 'Moradias de luxo',
+    'x1.etapa.torre.e4': 'Coroa e heliponto',
+    'x1.etapaN': 'Etapa {n} de {de}',
+    'x1.estado.0': 'Trancada',
+    'x1.estado.1': 'Pode começar',
+    'x1.estado.2': 'Em obra',
+    'x1.estado.3': 'Pronta',
+    'x1.recusa.marco': 'Libera no marco {n}, {nome}',
+    'x1.recusa.trancado': 'Depois de {etapa}',
+    'x1.recusa.creditos': 'Faltam {v} no caixa',
+    'x1.custo': 'Custo',
+    'x1.duracao': 'Obra',
+    'x1.duracao.valor': '{n} min de jogo',
+    'x1.xp': '{n} XP',
+    'x1.iniciar': 'Começar por {v}',
+    'x1.importar': 'Importar o que falta por {v}',
+    'x1.importar.nota': 'A importação chega a 160% do preço base; o caminhão leva do armazém para o canteiro.',
+    'x1.ver': 'Ver no mapa',
+    'x1.abrirLivro': 'Abrir o Livro da Arcologia',
+    'x1.materiais': 'Materiais',
+    'x1.material': '{entregue} de {pede}',
+    'x1.material.sub': '{caminho} a caminho · {estoque} no estoque',
+    'x1.fase': 'Fase {n} de {de}: {nome}',
+    'x1.progresso': '{p} da etapa',
+    'x1.parada.material': 'Obra parada: falta material no canteiro',
+    'x1.parada.caixa': 'Obra parada: caixa zerado',
+    'x1.data.inicio': 'Começou em {data}',
+    'x1.data.fim': 'Pronta em {data}',
+    'x1.data.previsao': 'Previsão: {data}',
+    'x1.prazo': 'Na história, até {data}',
+    'x1.entrega': 'O que entrega',
+
+    // fases (4 por etapa)
+    'x1.fase.escavacao': 'Escavação do Mirror Lake',
+    'x1.fase.impermeabilizacao': 'Impermeabilização',
+    'x1.fase.captacao': 'Captação e enchimento',
+    'x1.fase.portoes': 'Portões e vias internas',
+    'x1.fase.fundacao': 'Fundações',
+    'x1.fase.estrutura': 'Estrutura',
+    'x1.fase.fachada': 'Fachada',
+    'x1.fase.acabamento': 'Acabamento',
+
+    // efeitos (D49)
+    'x1.efeito.vias': 'Portões nas 8 avenidas e as vias internas até o pódio',
+    'x1.efeito.agua': 'Reservatório com água para {n} moradores',
+    'x1.efeito.valor': 'Valor do terreno em volta da sede',
+    'x1.efeito.licenca': '{n} licença de área',
+    'x1.efeito.holding': 'Linhas da Holding {p} mais produtivas e {n} caminhões a mais',
+    'x1.efeito.vagas': '{n} vagas de trabalho (ensino médio e superior)',
+    'x1.efeito.moradores': '{n} moradores de luxo',
+    'x1.efeito.demanda': 'Mais demanda por residencial média até {km} km',
+    'x1.efeito.atratividade': 'Atratividade da cidade +{v}',
+    'x1.efeito.legado': 'Legado +{v}',
+    'x1.efeito.helicoptero': 'O helicóptero da Holding pousa na Blade Tower',
+    'x1.luxo': 'Contribuição dos moradores de luxo',
+
+    // o resto da sede (M2)
+    'x1.futuras': 'Depois do Ato 1',
+    'x1.futuras.nota': 'Prazos da história. No mapa, aparece em fantasma com a silhueta de verdade até ser construída.',
+
+    // momentos (D49: título de terço inferior, a fala e o voo de câmera)
+    'x1.momento.lago.e1': 'O Mirror Lake encheu e os 8 portões estão abertos: água para {agua} moradores e a cidade já chega ao pódio.',
+    'x1.momento.torre.e1': 'O pódio está pronto. A Blade Tower e a Legacy Tower sobem juntas daqui.',
+    'x1.momento.torre.e2': 'A sede operacional abriu: {vagas} vagas, linhas mais produtivas e {caminhoes} caminhões a mais.',
+    'x1.momento.torre.e3': 'As moradias de luxo estão entregues: {moradores} moradores e a demanda da orla subindo.',
+    'x1.momento.torre.e4': 'A coroa acendeu e o helicóptero da Holding pousou na Blade Tower.',
+
+    // Mural
+    'x1.mural.lago.e1': 'O Mirror Lake está cheio e os 8 portões abertos. A cidade já chega ao pódio.',
+    'x1.mural.torre.e1': 'Fundações e pódio prontos. A Blade Tower e a Legacy Tower começam a subir.',
+    'x1.mural.torre.e2': 'A sede operacional da Blade Tower abriu as portas.',
+    'x1.mural.torre.e3': 'Entregamos as moradias de luxo da Blade Tower.',
+    'x1.mural.torre.e4': 'A coroa da Blade Tower acendeu. A Arcologia está inaugurada em fase inicial.',
+    'x1.mural.blade330': 'A Blade Tower chegou a {m} m.',
+    'x1.mural.ponte': 'A Dream Bridge foi içada a {m} m entre a Blade Tower e a Legacy Tower.',
+  });
+}

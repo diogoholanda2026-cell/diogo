@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import {
   malhasTorre, malhasTorreLod1, malhaSombraTorre, malhasPar, malhaSombraPar, trechosCorpo, contornoTrecho, medidasTorre,
   NIVEL, Malha, DIST_LOD0, LUZ_NOITE, torno, cilindro, materiais, descartarMateriais, atualizarArcologia, UNIFORMES,
-  CHAVES, criarPar, criarTorre, criarAquecimento, VIDRO, LUZ, malhaJato, FONTES, medidasDoPar, SETORES,
+  CHAVES, criarPar, criarTorre, criarAquecimento, VIDRO, LUZ, malhaJato, FONTES, medidasDoPar, SETORES, MEIO_VAO_CORTE,
 } from '../../fonte/render/arcologia/torre.js';
 import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { assentarHora, VISTAS as VISTAS_TORRE } from '../../fonte/render/cenas/torre.js';
@@ -26,6 +26,11 @@ import { ETAPA, AGUA, ARESTA } from '../../fonte/contratos/flags.js';
 import { montarParte, malhasNovas, setorDoAnel, SETOR_OVAL, PECAS, PECAS_COM_LOD } from '../../fonte/render/arcologia/partes.js';
 import { cavarTerreno, descavar, materialAgua } from '../../fonte/render/arcologia/lago.js';
 import { materialFantasma } from '../../fonte/render/arcologia/fantasma.js';
+import {
+  estadoObra, criarObra, malhaMastro, malhaCabeca, malhaCanteiroLago, malhaCanteiroTorre, malhaFrente, plantaNaAltura, GRUA, ALTURA_FRENTE,
+  espessuraFrente, alturaVidro, VAO_PE,
+} from '../../fonte/render/arcologia/obra.js';
+import { rotaDoVoo, posicaoNoCiclo, malhaHelicoptero, malhaRotor, malhaRotorCauda, CICLO } from '../../fonte/render/arcologia/heli.js';
 import {
   TORRE_LAMINA as TL, TORRE_IRMA, especTorre, RECUOS, PAR, torresDoPar, PLANOS, PLANO_ESCOLHIDO, PARTES_ORDEM,
   PARTES_NOMES, GLEBA_ENVELOPE, cavaDoPlano, POUSO, TORRE_POSICAO, HELIPONTO_LOCAL, torreParaMundo, CAMERA_ARCOLOGIA,
@@ -929,8 +934,8 @@ test('chamadas: a sede construída cabe na família do pc (as torres, o comum, o
 
 // ------------------------------------------------------------------------------------------------ cenas e domínio
 
-test('cenas: as vistas da sede v3 (aérea, avenida, mar, noite) na hora pedida e fora dos prédios', () => {
-  assert.deepEqual(Object.keys(VISTAS_SEDE).sort(), ['aerea', 'avenida', 'mar', 'noite']);
+test('cenas: as vistas da sede v3 (aérea, avenida, mar, noite e as da X1b) na hora pedida e fora dos prédios', () => {
+  assert.deepEqual(Object.keys(VISTAS_SEDE).sort(), ['aerea', 'avenida', 'heli', 'mar', 'noite', 'noiteAerea', 'obra', 'ponte']);
   const aneis = pecasDe('anel');
   for (const [id, v] of Object.entries(VISTAS_SEDE)) {
     const r = raioDe(v.de[0], v.de[2]);
@@ -1014,4 +1019,178 @@ test('lago: a cava da cena desce ao leito no anel de água, deixa o pódio no ch
   assert.equal(h(CX + 200, CZ), COTA, 'o parque não é cavado');
   descavar(T, guarda);
   assert.ok(T.altura.every((v) => v === COTA), 'desfazer volta ao chão');
+});
+
+// ------------------------------------------------------------------------------------------------ X1b: obra e voo
+
+const etapasNa = (id, p = 0.5) => {
+  const ids = ['lago.e1', 'torre.e1', 'torre.e2', 'torre.e3', 'torre.e4'];
+  const k = id === 'todas' ? ids.length : ids.indexOf(id);
+  return ids.map((e, i) => ({ id: e, estado: i < k ? ETAPA.PRONTA : i === k ? ETAPA.EM_OBRA : ETAPA.TRANCADA, progresso: i < k ? 1 : i === k ? p : 0 }));
+};
+
+test('obra (X1b): o corte por lado sobe com as etapas, a Legacy atrás, a Dream Bridge e o vão; só materiais do conjunto fixo', () => {
+  assert.equal(estadoObra(etapasNa('lago.e1')).torre, false);
+  assert.equal(estadoObra(etapasNa('lago.e1')).lago, true);
+  const e1 = estadoObra(etapasNa('torre.e1', 0.5));
+  assert.ok(e1.torre && Math.abs(e1.blade - e1.legacy) < 1e-9 && e1.blade === 20, 'o pódio sobe junto');
+  const e2 = estadoObra(etapasNa('torre.e2', 0.5));
+  assert.ok(e2.legacy < e2.blade, 'a Legacy um passo atrás');
+  assert.equal(e2.ponte, false);
+  assert.ok(e2.vao <= PODIO.altura + VAO_PE, 'o vão só tem o pódio e as marquises do pé das torres');
+  const e4 = estadoObra(etapasNa('torre.e4', 0.6));
+  assert.equal(e4.ponte, true);
+  assert.equal(e4.vao, Math.min(e4.blade, e4.legacy));
+  assert.equal(estadoObra(etapasNa('todas')).torre, false, 'pronta: sem obra');
+  // o par cortado: o eixo das torres no uniforme, a Blade do lado negativo
+  const ctx = ctxFalso();
+  const m = materiais(ctx);
+  const antes = [...m.lista].map((x) => fontesDoPrograma(x));
+  const par = criarPar(ctx);
+  par.posicionar(A.torre.x, 12, A.torre.z, A.torre.rot);
+  par.cortePorLado(150, 120, 41);
+  const u = m.torreOpaco.userData.uniformes;
+  const [blade, legacy] = torresDoPar(A.torre);
+  const lado = (t) => (t.x - u.uCorteEixo.value.x) * u.uCorteEixo.value.z + (t.z - u.uCorteEixo.value.y) * u.uCorteEixo.value.w;
+  assert.ok(lado(blade) < -PAR.vao / 2 && lado(legacy) > PAR.vao / 2, 'a Blade de um lado, a Legacy do outro');
+  assert.deepEqual([u.uCorteH.value.x, u.uCorteH.value.y, u.uCorteH.value.z, u.uCorteH.value.w], [162, 132, 53, MEIO_VAO_CORTE]);
+  // as faces internas (a 14 m do centro, no limite do vão) e os montantes ficam do lado das torres: com o limite em
+  // 14 m o arredondamento as jogava no vão, cortado no pódio, e a face sumia na obra
+  for (const lod of [0, 1]) {
+    const mp = malhasPar({ lod });
+    let perto = 0;
+    let dentro = 0;
+    for (const mm of [mp.vidro, mp.opaco]) {
+      for (let i = 0; i < mm.p.length; i += 3) {
+        const ax = Math.abs(mm.p[i]);
+        const y = mm.p[i + 1];
+        if (y <= PODIO.altura + VAO_PE || y >= PAR.ponte.pernas.cota - 3) continue;
+        if (ax < PAR.vao / 2 + 0.75) perto++;
+        if (ax < MEIO_VAO_CORTE) dentro++;
+      }
+    }
+    assert.ok(perto > 0 && dentro === 0, `LOD${lod}: ${dentro} vértices das torres no vão cortado`);
+  }
+  // os materiais das partes não cortam; desfazer volta ao inteiro
+  assert.equal(m.opaco.userData.uniformes.uCorteH.value.x, 1e6);
+  par.corte();
+  assert.equal(u.uCorteH.value.x, 1e6);
+  assert.deepEqual([...m.lista].map((x) => fontesDoPrograma(x)), antes, 'o corte é uniforme: nenhum programa muda');
+  par.descartar();
+  // o fantasma da obra é o mesmo programa do fantasma, só com o uAcima
+  const f0 = materialFantasma(ganchos);
+  const f1 = materialFantasma(ganchos);
+  f1.uniforms.uAcima.value = 1;
+  assert.equal(fontesDoPrograma(f1), fontesDoPrograma(f0));
+  f0.dispose();
+  f1.dispose();
+  descartarMateriais(ctx);
+});
+
+test('obra (X1b): a grua de treliça em trechos iguais até uns 545 m na Blade, a cabeça e os canteiros sem NaN', () => {
+  const mm = malhaMastro(GRUA.topoBlade + GRUA.trecho);
+  conferirMalha(mm.malha, 'mastro');
+  assert.equal(mm.malha.i.length, mm.trechos * mm.porTrecho, 'todo trecho com os mesmos índices (drawRange)');
+  assert.ok(mm.trechos * GRUA.trecho >= 540 && GRUA.topoBlade > TL.mastro.topo, 'acima do mastro de 520 m');
+  const cab = malhaCabeca();
+  conferirMalha(cab, 'cabeça');
+  const cx = caixaDe(cab);
+  assert.ok(cx[3] > 55 && cx[0] < -18, 'lança e contralança');
+  for (const [nome, m] of [['lago', malhaCanteiroLago(CX, CZ, 12)], ['torre', malhaCanteiroTorre(CX, CZ, 12)]]) {
+    conferirMalha(m, nome);
+    const b = m.caixa();
+    assert.ok(Math.hypot(b[3] - CX, b[5] - CZ) < GLEBA_ENVELOPE.raio, `${nome}: dentro da gleba`);
+  }
+  // a frente de obra: 3 pavimentos de esqueleto com o núcleo na frente, e a planta que recua com as lâminas
+  const fr = malhaFrente();
+  conferirMalha(fr, 'frente de obra');
+  const bf = fr.caixa();
+  assert.ok(Math.abs(bf[4] - (ALTURA_FRENTE + 8.4)) < 1e-6, 'o núcleo 2 pavimentos acima das lajes');
+  assert.ok(bf[0] < -17.9 && bf[3] > 17.9 && bf[2] < 0 && bf[5] > 49.9, 'a planta inteira de 36 x 50 m');
+  for (const spec of [TL, TORRE_IRMA]) {
+    assert.equal(plantaNaAltura(spec, 60), 25);
+    assert.equal(plantaNaAltura(spec, spec.laminas[2].topo + 1), 15);
+    assert.equal(plantaNaAltura(spec, spec.laminas[1].topo + 1), 1);
+    assert.equal(plantaNaAltura(spec, spec.laminas[0].topo + 1), -25 + spec.coroa.fundo);
+  }
+  // o vidro sobe sem salto: nasce no pódio, a frente de obra entre ele e a obra, e fecha nos últimos 12,6 m da coroa
+  for (const spec of [TL, TORRE_IRMA]) {
+    let ant = alturaVidro(0, spec);
+    for (let h = 0.25; h <= spec.altura + 20; h += 0.25) {
+      const v = alturaVidro(h, spec);
+      assert.ok(v >= ant - 1e-9 && v - ant <= 0.5 + 1e-9, `${spec.nome}: o vidro salta em ${h} m (${ant} para ${v})`);
+      assert.ok(v <= h + 1e-9 && espessuraFrente(h, spec) <= ALTURA_FRENTE);
+      ant = v;
+    }
+    assert.equal(alturaVidro(spec.altura - 2, spec), spec.altura - 2, `${spec.nome}: a frente fecha antes da coroa`);
+    assert.equal(espessuraFrente(PODIO.altura, spec), 0);
+  }
+  // o leito de terra fica no fundo da cava; o tapume abre as 8 avenidas
+  const lago = malhaCanteiroLago(CX, CZ, 12);
+  assert.ok(Math.min(...lago.p.filter((_, i) => i % 3 === 1)) < 12 + LAGO.nivel);
+  // no render: os materiais fixos e a altura acompanhando a obra
+  const ctx = ctxFalso();
+  const mats = materiais(ctx);
+  const obra = criarObra(ctx, mats.opaco);
+  obra.montar(A, 12);
+  obra.quadro(0, { torre: true, blade: 200, legacy: 150, lago: false });
+  const usados = new Set();
+  obra.grupo.traverse((o) => o.material && usados.add(o.material));
+  for (const x of usados) assert.ok(mats.lista.has(x), `${x.name} fora do conjunto fixo`);
+  const gr = obra.grupo.children.filter((o) => o.isGroup);
+  assert.equal(gr.length, 2);
+  const topo = (g) => g.children.find((o) => o.name.endsWith('cabeca')).position.y;
+  assert.ok(topo(gr[0]) >= 200 + GRUA.folga && topo(gr[0]) < 200 + GRUA.folga + GRUA.trecho);
+  assert.ok(topo(gr[1]) < topo(gr[0]), 'a da Legacy mais baixa');
+  obra.quadro(0, { torre: true, blade: 520, legacy: 452, lago: false });
+  assert.ok(topo(gr[0]) >= 540 && topo(gr[0]) <= GRUA.topoBlade + GRUA.trecho);
+  obra.quadro(0, { torre: false, lago: false });
+  assert.equal(gr[0].visible, false, 'pronta: as gruas saem');
+  obra.descartar();
+  descartarMateriais(ctx);
+});
+
+test('helicóptero (D61): pousa no centro do heliponto da Blade de frente para a torre, voa sobre o mar, malha leve', () => {
+  const R = rotaDoVoo(GLEBA_ENVELOPE.cota);
+  assert.ok(Math.hypot(R.pad[0] - POUSO.x, R.pad[2] - POUSO.z) < 1e-9);
+  assert.ok(Math.abs(R.pad[1] - (GLEBA_ENVELOPE.cota + POUSO.y) - 1.35) < 1e-9, 'os esquis no tabuleiro');
+  let noChao = 0;
+  let min = Infinity;
+  for (let t = 0; t < CICLO.total; t += 0.5) {
+    const q = posicaoNoCiclo(t, R);
+    if (q.noChao) {
+      noChao++;
+      assert.deepEqual(q.p, R.pad);
+    }
+    for (const v of q.p) assert.ok(Number.isFinite(v));
+    if (!q.noChao) min = Math.min(min, q.p[1]);
+  }
+  assert.ok(noChao * 0.5 >= 40, 'fica uns 45 s pousado');
+  assert.ok(min >= R.pad[1] - 1e-9, 'nunca abaixo do heliponto (nada atravessa a torre)');
+  // a chegada vem do mar (ao sul da sede)
+  assert.ok(R.chegada[2] > SEDE_CENTRO[1] + 1000);
+  // de frente para a torre: o nariz (+x local) aponta do heliponto para o centro da Blade
+  const dx = TORRE_POSICAO.x - POUSO.x;
+  const dz = TORRE_POSICAO.z - POUSO.z;
+  const rumo = Math.atan2(-dz, dx);
+  assert.ok(Math.abs(Math.atan2(Math.sin(rumo - R.frente), Math.cos(rumo - R.frente))) < 0.2 || Math.hypot(dx, dz) < 8);
+  const h = malhaHelicoptero('#c9a86a');
+  conferirMalha(h, 'helicóptero');
+  assert.ok(h.triangulos + malhaRotor().triangulos + malhaRotorCauda().triangulos < 1500);
+  const b = h.caixa();
+  assert.ok(b[3] - b[0] > 12 && b[3] - b[0] < 16, 'uns 13 m de ponta a ponta');
+});
+
+test('plano no jogo (X1b): na obra o pódio sai à parte, o lago em obra sem o espelho fantasma, o lago pronto traz os portões', () => {
+  const chao = () => 12;
+  const base = malhasDoPlano('A', { chao, prontas: new Set(), paisagem: false });
+  const obra = malhasDoPlano('A', { chao, prontas: new Set(['lago']), paisagem: 'portoes', podioObra: true });
+  assert.equal(base.podio, null);
+  assert.ok(obra.podio.opaco.triangulos > 0 && obra.podio.vidro.triangulos > 0, 'o pódio nos materiais das torres');
+  assert.ok(obra.fantasma.opaco.triangulos < base.fantasma.opaco.triangulos, 'o pódio não fica no fantasma');
+  const lagoObra = malhasDoPlano('A', { chao, prontas: new Set(), paisagem: false, lagoObra: true });
+  assert.ok(lagoObra.fantasma.opaco.triangulos < base.fantasma.opaco.triangulos, 'sem o espelho de holograma sobre a terra');
+  // os portões e a praça com o lago pronto (8 portões: 3 caixas cada)
+  assert.ok(obra.comum.opaco.triangulos > malhasDoPlano('A', { chao, prontas: new Set(['lago']), paisagem: false }).comum.opaco.triangulos);
+  conferirMalha(obra.comum.opaco, 'portões');
 });

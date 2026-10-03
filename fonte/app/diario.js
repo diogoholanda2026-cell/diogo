@@ -58,6 +58,8 @@ export function criarDiario({ local = localSeguro(), sessao, agora = () => Date.
   let ultimaGravacao = -Infinity;
   let sujo = false;
   let parado = null; // motivo ('outraPagina') quando esta página não grava mais
+  let falhou = false; // o localStorage recusou a última gravação (cheio): pede um save, que esvazia o diário
+  let meuTexto = null; // o último texto gravado por esta página (conferir a outra página sem ler o JSON)
 
   const diario = {
     ler: () => lerDiario(local.get(chave)),
@@ -101,8 +103,8 @@ export function criarDiario({ local = localSeguro(), sessao, agora = () => Date.
       if (mudou) sujo = true;
       return mudou;
     },
-    /** Precisa de save já (diário grande demais). */
-    cheio: () => (atual?.cmds.length ?? 0) > MAX_COMANDOS,
+    /** Precisa de save já (diário grande demais, ou o localStorage recusou). */
+    cheio: () => !!atual && (falhou || atual.cmds.length > MAX_COMANDOS),
     /** Grava no localStorage se passou o intervalo (ou forcar). Devolve true se gravou. */
     talvez(tMs, forcar = false) {
       if (!atual || parado) return false;
@@ -119,9 +121,12 @@ export function criarDiario({ local = localSeguro(), sessao, agora = () => Date.
       }
       const t = Math.max(agora(), meuT + 1);
       atual.carimbo = { sessao, tique: atual.tique, t };
-      const ok = local.set(chave, JSON.stringify(atual));
+      const texto = JSON.stringify(atual);
+      const ok = local.set(chave, texto);
+      falhou = !ok;
       if (ok) {
         meuT = t;
+        meuTexto = texto;
         sujo = false;
       }
       return ok;
@@ -131,7 +136,9 @@ export function criarDiario({ local = localSeguro(), sessao, agora = () => Date.
      */
     outraPagina() {
       if (!atual) return false;
-      const d = diario.ler();
+      const texto = local.get(chave);
+      if (texto !== null && texto === meuTexto) return false; // o último texto é o desta página: ninguém gravou depois
+      const d = lerDiario(texto);
       return !!(d && d.partida === atual.partida && d.carimbo && d.carimbo.sessao !== sessao && d.carimbo.t > meuT);
     },
     /**

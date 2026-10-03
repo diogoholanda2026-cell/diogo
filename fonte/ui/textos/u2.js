@@ -42,8 +42,10 @@ export function registrar(registrarTextos) {
     'u2.dica.colocar': 'Toque no lugar, gire se precisar e confirme. O prédio precisa de frente para uma via.',
     'u2.dica.colocar.mouse': 'Clique no lugar; vírgula e ponto giram. O prédio precisa de frente para uma via.',
     'u2.dica.avisos': 'Esses sinais mostram o que falta. Toque num deles.',
+    'u2.dica.avisos.mouse': 'Esses sinais mostram o que falta. Clique num deles.',
     'u2.dica.velocidade': 'Espaço pausa e volta; 1, 2 e 3 mudam a velocidade.',
     'u2.dica.numeros': 'Toque nos números lá em cima para ver os detalhes.',
+    'u2.dica.numeros.mouse': 'Clique nos números lá em cima para ver os detalhes.',
     'u2.dica.emprestimo': 'O caixa está baixo. A Economia tem o empréstimo, com as regras escritas.',
     'u2.sug.usar': 'Usar sugestão',
   });

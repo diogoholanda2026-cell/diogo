@@ -11,7 +11,7 @@
 // Uma chamada por carroceria e LOD que aparece (família 'vida').
 import * as THREE from 'three';
 import { perfilVia, ALTURA, alturaNaSecao } from '../geracao/perfilVia.js';
-import { faixasOrdenadas, naFaixa, curvaEntre, pontoCurva, fimDaFaixa, inicioDaFaixa } from './trafego.js';
+import { faixasOrdenadas, naFaixa, curvaEntre, pontoCurva, fimDaFaixa, inicioDaFaixa, matrizGiroY } from './trafego.js';
 import { alturaEm } from '../../comum/altura.js';
 import { porPerfil } from '../motor/perfis.js';
 
@@ -222,7 +222,9 @@ function criarCaminhoes(ctx) {
     });
   }
   let perfilMontado = ctx.perfil.id;
-  // modelo e GLSL sob demanda (chegam antes da última rodada do aquecimento: o programa compila na carga)
+  // modelo e GLSL sob demanda; o programa compila no aquecimento da carga (D66). Chegando depois da rodada final
+  // (máquina ocupada), pede uma rodada a mais, como as árvores
+  const fonteAquecer = () => malhas.map((M) => M.mesh);
   const carga = import('../geracao/caminhoes.js').then((m) => {
     mod = m;
     material = criarMaterialCaminhao(ctx.ganchos, U, m);
@@ -230,6 +232,11 @@ function criarCaminhoes(ctx) {
     U.gCamPiso.value = m.CAMINHAO.piso;
     perfilMontado = ctx.perfil.id;
     montarMalhas();
+    const aq = ctx.quadro?.aquecer;
+    if (aq?.pronto) {
+      aq.delete?.(fonteAquecer);
+      aq.add?.(fonteAquecer);
+    }
     return m;
   });
 
@@ -245,11 +252,6 @@ function criarCaminhoes(ctx) {
   let desenhados = 0;
   let naRua = 0;
   const pose = { x: 0, z: 0, hx: 1, hz: 0 };
-  const m4 = new THREE.Matrix4();
-  const qt = new THREE.Quaternion();
-  const eixoY = new THREE.Vector3(0, 1, 0);
-  const pos = new THREE.Vector3();
-  const um = new THREE.Vector3(1, 1, 1);
 
   function planoDe(rede, ent) {
     const ja = planos.get(ent.id);
@@ -298,10 +300,7 @@ function criarCaminhoes(ctx) {
         if (j >= M.cap) return;
         cont[k]++;
         desenhados++;
-        pos.set(x, y, z);
-        qt.setFromAxisAngle(eixoY, Math.atan2(hx, hz));
-        m4.compose(pos, qt, um);
-        M.mesh.instanceMatrix.array.set(m4.elements, j * 16);
+        matrizGiroY(M.mesh.instanceMatrix.array, j * 16, x, y, z, hx, hz);
         const cab = info.visual ? BRANCO : corHolding;
         const luz = (U.gCamNoite.value > 0.25 ? 1 : 0) | (freio ? 2 : 0);
         M.cab.array.set([cab[0], cab[1], cab[2], luz + 4 * (id % 64)], 4 * j);
@@ -370,6 +369,8 @@ function criarCaminhoes(ctx) {
       animar = b;
     },
     preparar: () => carga,
+    /** O modelo e o material chegaram (o aquecimento da carga pode esperar por isso). */
+    pronto: () => !!mod,
     /** Cenas: entregas de mostra ([{ id, item, n, caminho, tIni, tFim, visual }]), desenhadas como as da simulação. */
     amostras(lista) {
       amostras = lista ?? [];
@@ -387,6 +388,7 @@ function criarCaminhoes(ctx) {
       return { entregas: conhecidos.size, naRua, desenhados, tris };
     },
     descartar() {
+      ctx.quadro?.aquecer?.delete?.(fonteAquecer);
       for (const M of malhas) {
         cena.remove(M.mesh);
         M.mesh.geometry.dispose();

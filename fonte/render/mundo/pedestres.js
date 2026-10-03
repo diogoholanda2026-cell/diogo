@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { estacao, hashF } from '../geracao/malhaVia.js';
 import { perfilVia, ALTURA, alturaNaSecao } from '../geracao/perfilVia.js';
 import { grupoSemaforo, defasagemSemaforo } from '../geracao/cruzamento.js';
-import { restaVermelho, pontoCurva } from './trafego.js';
+import { restaVermelho, pontoCurva, matrizGiroY } from './trafego.js';
 import { alturaEm } from '../../comum/altura.js';
 import { maisPerto, arcoDoT } from '../../comum/bezier.js';
 import { CELULA, PREDIO, TIPO_PREDIO } from '../../contratos/flags.js';
@@ -67,6 +67,9 @@ const larguraAndar = (P, lado) => {
   const c = P.calcadas.find((k) => k.lado === lado);
   return c ? Math.max(0, c.largura - FAIXA_ANDAR.folgaFora - FAIXA_ANDAR.de) : 0;
 };
+
+/** Chave numérica (nunca 0) da faixa de pedestres do braço e no nó n: sem texto novo a cada pergunta do tráfego. */
+export const chaveFaixa = (n, e) => n * 1048576 + e + 1;
 
 /** Boca de uma aresta num nó: s onde a calçada acaba (a do fim, se a aresta chega ao nó pelo b). */
 const bocaDe = (ar, noFim) => (noFim ? ar.L - ar.cFim : ar.cIni);
@@ -151,18 +154,27 @@ function criarPedestres(ctx) {
     }
   }
   let perfilMontado = ctx.perfil.id;
-  // a figura e o GLSL sob demanda (chegam antes da última rodada do aquecimento: o programa compila na carga)
+  // a figura e o GLSL sob demanda; o programa compila no aquecimento da carga (D66). Chegando depois da rodada final
+  // (máquina ocupada), pede uma rodada a mais, como as árvores
+  const fonteAquecer = () => malhas.map((M) => M.mesh);
   const carga = Promise.all([import('../geracao/pessoas.js'), import('../materiais/shaders/pessoa.glsl.js')]).then(([m, sh]) => {
     mod = m;
     material = criarMaterialPessoa(ctx.ganchos, sh);
     perfilMontado = ctx.perfil.id;
     montarMalhas();
+    const aq = ctx.quadro?.aquecer;
+    if (aq?.pronto) {
+      aq.delete?.(fonteAquecer);
+      aq.add?.(fonteAquecer);
+    }
     return m;
   });
 
   // ---------------------------------------------------------------------------------------------- estado
   const gente = [];
   let frentes = [];
+  /** As portas (s) de cada calçada com gente: aresta * 2 + (lado > 0), das frentes do momento. */
+  let portas = new Map();
   let somaPeso = 0;
   let alvoFrentes = null;
   let tFrentes = -1e9;
@@ -172,8 +184,14 @@ function criarPedestres(ctx) {
   const alvo = new THREE.Vector3();
   const est = { x: 0, z: 0, tx: 1, tz: 0, t: 0 };
   const q = { x: 0, z: 0, hx: 0, hz: 0 };
-  /** Faixas de pedestres com gente atravessando: 'nó:aresta'. */
+  /** Faixas de pedestres com gente atravessando (chaveFaixa do nó e do braço). */
   const naFaixa = new Set();
+  /** Longe da câmera (fora do LOD0): ali a figura pode sumir sem que se veja. */
+  const foraDoLod0 = (p) => {
+    const cp = ctx.camera.position;
+    const l = perfil().lod0;
+    return (p.x - cp.x) ** 2 + (p.y - cp.y) ** 2 + (p.z - cp.z) ** 2 > l * l;
+  };
 
   /** As frentes (calçada de um lado de uma aresta) com a gente esperada e as portas, perto do alvo. */
   function montarFrentes(esp, rede, hora) {
@@ -217,6 +235,7 @@ function criarPedestres(ctx) {
       f.portas.push(s);
     }
     frentes = [...mapa.values()];
+    portas = new Map(frentes.map((f) => [f.e * 2 + (f.lado > 0 ? 1 : 0), f.portas]));
     for (const f of frentes) somaPeso += f.w;
     alvoFrentes = alvo.clone();
   }
@@ -255,20 +274,29 @@ function criarPedestres(ctx) {
     return {
       id, corpos: corposN, estado: parado ? 'parado' : 'anda', e: f.e, lado: f.lado, s, dir, off, v, vAgora: parado ? 0 : v,
       restante: 40 + 200 * hashF(id, 9), tParado: parado ? 15 + 45 * hashF(id, 10) : 0, plano: null, k: 0, t: 0, espera: 0,
-      x: 0, z: 0, y: 0, hx: 1, hz: 0, cruza: null,
+      x: 0, z: 0, y: 0, hx: 1, hz: 0, cruza: null, u: 0, dy: 0, uAr: null, uTipo: -1, uLado: 0, uOff: -1,
     };
   }
 
   /** Ponto na calçada (x, z, a direção de quem anda) e a cota. */
   function naCalcada(p, ar, T) {
-    const P = perfilVia(ar.tipo);
-    const u = uDaCalcada(P, p.lado, p.off);
+    // o u e a cota da faixa de andar só mudam com a calçada (aresta, tipo, lado) ou a faixa (off): guardados na pessoa
+    if (p.uAr !== ar || p.uTipo !== ar.tipo || p.uLado !== p.lado || p.uOff !== p.off) {
+      const P = perfilVia(ar.tipo);
+      p.u = uDaCalcada(P, p.lado, p.off);
+      p.dy = alturaNaSecao(P, p.u);
+      p.uAr = ar;
+      p.uTipo = ar.tipo;
+      p.uLado = p.lado;
+      p.uOff = p.off;
+    }
+    const u = p.u;
+    const dy = p.dy;
     estacao(ar.p, ar.tab, p.s, est);
     p.x = est.x - est.tz * u;
     p.z = est.z + est.tx * u;
     p.hx = est.tx * p.dir;
     p.hz = est.tz * p.dir;
-    const dy = alturaNaSecao(P, u);
     p.y = ar.ponte ? ar.cotas[0] + ((ar.cotas[1] - ar.cotas[0]) * p.s) / ar.L + dy - ALTURA.pista : (T ? alturaEm(T, p.x, p.z) : 0) + dy;
   }
 
@@ -374,7 +402,7 @@ function criarPedestres(ctx) {
       const l = Math.hypot(dx, dz) || 1;
       // a perna da espera (parado na borda) e a travessia
       pernas.push({ espera: true, n, e: aqui.ar.e, semaforo: !!no.semaforos, grupo: grupoSemaforo(aqui.b.theta), defas: defasagemSemaforo(n), dist: l, p: [P1.x, P1.z, P1.x, P1.z, P1.x, P1.z, P1.x, P1.z], L: 0.01, hx: dx / l, hz: dz / l, y: ALTURA.calcada });
-      pernas.push({ p: [P1.x, P1.z, P1.x + dx / 3, P1.z + dz / 3, P1.x + (2 * dx) / 3, P1.z + (2 * dz) / 3, P2.x, P2.z], L: l, y: ALTURA.pista, rampa: true, cruza: `${n}:${aqui.ar.e}` });
+      pernas.push({ p: [P1.x, P1.z, P1.x + dx / 3, P1.z + dz / 3, P1.x + (2 * dx) / 3, P1.z + (2 * dz) / 3, P2.x, P2.z], L: l, y: ALTURA.pista, rampa: true, cruza: chaveFaixa(n, aqui.ar.e) });
       const off = FAIXA_ANDAR.de + larguraAndar(perfilVia(depois.ar.tipo), depois.lado) * 0.5;
       ponto(depois.ar, depois.lado, depois.boca, off, B);
       pernas.push({ ...cubica(P2.x, P2.z, dx / l, dz / l, B.x, B.z, B.tx * depois.dir, B.tz * depois.dir), y: ALTURA.calcada });
@@ -467,7 +495,13 @@ function criarPedestres(ctx) {
     const d = v * dt;
     p.s += d * p.dir;
     p.restante -= d;
-    if (p.restante <= 0) return false; // chegou: entrou numa porta
+    // chegou: entra na primeira porta desta calçada por onde passar; sem porta nesta calçada (ou passado muito do
+    // destino), só some fora do LOD0, onde não se vê a figura sumir no meio da calçada
+    if (p.restante <= 0) {
+      const ps = portas.get(p.e * 2 + (p.lado > 0 ? 1 : 0));
+      if (ps?.some((s) => Math.abs(s - p.s) < Math.max(0.6, d))) return false;
+      if ((!ps || p.restante < -90) && foraDoLod0(p)) return false;
+    }
     if ((fim - p.s) * p.dir <= 0) {
       p.s = fim;
       esquina(rede, p, ar);
@@ -492,7 +526,7 @@ function criarPedestres(ctx) {
     const grupos = new Map();
     for (const p of gente) {
       if (p.estado !== 'anda') continue;
-      const k = `${p.e}:${p.lado}:${p.dir}`;
+      const k = p.e * 4 + (p.lado > 0 ? 2 : 0) + (p.dir > 0 ? 1 : 0);
       let g = grupos.get(k);
       if (!g) grupos.set(k, (g = []));
       g.push(p);
@@ -514,16 +548,12 @@ function criarPedestres(ctx) {
 
   // ---------------------------------------------------------------------------------------------- desenho
 
-  const m4 = new THREE.Matrix4();
-  const qt = new THREE.Quaternion();
-  const eixoY = new THREE.Vector3(0, 1, 0);
-  const pos = new THREE.Vector3();
-  const esc = new THREE.Vector3();
-
   function desenhar() {
     const P = perfil();
     const cp = ctx.camera.position;
     const cont = [0, 0];
+    const raio2 = P.raio * P.raio;
+    const lod0 = P.lod0 * P.lod0;
     corpos = 0;
     for (const p of gente) {
       const n = p.corpos.length;
@@ -544,19 +574,15 @@ function criarPedestres(ctx) {
             hz = k === 0 ? p.hx : -p.hx;
           }
         }
-        const d = Math.hypot(x - cp.x, p.y - cp.y, z - cp.z);
-        if (d > P.raio) continue;
-        const lod = d < P.lod0 ? 0 : 1;
+        const d2 = (x - cp.x) ** 2 + (p.y - cp.y) ** 2 + (z - cp.z) ** 2;
+        if (d2 > raio2) continue;
+        const lod = d2 < lod0 ? 0 : 1;
         const M = malhas[lod];
         const j = cont[lod];
         if (j >= M.cap) continue;
         cont[lod]++;
         corpos++;
-        pos.set(x, p.y, z);
-        qt.setFromAxisAngle(eixoY, Math.atan2(hx, hz));
-        esc.setScalar(b.escala);
-        m4.compose(pos, qt, esc);
-        M.mesh.instanceMatrix.array.set(m4.elements, j * 16);
+        matrizGiroY(M.mesh.instanceMatrix.array, j * 16, x, p.y, z, hx, hz, b.escala);
         const a = M.pessoa.array;
         a[4 * j] = b.fase % 1;
         a[4 * j + 1] = Math.min(1, p.vAgora / 1.2);
@@ -605,6 +631,30 @@ function criarPedestres(ctx) {
     }
   }
 
+  /**
+   * Um passo de todos: nasce gente nas portas até o alvo, sai quem ficou longe do alvo (e, se passou dele, quem está
+   * andando fora do LOD0; ninguém some no meio da travessia nem à vista) e os outros andam.
+   */
+  function andarTodos(rede, dt, tempo, T, P, h0) {
+    const alvoN = Math.min(P.pessoas, Math.round(somaPeso));
+    encher(rede, alvoN, 10, T, h0);
+    naFaixa.clear();
+    seguir();
+    let sobra = gente.reduce((a, p) => a + p.corpos.length, 0) - (alvoN + 8);
+    for (let i = gente.length - 1; i >= 0; i--) {
+      const p = gente[i];
+      const longe = (p.x - alvo.x) ** 2 + (p.z - alvo.z) ** 2 > (P.raio + 40) ** 2;
+      // passou do alvo: sai quem anda fora do LOD0 (perto da câmera, a gente só entra nas portas)
+      const sai = longe || (sobra > 0 && p.estado === 'anda' && foraDoLod0(p));
+      if (sai || !passo(rede, p, dt, tempo, T)) {
+        if (sai && !longe) sobra -= p.corpos.length;
+        gente.splice(i, 1);
+        continue;
+      }
+      for (const b of p.corpos) b.fase += (dt * p.vAgora) / b.passo;
+    }
+  }
+
   let tAnt = null;
   const dom = {
     nome: 'pedestres',
@@ -628,24 +678,7 @@ function criarPedestres(ctx) {
         montarFrentes(esp, vias.rede, c.horaDoCeu());
         tFrentes = tMs;
       }
-      const alvoN = Math.min(P.pessoas, Math.round(somaPeso));
-      encher(vias.rede, alvoN, 10, T, tMs);
-      naFaixa.clear();
-      seguir();
-      const tempo = c.relogioRua ?? tMs / 1000;
-      let sobra = gente.reduce((a, p) => a + p.corpos.length, 0) - (alvoN + 8);
-      for (let i = gente.length - 1; i >= 0; i--) {
-        const p = gente[i];
-        const longe = Math.hypot(p.x - alvo.x, p.z - alvo.z) > P.raio + 40;
-        // sobra: sai quem está andando (entra numa porta); ninguém some no meio da travessia
-        const sai = longe || (sobra > 0 && p.estado === 'anda');
-        if (sai || !passo(vias.rede, p, dt, tempo, T)) {
-          if (sai && !longe) sobra -= p.corpos.length;
-          gente.splice(i, 1);
-          continue;
-        }
-        for (const b of p.corpos) b.fase += (dt * p.vAgora) / b.passo;
-      }
+      andarTodos(vias.rede, dt, c.relogioRua ?? tMs / 1000, T, P, tMs);
       desenhar();
     },
     /** Cenas: anda (true), para (false) ou segue o jogo (null). */
@@ -664,22 +697,18 @@ function criarPedestres(ctx) {
       return gente.reduce((a, p) => a + p.corpos.length, 0);
     },
     preparar: () => carga,
+    /** A figura e o material chegaram (o aquecimento da carga pode esperar por isso). */
+    pronto: () => !!mod,
     /** Cenas: adianta a gente `seg` segundos sem desenhar (junto com trafego.avancar, quadro a quadro). */
     avancarUm(dt, ctxQ = ctx) {
       const vias = ctxQ.dominio('vias');
       if (!vias?.rede || !mod) return;
-      naFaixa.clear();
-      seguir();
       const tempo = ctxQ.relogioRua ?? 0;
-      for (let i = gente.length - 1; i >= 0; i--) {
-        const p = gente[i];
-        if (!passo(vias.rede, p, dt, tempo, ctxQ.sim.espelho.terreno)) gente.splice(i, 1);
-        else for (const b of p.corpos) b.fase += (dt * p.vAgora) / b.passo;
-      }
+      andarTodos(vias.rede, dt, tempo, ctxQ.sim.espelho.terreno, perfil(), Math.round(tempo * 10));
     },
     /** A faixa de pedestres do braço e do nó n tem gente atravessando? (trafego.js) */
     faixaOcupada(n, e) {
-      return naFaixa.has(`${n}:${e}`);
+      return naFaixa.has(chaveFaixa(n, e));
     },
     medidas() {
       let tris = 0;
@@ -694,6 +723,7 @@ function criarPedestres(ctx) {
       }));
     },
     descartar() {
+      ctx.quadro?.aquecer?.delete?.(fonteAquecer);
       for (const M of malhas) {
         cena.remove(M.mesh);
         M.mesh.geometry.dispose();

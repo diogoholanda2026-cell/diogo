@@ -8,7 +8,7 @@
 //   node ferramentas/testes/save.teste.mjs --chromium <pasta montada>
 //       no Chromium de teste: nova partida, comandos, pausa, save segurado no meio, a página morre (Page.crash) e a
 //       página nova continua: o mesmo tique, o mesmo livro e o mesmo hash.
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -17,7 +17,7 @@ import { criarSimulacao } from '../../fonte/sim/estado.js';
 import { SAVE } from '../../fonte/contratos/save.js';
 import { bancoNaMemoria, localSeguro, criarArmazem, proximoAuto, proximoManual, SLOTS_AUTO, SLOTS_MANUAIS, nomeArquivo, MAX_QUARENTENA } from '../../fonte/app/armazem.js';
 import { criarDiario, lerDiario } from '../../fonte/app/diario.js';
-import { criarSalvamento, ordemContinuar, serveAoDiario } from '../../fonte/app/salvamento.js';
+import { criarSalvamento, ordemContinuar, serveAoDiario, resumoContinuar } from '../../fonte/app/salvamento.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const fonte = (p) => join(RAIZ, 'fonte', p);
@@ -133,6 +133,14 @@ test('diário: grava na hora com o carimbo, junta o livro, solta a base velha; o
   assert.equal(lerDiario(ls.getItem(SAVE.chaves.diario)).carimbo.sessao, 'B', 'o diário da aba nova fica');
   assert.equal(lerDiario('{"v":1}'), null);
   assert.equal(lerDiario('nao e json'), null);
+  // o localStorage cheio recusa a gravação: o diário pede um save (que o esvazia) e volta a gravar quando cabe
+  let cabe = false;
+  const C = criarDiario({ local: { get: () => null, set: () => cabe, remove() {} }, sessao: 'C', agora: () => (relogio += 1) });
+  C.comecar({ partida: 'p2', ramo: 'r2', base: { slot: 'auto1', criado: 1, tique: 0, seq: 0 }, tique: 0 });
+  assert.equal(C.cheio(), true, 'recusou: pede save');
+  cabe = true;
+  assert.equal(C.gravar(), true);
+  assert.equal(C.cheio(), false);
 });
 
 // ------------------------------------------------------------------------------------------------ salvamento
@@ -237,11 +245,71 @@ test('salvamento: save danificado vai para a quarentena e o anterior abre; a par
   C.S.diario.acompanhar(C.sim);
   C.S.diario.gravar();
   const hash = C.sim.hash();
-  const D = pagina({ banco: bancoNaMemoria(), ls: ls2, sessao: 'D', relogio });
+  // os saves de outra partida no banco não passam na frente: o diário é da última partida jogada
+  const bancoD = bancoNaMemoria();
+  await bancoD.gravar([{ loja: 'saves', chave: 'auto1', valor: banco.lojas.saves.get('auto1') }, { loja: 'meta', chave: 'auto1', valor: { ...banco.lojas.meta.get('auto1') } }]);
+  const D = pagina({ banco: bancoD, ls: ls2, sessao: 'D', relogio });
   const c2 = await D.S.continuar();
   assert.ok(c2.ok);
+  assert.equal(c2.slot, null, 'voltou pelo diário, não pelo save da outra partida');
   assert.equal(D.sim.tique, 15);
   assert.equal(D.sim.hash(), hash);
+  let daPartida = [];
+  for (let i = 0; i < 200 && !daPartida.length; i++) {
+    await new Promise((ok) => setTimeout(ok, 10));
+    daPartida = (await D.S.listarSaves()).filter((m) => m.partida === 'px');
+  }
+  assert.equal(daPartida.length, 1, 'e já salvou a partida reconstruída');
+  assert.equal(daPartida[0].tique, 15);
+});
+
+test('salvamento: carregar o automático mais velho não grava por cima dele; a identidade da nova partida volta pelo diário; apagar a base salva de novo', async () => {
+  const banco = bancoNaMemoria();
+  const ls = armazenamento();
+  const relogio = { t: 5e6 };
+  const A = pagina({ banco, ls, sessao: 'A', relogio });
+  await A.S.comecarNova({ semente: SEMENTE, nome: 'Held', cor: '#c9a86a' });
+  for (let i = 0; i < 2; i++) {
+    A.sim.rodar(10, { sincrono: true });
+    await A.S.salvar('auto');
+  }
+  A.sim.rodar(10, { sincrono: true });
+  assert.deepEqual((await A.S.listarSaves()).map((m) => [m.slot, m.tique]), [['auto3', 20], ['auto2', 10], ['auto1', 0]]);
+  // o save de segurança (tique 30) vai para o rodízio sem o auto1, que é o que o jogador quer abrir
+  const c = await A.S.carregar('auto1');
+  assert.ok(c.ok);
+  assert.equal(A.sim.tique, 0, 'abriu o save velho, não o de segurança');
+  assert.deepEqual((await A.S.listarSaves()).map((m) => [m.slot, m.tique]), [['auto2', 30], ['auto3', 20], ['auto1', 0]]);
+  // apagar a base do diário da partida em jogo: um save novo vira a base
+  const base = A.S.diario.atual.base.slot;
+  A.sim.rodar(5, { sincrono: true });
+  await A.S.apagarSave(base);
+  assert.notEqual(A.S.diario.atual.base.slot, base, 'o diário tem base de novo');
+  assert.ok((await A.S.listarSaves()).some((m) => m.slot === A.S.diario.atual.base.slot && m.tique === 5));
+  // nova partida do app: a identidade (com o criador) entra antes do diário; a aba cai antes do primeiro save
+  const banco2 = bancoNaMemoria();
+  const ls2 = armazenamento();
+  const B = pagina({ banco: banco2, ls: ls2, sessao: 'B', relogio, sim: criarSimulacao({ semente: SEMENTE, holding: { nome: 'Holding Held', cor: '#c9a86a' }, modo: 'normal' }) });
+  B.sim.cmd('holding.identidade', { nome: 'Holding Held', cor: '#c9a86a', modo: 'normal', criador: 'Diogo Holanda' });
+  const gravar = banco2.gravar;
+  banco2.gravar = () => new Promise(() => {});
+  B.S.comecarNova({ semente: SEMENTE, nome: 'Holding Held', cor: '#c9a86a', criador: 'Diogo Holanda' });
+  await new Promise((ok) => setTimeout(ok, 30));
+  banco2.gravar = gravar;
+  B.sim.cmd('emprestimo.tomar', { valor: 1000 });
+  B.sim.rodar(12, { sincrono: true });
+  B.S.diario.acompanhar(B.sim);
+  B.S.diario.gravar();
+  const antes = { tique: B.sim.tique, seq: B.sim.livro.ultimoSeq, hash: B.sim.hash() };
+  // o menu mostra o que o Continuar abre: a partida do diário (sem save ainda), não o último save de outra partida
+  const resumo = resumoContinuar(await A.S.listarSaves(), B.S.diario.ler());
+  assert.deepEqual([resumo.nome, resumo.populacao, resumo.mes, resumo.ano, resumo.data], ['Holding Held', null, 1, 1, null]);
+  const doA = resumoContinuar(await A.S.listarSaves(), A.S.diario.ler());
+  assert.equal(doA.slot, A.S.diario.atual.base.slot, 'com save: o da linhagem do diário');
+  const C = pagina({ banco: banco2, ls: ls2, sessao: 'C', relogio });
+  const r = await C.S.continuar();
+  assert.ok(r.ok && r.slot === null, 'voltou pelo diário');
+  assert.deepEqual({ tique: C.sim.tique, seq: C.sim.livro.ultimoSeq, hash: C.sim.hash() }, antes, 'a identidade não se perde: mesmo seq e mesmo hash');
 });
 
 test('salvamento: exportar e importar (conferido inteiro, abre na hora); arquivo estranho não entra', async () => {
@@ -315,8 +383,27 @@ test('primeira hora: o mapa da SEDE3 sugere a avenida até o portão norte, as q
   const cmds = regras.comandosDaSugestao(quadra);
   assert.deepEqual(cmds.map((c) => c[0]), ['via.construir', 'zona.pintar']);
   assert.ok(sim.q.via.previa(cmds[0][1].plano).ok, 'a grade da primeira quadra cabe fora do disco da sede');
+  // a captação e a usina na rua da Vila: o "Usar sugestão" encaixa pela prévia (de frente para a via), como a ferramenta
+  const previa = (p) => sim.q.construir.previa(p);
+  for (const id of ['captacao', 'usina']) {
+    const [[nome, args]] = regras.comandosDaSugestao(lista.find((s) => s.id === id), 'teste', previa);
+    const r = sim.cmd(nome, args);
+    assert.ok(r.ok, `${id}: ${JSON.stringify(r)}`);
+  }
   assert.equal(regras.categoriaGuiada({ objetivos }), 'vias', 'o anel aponta Vias');
   assert.equal(regras.categoriaGuiada({ objetivos, ferramenta: 'via' }), null, 'com a ferramenta aberta, o anel sai');
+});
+
+test('primeira hora: a avenida sugerida fecha o objetivo e o anel e o traçado saem', async () => {
+  const { regras } = await ui();
+  const sim = criarSimulacao({ semente: SEMENTE });
+  const av = sim.q.sugestoes().find((s) => s.id === 'avenida');
+  for (const [nome, args] of regras.comandosDaSugestao(av)) assert.ok(sim.cmd(nome, args).ok);
+  sim.rodar(40, { sincrono: true });
+  const objetivos = sim.q.barra().objetivos;
+  const o = objetivos.find((x) => x.id === 'cidade.avenida');
+  assert.ok(!o || o.feito >= o.total, `objetivo da avenida: ${JSON.stringify(o)}`);
+  assert.deepEqual(regras.sugestoesAbertas({ objetivos, lista: sim.q.sugestoes() }).map((s) => s.id).includes('avenida'), false);
 });
 
 test('dicas: uma por vez, cada uma uma vez, a da velocidade só no mouse; nova partida e textos da U2', async () => {
@@ -345,6 +432,28 @@ test('dicas: uma por vez, cada uma uma vez, a da velocidade só no mouse; nova p
   assert.deepEqual(cfg.QUALIDADES, ['auto', 'ultra', 'alta', 'pc', 'media', 'leve'], 'o PC no seletor (pendência da I2)');
   assert.match(cfg.orcamentoEscrito('pc'), /800 chamadas e 2,5 mi triângulos/);
   assert.equal(cfg.abaVizinha('video', -1), 'sobre');
+  // "Manter esta qualidade?": a contagem é do módulo (trocar de aba ou fechar a tela não confirma); sem "Manter", volta
+  mock.timers.enable({ apis: ['setInterval'] });
+  try {
+    const pedidos = [];
+    const prefs = { value: { qualidade: 'auto' }, peek() { return this.value; } };
+    const uiFalsa = { jogo: { falso: true }, loja: { prefs }, R: { qualidade: (q) => pedidos.push(q) } };
+    cfg.trocarQualidade(uiFalsa, 'pc');
+    assert.deepEqual(cfg.manter.peek(), { de: 'auto', para: 'pc', resta: cfg.MANTER_S });
+    cfg.trocarQualidade(uiFalsa, 'alta');
+    assert.equal(cfg.manter.peek().de, 'auto', 'a de antes continua a primeira');
+    mock.timers.tick(3000);
+    assert.equal(cfg.manter.peek().resta, cfg.MANTER_S - 3);
+    cfg.trocarQualidade(uiFalsa, 'auto');
+    assert.equal(cfg.manter.peek(), null, 'de volta à de antes: nada a confirmar');
+    cfg.trocarQualidade(uiFalsa, 'leve');
+    mock.timers.tick(cfg.MANTER_S * 1000);
+    assert.equal(prefs.value.qualidade, 'auto', 'sem confirmar, volta sozinha');
+    assert.deepEqual(pedidos, ['pc', 'alta', 'auto', 'leve', 'auto']);
+    assert.equal(cfg.manter.peek(), null);
+  } finally {
+    mock.timers.reset();
+  }
   assert.equal(td.quadrosDoTeste(60), 1200);
   assert.equal(td.quadrosDoTeste(5), 120);
   const texto = td.textoDoResultado({ rel: { perfil: 'pc', sugerido: 'pc', motivo: 'RX 550: faixa do PC', qps: 41.2, resolucao: { w: 1536, h: 864, nativa: { w: 1920, h: 1080 }, modo: 'cronometro', alvoGpu: 15.5 }, gpuPasses: { terreno: 5.2, predios: 8 }, compilacoes: { programas: 58, depois: [] }, programas: [] }, longas: 2, quando: agora });
@@ -399,6 +508,8 @@ if (iChromium >= 0) {
         const sim = app.sim;
         const av = sim.q.sugestoes().find((s) => s.id === 'avenida');
         for (let k = 0; k + 1 < av.pontos.length; k++) sim.cmd('via.construir', { plano: { modo: 'reta', tipo: 'avenida', pontos: [av.pontos[k], av.pontos[k + 1]], sessao: `c.${k}` } });
+        // umas dezenas de tiques de uma vez (o SwiftShader desenha poucos quadros): a reprodução atravessa a obra
+        sim.rodar(40, { sincrono: true });
         sim.cmd('velocidade', { v: 3 });
         await new Promise((ok) => setTimeout(ok, 4000));
         sim.cmd('emprestimo.tomar', { valor: 1000 });

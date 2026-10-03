@@ -1406,7 +1406,7 @@ export function pontosTorre(M = M_LAMINA) {
   });
 }
 
-/** Pontos da Torre Lâmina sozinha. */
+/** Pontos da Blade Tower sozinha. */
 export const PONTOS_TORRE = pontosTorre(M_LAMINA);
 
 // ------------------------------------------------------------------------------------------------ o par (D89)
@@ -1571,6 +1571,10 @@ uniform float uNoite;
 uniform float uHora;
 uniform float uTempo;
 uniform float uCorte;
+// corte da obra do par (X1b): centro do pódio e eixo das torres (x, z); o corte da Blade, o da Legacy e o do vão (y no
+// mundo) e a meia largura do vão. Fora da obra o eixo é zero e os três cortes ficam no alto (não corta nada)
+uniform vec4 uCorteEixo;
+uniform vec4 uCorteH;
 varying vec4 vC;
 varying vec2 vUvM;
 #define G_LUZ_JANELA ${LUZ_NOITE.janela.toFixed(3)}
@@ -1578,6 +1582,11 @@ varying vec2 vUvM;
 #define G_LUZ_LANTERNA ${LUZ_NOITE.lanterna.toFixed(3)}
 #define G_LUZ_ARO ${LUZ_NOITE.aro.toFixed(3)}
 #define G_LUZ_LED ${LUZ_NOITE.led.toFixed(3)}
+float gCorte( vec3 p ) {
+  float s = dot( p.xz - uCorteEixo.xy, uCorteEixo.zw );
+  float lado = s < -uCorteH.w ? uCorteH.x : ( s > uCorteH.w ? uCorteH.y : uCorteH.z );
+  return min( uCorte, lado );
+}
 float gH1( vec2 p ) {
   vec3 p3 = fract( vec3( p.xyx ) * 0.1031 );
   p3 += dot( p3, p3.yzx + 33.33 );
@@ -1974,8 +1983,21 @@ function ligarComum(shader, extras) {
  * que muda entre as variantes são uniformes (uLinhas, uCorte, uNoite): um programa só por material, compilado na carga.
  */
 export const CHAVES = Object.freeze({
-  vidro: 'arcologia-vidro-3', opaco: 'arcologia-opaco-3', cascata: 'arcologia-cascata-2', jato: 'arcologia-jato-2',
+  vidro: 'arcologia-vidro-4', opaco: 'arcologia-opaco-4', cascata: 'arcologia-cascata-2', jato: 'arcologia-jato-2',
 });
+
+/**
+ * Meia largura do vão no corte por lado (X1b): 1 m mais estreita que o vão de 28 m. As faces internas das torres ficam
+ * exatamente a 14 m do centro; com o limite em 14 m o arredondamento as jogava no vão (cortado no pódio) e a face sumia
+ * na obra. Os montantes e as chapas da Dream Bridge que entram até 1 m no vão sobem com a torre.
+ */
+export const MEIO_VAO_CORTE = PAR.vao / 2 - 1;
+
+/** O volume da sombra da obra só troca de 2 em 2 m: cada troca pede um passe novo do mapa de sombra. */
+const PASSO_SOMBRA_OBRA = 2;
+
+/** Uniformes do corte por lado da obra do par (gCorte): sem obra, nada corta. */
+export const extrasCorte = () => ({ uCorteEixo: { value: new THREE.Vector4(0, 0, 0, 0) }, uCorteH: { value: new THREE.Vector4(1e6, 1e6, 1e6, 0) } });
 
 /**
  * Material de vidro da Arcologia: MeshStandardMaterial com a fachada no shader (tipo por vértice) e os ganchos
@@ -1983,12 +2005,12 @@ export const CHAVES = Object.freeze({
  */
 export function materialVidro(ganchos, { linhas = 0, corte = 1e6 } = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.4, envMapIntensity: 1.0 });
-  const extras = { uLinhas: { value: linhas }, uCorte: { value: corte } };
+  const extras = { uLinhas: { value: linhas }, uCorte: { value: corte }, ...extrasCorte() };
   mat.userData.uniformes = extras;
   mat.onBeforeCompile = (shader) => {
     ligarComum(shader, extras);
     let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${GLSL_COMUM}\n${FRAG_VIDRO}`);
-    fs = fs.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif ( vGPosMundo.y > uCorte ) discard;');
+    fs = fs.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif ( vGPosMundo.y > gCorte( vGPosMundo ) ) discard;');
     fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\nfCosV = abs( dot( normalize( vNormal ), normalize( vViewPosition ) ) );\ngFachada();\ndiffuseColor.rgb = fTint;');
     fs = fs.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = fRug;');
     fs = fs.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = fMet;');
@@ -2005,12 +2027,12 @@ export function materialVidro(ganchos, { linhas = 0, corte = 1e6 } = {}) {
 /** Material opaco da Arcologia: cor, rugosidade, metal, luz e padrão por vértice. */
 export function materialOpaco(ganchos, { corte = 1e6 } = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0, envMapIntensity: 0.8 });
-  const extras = { uCorte: { value: corte } };
+  const extras = { uCorte: { value: corte }, ...extrasCorte() };
   mat.userData.uniformes = extras;
   mat.onBeforeCompile = (shader) => {
     ligarComum(shader, extras);
     let fs = shader.fragmentShader.replace('#include <common>', `#include <common>\n${GLSL_COMUM}\n${FRAG_OPACO}`);
-    fs = fs.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif ( vGPosMundo.y > uCorte ) discard;');
+    fs = fs.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif ( vGPosMundo.y > gCorte( vGPosMundo ) ) discard;');
     fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\ngOpaco();\ndiffuseColor.rgb *= oCor;');
     fs = fs.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = oRug;');
     fs = fs.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = oMet;');
@@ -2441,10 +2463,38 @@ function criarModelo(ctx, { nome, m0, m1, ms, efeitos = null, yCentro, topo }) {
      */
     corte(h = 1e6) {
       corte = h;
-      for (const m of [mats.torreVidro, mats.torreVidroLod1, mats.torreOpaco]) m.userData.uniformes.uCorte.value = grupo.position.y + h;
+      for (const m of [mats.torreVidro, mats.torreVidroLod1, mats.torreOpaco]) {
+        m.userData.uniformes.uCorte.value = grupo.position.y + h;
+        m.userData.uniformes.uCorteEixo.value.set(0, 0, 0, 0);
+        m.userData.uniformes.uCorteH.value.set(1e6, 1e6, 1e6, 0);
+      }
       volSombra.scale.y = Math.min(1, Math.max(1e-3, h / topo));
       volSombra.updateMatrixWorld(true);
       ctx.sombra?.marcar();
+    },
+    /**
+     * Corte por lado da obra do par (X1b): a Blade (x local < -vão/2) até blade, a Legacy (x > vão/2) até legacy e o
+     * vão (a Dream Bridge e o pódio entre as torres) até vao, em metros acima da plataforma. Sem argumentos, desfaz.
+     * O volume da sombra encolhe até a mais alta.
+     */
+    cortePorLado(blade = 1e6, legacy = blade, vao = Math.min(blade, legacy)) {
+      const y = grupo.position.y;
+      const r = grupo.rotation.y;
+      corte = Math.max(blade, legacy);
+      for (const m of [mats.torreVidro, mats.torreVidroLod1, mats.torreOpaco]) {
+        const u = m.userData.uniformes;
+        u.uCorte.value = 1e6;
+        u.uCorteEixo.value.set(grupo.position.x, grupo.position.z, Math.cos(r), -Math.sin(r));
+        u.uCorteH.value.set(y + blade, y + legacy, y + vao, MEIO_VAO_CORTE);
+      }
+      // a obra sobe a cada quadro: a sombra acompanha aos saltos (o mapa não se refaz a cada quadro da obra)
+      const s = Math.min(1, Math.max(1e-3, corte / topo));
+      const atual = volSombra.scale.y;
+      if (s !== atual && (Math.abs(s - atual) * topo >= PASSO_SOMBRA_OBRA || s === 1 || s < atual)) {
+        volSombra.scale.y = s;
+        volSombra.updateMatrixWorld(true);
+        ctx.sombra?.marcar();
+      }
     },
     descartar() {
       projetar(false);
