@@ -18,20 +18,24 @@ const _p = new THREE.Vector3();
 const _q = new THREE.Vector3();
 
 /**
- * Ponto do mundo na tela (R.projetar): { x, y, visivel, dist }, em px CSS. "Na frente" sai do espaço da câmera, não do
- * z da tela: com a profundidade invertida um ponto logo atrás da câmera cai com z entre -1 e 0 e passaria por visível
- * (marcadores e âncoras espelhados no meio da tela).
+ * Ponto do mundo na tela (R.projetar): { x, y, visivel, dist, frente, prof }, em px CSS. "Na frente" sai do espaço da
+ * câmera, não do z da tela: com a profundidade invertida um ponto logo atrás da câmera cai com z entre -1 e 0 e
+ * passaria por visível (marcadores e âncoras espelhados no meio da tela). frente diz se o ponto está além do plano
+ * próximo (mesmo fora da tela) e prof é a distância ao longo do eixo da câmera (negativa atrás dela): quem desenha uma
+ * linha com pontos dos dois lados (o traçado sugerido rente ao chão) corta o trecho no plano próximo pela prof, em vez
+ * de ligar um ponto espelhado.
  * @param {THREE.Camera} camera  com matrixWorld e matrixWorldInverse em dia
  * @param {number[]} p  [x, y, z]
  */
 export function projetarNaTela(camera, largura, altura, p) {
   const v = _p.set(p[0], p[1], p[2]);
   const dist = v.distanceTo(camera.position);
-  const frente = _q.copy(v).applyMatrix4(camera.matrixWorldInverse).z < -(camera.near || 0);
+  const prof = -_q.copy(v).applyMatrix4(camera.matrixWorldInverse).z;
+  const frente = prof > (camera.near || 0);
   v.project(camera);
   const x = ((v.x + 1) / 2) * largura;
   const y = ((1 - v.y) / 2) * altura;
-  return { x, y, visivel: frente && Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= largura && y >= 0 && y <= altura, dist };
+  return { x, y, visivel: frente && Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= largura && y >= 0 && y <= altura, dist, frente, prof };
 }
 
 /**

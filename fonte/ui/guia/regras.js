@@ -149,3 +149,53 @@ export function sugestoesAgora(ui) {
   const sess = sessao.value;
   return abertas.map((s) => ({ s, usar: ferramentaServe(s, sess) }));
 }
+
+// ------------------------------------------------------------------------------------------------ traçado na tela
+
+/** Profundidade (m, no eixo da câmera) onde o traçado é cortado: um pouco além do plano próximo do render. */
+const PROF_CORTE = 1;
+
+/**
+ * Pontos de tela de um traçado do mundo cortado no plano da câmera (C1b): com a câmera rente ao chão, o ponto atrás
+ * dela projeta espelhado e ligava o traçado ao outro lado da tela. Cada trecho que cruza o plano termina no ponto de
+ * corte (a prof de R.projetar é afim no mundo: a interpolação é exata). Aberto: lista de trechos (cada um uma lista
+ * de pontos); fechado (a quadra): um contorno só, pelo recorte de Sutherland e Hodgman num plano.
+ */
+export function recortarNaFrente(projetar, mundo, fechado = false) {
+  const pr = mundo.map((p) => projetar(p));
+  const dentro = (k) => (pr[k]?.prof ?? (pr[k]?.frente === false ? -1 : 1)) > PROF_CORTE;
+  const corte = (a, b) => {
+    const pa = pr[a].prof;
+    const pb = pr[b].prof;
+    const t = (pa - PROF_CORTE) / (pa - pb);
+    const A = mundo[a];
+    const B = mundo[b];
+    return projetar([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]);
+  };
+  const n = mundo.length;
+  if (fechado) {
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const j = (k + 1) % n;
+      if (dentro(k)) out.push(pr[k]);
+      if (dentro(k) !== dentro(j) && Number.isFinite(pr[k].prof) && Number.isFinite(pr[j].prof)) out.push(corte(k, j));
+    }
+    return out.length >= 3 ? [out] : [];
+  }
+  const trechos = [];
+  let atual = [];
+  for (let k = 0; k < n; k++) {
+    if (dentro(k)) atual.push(pr[k]);
+    const j = k + 1;
+    if (j >= n) break;
+    if (dentro(k) !== dentro(j) && Number.isFinite(pr[k].prof) && Number.isFinite(pr[j].prof)) {
+      atual.push(corte(k, j));
+      if (dentro(k)) {
+        trechos.push(atual);
+        atual = [];
+      }
+    }
+  }
+  if (atual.length) trechos.push(atual);
+  return trechos.filter((t) => t.length >= 2);
+}

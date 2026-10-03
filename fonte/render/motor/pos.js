@@ -2,7 +2,7 @@
 // aparelho aceita, senão meia precisão; profundidade de 32 bits em ponto flutuante com a profundidade invertida),
 // e a composição leva à tela com bloom por redução dupla a 1/4 (4 níveis no Média, 5 no PC), exposição, AgX, CAS
 // sempre que o desenho interno é menor que a tela (forcaCas: a ampliação pelo teto de pixels do 'pc' numa tela de 4K
-// ou pela resolução dinâmica; o filtro num espaço perceptivo, composicaoPerceptiva), vinheta leve e pontilhado. O
+// ou pela resolução dinâmica; o filtro num espaço perceptivo, em shaders/pos.glsl.js), vinheta leve e pontilhado. O
 // Leve desenha direto na tela com o AgX do three (sem pós). Reaproveita a ideia do motor do jogo antigo
 // (antigo/fonte/render/engine.js), sem PBR Neutral fixo, sem tintas de sombra e realce, com saturação 1,0.
 import * as THREE from 'three';
@@ -28,54 +28,6 @@ export function forcaCas(ampliacao) {
   return Math.min(0.85, 0.25 + 0.55 * (ampliacao - 1));
 }
 
-/**
- * Troca um trecho do GLSL sem depender do espaço: a montagem enxuga os templates marcados como GLSL (tira a indentação
- * e o espaço em volta de ( ) , ; { } =), então o trecho vira uma expressão com \s* entre as palavras. Erro se sumiu.
- */
-function trocar(src, trecho, novo) {
-  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const partes = trecho.trim().split(/\s+/).map((t) => t.split(/([(),;{}=])/).filter(Boolean).map(esc).join('\\s*'));
-  const re = new RegExp(partes.join('\\s*'));
-  if (!re.test(src)) throw new Error(`pos: trecho da CAS não encontrado: ${trecho.trim().slice(0, 60)}`);
-  return src.replace(re, () => novo);
-}
-
-/**
- * A composição com a CAS num espaço perceptivo (PC2). A de pos.glsl.js filtra o HDR linear: a janela acesa (10) ao
- * lado da fachada escura (0,05) empurrava o vizinho abaixo de zero, e a CAS sempre ligada desenhava um anel preto em
- * volta de cada luz da cidade à noite. Aqui os 5 texels passam por Reinhard pelo maior canal (com a exposição, tudo em
- * [0, 1)) e pela raiz (perto do sRGB, o domínio para o qual a CAS da AMD foi feita), o filtro roda por canal e a
- * conta volta ao HDR (a volta é exata onde o filtro não mexe). Só o trecho da CAS muda; o integrador pode levar esta
- * versão para pos.glsl.js (da R1a, fora desta parcela).
- */
-export function composicaoPerceptiva(fonte) {
-  let f = trocar(
-    fonte,
-    'void main() { vec3 cor = texture( tCena, vUv ).rgb;',
-    `// CAS num espaço perceptivo (motor/pos.js): Reinhard pelo maior canal com a exposição e a raiz; casDe desfaz
-vec3 casPara( vec3 c ) { vec3 e = max( c, vec3( 0.0 ) ) * uExposicao; return sqrt( e / ( 1.0 + max( e.r, max( e.g, e.b ) ) ) ); }
-vec3 casDe( vec3 p ) { vec3 t = p * p; float m = min( max( t.r, max( t.g, t.b ) ), 0.999 ); return t / ( ( 1.0 - m ) * uExposicao ); }
-void main() {
-  vec3 cor = texture( tCena, vUv ).rgb;`,
-  );
-  f = trocar(
-    f,
-    `float c0 = comprime( cor ), c1 = comprime( n ), c2 = comprime( sl ), c3 = comprime( l ), c4 = comprime( r );
-    float mn = min( c0, min( min( c1, c2 ), min( c3, c4 ) ) );
-    float mx = max( c0, max( max( c1, c2 ), max( c3, c4 ) ) );
-    float amp = sqrt( clamp( min( mn, 1.0 - mx ) / max( mx, 1e-4 ), 0.0, 1.0 ) );
-    float w = - amp / mix( 8.0, 5.0, uCas );
-    cor = max( ( cor + w * ( n + sl + l + r ) ) / ( 1.0 + 4.0 * w ), vec3( 0.0 ) );`,
-    `vec3 p0 = casPara( cor ), p1 = casPara( n ), p2 = casPara( sl ), p3 = casPara( l ), p4 = casPara( r );
-    vec3 mn = min( p0, min( min( p1, p2 ), min( p3, p4 ) ) );
-    vec3 mx = max( p0, max( max( p1, p2 ), max( p3, p4 ) ) );
-    vec3 amp = sqrt( clamp( min( mn, 1.0 - mx ) / max( mx, vec3( 1e-4 ) ), 0.0, 1.0 ) );
-    vec3 w = - amp / mix( 8.0, 5.0, uCas );
-    cor = casDe( clamp( ( p0 + w * ( p1 + p2 + p3 + p4 ) ) / ( 1.0 + 4.0 * w ), 0.0, 1.0 ) );`,
-  );
-  return f;
-}
-const COMPOSICAO_CAS = composicaoPerceptiva(COMPOSICAO);
 
 function materialTela(nome, frag, uniforms, blending = THREE.NoBlending) {
   return new THREE.ShaderMaterial({
@@ -125,7 +77,7 @@ export class Pos {
     this.mPre = materialTela('pos-prefiltro', PREFILTRO, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uLimiar: { value: 1.1 }, uJoelho: { value: 0.5 }, uExposicao: { value: 1 } });
     this.mReduz = materialTela('pos-reduz', REDUZ, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mAmplia = materialTela('pos-amplia', AMPLIA, { tMapa: { value: null }, uTexel: { value: new THREE.Vector2() }, uPeso: { value: 1 } }, THREE.AdditiveBlending);
-    this.mComp = materialTela('pos-composicao', COMPOSICAO_CAS, {
+    this.mComp = materialTela('pos-composicao', COMPOSICAO, {
       tCena: { value: null }, tBloom: { value: null }, uTexel: { value: new THREE.Vector2() }, uBloom: { value: 0.05 },
       uExposicao: { value: 1 }, uPotencia: { value: LOOK.potencia }, uSaturacao: { value: LOOK.saturacao }, uCas: { value: 0 }, uVinheta: { value: 0.12 }, uAspecto: { value: 1.7 }, uTempo: { value: 0 },
       uEsmaecer: { value: 0 }, uCorEsmaecer: { value: new THREE.Vector3(0.02, 0.03, 0.05) },

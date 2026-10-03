@@ -277,7 +277,7 @@ export async function criarRenderFalso(canvas, opcoes = {}) {
       const c = raioChao(x, y);
       return c ? { tipo: 'terreno', ref: null, idx: -1, ponto: c } : null;
     },
-    projetar(pt) { atualizarCamera(); const s = tela(pt); return { x: s.x, y: s.y, visivel: s.z > 1 && s.x >= 0 && s.x <= W && s.y >= 0 && s.y <= H, dist: Math.hypot(...sub(pt, olho)) }; },
+    projetar(pt) { atualizarCamera(); const s = tela(pt); return { x: s.x, y: s.y, visivel: s.z > 1 && s.x >= 0 && s.x <= W && s.y >= 0 && s.y <= H, dist: Math.hypot(...sub(pt, olho)), frente: s.z > 1, prof: s.z }; },
     raio(x, y) { atualizarCamera(); return raioChao(x, y); },
     ancoras(lista) { atualizarCamera(); return lista.map((pt) => R.projetar(pt)); },
     camadas: { mostrar(c) { estado.camada = c; sujar(); }, ocultar() { estado.camada = null; sujar(); } },
@@ -299,6 +299,7 @@ export async function criarRenderFalso(canvas, opcoes = {}) {
     sempreDia(b) { estado.sempreDia = !!b; sujar(); },
     estado(e) { estado.estadoR = e; },
     qualidade(id) { estado.qualidade = id; },
+    resolucao(o = {}) { if (o.dinamica !== undefined) estado.dinamica = !!o.dinamica; if (o.nitidez !== undefined) estado.nitidez = o.nitidez; return { dinamica: estado.dinamica !== false, nitidez: estado.nitidez ?? 'auto' }; },
     perfil: () => ({ id: estado.qualidade, sugerido: 'media', capac: { clipControl: true, multiDraw: true, timer: false, limites: { amostradores: 16, varyings: 15 } } }),
     aquecido: () => Promise.resolve(null),
     // números de mentira no formato do contrato (perto do alvo da 4.8 no Média)

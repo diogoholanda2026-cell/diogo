@@ -314,10 +314,11 @@ export function registrar(api) {
       if (med?.promessa) return med.promessa;
       med = criarMedicao(quadros);
       ctx.medirGpu = true;
-      // a resolução fica travada só durante a medida (depois volta a dinâmica, ou a fixa do ?pr=)
+      // a resolução fica travada só durante a medida (depois volta a dinâmica, ou a fixa do ?pr=); guarda só a trava
+      // da consulta (travada): a preferência do jogador (dinamica) não muda com a medida
       const res = ctx.quadro?.resolucao;
       if (res) {
-        med.fixaAntes = res.fixa;
+        med.fixaAntes = res.travada ?? res.fixa;
         res.fixa = true;
       }
       painel?.mostrar(null, t('medindo', { n: quadros }));

@@ -2,7 +2,7 @@
 // tracejado das sugestões com o "Usar sugestão". O fantasma segue a câmera: os pontos passam por R.projetar a cada
 // quadro (ui.aoQuadro) e vão direto aos atributos do SVG, sem redesenhar o componente.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { categoriaAgora, sugestoesAgora, usarSugestao, caixaDaQuadra } from './regras.js';
+import { categoriaAgora, sugestoesAgora, usarSugestao, caixaDaQuadra, recortarNaFrente } from './regras.js';
 import { t } from '../textos.js';
 import { Glifo } from '../glifos/Glifo.jsx';
 import { alturaEm } from '../../comum/altura.js';
@@ -25,6 +25,8 @@ export function AnelGuia() {
   if (!cat || !r) return null;
   return <div class="guia-anel" data-guia={cat} aria-hidden="true" style={{ left: `${r.x - 3}px`, top: `${r.y - 3}px`, width: `${r.w + 6}px`, height: `${r.h + 6}px` }} />;
 }
+
+const xy = (p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
 
 /** Pontos do mundo de uma sugestão (contorno fechado na quadra; um ponto no prédio). */
 export function pontosDaSugestao(s) {
@@ -58,7 +60,14 @@ function Sugestao({ ui, s, usar }) {
       if (s.tipo === 'construir') {
         forma.current.setAttribute('cx', tela[0].x.toFixed(1));
         forma.current.setAttribute('cy', tela[0].y.toFixed(1));
-      } else forma.current.setAttribute('points', tela.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '));
+      } else if (s.tipo === 'zona') {
+        // o contorno da quadra cortado no plano da câmera (sem o canto espelhado)
+        const [c] = recortarNaFrente(R.projetar, mundo, true);
+        forma.current.setAttribute('points', c ? c.map(xy).join(' ') : '');
+      } else {
+        const d = recortarNaFrente(R.projetar, mundo).map((t) => `M${t.map(xy).join('L')}`).join('');
+        forma.current.setAttribute('d', d || 'M0,0');
+      }
       if (chip.current) {
         const a = R.projetar(ancora);
         chip.current.style.display = a?.visivel ? '' : 'none';
@@ -71,7 +80,7 @@ function Sugestao({ ui, s, usar }) {
   return (
     <>
       <svg class="sug-svg" aria-hidden="true">
-        {s.tipo === 'via' ? <polyline ref={forma} /> : s.tipo === 'zona' ? <polygon ref={forma} /> : <circle ref={forma} r="22" />}
+        {s.tipo === 'via' ? <path ref={forma} /> : s.tipo === 'zona' ? <polygon ref={forma} /> : <circle ref={forma} r="22" />}
       </svg>
       {usar ? (
         <button

@@ -348,10 +348,18 @@ export async function criarRender(canvas, opcoes = {}) {
       const r = depuracao.raioDaTela(cam, quadro.w, quadro.h, x, y);
       return selecionarPorRaio({ ...r, xTela: x, yTela: y }, ctx);
     },
-    // "na frente" decidido no espaço da câmera (R1a): com a profundidade invertida, o z da tela não serve
+    // "na frente" decidido no espaço da câmera (R1a): com a profundidade invertida, o z da tela não serve; frente e
+    // prof deixam quem desenha uma linha cortar o trecho atrás da câmera (o traçado sugerido rente ao chão)
     projetar: (p) => raio.projetarNaTela(cam, quadro.w, quadro.h, p),
     raio: (x, y) => ctx.raio(x, y),
-    ancoras: (lista) => lista.map((p) => R.projetar(p)),
+    // pelo domínio 'ancoras' (X3a: a oclusão pelo relevo, até 40 por quadro); sem ele (cenas sem o domínio) e além
+    // das 40, só a projeção
+    ancoras(lista) {
+      const dom = instancias.get('ancoras');
+      const r = dom?.ancoras ? dom.ancoras(lista) : [];
+      for (let k = r.length; k < lista.length; k++) r.push(R.projetar(lista[k]));
+      return r;
+    },
     camadas: {
       mostrar: (c) => ctx.emitir('camadas', c),
       ocultar: () => ctx.emitir('camadas', null),
@@ -373,9 +381,11 @@ export async function criarRender(canvas, opcoes = {}) {
       definir: (lista) => ctx.emitir('marcadores', lista ?? []),
     },
     // aceita { tipo, ref } (o domínio do selecionado) ou só a ref (um prédio, como antes); 'selecionado' leva a ref do
-    // prédio ou do colocável (predios.js) e 'selecao' leva { tipo, ref } para os outros domínios (a aresta das vias)
+    // prédio ou do colocável (predios.js) e 'selecao' leva { tipo, ref } para os outros domínios (a aresta das vias).
+    // O marcador acende o prédio dele (a ref do marcador é a do prédio do aviso, desenhoMarcadores.js)
     selecionado(s) {
       const sel = s == null ? null : typeof s === 'object' ? { tipo: s.tipo ?? 'predio', ref: s.ref ?? null } : { tipo: 'predio', ref: s };
+      if (sel?.tipo === 'marcador') sel.tipo = 'predio';
       ctx.emitir('selecionado', sel && (sel.tipo === 'predio' || sel.tipo === 'colocavel') ? sel.ref : null);
       ctx.emitir('selecao', sel);
     },
@@ -413,6 +423,14 @@ export async function criarRender(canvas, opcoes = {}) {
       // o MSAA do canvas só muda num contexto novo: a R1a leva o MSAA para o alvo HDR (troca na hora)
     },
     perfil: () => ({ id: perfil.id, sugerido, capac: rz.capac, gpu: rz.gpu }),
+    /**
+     * Preferência do jogador (Configurações, U2a): { dinamica: bool, nitidez: 'auto' | 'desligada' }. A dinâmica
+     * desligada trava no nominal do perfil; a nitidez desligada tira o CAS. Devolve o que vale agora.
+     */
+    resolucao(op = {}) {
+      quadro.resolucao.preferir(op ?? {});
+      return { dinamica: quadro.resolucao.dinamica, nitidez: quadro.resolucao.semCas ? 'desligada' : 'auto' };
+    },
     /**
      * Promessa do aquecimento dos programas (D66, motor/quadro.js): resolve com o relatório quando a rodada final
      * termina, de 2,5 a 12 s depois do primeiro quadro. O app segura a tela de carga até ela.

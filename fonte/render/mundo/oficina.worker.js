@@ -18,7 +18,6 @@ import * as malhaVia from '../geracao/malhaVia.js';
 import * as cruzamento from '../geracao/cruzamento.js';
 import * as veiculos from '../geracao/veiculos.js';
 import * as veiculosLuxo from '../geracao/veiculos-luxo.js';
-import * as pessoas from '../geracao/pessoas.js';
 import * as planoPredio from '../geracao/planoPredio.js';
 import * as malhaPredio from '../geracao/malhaPredio.js';
 import * as fundir from '../geracao/fundir.js';
@@ -27,9 +26,12 @@ import * as ponte from '../geracao/ponte.js';
 import * as colocaveis from '../colocaveis/index.js';
 import * as campoAlturas from '../ambiente/campoAlturas.js';
 
-/** Índice fixo dos módulos que registram geradores. */
+/**
+ * Índice fixo dos módulos que registram geradores. A figura de gente (geracao/pessoas.js, R3b) não entra: ela roda na
+ * thread principal, sob demanda (mundo/pedestres.js), e aqui só pesaria no teto do worker.
+ */
 export const MODULOS_OFICINA = Object.freeze([
-  ruido, arvores, impostor, perfilVia, malhaVia, cruzamento, veiculos, veiculosLuxo, pessoas, planoPredio, malhaPredio,
+  ruido, arvores, impostor, perfilVia, malhaVia, cruzamento, veiculos, veiculosLuxo, planoPredio, malhaPredio,
   fundir, quantizar, ponte, colocaveis, campoAlturas,
 ]);
 

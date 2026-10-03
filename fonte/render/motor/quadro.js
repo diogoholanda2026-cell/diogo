@@ -323,7 +323,7 @@ export class Quadro {
    * 1080p ou a resolução dinâmica abaixo do nominal), na medida da ampliação (forcaCas, motor/pos.js).
    */
   get cas() {
-    if (!this.ctx.perfil.pos) return 0;
+    if (!this.ctx.perfil.pos || this.resolucao.semCas) return 0;
     const dpr = this.resolucao.dpr || 1;
     return Math.max(forcaCas(dpr / (this.ctx.pr || dpr)), this.resolucao.cas);
   }

@@ -12,6 +12,7 @@
 //   node --test ferramentas/testes/motor.teste.mjs (o simular --testes descobre)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { posicaoSol, posicaoLua, nascerEPor, faseDaLua, astros } from '../../fonte/render/ambiente/astro.js';
 import * as C from '../../fonte/render/ambiente/ceu.js';
@@ -299,6 +300,12 @@ test('projetar: com a profundidade invertida um ponto atrás da câmera não pas
   assert.equal(projetarNaTela(cam, 1000, 500, [0, 100, 50]).visivel, false);
   const frente = projetarNaTela(cam, 1000, 500, [0, 100, -50]);
   assert.ok(frente.visivel && Math.abs(frente.x - 500) < 1e-6 && Math.abs(frente.y - 250) < 1e-6 && Math.abs(frente.dist - 50) < 1e-9);
+  // frente e prof (C1b): o traçado sugerido corta no plano próximo pela prof, que é afim no mundo
+  const tras = projetarNaTela(cam, 1000, 500, [0, 100, 50]);
+  assert.equal(tras.frente, false);
+  assert.ok(Math.abs(tras.prof + 50) < 1e-9 && Math.abs(frente.prof - 50) < 1e-9 && frente.frente);
+  const fora = projetarNaTela(cam, 1000, 500, [5000, 100, -50]);
+  assert.ok(fora.frente && !fora.visivel, 'fora da tela mas na frente');
 });
 
 // ------------------------------------------------------------------------------------------------ sombra própria
@@ -880,6 +887,50 @@ test('resolução: o PC acerta os degraus pela tela, começa na nativa e troca p
   assert.equal(fixa.ctx.pr, 1);
 });
 
+test('resolução: a preferência do jogador (R.resolucao) trava no nominal e tira o CAS; a bancada não a apaga', () => {
+  const ctx = { perfil: PERFIS.pc, pr: 1.5, tela: { w: 1280, h: 720 } };
+  const r = new Resolucao(ctx, { fixa: false });
+  Object.defineProperty(r, 'dpr', { value: 1.5 });
+  r.conferir();
+  let t = 0;
+  for (; t < 3000; t += 16.7) r.amostraGpu(24, 1.5, t);
+  let trocou = false;
+  for (let k = 0; k < 60 && !trocou; k++, t += 16.7) trocou = r.amostraGpu(24, ctx.pr, t);
+  assert.ok(trocou && ctx.pr < 1.5, 'desceu pela placa');
+  assert.ok(r.cas > 0.5);
+  // desligada: volta ao nominal, fica 'fixa' e não desce mais
+  assert.equal(r.preferir({ dinamica: false }), true);
+  assert.equal(ctx.pr, 1.5);
+  assert.equal(r.modo, 'fixa');
+  for (let k = 0; k < 200; k++, t += 16.7) assert.equal(r.amostraGpu(40, 1.5, t), false);
+  assert.equal(ctx.pr, 1.5);
+  // a troca de tela mantém o nominal
+  ctx.tela = { w: 2560, h: 1440 };
+  r.conferir();
+  assert.equal(ctx.pr, 0.75);
+  ctx.tela = { w: 1280, h: 720 };
+  r.conferir();
+  // a medida da bancada trava e destrava pela consulta sem religar a dinâmica do jogador
+  const antes = r.travada ?? r.fixa;
+  r.fixa = true;
+  r.fixa = antes;
+  assert.equal(r.fixa, true, 'continua desligada pelo jogador');
+  assert.equal(r.travada, false);
+  // religada: espera 3 s de novo e volta a agir
+  assert.equal(r.preferir({ dinamica: true }), false);
+  assert.equal(r.modo, 'cronometro');
+  for (let k = 0; k < 400 && ctx.pr === 1.5; k++, t += 16.7) r.amostraGpu(24, ctx.pr, t);
+  assert.ok(ctx.pr < 1.5, 'desce de novo');
+  // nitidez desligada: sem CAS, mesmo abaixo do nominal, também no quadro
+  r.preferir({ nitidez: 'desligada' });
+  assert.equal(r.cas, 0);
+  const cas = Object.getOwnPropertyDescriptor(Quadro.prototype, 'cas').get;
+  assert.equal(cas.call({ ctx: { perfil: PERFIS.pc, pr: 1 }, resolucao: { dpr: 2.5, cas: 0, semCas: true } }), 0);
+  assert.ok(cas.call({ ctx: { perfil: PERFIS.pc, pr: 1 }, resolucao: { dpr: 2.5, cas: 0, semCas: false } }) > 0.5);
+  r.preferir({ nitidez: 'auto' });
+  assert.ok(r.cas > 0.5);
+});
+
 test('teto de qps: 60 na média num monitor de 144 Hz; a 60 Hz nunca pula um quadro', () => {
   const contar = (hz, s, teto, jitter = 0) => {
     const r = new Ritmo();
@@ -1422,20 +1473,21 @@ test('resolução no jogo: o PC do dono (4K a 2,5 de escala) liga pelo cronômet
   assert.equal(r2.amostraGpu(40, ctx2.pr, 70000, 'teste'), false);
 });
 
-test('CAS perceptiva: sem anel preto em volta da luz acesa, e a troca vale no GLSL cru e no enxuto da montagem', async () => {
-  const { composicaoPerceptiva } = await import('../../fonte/render/motor/pos.js');
+test('CAS perceptiva: sem anel preto em volta da luz acesa, no GLSL cru e no enxuto da montagem', async () => {
+  // a CAS perceptiva mora em pos.glsl.js desde a C1b (antes era uma troca de texto em motor/pos.js)
   const { COMPOSICAO } = await import('../../fonte/render/materiais/shaders/pos.glsl.js');
   const { enxugarGlsl } = await import('../montar.mjs');
   const js = enxugarGlsl(`const x = /* glsl */ \`${COMPOSICAO}\`;`);
   const enxuto = js.slice(js.indexOf('`') + 1, js.lastIndexOf('`'));
   assert.ok(enxuto.length < COMPOSICAO.length, 'a montagem enxuga o GLSL');
-  for (const f of [COMPOSICAO, enxuto]) {
-    const g = composicaoPerceptiva(f);
-    assert.match(g, /cor = casDe\( clamp\(/);
-    assert.ok(!/comprime\(\s*cor\s*\)/.test(g), 'o filtro linear saiu');
+  for (const g of [COMPOSICAO, enxuto]) {
+    assert.match(g, /cor\s*=\s*casDe\(\s*clamp\(/);
+    assert.match(g, /vec3\s+casPara\(/);
+    assert.ok(!/comprime\(/.test(g), 'o filtro linear saiu');
     assert.equal((g.match(/void main\(\s*\)/g) ?? []).length, 1);
   }
-  assert.throws(() => composicaoPerceptiva('void main() {}'), /trecho da CAS/);
+  const pos = readFileSync(new URL('../../fonte/render/motor/pos.js', import.meta.url), 'utf8');
+  assert.ok(!/composicaoPerceptiva|COMPOSICAO_CAS/.test(pos), 'motor/pos.js usa a composição de pos.glsl.js como está');
   // as duas contas em JS (um canal): a fachada escura (0,05) ao lado da janela acesa (10), exposição 1, CAS do dono
   const cas = 0.72;
   const lum = (c) => c; // cinza: a luminância é o próprio valor

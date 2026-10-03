@@ -11,6 +11,8 @@
 // No 'pc' os degraus são 70%, 80%, 90% e 100% da nativa (com o teto de pixels de 1080p); nos outros, os DEGRAUS_PR do
 // perfil. Parada com ?pr= (testes), no estado 'teste' (o Teste de desempenho mede com a resolução travada), com a tela
 // coberta e nos primeiros 3 s (compilação). Abaixo do nominal a composição liga o CAS (nitidez) na medida da queda.
+// O jogador escolhe nas Configurações (R.resolucao, C1b): a resolução dinâmica desligada trava no nominal do perfil e a
+// nitidez 'desligada' tira o CAS (o automático segue a ampliação e a queda).
 import { degrausDoPerfil, indiceDoDegrau } from './perfis.js';
 
 /** Números do controle pelo cronômetro (alvo em ms de placa vem do perfil). */
@@ -141,7 +143,9 @@ export class Resolucao {
   /** @param {object} ctx  contexto do render (perfil, pr, tela) */
   constructor(ctx, { fixa = null } = {}) {
     this.ctx = ctx;
-    this.fixa = fixa ?? (typeof location !== 'undefined' && /[?&]pr=/.test(location.search || ''));
+    this.travada = fixa ?? (typeof location !== 'undefined' && /[?&]pr=/.test(location.search || '')); // ?pr= e testes
+    this.dinamica = true; // preferência do jogador (R.resolucao)
+    this.semCas = false; // nitidez 'desligada' (R.resolucao)
     this.acc = { t: 0, n: 0 };
     this.r = { lento: 0, bom: 0, ultDesce: -1e9, subiu: {}, desfeitas: {}, bloq: {} };
     this.t0 = null;
@@ -159,6 +163,37 @@ export class Resolucao {
     return typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
   }
 
+  /** Parada: pela consulta (?pr=, a bancada e os testes) ou pelo jogador (resolução dinâmica desligada). */
+  get fixa() {
+    return this.travada || !this.dinamica;
+  }
+
+  set fixa(v) {
+    this.travada = !!v;
+  }
+
+  /**
+   * Preferência do jogador (R.resolucao): { dinamica, nitidez: 'auto' | 'desligada' }. Desligar a dinâmica volta ao
+   * nominal do perfil (o quadro refaz a tela quando ctx.pr muda); religar recomeça os 3 s de espera. true se ctx.pr
+   * mudou.
+   */
+  preferir({ dinamica, nitidez } = {}) {
+    if (nitidez !== undefined) this.semCas = nitidez === 'desligada';
+    if (dinamica === undefined || !!dinamica === this.dinamica) return false;
+    this.dinamica = !!dinamica;
+    this.controle = null;
+    this.acc = { t: 0, n: 0 };
+    this.r = { lento: 0, bom: 0, ultDesce: -1e9, subiu: {}, desfeitas: {}, bloq: {} };
+    if (this.dinamica) {
+      this.t0 = null;
+      return false;
+    }
+    if (this.travada) return false;
+    const pr0 = this.ctx.pr;
+    this.ctx.pr = this.nominal;
+    return this.ctx.pr !== pr0;
+  }
+
   /** Degraus do perfil neste aparelho e nesta tela, do menor ao nominal. */
   get degraus() {
     return degrausDoPerfil(this.ctx.perfil, this.dpr, this.ctx.tela);
@@ -172,7 +207,7 @@ export class Resolucao {
 
   /** Força do CAS (0 a 1) pela queda da resolução abaixo do nominal. */
   get cas() {
-    if (!this.ctx.perfil.pos) return 0;
+    if (!this.ctx.perfil.pos || this.semCas) return 0;
     const q = 1 - this.ctx.pr / this.nominal;
     return q > 0.02 ? Math.min(1, 0.35 + q * 2.5) : 0;
   }
@@ -207,9 +242,10 @@ export class Resolucao {
       // a troca de perfil compila os programas dele: os 3 s de espera recomeçam
       if (antes) this.t0 = null;
     }
-    if (this.fixa) return false;
+    if (this.travada) return false;
     const pr0 = ctx.pr;
-    ctx.pr = perfilNovo || !antes ? D[D.length - 1] : D[Math.min(D.length - 1, indiceDoDegrau(antes, ctx.pr))];
+    // com a dinâmica desligada pelo jogador fica no nominal (o 'pc' acerta o teto de 1080p pela tela)
+    ctx.pr = perfilNovo || !antes || !this.dinamica ? D[D.length - 1] : D[Math.min(D.length - 1, indiceDoDegrau(antes, ctx.pr))];
     return ctx.pr !== pr0;
   }
 

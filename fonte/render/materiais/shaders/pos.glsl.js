@@ -103,7 +103,14 @@ vec3 agx( vec3 cor, float exposicao, float potencia, float saturacao ) {
 }
 `;
 
-/** Composição: cena + bloom, CAS, exposição e AgX, vinheta, sRGB, pontilhado e esmaecer. */
+/**
+ * Composição: cena + bloom, CAS, exposição e AgX, vinheta, sRGB, pontilhado e esmaecer. A CAS roda num espaço
+ * perceptivo (PC2, trazida de motor/pos.js na C1b): filtrar o HDR linear empurrava o vizinho da janela acesa (10) ao
+ * lado da fachada escura (0,05) abaixo de zero, e a CAS sempre ligada desenhava um anel preto em volta de cada luz da
+ * cidade à noite. Os 5 texels passam por Reinhard pelo maior canal (com a exposição, tudo em [0, 1)) e pela raiz
+ * (perto do sRGB, o domínio para o qual a CAS da AMD foi feita), o filtro roda por canal e a conta volta ao HDR (a
+ * volta é exata onde o filtro não mexe).
+ */
 export const COMPOSICAO = /* glsl */ `
 uniform sampler2D tCena;
 uniform sampler2D tBloom;
@@ -122,21 +129,23 @@ varying vec2 vUv;
 ${AGX}
 float h12( vec2 p ) { vec3 p3 = fract( vec3( p.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
 vec3 paraSrgb( vec3 c ) { return mix( c * 12.92, 1.055 * pow( c, vec3( 1.0 / 2.4 ) ) - 0.055, step( 0.0031308, c ) ); }
-float comprime( vec3 c ) { float l = dot( c, ${LUM} ) * uExposicao; return l / ( 1.0 + l ); }
+// CAS num espaço perceptivo: Reinhard pelo maior canal com a exposição e a raiz; casDe desfaz
+vec3 casPara( vec3 c ) { vec3 e = max( c, vec3( 0.0 ) ) * uExposicao; return sqrt( e / ( 1.0 + max( e.r, max( e.g, e.b ) ) ) ); }
+vec3 casDe( vec3 p ) { vec3 t = p * p; float m = min( max( t.r, max( t.g, t.b ) ), 0.999 ); return t / ( ( 1.0 - m ) * uExposicao ); }
 void main() {
   vec3 cor = texture( tCena, vUv ).rgb;
   if ( uCas > 0.0 ) {
-    // CAS: vizinhos em cruz; o peso negativo encolhe onde já há contraste (medido na luminância comprimida)
+    // CAS: vizinhos em cruz; o peso negativo encolhe onde já há contraste (por canal, no espaço perceptivo)
     vec3 n = texture( tCena, vUv + vec2( 0.0, uTexel.y ) ).rgb;
     vec3 sl = texture( tCena, vUv - vec2( 0.0, uTexel.y ) ).rgb;
     vec3 l = texture( tCena, vUv - vec2( uTexel.x, 0.0 ) ).rgb;
     vec3 r = texture( tCena, vUv + vec2( uTexel.x, 0.0 ) ).rgb;
-    float c0 = comprime( cor ), c1 = comprime( n ), c2 = comprime( sl ), c3 = comprime( l ), c4 = comprime( r );
-    float mn = min( c0, min( min( c1, c2 ), min( c3, c4 ) ) );
-    float mx = max( c0, max( max( c1, c2 ), max( c3, c4 ) ) );
-    float amp = sqrt( clamp( min( mn, 1.0 - mx ) / max( mx, 1e-4 ), 0.0, 1.0 ) );
-    float w = - amp / mix( 8.0, 5.0, uCas );
-    cor = max( ( cor + w * ( n + sl + l + r ) ) / ( 1.0 + 4.0 * w ), vec3( 0.0 ) );
+    vec3 p0 = casPara( cor ), p1 = casPara( n ), p2 = casPara( sl ), p3 = casPara( l ), p4 = casPara( r );
+    vec3 mn = min( p0, min( min( p1, p2 ), min( p3, p4 ) ) );
+    vec3 mx = max( p0, max( max( p1, p2 ), max( p3, p4 ) ) );
+    vec3 amp = sqrt( clamp( min( mn, 1.0 - mx ) / max( mx, vec3( 1e-4 ) ), 0.0, 1.0 ) );
+    vec3 w = - amp / mix( 8.0, 5.0, uCas );
+    cor = casDe( clamp( ( p0 + w * ( p1 + p2 + p3 + p4 ) ) / ( 1.0 + 4.0 * w ), 0.0, 1.0 ) );
   }
   if ( uBloom > 0.0 ) cor += texture( tBloom, vUv ).rgb * ( uBloom / uExposicao );
   cor = agx( cor, uExposicao, uPotencia, uSaturacao );

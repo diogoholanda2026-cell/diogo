@@ -21,7 +21,7 @@ const CSS_GUIA = `
 .guia-anel{position:absolute;border-radius:var(--r2);box-shadow:0 0 0 2px var(--ch);pointer-events:none;animation:guiaPulso 1.6s ease-out infinite}
 @keyframes guiaPulso{0%{transform:scale(1);opacity:1}70%{transform:scale(1.18);opacity:0}100%{transform:scale(1.18);opacity:0}}
 .sug-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.sug-svg polyline,.sug-svg polygon,.sug-svg circle{fill:none;stroke:#d9bd84;stroke-width:3;stroke-dasharray:10 8;stroke-linecap:round;stroke-linejoin:round}
+.sug-svg path,.sug-svg polyline,.sug-svg polygon,.sug-svg circle{fill:none;stroke:#d9bd84;stroke-width:3;stroke-dasharray:10 8;stroke-linecap:round;stroke-linejoin:round}
 .sug-svg polygon{fill:rgba(217,189,132,.10)}
 .sug-chip{position:absolute;transform:translate(-50%,-100%);display:inline-flex;align-items:center;gap:6px;min-height:var(--alvo);padding:0 var(--e3);
   border-radius:var(--rp);background:var(--s1);box-shadow:var(--luz),var(--sombra2),inset 0 0 0 1px var(--ch);color:var(--ch);font-size:var(--t13);

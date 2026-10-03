@@ -213,7 +213,7 @@ export function registrar(registrarCenaVitrine) {
       await esperarSeletor(esperar, '[data-dica="numeros"]');
     },
     conferir: () => {
-      const f = conferirTexto('[data-dica="numeros"]', /Lívia Andrade.*Toque nos números/, 'dica')();
+      const f = conferirTexto('[data-dica="numeros"]', /Lívia Andrade.*(Toque|Clique) nos números/, 'dica')();
       if (!document.querySelector('.mao')) f.push('sem a mão fantasma');
       if (!document.querySelector('[data-guia="vias"]')) f.push('sem o anel de guia em Vias');
       return f;
