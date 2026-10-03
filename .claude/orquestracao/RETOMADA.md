@@ -9,7 +9,8 @@ de outras parcelas fora do disco da sede, cena rua no cruzamento novo, plataform
 Notas completas em `docs/entregas/onda3/`. Testes: tudo verde menos o subteste 14 de geracao-vias (tráfego), um
 defeito da fila em `render/mundo/trafego.js` passado à R3b. Montagem: só o aviso A1 (JS principal em 1.892 KB).
 
-**Etapa 3 rodando** (R3b, U2a, X1b, X3a), com a base no commit da integração. Ao terminar: ler os resultados, testes
+**Etapa 3 rodando** (R3b, U2a, X1b, X3a; workflow wi15fc9td, run wf_9f42c5d7-973, base `9b001b5`). Se parar no
+meio, grave o parcial e relance com ONDE PAROU no topo dos textos, como na etapa 2. Ao terminar: ler os resultados, testes
 verdes, `montar.mjs`, juntar as notas nas fichas, gravar e escrever a C1 (JS principal acima do teto, calibração do
 começo, robô com a coroa de quadras dentro do disco, greide do nó de entrada, os dois 'ShaderMaterial' sem dono,
 bancada no PC do dono). Para o dono ver na prévia: Helix Labs e Compass Tower lendo como silos, fachada do Horizon Ring
