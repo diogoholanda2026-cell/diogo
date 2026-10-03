@@ -2,6 +2,9 @@
 
 ## ONDE PAROU (02/10/2026, pausa pedida pelo dono)
 
+**03/10/2026: retomada.** Etapa 2 relançada (workflow wfoluyj1e, run wf_3c913d07-93f, base `32b7805`), continuando do
+commit da pausa. O resto desta seção vale até ela terminar.
+
 **Onda 3 pausada no meio da etapa 2.** Nada rodando. A etapa 1 (S2a, S3a, R2b, R4b, U1b) está pronta, revisada e
 gravada (`32b7805`; notas nas fichas e em `docs/entregas/onda3/`). A etapa 2 (SEDE3 e R5, base `32b7805`) foi
 interrompida duas vezes (reinício do contêiner e a pausa) **sem nota e sem revisão**: o trabalho parcial está no commit
