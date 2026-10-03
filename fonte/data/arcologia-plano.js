@@ -6,7 +6,7 @@
 // saem dos portões, a cada 45 graus, e seguem para a cidade. Medidas do modelo do dono (docs/pesquisa/sede/sede-v3.md).
 // mapa-heldopolis.js importa a gleba daqui e assenta o platô em volta dela. Metros; x leste, z sul. Ângulos em graus no
 // plano x-z, como no modelo: 0 = leste, 90 = sul, 180 = oeste, 270 = norte.
-import { congelar, sen, cos, atan2 } from '../comum/util.js';
+import { congelar, sen, cos, atan2, hipot } from '../comum/util.js';
 import { girar } from '../comum/vetor.js';
 import { ARESTA } from '../contratos/flags.js';
 
@@ -140,7 +140,7 @@ export function especTorre(altura, { nome = 'Blade Tower', heliponto = true } = 
     led: { largura: 0.35 },
     parapeito: 1.2,
     triangulos: {
-      lod0: { media: [8000, 26000], alta: [40000, 70000], ultra: [40000, 70000], pc: [40000, 70000] },
+      lod0: { media: [6000, 26000], alta: [40000, 70000], ultra: [40000, 70000], pc: [40000, 70000] },
       lod1: [2000, 5000],
     },
   });
@@ -267,7 +267,7 @@ export function contornoAnelDeAgua(cx, cz, r0, r1, n = 120) {
  *   fontes { cx, cz, r, n, evitar: [graus] }               os jatos dançantes no lago em anel
  *   anel { cx, cz, raio, fundo, altura, andares, de, ate, portais, vao, pe, led, teto }   um trecho de anel (Apple Park)
  *   codex { x, z, altura, rot }                            o prisma facetado de vidro escuro com o átrio de livros
- *   oval { x, z, altura, a, b, torcao, rot, led }          a torre oval com as marquises e a faixa de LED
+ *   oval { x, z, altura, a, b, afina, torcao, rot, led }   a torre oval (afina: a escala da planta no topo)
  *   floresta { cx, cz, r0, r1 }                            o anel de floresta em volta do lago
  *   jardim { cx, cz, r0, r1 }                              o parque: gramados, bosques e caminhos
  *   supertree { x, z, altura }, passarela { pontos, cota } as Supertrees e a passarela entre elas
@@ -289,12 +289,13 @@ export const FLORESTA = congelar({ r0: 100.5, r1: 114 });
 export const PRACA = congelar({ r0: 114, r1: 150 });
 
 /**
- * Faixa de LED de cada peça (D88): contínua, no meio da altura de cada anel; nas torres ovais, na mesma altura da do
- * Horizon Ring (a que o olho segue de longe). y0 e y1 acima do chão.
+ * Faixa de LED de cada peça (D88): contínua, um andar no meio da altura de cada anel, entre duas marquises (com dois
+ * andares ela lia como um cinto largo); nas torres ovais, na mesma altura da do Horizon Ring (a que o olho segue de
+ * longe). y0 e y1 acima do chão.
  */
 const ledNoMeio = (A) => {
   const pe = A.altura / A.andares;
-  return { y0: cm(A.altura / 2 - pe), y1: cm(A.altura / 2 + pe) };
+  return { y0: cm(A.altura / 2 - pe / 2), y1: cm(A.altura / 2 + pe / 2) };
 };
 const LED_HORIZON = ledNoMeio(HORIZON);
 const LED_MERIDIAN = ledNoMeio(MERIDIAN);
@@ -385,11 +386,11 @@ const PLANO_A = {
     },
     {
       id: 'helix', nome: 'Helix Labs',
-      pecas: [{ tipo: 'oval', x: noRaio(R_TORRES, TORRES_DO_BOSQUE.helix)[0], z: noRaio(R_TORRES, TORRES_DO_BOSQUE.helix)[1], altura: 180, a: 34, b: 21, torcao: 32, rot: naRota(TORRES_DO_BOSQUE.helix), led: LED_HORIZON }],
+      pecas: [{ tipo: 'oval', x: noRaio(R_TORRES, TORRES_DO_BOSQUE.helix)[0], z: noRaio(R_TORRES, TORRES_DO_BOSQUE.helix)[1], altura: 180, a: 27, b: 17, afina: 0.8, torcao: 32, rot: naRota(TORRES_DO_BOSQUE.helix), led: LED_HORIZON }],
     },
     {
       id: 'compass', nome: 'Compass Tower',
-      pecas: [{ tipo: 'oval', x: noRaio(R_TORRES, TORRES_DO_BOSQUE.compass)[0], z: noRaio(R_TORRES, TORRES_DO_BOSQUE.compass)[1], altura: 180, a: 31, b: 20, torcao: 0, rot: naRota(TORRES_DO_BOSQUE.compass), led: LED_HORIZON, coroa: 'agulha' }],
+      pecas: [{ tipo: 'oval', x: noRaio(R_TORRES, TORRES_DO_BOSQUE.compass)[0], z: noRaio(R_TORRES, TORRES_DO_BOSQUE.compass)[1], altura: 180, a: 25, b: 16, afina: 0.84, torcao: 0, rot: naRota(TORRES_DO_BOSQUE.compass), led: LED_HORIZON, coroa: 'agulha' }],
     },
     {
       id: 'parque', nome: 'Park of Future Dreams',
@@ -402,12 +403,12 @@ const PLANO_A = {
     },
   ],
   paisagem: {
-    // a praça do pódio, onde as avenidas acabam, e os caminhos em anel do modelo (480 e 688)
+    // a praça do pódio, onde as avenidas acabam, e os caminhos em anel do modelo entre os anéis (480 e 688; o de 290,
+    // dentro do Meridian Ring, é do jardim)
     praca: { cx: CX, cz: CZ, r0: PRACA.r0, r1: PRACA.r1 },
     caminhos: [
       { cx: CX, cz: CZ, r: 480, largura: 10 },
       { cx: CX, cz: CZ, r: 688, largura: 10 },
-      { cx: CX, cz: CZ, r: 290, largura: 8 },
     ],
     // o bosque entre os anéis (a Codex, a Helix e a Compass no meio dele) e a faixa verde entre o Horizon Ring e o anel
     // viário
@@ -436,7 +437,8 @@ const PLANO_A = {
     deepCore: { nome: 'Deep Core', grade: [3, 3], lado: 34, passo: 46, profundidade: 26, resfriamento: 92 },
     lumenCollider: { nome: 'Lumen Collider', raio: 330, profundidade: 48, saloes: [45, 135, 225, 315] },
   },
-  camera: { x: CX, z: CZ, dist: 2600, guinada: 20, inclinacao: 30 },
+  // o disco inteiro às 17h30, do sul-sudoeste, com as torres no meio (CAMERA_ARCOLOGIA)
+  camera: { x: CX, z: CZ + 60, dist: 2600, guinada: 20, inclinacao: 30 },
 };
 
 /**
@@ -448,9 +450,10 @@ const PLANO_A = {
 export function mataDaSede(x, z) {
   const dx = x - CX;
   const dz = z - CZ;
-  const r = Math.hypot(dx, dz);
+  // as funções de comum/util (as mesmas em todo motor de JS): a S1a pinta a grade da mata da simulação com isto
+  const r = hipot(dx, dz);
   if (r > R_GLEBA) return null;
-  const a = ((Math.atan2(dz, dx) / RAD) % 360 + 360) % 360;
+  const a = ((atan2(dz, dx) / RAD) % 360 + 360) % 360;
   // as avenidas radiais (24 m) com 4 m de calçada de cada lado, do anel viário à praça
   const naAvenida = AVENIDAS.some((g) => {
     const d = ((a - g + 540) % 360) - 180;
@@ -470,7 +473,7 @@ export function mataDaSede(x, z) {
     if (Math.abs(r - 480) < 9 || Math.abs(r - 688) < 9) return 0.05;
     for (const t of Object.values(TORRES_DO_BOSQUE)) {
       const [tx, tz] = pontoDoArco(CX, CZ, R_TORRES, t);
-      if (Math.hypot(x - tx, z - tz) < 80) return 0.05;
+      if (hipot(x - tx, z - tz) < 80) return 0.05;
     }
     return ruido > 0.36 ? 0.88 : 0.1;
   }
@@ -512,7 +515,7 @@ export const POUSO = congelar({ ...torreParaMundo(TORRE_POSICAO, HELIPONTO_LOCAL
  * Câmera da Arcologia (voos e o botão da barra): o disco inteiro às 17h30, do sul-sudoeste, com as torres no meio.
  * Ângulos em graus (contratos/render.js).
  */
-export const CAMERA_ARCOLOGIA = congelar({ x: CX, z: CZ + 60, dist: 2600, guinada: 20, inclinacao: 30 });
+export const CAMERA_ARCOLOGIA = congelar({ ...PLANOS[PLANO_ESCOLHIDO].camera });
 
 /**
  * A cava do Mirror Lake (o reservatório da lago.e1) como forma do aplainar (D5; X1b registra quando lago.e1 começa):

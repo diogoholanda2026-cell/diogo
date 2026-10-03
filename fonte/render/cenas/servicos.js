@@ -4,7 +4,7 @@
 // areal na margem). Os prédios da cidade debaixo das plantas saem. ?vista= troca a câmera:
 //   padrao   os serviços de dia (15h, a hora do A10)
 //   holding  a produção da Holding
-//   noite    os serviços às 21h
+//   noite    os serviços de noite, mais perto (com ?hora=21, a hora do céu das cenas)
 //   perto    a clínica (Rede Sarah) e a escola de perto
 //   aberta   a vista aberta da bancada (a cidade inteira; o orçamento com os colocáveis)
 //   <tipo>   um modelo de perto (o id de data/colocaveis.js)
@@ -198,12 +198,46 @@ function desmatar(esp, L, mudancas) {
   mudancas?.marcarRet?.('floresta', x0, z0, x1, z1);
 }
 
+/**
+ * Aplaina o chão debaixo da planta, como a plataforma que o construir da simulação registra no aplainar: as amostras da
+ * grade dentro da planta ficam na cota do lote e as de até um passo em volta só descem até ela (nada sobe debaixo da
+ * via). Sem isso o chão de fora fura o piso dos lotes grandes (até 0,4 m acima da média na cidade sintética).
+ */
+function aplainarLote(esp, L, mudancas) {
+  const T = esp.terreno;
+  if (!T?.altura) return;
+  const [ox, oz] = T.origem ?? [-4096, -4096];
+  const p = T.passo;
+  // na cota do lote: o piso do modelo fica 5 cm acima e alturaEm no centro volta a cota do prédio (o espelho confere)
+  const alvo = L.y;
+  const cs = cantos(L.x, L.z, L.rot, L.w + 2 * p, L.d + 2 * p);
+  const x0 = Math.min(...cs.map((c) => c[0]));
+  const x1 = Math.max(...cs.map((c) => c[0]));
+  const z0 = Math.min(...cs.map((c) => c[1]));
+  const z1 = Math.max(...cs.map((c) => c[1]));
+  const c = Math.cos(L.rot);
+  const s = Math.sin(L.rot);
+  for (let j = Math.max(0, Math.ceil((z0 - oz) / p)); j <= Math.min(T.n - 1, Math.floor((z1 - oz) / p)); j++) {
+    for (let i = Math.max(0, Math.ceil((x0 - ox) / p)); i <= Math.min(T.n - 1, Math.floor((x1 - ox) / p)); i++) {
+      const dx = ox + i * p - L.x;
+      const dz = oz + j * p - L.z;
+      const u = Math.abs(dx * c - dz * s);
+      const v = Math.abs(dx * s + dz * c);
+      const k = j * T.n + i;
+      if (u <= L.w / 2 && v <= L.d / 2) T.altura[k] = alvo;
+      else if (u <= L.w / 2 + p && v <= L.d / 2 + p) T.altura[k] = Math.min(T.altura[k], alvo);
+    }
+  }
+  mudancas?.marcarRet?.('terreno', x0, z0, x1, z1);
+}
+
 /** Tira os prédios da cidade debaixo das plantas e põe os colocáveis no espelho. Devolve [{ tipo, i, x, z, ... }]. */
 export function construirNaCena(esp, lugares, { niveis = {}, obra = [], mudancas = null } = {}) {
   const P = esp.predios;
   const feitos = [];
   for (const L of lugares) {
     desmatar(esp, L, mudancas);
+    aplainarLote(esp, L, mudancas);
     const R = { x: L.x, z: L.z, rot: L.rot, w: L.w, d: L.d };
     for (let i = 0; i < P.n; i++) {
       if (!P.viva[i] || P.tipo[i] !== TIPO_PREDIO.ZONA) continue;
@@ -242,10 +276,57 @@ function enquadrar(lugares, { guinada = 30, inclinacao = 36, fator = 0.9, min = 
   return { x: (Math.min(...xs) + Math.max(...xs)) / 2, z: (Math.min(...zs) + Math.max(...zs)) / 2, dist: Math.max(min, ext * fator), guinada, inclinacao };
 }
 
-/** Câmera de perto de um lugar, olhando a frente (a frente do lote aponta para (sen rot, cos rot)). */
-function dePerto(L, { dist, inclinacao = 26, lado = 28 } = {}) {
-  const g = (-L.rot * 180) / Math.PI + 180 + lado;
-  return { x: L.x, z: L.z, dist: dist ?? Math.max(70, Math.hypot(L.w, L.d) * 1.5), guinada: g, inclinacao };
+/** O núcleo de um grupo: os lugares a até `raio` metros da mediana (tira o areal na margem, longe dos outros). */
+function nucleo(lugares, raio = 260) {
+  const med = (v) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)] ?? 0;
+  const mx = med(lugares.map((l) => l.x));
+  const mz = med(lugares.map((l) => l.z));
+  const perto = lugares.filter((l) => Math.hypot(l.x - mx, l.z - mz) <= raio);
+  return perto.length ? perto : lugares;
+}
+
+/**
+ * Quantos prédios da cidade tapam a vista de (x, z, y) pela câmera (guinada g, inclinação inc, distância dist, na
+ * convenção da camera.js): os que ficam no corredor da linha de visada e passam da altura dela ali. A altura do prédio
+ * é estimada pelo nível (a cidade vertical da D76 chega a uns 50 m no nível 5).
+ */
+function obstrucao(esp, L, g, inc, dist) {
+  const P = esp.predios;
+  const gu = (g * Math.PI) / 180;
+  const ic = (inc * Math.PI) / 180;
+  const h = dist * Math.cos(ic);
+  const cx = L.x - h * Math.sin(gu);
+  const cz = L.z + h * Math.cos(gu);
+  const vx = cx - L.x;
+  const vz = cz - L.z;
+  const v2 = vx * vx + vz * vz || 1;
+  let n = 0;
+  for (let i = 0; i < P.n; i++) {
+    if (!P.viva[i] || P.tipo[i] !== TIPO_PREDIO.ZONA) continue;
+    const dx = P.x[i] - L.x;
+    const dz = P.z[i] - L.z;
+    const t = (dx * vx + dz * vz) / v2;
+    if (t < 0.05 || t > 1) continue;
+    if (Math.hypot(dx - vx * t, dz - vz * t) > Math.max(P.w[i], P.d[i]) / 2 + 3) continue;
+    if (P.y[i] + 6 + 9 * P.nivel[i] > L.y + t * dist * Math.sin(ic)) n++;
+  }
+  return n;
+}
+
+/**
+ * Câmera de perto de um lugar, olhando a frente (a frente do lote aponta para (sen rot, cos rot)), girada para o lado
+ * com menos prédios da cidade no caminho (a vista não fica tapada por uma torre do bairro).
+ */
+function dePerto(esp, L, { dist, inclinacao = 26, lado = 28 } = {}) {
+  const d = dist ?? Math.max(70, Math.hypot(L.w, L.d) * 1.5);
+  const base = (-L.rot * 180) / Math.PI + 180 + lado;
+  let melhor = null;
+  for (const desvio of [0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180]) {
+    const n = obstrucao(esp, L, base + desvio, inclinacao, d);
+    if (!melhor || n < melhor.n) melhor = { n, g: base + desvio };
+    if (n === 0) break;
+  }
+  return { x: L.x, z: L.z, dist: d, guinada: melhor.g, inclinacao };
 }
 
 export function registrar(registrarCena) {
@@ -282,10 +363,11 @@ export function registrar(registrarCena) {
       const sv = feitos.filter((f) => COLOCAVEIS[f.tipo].familia === 'servico');
       const hd = feitos.filter((f) => COLOCAVEIS[f.tipo].familia === 'holding');
       let cam = null;
-      if (vista === 'holding') cam = enquadrar(hd, { guinada: 205, inclinacao: 34, fator: 0.62 });
+      if (vista === 'holding') cam = enquadrar(nucleo(hd), { guinada: 205, inclinacao: 34, fator: 0.75 });
       else if (vista === 'aberta') cam = { ...CAMERA_ABERTA };
-      else if (vista === 'perto') cam = doTipo('clinica') ? dePerto(doTipo('clinica'), { dist: 120, inclinacao: 24 }) : null;
-      else if (COLOCAVEIS[vista]) cam = doTipo(vista) ? dePerto(doTipo(vista)) : null;
+      else if (vista === 'perto') cam = doTipo('clinica') ? dePerto(esp, doTipo('clinica'), { dist: 120, inclinacao: 24 }) : null;
+      else if (COLOCAVEIS[vista]) cam = doTipo(vista) ? dePerto(esp, doTipo(vista)) : null;
+      else if (vista === 'noite') cam = enquadrar(sv, { guinada: 30, inclinacao: 30, fator: 0.45 });
       else cam = enquadrar(sv, { guinada: 30, inclinacao: 34, fator: 0.6 });
       if (cam) ctx.cameraApi.definir(cam);
       // o domínio: o registrado no índice do render ou, enquanto o índice não o liga, um da própria cena, que ela

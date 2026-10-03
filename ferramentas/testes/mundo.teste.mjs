@@ -310,7 +310,7 @@ test('água: fundo abaixo do nível em toda amostra de água; mar ligado ao aber
   assert.equal(nivelAguaEm(sim, 0, 0), null);
 });
 
-test('mapa: área inicial num componente só de terra (D53); rocha, areia e argila dentro, calcário e orla fora (D3)', () => {
+test('mapa: área inicial num componente só de terra (D53); rocha, areia e argila dentro, calcário fora (D3), orla dentro (D90)', () => {
   const r = conferirMapa(simDoMapa());
   assert.deepEqual(r.falhas, []);
   assert.equal(r.medidas.componentes, 1);
@@ -663,6 +663,24 @@ test('áreas (D55) e sugestões (D36, D90): formato, dentro da área inicial, av
       }
     }
     assert.equal(tipo, 'rua', `${id} de frente para ${tipo}`);
+  }
+  // as quadras sugeridas: a grade de ruas da caixa de cada uma (como o robô traça) passa na prévia, fora do disco
+  for (const q of S.filter((x) => x.tipo === 'zona')) {
+    const xs = q.pontos.map((p) => p[0]);
+    const zs = q.pontos.map((p) => p[1]);
+    const [qx0, qz0, qx1, qz1] = [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)];
+    const pv = sim.q.via.previa({ modo: 'grade', tipo: 'rua', pontos: [[qx0, qz0], [qx1, qz0], [qx1, qz1]] });
+    assert.ok(pv.ok, `${q.id}: ${JSON.stringify(pv.erros)}`);
+  }
+  // a avenida constrói trecho a trecho, em ordem (como o robô), no declive da avenida, e o último trecho encaixa no
+  // portão norte pela reta radial (chegando de viés, a lateral da pista entra no disco: código 'gleba')
+  const pts = porId.avenida.pontos;
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const plano = { modo: 'reta', tipo: porId.avenida.via, pontos: [pts[k], pts[k + 1]], sessao: 1 };
+    const pv = sim.q.via.previa(plano);
+    assert.ok(pv.ok, `avenida, trecho ${k}: ${JSON.stringify(pv.erros)}`);
+    if (k === pts.length - 2) assert.ok(pv.encaixes.some((e) => e.portao === 'norte'), 'a avenida não chega ao portão norte');
+    assert.ok(sim.cmd('via.construir', { plano }).ok, `avenida, trecho ${k}`);
   }
 });
 

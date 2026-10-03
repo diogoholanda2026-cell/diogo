@@ -17,10 +17,10 @@ import { Construtor } from '../geracao/malhaPredio.js';
 import { quantizarMalha } from '../geracao/quantizar.js';
 import { COLOCAVEIS, COLOCAVEIS_ORDEM } from '../../data/colocaveis.js';
 import { Montador, mat, F, ENTERRA, PASSO_ARV, ESPECIES_ARVORE } from './pecas.js';
-
-export { PASSO_ARV, ESPECIES_ARVORE };
 import { MODELOS_SERVICOS } from './servicos.js';
 import { MODELOS_HOLDING } from './holding.js';
+
+export { PASSO_ARV, ESPECIES_ARVORE };
 
 export const NUM_C = 6;
 export const INT_C = 4;
@@ -86,6 +86,9 @@ function caixaDoTrecho(K, v0, v1, ox, oy, oz, rot) {
 /** Gera a malha de uma lista de colocáveis (o pedido 'colocavel' da oficina). */
 export function gerarColocaveis(dados) {
   const { n = 0, num, ints, lod = 0, detalhe = 'media' } = dados;
+  // um pedido sem os dados (os buffers foram transferidos a um worker que morreu) não vira malha com NaN: o erro volta
+  // na resposta e o domínio pede de novo
+  if (n > 0 && !(num?.length >= n * NUM_C && ints?.length >= n * INT_C)) throw new Error(`colocavel: pedido sem os dados de ${n} colocáveis`);
   const K = new Construtor(Math.max(1024, n * (lod ? 400 : 6000)));
   const caixas = new Float32Array(n * CAIXA_C);
   const faixas = new Uint32Array(n * 2);
@@ -125,7 +128,9 @@ export function pedidoColocaveis(P, itens, { ox = 0, oz = 0, lod = 0, detalhe = 
     num.set([P.x[i] - ox, P.y[i], P.z[i] - oz, P.rot[i], P.w[i], P.d[i]], NUM_C * k);
     ints[INT_C * k] = i;
     ints[INT_C * k + 1] = P.semente[i];
-    ints[INT_C * k + 2] = Math.max(0, COLOCAVEIS_ORDEM.indexOf(tipo));
+    // tipo fora da tabela: o índice não existe e o gerador desenha o modelo de reserva
+    const t = COLOCAVEIS_ORDEM.indexOf(tipo);
+    ints[INT_C * k + 2] = t < 0 ? 0xffff : t;
     ints[INT_C * k + 3] = (P.nivel[i] || 1) | (semArvores(i) ? SEM_ARVORES : 0);
   });
   return { dados: { lod, detalhe, ox, oz, n, num, ints }, transferir: [num.buffer, ints.buffer] };

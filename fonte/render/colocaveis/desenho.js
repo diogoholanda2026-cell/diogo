@@ -3,7 +3,9 @@
 // R4a (a vista de depuração da F0) não desenha nada: a caixa da depuração já mostra os colocáveis.
 //   LOD1  uma malha só com todos os colocáveis (o gerador na oficina, fundida e quantizada): uma chamada no mapa
 //         inteiro. Cada colocável é um trecho contínuo dos índices; os que estão no LOD0 de perto saem do índice
-//         visível (reescrito só quando o conjunto de setores de perto muda), e a sombra própria usa o índice inteiro.
+//         visível (reescrito só quando o conjunto de setores de perto muda). A sombra própria usa outro índice da
+//         mesma malha, só com os colocáveis que podem sombrear a região das cascatas (ctx.sombra.regiao), reescrito
+//         quando a região muda: a família 'sombra' não cresce com o número de colocáveis no mapa.
 //   LOD0  por setor de 256 m perto da câmera (o alcance do LOD0 do perfil), uma malha por setor, com cache.
 //   Obra  o corte no vértice da R4b: ctx.dominio('predios').alturaObra(idx, H) com a altura do modelo.
 //   Detalhe pela tabela DETALHE_COLOCAVEIS (Média ou Ultra, data/colocaveis.js); trocar a qualidade refaz tudo.
@@ -27,6 +29,10 @@ const NO_AR = 2;
 const ESPERA_LOD1 = 250;
 /** Folga (fração) para sair do LOD0: não fica trocando na borda. */
 const HISTERESE = 0.12;
+/** Quadros de espera antes de pedir de novo um setor que a oficina devolveu com erro. */
+const ESPERA_ERRO = 30;
+/** Espera (ms) antes de pedir de novo o LOD1 que a oficina devolveu com erro. */
+const ESPERA_ERRO_LOD1 = 1000;
 
 const agoraMs = () => (typeof performance !== 'undefined' ? performance.now() : 0);
 
@@ -94,16 +100,19 @@ export function criarColocaveis(ctx) {
   let detalhe = porPerfil(DETALHE_COLOCAVEIS, ctx.perfil);
 
   const itens = new Map(); // idx -> { i, tipo, s, sig, obra, H }
-  const setores = new Map(); // s -> { s, x0, z0, lista: Set, versao, lod0, pedido, quer, usado, ymin, ymax }
+  const setores = new Map(); // s -> { s, x0, z0, lista: Set, versao, lod0, pedido, quer, usado, ymin, ymax, espera }
   let iniciado = false;
   let versaoItens = 0; // sobe a cada mudança que o LOD1 precisa ver
+  let versaoObra = 0; // sobe quando um colocável entra ou sai da obra (o índice da sombra deixa a obra de fora)
   const fila = []; // respostas a montar no próximo quadro
   let noAr = 0;
   let quadros = 0;
   const caixas = new Map(); // idx -> Float32Array(6) [x0, z0, x1, z1, y0, y1] no espaço do lote
   let arvores = 0; // árvores plantadas na vegetação
   // LOD1 da cidade inteira
-  const longe = { versao: -1, pedida: -1, tPedido: -Infinity, mesh: null, sombra: null, geoTudo: null, indices: null, faixas: new Map(), chave: '', tris: 0, bytes: 0, pendente: false, tMudou: -Infinity };
+  const longe = { versao: -1, pedida: -1, tPedido: -Infinity, mesh: null, sombra: null, geoTudo: null, indices: null, faixas: new Map(), chave: '', chaveSombra: '', tris: 0, trisSombra: 0, bytes: 0, pendente: false, tMudou: -Infinity, erros: 0 };
+  // silhuetas do fantasma (X2), por tipo, nível e detalhe: a geometria é do domínio
+  const silhuetas = new Map();
   // a malha vazia do aquecimento (o programa existe desde a carga mesmo sem nenhum colocável)
   const mAq = gerarColocaveis({ lod: 1, detalhe, n: 1, num: new Float32Array([0, -1000, 0, 0, 16, 16]), ints: new Uint32Array([0, 1, 1, 1]) }).malhas[0];
   const geoAq = geometriaQuantizada(mAq, { soltar: false });
@@ -117,7 +126,8 @@ export function criarColocaveis(ctx) {
     let st = setores.get(s);
     if (!st) {
       const [x0, z0] = grade.canto(s);
-      st = { s, x0, z0, lista: new Set(), versao: 1, lod0: null, pedido: 0, quer: false, usado: 0, ymin: -2, ymax: 40, dist: Infinity };
+      // a faixa de altura vem dos colocáveis (a cota do terreno e a altura da tabela, depois a da malha)
+      st = { s, x0, z0, lista: new Set(), versao: 1, lod0: null, pedido: 0, quer: false, usado: 0, ymin: Infinity, ymax: -Infinity, dist: Infinity, espera: 0 };
       setores.set(s, st);
     }
     return st;
@@ -149,8 +159,9 @@ export function criarColocaveis(ctx) {
       if (velho.obra !== obra) {
         velho.obra = obra;
         corte(velho);
-        // as árvores do lote só nascem com a obra pronta (o LOD1 traz a lista de novo)
+        // as árvores do lote só nascem com a obra pronta (o LOD1 traz a lista de novo); a sombra segue a obra
         versaoItens++;
+        versaoObra++;
         longe.tMudou = agoraMs();
       }
       return;
@@ -167,7 +178,10 @@ export function criarColocaveis(ctx) {
     const st = setorPara(s);
     st.lista.add(i);
     st.versao++;
+    st.ymin = Math.min(st.ymin, P.y[i] - 2);
+    st.ymax = Math.max(st.ymax, P.y[i] + it.H);
     versaoItens++;
+    if (obra) versaoObra++;
     longe.tMudou = agoraMs();
     corte(it);
   }
@@ -248,12 +262,18 @@ export function criarColocaveis(ctx) {
   function soltarLod0(st) {
     if (!st.lod0) return;
     cena.remove(st.lod0.mesh);
-    st.lod0.mesh.geometry.dispose();
+    st.lod0.mesh.geometry?.dispose();
     st.lod0 = null;
   }
 
   function receberLod0({ st, r, lista, versao, det }) {
     if (det !== detalhe || !setores.has(st.s)) return;
+    if (r?.erro || (!r?.malhas?.length && lista.length)) {
+      // a oficina falhou (o erro já foi para o console): o LOD0 velho fica e o setor é pedido de novo mais tarde
+      st.pedido = 0;
+      st.espera = quadros + ESPERA_ERRO;
+      return;
+    }
     soltarLod0(st);
     const m = r.malhas?.[0];
     if (!m) {
@@ -284,11 +304,11 @@ export function criarColocaveis(ctx) {
       }
     });
     // a altura dos setores (distância e descarte) pelas caixas
+    const P = ctx.sim.espelho.predios;
     for (const st of setores.values()) {
       let y1 = -Infinity;
       for (const i of st.lista) {
         const c = caixas.get(i);
-        const P = ctx.sim.espelho.predios;
         if (c && i < P.n) y1 = Math.max(y1, P.y[i] + c[5]);
       }
       if (Number.isFinite(y1)) st.ymax = y1;
@@ -297,9 +317,17 @@ export function criarColocaveis(ctx) {
 
   function receberLod1({ r, lista, versao, det }) {
     if (det !== detalhe) return;
+    if (r?.erro || (!r?.malhas?.length && lista.length)) {
+      // a oficina falhou: o LOD1 velho fica e o pedido volta depois de uma espera
+      longe.erros++;
+      longe.pedida = -1;
+      longe.tMudou = agoraMs() + ESPERA_ERRO_LOD1;
+      return;
+    }
     const velhoTudo = longe.geoTudo;
     const velhaVis = longe.mesh?.geometry;
-    if (longe.sombra) ctx.sombra.soltar(longe.sombra);
+    const velhaSombra = longe.sombra?.geometry;
+    if (longe.sombra) ctx.sombra?.soltar(longe.sombra);
     longe.faixas.clear();
     const m = r.malhas?.[0];
     if (!m) {
@@ -314,14 +342,19 @@ export function criarColocaveis(ctx) {
       longe.bytes = 0;
     } else {
       const indices = m.indices.slice();
-      const geoTudo = geometriaQuantizada(m);
-      const geoVis = new THREE.BufferGeometry();
-      for (const [k, a] of Object.entries(geoTudo.attributes)) geoVis.setAttribute(k, a);
-      geoVis.boundingSphere = geoTudo.boundingSphere;
-      geoVis.boundingBox = geoTudo.boundingBox;
-      const ind = new THREE.BufferAttribute(indices.slice(), 1);
-      ind.setUsage(THREE.DynamicDrawUsage);
-      geoVis.setIndex(ind);
+      const geoTudo = geometriaQuantizada(m, { indice: false });
+      // duas vistas da mesma malha, cada uma com o seu índice dinâmico: a da cena e a da sombra
+      const vistaDe = () => {
+        const g = new THREE.BufferGeometry();
+        for (const [k, a] of Object.entries(geoTudo.attributes)) g.setAttribute(k, a);
+        g.boundingSphere = geoTudo.boundingSphere;
+        g.boundingBox = geoTudo.boundingBox;
+        const ind = new THREE.BufferAttribute(indices.slice(), 1);
+        ind.setUsage(THREE.DynamicDrawUsage);
+        g.setIndex(ind);
+        return g;
+      };
+      const geoVis = vistaDe();
       longe.indices = indices;
       if (!longe.mesh) {
         longe.mesh = new THREE.Mesh(geoVis, material);
@@ -330,11 +363,12 @@ export function criarColocaveis(ctx) {
         cena.add(longe.mesh);
       } else longe.mesh.geometry = geoVis;
       posicionar(longe.mesh, m, 0, 0);
-      // a sombra própria (D43): o LOD1 inteiro, com o índice completo
-      const fonte = posicionar(new THREE.Mesh(geoTudo, material), m, 0, 0);
+      // a sombra própria (D43): o LOD1 dos colocáveis perto da região das cascatas (filtrarSombra)
+      const fonte = posicionar(new THREE.Mesh(vistaDe(), material), m, 0, 0);
       fonte.name = 'colocaveis:sombra';
       longe.sombra = fonte;
-      medidas.familia(ctx.sombra.projetor(fonte), 'sombra');
+      const gemeo = ctx.sombra?.projetor(fonte);
+      if (gemeo) medidas.familia(gemeo, 'sombra');
       longe.geoTudo = geoTudo;
       longe.tris = m.tris;
       longe.bytes = bytesDe(m);
@@ -342,11 +376,13 @@ export function criarColocaveis(ctx) {
       guardarCaixas(lista, r.caixas);
     }
     velhoTudo?.dispose();
+    velhaSombra?.dispose();
     if (velhaVis && velhaVis !== longe.mesh?.geometry) velhaVis.dispose();
     plantar(r.arvores);
     longe.versao = versao;
     longe.chave = '';
-    ctx.sombra.marcar();
+    longe.chaveSombra = '';
+    ctx.sombra?.marcar();
   }
 
   /** As árvores dos lotes (do LOD1, no espaço do mundo) na vegetação da R2b, com as espécies dela. */
@@ -393,6 +429,39 @@ export function criarColocaveis(ctx) {
     longe.mesh.visible = n > 0;
   }
 
+  /**
+   * O índice da sombra: os colocáveis cujo lote fica a até o raio da cascata maior (na diagonal do quadrado) mais a
+   * sombra comprida do sol baixo (3 vezes a altura) do centro da região. Sem região (antes do primeiro passe), todos.
+   * A obra fica de fora: o gêmeo da sombra não tem o corte da R4b e projetaria o prédio pronto.
+   */
+  function filtrarSombra() {
+    if (!longe.sombra || !longe.indices) return;
+    const reg = ctx.sombra?.regiao ?? null;
+    const chave = `${reg ? `${Math.round(reg.x)},${Math.round(reg.z)},${Math.round(reg.raio)}` : 'tudo'}|${versaoObra}`;
+    if (chave === longe.chaveSombra) return;
+    longe.chaveSombra = chave;
+    const P = ctx.sim.espelho.predios;
+    const ind = longe.sombra.geometry.index;
+    const dst = ind.array;
+    let n = 0;
+    for (const [i, [a, c]] of longe.faixas) {
+      if (itens.get(i)?.obra) continue;
+      if (reg) {
+        if (i >= P.n) continue;
+        const folga = 40 + 3 * (itens.get(i)?.H ?? 20);
+        if (Math.hypot(P.x[i] - reg.x, P.z[i] - reg.z) > reg.raio * Math.SQRT2 + folga) continue;
+      }
+      dst.set(longe.indices.subarray(a, a + c), n);
+      n += c;
+    }
+    ind.clearUpdateRanges();
+    ind.addUpdateRange(0, Math.max(1, n));
+    ind.needsUpdate = true;
+    longe.sombra.geometry.setDrawRange(0, n);
+    longe.trisSombra = n / 3;
+    ctx.sombra?.marcar?.();
+  }
+
   function passo({ pedidos0 = 1 } = {}) {
     quadros++;
     while (fila.length) {
@@ -420,15 +489,18 @@ export function criarColocaveis(ctx) {
         continue;
       }
       st.usado = quadros;
-      if ((!st.lod0 || st.lod0.versao !== st.versao) && st.pedido !== st.versao && noAr < NO_AR && pedidos < pedidos0) {
+      if ((!st.lod0 || st.lod0.versao !== st.versao) && st.pedido !== st.versao && quadros >= st.espera && noAr < NO_AR && pedidos < pedidos0) {
         pedirSetor(st);
         pedidos++;
       }
-      const ok = st.lod0 && st.lod0.versao === st.versao;
-      if (st.lod0) st.lod0.mesh.visible = !!ok;
-      if (ok) perto.push(st.s);
+      // o LOD0 velho fica à vista até o novo chegar (o setor não cai para o LOD1 por um quadro a cada mudança)
+      if (st.lod0) {
+        st.lod0.mesh.visible = true;
+        perto.push(st.s);
+      }
     }
     filtrar(perto);
+    filtrarSombra();
     // cache: solta os LOD0 mais antigos fora da vista
     const guardados = [...setores.values()].filter((st) => st.lod0 && !st.quer).sort((a, b) => b.usado - a.usado);
     for (const st of guardados.slice(CACHE_LOD0)) soltarLod0(st);
@@ -453,9 +525,15 @@ export function criarColocaveis(ctx) {
       st.versao++;
       st.pedido = 0;
     }
+    disporSilhuetas();
     versaoItens++;
     longe.tMudou = -Infinity;
   });
+
+  function disporSilhuetas() {
+    for (const g of silhuetas.values()) g.dispose();
+    silhuetas.clear();
+  }
 
   // ---------------------------------------------------------------------------------------------- api
 
@@ -495,31 +573,39 @@ export function criarColocaveis(ctx) {
         }
       }
       const vis = longe.mesh?.visible ? (longe.mesh.geometry.drawRange.count === Infinity ? longe.tris : longe.mesh.geometry.drawRange.count / 3) : 0;
-      return { itens: itens.size, setores: setores.size, lod0, trisLod0: tris0, trisLod1: Math.round(vis), trisLod1Total: longe.tris, arvores, memoriaMB: +(bytes / 1048576).toFixed(2), detalhe };
+      return { itens: itens.size, setores: setores.size, lod0, trisLod0: tris0, trisLod1: Math.round(vis), trisLod1Total: longe.tris, trisSombra: longe.sombra ? Math.round(longe.trisSombra) : 0, arvores, memoriaMB: +(bytes / 1048576).toFixed(2), detalhe, errosOficina: longe.erros };
     },
     /** Caixa de um colocável no espaço do lote ([x0, z0, x1, z1, y0, y1]) ou null. */
     caixa: (i) => (caixas.has(i) ? Array.from(caixas.get(i)) : null),
     /**
      * Geometria do LOD1 de um tipo (no espaço do lote, base em y = 0), para o fantasma da ferramenta de colocar (X2):
-     * posição Float32 e normal, sem os atributos da fachada.
+     * posição Float32 e normal, sem os atributos da fachada. A geometria é do domínio (uma por tipo e nível, guardada):
+     * quem usa não descarta; null para um tipo que não é colocável.
      */
     silhueta(tipo, nivel = 1) {
+      if (!COLOCAVEIS[tipo]) return null;
+      const chave = `${tipo}|${nivel}`;
+      let g = silhuetas.get(chave);
+      if (g) return g;
       const K = new Construtor(256);
       K.predio(0, 0, 0, 0, 0);
-      const peg = COLOCAVEIS[tipo]?.pegada ?? [24, 24];
-      modelar(K, { tipo, w: peg[0], d: peg[1], nivel, lod: 1, detalhe });
-      const g = new THREE.BufferGeometry();
+      const [w, d] = COLOCAVEIS[tipo].pegada;
+      modelar(K, { tipo, w, d, nivel, lod: 1, detalhe });
+      g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(K.pos.slice(0, 3 * K.nv), 3));
       g.setAttribute('normal', new THREE.BufferAttribute(K.nor.slice(0, 3 * K.nv), 3));
       g.setIndex(new THREE.BufferAttribute(K.idx.slice(0, K.ni), 1));
+      silhuetas.set(chave, g);
       return g;
     },
     descartar() {
       desligar?.();
       for (const st of setores.values()) soltarLod0(st);
+      disporSilhuetas();
       if (longe.mesh) cena.remove(longe.mesh);
-      if (longe.sombra) ctx.sombra.soltar(longe.sombra);
+      if (longe.sombra) ctx.sombra?.soltar(longe.sombra);
       longe.mesh?.geometry.dispose();
+      longe.sombra?.geometry.dispose();
       longe.geoTudo?.dispose();
       ctx.quadro?.aquecer?.delete?.(aquecer);
       aquecer.geometry.dispose();

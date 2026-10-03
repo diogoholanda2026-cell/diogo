@@ -4,6 +4,7 @@ Custo: o gancho camada no sombreador dos prédios entra no custo que a PC2 mediu
 Marcadores instanciados com forma por gravidade e oclusão, teto por perfil (60 no Média; o 'pc' herda o Alta). Rótulos de áreas, avenidas e marcos no DOM, com os nomes da sede v3 em inglês, lidos de data/arcologia-plano.js (a SEDE3 publicou na etapa 2: Park of Future Dreams, Meridian Ring, Horizon Ring, Blade Tower...). Legenda embaixo ao centro. Textos sem travessão.
 Capturas (no máximo 4, 1376 x 768, ?q=pc) na cena camadas: Zonas, Água, Serviços e Valor.
 Testes: camadas (rampas, legendas, teto de marcadores, nada desenhado com a camada desligada).
+Da etapa 2: os rótulos da sede vêm de PARTES_NOMES e TRECHOS_HORIZON (data/arcologia-plano.js); a seleção da sede devolve o id do trecho em ref.
 Contexto da onda 3 (vale para todas as parcelas da onda, que termina no M1a jogável):
 - Decisões novas do dono: D63 a D90 no docs/PROJETO.md (2.1). Leia as linhas inteiras. As que mudam o M1a:
   - D67: calendário com data real. O jogo começa em jan. 2020 (a D42 fica: 1 h de jogo = 6 meses; mês = 600 tiques). A interface mostra "jan. 2020", nunca "Mês 3 · Ano 2".

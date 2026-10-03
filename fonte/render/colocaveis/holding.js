@@ -31,8 +31,9 @@ function pilha(b, x, z, r, h, cor, k, op = {}) {
 /** Correia transportadora inclinada de a até b2 ([x, y, z]), com os pés a cada ~7 m e a cobertura da esteira. */
 function correia(b, a, b2, op = {}) {
   if (b.fora(op)) return;
-  const aco = mat(F.METAL, op.cor ?? '#8e9396');
-  const capa = mat(F.METAL, '#b8bab6');
+  const aco = mat(F.METAL, op.cor ?? '#7b8084');
+  // a cobertura de chapa pintada, fosca (o metal claro do shader brilhava branco contra o céu)
+  const capa = mat(F.CONCRETO, '#8c908f', { dg: 0.4 });
   b.viga(a, b2, op.larg ?? 1.1, 0.45, aco, { l1: op.l1 });
   if (b.lod === 1) return;
   // a cobertura de chapa em meia-cana sobre a esteira (pela face de cima, mais clara)
@@ -203,26 +204,110 @@ function escritorioObra(b) {
 
 // ------------------------------------------------------------------------------------------------ pedreira e mina
 
+/** Passo suave de 0 a 1 (as pontas do morro descem ao chão). */
+const suave = (t) => t * t * (3 - 2 * t);
+
+const subtrair = (a, c) => [a[0] - c[0], a[1] - c[1], a[2] - c[2]];
+const vetorial = (a, c) => [a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2], a[0] * c[1] - a[1] * c[0]];
+
 /**
- * Cava em bancadas (pedreira de granito, mina de calcário): degraus de rocha que sobem para o fundo, cada um mais
- * estreito, com a frente irregular pela semente, as bermas de cascalho e o mato no alto.
+ * Curva em U de um nível do morro: a metade de trás de uma superelipse de semieixos (ax, az) em volta de (0, zc) e as
+ * duas pernas retas até zFrente. Cada ponto é [x, z, f]: f é o fator da altura (0 na ponta da perna, onde o morro
+ * chega ao chão; 1 no fundo). Todas as curvas do morro têm a mesma amostragem, e as faixas entre duas viram tiras de
+ * quadriláteros. nArco par: o fundo (z = zc - az) e as pontas são sempre pontos, a mesma caixa nos dois LOD.
  */
-function bancadas(b, z0, z1, nB, hB, rocha, berma, topo, k0) {
-  const hw = b.w / 2;
-  for (let k = 0; k < nB; k++) {
-    const recuo = k * (b.w * 0.07);
-    const zf = z1 - ((z1 - z0) * k) / nB;
-    const n = b.lod ? 2 : b.ultra ? 10 : 6;
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-      const x = -hw + 0.6 + recuo + ((b.w - 1.2 - 2 * recuo) * i) / n;
-      const j = i === 0 || i === n ? 0 : b.lod ? 0 : (b.r(k0 + k * 20 + i) - 0.5) * 2.4;
-      pts.push([x, zf + j - (i === 0 || i === n ? 2.5 : 0)]);
-    }
-    pts.push([hw - 0.6 - recuo, z0], [-hw + 0.6 + recuo, z0]);
-    const ehTopo = k === nB - 1;
-    b.prisma(pts, -ENTERRA, ENTERRA + hB * (k + 1), rocha, { topo: ehTopo ? topo : berma, l1: true });
+function curvaU(ax, az, zc, zFrente, nArco, nPerna) {
+  const sup = (v) => Math.sign(v) * Math.abs(v) ** (2 / 3);
+  const pts = [];
+  for (let i = 0; i < nPerna; i++) pts.push([-ax, zFrente + ((zc - zFrente) * i) / nPerna, suave(i / nPerna)]);
+  for (let i = 0; i <= nArco; i++) {
+    const a = (i / nArco) * Math.PI;
+    pts.push([-ax * sup(Math.cos(a)), zc - az * sup(Math.sin(a)), 1]);
   }
+  for (let i = nPerna - 1; i >= 0; i--) pts.push([ax, zFrente + ((zc - zFrente) * i) / nPerna, suave(i / nPerna)]);
+  return pts;
+}
+
+/** Faixa do morro entre as curvas P e Q nas alturas yP(i) e yQ(i) (berma, platô, encosta): normal para cima. */
+function faixaMorro(b, P, Q, yP, yQ, m, ao = 1) {
+  for (let i = 0; i + 1 < P.length; i++) {
+    const a = [P[i][0], yP(i), P[i][1]];
+    const c1 = [P[i + 1][0], yP(i + 1), P[i + 1][1]];
+    const c2 = [Q[i + 1][0], yQ(i + 1), Q[i + 1][1]];
+    const d = [Q[i][0], yQ(i), Q[i][1]];
+    let n = vetorial(subtrair(c1, a), subtrair(d, a));
+    if (Math.hypot(...n) < 1e-6) n = vetorial(subtrair(c2, d), subtrair(c1, d));
+    const l = Math.hypot(...n);
+    n = l < 1e-6 ? [0, 1, 0] : n.map((x) => (x / l) * (n[1] < 0 ? -1 : 1));
+    b.quad(a, c1, c2, d, m, { n, u: [a[0], c1[0], c2[0], d[0]], v: [a[2], c1[2], c2[2], d[2]], larg: 1, ao });
+  }
+}
+
+/** Frente de lavra: a parede de rocha ao longo da curva P, de y0(i) a y1(i), virada para dentro da cava. */
+function frenteLavra(b, P, y0, y1, m) {
+  const vao = m.v || 3;
+  let acum = 0;
+  for (let i = 0; i + 1 < P.length; i++) {
+    const [xa, za] = P[i];
+    const [xb, zb] = P[i + 1];
+    const L = Math.hypot(xb - xa, zb - za);
+    if (L < 1e-4) continue;
+    const u = [acum / vao, (acum + L) / vao, (acum + L) / vao, acum / vao];
+    b.quad([xa, y0(i), za], [xb, y0(i + 1), zb], [xb, y1(i + 1), zb], [xa, y1(i), za], m, { n: [-(zb - za) / L, 0, (xb - xa) / L], u, v: [y0(i), y0(i + 1), y1(i + 1), y1(i)], larg: L, ao: 0.9 });
+    acum += L;
+  }
+}
+
+/**
+ * Morro lavrado (pedreira de encosta, mina a céu aberto): o morro ocupa o fundo do lote e a cava abre para a frente em
+ * anfiteatro, com as frentes de lavra de rocha em degraus, as bermas de cascalho entre elas, o platô e a encosta de
+ * fora cobertos de mato, e as pernas do U descendo até o chão na frente (nada de bolo em degraus nem paredão no fundo:
+ * por fora é um morro). A praça da cava (o piso do lote) recebe a britagem. Devolve a curva da praça e a altura.
+ * op: nB (bancadas), hB (altura de cada uma), saia (alcance da encosta), berma, zc, zFrente, rocha, berma e mato
+ * (materiais), k0 (chave da variação).
+ */
+function morroLavrado(b, op) {
+  const hw = b.w / 2;
+  const hd = b.d / 2;
+  const nB = op.nB ?? 3;
+  const hB = op.hB ?? 5.2;
+  const H = nB * hB;
+  const saia = op.saia ?? 0.62 * H;
+  const plato = 2.2;
+  const larg = op.largBerma ?? 3.2;
+  const zc = op.zc ?? -4;
+  const zFrente = op.zFrente ?? 12;
+  const nArco = b.lod ? 4 : b.ultra ? 12 : 8;
+  const nPerna = b.lod ? 1 : b.ultra ? 3 : 2;
+  const axB = hw - 1;
+  const azB = zc + hd - 1;
+  const U = (rec) => curvaU(axB - rec, azB - rec, zc, zFrente, nArco, nPerna);
+  const B = U(0);
+  const R = U(saia);
+  // C[j]: a frente que sobe do nível j - 1 ao j (C[1] na praça, C[nB] encostada no platô)
+  const C = [];
+  for (let j = 1; j <= nB; j++) C[j] = U(saia + plato + (nB - j) * larg);
+  const alt = (P, y) => (i) => y * P[i][2];
+  for (let j = 1; j <= nB; j++) frenteLavra(b, C[j], alt(C[j], (j - 1) * hB), alt(C[j], j * hB), op.rocha);
+  for (let j = 1; j < nB; j++) faixaMorro(b, C[j], C[j + 1], alt(C[j], j * hB), alt(C[j + 1], j * hB), op.berma);
+  faixaMorro(b, C[nB], R, alt(C[nB], H), alt(R, H), op.mato);
+  // a encosta de fora desce até um pouco abaixo do piso do lote (a borda some nele)
+  faixaMorro(b, R, B, alt(R, H), () => -0.2, op.encosta ?? op.mato, 0.9);
+  // o mato do platô e da encosta (plantado pela vegetação), com a amostragem fixa (a mesma lista em todo LOD)
+  const k0 = op.k0 ?? 300;
+  const Uf = (rec) => curvaU(axB - rec, azB - rec, zc, zFrente, 8, 2);
+  const Cf = Uf(saia + plato);
+  const Rf = Uf(saia);
+  const Bf = Uf(0);
+  for (let i = 1; i + 1 < Rf.length; i++) {
+    const [xr, zr, fr] = Rf[i];
+    const [xb, zb] = Bf[i];
+    if (fr < 0.5) continue;
+    const t = b.entre(k0 + 3 * i, 0.15, 0.55);
+    b.arvore(xr + (xb - xr) * t, H * fr * (1 - t) + 0.1, zr + (zb - zr) * t, { alt: b.entre(k0 + 3 * i + 1, 5, 8), raio: b.entre(k0 + 3 * i + 2, 1.8, 2.6), especie: i % 3 ? 'mata2' : 'mata3' });
+    if (i % 2) b.arvore((xr + Cf[i][0]) / 2, H * fr + 0.05, (zr + Cf[i][1]) / 2, { alt: b.entre(k0 + 3 * i + 40, 3, 5), raio: 1.4, especie: 'moita' });
+  }
+  return { H, praca: C[1], zc, zFrente };
 }
 
 /** Britagem: tremonha sobre o muro, o britador na cor da Holding e a torre de peneiras sobre pés. */
@@ -243,48 +328,44 @@ function britagem(b, x, z, op = {}) {
 }
 
 /**
- * Pedreira (pedreiras de brita reais): a frente de lavra em bancadas de granito no fundo, a britagem com a tremonha,
- * o britador e a torre de peneiras, as correias até as pilhas cônicas de brita, a pá carregadeira, o caminhão e o
- * escritório com o letreiro.
+ * Pedreira (pedreiras de brita reais, de encosta): o morro de granito lavrado em anfiteatro no fundo, a britagem na
+ * praça da cava (tremonha, britador na cor da Holding e torre de peneiras), as correias radiais até as pilhas cônicas de
+ * brita na frente, a pá carregadeira, o caminhão basculante e o escritório com o letreiro.
  */
 function pedreira(b, op = {}) {
   const hw = b.w / 2;
   const hd = b.d / 2;
-  const chao = mat(F.PISO, op.chao ?? '#9a9284');
-  const rocha = mat(F.PEDRA, op.rocha ?? '#8e8a84', { v: 1.6, dg: 0.6 });
-  const berma = mat(F.PISO, op.berma ?? '#a39a8a');
+  lote(b, mat(F.PISO, op.chao ?? '#9a9284'));
+  const rocha = mat(F.PEDRA, op.rocha ?? '#6f6b66', { v: 1.6, dg: 0.7 });
+  const berma = mat(F.PISO, op.berma ?? '#8e8676');
   const mato = mat(F.VERDE, COR.gramaEscura);
-  lote(b, chao);
-  const nB = 4;
-  const hB = op.hB ?? 4.6;
-  bancadas(b, -hd + 0.6, -hd + b.d * 0.48, nB, hB, rocha, berma, mato, 300);
-  // árvores no alto da cava
-  for (let k = 0; k < 5; k++) b.arvore(-hw * 0.6 + k * (b.w * 0.15), nB * hB, -hd + 2.6, { alt: b.entre(320 + k, 5, 7), raio: 2, especie: 'oiti' });
+  const encosta = mat(F.VERDE, op.encosta ?? '#525c3e');
+  morroLavrado(b, { hB: op.hB ?? 5.2, rocha, berma, mato, encosta, k0: 300 });
+  // pilhas na faixa da frente (uma por produto), com as correias radiais da torre de peneiras
+  const np = op.semBritagem ? 3 : 2 + b.nivel;
+  const zp = hd - 10.5;
+  const pilhas = [];
+  for (let k = 0; k < np; k++) pilhas.push([-hw + 6 + k * 12.5, zp + (k % 2) * 1.2]);
   if (op.semBritagem) {
-    for (let k = 0; k < 3; k++) pilha(b, -hw + 10 + k * 13, hd - 10 + (k % 2) * 2, 5.5, 4.5, op.cor ?? '#8f8b85', 340 + k * 3);
+    for (const [k, [px, pz]] of pilhas.entries()) pilha(b, px, pz, 5.4, 4.6 + b.r(340 + k), op.cor ?? '#8f8b85', 340 + k * 3);
   } else {
-    const [tx, tz] = britagem(b, -hw + 9, hd * 0.12, { dx: 15, dz: 1 });
-    // pilhas de brita (uma por produto) com as correias radiais
-    const np = 2 + b.nivel;
-    for (let k = 0; k < np; k++) {
-      const a = -0.2 + (k / Math.max(1, np - 1)) * 1.4;
-      const px = tx + Math.cos(a) * 15;
-      const pz = Math.min(hd - 7.5, tz + Math.sin(a) * 13);
-      pilha(b, Math.min(hw - 7.5, px), pz, 6.2, 5.6 + b.r(350 + k), op.cor ?? '#8f8b85', 360 + k * 3);
-      correia(b, [tx + 2.4, 12.2, tz], [Math.min(hw - 7.5, px), 6.4, pz], { larg: 0.9 });
+    const [tx, tz] = britagem(b, -8, -3, { dx: 13, dz: 1 });
+    for (const [k, [px, pz]] of pilhas.entries()) {
+      pilha(b, px, pz, 5.2, 5 + b.r(350 + k), op.cor ?? '#8f8b85', 360 + k * 3);
+      correia(b, [tx + 2.4, 12.2, tz], [px, 6.2, pz], { larg: 0.9 });
     }
   }
   // escritório (contêiner) e o letreiro na entrada
-  conteiner(b, -hw + 8, 0.08, hd - 3, mat(F.JANELA, '#d4d3cd', { a: 2.6, v: 2, c2: '#5d6468', uso: 2 }), {});
+  conteiner(b, -hw + 8, 0.08, hd - 2.4, mat(F.JANELA, '#d4d3cd', { a: 2.6, v: 2, c2: '#5d6468', uso: 2 }), {});
   letreiro(b, -hw + 19, 0.05, hd - 0.8, 7, 1.4);
-  // pá carregadeira e caminhão basculante na cor da Holding
-  b.veiculo(hw * 0.15, 0.08, hd - 6, 0.8, { comp: 8, larg: 2.8, alt: 1.8, mat: corHolding(), corCabine: '#d6d6d0' });
-  b.veiculo(-hw * 0.3, 0.08, hd * 0.05 + 8, -0.4, { comp: 6.5, larg: 2.6, alt: 1.2, mat: mat(F.METAL, '#b8962f'), corCabine: '#b8962f' });
+  // pá carregadeira na praça (na cor da Holding) e o caminhão basculante saindo
+  b.veiculo(6, 0.08, 6, 0.8, { comp: 8, larg: 2.8, alt: 1.8, mat: corHolding(), corCabine: '#d6d6d0' });
+  b.veiculo(-6, 0.08, 8, -0.4, { comp: 6.5, larg: 2.6, alt: 1.2, mat: mat(F.METAL, '#b8962f'), corCabine: '#b8962f' });
 }
 
-/** Mina de calcário: a mesma cava, clara, sem britagem (o calcário vai cru para a cimenteira). */
+/** Mina de calcário: o mesmo morro lavrado, claro, sem britagem (o calcário vai cru para a cimenteira). */
 function mina(b) {
-  pedreira(b, { chao: '#b9b1a1', rocha: '#cfc6b3', berma: '#c4bba8', cor: '#cdc5b4', hB: 4.2, semBritagem: true });
+  pedreira(b, { chao: '#b9b1a1', rocha: '#c9c0ad', berma: '#c4bba8', encosta: '#59623f', cor: '#cdc5b4', hB: 4.8, semBritagem: true });
 }
 
 // ------------------------------------------------------------------------------------------------ areal
@@ -464,14 +545,14 @@ function cimenteira(b) {
   const aco = mat(F.METAL, '#8e9396');
   const claro = mat(F.METAL, '#c4c6c3');
   lote(b, chao);
-  // torre de ciclones
+  // torre de ciclones (os pisos ficam cobertos pelo de cima: a oclusão cozida tira o azul do céu deles)
   const tx = -hw + 10;
   const tz = -hd + 11;
   const L = 12;
   const H = 52;
   b.caixa(tx, -ENTERRA, tz, L, ENTERRA + 16, L, mat(F.GALPAO, '#bfc1bd', { a: 8, v: 4, uso: 3, c2: '#5d6468' }), { topo: false, l1: true });
   for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.caixa(tx + sx * (L / 2 - 0.5), 16, tz + sz * (L / 2 - 0.5), 1, H - 16, 1, aco, { topo: false });
-  for (let k = 0; k < 5; k++) b.laje(tx, 16 + k * 9, tz, L, L, 0.4, mat(F.METAL, '#7a7f83'), {});
+  for (let k = 0; k < 5; k++) b.laje(tx, 16 + k * 9, tz, L, L, 0.4, mat(F.LAJE, '#6f7275'), { borda: mat(F.CONCRETO, '#8a8d8f'), aoTopo: 0.35 });
   b.caixa(tx, 16, tz, L, H - 16, L, claro, { so1: true });
   for (let k = 0; k < 4; k++) {
     const y = 18 + k * 9;

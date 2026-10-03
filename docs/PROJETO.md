@@ -1497,6 +1497,16 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 | Vidraria, Serraria, Manejo (corte) | galpão longo com forno float; galpão e pátio de toras; posto na mata | tipologias reais | 3 mil / 8 mil | 250 |
 
 - **Testa sem as outras:** cena `servicos` com a sintética. **Depende de:** R4a.
+- **Entregue em 03/10/2026** (R5, revisada; onda 3, etapa 2). 24 colocáveis em `data/colocaveis.js` (14 serviços e 10
+  prédios da Holding, do M1a, do M1b e da linha de corte), cada um com a referência real ("Inspirado em ..."), a pegada
+  da planta da simulação e os tetos Média, Ultra e LOD1; o 'pc' usa a coluna Ultra (cabe). Gerador 'colocavel' na
+  oficina com o corpo sob demanda; domínio 'colocaveis' (LOD1 do mapa numa chamada, LOD0 por setor, corte da obra da
+  R4b, `silhueta(tipo, nivel)` para o fantasma da X2), ligado no índice fixo pelo integrador; seleção 'colocavel'. A
+  revisão trocou a pedreira e a mina em degraus (bolo) por morro lavrado, refez os tijolos do CopenHill e corrigiu a
+  sombra da obra, o erro da oficina e um vazamento da silhueta. Pendências: delegacia (Capanema) atarracada pelo lote,
+  internação do hospital em caixa escura, encostas lisas da pedreira, termelétrica escura à noite; a folha da Holding
+  ainda não mostra "Inspirado em ..." (U2a ou C1); LOD1 numa escala só pode brigar com o chão de longe (medir no M1b).
+  Nota completa em `docs/entregas/onda3/R5.md`.
 
 #### U1b. HUD, seleção e gestão (onda 3; 3 sessões)
 - **Arquivos:** `ui/hud/{Velocidade,Trilho,Objetivo,FaixaAlerta,Avisos,Menu,Retomar}.jsx`, `ui/selecao/Folha.jsx`,
@@ -1551,6 +1561,22 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   Supertrees e os fantasmas; cenas `torre` e `planos` (aerea, avenida, mar, noite).
 - **Entrega:** testes de forma e de mapa verdes, família arcologia até 250 mil triângulos de perto e 60 mil na vista
   aberta, nenhuma recompilação em tempo de jogo, bancada aberta no 'pc' medida antes e depois, 4 capturas.
+- **Entregue em 03/10/2026** (SEDE3, revisada; onda 3, etapa 2, retomada depois do reinício do contêiner e da pausa).
+  Área inicial de 6 x 5 (`inicio [[6,5],[11,9]]`), platô em disco na cota 12 (centro (200, 190), raio 860), córregos
+  contornando o disco, Morro do Mirante recuado 30 m, nó de entrada em (60, -700), avenida e quadras sugeridas fora do
+  disco, captação e usina 'solar' na rua principal da Vila (agora até (-935, 300), com rede); janela do relevo fino de
+  161² para 202² (+58 KB). Plano A v3 (só o A): gleba em disco (raio 812), 8 portões, vias internas ARCOLOGIA,
+  `PARTES_ORDEM` (torre, lago, meridian, horizon, codex, helix, compass, parque) com `PARTES_NOMES` em inglês,
+  `TRECHOS_HORIZON` (8, dois na fase 1), Blade e Legacy com centros a 64 m, vão de 28 m e Dream Bridge a 330 m,
+  `TORRE_POSICAO` e `POUSO` novos, `cavaDoPlano` no Mirror Lake, `mataDaSede`. Render: domínio 'arcologia' da v3 com
+  `partesProntas` pelas etapas e fantasma do que falta, LOD por 18 setores, nada recompila. Família arcologia: 217 mil
+  de perto no pior caso, 31,7 mil na vista aberta com a sede pronta, 13,3 mil no jogo de hoje. Cidade sintética fora do
+  disco. Integrador: teto da vista aberta de 40 mil para 60 mil (contrato), mata limpa pelo disco
+  (`sim/mundo/floresta.js`) e os testes de outras parcelas com vias dentro do disco corrigidos. Pendências: Helix Labs e
+  Compass Tower leem como silos de longe, a fachada do Horizon Ring fica monótona de perto e o parque central ralo
+  (ver com o dono na prévia); anéis acinzentados à noite; sombra longa das torres na aérea (R1b); API de câmera fixa
+  (R1a); greide do nó de entrada no limite de declive (S1a); coroa de quadras do robô dentro do disco (S3a, C1); dois
+  'ShaderMaterial' sem dono que não ligam no SwiftShader (C1). Nota completa em `docs/entregas/onda3/SEDE3.md`.
 
 #### X1b. Arcologia jogável (onda 3; 2 sessões)
 - **Depois da SEDE3 (D88 a D90):** a sede v3 troca a forma da Arcologia; a X1b roda na etapa 3 da onda 3, sobre o que a

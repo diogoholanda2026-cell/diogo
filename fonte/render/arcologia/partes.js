@@ -16,7 +16,7 @@ import {
   Malha, acab, vid, vidAnel, VIDRO, PADRAO, LUZ, tampa, caixa, cilindro, torno, hashF, orientar, barra, cascaEfeito,
   CASCATA,
 } from './torre.js';
-import { PAR, LAGO } from '../../data/arcologia-plano.js';
+import { PAR, LAGO, AVENIDAS } from '../../data/arcologia-plano.js';
 
 const RAD = Math.PI / 180;
 
@@ -27,7 +27,6 @@ const K = {
   piso: acab('#b1a797', { rugo: 0.8, padrao: PADRAO.piso }),
   granito: acab('#6a655f', { rugo: 0.6, padrao: PADRAO.pedra }),
   granitoEscuro: acab('#3e3c3a', { rugo: 0.35, padrao: PADRAO.pedra }),
-  concretoClaro: acab('#c8c2b6', { rugo: 0.75 }),
   metalClaro: acab('#b9b8b3', { rugo: 0.45, metal: 1, padrao: PADRAO.metal }),
   // a marquise branca de cada laje (a assinatura da Apple Park): alumínio pintado, fosco
   marquise: acab('#e4e2dc', { rugo: 0.55 }),
@@ -198,7 +197,7 @@ const SETOR_SEM = 19;
 
 /**
  * Trecho de anel (Apple Park, McLaren): vidro curvo do chão ao teto por fora e por dentro (o vidro do eixo a fundo/2),
- * a marquise branca em cada laje (2,4 m de balanço), a faixa de LED de dois andares no meio da altura (no shader), a
+ * a marquise branca em cada laje (2,4 m de balanço), a faixa de LED de um andar no meio da altura (no shader), a
  * cobertura com a borda branca, os painéis solares e, no Horizon Ring, a pista de 4,6 km no eixo com as quadras e as
  * piscinas; no Meridian, a faixa de jardim no meio. Onde uma avenida cruza, o anel passa por cima num pórtico de vao por
  * pe metros. Casca no LOD1 (g.lod = 1); as marquises por setor no LOD0.
@@ -217,12 +216,15 @@ function anel(g, p) {
   const kv = (a) => vidAnel(VIDRO.anel, sem, meio, peA, setorDoAnel(p, a));
   const passoParede = 2;
   const passoTeto = 3;
+  // as marquises do LOD0 em trechos de 3 graus: a corda passa no máximo 26 cm para dentro do vidro (no Horizon), que
+  // a esconde, e a borda do balanço não mostra quina
+  const passoMarquise = 3;
 
   if (lod === 0) {
     // marquises em geometria (o LOD0 de cada setor): topo branco, forro e testa, por fora e por dentro, em todas as
-    // lajes menos a do meio da faixa de LED; nos pórticos, só acima da passagem
+    // lajes (as duas da faixa de LED a emolduram); nos pórticos, só acima da passagem
     for (const [r, sinal] of [[rF, 1], [rD, -1]]) {
-      const { A, meio: mp } = angulosDoArco(r, de, ate, passoParede, portais, vao);
+      const { A, meio: mp } = angulosDoArco(r, de, ate, passoMarquise, portais, vao);
       for (let i = 0; i + 1 < A.length; i++) {
         const a0 = A[i];
         const a1 = A[i + 1];
@@ -231,7 +233,7 @@ function anel(g, p) {
         const rb = r + sinal * bal;
         for (let l = 1; l < andares; l++) {
           const yl = l * peA;
-          if (Math.abs(yl - meio) < peA - 0.01) continue;
+          if (Math.abs(yl - meio) < peA / 2 - 0.01) continue;
           if (portal && yl < pePortal + 0.5) continue;
           const [ri, re] = sinal > 0 ? [r, rb] : [rb, r];
           faixaArco(alvo, cx, cz, ri, re, a0, a1, yb + yl + 0.25, K.marquise, true);
@@ -257,8 +259,10 @@ function anel(g, p) {
   }
 
   const yTeto = H - 1.0; // o forro da cobertura (a laje de 1 m com a borda branca)
-  // vidro curvo das duas faces; nos pórticos, só acima da passagem
-  for (const [r, sinal] of [[rF, 1], [rD, -1]]) {
+  // vidro curvo das duas faces; nos pórticos, só acima da passagem. No fantasma, só a face de fora: o holograma é
+  // transparente e de dois lados, e a de dentro dobrava a sobreposição de pixels de um anel de 1,5 km na vista aberta
+  const faces = g.fantasma ? [[rF, 1]] : [[rF, 1], [rD, -1]];
+  for (const [r, sinal] of faces) {
     const { A, meio: mp } = angulosDoArco(r, de, ate, passoParede, portais, vao);
     for (let i = 0; i + 1 < A.length; i++) {
       const a0 = A[i];
@@ -295,7 +299,8 @@ function anel(g, p) {
       faixaArco(g.opaco, cx, cz, rF, rF + bal, a0, a1, yb + yTeto, K.forro, false);
       faixaArco(g.opaco, cx, cz, rD - bal, rD, a0, a1, yb + yTeto, K.forro, false);
     }
-    if (esporte) quadrasEPiscinas(g, p, yb + H, rD + 3, raio - 4.66, raio + 4.66, rF - 3);
+    // no fantasma, só a silhueta: as quadras e as piscinas eram retângulos claros sobrepostos ao véu da cobertura
+    if (esporte && !g.fantasma) quadrasEPiscinas(g, p, yb + H, rD + 3, raio - 4.66, raio + 4.66, rF - 3);
   }
   // pórticos: os lados da passagem em vidro de saguão e o teto aceso a pe metros
   const mF = Math.asin(vao / 2 / rF) / RAD;
@@ -767,13 +772,13 @@ function codex(g, p) {
 }
 
 /**
- * Torre oval (Helix Labs e Compass Tower, D89): planta elíptica, vidro do chão ao teto com a marquise branca em cada
- * laje (a língua dos anéis) e a faixa de LED na mesma altura da do Horizon Ring; a Helix gira `torcao` graus do pé ao
- * topo (a Torre Generali), a Compass sobe reta com a agulha. Casca no LOD1 (em faixas de 2 andares quando gira), as
+ * Torre oval (Helix Labs e Compass Tower, D89): planta elíptica que afina até o topo, vidro do chão ao teto com a
+ * marquise branca em cada laje (a língua dos anéis) e a faixa de LED na mesma altura da do Horizon Ring; a Helix gira
+ * `torcao` graus do pé ao topo (a Torre Generali), a Compass sobe reta com a agulha. Casca no LOD1 (em faixas de 2 andares quando gira), as
  * marquises no LOD0 do setor dela.
  */
 function oval(g, p, setor) {
-  const { x, z, altura: H, a, b, torcao = 0, rot = 0, led, coroa } = p;
+  const { x, z, altura: H, a, b, afina = 1, torcao = 0, rot = 0, led, coroa } = p;
   const y = g.chao(x, z);
   const andares = Math.round(H / 6.43);
   const peA = H / andares;
@@ -782,10 +787,12 @@ function oval(g, p, setor) {
   const nE = 48;
   const bal = 2.2;
   const giroEm = (yy) => rot + torcao * RAD * (yy / H);
+  // a planta afina em linha reta até `afina` no topo (a Generali e o Shard): a torre lê esguia, não como um silo
+  const esc = (yy) => 1 - (1 - afina) * Math.min(1, Math.max(0, yy / H));
   const pto = (t, yy, d = 0) => {
     const th = giroEm(yy);
-    const lx = (a + d) * Math.cos(t);
-    const lz = (b + d) * Math.sin(t);
+    const lx = (a * esc(yy) + d) * Math.cos(t);
+    const lz = (b * esc(yy) + d) * Math.sin(t);
     return [x + Math.cos(th) * lx + Math.sin(th) * lz, y + yy, z - Math.sin(th) * lx + Math.cos(th) * lz];
   };
   const nrm = (t, yy) => {
@@ -808,7 +815,7 @@ function oval(g, p, setor) {
     const alvo = g.setor ? g.setor(setor).opaco : g.opaco;
     for (let l = 1; l < andares; l++) {
       const yl = l * peA;
-      if (Math.abs(yl - meio) < peA - 0.01) continue;
+      if (Math.abs(yl - meio) < peA / 2 - 0.01) continue;
       for (let i = 0; i < nE; i++) {
         const t0 = (2 * Math.PI * i) / nE;
         const t1 = (2 * Math.PI * (i + 1)) / nE;
@@ -867,17 +874,31 @@ function oval(g, p, setor) {
 // ------------------------------------------------------------------------------------------------ o parque
 
 /**
+ * Coroa de r0 a r1 na cota y com os vãos das 8 avenidas radiais (16 m para cada lado do eixo): o gramado e os caminhos
+ * do parque não cobrem as pistas. Trechos de até ~45 m.
+ */
+function entreAvenidas(m, cx, cz, r0, r1, y, k) {
+  const d = Math.asin(Math.min(1, 16 / r0)) / RAD;
+  for (const a of AVENIDAS) {
+    const n = Math.max(1, Math.ceil(((45 - 2 * d) * RAD * r1) / 45));
+    for (let i = 0; i < n; i++) faixaArco(m, cx, cz, r0, r1, a + d + ((45 - 2 * d) * i) / n, a + d + ((45 - 2 * d) * (i + 1)) / n, y, k, true);
+  }
+}
+
+/**
  * Anel de floresta em volta do lago (D88): o chão de mata escura; as árvores (a mata densa de copa redonda, as
  * emergentes e as embaúbas) vão para a vegetação (g.arvores), marcadas `mata` (o domínio deixa de fora as que a grade
  * da mata já desenha).
  */
 function floresta(g, p) {
   const { cx, cz, r0, r1 } = p;
-  const y = g.chao(cx + r1, cz);
-  if (g.sombra) return;
+  // na cota do centro do pódio: a cava do lago desce o chão até uns 24 m além da borda, e o anel de floresta fica como
+  // um deque plano sobre ela (do coroamento do lago à praça), sem degrau
+  const y = g.chao(cx, cz);
+  if (g.sombra || g.fantasma) return;
   const n = 64;
   for (let i = 0; i < n; i++) faixaArco(g.opaco, cx, cz, r0, r1, (360 * i) / n, (360 * (i + 1)) / n, y + 0.12, K.gramaEscura, true);
-  if (!g.arvores || g.fantasma) return;
+  if (!g.arvores) return;
   const passo = 6.5;
   for (let r = r0 + passo / 2; r < r1; r += passo) {
     const nA = Math.floor((2 * Math.PI * r) / passo);
@@ -899,17 +920,16 @@ function floresta(g, p) {
  */
 function jardim(g, p, mata) {
   const { cx, cz, r0, r1 } = p;
-  const y = g.chao(cx + r0, cz);
-  if (g.sombra) return;
-  const n = 120;
+  const y = g.chao(cx, cz);
+  // no fantasma o gramado não entra: um véu transparente de 800 m sobre o parque só custaria pixel
+  if (g.sombra || g.fantasma) return;
   const nr = Math.max(1, Math.ceil((r1 - r0) / 45));
   for (let j = 0; j < nr; j++) {
     const ra = r0 + ((r1 - r0) * j) / nr;
     const rb = r0 + ((r1 - r0) * (j + 1)) / nr;
-    for (let i = 0; i < n; i++) faixaArco(g.opaco, cx, cz, ra, rb, (360 * i) / n, (360 * (i + 1)) / n, y + 0.12, K.grama, true);
+    entreAvenidas(g.opaco, cx, cz, ra, rb, y + 0.12, K.grama);
   }
-  if (g.fantasma) return;
-  for (let i = 0; i < n; i++) faixaArco(g.opaco, cx, cz, 286, 294, (360 * i) / n, (360 * (i + 1)) / n, y + 0.2, K.piso, true);
+  entreAvenidas(g.opaco, cx, cz, 286, 294, y + 0.2, K.piso);
   // os maciços (a mata do parque) como árvores, para quando a grade da mata não os desenha
   if (g.arvores && mata) {
     for (let r = r0 + 6; r < r1 - 4; r += 11) {
@@ -937,10 +957,25 @@ function supertree(g, p) {
   const rb = Math.max(2.4, h * 0.07);
   const rm = rb * 0.55;
   const tronco = [[rb, 0], [rb * 0.8, 0.12], [rm, 0.4], [rm * 1.1, 0.56], [rm * 1.5, 0.66]].map(([r, t]) => [r, y + h * t]);
-  if (g.sombra || g.fantasma) {
-    torno(m, p.x, p.z, tronco, 8, g.sombra ? K.granito : K.tronco);
+  if (g.sombra) {
+    torno(m, p.x, p.z, tronco, 8, K.granito);
     torno(m, p.x, p.z, [[rm * 1.5, y + h * 0.66], [h * 0.3, y + h]], 10, K.trelica);
     g.caixa([p.x, y, p.z], h * 0.3, h);
+    return;
+  }
+  if (g.fantasma) {
+    // o holograma da Supertree é o esqueleto dela: o tronco, 8 nervuras do funil e o aro do topo. O funil cheio, num
+    // véu claro visto do alto, lia como um cogumelo
+    torno(m, p.x, p.z, tronco, 8, K.tronco);
+    const R = h * 0.3;
+    const perfil = [[rm * 1.5, 0.66], [h * 0.11, 0.76], [h * 0.2, 0.87], [R, 1.0]];
+    for (let s = 0; s < 8; s++) {
+      const ang = (s / 8) * Math.PI * 2;
+      const pts = perfil.map(([r, t]) => [p.x + Math.cos(ang) * r, y + h * t, p.z + Math.sin(ang) * r]);
+      for (let j = 0; j + 1 < pts.length; j++) barra(m, pts[j], pts[j + 1], 0.3, 3, K.trelica);
+    }
+    torno(m, p.x, p.z, [[R, y + h - 0.6], [R, y + h + 0.6]], 16, K.trelica);
+    g.caixa([p.x, y, p.z], R, h);
     return;
   }
   torno(m, p.x, p.z, tronco, 8, K.tronco);
@@ -996,6 +1031,7 @@ function passarela(g, p) {
     const yb = g.chao(bx, bz) + cota;
     const ym = (ya + yb) / 2;
     caixa(g.opaco, (ax + bx) / 2, (az + bz) / 2, L / 2, w, ym - 0.8, ym, K.marquise, { ux, uz, base: true });
+    g.caixa([(ax + bx) / 2, ym - 1, (az + bz) / 2], L / 2 + 2, 3, L / 2 + 2);
     if (g.fantasma) continue;
     caixa(g.opaco, (ax + bx) / 2, (az + bz) / 2, L / 2, w - 0.1, ym, ym + 0.05, K.deck, { ux, uz });
     for (const s of [-1, 1]) {
@@ -1003,7 +1039,6 @@ function passarela(g, p) {
       const oz = ux * s * (w - 0.05);
       g.vidro.quad([ax + ox, ym, az + oz], [bx + ox, ym, bz + oz], [bx + ox, ym + 1.1, bz + oz], [ax + ox, ym + 1.1, az + oz], [-uz * s, 0, ux * s], [0, 0], [L, 0], [L, 1.1], [0, 1.1], vid(VIDRO.parapeito, 0.2));
     }
-    g.caixa([(ax + bx) / 2, ym - 1, (az + bz) / 2], L / 2 + 2, 3, L / 2 + 2);
   }
 }
 

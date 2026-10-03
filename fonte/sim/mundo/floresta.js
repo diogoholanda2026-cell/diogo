@@ -31,6 +31,7 @@ export function gerarFloresta(base, mapa) {
   const { relevo, tipoDomo, costa, G } = base.campos;
   const s0 = sementeDe(mapa.semente) + 911;
   const [gx0, gz0, gx1, gz1] = mapa.plato.caixa;
+  const disco = mapa.plato.disco;
   const vila = mapa.vila.area.flat();
   let vx0 = Infinity;
   let vz0 = Infinity;
@@ -131,6 +132,8 @@ export function gerarFloresta(base, mapa) {
       }
       // gleba e Vila: gramado e quintais
       if (x > gx0 - 10 && x < gx1 + 10 && z > gz0 - 10 && z < gz1 + 10) d = Math.min(d, 0.05);
+      // o platô em disco da sede v3 (D90): a caixa é só o centro, então a mata limpa pelo círculo
+      if (disco && (x - disco.cx) * (x - disco.cx) + (z - disco.cz) * (z - disco.cz) < (disco.r + 10) * (disco.r + 10)) d = Math.min(d, 0.05);
       else if (x > vx0 && x < vx1 && z > vz0 && z < vz1 && pontoNoPoligono(x, z, vila)) d = Math.min(d, 0.22);
       dens[j * N + i] = Math.round(clamp(d, 0, 1) * 255);
     }

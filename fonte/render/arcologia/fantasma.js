@@ -34,7 +34,8 @@ varying vec3 vV;
 float gLinhaF( float x, float w ) {
   float fw = max( fwidth( x ), 1e-4 );
   float d = abs( fract( x + 0.5 ) - 0.5 );
-  return ( 1.0 - smoothstep( w * 0.5 - fw, w * 0.5 + fw, d ) ) * ( 1.0 - smoothstep( 0.2, 0.5, fw ) );
+  // somem antes de chegar a 3 pixels entre linhas (fw 0,3): de longe a grade de 6 m do anel virava um código de barras
+  return ( 1.0 - smoothstep( w * 0.5 - fw, w * 0.5 + fw, d ) ) * ( 1.0 - smoothstep( 0.12, 0.3, fw ) );
 }
 void main() {
   #include <logdepthbuf_fragment>

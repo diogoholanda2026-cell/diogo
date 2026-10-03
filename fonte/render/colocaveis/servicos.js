@@ -85,7 +85,7 @@ function captacao(b) {
   const piso = mat(F.PISO, COR.piso);
   const grama = mat(F.VERDE, COR.grama);
   const concreto = mat(F.CONCRETO, COR.concretoClaro, { v: 2 });
-  const vidro = mat(F.CORTINA, '#9aa1a6', { a: 4.4, v: 1.6, c2: COR.caixilho, vd: 0.25, uso: 2 });
+  const vidro = mat(F.CORTINA, '#9aa1a6', { a: 4.4, v: 1.6, c2: COR.caixilho, vd: 0.25, uso: 3 });
   const aco = mat(F.METAL, COR.comporta);
   const branco = mat(F.METAL, '#d5d4ce');
   const agua = mat(F.AGUA, '#2a5a5e');
@@ -326,7 +326,7 @@ function praca(b) {
 
 /** Pavilhão da Rede Sarah: alas brancas em volta de um jardim, sheds curvos de chapa branca e a marquise curva. */
 function alasSarah(b, x0, x1, z0, z1, pz0, pz1, px0, px1, alt, op = {}) {
-  const parede = mat(F.FITA, COR.brancoSarah, { a: alt, v: 1.4, c2: '#d6d8d6', uso: 2, dg: 0.15 });
+  const parede = mat(F.FITA, COR.brancoSarah, { a: alt, v: 1.4, c2: '#d6d8d6', uso: 3, dg: 0.15 });
   const chapa = mat(F.TELHA_METAL, '#dedcd5');
   const vidro = mat(F.VIDRO, '#4a5a66');
   const oitao = mat(F.LISO, COR.brancoSarah);
@@ -481,8 +481,8 @@ function delegacia(b) {
   const hd = b.d / 2;
   const pedra = mat(F.PEDRA, '#d0c9bb', { v: 1.2 });
   const piso = mat(F.PISO, '#b3ad9f');
-  const brise = mat(F.BRISE_H, '#c9c4b8', { a: 3.4, v: 1.6, c2: '#71879a', uso: 2, dg: 0.25 });
-  const pele = mat(F.CORTINA, '#8d979e', { a: 3.4, v: 1.4, c2: '#4f575c', uso: 2, vd: 0.3 });
+  const brise = mat(F.BRISE_H, '#c9c4b8', { a: 3.4, v: 1.6, c2: '#71879a', uso: 3, dg: 0.25 });
+  const pele = mat(F.CORTINA, '#8d979e', { a: 3.4, v: 1.4, c2: '#4f575c', uso: 3, vd: 0.3 });
   const empena = mat(F.PEDRA, '#b8b0a2', { v: 0.8 });
   const concreto = mat(F.CONCRETO, '#c9c3b7');
   const laje = mat(F.LAJE, '#8f8b84');
@@ -528,39 +528,80 @@ function delegacia(b) {
 
 // ------------------------------------------------------------------------------------------------ bombeiros
 
+/** Lâmina de concreto: parede fina de planta em cunha (as pontas agudas), com o topo inclinado de ha a hb. */
+function lamina(b, xa, za, xb, zb, esp, ha, hb, m, op = {}) {
+  const L = Math.hypot(xb - xa, zb - za);
+  const ux = (xb - xa) / L;
+  const uz = (zb - za) / L;
+  // a normal para o lado da espessura e as pontas cortadas em bisel (a face de trás é mais curta)
+  const nx = -uz * esp;
+  const nz = ux * esp;
+  const bis = op.bisel ?? esp * 2.5;
+  const pts = [[xa, za], [xb, zb], [xb + nx - ux * bis, zb + nz - uz * bis], [xa + nx + ux * bis, za + nz + uz * bis]];
+  b.prisma(pts, op.y0 ?? -ENTERRA, Math.max(ha, hb), m, { hTopo: [ha, hb, hb, ha].map((h) => h - (op.y0 ?? -ENTERRA)), topo: op.topo ?? m, faces: op.faces, l1: op.l1 ?? true });
+}
+
 /**
- * Quartel de bombeiros (Vitra Fire Station): volumes longos em cunha de concreto liso com as paredes inclinadas, a
- * marquise em lâmina que avança em balanço sobre o pátio, as portas das viaturas, a torre de treino e os caminhões.
+ * Quartel de bombeiros (Vitra Fire Station, Zaha Hadid): um feixe de lâminas de concreto liso, longas e inclinadas, que
+ * deslizam umas sobre as outras e terminam em ponta; o salão das viaturas com o pano de vidro corrido para o pátio, a
+ * marquise em lâmina fina que avança em balanço até uma ponta aguda sobre o pátio, apoiada num feixe de colunas finas
+ * em ângulos diferentes; a faixa de janela horizontal cortando a lâmina do fundo, a asa alta que sobe para o céu na
+ * outra ponta e a torre de treino em cunha.
  */
 function bombeiros(b) {
   const hw = b.w / 2;
   const hd = b.d / 2;
-  const piso = mat(F.PISO, '#9d978c');
-  const conc = mat(F.CONCRETO, '#c5c0b6', { v: 2 });
-  const vidro = mat(F.CORTINA, '#7d878e', { a: 3.6, v: 2, c2: '#3c4144', uso: 2 });
-  const porta = mat(F.GARAGEM, '#a33a30', { v: 4.5 });
+  const piso = mat(F.PISO, '#8f8a81');
+  const patio = mat(F.PISO, '#7d7a74');
+  const conc = mat(F.CONCRETO, '#c9c5bc', { v: 2, dg: 0.15 });
+  const concSombra = mat(F.CONCRETO, '#b9b4aa', { v: 2, dg: 0.2 });
+  const pano = mat(F.CORTINA, '#7f898f', { a: 6.6, v: 3.3, c2: '#2f3437', uso: 3, vd: 0.25 });
+  const faixa = mat(F.CORTINA, '#6d777d', { a: 1.4, v: 2.2, c2: '#2f3437', uso: 3, vd: 0.3 });
   const laje = mat(F.LAJE, '#9a958c');
+  const preto = mat(F.METAL, '#2f3134');
   const grama = mat(F.VERDE, COR.grama);
   lote(b, piso);
-  b.plano(-hw + 0.5, -hd + 0.5, -hw + 7, hd - 9, 0.08, grama, {});
-  // volume A: o salão das viaturas, em cunha, aberto para a rua com as portas
-  const A = [[-hw + 3, hd - 11], [hw - 4, hd - 9.5], [hw - 6, 1], [-hw + 5, -1]];
-  b.prisma(A, 0, 7.5, conc, { hTopo: [7.2, 8.2, 8.2, 7.2], faces: (k) => (k === 0 ? porta : k === 2 ? vidro : conc), topo: laje, l1: true });
-  // volume B: o corpo longo atrás, com as paredes que se inclinam
-  const B = [[-hw + 2, -1.5], [hw - 2, -3], [hw - 6, -8.5], [-hw + 6, -6]];
-  const Bc = [[-hw + 2.8, -1.7], [hw - 1.2, -3.4], [hw - 5.2, -8.1], [-hw + 6.6, -5.8]];
-  b.prisma(B, 0, 10.5, conc, { cima: Bc, hTopo: [9.6, 11.2, 11.2, 9.6], faces: (k) => (k === 0 ? vidro : conc), topo: laje, l1: true });
-  // a lâmina em balanço: ponta aguda sobre o pátio, apoiada por colunas finas inclinadas
-  const M = [[-hw - 0.5 + 1, hd - 3.5], [hw - 1, hd - 6.8], [hw - 3, hd - 9.2], [-hw + 9, hd - 8.2]];
-  b.prisma(M, 6.9, 0.45, conc, { topo: conc, base: conc, l1: true });
-  if (b.lod === 0) {
-    for (const [x, z, dx] of [[-hw + 4, hd - 5, 0.8], [-hw + 6.2, hd - 5.4, -0.6], [-hw + 9, hd - 6.4, 0.5]]) b.tubo([x, 0.05, z], [x + dx, 6.95, z - 0.6], 0.09, mat(F.METAL, '#3c4043'), { lados: 4 });
-  }
-  // volume C: a torre de treino, uma cunha alta e fina no fundo
-  const C = [[hw - 9, -10], [hw - 4.5, -10.5], [hw - 3.5, -hd + 2], [hw - 7.5, -hd + 2.6]];
-  b.prisma(C, 0, 18, conc, { hTopo: [17, 18, 18, 17.4], faces: (k) => (k === 1 ? vidro : conc), topo: laje, l1: true });
-  // viaturas na frente das portas
-  for (let k = 0; k < 2; k++) b.veiculo(-hw + 9 + k * 7.5, 0.05, hd - 5.8 + k * 0.6, -0.06, { comp: 8.4, larg: 2.5, alt: 2.4, cor: '#9a2f28', corCabine: '#9a2f28' });
+  // pátio das viaturas na frente e o gramado do fundo à esquerda (a faixa de grama de Vitra)
+  b.plano(-hw + 0.4, 3.4, hw - 0.4, hd - 0.4, 0.08, patio, {});
+  b.plano(-hw + 0.5, -hd + 0.5, -hw + 9, -9, 0.08, grama, {});
+  // o eixo do conjunto gira um pouco em relação à rua (as lâminas não são paralelas ao lote)
+  const g = -0.05;
+  b.em(0, 0, 0, g, () => {
+    // salão das viaturas: cunha baixa, pano de vidro corrido para o pátio (três portas de 4,4 m)
+    const A = [[-13.2, 3.2], [13.8, 1.4], [12.2, -4.2], [-11.8, -2.6]];
+    b.prisma(A, 0, 7.4, conc, { hTopo: [6.8, 7.6, 7.6, 6.8], faces: (k) => (k === 0 ? pano : conc), topo: laje, l1: true });
+    // lâmina 1, entre o salão e o vestiário: sobe da esquerda para a direita e passa do salão nas duas pontas
+    lamina(b, -15.2, -2.4, 15.2, -4.6, 0.9, 5.4, 10.6, concSombra, {});
+    // vestiário e sala de exercícios: corpo longo de paredes inclinadas, a faixa de janela horizontal cortando a frente
+    const B = [[-12.6, -3.6], [11.8, -5.4], [10.2, -11.2], [-10.4, -9.4]];
+    const Bc = [[-13.4, -3.5], [12.8, -5.5], [10.8, -10.6], [-10.9, -9]];
+    b.prisma(B, 0, 6.6, conc, { cima: Bc, hTopo: [6.2, 7.2, 7.2, 6.2], faces: (k) => (k === 2 ? concSombra : conc), topo: laje, l1: true });
+    b.parede(-11.4, -3.4, 10.6, -5.0, 3.1, 4.5, faixa, { vBase: 3.1 });
+    // lâmina 2, no fundo: a mais longa, baixa à esquerda, com a ponta aguda passando do corpo
+    lamina(b, 13.8, -11.6, -15.4, -9.8, 0.7, 7.8, 4.2, conc, {});
+    // a asa alta: placa inclinada que sobe da cobertura para o céu na ponta direita
+    lamina(b, 9.4, -2.8, 15.4, -7.4, 0.6, 7.6, 13.8, conc, { bisel: 3.2 });
+    // a marquise: lâmina fina que avança em balanço até a ponta aguda sobre o pátio, do lado da entrada
+    const M = [[-14.8, 13.0], [8.8, 3.6], [11.6, 2.2], [-6.2, 2.4]];
+    b.prisma(M, 5.6, 0.42, conc, { hTopo: [0.42, 0.42, 0.42, 0.42], topo: conc, base: concSombra, l1: true });
+    // a segunda marquise, mais alta e curta, cruzando a primeira (a sobreposição de planos)
+    const M2 = [[-9.6, 7.2], [6.4, 1.6], [7.6, 0.4], [-4.4, 1.8]];
+    b.prisma(M2, 8.0, 0.36, conc, { topo: conc, base: concSombra, l1: true });
+    // o feixe de colunas finas em ângulos diferentes sob a ponta da marquise (os "palitos" de Vitra)
+    const colunas = b.ultra
+      ? [[-12.2, 10.8, 0.9, -0.5], [-11.1, 10.1, -0.7, 0.4], [-10.1, 9.4, 0.5, 0.8], [-9.2, 9.0, -0.4, -0.7], [-8.1, 8.6, 1.1, 0.2], [-6.6, 7.9, -0.9, -0.3], [-5.0, 7.0, 0.3, -0.9]]
+      : [[-12.2, 10.8, 0.9, -0.5], [-10.1, 9.4, 0.5, 0.8], [-8.1, 8.6, 1.1, 0.2], [-5.0, 7.0, 0.3, -0.9]];
+    if (b.lod === 0) for (const [x, z, dx, dz] of colunas) b.tubo([x, 0.05, z], [x + dx, 5.62, z + dz], 0.1, preto, { lados: 4 });
+    // canaleta preta na borda da marquise (o friso fino que desenha a ponta)
+    if (b.lod === 0) b.viga([-14.6, 5.66, 12.8], [8.6, 5.66, 3.6], 0.12, 0.14, preto, {});
+    // torre de treino: cunha alta e fina no fundo à direita, com a janela vertical de vidro
+    const C = [[11.2, -12.4], [14.0, -13.4], [14.4, -18.4], [11.8, -17.8]];
+    b.prisma(C, 0, 18, conc, { hTopo: [16.4, 18, 18, 16.9], faces: (k) => (k === 1 ? faixa : conc), topo: laje, l1: true });
+  });
+  // viaturas no pátio, saindo das portas
+  for (let k = 0; k < 2; k++) b.veiculo(-7 + k * 7.4, 0.08, 8.4 - k * 0.5, -0.07, { comp: 8.4, larg: 2.5, alt: 2.4, cor: '#9a2f28', corCabine: '#9a2f28' });
+  b.arvore(-hw + 4.6, 0.05, -hd + 4.6, { alt: 8, raio: 3, especie: 'mata2' });
+  b.arvore(-hw + 4.2, 0.05, -12.5, { alt: 7, raio: 2.6, especie: 'oiti' });
 }
 
 // ------------------------------------------------------------------------------------------------ ETE
@@ -622,9 +663,11 @@ function termica(b) {
   const hw = b.w / 2;
   const hd = b.d / 2;
   const piso = mat(F.PISO, '#9f998e');
-  const alum = mat(F.METAL, '#b3b6b4');
-  const fiada = mat(F.METAL, '#c2c4c1');
-  const fresta = mat(F.VIDRO, '#39444b');
+  // o alumínio fosco das fachadas (o metal polido do shader ficaria escuro na sombra): o pano de fundo mais escuro e
+  // os tijolos claros na frente dele, com as janelas escuras entre os tijolos (o xadrez que se lê de longe)
+  const alum = mat(F.LISO, '#8f9492', { dg: 0.1 });
+  const fiada = mat(F.LISO, '#c9ccc9', { dg: 0.05 });
+  const fresta = mat(F.CORTINA, '#2f3a40', { a: 1.2, v: 3.3, c2: '#22272b', uso: 3, vd: 0.25 });
   const saguao = mat(F.CORTINA, '#8d979c', { a: 4, v: 2.2, c2: '#c9cbc8', uso: 3, vd: 0.35 });
   const verde = mat(F.VERDE, '#56603f');
   const pista = mat(F.VERDE, '#6d785a');
@@ -667,8 +710,9 @@ function termica(b) {
   guarda(b, x0 + 0.4, zk - 0.3, x0 + 0.4, z0 + 0.4, yB, mat(F.VIDRO, '#56646d'));
   guarda(b, x1 - 0.4, z0 + 0.4, x1 - 0.4, zk - 0.3, yB, mat(F.VIDRO, '#56646d'));
   b.caixa(x0 + 8, yB, z0 + 3.4, 10, 3.2, 5, mat(F.CORTINA, '#8d979c', { a: 3.2, v: 1.6, c2: '#c9cbc8', uso: 1 }), { topo: laje, l1: true });
-  // os tijolos de alumínio: em cada fiada de 2,4 m a linha de sombra (o tijolo que avança) e as frestas de vidro em
-  // degraus, desencontradas de uma fiada para a outra; nas laterais as fiadas acabam na rampa
+  // os tijolos de alumínio (1,2 x 3,3 m, avançando 0,3 m) em fiadas de 2,4 m, desencontrados de uma fiada para a
+  // outra, com a janela escura entre dois tijolos; nas laterais as fiadas acabam em degraus na rampa (o perfil do
+  // CopenHill). No Ultra cada tijolo tem as cabeças e o fundo; na Média, a frente e o topo (a sombra que se vê)
   const passoF = 2.4;
   const nF = Math.floor((yB - 3) / passoF);
   const ladoF = (xa, za, xb, zb, k, y, topoDe) => {
@@ -681,18 +725,23 @@ function termica(b) {
     let fim = L;
     while (fim > 0 && topoDe(xa + ux * fim, za + uz * fim) < y + 1.6) fim -= 1.1;
     if (fim < 3) return;
-    // a sombra da fiada: o tijolo de 1,2 m que avança 0,3 m
-    const cx = xa + ux * (fim / 2) + nx * (sai / 2);
-    const cz = za + uz * (fim / 2) + nz * (sai / 2);
     const giro = Math.atan2(-uz, ux);
-    b.caixa(cx, y, cz, fim, 1.2, sai, fiada, { giro, sem: 8, topo: fiada });
-    // as frestas: 3,3 m de vidro a cada 6,6 m, a fiada seguinte desencontrada
-    const des = (k % 2) * 3.3 + b.entre(300 + k, 0, 1.2);
-    for (let t = des + 0.6; t + 3.3 < fim - 0.4; t += 6.6) {
-      if (b.r(400 + k * 31 + Math.round(t)) < 0.18) continue;
-      const pa = [xa + ux * t + nx * 0.03, za + uz * t + nz * 0.03];
-      const pb = [xa + ux * (t + 3.3) + nx * 0.03, za + uz * (t + 3.3) + nz * 0.03];
-      b.parede(pa[0], pa[1], pb[0], pb[1], y + 1.25, y + 2.3, fresta, {});
+    const des = (k % 2) * 3.3;
+    // no giro da caixa o z local aponta para dentro da parede: a face de dentro (bit 4) não se desenha
+    for (let t = des - 3.3; t < fim; t += 6.6) {
+      // o tijolo, cortado nas pontas da fiada
+      const t0 = Math.max(0, t);
+      const t1 = Math.min(fim, t + 3.3);
+      if (t1 - t0 > 0.4) {
+        const tm = (t0 + t1) / 2;
+        b.caixa(xa + ux * tm + nx * (sai / 2), y, za + uz * tm + nz * (sai / 2), t1 - t0, 1.2, sai, fiada, { giro, sem: b.ultra ? 4 : 7, topo: fiada, base: b.ultra ? alum : undefined });
+      }
+      // a janela entre este tijolo e o próximo (algumas fechadas)
+      const j0 = Math.max(0, t + 3.3);
+      const j1 = Math.min(fim, t + 6.6);
+      if (j1 - j0 > 0.8 && b.r(400 + k * 31 + Math.round(t)) >= 0.15) {
+        b.parede(xa + ux * j0 + nx * 0.03, za + uz * j0 + nz * 0.03, xa + ux * j1 + nx * 0.03, za + uz * j1 + nz * 0.03, y, y + 1.2, fresta, {});
+      }
     }
   };
   for (let k = 0; k < nF; k++) {
@@ -855,6 +904,14 @@ function parqueG(b) {
   const np = 9;
   for (let i = 0; i < np; i++) b.palmeira(-hw + 5 + ((b.w - 10) * i) / (np - 1), 0.05, hd - 10.5, { alt: b.entre(110 + i, 16, 19), larg: 7 });
   for (let k = 0; k < 6; k++) b.arvore(-hw * 0.5 + b.entre(120 + k, -8, 8), 0.4, -hd * 0.25 + b.entre(130 + k, -6, 6), { alt: b.entre(140 + k, 8, 11), raio: 3, especie: k % 2 ? 'embauba' : 'mata2' });
+  // os grupos de árvores de Burle Marx no gramado: maciços soltos no fundo e entre as ilhas, longe do caminho
+  for (const [gx, gz, n] of [[-hw * 0.9, -hd * 0.75, 5], [hw * 0.05, -hd * 0.8, 4], [hw * 0.85, -hd * 0.72, 5], [hw * 0.1, hd * 0.15, 3]]) {
+    for (let k = 0; k < n; k++) {
+      const a = b.entre(150 + Math.round(gx) + k, 0, TAU);
+      const r = b.entre(160 + Math.round(gz) + k, 1.5, 6);
+      b.arvore(Math.max(-hw + 3, Math.min(hw - 3, gx + Math.cos(a) * r)), 0.05, Math.max(-hd + 3, Math.min(hd - 11, gz + Math.sin(a) * r)), { alt: b.entre(170 + k, 7, 12), raio: b.entre(180 + k, 2.4, 3.6), especie: k % 3 === 0 ? 'oiti' : k % 3 === 1 ? 'mata2' : 'embauba' });
+    }
+  }
   // postes altos de luz (os do Aterro), com o anel de refletores
   for (const x of [-hw * 0.62, 0, hw * 0.62]) {
     b.tubo([x, -0.5, hd - 6], [x, 30, hd - 6], 0.45, mat(F.CONCRETO, '#c8c3b9'), { lados: 4, l1: true });

@@ -136,7 +136,7 @@ export const FAMILIAS = congelar(['terreno', 'predios', 'colocaveis', 'arvores',
  * perfil, e na vista aberta (tudo no LOD1), no Alta e no 'pc'. No Média a vista aberta segue a 4.8 (60 mil); de perto
  * dá cerca de 75 mil (medido pela SEDE2).
  */
-export const TETO_ARCOLOGIA = congelar({ perto: { ultra: 250000, alta: 250000, pc: 250000, media: 90000 }, aberta: 40000 });
+export const TETO_ARCOLOGIA = congelar({ perto: { ultra: 250000, alta: 250000, pc: 250000, media: 90000 }, aberta: 60000 }); // aberta: 60 mil com a sede v3 (D88 a D90)
 
 /**
  * Orçamento gráfico do pior quadro de 120 (A6 e 4.8). Os tetos por família valem no Média e no 'pc' (bancada aberta);
@@ -160,7 +160,7 @@ export const ORCAMENTO = congelar({
       arvores: { calls: [14, 24], alvo: 220000, teto: 300000 },
       vias: { calls: [30, 60], alvo: 150000, teto: 200000 },
       vida: { calls: [10, 16], alvo: 50000, teto: 80000 },
-      arcologia: { calls: [20, 40], alvo: 30000, teto: 40000, nota: 'LOD1 na vista aberta; de perto até 250 mil (TETO_ARCOLOGIA)' },
+      arcologia: { calls: [20, 40], alvo: 30000, teto: 60000, nota: 'LOD1 na vista aberta com a sede v3; de perto até 250 mil (TETO_ARCOLOGIA)' },
       sombra: { calls: [20, 60], alvo: 200000, teto: 300000, nota: 'callsSombra e trisSombra, 2 cascatas' },
       resto: { calls: [30, 50], alvo: 60000, teto: 110000, nota: 'água, props, obras e marcadores; chamadas com céu e pós' },
     },

@@ -1,12 +1,12 @@
-// Cena 'torre' (X1a e SEDE2, A10): as torres gêmeas (D64) no platô do mapa de Heldópolis (S1a), com o plano padrão
-// construído em volta, e a prancha de aceite: 4 azimutes e 2 closes (a fenda com a cachoeira e as duas coroas), de dia
-// e de noite. ?cena=torre abre a vista livre a ~1,3 km; ?prancha=1 monta a prancha na própria página (cada vista sai
-// de R.foto, com o mesmo quadro do jogo) e a mostra por cima do canvas; ?sim=sintetica põe as torres na cidade
-// sintética de 12 mil prédios.
+// Cena 'torre' (SEDE3, A10): a Blade Tower e a Legacy Tower (D89) no pódio redondo da sede v3, ligadas pela Dream
+// Bridge a 330 m, com a sede inteira construída em volta, no platô do mapa de Heldópolis (S1a), e a prancha de aceite:
+// 4 azimutes e 2 closes (a Dream Bridge e as duas coroas), de dia (17h30) e de noite. ?cena=torre abre a vista livre a
+// ~1,3 km; ?prancha=1 monta a prancha na própria página (cada vista sai de R.foto, com o mesmo quadro do jogo) e a
+// mostra por cima do canvas; ?contexto=0 mostra só o par no pódio; ?sim=sintetica põe a sede na cidade sintética.
 //   window.__cenaTorre.prancha({ hora })  → Promise: monta a prancha na hora pedida. Mudar a hora no meio pede ~30
 //   quadros para a luz do ambiente e o cubo do céu assentarem (D9); a captura abre a página já na hora (?hora=21).
-// window.__resultado confere o orçamento da D64 e da D66 (triângulos do LOD0 do perfil por torre, LOD1 e sombra).
-import { TORRE_LAMINA as TL, PLANOS, PLANO_PADRAO, GLEBA_ENVELOPE, GEMEAS } from '../../data/arcologia-plano.js';
+// window.__resultado confere o orçamento da D66 (triângulos do LOD0 do perfil por torre, LOD1 e sombra).
+import { TORRE_LAMINA as TL, PLANOS, PLANO_PADRAO, GLEBA_ENVELOPE, PAR, mataDaSede } from '../../data/arcologia-plano.js';
 import { cavarPlanoNaCena, descavar } from '../arcologia/lago.js';
 import { ARESTA } from '../../contratos/flags.js';
 
@@ -33,18 +33,19 @@ export async function assentarHora(R, ctx, hora, quadros = 30) {
 }
 
 /**
- * Vistas da prancha, no espaço do par (o meio da fenda; a fenda corre no eixo norte-sul, +z é o sul, o lago e o mar):
- * de onde a câmera olha, para onde e o campo de visão vertical. Os azimutes são contados a partir do sul, no sentido
- * horário visto de cima. Os closes: a fenda com a ponte e a cachoeira vista do lago, e as duas coroas.
+ * Vistas da prancha, no espaço do par (o centro do pódio; x pelo eixo das torres, a Blade em -32 e a Legacy em +32; +z
+ * o lado das penas): de onde a câmera olha, para onde e o campo de visão vertical. Os azimutes são contados a partir do
+ * +z, no sentido horário visto de cima. Os closes: a Dream Bridge vista de cima, com o jardim e a piscina, e as coroas.
  */
 const ALTO = TL.altura;
+const PONTE = PAR.ponte;
 export const VISTAS = Object.freeze([
   { id: 'az20', azimute: 20, dist: 1250, altura: ALTO * 0.5, alvo: [0, ALTO * 0.5, 0], fov: 40 },
   { id: 'az110', azimute: 110, dist: 1250, altura: ALTO * 0.5, alvo: [0, ALTO * 0.5, 0], fov: 40 },
   { id: 'az200', azimute: 200, dist: 1250, altura: ALTO * 0.5, alvo: [0, ALTO * 0.5, 0], fov: 40 },
   { id: 'az290', azimute: 290, dist: 1250, altura: ALTO * 0.5, alvo: [0, ALTO * 0.5, 0], fov: 40 },
-  { id: 'fenda', de: [-14, 9, 118], alvo: [0, GEMEAS.ponte.cota * 0.62, 0], fov: 58 },
-  { id: 'coroas', de: [-90, ALTO - 10, 150], alvo: [0, ALTO - 50, 0], fov: 52 },
+  { id: 'ponte', de: [-24, PONTE.cota + 55, 150], alvo: [0, PONTE.cota, (PONTE.z0 + PONTE.z1) / 2], fov: 46 },
+  { id: 'coroas', de: [-150, ALTO - 10, 170], alvo: [0, ALTO - 50, 0], fov: 52 },
 ]);
 
 /** Arranjo da prancha (1920 x 1080): 4 retratos de azimute e os 2 closes empilhados à direita. */
@@ -90,6 +91,60 @@ export function tirarAnelSintetico(ctx) {
   return n;
 }
 
+/**
+ * Vista fixa no lugar da câmera do jogo: enquanto ativa() vale, a atualização da câmera põe a pose da vista (pose()
+ * aplica a posição, o alvo e o campo) e o alvo da câmera (onde a sombra se centra) é alvo(). Assim os domínios veem a
+ * câmera da vista no quadro deles (a vegetação escolhe as árvores, a sombra se centra, a Arcologia escolhe os LODs), e
+ * não a do jogo, que a cena sobrescrevia depois. Fora da vista, a câmera do jogo segue. Devolve a função que desfaz.
+ */
+export function fixarCamera(ctx, { ativa, pose, alvo }) {
+  const api = ctx.cameraApi;
+  if (!api) return () => {};
+  const orig = { atualizar: api.atualizar, alvo: api.alvo };
+  api.atualizar = (tMs) => (ativa() ? pose() : orig.atualizar(tMs));
+  api.alvo = (v) => {
+    if (!ativa() || !v) return orig.alvo(v);
+    const a = alvo();
+    return v.set(a[0], a[1], a[2]);
+  };
+  return () => {
+    api.atualizar = orig.atualizar;
+    api.alvo = orig.alvo;
+  };
+}
+
+/**
+ * Pinta a mata do parque da sede (mataDaSede: o anel de floresta, os maciços do parque, os bosques entre os anéis) na
+ * grade da floresta da simulação da cena, como a S1a fará quando o parque ficar pronto, e marca o retângulo no diário
+ * (o chão e a vegetação refazem). Devolve a função que desfaz.
+ */
+export function pintarMataDaSede(ctx) {
+  const F = ctx.sim?.espelho?.floresta;
+  if (!F?.dens) return () => {};
+  const [x0, z0, x1, z1] = GLEBA_ENVELOPE.caixa;
+  const i0 = Math.max(0, Math.floor((x0 - F.origem[0]) / F.passo));
+  const i1 = Math.min(F.n - 1, Math.ceil((x1 - F.origem[0]) / F.passo));
+  const j0 = Math.max(0, Math.floor((z0 - F.origem[1]) / F.passo));
+  const j1 = Math.min(F.n - 1, Math.ceil((z1 - F.origem[1]) / F.passo));
+  const guarda = new Map();
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const d = mataDaSede(F.origem[0] + (i + 0.5) * F.passo, F.origem[1] + (j + 0.5) * F.passo);
+      if (d === null) continue;
+      const k = j * F.n + i;
+      guarda.set(k, F.dens[k]);
+      F.dens[k] = Math.round(d * 255);
+    }
+  }
+  const marcar = () => ctx.sim.mudancas?.marcarRet?.('floresta', x0, z0, x1, z1);
+  marcar();
+  return () => {
+    for (const [k, v] of guarda) F.dens[k] = v;
+    guarda.clear();
+    marcar();
+  };
+}
+
 export function registrar(registrarCena) {
   registrarCena('torre', {
     sim: simDaCena(),
@@ -99,13 +154,15 @@ export function registrar(registrarCena) {
       const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
       tirarAnelSintetico(ctx);
       const dom = ctx.dominio('arcologia');
-      // a Torre no plano padrão construído (o entorno de verdade); ?contexto=0 mostra só a Torre com a esplanada
+      // o par na sede construída (o entorno de verdade); ?contexto=0 mostra só o par no pódio
       const contexto = qs.get('contexto') !== '0';
       const cava = { guarda: new Map(), ret: null };
+      let despintar = () => {};
       if (contexto) {
         cavarPlanoNaCena(ctx, PLANOS[PLANO_PADRAO], GLEBA_ENVELOPE.cota, cava);
-        dom?.vitrine({ modo: 'plano', plano: PLANO_PADRAO });
-      } else dom?.vitrine({ modo: 'torre', plano: PLANO_PADRAO });
+        despintar = pintarMataDaSede(ctx);
+        dom?.vitrine({ modo: 'plano' });
+      } else dom?.vitrine({ modo: 'torre' });
       const cam = ctx.camera;
       const fov0 = cam.fov;
       let vista = null; // vista forçada (prancha)
@@ -152,6 +209,7 @@ export function registrar(registrarCena) {
           vista = VISTAS[i];
           const q = QUADROS[i];
           R.foto({ w: q.w, h: q.h }); // um quadro para o céu, a sombra e o reflexo assentarem na vista nova
+          ctx.dominio('vegetacao')?.preparar?.(); // as árvores do alcance da vista nova de uma vez
           const blob = await R.foto({ w: q.w, h: q.h });
           const img = await createImageBitmap(blob);
           g.drawImage(img, q.x, q.y, q.w, q.h);
@@ -169,6 +227,7 @@ export function registrar(registrarCena) {
         await assentarHora(R, ctx, hora);
         vista = VISTAS.find((v) => v.id === id) ?? VISTAS[0];
         R.foto({ w, h });
+        ctx.dominio('vegetacao')?.preparar?.();
         const blob = await R.foto({ w, h });
         vista = null;
         return await new Promise((ok) => {
@@ -199,15 +258,20 @@ export function registrar(registrarCena) {
         const falhas = [];
         const perfil = ctx.perfil?.id ?? 'media';
         const faixa = TL.triangulos.lod0[perfil] ?? TL.triangulos.lod0.media;
-        // as gêmeas somam as duas torres: cada uma dentro da faixa (D66: até 70 mil cada no Alta)
-        const n = dom?.torre?.gemeas ? 2 : 1;
+        // cada torre do par dentro da faixa do perfil (D66: até 70 mil cada no Alta e no 'pc'); o LOD1 das duas com a
+        // ponte
         if (!tri) falhas.push('as torres não foram montadas');
         else {
-          if (perfil !== 'leve' && (tri.lod0 < n * faixa[0] || tri.lod0 > n * faixa[1])) falhas.push(`LOD0 com ${tri.lod0} triângulos em ${n} torre(s) no perfil ${perfil} (D66: ${faixa[0]} a ${faixa[1]} cada)`);
-          if (tri.lod1 < n * TL.triangulos.lod1[0] || tri.lod1 > n * TL.triangulos.lod1[1]) falhas.push(`LOD1 com ${tri.lod1} triângulos em ${n} torre(s) (${TL.triangulos.lod1.join(' a ')} cada)`);
+          for (const t of dom.torre.triangulosPorTorre ?? []) {
+            if (perfil !== 'leve' && (t.lod0 < faixa[0] || t.lod0 > faixa[1])) falhas.push(`${t.nome}: LOD0 com ${t.lod0} triângulos no perfil ${perfil} (D66: ${faixa[0]} a ${faixa[1]})`);
+          }
+          if (tri.lod1 < 2 * TL.triangulos.lod1[0] || tri.lod1 > 2 * TL.triangulos.lod1[1] + 600) falhas.push(`LOD1 do par com ${tri.lod1} triângulos (${TL.triangulos.lod1.join(' a ')} cada torre, mais a ponte)`);
         }
-        return { ok: falhas.length === 0, falhas, medidas: { perfil, triangulos: tri ?? null, lod: dom?.torre?.lod ?? null, familias: ctx.stats?.familias ?? null } };
+        return { ok: falhas.length === 0, falhas, medidas: { perfil, triangulos: tri ?? null, porTorre: dom?.torre?.triangulosPorTorre ?? null, lod: dom?.torre?.lod ?? null, familias: ctx.stats?.familias ?? null } };
       }
+
+      // a vista da prancha entra no lugar da câmera do jogo (os domínios a veem no quadro deles)
+      const soltarCamera = fixarCamera(ctx, { ativa: () => !!vista, pose: aplicarVista, alvo: () => vistaNoMundo(vista, t()).alvo });
 
       return {
         quadro() {
@@ -216,7 +280,9 @@ export function registrar(registrarCena) {
         },
         resultado,
         descartar() {
+          soltarCamera();
           img?.remove();
+          despintar();
           const T = ctx.sim?.espelho?.terreno;
           // desfaz a cava e marca o chão no diário (o terreno refaz a malha da região)
           if (T && cava.guarda.size) {

@@ -133,7 +133,9 @@ const SERRAS = [
  */
 const MORROS = [
   { id: 'pedreira', forma: 'morro', x: -470, z: -820, rx: 420, rz: 320, ang: 0.15, h: 236, face: 1.7, forte: 0.7 },
-  { id: 'mirante', forma: 'morro', x: 485, z: -880, rx: 390, rz: 285, ang: -0.25, h: 205, face: 1.3, forte: 0.6 },
+  // o Mirante recuado para o norte: o pé dele fica a mais de 20 m da borda do anel viário da sede (D90; em z -880 o
+  // platô cortava 10 m do flanco junto do portão norte)
+  { id: 'mirante', forma: 'morro', x: 485, z: -910, rx: 390, rz: 285, ang: -0.25, h: 205, face: 1.3, forte: 0.6 },
   // os dois morros baixos da planície do leste, fora do disco da sede (D90), com a rodovia ao norte e a enseada ao sul
   { id: 'leste', forma: 'morro', x: 1260, z: -560, rx: 230, rz: 200, ang: 0.2, h: 78 },
   { id: 'morrinho', forma: 'morro', x: 1640, z: -380, rx: 120, rz: 105, ang: 0.6, h: 45 },
@@ -423,13 +425,18 @@ const AREAS = [
  * quadras na faixa plana entre os morros e o disco da sede e a oeste dele, a captação e a usina solar na rua principal
  * da Vila (com rede: a Vila e as duas ficam na mesma rede de água e energia), e os primeiros prédios da Holding. O fim
  * da avenida é o portão norte do plano escolhido (areas.js acerta pelo plano).
+ * A avenida sai do nó de entrada pela meia encosta (o nó fica no aterro do acesso, 3 m acima do pasto, e descer direto
+ * passa de 9% de declive) e chega ao portão no eixo da avenida norte, na reta radial: chegando de viés, a lateral da
+ * pista entra no disco antes do portão e a via é recusada (código 'gleba'). Cada trecho constrói sozinho, em ordem.
  */
 const SUGESTOES = {
-  avenida: { via: 'avenida', pontos: [[60, -700], [130, -662], [200, -622]] },
+  avenida: { via: 'avenida', pontos: [[60, -700], [120, -716], [200, -680], [200, -622]] },
+  // retângulos: a grade de ruas da caixa de cada quadra (o robô e a mão da dica traçam assim) fica fora do disco da
+  // sede, com a calçada, e longe dos córregos
   quadras: [
-    { zona: 'resBaixa', contorno: [[-745, -250], [-575, -250], [-640, 90], [-745, 90]] },
-    { zona: 'comBaixa', contorno: [[575, -585], [830, -585], [850, -430], [795, -410]] },
-    { zona: 'resBaixa', contorno: [[-745, 120], [-650, 120], [-635, 300], [-745, 300]] },
+    { zona: 'resBaixa', contorno: [[-745, -250], [-635, -250], [-635, 90], [-745, 90]] },
+    { zona: 'comBaixa', contorno: [[700, -600], [880, -600], [880, -470], [700, -470]] },
+    { zona: 'resBaixa', contorno: [[-745, 120], [-635, 120], [-635, 300], [-745, 300]] },
   ],
   captacao: { construir: 'captacao', x: -965, z: 350, rot: 0 },
   usina: { construir: 'solar', x: -905, z: 350, rot: 0 },

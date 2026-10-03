@@ -451,7 +451,7 @@ const alcancaveis = (raizes) => {
 
 test('índices: todo módulo do render e da interface está ligado a um índice fixo (esqueletos inclusive)', () => {
   const r = (p) => fonte(`render/${p}`);
-  const indicesRender = [r('index.js'), r('cenas/index.js'), r('mundo/oficina.worker.js')].flatMap(importados);
+  const indicesRender = alcancaveis([r('index.js'), r('cenas/index.js'), r('mundo/oficina.worker.js')]);
   const semIndice = [];
   for (const f of listar(fonte('render'), /\.js$/)) {
     const rel = relative(fonte('render'), f).split('\\').join('/');

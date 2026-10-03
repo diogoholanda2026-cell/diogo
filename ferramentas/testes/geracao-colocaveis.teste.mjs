@@ -266,6 +266,22 @@ test('árvores: o LOD1 traz as árvores dos lotes para a vegetação (espécies 
   assert.equal(gerarColocaveis(pedidoColocaveis(P, itens, { lod: 0, detalhe: 'ultra' }).dados).arvores.length, 0);
 });
 
+test('pedido sem dados ou com tipo fora da tabela: erro na resposta (nada de NaN) e o modelo de reserva', async () => {
+  // os buffers foram transferidos a um worker que morreu: o pedido volta sem dados e o gerador acusa, não desenha NaN
+  assert.throws(() => gerarColocaveis({ lod: 1, n: 2, num: new Float32Array(0), ints: new Uint32Array(0) }), /sem os dados/);
+  const { criarDespachante } = await import('../../fonte/render/mundo/oficina.worker.js');
+  const ind = await import('../../fonte/render/colocaveis/index.js');
+  await ind.carregarGerador();
+  const { resposta } = criarDespachante().responder({ id: 3, tipo: 'colocavel', chave: 1, dados: { lod: 0, n: 1, num: new Float32Array(0), ints: new Uint32Array(0) } });
+  assert.match(resposta.erro ?? '', /sem os dados/);
+  // um tipo que não está na tabela não vira a captação: desenha o volume de reserva, dentro da planta pedida
+  const esp = espelhoDeTeste(['poco']);
+  const r = gerarColocaveis(pedidoColocaveis(esp.predios, [{ i: 0, tipo: 'naoExiste' }], { lod: 0 }).dados);
+  const c = r.caixas.subarray(0, CAIXA_C);
+  assert.ok(r.tris > 0 && r.tris < 60, `reserva com ${r.tris} triângulos`);
+  assert.ok(c[0] >= -8.05 && c[2] <= 8.05 && c[1] >= -8.05 && c[3] <= 8.05, `reserva fora da planta: ${Array.from(c)}`);
+});
+
 test('oficina: o despachante do worker registra o gerador "colocavel" e responde depois de o módulo chegar', async () => {
   const { criarDespachante } = await import('../../fonte/render/mundo/oficina.worker.js');
   const ind = await import('../../fonte/render/colocaveis/index.js');
@@ -324,5 +340,104 @@ test('cena servicos: os 24 tipos ganham lugar na cidade sintética, de frente pa
       const s = Math.sin(f.rot);
       assert.ok(Math.abs(dx * c - dz * s) > f.w / 2 || Math.abs(dx * s + dz * c) > f.d / 2, `prédio ${i} dentro de ${f.tipo}`);
     }
+  }
+});
+
+test('domínio: LOD1 e LOD0 chegam, a obra sai da sombra, e o erro da oficina não apaga o que está à vista', async () => {
+  const THREE = await import('three');
+  const { ganchos } = await import('../../fonte/render/motor/ganchos.js');
+  const predios = await import('../../fonte/render/mundo/predios.js');
+  const { criarColocaveis } = await import('../../fonte/render/colocaveis/desenho.js');
+  const { oficinaDe } = await import('../../fonte/render/mundo/oficina.js');
+  const { PERFIS } = await import('../../fonte/render/motor/perfis.js');
+  const { criarSimulacao } = await import('../../fonte/sim/estado.js');
+  const { gerarCidadeSintetica, SINTETICA } = await import('../cidade-sintetica.mjs');
+  const { PonteRender } = await import('../../fonte/render/ponte.js');
+  const { escolherLugares, construirNaCena, BAIRROS } = await import('../../fonte/render/cenas/servicos.js');
+  const { PREDIO } = await import('../../fonte/contratos/flags.js');
+  const sim = criarSimulacao({ semente: SINTETICA.semente, dominios: false });
+  gerarCidadeSintetica({ sim, predios: 500 });
+  const esp = sim.espelho;
+  const P = esp.predios;
+  const feitos = construirNaCena(esp, escolherLugares(esp, ['clinica', 'delegacia', 'praca'].map((tipo) => ({ tipo })), BAIRROS.servicos), { mudancas: sim.mudancas });
+  assert.equal(feitos.length, 3);
+  const alvo = feitos[0];
+  const camera = new THREE.PerspectiveCamera(40, 1376 / 768, 0.5, 20000);
+  camera.position.set(alvo.x + 90, alvo.y + 140, alvo.z + 90);
+  camera.lookAt(alvo.x, alvo.y, alvo.z);
+  camera.updateMatrixWorld();
+  const relogio = { agora: 0 };
+  const nowOrig = performance.now;
+  performance.now = () => relogio.agora;
+  let fabrica = null;
+  predios.registrar({ registrarDominio: (n, f) => (fabrica = f), registrarSelecionavel() {} });
+  let domPredios = null;
+  const ctx = {
+    cena: new THREE.Scene(), ganchos, perfil: PERFIS.pc, semClip: false, stats: { instancias: {}, setores: {} },
+    medidas: { familia: (m) => m }, textura: () => null, ouvir: () => () => {}, renderer: null, THREE,
+    sim: { espelho: esp, mudancas: sim.mudancas },
+    sombra: { projetor: (m) => m, soltar() {}, marcar() {}, regiao: null }, camera,
+    cameraApi: { estado: () => ({ dist: 220 }), alvo: (v) => v.set(alvo.x, alvo.y, alvo.z), atualizar() {} },
+    sol: { dir: new THREE.Vector3(0.4, 0.8, 0.3).normalize(), dia: 1 }, horaDoCeu: () => 10, criarWorker: () => null,
+    dominio: (n) => (n === 'predios' ? domPredios : null),
+  };
+  domPredios = fabrica(ctx);
+  // a oficina dos colocáveis: a de verdade, que pode ser mandada falhar (a resposta { erro } da oficina)
+  let falhar = false;
+  const { gerarColocaveis: gerar } = await import('../../fonte/render/colocaveis/gerador.js');
+  const ctxC = Object.create(ctx);
+  ctxC._oficina = { worker: {}, pendentes: 0, pedir: (tipo, dados) => Promise.resolve(falhar ? { erro: 'falha de teste' } : gerar(dados)), rodarLocal() {} };
+  const dom = criarColocaveis(ctxC);
+  const ponte = new PonteRender(ctx.sim);
+  const oficina = oficinaDe(ctx);
+  const quadro = async (n = 1, passo = 16) => {
+    for (let k = 0; k < n; k++) {
+      ponte.quadro([domPredios, dom], ctx);
+      domPredios.quadro(relogio.agora, ctx);
+      dom.quadro(relogio.agora, ctxC);
+      oficina.rodarLocal(16);
+      await new Promise((ok) => setTimeout(ok, 0));
+      relogio.agora += passo;
+    }
+  };
+  const esperar = async (cond, max = 400) => {
+    for (let k = 0; k < max && !cond(); k++) await quadro(1, 20);
+    return cond();
+  };
+  try {
+    assert.ok(await esperar(() => dom.pronto() && dom.medidas().trisLod1Total > 0), 'o LOD1 chegou');
+    let m = dom.medidas();
+    assert.equal(m.itens, 3);
+    assert.ok(m.lod0 >= 1 && m.trisLod0 > 0, 'o LOD0 de perto chegou');
+    // sem região da sombra, todos os colocáveis projetam
+    assert.equal(m.trisSombra, m.trisLod1Total);
+    const i = alvo.i;
+    const caixa = dom.caixa(i);
+    assert.ok(caixa && caixa[5] > 3, 'a caixa do modelo');
+    // em obra: o gêmeo da sombra (sem o corte da R4b) deixa o colocável de fora
+    P.flags[i] |= PREDIO.OBRA;
+    P.obraIni[i] = 0;
+    P.obraFim[i] = 1000;
+    sim.mudancas.marcarIdx('predios', i);
+    assert.ok(await esperar(() => dom.pronto() && dom.medidas().trisSombra < dom.medidas().trisLod1Total), 'a obra saiu da sombra');
+    // a oficina falha: o LOD1 e o LOD0 que estão à vista ficam, e o pedido volta depois
+    const antes = dom.medidas();
+    falhar = true;
+    P.nivel[i] = 2;
+    sim.mudancas.marcarIdx('predios', i);
+    assert.ok(await esperar(() => dom.medidas().errosOficina > 0), 'a oficina falhou');
+    m = dom.medidas();
+    assert.equal(m.trisLod1Total, antes.trisLod1Total, 'o LOD1 velho fica');
+    assert.ok(m.lod0 >= 1, 'o LOD0 velho fica à vista');
+    assert.equal(dom.pronto(), false);
+    falhar = false;
+    assert.ok(await esperar(() => dom.pronto()), 'pedido de novo depois da espera, e pronto');
+    // a silhueta do fantasma é guardada (a mesma geometria) e some com o domínio
+    const g = dom.silhueta('clinica', 1);
+    assert.ok(g.attributes.position.count > 0 && dom.silhueta('clinica', 1) === g && dom.silhueta('naoExiste') === null);
+  } finally {
+    dom.descartar();
+    domPredios.descartar();
+    performance.now = nowOrig;
   }
 });

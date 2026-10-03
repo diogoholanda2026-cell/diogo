@@ -72,6 +72,7 @@ import * as obras from './mundo/obras.js';
 import * as anexos from './mundo/anexos.js';
 import * as lotes from './mundo/lotes.js';
 import * as colocaveis from './colocaveis/index.js';
+import * as colocaveisDominio from './colocaveis/dominio.js';
 import * as iates from './vida/iates.js';
 import * as navios from './vida/navios.js';
 import * as jatos from './vida/jatos.js';
@@ -96,7 +97,7 @@ export const MODULOS_RENDER = Object.freeze([
   sombraProjetores, sombraMapa, camera, entrada, raio,
   biblioteca, texturasChao, texturasVia, texturasPredio,
   terreno, agua, fora, vegetacao, vias, luzRua, props, trafego, pedestres, caminhoes,
-  predios, setores, oficina, instancias, obras, anexos, lotes, colocaveis,
+  predios, setores, oficina, instancias, obras, anexos, lotes, colocaveis, colocaveisDominio,
   iates, navios, jatos,
   torre, planos, partes, lago, fantasma, arcoObra, heli,
   sobreFerramentas, sobreCamadas, sobreMarcadores, sobreAncoras,

@@ -368,8 +368,8 @@ export function torno(m, cx, cz, perfil, seg, k, { ex = 1, ez = 1, rot = 0, fech
     const l = Math.hypot(rb - ra, yb - ya) || 1;
     return [(yb - ya) / l, -(rb - ra) / l];
   });
-  // normal macia por vértice (radial da planta esticada no ângulo do vértice, inclinada pelo perfil): a casca da Vida,
-  // a esfera da Biblioteca e as Supertrees leem curvas, não como poliedros de maquete
+  // normal macia por vértice (radial da planta esticada no ângulo do vértice, inclinada pelo perfil): o globo do átrio
+  // da Codex e as Supertrees leem curvas, não como poliedros de maquete
   const normal = (j, a) => {
     let nx = Math.cos(a) / ex;
     let nz = Math.sin(a) / ez;
@@ -552,7 +552,7 @@ const V = {
   quina: vid(VIDRO.costura, 0.37, 1),
   vento: vid(VIDRO.vento, 0.53),
   saguao: vid(VIDRO.saguao, 0.71),
-  // a lanterna da coroa leva 1 no último número (o shader a distingue da esfera da Biblioteca)
+  // a lanterna da coroa leva 1 no último número (o shader a distingue do globo do átrio da Codex)
   lanterna: [VIDRO.lanterna, 0.29, 0, 1],
   parapeito: vid(VIDRO.parapeito, 0.83),
 };
@@ -1415,7 +1415,6 @@ const KP = {
   bronze: K.bronze,
   granito: K.granito,
   forro: K.forro,
-  piso: K.piso,
   jardim: K.jardim,
   jardineira: K.jardineira,
   piscina: K.piscina,
@@ -1698,32 +1697,34 @@ void gVidroPainel( float col, float fl, float fv, float sem, float esp ) {
   fEmi += vec3( 0.5, 0.6, 0.8 ) * ocupado * ( 1.0 - acesa ) * 0.006 * gH1( vec2( un, fl ) * 1.9 + 4.3 ) * uNoite * G_LUZ_JANELA * ( 1.0 - longe ) * ( 1.0 - esp );
   fTint *= mix( vec3( 1.0 ), vec3( 0.5, 0.58, 0.75 ), uNoite );
 }
-// A faixa de LED dos anéis e das torres ovais (D88): dois andares em volta de 'meio', contínua. De dia, uma fita de
+// A faixa de LED dos anéis e das torres ovais (D88): um andar em volta de 'meio', entre duas marquises, contínua. De dia, uma fita de
 // vidro grafite com a grade de pontos de LED (a que se lê de longe como a linha escura que cinta o anel); à noite, luz
 // branca quente que respira em ondas largas que correm o anel, com um tom frio que passa devagar. Sem cor de arco-íris:
 // a luz da Holding é champanhe
 void gLed( float u, float y, float meio, float pe ) {
-  float t = ( y - ( meio - pe ) ) / ( 2.0 * pe );
+  float t = ( y - ( meio - 0.5 * pe ) ) / pe;
   float pontos = gLinha( u / 0.9, 0.5 ) * gLinha( y / 0.9, 0.5 );
-  fTint = vec3( 0.13, 0.13, 0.14 );
+  fTint = vec3( 0.075, 0.075, 0.08 );
   fMet = 0.55;
   fRug = 0.22;
-  fAlb = vec3( 0.018, 0.017, 0.016 ) + vec3( 0.05, 0.045, 0.04 ) * pontos;
+  fAlb = vec3( 0.012, 0.011, 0.011 ) + vec3( 0.04, 0.036, 0.032 ) * pontos;
   fInc = vec2( 0.0 );
   float onda = 0.55 + 0.45 * sin( u / 46.0 - uTempo * 0.55 + 0.6 * sin( u / 230.0 ) );
   float fria = smoothstep( 0.55, 1.0, sin( u / 610.0 + uTempo * 0.08 ) );
-  vec3 cor = mix( vec3( 1.0, 0.82, 0.58 ), vec3( 0.62, 0.86, 1.0 ), fria * 0.8 );
-  // as bordas da faixa mais acesas (as linhas que o olho segue de longe) e o miolo pela onda
+  vec3 cor = mix( vec3( 1.0, 0.82, 0.58 ), vec3( 0.62, 0.86, 1.0 ), fria * 0.45 );
+  // as bordas da faixa mais acesas (as linhas que o olho segue de longe) e o miolo pela onda, que nunca apaga
   float borda = 1.0 - smoothstep( 0.0, 0.16, min( t, 1.0 - t ) );
-  float luz = ( 0.35 + 0.65 * onda ) * ( 0.55 + 0.45 * pontos ) + 0.6 * borda;
+  float luz = ( 0.5 + 0.3 * onda ) * ( 0.75 + 0.25 * pontos ) + 0.35 * borda;
+  // a faixa é a linha de luz que cinta o anel à noite: de 1 a 3 na tela (exposição da noite), duas a quatro vezes a
+  // janela acesa, abaixo do aro do heliponto (sem estourar no bloom). Com 0,55 do LED ela sumia entre os forros
   fEmi = cor * luz * mix( 0.012, G_LUZ_LED, uNoite );
 }
 // Anéis (Apple Park, McLaren): vidro curvo do chão ao teto em painéis largos, o forro claro de cada andar visto através
 // dele e, à noite, os escritórios acesos quase contínuos. No LOD1 (e nos setores sem a geometria) a marquise branca de
 // cada laje sai daqui: a faixa cobre o vidro de cima para baixo quanto mais do alto se olha (2,4 m de balanço) e de baixo
-// para cima quando se olha de baixo. A faixa de LED (dois andares no meio da altura) troca o vidro
+// para cima quando se olha de baixo. A faixa de LED (um andar no meio da altura) troca o vidro
 void gVidroAnel( float u, float y, float sem, float pe, float meio, float setor, float painel ) {
-  if ( abs( y - meio ) < pe ) {
+  if ( abs( y - meio ) < 0.5 * pe ) {
     gLed( u, y, meio, pe );
     return;
   }
@@ -1732,15 +1733,19 @@ void gVidroAnel( float u, float y, float sem, float pe, float meio, float setor,
   float fv = fract( yy );
   float col = floor( u / painel );
   gVidroPainel( col, fl, fv, sem, 0.0 );
-  float grupo = floor( col / 4.0 );
-  float acesa = step( gH1( vec2( grupo * 1.3, fl * 2.1 ) + sem * 5.0 ), max( 0.5, gAcesas( uHora ) ) );
-  float forca = 0.55 + 0.45 * gH1( vec2( grupo * 0.7, fl * 1.3 ) + 4.1 );
-  fEmi = vec3( 1.0, 0.84, 0.64 ) * uNoite * G_LUZ_JANELA * 0.38 * forca * ( 0.08 + 0.92 * smoothstep( 0.5, 0.97, fv ) ) * mix( 0.08, 1.0, acesa );
-  // vidro extraclaro: menos prata, mais do interior; o forro branco perto do teto de cada andar
-  fTint = vec3( 0.34, 0.37, 0.38 );
-  fAlb = mix( vec3( 0.03, 0.032, 0.03 ), vec3( 0.26, 0.25, 0.23 ), smoothstep( 0.8, 0.97, fv ) );
-  float junta = gLinha( u / painel, 0.012 );
-  fTint = mix( fTint, vec3( 0.5, 0.5, 0.48 ), junta );
+  // à noite os andares acendem em trechos longos (salas e corredores de dezenas de metros, o brilho contínuo da Apple
+  // Park), com poucos trechos apagados: grupos de 4 painéis sorteados um a um liam como um mosaico de ruído
+  float grupo = floor( col / 6.0 );
+  float n = gRuido( vec2( u / 38.0 + sem * 13.0 + fl * 7.31, fl * 3.7 ) );
+  float acesa = smoothstep( 0.22, 0.34, n );
+  float forca = 0.7 + 0.3 * gH1( vec2( grupo * 0.7, fl * 1.3 ) + 4.1 );
+  fEmi = vec3( 1.0, 0.84, 0.64 ) * uNoite * G_LUZ_JANELA * 0.5 * forca * ( 0.08 + 0.92 * smoothstep( 0.5, 0.97, fv ) ) * mix( 0.08, 1.0, acesa );
+  // vidro extraclaro: menos prata, mais do interior; o forro claro perto do teto de cada andar, fino (com o forro
+  // largo e claro o anel lia como uma pilha de pratos brancos, não como vidro com as linhas das marquises)
+  fTint = vec3( 0.2, 0.225, 0.245 );
+  fAlb = mix( vec3( 0.022, 0.024, 0.024 ), vec3( 0.13, 0.125, 0.115 ), smoothstep( 0.87, 0.97, fv ) );
+  float junta = gLinha( u / painel, 0.006 );
+  fTint = mix( fTint, vec3( 0.36, 0.36, 0.35 ), junta );
   fAlb = mix( fAlb, vec3( 0.0 ), junta );
   if ( uLinhas > 0.5 && gLodSetor( setor ) < 0.5 ) {
     vec3 vd = normalize( cameraPosition - vGPosMundo );
@@ -2486,9 +2491,18 @@ export function criarPar(ctx, { perfil = ctx.perfil } = {}) {
     topo: medidasDoPar(TORRE_LAMINA).topo,
   });
   api.par = true;
-  api.triangulosPorTorre = torresDoPar({ x: 0, z: 0, rot: 0 }).map((t) => {
-    const m = malhasTorre({ nivel, spec: t.spec, gemea: true, base: PAR.podio });
-    return { nome: t.spec.nome, lod0: m.vidro.triangulos + m.opaco.triangulos };
+  // o LOD0 de cada torre (o resultado da cena 'torre' confere os 70 mil): sob demanda, porque gerar as duas de novo
+  // custa uns 90 ms de thread principal, e o jogo não lê isto na carga
+  let porTorre = null;
+  Object.defineProperty(api, 'triangulosPorTorre', {
+    enumerable: true,
+    get() {
+      porTorre ??= torresDoPar({ x: 0, z: 0, rot: 0 }).map((t) => {
+        const m = malhasTorre({ nivel, spec: t.spec, gemea: true, base: PAR.podio });
+        return { nome: t.spec.nome, lod0: m.vidro.triangulos + m.opaco.triangulos };
+      });
+      return porTorre;
+    },
   });
   return api;
 }

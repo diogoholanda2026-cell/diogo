@@ -1,32 +1,34 @@
-// Planos diretores da Arcologia (D59, D63) e o domínio 'arcologia' do render: as torres, o lago e as partes do plano
-// no mundo. No jogo, o plano é o do espelho (ou o escolhido, ou o padrão enquanto ninguém escolheu); as torres
-// aparecem prontas quando torre.e4 fica pronta e, antes disso, como fantasma (a obra por etapas é da X1b); o lago
-// aparece quando lago.e1 fica pronta e o chão já foi cavado (o aplainar); as outras partes são fantasma com a silhueta
-// LOD1 de verdade (D26). As cenas pedem outras vistas pelo domínio:
-//   ctx.dominio('arcologia').vitrine({ modo: 'torre' })               só as torres, prontas
-//   ctx.dominio('arcologia').vitrine({ modo: 'plano', plano: 'B' })   o plano inteiro construído, com a paisagem, as
-//                                                                      vias internas e os portões
-//   ctx.dominio('arcologia').vitrine(null)                            volta ao jogo
-// As partes com LOD (a Sede em anel e a cúpula) trocam o LOD0 pelo LOD1 pela distância da câmera ao centro do plano.
-// Desempenho (D66): um programa por material, todos compilados na carga (criarAquecimento); nada muda de programa
-// entre o dia e a noite, os LODs e o fantasma.
+// A sede v3 no render (D88 a D90) e o domínio 'arcologia': o Park of Future Dreams no disco da gleba, com a Blade
+// Tower e a Legacy Tower no pódio (torre.js), o Mirror Lake (lago.js), as partes (partes.js: os dois anéis, as torres
+// do bosque, as Dream Falls, as fontes e o parque) e a paisagem do disco (a praça do pódio, os caminhos em anel, os
+// bosques, o anel viário, as 8 avenidas e os portões). No jogo, cada parte aparece pronta quando as etapas dela ficam
+// prontas no espelho (a obra por etapas é da X1b) e, antes disso, como fantasma com a silhueta de verdade (D26); o lago
+// só aparece de verdade quando o chão já foi cavado (o aplainar). As cenas pedem outras vistas pelo domínio:
+//   ctx.dominio('arcologia').vitrine({ modo: 'torre' })   o par no pódio, pronto (sem o resto da sede)
+//   ctx.dominio('arcologia').vitrine({ modo: 'plano' })   a sede inteira construída, com a paisagem e as vias internas
+//   ctx.dominio('arcologia').vitrine(null)                volta ao jogo
+// LOD por setor (D66): os 8 trechos do Horizon Ring, os 8 oitavos do Meridian Ring e as duas torres ovais trocam as
+// marquises do shader pelas de geometria quando a câmera chega perto de cada um (o uniforme uLodSetor avisa o vidro).
+// Desempenho: um material por tipo (o conjunto fixo de torre.js), todos compilados na carga (criarAquecimento); nada
+// muda de programa entre o dia, a noite, os LODs e o fantasma.
 import * as THREE from 'three';
 import { alturaEm } from '../../comum/altura.js';
-import { pontoNoPoligono } from '../../comum/vetor.js';
 import { ETAPA } from '../../contratos/flags.js';
 import {
-  PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, GLEBA_ENVELOPE, TORRE_LAMINA, suavizar, torresGemeas,
+  PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, GLEBA_ENVELOPE, TORRE_LAMINA, ANEL_VIARIO, AVENIDAS, mataDaSede,
+  TRECHOS_HORIZON,
 } from '../../data/arcologia-plano.js';
 import {
-  criarTorre, criarPar, atualizarArcologia, estadoDoCeu, materiais, descartarMateriais, geometriaDe, Malha, acab, PADRAO,
-  tampa, arvore, hashF, orientar, triangular, caixa, NIVEL, malhasTorreLod1, PONTOS_TORRE, criarJatos, criarAquecimento,
-  DIST_EFEITOS,
+  criarPar, atualizarArcologia, estadoDoCeu, materiais, descartarMateriais, geometriaDe, Malha, acab, PADRAO, tampa,
+  caixa, malhasPar, criarJatos, criarAquecimento, DIST_EFEITOS, UNIFORMES, orientar, hashF,
 } from './torre.js';
-import { montarParte, deslocar, PECAS_COM_LOD } from './partes.js';
-import { montarReservatorio, montarLagoCircular, materialAgua, quadroAgua, PASSEIO } from './lago.js';
+import { montarParte, setorDoAnel, SETOR_OVAL, difGraus } from './partes.js';
+import { montarLagoAnel, materialAgua, quadroAgua } from './lago.js';
 import { materialFantasma, malhaFantasma, criarFantasma } from './fantasma.js';
 
-/** Plano que o jogo mostra: o do espelho, o escolhido no portão 1 ou o padrão. */
+const RAD = Math.PI / 180;
+
+/** Plano que o jogo mostra: o do espelho, o escolhido ou o padrão (a sede v3). */
 export function planoDoJogo(esp) {
   const id = esp?.arcologia?.plano ?? PLANO_ESCOLHIDO ?? PLANO_PADRAO;
   return PLANOS[id] ? id : PLANO_PADRAO;
@@ -37,33 +39,46 @@ export function estadoEtapa(esp, id) {
   return esp?.arcologia?.etapas?.find((e) => e.id === id)?.estado ?? ETAPA.TRANCADA;
 }
 
+/**
+ * Partes prontas no espelho (ids de PARTES_ORDEM e dos trechos do Horizon Ring): a torre com a torre.e4 (D49), o lago
+ * com a lago.e1; as outras quando todas as etapas delas (id igual ou que começa com "<id>.") estão prontas.
+ * @returns {Set<string>}
+ */
+export function partesProntas(esp) {
+  const etapas = esp?.arcologia?.etapas ?? [];
+  const prontas = new Set();
+  if (estadoEtapa(esp, 'torre.e4') === ETAPA.PRONTA) prontas.add('torre');
+  if (estadoEtapa(esp, 'lago.e1') === ETAPA.PRONTA) prontas.add('lago');
+  const ids = [...PARTES_ORDEM.filter((p) => p !== 'torre' && p !== 'lago' && p !== 'horizon'), ...TRECHOS_HORIZON.map((t) => t.id)];
+  for (const id of ids) {
+    const delas = etapas.filter((e) => e.id === id || e.id.startsWith(`${id}.`));
+    if (delas.length && delas.every((e) => e.estado === ETAPA.PRONTA)) prontas.add(id);
+  }
+  return prontas;
+}
+
 /** Cota do chão num ponto: a do terreno (a plataforma do aplainar), ou a da gleba sem terreno. */
 export function cotaEm(T, x, z) {
   return T?.altura ? alturaEm(T, x, z) : GLEBA_ENVELOPE.cota;
 }
 
-/** Centro de um plano (o do anel no A v2; nos outros, a Torre). */
-export const centroDoPlano = (P) => P.centro ?? [P.torre.x, P.torre.z];
+/** Centro do plano (o do pódio). A cota da gleba se mede ali: o centro do pódio fica fora da cava do lago. */
+export const centroDoPlano = (P) => P.centro;
 
-/**
- * Ponto onde se mede a cota da plataforma de um plano: a Torre; no par (D64), sob o pódio da Lâmina, longe do poço da
- * fenda (que faz parte da cava do lago e desce com ela).
- */
-export function pontoDaCota(P) {
-  const t = P.torre;
-  if (!t.gemeas) return [t.x, t.z];
-  const [lam] = torresGemeas(t);
-  return [lam.x + 10 * Math.cos(t.rot ?? 0), lam.z - 10 * Math.sin(t.rot ?? 0)];
+/** O reservatório (o Mirror Lake) de um plano. */
+export const reservatorioDe = (P) => P.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
+
+/** Um ponto na água do lago em anel (no meio do anel, ao sul do pódio: a leste fica a fresta do contorno). */
+export function pontoNaAgua(res) {
+  return [res.cx, res.cz + (res.r0 + res.r1) / 2];
 }
 
 // ================================================================================================ paisagem
 
 const KP = {
-  // gramado cuidado: um pouco mais verde e mais claro que o capim do platô (sem chegar ao verde-lima)
-  grama: acab('#5b6a3a', { rugo: 0.95, padrao: PADRAO.grama }),
-  gramaEscura: acab('#4f5d34', { rugo: 0.95, padrao: PADRAO.grama }),
-  piso: acab('#b0a695', { rugo: 0.8, padrao: PADRAO.piso }),
-  portuguesa: acab('#8c877c', { rugo: 0.85, padrao: PADRAO.portuguesa }),
+  pisoClaro: acab('#c4baa8', { rugo: 0.78, padrao: PADRAO.piso }),
+  piso: acab('#b1a797', { rugo: 0.8, padrao: PADRAO.piso }),
+  gramaEscura: acab('#46532f', { rugo: 0.95, padrao: PADRAO.grama }),
   asfalto: acab('#2c2e31', { rugo: 0.85 }),
   calcada: acab('#a39c90', { rugo: 0.8, padrao: PADRAO.piso }),
   canteiro: acab('#46532f', { rugo: 0.95, padrao: PADRAO.grama }),
@@ -71,416 +86,306 @@ const KP = {
   champanhe: acab('#b8a684', { rugo: 0.32, metal: 1, padrao: PADRAO.metal }),
 };
 
+/** Coroa plana de r0 a r1 entre os ângulos a0 e a1 (graus), na cota y, em n trechos. uv = (x, z). */
+function coroa(m, cx, cz, r0, r1, y, k, n = 96, a0 = 0, a1 = 360) {
+  for (let i = 0; i < n; i++) {
+    const t0 = (a0 + ((a1 - a0) * i) / n) * RAD;
+    const t1 = (a0 + ((a1 - a0) * (i + 1)) / n) * RAD;
+    const P = [[r0, t0], [r0, t1], [r1, t1], [r1, t0]].map(([r, t]) => [cx + r * Math.cos(t), y, cz + r * Math.sin(t)]);
+    m.quad(...P, [0, 1, 0], ...P.map((q) => [q[0], q[2]]), k);
+  }
+}
+
 /**
- * Polígono deitado no relevo: triangula, subdivide os triângulos até o lado de ~passo metros e põe cada vértice em
- * chao(x, z) + dy. uv = (x, z).
+ * Faixa reta de largura w do raio r0 ao r1 no eixo da avenida de ângulo a (graus), deslocada o metros para o lado, na
+ * cota y. uv = (x, z).
  */
-export function deitar(m, poly, chao, dy, k, passo = 24) {
-  const { pontos, indices } = triangular(poly);
-  const pt = (i) => [pontos[2 * i], pontos[2 * i + 1]];
-  const pilha = [];
-  for (let t = 0; t < indices.length; t += 3) pilha.push([pt(indices[t]), pt(indices[t + 1]), pt(indices[t + 2])]);
-  let guarda = 0;
-  while (pilha.length && guarda++ < 200000) {
-    const [a, b, c] = pilha.pop();
-    const lados = [[a, b, c], [b, c, a], [c, a, b]].map(([p, q, r]) => ({ l: Math.hypot(q[0] - p[0], q[1] - p[1]), p, q, r }));
-    lados.sort((u, v) => v.l - u.l);
-    const L = lados[0];
-    if (L.l > passo) {
-      const mid = [(L.p[0] + L.q[0]) / 2, (L.p[1] + L.q[1]) / 2];
-      pilha.push([L.p, mid, L.r], [mid, L.q, L.r]);
-      continue;
+function faixaRadial(m, cx, cz, a, r0, r1, w, o, y, k) {
+  const ux = Math.cos(a * RAD);
+  const uz = Math.sin(a * RAD);
+  const P = [[r0, o - w / 2], [r1, o - w / 2], [r1, o + w / 2], [r0, o + w / 2]].map(([r, l]) => [cx + ux * r - uz * l, y, cz + uz * r + ux * l]);
+  m.quad(...P, [0, 1, 0], ...P.map((q) => [q[0], q[2]]), k);
+}
+
+/**
+ * Coroa de r0 a r1 com os vãos das 8 avenidas radiais (meia largura `meia` em volta de cada eixo): o chão dos bosques,
+ * os caminhos e o gramado não cobrem as pistas.
+ */
+export function coroaEntreAvenidas(m, cx, cz, r0, r1, y, k, meia = 16) {
+  const d = Math.asin(Math.min(1, meia / r0)) / RAD;
+  for (const a of AVENIDAS) {
+    const a0 = a + d;
+    const a1 = a + 45 - d;
+    if (a1 - a0 < 0.5) continue;
+    coroa(m, cx, cz, r0, r1, y, k, Math.max(1, Math.ceil(((a1 - a0) * RAD * r1) / 45)), a0, a1);
+  }
+}
+
+/** Faixas de raio onde as avenidas passam sob os anéis (sem palmeiras: a copa bateria nas marquises). */
+function sobAneis(plano) {
+  const raios = new Map();
+  for (const p of plano.partes.flatMap((q) => q.pecas)) if (p.tipo === 'anel') raios.set(p.raio, p.fundo);
+  return [...raios].map(([r, f]) => [r - f / 2 - 10, r + f / 2 + 10]);
+}
+
+/**
+ * Avenida de 24 m (calçada 3, pista 7, canteiro 4 com palmeiras-imperiais, pista 7, calçada 3): em arco (o anel viário,
+ * de `de` a `ate`, com o canteiro parando 16 m antes das avenidas radiais) ou radial (de r0 a r1, com o canteiro
+ * parando 16 m antes do anel viário e as palmeiras fora dos pórticos dos anéis, `semPalmas`).
+ */
+function avenida(m, arvores, cx, cz, y, v, semPalmas = []) {
+  const w = v.largura ?? 24;
+  const calc = 3;
+  const cant = 4;
+  const pista = (w - 2 * calc - cant) / 2;
+  const off = cant / 2 + pista / 2;
+  const palma = (x, z, s) => arvores?.push({ x, y: y + 0.2, z, especie: 'palmeira', altura: 17 + 4 * hashF(Math.round(x), Math.round(z), s), giro: hashF(Math.round(z), Math.round(x), 3) * 6.28 });
+  if (v.arco) {
+    const { r, de, ate } = v.arco;
+    const n = Math.max(4, Math.ceil(((ate - de) * RAD * r) / 14));
+    coroa(m, cx, cz, r - w / 2, r + w / 2, y + 0.1, KP.calcada, n, de, ate);
+    coroa(m, cx, cz, r - off - pista / 2, r - off + pista / 2, y + 0.13, KP.asfalto, n, de, ate);
+    coroa(m, cx, cz, r + off - pista / 2, r + off + pista / 2, y + 0.13, KP.asfalto, n, de, ate);
+    const folga = (16 / r) / RAD;
+    const a0 = de + folga;
+    const a1 = ate - folga;
+    coroa(m, cx, cz, r - cant / 2, r + cant / 2, y + 0.16, KP.canteiro, Math.max(1, Math.ceil(((a1 - a0) * RAD * r) / 14)), a0, a1);
+    for (let s = 7; s < (a1 - a0) * RAD * r - 3; s += 14) {
+      const t = (a0 + (s / r) / RAD) * RAD;
+      palma(cx + r * Math.cos(t), cz + r * Math.sin(t), 1);
     }
-    const i0 = m.v(a[0], chao(a[0], a[1]) + dy, a[1], 0, 1, 0, a[0], a[1], k);
-    const i1 = m.v(b[0], chao(b[0], b[1]) + dy, b[1], 0, 1, 0, b[0], b[1], k);
-    const i2 = m.v(c[0], chao(c[0], c[1]) + dy, c[1], 0, 1, 0, c[0], c[1], k);
-    m.tri(i0, i1, i2);
+    return;
+  }
+  const { a, r0, r1 } = v;
+  const ra = Math.min(r0, r1);
+  const rb = Math.max(r0, r1);
+  faixaRadial(m, cx, cz, a, ra, rb, w, 0, y + 0.1, KP.calcada);
+  faixaRadial(m, cx, cz, a, ra, rb, pista, -off, y + 0.13, KP.asfalto);
+  faixaRadial(m, cx, cz, a, ra, rb, pista, off, y + 0.13, KP.asfalto);
+  const c0 = ra;
+  const c1 = Math.min(rb, ANEL_VIARIO.raio - 16);
+  if (c1 - c0 < 2) return;
+  faixaRadial(m, cx, cz, a, c0, c1, cant, 0, y + 0.16, KP.canteiro);
+  for (let s = c0 + 7; s < c1 - 3; s += 14) {
+    if (semPalmas.some(([q0, q1]) => s > q0 && s < q1)) continue;
+    palma(cx + Math.cos(a * RAD) * s, cz + Math.sin(a * RAD) * s, 2);
   }
 }
 
-/** Faixa ao longo de uma polilinha (pares), largura w, deslocada lateralmente por o (+ à direita), no relevo. */
-export function fita(m, pts, w, chao, dy, k, o = 0, passo = 12) {
-  // reamostra a polilinha a cada passo metros
-  const P = [];
-  for (let i = 0; i + 2 < pts.length; i += 2) {
-    const ax = pts[i], az = pts[i + 1], bx = pts[i + 2], bz = pts[i + 3];
-    const l = Math.hypot(bx - ax, bz - az);
-    const q = Math.max(1, Math.ceil(l / passo));
-    for (let s = 0; s < q; s++) P.push([ax + ((bx - ax) * s) / q, az + ((bz - az) * s) / q]);
-  }
-  P.push([pts[pts.length - 2], pts[pts.length - 1]]);
-  const lados = [];
-  for (let i = 0; i < P.length; i++) {
-    const a = P[Math.max(0, i - 1)];
-    const b = P[Math.min(P.length - 1, i + 1)];
-    let tx = b[0] - a[0];
-    let tz = b[1] - a[1];
-    const l = Math.hypot(tx, tz) || 1;
-    tx /= l;
-    tz /= l;
-    const rx = -tz;
-    const rz = tx;
-    const e = [P[i][0] + rx * (o - w / 2), P[i][1] + rz * (o - w / 2)];
-    const d = [P[i][0] + rx * (o + w / 2), P[i][1] + rz * (o + w / 2)];
-    lados.push([e, d]);
-  }
-  for (let i = 0; i + 1 < lados.length; i++) {
-    const [e0, d0] = lados[i];
-    const [e1, d1] = lados[i + 1];
-    const v = (p) => [p[0], chao(p[0], p[1]) + dy, p[1]];
-    m.quad(v(e0), v(d0), v(d1), v(e1), [0, 1, 0], [e0[0], e0[1]], [d0[0], d0[1]], [d1[0], d1[1]], [e1[0], e1[1]], k);
-  }
-  return P;
-}
-
-/** Pontos a cada passo metros ao longo de uma polilinha, com a direção (para fileiras de árvores). */
-function aoLongoDe(pts, passo) {
-  const out = [];
-  let resto = 0;
-  for (let i = 0; i + 2 < pts.length; i += 2) {
-    const ax = pts[i], az = pts[i + 1], bx = pts[i + 2], bz = pts[i + 3];
-    const l = Math.hypot(bx - ax, bz - az);
-    if (l < 1e-6) continue;
-    let s = resto;
-    while (s <= l) {
-      out.push({ x: ax + ((bx - ax) * s) / l, z: az + ((bz - az) * s) / l, tx: (bx - ax) / l, tz: (bz - az) / l });
-      s += passo;
-    }
-    resto = s - l;
-  }
-  return out;
-}
-
-/** Portão: dois pilares de pedra e a verga champanhe, de frente para a via que entra. */
-function portao(m, x, z, dir, chao) {
-  const y = chao(x, z);
-  const [tx, tz] = dir;
+/** Portão: dois pilares de pedra e a verga champanhe sobre a avenida, de frente para quem chega (ângulo a, graus). */
+function portao(m, x, z, a, y) {
+  const tx = Math.cos(a * RAD);
+  const tz = Math.sin(a * RAD);
   const rx = -tz;
   const rz = tx;
   for (const s of [-1, 1]) caixa(m, x + rx * 17 * s, z + rz * 17 * s, 2.2, 2.2, y - 1, y + 16, KP.pedra, { ux: tx, uz: tz });
   caixa(m, x, z, 1.2, 19.5, y + 13.8, y + 15.2, KP.champanhe, { ux: tx, uz: tz, base: true });
 }
 
-/** Distância de um ponto a uma polilinha (pares). */
-function distPolilinha(x, z, P) {
-  let md = Infinity;
-  for (let i = 0; i + 3 < P.length; i += 2) {
-    const ax = P[i], az = P[i + 1], bx = P[i + 2], bz = P[i + 3];
-    const dx = bx - ax, dz = bz - az;
-    const l2 = dx * dx + dz * dz || 1;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
-    md = Math.min(md, Math.hypot(x - ax - dx * t, z - az - dz * t));
-  }
-  return md;
-}
-
-/** Coroa circular deitada no relevo (de r0 a r1), em n trechos com os raios subdivididos a cada ~12 m. */
-function anelDeitado(m, cx, cz, r0, r1, chao, dy, k, n = 96) {
-  const nr = Math.max(1, Math.ceil((r1 - r0) / 12));
-  for (let i = 0; i < n; i++) {
-    const a0 = (i / n) * Math.PI * 2;
-    const a1 = ((i + 1) / n) * Math.PI * 2;
-    for (let j = 0; j < nr; j++) {
-      const ra = r0 + ((r1 - r0) * j) / nr;
-      const rb = r0 + ((r1 - r0) * (j + 1)) / nr;
-      const P = [[ra, a0], [ra, a1], [rb, a1], [rb, a0]].map(([r, a]) => {
-        const x = cx + r * Math.cos(a);
-        const z = cz + r * Math.sin(a);
-        return [x, chao(x, z) + dy, z];
-      });
-      m.quad(...P, [0, 1, 0], ...P.map((q) => [q[0], q[2]]), k);
+/**
+ * Árvores de um bosque em anel (de r0 a r1): grade polar mexida, uma árvore onde a mata do parque (mataDaSede) passa
+ * de 0,6. Marcadas `mata`: quando a grade da mata já tem o parque pintado, o domínio deixa de fora.
+ */
+function bosque(arvores, cx, cz, r0, r1, densidade, y) {
+  const passo = 1 / Math.sqrt(densidade);
+  for (let r = r0 + passo / 2; r < r1; r += passo) {
+    const n = Math.floor((2 * Math.PI * r) / passo);
+    for (let i = 0; i < n; i++) {
+      const t = ((i + 0.7 * hashF(i, Math.round(r), 3)) / n) * 360;
+      const rr = r + (hashF(i, Math.round(r), 4) - 0.5) * passo * 0.6;
+      const x = cx + rr * Math.cos(t * RAD);
+      const z = cz + rr * Math.sin(t * RAD);
+      if ((mataDaSede(x, z) ?? 0) < 0.6) continue;
+      const h = hashF(i, Math.round(r), 5);
+      const especie = h < 0.6 ? 'mata2' : h < 0.75 ? 'mata1' : h < 0.9 ? 'oiti' : 'mata3';
+      arvores?.push({ x, y: y + 0.1, z, especie, mata: true });
     }
   }
 }
 
 /**
- * Paisagem de um plano: parques e praças deitados no relevo, passeios (pedra portuguesa no plano C, o calçadão do
- * Aterro; os eixos da sede v2 em pedra clara com palmeiras-imperiais), bosques, anéis (o bosque em volta do lago, o
- * cinturão de mata em volta da Sede, como na Apple Park, e a clareira da cúpula), fileiras de árvores, as vias internas
- * (avenida de 24 m com canteiro de palmeiras, ou o anel de 18 m) e os portões.
+ * Paisagem da sede v3: a praça de pedra clara do pódio (onde as avenidas acabam), os caminhos em anel do modelo (480 e
+ * 688 m), o chão e as árvores dos bosques (entre os anéis e atrás do Horizon Ring), os portões nas 8 avenidas e, com
+ * `vias`, o anel viário e as avenidas (só nas cenas: no jogo as vias internas são do grafo, ligadas pela X1b). Tudo na
+ * cota da gleba (o platô é plano). As árvores vão para a lista (a vegetação desenha).
  */
-export function montarPaisagem(plano, { chao, opaco, arvores, nivel = 1, fora = null }) {
+export function montarPaisagem(plano, { cota, opaco, arvores = null, vias = true }) {
   const P = plano.paisagem;
-  const orla = plano.id === 'C';
-  const livre = (x, z) => !fora || !fora(x, z);
-  let nArv = 0;
-  const maxArv = [200, 900, 1300, 1600][nivel];
-  const plantar = (x, z, op) => {
-    if (nArv >= maxArv || !livre(x, z)) return;
-    nArv++;
-    arvore(arvores, x, chao(x, z) + 0.15, z, { detalhe: 0, ...op });
-  };
-  // parques com a borda macia (Chaikin): de cima, curvas de paisagismo (Burle Marx), não polígonos de maquete. Sem
-  // contorno pintado: quem marca o parque são os maciços de árvores e as clareiras
-  const parques = P.parques.map((poly) => orientar(suavizar(poly, { voltas: 2 })));
-  parques.forEach((poly, i) => deitar(opaco, poly, chao, 0.14, i % 2 ? KP.gramaEscura : KP.grama));
-  for (const poly of P.pracas) deitar(opaco, poly, chao, 0.2, orla ? KP.portuguesa : KP.piso);
-  for (const ps of P.passeios) {
-    fita(opaco, ps.caminho, ps.largura, chao, 0.24, orla || ps.portuguesa ? KP.portuguesa : ps.eixo ? KP.pedra : KP.piso);
-    const palmas = orla || ps.portuguesa || ps.largura >= 14;
-    for (const q of aoLongoDe(ps.caminho, palmas ? 13 : 16)) {
-      for (const s of [-1, 1]) {
-        const off = (ps.largura / 2 + 2.5) * s;
-        plantar(q.x - q.tz * off, q.z + q.tx * off, palmas ? { tipo: 'palmeira', altura: 16 + 5 * hashF(Math.round(q.x), Math.round(q.z)), raio: 3.4, semente: Math.round(q.x * 7 + q.z) } : { altura: 8, raio: 3, semente: Math.round(q.x * 3 + q.z * 5) });
-      }
-    }
-  }
-  // bosques: grade mexida com a densidade pedida
+  const [cx, cz] = plano.centro;
+  const y = cota;
+  // praça do pódio, com a faixa de pedra na borda
+  coroa(opaco, cx, cz, P.praca.r0, P.praca.r1, y + 0.2, KP.pisoClaro, 128);
+  coroa(opaco, cx, cz, P.praca.r1 - 2, P.praca.r1, y + 0.22, KP.pedra, 128);
+  for (const c of P.caminhos) coroaEntreAvenidas(opaco, cx, cz, c.r - c.largura / 2, c.r + c.largura / 2, y + 0.22, KP.piso);
   for (const b of P.bosques) {
-    const C = orientar(b.contorno);
-    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-    for (let i = 0; i < C.length; i += 2) {
-      x0 = Math.min(x0, C[i]);
-      x1 = Math.max(x1, C[i]);
-      z0 = Math.min(z0, C[i + 1]);
-      z1 = Math.max(z1, C[i + 1]);
+    // o chão de mata escura, em coroas de até 60 m entre as avenidas (o lado de cada quadrilátero fica abaixo de 45 m)
+    const nr = Math.max(1, Math.ceil((b.r1 - b.r0) / 60));
+    for (let j = 0; j < nr; j++) {
+      const ra = b.r0 + ((b.r1 - b.r0) * j) / nr;
+      const rb = b.r0 + ((b.r1 - b.r0) * (j + 1)) / nr;
+      coroaEntreAvenidas(opaco, cx, cz, ra, rb, y + 0.14, KP.gramaEscura);
     }
-    const passo = 1 / Math.sqrt(b.densidade);
-    for (let z = z0; z <= z1; z += passo) {
-      for (let x = x0; x <= x1; x += passo) {
-        const jx = x + (hashF(Math.round(x), Math.round(z), 1) - 0.5) * passo * 0.8;
-        const jz = z + (hashF(Math.round(x), Math.round(z), 2) - 0.5) * passo * 0.8;
-        if (!pontoNoPoligono(jx, jz, C)) continue;
-        plantar(jx, jz, { altura: 9 + 6 * hashF(Math.round(jx), 3), raio: 3.2 + 1.6 * hashF(Math.round(jz), 4), semente: Math.round(jx * 13 + jz) });
-      }
-    }
-    deitar(opaco, C, chao, 0.1, KP.gramaEscura);
+    bosque(arvores, cx, cz, b.r0, b.r1, b.densidade, y);
   }
-  // anéis: gramado deitado e, no bosque, árvores numa grade polar mexida (clareiras onde o hash não planta)
-  for (const a of P.aneis ?? []) {
-    anelDeitado(opaco, a.cx, a.cz, a.r0, a.r1, chao, 0.12, a.tipo === 'bosque' ? KP.gramaEscura : KP.grama);
-    const bosque = a.tipo === 'bosque';
-    const passo = bosque ? 1 / Math.sqrt(a.densidade ?? 0.006) : 26;
-    for (let r = a.r0 + passo / 2; r < a.r1; r += passo) {
-      const n = Math.floor((2 * Math.PI * r) / passo);
-      for (let i = 0; i < n; i++) {
-        const t = ((i + hashF(i, Math.round(r), 3) * 0.7) / n) * Math.PI * 2;
-        const rr = r + (hashF(i, Math.round(r), 4) - 0.5) * passo * 0.6;
-        const x = a.cx + rr * Math.cos(t);
-        const z = a.cz + rr * Math.sin(t);
-        if (!bosque && hashF(i, 7, Math.round(r)) < 0.5) continue;
-        if (bosque && hashF(Math.floor(t * 6), Math.round(a.r0), 9) < 0.18) continue; // clareiras
-        plantar(x, z, { altura: 9 + 7 * hashF(i, Math.round(r), 5), raio: 3 + 1.8 * hashF(Math.round(r), i, 6), semente: Math.round(x * 11 + z * 3) });
-      }
-    }
-  }
-  // maciços de árvores dentro dos parques (grade larga e mexida; clareiras onde o hash não planta)
-  parques.forEach((C, ip) => {
-    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-    for (let i = 0; i < C.length; i += 2) {
-      x0 = Math.min(x0, C[i]);
-      x1 = Math.max(x1, C[i]);
-      z0 = Math.min(z0, C[i + 1]);
-      z1 = Math.max(z1, C[i + 1]);
-    }
-    const passo = 17;
-    for (let z = z0 + passo / 2; z <= z1; z += passo) {
-      for (let x = x0 + passo / 2; x <= x1; x += passo) {
-        const g = hashF(Math.floor(x / 80), Math.floor(z / 80), ip + 17);
-        if (g < 0.4) continue; // clareira
-        const jx = x + (hashF(Math.round(x), Math.round(z), 5) - 0.5) * passo;
-        const jz = z + (hashF(Math.round(z), Math.round(x), 6) - 0.5) * passo;
-        if (!pontoNoPoligono(jx, jz, C)) continue;
-        plantar(jx, jz, { altura: 8 + 7 * hashF(Math.round(jx), 7), raio: 3 + 2 * hashF(Math.round(jz), 8), semente: Math.round(jx * 11 + jz * 3) });
-      }
-    }
-  });
-  // árvores soltas nos parques (poucas, nas bordas: o miolo fica aberto)
-  parques.forEach((C, ip) => {
-    for (let i = 0; i < C.length; i += 2) {
-      const j = (i + 2) % C.length;
-      const l = Math.hypot(C[j] - C[i], C[j + 1] - C[i + 1]);
-      const q = Math.floor(l / 34);
-      for (let s = 0; s < q; s++) {
-        const t = (s + 0.5) / q;
-        const x = C[i] + (C[j] - C[i]) * t;
-        const z = C[i + 1] + (C[j + 1] - C[i + 1]) * t;
-        const cx = x + (hashF(ip, i, s) - 0.5) * 14;
-        const cz = z + (hashF(s, ip, i) - 0.5) * 14;
-        if (pontoNoPoligono(cx, cz, C)) plantar(cx, cz, { altura: 8 + 5 * hashF(i, s), raio: 3 + 1.5 * hashF(s, i), semente: ip * 100 + i * 7 + s });
-      }
-    }
-  });
-  // vias internas: avenida de 24 m (calçada 3, pista 7, canteiro 4 com palmeiras, pista 7, calçada 3) ou o anel de 18 m
-  // (calçada 2, pista 6,5, canteiro 1, pista 6,5, calçada 2)
+  for (const g of plano.portoes) portao(opaco, g.x, g.z, g.angulo, y);
+  if (!vias) return;
+  const semPalmas = sobAneis(plano);
   for (const v of plano.vias) {
-    const w = v.largura ?? 24;
-    const calc = w >= 24 ? 3 : 2;
-    const cant = w >= 24 ? 4 : 1;
-    const pista = (w - 2 * calc - cant) / 2;
-    const off = cant / 2 + pista / 2;
-    fita(opaco, v.pontos, w, chao, 0.1, KP.calcada);
-    fita(opaco, v.pontos, pista, chao, 0.13, KP.asfalto, -off);
-    fita(opaco, v.pontos, pista, chao, 0.13, KP.asfalto, off);
-    fita(opaco, v.pontos, cant, chao, 0.16, cant >= 3 ? KP.canteiro : KP.calcada);
-    if (cant >= 3) for (const q of aoLongoDe(v.pontos, 14)) plantar(q.x, q.z, { tipo: 'palmeira', altura: 15 + 4 * hashF(Math.round(q.x), 9), raio: 3.2, semente: Math.round(q.x + q.z * 3) });
-  }
-  // portões nas pontas das vias que tocam a borda da gleba
-  for (const g of plano.portoes) {
-    const v = plano.vias.reduce((mais, via) => {
-      const d = Math.hypot(via.pontos[0] - g.x, via.pontos[1] - g.z);
-      return !mais || d < mais.d ? { via, d } : mais;
-    }, null);
-    let dir = [0, 1];
-    if (v) {
-      const p = v.via.pontos;
-      const l = Math.hypot(p[2] - p[0], p[3] - p[1]) || 1;
-      dir = [(p[2] - p[0]) / l, (p[3] - p[1]) / l];
+    if (v.anel) avenida(opaco, arvores, cx, cz, y, v);
+    else {
+      const ra = Math.hypot(v.pontos[0] - cx, v.pontos[1] - cz);
+      const rb = Math.hypot(v.pontos[2] - cx, v.pontos[3] - cz);
+      const a = Math.atan2(v.pontos[1] - cz, v.pontos[0] - cx) / RAD;
+      avenida(opaco, arvores, cx, cz, y, { ...v, a, r0: ra, r1: rb }, semPalmas);
     }
-    portao(opaco, g.x, g.z, dir, chao);
   }
-  return { arvores: nArv };
 }
 
-// ================================================================================================ um plano em malhas
-
-const novas = () => ({ vidro: new Malha('vidro'), opaco: new Malha('opaco'), claro: new Malha('claro'), arvores: new Malha('opaco') });
+// ================================================================================================ o plano em malhas
 
 /**
- * O que ocupa o chão de um plano (as árvores da paisagem não entram): o lago e a ilha, a Sede em anel, as vias, os
- * passeios, a cúpula e as caixas das outras peças. Para o A v2 as regras são círculos (o anel, o lago); nos outros,
- * a Torre e o contorno do reservatório.
+ * Onde cada setor do LOD0 fica (para a distância da câmera): os trechos de anel são arcos, as torres ovais pontos.
+ * @returns {Map<number, { arco?: number[], ponto?: number[], y0: number, y1: number }>}
  */
-function ocupadoDoPlano(plano, caixas) {
-  const T = plano.torre;
-  const res = plano.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
-  const anelSede = plano.partes.flatMap((p) => p.pecas).find((p) => p.tipo === 'sedeAnel');
-  const cupulas = plano.partes.flatMap((p) => p.pecas).filter((p) => p.tipo === 'cupula');
-  const vias = plano.vias;
-  const passeios = plano.paisagem.passeios;
-  const contornoRes = res.forma === 'circulo' ? null : deslocar(orientar(res.contorno), PASSEIO * 0.5);
-  const outras = caixas.filter((c) => c.parte !== 'sede' && c.parte !== 'lago' && c.parte !== 'vida').map((c) => c.caixa);
-  return (x, z) => {
-    if (!T.gemeas && Math.hypot(x - T.x, z - T.z) < 72) return true;
-    if (res.forma === 'circulo') {
-      if (Math.hypot(x - res.cx, z - res.cz) < res.raio + 14) return true;
-    } else if (pontoNoPoligono(x, z, contornoRes)) return true;
-    if (anelSede) {
-      const d = Math.hypot(x - anelSede.cx, z - anelSede.cz);
-      if (d > anelSede.rDentro - 4 && d < anelSede.rFora + 6) return true;
+export function alvosDosSetores(plano, cota = GLEBA_ENVELOPE.cota) {
+  const alvos = new Map();
+  for (const parte of plano.partes) {
+    for (const p of parte.pecas) {
+      if (p.tipo === 'anel') {
+        for (let de = p.de; de < p.ate - 1e-6; de += 45) {
+          const s = setorDoAnel(p, de + 1);
+          alvos.set(s, { arco: [p.cx, p.cz, p.raio, de, Math.min(p.ate, de + 45)], y0: cota, y1: cota + p.altura });
+        }
+      } else if (p.tipo === 'oval') alvos.set(SETOR_OVAL[parte.id] ?? 18, { ponto: [p.x, p.z], y0: cota, y1: cota + p.altura });
     }
-    for (const c of cupulas) if (Math.hypot(x - c.x, z - c.z) < c.diametro / 2 + 8) return true;
-    for (const v of vias) if (distPolilinha(x, z, v.pontos) < (v.largura ?? 24) / 2 + 3) return true;
-    for (const p of passeios) if (distPolilinha(x, z, p.caminho) < p.largura / 2 + 1.5) return true;
-    for (const b of outras) if (x > b[0] - 4 && x < b[3] + 4 && z > b[2] - 4 && z < b[5] + 4) return true;
-    return false;
-  };
+  }
+  return alvos;
+}
+
+/** Distância de (px, py, pz) ao alvo de um setor (o arco ou o ponto, entre o pé e o topo). */
+export function distAoSetor(alvo, px, py, pz) {
+  let qx;
+  let qz;
+  if (alvo.arco) {
+    const [cx, cz, r, de, ate] = alvo.arco;
+    const a = Math.atan2(pz - cz, px - cx) / RAD;
+    const meio = (de + ate) / 2;
+    const meia = (ate - de) / 2;
+    const t = (meio + Math.max(-meia, Math.min(meia, difGraus(a, meio)))) * RAD;
+    qx = cx + r * Math.cos(t);
+    qz = cz + r * Math.sin(t);
+  } else [qx, qz] = alvo.ponto;
+  const dy = py < alvo.y0 ? alvo.y0 - py : py > alvo.y1 ? py - alvo.y1 : 0;
+  return Math.hypot(px - qx, pz - qz, dy);
 }
 
 /**
- * Malhas de um plano (sem as torres, que são do torre.js): as partes prontas em material de verdade, as outras no
- * fantasma, o lago e, se pedida, a paisagem. As peças com LOD (a Sede em anel, a cúpula) saem duas vezes, em lod0 e
- * lod1; as outras, uma vez só em comum.
- * @param {string} id  'A' | 'B' | 'C'
- * @param {{ chao: Function, prontas: Set<string> | 'todas', lagoReal?: boolean, paisagem?: boolean, nivel?: number }} op
- * @returns {{ comum, lod0, lod1, agua: Malha, efeitos: Malha, jatos: object[], fantasma, sombra, caixas, nivelAgua: number,
- *   cota: number, arvores: number }}
+ * Malhas de um plano (sem o par de torres, que é do torre.js): as partes prontas em material de verdade (a casca no
+ * comum, as marquises do LOD0 por setor), as outras no fantasma, o lago e, se pedida, a paisagem.
+ * @param {string} id
+ * @param {{ chao: Function, prontas?: Set<string> | 'todas', lagoReal?: boolean, paisagem?: boolean, vias?: boolean,
+ *   so?: Set<string> | null, mata?: Function | null }} op  so: só estas partes (as outras nem em fantasma)
+ * @returns {{ comum: { vidro: Malha, opaco: Malha }, setores: Map<number, Malha>, agua: Malha, efeitos: Malha,
+ *   jatos: object[], arvores: object[], fantasma: { vidro: Malha, opaco: Malha }, sombra: { vidro: Malha, opaco: Malha },
+ *   caixas: { parte: string, idx: number, trecho: string | null, caixa: number[] }[], nivelAgua: number, cota: number }}
  */
-export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, paisagem = true, nivel = 1 } = {}) {
+export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, paisagem = true, vias = paisagem, so = null, mata = mataDaSede } = {}) {
   const plano = PLANOS[id];
-  const comum = novas();
-  const lod0 = novas();
-  const lod1 = novas();
+  const pronta = (pid) => prontas === 'todas' || prontas.has(pid);
+  const comum = { vidro: new Malha('vidro'), opaco: new Malha('opaco') };
+  const setores = new Map();
+  const setor = (s) => {
+    if (!setores.has(s)) setores.set(s, new Malha('opaco'));
+    return { opaco: setores.get(s) };
+  };
   const agua = new Malha('agua');
   const efeitos = new Malha('cascata');
   const jatos = [];
+  const arvores = [];
+  const fant = { vidro: new Malha('vidro'), opaco: new Malha('opaco') };
   const sombra = { vidro: new Malha('vidro'), opaco: new Malha('opaco') };
-  const fant = { vidro: new Malha('vidro'), opaco: new Malha('opaco'), arvores: new Malha('opaco') };
   const caixas = [];
-  const cota = chao(...pontoDaCota(plano));
-  const lago = plano.partes.find((p) => p.id === 'lago');
-  const res = lago.pecas.find((p) => p.tipo === 'reservatorio');
+  const [cx, cz] = plano.centro;
+  const cota = chao(cx, cz);
+  const res = reservatorioDe(plano);
   const nivelAgua = cota + res.nivel;
-  const semLod = (p) => !PECAS_COM_LOD.has(p.tipo);
-  const comLod = (p) => PECAS_COM_LOD.has(p.tipo);
+  const base = { chao, nivelAgua, mata };
+  const juntar = (parteId, r) => r.caixas.forEach((c, k) => caixas.push({ parte: parteId, idx: PARTES_ORDEM.indexOf(parteId), trecho: r.trechos[k], caixa: c }));
   for (const parte of plano.partes) {
-    if (parte.id === 'torre') continue;
-    const pronta = prontas === 'todas' || prontas.has(parte.id);
-    const idx = PARTES_ORDEM.indexOf(parte.id);
+    if (so && !so.has(parte.id)) continue;
+    // o par de torres é do torre.js e o reservatório do lago.js; o resto da parte (o pódio, as quedas) sai aqui
+    const pecas = parte.pecas.filter((p) => p.tipo !== 'torre' && p.tipo !== 'reservatorio');
     if (parte.id === 'lago') {
-      const real = pronta && lagoReal;
+      const real = pronta('lago') && lagoReal;
       if (real) {
-        const r = res.forma === 'circulo'
-          ? montarLagoCircular(res, { opaco: comum.opaco, agua, efeitos, arvores: comum.arvores, cota, lod: 1 })
-          : montarReservatorio(res, { opaco: comum.opaco, agua, cota });
-        caixas.push({ parte: parte.id, idx, caixa: r.caixa });
+        const r = montarLagoAnel(res, { opaco: comum.opaco, agua, cota });
+        caixas.push({ parte: 'lago', idx: PARTES_ORDEM.indexOf('lago'), trecho: null, caixa: r.caixa });
+        juntar('lago', montarParte({ id: 'lago', pecas }, { ...base, ...comum, efeitos, jatos, arvores, lod: 1 }));
       } else {
-        // espelho prometido: o contorno da água em holograma, logo acima do chão
+        // o espelho prometido: o anel de água em holograma, logo acima do chão
         tampa(fant.opaco, orientar(res.contorno), cota + 0.4, [0, 0, 0, 0], true);
-      }
-      const outras = { ...parte, pecas: parte.pecas.filter((p) => p.tipo !== 'reservatorio') };
-      if (outras.pecas.length) {
-        const r = montarParte(outras, real ? { chao, nivelAgua, ...comum, jatos } : { chao, nivelAgua, ...fant, fantasma: true });
-        for (const c of r.caixas) caixas.push({ parte: parte.id, idx, caixa: c });
+        juntar('lago', montarParte({ id: 'lago', pecas }, { ...base, ...fant, fantasma: true }));
       }
       continue;
     }
-    if (!pronta) {
-      const r = montarParte(parte, { chao, nivelAgua, ...fant, fantasma: true, lod: 1 });
-      for (const c of r.caixas) caixas.push({ parte: parte.id, idx, caixa: c });
-      continue;
+    // o Horizon Ring fica pronto trecho a trecho (D89); as outras partes inteiras
+    const grupos = parte.id === 'horizon' ? pecas.map((p) => ({ id: p.id, pecas: [p] })) : [{ id: parte.id, pecas }];
+    for (const g of grupos) {
+      const sub = { id: parte.id, pecas: g.pecas };
+      if (!pronta(g.id)) {
+        juntar(parte.id, montarParte(sub, { ...base, ...fant, fantasma: true }));
+        continue;
+      }
+      juntar(parte.id, montarParte(sub, { ...base, ...comum, efeitos, jatos, arvores, lod: 1 }));
+      montarParte(sub, { ...base, ...comum, setor, lod: 0 });
+      montarParte(sub, { ...base, vidro: sombra.vidro, opaco: sombra.opaco, sombra: true });
     }
-    const r = montarParte(parte, { chao, nivelAgua, ...comum, efeitos, lod: 1, so: semLod });
-    montarParte(parte, { chao, nivelAgua, ...lod0, efeitos, lod: 0, so: comLod });
-    const r1 = montarParte(parte, { chao, nivelAgua, ...lod1, lod: 1, so: comLod });
-    for (const c of [...r.caixas, ...r1.caixas]) caixas.push({ parte: parte.id, idx, caixa: c });
-    montarParte(parte, { chao, nivelAgua, vidro: sombra.vidro, opaco: sombra.opaco, arvores: null, lod: 1, sombra: true });
   }
-  let nArvores = 0;
-  if (paisagem) nArvores = montarPaisagem(plano, { chao, opaco: comum.opaco, arvores: comum.arvores, nivel, fora: ocupadoDoPlano(plano, caixas) }).arvores;
-  return { comum, lod0, lod1, agua, efeitos, jatos, fantasma: fant, sombra, caixas, nivelAgua, cota, arvores: nArvores };
+  if (paisagem) montarPaisagem(plano, { cota, opaco: comum.opaco, arvores, vias });
+  return { comum, setores, agua, efeitos, jatos, arvores, fantasma: fant, sombra, caixas, nivelAgua, cota };
 }
 
-/** Caixa de seleção de uma torre sozinha no espaço local dela: o pódio com a marquise, do chão ao mastro. */
-const CAIXA_TORRE = Object.freeze([
-  -PONTOS_TORRE.podio.x - 1, -3, PONTOS_TORRE.podio.z0 - TORRE_LAMINA.podio.marquise, PONTOS_TORRE.podio.x + 1, PONTOS_TORRE.topo,
-  PONTOS_TORRE.podio.z1 + 1,
-]);
+/** Caixa de seleção do par no espaço do par: as duas torres (a Blade em x = -32, a Legacy em +32), do pódio ao mastro. */
+const CAIXA_PAR = Object.freeze([-51, 0, -27, 51, TORRE_LAMINA.mastro.topo, 27]);
 
-/** Caixa de seleção do par no espaço do par: as duas torres com os pódios, do chão ao mastro da Lâmina. */
-const CAIXA_PAR = Object.freeze([-71, -3, -28, 71, TORRE_LAMINA.mastro.topo, 28]);
-
-/** Folga em volta do envelope da gleba (passeio do reservatório, esplanada e a transição do aplainar), em metros. */
+/** Folga em volta do disco da gleba (a calçada e a transição do platô), em metros. */
 const FOLGA_GLEBA = 60;
 
 /**
- * true se algum retângulo sujo do terreno ([x0, z0, x1, z1]) toca o envelope da gleba com a folga: o resto da cidade
- * mexe no chão o tempo todo (vias, lotes) e não pede refazer a Arcologia.
+ * true se algum retângulo sujo do terreno ([x0, z0, x1, z1]) toca o disco da gleba com a folga: a cidade em volta
+ * mexe no chão o tempo todo (vias, lotes) e não pede refazer a sede.
  */
 export function tocaGleba(rets) {
   if (!rets?.length) return false;
-  const [gx0, gz0, gx1, gz1] = GLEBA_ENVELOPE.caixa;
-  return rets.some(([x0, z0, x1, z1]) => x1 >= gx0 - FOLGA_GLEBA && x0 <= gx1 + FOLGA_GLEBA && z1 >= gz0 - FOLGA_GLEBA && z0 <= gz1 + FOLGA_GLEBA);
-}
-
-/** Um ponto certamente dentro de um polígono (o centro do maior triângulo da triangulação). */
-export function pontoDentro(poly) {
-  const { pontos, indices } = triangular(poly);
-  let melhor = [pontos[0], pontos[1]];
-  let area = -1;
-  for (let t = 0; t < indices.length; t += 3) {
-    const [a, b, c] = [indices[t], indices[t + 1], indices[t + 2]];
-    const ax = pontos[2 * a], az = pontos[2 * a + 1], bx = pontos[2 * b], bz = pontos[2 * b + 1], cx = pontos[2 * c], cz = pontos[2 * c + 1];
-    const ar = Math.abs((bx - ax) * (cz - az) - (bz - az) * (cx - ax));
-    if (ar > area) {
-      area = ar;
-      melhor = [(ax + bx + cx) / 3, (az + bz + cz) / 3];
-    }
-  }
-  return melhor;
-}
-
-/** Um ponto na água do reservatório (no lago circular, no meio do anel de água ao sul da ilha). */
-export function pontoNaAgua(res) {
-  if (res.forma === 'circulo') return [res.cx, res.cz + (res.raio + res.ilha.rz) / 2];
-  return pontoDentro(res.contorno);
+  const [gx, gz] = GLEBA_ENVELOPE.centro;
+  const r = GLEBA_ENVELOPE.raio + FOLGA_GLEBA;
+  return rets.some(([x0, z0, x1, z1]) => {
+    const dx = Math.max(x0 - gx, 0, gx - x1);
+    const dz = Math.max(z0 - gz, 0, gz - z1);
+    return dx * dx + dz * dz <= r * r;
+  });
 }
 
 /**
- * Distância (m) da câmera ao centro do plano em que as partes com LOD (a Sede em anel, a cúpula) trocam o LOD1 pelo
- * LOD0: as marquises de 0,5 m e as barras da cúpula cobrem ~1 pixel ali, em 1080p.
+ * Distância (m) da câmera a um setor em que as marquises dele saem do shader para a geometria: elas têm 0,5 m e cobrem
+ * ~meio pixel ali, em 1080p (de longe o shader do vidro as desenha filtradas).
  */
-export const DIST_PARTES_LOD0 = Object.freeze({ leve: 700, media: 1100, alta: 1500, ultra: 1900, pc: 1500 });
+export const DIST_PARTES_LOD0 = Object.freeze({ leve: 300, media: 500, alta: 800, ultra: 1100, pc: 800 });
+
+/** Liga (1) ou desliga (0) a geometria das marquises do setor s no uniforme do vidro. */
+function lodSetor(s, v) {
+  const q = UNIFORMES.uLodSetor.value[s >> 2];
+  if (q) q.setComponent(s & 3, v);
+}
+
+/** Densidade da mata (0 a 1) na grade espelho.floresta, 0 sem ela. */
+function mataNaGrade(F, x, z) {
+  if (!F?.dens) return 0;
+  const i = Math.floor((x - F.origem[0]) / F.passo);
+  const j = Math.floor((z - F.origem[1]) / F.passo);
+  if (i < 0 || j < 0 || i >= F.n || j >= F.n) return 0;
+  return F.dens[j * F.n + i] / 255;
+}
 
 // ================================================================================================ domínio
 
@@ -497,55 +402,55 @@ function criarDominio(ctx) {
   let torre = null;
   let torrePerfil = null; // perfil do LOD0 montado (a troca de qualidade refaz a geometria, nunca o programa)
   let torreFantasma = null;
-  let partes = null; // { grupo, lod0, lod1, efeitos, jatos, caixas, volume, plano, arvores, centro }
-  let vitrine = null; // { modo, plano }
+  let partes = null; // { grupo, setores, efeitos, jatos, caixas, volume, plano, arvores, centro }
+  let vitrine = null; // { modo }
   let chave = '';
   let sujo = true;
-  let lodPartes = 1;
   const estadoCeu = {};
 
   const limparPartes = () => {
     if (!partes) return;
     raiz.remove(partes.grupo);
-    if (partes.volume) ctx.sombra.soltar(partes.volume);
+    if (partes.volume) ctx.sombra?.soltar(partes.volume);
     partes.grupo.traverse((o) => o.geometry?.dispose());
     // o InstancedMesh dos jatos guarda o buffer das matrizes e o VAO fora da geometria: só o dispose() dele os solta
     partes.jatos?.dispose();
+    for (const s of partes.setores) lodSetor(s.id, 0);
+    ctx.vegetacao?.plantar('arcologia', null);
     partes = null;
   };
 
   function montar(esp) {
     const modo = vitrine?.modo ?? 'jogo';
-    const plano = vitrine?.plano ?? planoDoJogo(esp);
+    const plano = planoDoJogo(esp);
     const P = PLANOS[plano];
     const T = esp?.terreno;
     const chao = (x, z) => cotaEm(T, x, z);
-    const torrePronta = modo !== 'jogo' || estadoEtapa(esp, 'torre.e4') === ETAPA.PRONTA;
-    const res = P.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
+    const prontas = modo === 'jogo' ? partesProntas(esp) : 'todas';
+    const torrePronta = prontas === 'todas' || prontas.has('torre');
+    const res = reservatorioDe(P);
     // o reservatório só aparece de verdade quando o chão já foi cavado (o aplainar do jogo ou a cena)
     const [ccx, ccz] = centroDoPlano(P);
-    const cota = chao(...pontoDaCota(P));
+    const cota = chao(ccx, ccz);
     const [ax, az] = pontoNaAgua(res);
     const cavado = chao(ax, az) < cota + res.nivel - 0.5;
-    const lagoPronto = modo === 'plano' || estadoEtapa(esp, 'lago.e1') === ETAPA.PRONTA;
-    const nova = `${modo}|${plano}|${torrePronta}|${lagoPronto}|${cavado}|${ctx.perfil?.id}|${T?.altura?.length ?? 0}`;
+    const chaveProntas = prontas === 'todas' ? 'todas' : [...prontas].sort().join(',');
+    const nova = `${modo}|${plano}|${chaveProntas}|${cavado}|${ctx.perfil?.id}|${T?.altura?.length ?? 0}`;
     if (nova === chave && !sujo) return;
     chave = nova;
     sujo = false;
 
-    // torres: prontas (LOD0/LOD1) ou fantasma; o LOD0 é do perfil, então a troca de qualidade refaz a geometria
-    const gemeas = !!P.torre.gemeas;
-    if (torre && (torrePerfil !== ctx.perfil?.id || !!torre.gemeas !== gemeas)) {
+    // o par: pronto (LOD0 e LOD1) ou fantasma; o LOD0 é do perfil, então a troca de qualidade refaz a geometria
+    if (torre && torrePerfil !== ctx.perfil?.id) {
       torre.descartar();
       torre = null;
     }
     if (!torre) {
-      torre = gemeas ? criarPar(ctx) : criarTorre(ctx);
+      torre = criarPar(ctx);
       torrePerfil = ctx.perfil?.id;
       raiz.add(torre.grupo);
     }
-    const yT = cota;
-    torre.posicionar(P.torre.x, yT, P.torre.z, P.torre.rot);
+    torre.posicionar(P.torre.x, cota, P.torre.z, P.torre.rot);
     torre.mostrar(torrePronta);
     if (torreFantasma) {
       raiz.remove(torreFantasma);
@@ -553,100 +458,94 @@ function criarDominio(ctx) {
       torreFantasma = null;
     }
     if (!torrePronta) {
-      const partesF = [];
-      if (gemeas) {
-        for (const t of torresGemeas({ x: 0, z: 0, rot: 0 })) {
-          const m1 = malhasTorreLod1({ spec: t.spec, gemea: true });
-          partesF.push(m1.vidro.transformar(t.x, 0, t.z, t.rot), m1.opaco.transformar(t.x, 0, t.z, t.rot));
-        }
-      } else {
-        const m1 = malhasTorreLod1();
-        partesF.push(m1.vidro, m1.opaco);
-      }
-      torreFantasma = criarFantasma(ctx, malhaFantasma(...partesF), matFantasma);
-      torreFantasma.position.set(P.torre.x, yT, P.torre.z);
+      const m1 = malhasPar({ lod: 1 });
+      torreFantasma = criarFantasma(ctx, malhaFantasma(m1.vidro, m1.opaco), matFantasma);
+      torreFantasma.position.set(P.torre.x, cota, P.torre.z);
       torreFantasma.rotation.y = P.torre.rot;
       raiz.add(torreFantasma);
     }
 
-    // partes do plano
+    // as partes; no modo 'torre', só o pódio (as torres nascem nele)
     limparPartes();
-    if (modo === 'torre') return;
-    const prontas = modo === 'plano' ? 'todas' : new Set(lagoPronto ? ['lago'] : []);
-    const nivel = NIVEL[ctx.perfil?.id] ?? 1;
-    const m = malhasDoPlano(plano, { chao, prontas, lagoReal: cavado, paisagem: modo === 'plano', nivel });
+    const parqueVivo = prontas === 'todas' || prontas.has('parque');
+    const m = malhasDoPlano(plano, {
+      chao, prontas, lagoReal: cavado, paisagem: modo === 'plano' || (modo === 'jogo' && parqueVivo), vias: modo === 'plano',
+      so: modo === 'torre' ? new Set(['torre']) : null,
+    });
     const grupo = new THREE.Group();
     grupo.name = `arcologia:plano-${plano}`;
-    const g0 = new THREE.Group();
-    const g1 = new THREE.Group();
-    g0.name = 'plano:lod0';
-    g1.name = 'plano:lod1';
-    const add = (alvo, malha, mat, fam, nome, ordem = 0) => {
+    const add = (malha, mat, fam, nome, ordem = 0) => {
       if (!malha?.triangulos) return null;
       const o = new THREE.Mesh(geometriaDe(malha), mat);
       o.name = nome;
       o.renderOrder = ordem;
-      ctx.medidas.familia(o, fam);
-      alvo.add(o);
+      ctx.medidas?.familia(o, fam);
+      grupo.add(o);
       return o;
     };
-    add(grupo, m.comum.vidro, mats.vidroLod1, 'arcologia', 'plano:vidro');
-    add(grupo, m.comum.opaco, mats.opaco, 'arcologia', 'plano:opaco');
-    add(grupo, m.comum.arvores, mats.opaco, 'arvores', 'plano:arvores');
-    add(g0, m.lod0.vidro, mats.vidro, 'arcologia', 'plano:lod0:vidro');
-    add(g0, m.lod0.opaco, mats.opaco, 'arcologia', 'plano:lod0:opaco');
-    add(g0, m.lod0.arvores, mats.opaco, 'arvores', 'plano:lod0:arvores');
-    add(g0, m.lod0.claro, mats.claro, 'arcologia', 'plano:lod0:claro', 20);
-    add(g1, m.lod1.vidro, mats.vidroLod1, 'arcologia', 'plano:lod1:vidro');
-    add(g1, m.lod1.opaco, mats.opaco, 'arcologia', 'plano:lod1:opaco');
-    add(g1, m.lod1.arvores, mats.opaco, 'arvores', 'plano:lod1:arvores');
-    add(g1, m.lod1.claro, mats.claroLod1, 'arcologia', 'plano:lod1:claro', 20);
-    grupo.add(g0, g1);
-    add(grupo, m.agua, matAgua, 'resto', 'plano:agua');
-    const efeitos = add(grupo, m.efeitos, mats.cascata, 'arcologia', 'plano:efeitos', 11);
+    add(m.comum.vidro, mats.vidroLod1, 'arcologia', 'plano:vidro');
+    add(m.comum.opaco, mats.opaco, 'arcologia', 'plano:opaco');
+    const alvos = alvosDosSetores(P, cota);
+    const setores = [];
+    for (const [s, malha] of m.setores) {
+      const o = add(malha, mats.opaco, 'arcologia', `plano:setor${s}`);
+      if (!o) continue;
+      o.visible = false;
+      setores.push({ id: s, malha: o, alvo: alvos.get(s), lod0: false });
+    }
+    add(m.agua, matAgua, 'resto', 'plano:agua');
+    const efeitos = add(m.efeitos, mats.cascata, 'arcologia', 'plano:efeitos', 11);
     let jatos = null;
     if (m.jatos.length) {
       jatos = criarJatos(ctx, m.jatos, m.nivelAgua, mats.jato);
       grupo.add(jatos);
     }
-    const f = criarFantasma(ctx, malhaFantasma(m.fantasma.vidro, m.fantasma.opaco, m.fantasma.arvores), matFantasma);
+    const f = criarFantasma(ctx, malhaFantasma(m.fantasma.vidro, m.fantasma.opaco), matFantasma);
     if (f) grupo.add(f);
-    // volume de sombra das partes prontas (os volumes LOD1, sem chão nem árvores nem o vidro da cúpula)
+    // volume de sombra das partes prontas (as cascas, sem o chão nem as árvores)
     let volume = null;
     const vs = malhaFantasma(m.sombra.vidro, m.sombra.opaco);
-    if (vs.triangulos) {
+    if (vs.triangulos && ctx.sombra) {
       volume = new THREE.Mesh(geometriaDe(vs), mats.opaco);
       volume.visible = false;
       volume.name = 'plano:sombra';
       grupo.add(volume);
-      ctx.medidas.familia(ctx.sombra.projetor(volume), 'sombra');
+      ctx.medidas?.familia(ctx.sombra.projetor(volume), 'sombra');
     }
     raiz.add(grupo);
     grupo.updateMatrixWorld(true);
-    ctx.sombra.marcar();
-    partes = { grupo, lod0: g0, lod1: g1, efeitos, jatos, caixas: m.caixas, volume, plano, arvores: m.arvores, centro: new THREE.Vector3(ccx, cota + 20, ccz) };
-    lodPartes = -1;
+    ctx.sombra?.marcar();
+    // as árvores do parque e das avenidas vão para a vegetação; as da mata, só onde a grade não tem o parque pintado
+    const F = esp?.floresta;
+    const arvores = m.arvores.filter((a) => !a.mata || mataNaGrade(F, a.x, a.z) < 0.5);
+    ctx.vegetacao?.plantar('arcologia', arvores);
+    partes = { grupo, setores, efeitos, jatos, caixas: m.caixas, volume, plano, arvores: arvores.length, centro: new THREE.Vector3(ccx, cota + 20, ccz) };
+    quadroPartes();
   }
 
-  /** LOD das partes pela distância da câmera ao centro do plano (histerese de 5%) e os efeitos só de perto. */
+  /** O LOD de cada setor pela distância da câmera a ele (histerese de 5%) e os efeitos de água só de perto. */
   function quadroPartes() {
     if (!partes) return;
-    const d = ctx.camera.position.distanceTo(partes.centro);
-    const limite = (DIST_PARTES_LOD0[ctx.perfil?.id] ?? 1500) * (lodPartes === 0 ? 1.05 : 0.95);
-    const lod = dom.forcarLodPartes ?? (d < limite ? 0 : 1);
-    if (lod !== lodPartes) {
-      lodPartes = lod;
-      partes.lod0.visible = lod === 0;
-      partes.lod1.visible = lod === 1;
+    const c = ctx.camera.position;
+    const lim = DIST_PARTES_LOD0[ctx.perfil?.id] ?? 800;
+    for (const s of partes.setores) {
+      const perto = dom.forcarLodPartes != null
+        ? dom.forcarLodPartes === 0
+        : !!s.alvo && distAoSetor(s.alvo, c.x, c.y, c.z) < lim * (s.lod0 ? 1.05 : 0.95);
+      if (perto !== s.lod0) {
+        s.lod0 = perto;
+        s.malha.visible = perto;
+        lodSetor(s.id, perto ? 1 : 0);
+      }
     }
-    const perto = d < DIST_EFEITOS;
-    if (partes.efeitos) partes.efeitos.visible = perto;
-    if (partes.jatos) partes.jatos.visible = perto;
+    const d = c.distanceTo(partes.centro);
+    if (partes.efeitos) partes.efeitos.visible = d < DIST_EFEITOS;
+    if (partes.jatos) partes.jatos.visible = d < DIST_EFEITOS;
   }
 
   const dom = {
     nome: 'arcologia',
-    /** Força o LOD das partes (0 ou 1) ou volta ao automático (null). */
+    /** Força o LOD das partes (0: todos os setores com a geometria; 1: nenhum) ou volta ao automático (null). */
     forcarLodPartes: null,
     /**
      * Refaz a escolha dos LODs e dos efeitos com a câmera do momento: uma cena que põe a câmera depois dos domínios
@@ -658,9 +557,9 @@ function criarDominio(ctx) {
     },
     aplicar(d, esp) {
       // o chão refaz tudo só quando mexe na gleba; o sinal 'arcologia' (progresso das etapas a cada tique) só remonta
-      // quando a chave muda (etapa pronta, plano escolhido); a troca de qualidade refaz as torres e as partes
+      // quando a chave muda (parte pronta, plano escolhido); a troca de qualidade refaz as torres e as partes
       if (d.tudo?.terreno || tocaGleba(d.terreno) || ctx.perfil?.id !== torrePerfil) sujo = true;
-      if (sujo || d.arcologia || d.tudo?.predios || !chave) montar(esp);
+      if (sujo || d.arcologia || !chave) montar(esp);
     },
     quadro(tMs, c) {
       aquecer.quadro();
@@ -677,7 +576,7 @@ function criarDominio(ctx) {
       sujo = true;
       montar(ctx.sim?.espelho);
     },
-    /** Refaz tudo (a cena mexeu no chão). */
+    /** Refaz tudo (a cena mexeu no chão ou na mata). */
     refazer() {
       sujo = true;
       montar(ctx.sim?.espelho);
@@ -688,21 +587,25 @@ function criarDominio(ctx) {
     get partes() {
       return partes;
     },
+    /** 0 se algum setor está com as marquises em geometria, 1 se nenhum. */
     get lodPartes() {
-      return lodPartes;
+      return partes?.setores.some((s) => s.lod0) ? 0 : 1;
     },
     /** Os materiais da Arcologia (o conjunto fixo, a água e o fantasma): o teste de programas e a bancada leem. */
     get materiais() {
       return [...mats.lista, matAgua, matFantasma];
     },
-    /** Raio da tela contra as caixas das partes e as torres: { tipo: 'arcologia', idx da parte, ponto, dist }. */
+    /**
+     * Raio da tela contra as caixas das partes e as torres: { tipo: 'arcologia', ref (o id do trecho do Horizon Ring,
+     * ou null), idx da parte, ponto, dist }.
+     */
     selecionar(raio) {
       const o = raio.origem;
       const dv = raio.dir;
       let melhor = null;
-      // raio contra uma caixa [x0, y0, z0, x1, y1, z1]; oo e dd são o raio no espaço da caixa (o mundo, ou o local da
-      // Torre, que só gira e desloca: a distância t é a mesma nos dois)
-      const testar = (b, idx, oo = o, dd = dv) => {
+      // raio contra uma caixa [x0, y0, z0, x1, y1, z1]; oo e dd são o raio no espaço da caixa (o mundo, ou o do par,
+      // que só gira e desloca: a distância t é a mesma nos dois)
+      const testar = (b, idx, ref, oo = o, dd = dv) => {
         let t0 = 0;
         let t1 = Infinity;
         for (let e = 0; e < 3; e++) {
@@ -719,18 +622,18 @@ function criarDominio(ctx) {
           t1 = Math.min(t1, bb);
           if (t0 > t1) return;
         }
-        if (!melhor || t0 < melhor.dist) melhor = { tipo: 'arcologia', ref: null, idx, dist: t0, ponto: [o[0] + dv[0] * t0, o[1] + dv[1] * t0, o[2] + dv[2] * t0] };
+        if (!melhor || t0 < melhor.dist) melhor = { tipo: 'arcologia', ref, idx, dist: t0, ponto: [o[0] + dv[0] * t0, o[1] + dv[1] * t0, o[2] + dv[2] * t0] };
       };
       if (torre?.grupo) {
-        // as torres: o raio levado ao espaço local (girado pelo plano) contra a caixa do pódio ao mastro
+        // as torres: o raio levado ao espaço do par (girado pelo plano) contra a caixa do pódio ao mastro
         const g = torre.grupo;
         const c = Math.cos(g.rotation.y);
         const sn = Math.sin(g.rotation.y);
         const ox = o[0] - g.position.x;
         const oz = o[2] - g.position.z;
-        testar(torre.gemeas ? CAIXA_PAR : CAIXA_TORRE, PARTES_ORDEM.indexOf('torre'), [c * ox - sn * oz, o[1] - g.position.y, sn * ox + c * oz], [c * dv[0] - sn * dv[2], dv[1], sn * dv[0] + c * dv[2]]);
+        testar(CAIXA_PAR, PARTES_ORDEM.indexOf('torre'), null, [c * ox - sn * oz, o[1] - g.position.y, sn * ox + c * oz], [c * dv[0] - sn * dv[2], dv[1], sn * dv[0] + c * dv[2]]);
       }
-      for (const c of partes?.caixas ?? []) testar(c.caixa, c.idx);
+      for (const c of partes?.caixas ?? []) testar(c.caixa, c.idx, c.trecho ?? null);
       return melhor;
     },
     descartar() {

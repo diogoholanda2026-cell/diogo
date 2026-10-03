@@ -3,7 +3,7 @@
 //   no worker (api.registrarGeradorOficina): o gerador 'colocavel' (gerador.js). Ele vem por import(): o esbuild põe
 //     o módulo dentro do worker (IIFE) e, no pacote do jogo, num pedaço sob demanda (A1); no worker a promessa resolve
 //     antes da primeira mensagem. Sem worker, o despachante local da thread principal carrega o mesmo pedaço.
-//   no render (api.registrarDominio): a seleção 'colocavel' (pela caixa que o domínio guarda, ou pela planta com a
+//   no render (api.registrarSelecionavel): a seleção 'colocavel' (pela caixa que o domínio guarda, ou pela planta com a
 //     altura da tabela enquanto ele não tem a malha).
 // O desenho (o domínio 'colocaveis', com o three) mora em dominio.js e desenho.js: este índice não importa o three
 // nem nada que o importe, porque o worker o importa (o three inteiro passaria do teto do worker, A1).
@@ -86,8 +86,9 @@ export function registrar(api) {
     api.registrarGeradorOficina('colocavel', gerarNaOficina);
   }
   if (api.registrarSelecionavel && api.registrarDominio) {
+    // o nome do registro é o da ficha R5 (registrarSelecionavel('colocavel')); o domínio do desenho é 'colocaveis'
     api.registrarSelecionavel(
-      'colocaveis',
+      'colocavel',
       (raio, ctx) => {
         const dom = ctx.dominio('colocaveis');
         return selecionarColocavel(raio, ctx.sim.espelho, (i) => dom?.caixa?.(i) ?? null);
