@@ -168,6 +168,27 @@ export function registrar(registrarCenaVitrine) {
     },
     conferir: conferirTexto('[data-tela="configuracoes"]', /Geral.*Música.*Ambiente.*Efeitos do mundo.*Interface/, 'som'),
   });
+  // as linhas que a integração ligou (C1b): o filtro dos avisos (X3a) na Interface e a paleta para daltonismo
+  registrarCenaVitrine('u2-config-interface', {
+    async preparar({ ui, jogo, esperar, acionar }) {
+      await prepararJogo(jogo);
+      ui.ui.abrirTela('configuracoes');
+      await esperarSeletor(esperar, '[data-a="configuracoes.aba"][data-k="interface"]');
+      acionar('configuracoes.aba', 'interface');
+      await esperarSeletor(esperar, '[data-a="cfg.avisos"]');
+    },
+    conferir: conferirTexto('[data-tela="configuracoes"]', /Avisos sobre os prédios.*Todos.*Graves e atenção.*Nenhum/, 'interface'),
+  });
+  registrarCenaVitrine('u2-config-acessibilidade', {
+    async preparar({ ui, jogo, esperar, acionar }) {
+      await prepararJogo(jogo);
+      ui.ui.abrirTela('configuracoes');
+      await esperarSeletor(esperar, '[data-a="configuracoes.aba"][data-k="acessibilidade"]');
+      acionar('configuracoes.aba', 'acessibilidade');
+      await esperarSeletor(esperar, '[data-cfg="daltonismo"]');
+    },
+    conferir: conferirTexto('[data-tela="configuracoes"]', /Alto contraste.*Reduzir movimento.*Cores das camadas para daltonismo/, 'acessibilidade'),
+  });
   registrarCenaVitrine('u2-config-salvamento', {
     async preparar({ ui, jogo, esperar, acionar }) {
       await prepararJogo(jogo);

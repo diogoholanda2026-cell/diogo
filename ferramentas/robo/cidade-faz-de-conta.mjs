@@ -19,6 +19,7 @@ import { refDe } from '../../fonte/contratos/espelho.js';
 import { HOLDING_ORDEM, PREDIOS_HOLDING, vagasDoNivel } from '../../fonte/data/holding.js';
 import { ZONAS_ORDEM } from '../../fonte/data/zonas.js';
 import { tarifaDoBemEstar } from '../../fonte/data/economia.js';
+import { SERVICOS } from '../../fonte/data/servicos.js';
 
 /** Domínios da S3a na ordem do índice (fonte/sim/estado.js). */
 export const DOMINIOS_S3A = [economia, producao, mercado, logistica, progresso, objetivos, historia];
@@ -132,8 +133,11 @@ export function ligarCidadeFalsa(sim, { moradoresIniciais = 350, taxa = 22 } = {
         else if (z === cb || z === ind) celCom++;
       }
     }
-    const agua = soma('agua');
-    const energia = soma('energia');
+    // os produtores registrados na rede (o reservatório do Mirror Lake, lago.e1) contam na escala da captação: a
+    // capacidade em m³/h da S2a vezes o que a captação de faz de conta dá por m³/h
+    const extra = (rec) => (sim.redes?.produtores ? sim.redes.produtores(rec).reduce((a, p) => a + (+p.capacidade || 0), 0) : 0);
+    const agua = soma('agua') + extra('agua') * (SERVICOS_FALSOS.captacao.agua / (SERVICOS.captacao?.capacidade || 30));
+    const energia = soma('energia') + extra('energia') * (SERVICOS_FALSOS.usinaSolar.energia / (SERVICOS.solar?.capacidade || 8000));
     const temAgua = agua > 0 && agua >= E.pop * 0.5;
     const temEnergia = energia > 0;
     let be = 40 - (temAgua ? 0 : 25) - (temEnergia ? 0 : 25);

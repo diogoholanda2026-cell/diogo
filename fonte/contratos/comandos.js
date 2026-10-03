@@ -51,23 +51,23 @@ export const COMANDOS = congelar({
   'predio.cor': { dono: 'S2a', args: '{ ref, cor }', codigos: ['inexistente', 'valor'], exemplo: { ref: 5, cor: 3 } },
   'predio.nome': { dono: 'S2a', args: '{ ref, nome }', codigos: ['inexistente', 'valor'], exemplo: { ref: 5, nome: 'Pedreira Norte' } },
   'predio.nivel': {
-    dono: 'S3a', args: '{ ref } (prédio da Holding)', codigos: ['creditos', 'estoque', 'marco', 'maximo'], exemplo: { ref: 9 },
+    dono: 'S3a', args: '{ ref } (prédio da Holding)', codigos: ['creditos', 'estoque', 'marco', 'maximo', 'inexistente'], exemplo: { ref: 9 },
   },
   'ladrilho.comprar': {
     dono: 'S1a', args: '{ i, j }', codigos: ['licenca', 'creditos', 'vizinho', 'comprado'], exemplo: { i: 10, j: 7 },
   },
   'linha.ordem': {
     dono: 'S3a', args: '{ predio, linha, item, n: 1..10, auto }',
-    codigos: ['lote', 'estoque', 'trancado', 'ocupado', 'pessoal'],
+    codigos: ['lote', 'estoque', 'trancado', 'ocupado', 'pessoal', 'inexistente'],
     exemplo: { predio: 9, linha: 0, item: 'brita', n: 10, auto: true },
   },
-  'linha.parar': { dono: 'S3a', args: '{ predio, linha }', codigos: ['nada'], exemplo: { predio: 9, linha: 0 } },
+  'linha.parar': { dono: 'S3a', args: '{ predio, linha }', codigos: ['nada', 'inexistente'], exemplo: { predio: 9, linha: 0 } },
   'estoque.reserva': { dono: 'S3a', args: '{ item, n }', codigos: ['valor'], exemplo: { item: 'concreto', n: 40 } },
   'estoque.vendeCidade': { dono: 'S3a', args: '{ item, sim: bool }', codigos: ['valor'], exemplo: { item: 'tijolo', sim: true } },
   'cidade.importarAuto': { dono: 'S3a', args: '{ sim: bool } (D48)', codigos: ['valor'], exemplo: { sim: false } },
   'deposito.vender': { dono: 'S3a', args: '{ item, n }', codigos: ['limite', 'nada', 'valor'], exemplo: { item: 'brita', n: 20 } },
   'deposito.auto': { dono: 'S3a', args: '{ item, acima: n | null }', codigos: ['valor'], exemplo: { item: 'areia', acima: 200 } },
-  importar: { dono: 'S3a', args: '{ item, n }', codigos: ['creditos', 'trancado'], exemplo: { item: 'aco', n: 10 } },
+  importar: { dono: 'S3a', args: '{ item, n } (n de 1 a 1.000)', codigos: ['creditos', 'trancado', 'valor'], exemplo: { item: 'aco', n: 10 } },
   'emprestimo.tomar': {
     dono: 'S3a', args: '{ valor } (múltiplo de 1.000)', codigos: ['valor', 'limiteAno', 'limiteDivida'], exemplo: { valor: 50000 },
   },
@@ -75,13 +75,17 @@ export const COMANDOS = congelar({
   'emprestimo.pagarParcela': { dono: 'S3a', args: '{}', codigos: ['nada', 'creditos'], exemplo: {} },
   'emprestimo.quitar': { dono: 'S3a', args: '{}', codigos: ['nada', 'creditos'], exemplo: {} },
   'arcologia.iniciar': {
-    dono: 'X1b', args: '{ etapa }', codigos: ['marco', 'creditos', 'emObra', 'trancado'], exemplo: { etapa: 'lago.e1' },
+    dono: 'X1b', args: '{ etapa } (nada: a etapa já está pronta; valor: etapa que não existe)',
+    codigos: ['marco', 'creditos', 'emObra', 'trancado', 'nada', 'valor'], exemplo: { etapa: 'lago.e1' },
   },
   acelerar: {
     dono: 'S3a', args: '{ alvo: { predio, linha }, minutos: 1 | 5 | 10 | 30 | 60 } (etapas só se o dono pedir, D13)',
-    codigos: ['creditos', 'nada'], exemplo: { alvo: { predio: 9, linha: 0 }, minutos: 5 },
+    codigos: ['creditos', 'nada', 'valor', 'inexistente'], exemplo: { alvo: { predio: 9, linha: 0 }, minutos: 5 },
   },
-  'decisao.escolher': { dono: 'S3a', args: '{ id, opcao }', codigos: ['inexistente', 'prazo'], exemplo: { id: 'vila.agua', opcao: 'captacao' } },
+  'decisao.escolher': {
+    dono: 'S3a', args: '{ id, opcao } (creditos: a opção custa mais que o caixa)', codigos: ['inexistente', 'prazo', 'creditos'],
+    exemplo: { id: 'vila.agua', opcao: 'captacao' },
+  },
   'decisao.adiar': { dono: 'S3a', args: '{ id }', codigos: ['inexistente', 'prazo'], exemplo: { id: 'vila.agua' } },
   'holding.identidade': {
     dono: 'S3a (F0 tem o substituto)', args: "{ nome, cor, modo: 'normal' | 'livre' } (nova partida)", codigos: ['valor'],

@@ -228,7 +228,8 @@ function gerarFolhas({ renderer, THREE: T, perfil }) {
     anisotropy: 4,
   });
   alvo.texture.colorSpace = T.NoColorSpace;
-  const mat = new T.ShaderMaterial({ uniforms: { uSemente: { value: 4243 } }, vertexShader: GLSL_GERAR_FOLHAS.vertice, fragmentShader: GLSL_GERAR_FOLHAS.fragmento, depthTest: false, depthWrite: false });
+  // com nome: a bancada e a página de teste dizem de quem é o programa (o material é descartado logo depois)
+  const mat = new T.ShaderMaterial({ name: 'arvores:gerar-folhas', uniforms: { uSemente: { value: 4243 } }, vertexShader: GLSL_GERAR_FOLHAS.vertice, fragmentShader: GLSL_GERAR_FOLHAS.fragmento, depthTest: false, depthWrite: false });
   const cena = new T.Scene();
   const q = new T.Mesh(new T.PlaneGeometry(2, 2), mat);
   q.frustumCulled = false;
@@ -519,6 +520,7 @@ function assarImpostores(renderer, modelos0, U, lado) {
   const alvos = [criar(), criar()];
   const { GLSL_IMP_ASSAR } = F;
   const mat = new THREE.ShaderMaterial({
+    name: 'arvores:assar-impostores',
     uniforms: { ...U, uModoNormal: { value: 0 } },
     vertexShader: GLSL_IMP_ASSAR.vertice,
     fragmentShader: GLSL_IMP_ASSAR.fragmento,
@@ -673,6 +675,7 @@ function criarVegetacao(ctx) {
   let comGlsl = false;
   let prepararDepois = false;
   let morto = false;
+  let glslFalhou = false;
   const pegarFolhas = () => {
     const t = ctx.textura('arvores.folhas');
     U.gArvFolhas.value = t;
@@ -1018,6 +1021,8 @@ function criarVegetacao(ctx) {
         montar(c);
       }
     },
+    /** O GLSL das árvores chegou (ou falhou): o aquecimento da carga espera por ele (motor/quadro.js, D66). */
+    pronto: () => comGlsl || glslFalhou || morto,
     /** Para as cenas e as capturas: gera todos os ladrilhos do alcance de uma vez e monta. */
     preparar() {
       if (!comGlsl) {
@@ -1078,7 +1083,11 @@ function criarVegetacao(ctx) {
   // os programas na carga (D66): os baldes ficam escondidos até ter árvore
   ctx.quadro?.aquecer?.add?.(fonteAquecer);
   if (F) nascer();
-  else carregarGlsl().then(nascer, (e) => console.error('vegetação: o GLSL das árvores não carregou', e));
+  else
+    carregarGlsl().then(nascer, (e) => {
+      glslFalhou = true;
+      console.error('vegetação: o GLSL das árvores não carregou', e);
+    });
   return api;
 }
 

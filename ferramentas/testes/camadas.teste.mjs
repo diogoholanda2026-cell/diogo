@@ -217,7 +217,8 @@ test('legendas: títulos, pontas, marcas e categorias com os textos de verdade (
   assert.ok(resumo.includes('Média da cidade 64;'), resumo);
   assert.deepEqual(bem.pontas, ['0', '100']);
   assert.deepEqual(bem.marcas.map((m) => m.texto), ['30', '60']);
-  assert.ok(bem.marcas[0].dica.includes('Contribuição de 5'));
+  // C1a: as faixas não trazem a Contribuição em unidades de desenho (D68, D87); o valor em dólar fica no resumo
+  assert.ok(bem.marcas[0].dica.includes('menor Contribuição') && !/\d+ por morador/.test(bem.marcas[0].dica), bem.marcas[0].dica);
   assert.ok(bem.gradiente.startsWith('linear-gradient(90deg,'));
   const serv = modeloLegenda(casos[4].d, { t, num });
   assert.deepEqual(serv.pontas, ['Sem atendimento', 'Bem atendido']);

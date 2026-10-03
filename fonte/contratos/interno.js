@@ -8,6 +8,10 @@ import { congelar } from '../comum/util.js';
  * como a seção JSON 'agregados' (vai no save e no hash): quem lê entre duas somas precisa do mesmo valor numa partida
  * carregada. Escreva nos campos (sim.agregados.populacao = ...), nunca troque o objeto, e não guarde objetos de dentro
  * dele entre tiques (ao carregar o conteúdo é trocado no lugar). Só números, arrays e arrays tipados.
+ * Com a cidade viva, a S2a escreve também (fora dos padrões abaixo, só existem depois da primeira rodada dela; quem lê
+ * usa `?? 0` ou cai no campo vizinho): `bemEstarSuave` (a média de 1 mês sem arredondar, a que a tarifa arredonda em
+ * `bemEstarTarifa`), `empregos.taxa` (desemprego de 0 a 1) e `empregos.trabalhadores` (os trabalhadores da cidade,
+ * com os contratados da Holding).
  * @example criarAgregados().redes.agua // { oferta: 0, demanda: 0 }
  */
 export function criarAgregados() {
@@ -65,6 +69,20 @@ export const SERVICOS_INTERNOS = congelar({
  *   sim.colocaveis.registrar(tipo, def)                                S2a (serviços), S3a (Holding): um só comando construir
  *   sim.camadas.registrar(id, fn);  sim.avisos.registrar(codigo, fn)   cada domínio os seus
  *   sim.travessia.registrar(fn)                                        X4 (M1b): validar() de S1b pergunta se vira ponte
+ *
+ * Acréscimos que as parcelas da onda 3 publicaram e outras já usam (atribuídos direto no objeto, fora de implementar):
+ *   sim.holding.registrarChegada(nome, fn)  entregas com aoChegar nomeado (sobrevive ao save); .folha(ref) → a parte
+ *     holding de q.predio; .ocupados() → [4] vagas da Holding ocupadas (a S2a desconta dos trabalhadores; a X1b soma
+ *     as vagas da Arcologia); .estoque(item) → n                                                              S3a
+ *   sim.economia = { eficiencia(), caixaZerado(), regras() (REGRAS_DONO da partida), data(t), efeitos(tipo),
+ *     somarMedidor(nome, v, motivo) }                                                                         S3a
+ *   sim.cidade = { efeito(id, { x?, z?, raio? (sem raio vale a cidade inteira), demanda?: { zona: +n }, valor?,
+ *     bemEstar?, atratividade? }), remover(id), lista() → [{ id, ...efeito }] }           S2a; X1b registra os da D49
+ *   sim.arcologia = { vagas() → [4], moradoresLuxo(), contribuicaoHora() (Contribuição dos moradores de luxo, que a
+ *     economia soma na renda dos moradores), valor() (créditos pagos e materiais entregues: entra no valuation, D49),
+ *     estado(id) }                                                                                             X1b
+ *   linha de produção (sim.json.producao): nLote, o n do lote em andamento (os insumos que ele consumiu na partida;
+ *     a ordem `n` vale para o próximo)                                                                         S3a
  */
 export const REGISTROS = congelar([
   'custos', 'holding', 'progresso', 'redes', 'formas', 'colocaveis', 'camadas', 'avisos', 'travessia',

@@ -41,7 +41,10 @@ const carga = {
 
 const quadro = () => new Promise((ok) => requestAnimationFrame(() => ok()));
 
-/** Teto da espera pelo aquecimento: uma placa lenta não prende a carga (a rodada final vem de 2,5 a 12 s). */
+/**
+ * Teto da espera pelo aquecimento: uma placa lenta não prende a carga (a rodada final vem a partir de 2,5 s, quando o
+ * código sob demanda chegou; no PC do dono em poucos segundos, AQUECER em render/motor/quadro.js).
+ */
 const TETO_AQUECER_MS = 20000;
 
 /** Espera os programas da placa compilados (R.aquecido, D66), com teto; o laço continua desenhando por trás da carga. */

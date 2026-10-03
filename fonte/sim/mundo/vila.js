@@ -163,6 +163,12 @@ function construirRodovia(sim, mapa, base, nos) {
   const ya = greide(base, La, { declive: R.declive });
   // começa na cota da junção e segue o greide sem passar do declive (corte ou aterro onde precisar)
   ya[0] = sim.tabelas.nos.y[nosIdx[iJ]];
+  // o nó de entrada desce ao chão natural (C1a): a média móvel trazia a cota da sela até o nó, que ficava num aterro
+  // de 3 m sobre o pasto, e toda rua que saía dele para o sul passava do declive; agora o fim do acesso chega ao
+  // relevo base no nó, voltando para trás no declive máximo (corte na saída da sela)
+  const fim = La.n - 1;
+  ya[fim] = Math.min(ya[fim], alturaEm(base, La.x[fim], La.z[fim]));
+  for (let i = fim - 1; i > 0; i--) ya[i] = Math.min(ya[i], ya[i + 1] + R.declive * (La.s[i + 1] - La.s[i]));
   for (let i = 1; i < La.n; i++) {
     const g = R.declive * (La.s[i] - La.s[i - 1]);
     ya[i] = clamp(ya[i], ya[i - 1] - g, ya[i - 1] + g);

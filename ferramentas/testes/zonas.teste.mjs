@@ -196,3 +196,40 @@ test('camadas Zonas e Nível: só as zonas da parte atual na legenda; contagem p
   const p = n.resumo.params;
   assert.equal(p.n1 + p.n2 + p.n3 + p.n4 + p.n5, zona);
 });
+
+// C1a (revisão): o bônus de demanda de um efeito de área com raio (torre.e3, D49: +20 de residencial média em 1,5 km)
+// vale na parte das frentes livres da zona dentro do raio; sem raio, a cidade inteira.
+test('efeito de demanda com raio: só as frentes no raio contam; longe não dá nada; sem raio vale a cidade toda', () => {
+  const sim = criarSimulacao({ semente: 'zonas-raio', modo: 'livre' });
+  rua(sim, [[-760, -480], [-280, -480]]);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: -760, z: -540, x2: -280, z2: -420 }, zona: indiceZona('resMedia') }).ok);
+  const bonus = (id, ef) => {
+    sim.cidade.efeito(id, ef);
+    sim.rodar(RODADA, { sincrono: true });
+    const f = sim.q.demanda().fatores.resMedia.find((x) => x.id === 'decisao');
+    sim.cidade.remover(id);
+    return f ? f.v : 0;
+  };
+  assert.equal(bonus('teste.perto', { x: -520, z: -480, raio: 1500, demanda: { resMedia: 20 } }), 20, 'todas as frentes no raio');
+  assert.equal(bonus('teste.longe', { x: 3000, z: 3000, raio: 1500, demanda: { resMedia: 20 } }), 0, 'nenhuma frente no raio');
+  const metade = bonus('teste.metade', { x: -760, z: -480, raio: 240, demanda: { resMedia: 20 } });
+  assert.ok(metade > 5 && metade < 15, `metade das frentes no raio: ${metade}`);
+  assert.equal(bonus('teste.cidade', { demanda: { resMedia: 20 } }), 20, 'sem raio: a cidade inteira');
+  assert.deepEqual(sim.erros, []);
+});
+
+// C1a (revisão): a versão das camadas Zonas e Nível é a dos dados (a UI e o render só refazem quando ela muda): a zona
+// pintada com o jogo parado muda a versão, e a consulta repetida sem mudança dá a mesma.
+test('camadas Zonas e Nível: a versão muda com a pintura sem rodar o jogo e fica igual sem mudança', () => {
+  const sim = criarSimulacao({ semente: 'zonas-versao', modo: 'livre' });
+  rua(sim, [[-760, -480], [-280, -480]]);
+  const v0 = sim.q.camada('zonas').versao;
+  assert.equal(sim.q.camada('zonas').versao, v0, 'sem mudança, a mesma versão');
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -450, raio: 40 }, zona: indiceZona('resBaixa') }).ok);
+  const v1 = sim.q.camada('zonas').versao;
+  assert.notEqual(v1, v0, 'a pintura muda a versão com o jogo parado');
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -450, raio: 40 }, zona: 0 }).ok);
+  assert.notEqual(sim.q.camada('zonas').versao, v1, 'apagar também muda');
+  const n0 = sim.q.camada('nivel').versao;
+  assert.equal(sim.q.camada('nivel').versao, n0);
+});

@@ -1,14 +1,17 @@
 // Áreas nomeadas (Vila, orla, gleba, várzea, morros; D55) e as sugestões da primeira hora (D36; dona: S1a).
 //
 // espelho.areas: [{ id, nome, contorno: Float64Array }]. q.sugestoes(): o que o mapa sugere para a primeira hora, tudo
-// dado autoral e determinístico: a primeira avenida do nó de entrada até o portão norte da gleba, as primeiras quadras,
-// os lugares da captação (no rio, acima da Vila) e da usina solar, o nó de entrada da energia e os primeiros prédios
-// da Holding (Escritório de Obra, Pedreira, Areal e Olaria, sobre os recursos). Formato de cada uma:
+// dado autoral e determinístico: a primeira avenida do nó de entrada até o portão norte da gleba, a ligação da rua
+// principal da Vila com o bairro novo, as ruas de terra da Vila para melhorar, as primeiras quadras, os lugares da
+// captação (no rio, acima da Vila) e da usina solar, o nó de entrada da energia e os primeiros prédios da Holding
+// (Escritório de Obra, Pedreira, Areal e Olaria, sobre os recursos e de frente para a estrada). Formato de cada uma:
 //   { id, tipo: 'via', via, pontos: [[x, z]] } · { id, tipo: 'zona', zona, pontos (contorno) }
+//   { id, tipo: 'melhorar', via, arestas: [ref], pontos: [[x, z]] (os nós das ruas, para o alvo e o traçado) }
 //   { id, tipo: 'construir', construir, x, z, rot } · { id, tipo: 'no', x, z, ref }
 import { pontoNoPoligono } from '../../comum/vetor.js';
 import { GLEBA_ENVELOPE, PLANOS, PLANO_ESCOLHIDO } from '../../data/arcologia-plano.js';
 import { MAPA_HELDOPOLIS } from '../../data/mapa-heldopolis.js';
+import { indiceVia } from '../../data/vias.js';
 import { terrenoBase } from './terreno.js';
 
 /** Áreas do mapa com o contorno em Float64Array. */
@@ -44,6 +47,24 @@ export function sugestoes(sim) {
   const pontos = S.avenida.pontos.map((p) => [p[0], p[1]]);
   pontos[pontos.length - 1] = portaoNorte(sim);
   out.push({ id: 'avenida', tipo: 'via', via: S.avenida.via, pontos });
+  if (S.ligacao) out.push({ id: 'ligacao', tipo: 'via', via: S.ligacao.via, pontos: S.ligacao.pontos.map((p) => [p[0], p[1]]) });
+  if (S.vila) {
+    // as arestas de terra das ruas nomeadas da Vila que ainda existem (sim.json.mapa.ruas guarda as refs)
+    const A = sim.tabelas.arestas;
+    const N = sim.tabelas.nos;
+    const arestas = [];
+    const pts = [];
+    for (const nome of S.vila.ruas) {
+      for (const ref of sim.json.mapa?.ruas?.[nome] ?? []) {
+        if (!A.vivaRef?.(ref)) continue;
+        const e = ref % 1048576;
+        if (A.tipo[e] !== indiceVia('terra')) continue;
+        arestas.push(ref);
+        pts.push([N.x[A.a[e]], N.z[A.a[e]]], [N.x[A.b[e]], N.z[A.b[e]]]);
+      }
+    }
+    if (arestas.length) out.push({ id: 'vila', tipo: 'melhorar', via: S.vila.via, arestas, pontos: pts });
+  }
   S.quadras.forEach((q, k) => out.push({ id: `quadra${k + 1}`, tipo: 'zona', zona: q.zona, pontos: q.contorno.map((p) => [p[0], p[1]]) }));
   const entrada = sim.json.mapa?.entrada ?? -1;
   out.push({ id: 'entrada', tipo: 'no', x: mapa.entrada.x, z: mapa.entrada.z, ref: entrada, energiaMW: mapa.entrada.energiaMW });

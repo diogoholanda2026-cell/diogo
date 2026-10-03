@@ -103,7 +103,8 @@ export async function testar(o) {
   const t0 = Date.now();
   let pronto = true;
   try {
-    await page.goto(`http://localhost:${srv.porta}/${o.pagina}${consulta ? '?' + consulta : ''}`);
+    // a carga também espera até o teto: com a máquina ocupada (outra bancada ou robô junto), os 30 s do padrão não bastam
+    await page.goto(`http://localhost:${srv.porta}/${o.pagina}${consulta ? '?' + consulta : ''}`, { timeout: o.teto * 1000 });
     try { await page.waitForFunction(() => window.__pronto === true, null, { timeout: o.teto * 1000, polling: 250 }); } catch (e) { pronto = false; logs.push('sem __pronto: ' + e.message.split('\n')[0]); }
     if (!process.env.ANIMAR) await page.addStyleTag({ content: SEM_ANIMACAO });
     if (script) { try { await page.evaluate(script); } catch (e) { erros++; logs.push('script: ' + e.message); } }

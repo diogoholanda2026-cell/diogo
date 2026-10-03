@@ -1179,7 +1179,8 @@ test('aquecimento: compila domínio por domínio no alvo de cada cena e marca pr
     emitir: (n) => emitidos.push(n),
     quadro: { desenhados: 57 },
   };
-  const a = new Aquecimento(ctx);
+  // um quadro com tudo carregado basta aqui; a espera dos quadros e dos sob demanda tem o teste dela (C1b)
+  const a = new Aquecimento(ctx, { minQuadros: 1 });
   const alvo = { alvo: 'alvoHdr', tom: 'nenhum' };
   assert.equal(a.quadro(0, alvo), true, 'primeira rodada no primeiro quadro');
   assert.deepEqual(chamadas.map((c) => [c.nome, c.alvo, c.tom]), [
@@ -1223,7 +1224,7 @@ test('aquecimento: compila domínio por domínio no alvo de cada cena e marca pr
   assert.equal(vigia.pronto, false);
   assert.equal(a.estado, 'aquecendo');
   // sem compileAsync (render falso) fica pronto na rodada final, sem quebrar
-  const b = new Aquecimento({ ...ctx, renderer: {}, perfil: PERFIS.pc, capac: {} }, { esperaMs: 0 });
+  const b = new Aquecimento({ ...ctx, renderer: {}, perfil: PERFIS.pc, capac: {} }, { esperaMs: 0, minQuadros: 1 });
   b.quadro(0, alvo);
   await b._pendente;
   b.quadro(10, alvo);
@@ -1281,7 +1282,7 @@ test('aquecimento: trocar o perfil no meio da rodada final não marca pronto com
   };
   const obj = (name) => ({ isObject3D: true, name, userData: {} });
   const ctx = { renderer, cena: { isObject3D: true, children: [obj('predios')] }, camera: {}, perfil: PERFIS.pc, capac: { programas: vigia }, medidas: { stats: {} } };
-  const a = new Aquecimento(ctx, { esperaMs: 0 });
+  const a = new Aquecimento(ctx, { esperaMs: 0, minQuadros: 1 });
   const promessa = a.promessa;
   a.quadro(0, {});
   soltar.splice(0).forEach((ok) => ok());
@@ -1305,6 +1306,67 @@ test('aquecimento: trocar o perfil no meio da rodada final não marca pronto com
   assert.equal(a.promessa, promessa, 'a promessa de antes da troca é a mesma');
   assert.equal((await promessa).estado, 'pronto');
   assert.ok(Number.isFinite(a.relatorio().msThread));
+});
+
+test('aquecimento (C1b): a final espera os domínios sob demanda e um mínimo de quadros; os setores só até o teto', async () => {
+  const renderer = { getRenderTarget: () => null, setRenderTarget() {}, toneMapping: 0, compileAsync: (o) => Promise.resolve(o) };
+  const obj = (name) => ({ isObject3D: true, name, userData: {} });
+  const estado = { predios: false, vegetacao: false, pedestres: false };
+  const ctx = {
+    renderer, cena: { isObject3D: true, children: [obj('terreno')] }, camera: {}, perfil: PERFIS.pc, capac: {}, medidas: { stats: {} },
+    // 'caminhoes' sem pronto() e 'obras' ausente: nada a esperar deles
+    dominio: (n) => (n in estado ? { pronto: () => estado[n] } : n === 'caminhoes' ? {} : null),
+  };
+  const a = new Aquecimento(ctx);
+  assert.deepEqual([AQUECER.minQuadros >= 3, AQUECER.tetoSobDemandaMs > AQUECER.tetoMs], [true, true]);
+  assert.ok(['vegetacao', 'pedestres', 'caminhoes', 'colocaveis', 'obras', 'marcadores'].every((n) => AQUECER.sobDemanda.includes(n)));
+  a.quadro(0, {});
+  await a._pendente;
+  // o código sob demanda ainda não chegou: nada de final, nem depois do teto dos setores
+  let t = 0;
+  for (; t < AQUECER.tetoMs + 1000; t += 100) assert.equal(a.quadro(t, {}), false);
+  assert.deepEqual(ctx.medidas.stats.aquecimento.esperando, ['vegetacao', 'pedestres']);
+  // chegou: os prédios ainda carregando já não seguram (passou do teto), mas a final pede minQuadros seguidos
+  estado.vegetacao = estado.pedestres = true;
+  let k = 0;
+  while (!a.quadro((t += 100), {})) k++;
+  assert.equal(k, AQUECER.minQuadros - 1, 'quadros seguidos com tudo carregado');
+  await a._pendente;
+  assert.equal(a.estado, 'pronto');
+  // antes do teto dos setores, prédios carregando seguram a final; um quadro sem eles zera a contagem
+  const b = new Aquecimento({ ...ctx, medidas: { stats: {} } }, { minQuadros: 3 });
+  estado.predios = false;
+  b.quadro(0, {});
+  await b._pendente;
+  assert.equal(b.quadro(AQUECER.esperaMs, {}), false);
+  estado.predios = true;
+  assert.equal(b.quadro(AQUECER.esperaMs + 10, {}), false);
+  assert.equal(b.quadro(AQUECER.esperaMs + 20, {}), false);
+  estado.predios = false;
+  assert.equal(b.quadro(AQUECER.esperaMs + 30, {}), false, 'zerou');
+  estado.predios = true;
+  for (let q = 1; q <= 2; q++) assert.equal(b.quadro(AQUECER.esperaMs + 30 + q * 10, {}), false);
+  assert.equal(b.quadro(AQUECER.esperaMs + 60, {}), true, 'três seguidos');
+  // o que nunca chega não prende o jogo: com tetoSobDemandaMs e tetoSobDemandaQuadros desenhados, a final sai de
+  // qualquer jeito; com a thread presa (poucos quadros), o relógio sozinho não solta
+  const c = new Aquecimento({ ...ctx, medidas: { stats: {} }, dominio: (n) => (n === 'marcadores' ? { pronto: () => false } : null) });
+  c.quadro(0, {});
+  await c._pendente;
+  for (let q = 1; q < 4; q++) assert.equal(c.quadro(AQUECER.tetoSobDemandaMs * q, {}), false, 'poucos quadros: espera');
+  let tc = AQUECER.tetoSobDemandaMs * 4;
+  let n = 3;
+  while (!c.quadro((tc += 16), {})) n++;
+  assert.equal(n + 1, AQUECER.tetoSobDemandaQuadros);
+  assert.deepEqual(c.relatorio().final, { motivo: 'teto', ms: tc, quadros: AQUECER.tetoSobDemandaQuadros, faltavam: ['marcadores'] });
+  // a troca de perfil recomeça a carga: nem o motivo nem a espera de antes ficam no relatório, e o teto conta de novo
+  await c._pendente;
+  c.ctx.perfil = PERFIS.alta;
+  assert.equal(c.quadro((tc += 16), {}), true, 'primeira rodada do perfil novo');
+  assert.equal(c.relatorio().final, null);
+  assert.deepEqual(c.relatorio().esperando, []);
+  await c._pendente;
+  assert.equal(c.quadro(tc + AQUECER.tetoSobDemandaMs, {}), false, 'o teto conta os quadros do perfil novo');
+  assert.deepEqual(c.relatorio().esperando, ['marcadores']);
 });
 
 test('resolução: a troca de perfil recomeça a espera de 3 s e o controle acompanha os degraus da tela', () => {

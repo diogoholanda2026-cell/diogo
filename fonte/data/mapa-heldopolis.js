@@ -382,6 +382,9 @@ const VILA = {
       id: 'estrada', tipo: 'terra',
       pontos: [[-935, 300], [-926, 200], [-918, -60], [-916, -380], [-928, -700], [-962, -990], [-1010, -1190]],
     },
+    // o caminho do barreiro (C1a): da estrada até a beira do rio, onde a argila da várzea é boa (a olaria da primeira
+    // hora fica nele; da estrada ela pegava só a borda pobre da faixa). Fora da área dos prédios da Vila
+    { id: 'barreiro', tipo: 'terra', pontos: [[-926, 200], [-1000, 200]] },
   ],
   // área onde nascem os prédios, com a planta inteira dentro dela (fora, só as ruas)
   area: [[-1020, 400], [-905, 380], [-880, 500], [-820, 600], [-812, 950], [-660, 955], [-660, 1020], [-1020, 1020]],
@@ -421,29 +424,42 @@ const AREAS = [
 ];
 
 /**
- * Sugestões da primeira hora (D36, D90): a primeira avenida do nó de entrada até o portão norte da sede, as primeiras
- * quadras na faixa plana entre os morros e o disco da sede e a oeste dele, a captação e a usina solar na rua principal
- * da Vila (com rede: a Vila e as duas ficam na mesma rede de água e energia), e os primeiros prédios da Holding. O fim
- * da avenida é o portão norte do plano escolhido (areas.js acerta pelo plano).
- * A avenida sai do nó de entrada pela meia encosta (o nó fica no aterro do acesso, 3 m acima do pasto, e descer direto
- * passa de 9% de declive) e chega ao portão no eixo da avenida norte, na reta radial: chegando de viés, a lateral da
- * pista entra no disco antes do portão e a via é recusada (código 'gleba'). Cada trecho constrói sozinho, em ordem.
+ * Sugestões da primeira hora (D36, D90): a primeira avenida do nó de entrada até o portão norte da sede; a captação e
+ * a usina solar na rua principal da Vila (com rede); as ruas de terra da Vila para melhorar (a rede chega a todas as
+ * casas); a ligação da rua principal com o bairro novo e as três primeiras quadras, a oeste do disco da sede, em xadrez
+ * (cada grade toca a outra pelo canto, então a rede da Vila chega a todas; duas grades lado a lado repetiriam a rua da
+ * divisa e a prévia recusa); e os primeiros prédios da Holding sobre o recurso de cada um e de frente para uma via:
+ * o Escritório, o Areal e a Olaria na estrada de terra da Vila e no caminho do barreiro, que já existem no começo (o
+ * "Usar sugestão" não recusa por 'acesso'), e a Pedreira na primeira avenida. O fim da avenida é o portão norte do
+ * plano escolhido (areas.js acerta pelo plano).
+ * A avenida sai do nó de entrada pela meia encosta e chega ao portão no eixo da avenida norte, na reta radial: chegando
+ * de viés, a lateral da pista entra no disco antes do portão e a via é recusada (código 'gleba'). Cada trecho constrói
+ * sozinho, em ordem. As quadras ficam na malha de 112 m que o robô continua (ferramentas/robo/robo-sim.mjs).
  */
 const SUGESTOES = {
   avenida: { via: 'avenida', pontos: [[60, -700], [120, -716], [200, -680], [200, -622]] },
+  // ligação: da ponta norte da rua principal da Vila ao canto da primeira quadra, subindo o degrau da várzea em
+  // diagonal (10% de declive, abaixo dos 12% da rua)
+  ligacao: { via: 'rua', pontos: [[-935, 300], [-880, 276]] },
+  // ruas de terra da Vila (data VILA.ruas) que a melhoria troca por rua com calçada e redes (D52)
+  vila: { via: 'rua', ruas: ['praia', 'deCima', 'travessaNorte', 'travessaSul'] },
   // retângulos: a grade de ruas da caixa de cada quadra (o robô e a mão da dica traçam assim) fica fora do disco da
-  // sede, com a calçada, e longe dos córregos
+  // sede, com a calçada; a indústria perto da Vila dá emprego a quem mora nela (87% sem trabalho no começo, S2a)
   quadras: [
-    { zona: 'resBaixa', contorno: [[-745, -250], [-635, -250], [-635, 90], [-745, 90]] },
-    { zona: 'comBaixa', contorno: [[700, -600], [880, -600], [880, -470], [700, -470]] },
-    { zona: 'resBaixa', contorno: [[-745, 120], [-635, 120], [-635, 300], [-745, 300]] },
+    { zona: 'industria', contorno: [[-880, 164], [-768, 164], [-768, 276], [-880, 276]] },
+    { zona: 'resBaixa', contorno: [[-768, 52], [-656, 52], [-656, 164], [-768, 164]] },
+    { zona: 'comBaixa', contorno: [[-880, -60], [-768, -60], [-768, 52], [-880, 52]] },
   ],
   captacao: { construir: 'captacao', x: -965, z: 350, rot: 0 },
   usina: { construir: 'solar', x: -905, z: 350, rot: 0 },
-  escritorio: { construir: 'escritorioObra', x: -120, z: -598, rot: 0 },
-  pedreira: { construir: 'pedreira', x: -480, z: -558, rot: 3.1416 },
-  areal: { construir: 'areal', x: -1000, z: -240, rot: -1.5708 },
-  olaria: { construir: 'olaria', x: -998, z: 80, rot: -1.5708 },
+  // na estrada de terra da Vila (D52: a terra dá acesso, sem redes), entre o rio e o córrego da Pedreira; o areal na
+  // margem arenosa e a olaria na argila da beira do rio, no caminho do barreiro
+  escritorio: { construir: 'escritorioObra', x: -886, z: -420, rot: 0 },
+  areal: { construir: 'areal', x: -955, z: -205, rot: 0 },
+  olaria: { construir: 'olaria', x: -996, z: 160, rot: 1.524 },
+  // a pedreira no granito do pé do Morro do Mirante, de frente para o primeiro trecho da avenida (a primeira sugestão
+  // da cidade): perto da estrada de terra a encosta é íngreme demais e o pé dela tem pouca rocha
+  pedreira: { construir: 'pedreira', x: 93, z: -755, rot: 1.831 },
 };
 
 /** Nomes de lugares para os rótulos do mapa (chave do texto em ui/textos/s1.js). */

@@ -371,20 +371,20 @@ na UI isso chega sempre como Promise (D16).
 | `construir` | `{ tipo, x, z, rot }` (serviço ou prédio da Holding) | `creditos`, `marco`, `acesso`, `colisao`, `declive`, `agua`, `recurso`, `ladrilho`, `gleba` |
 | `demolir` | `{ refs: [ref] }` | `arcologia`, `inexistente`, `creditos` |
 | `predio.cor`, `predio.nome` | `{ ref, cor }`, `{ ref, nome }` | `inexistente`, `valor` |
-| `predio.nivel` | `{ ref }` (prédio da Holding) | `creditos`, `estoque`, `marco`, `maximo` |
+| `predio.nivel` | `{ ref }` (prédio da Holding) | `creditos`, `estoque`, `marco`, `maximo`, `inexistente` |
 | `ladrilho.comprar` | `{ i, j }` | `licenca`, `creditos`, `vizinho`, `comprado` |
-| `linha.ordem` | `{ predio, linha, item, n: 1..10, auto }` | `lote`, `estoque`, `trancado`, `ocupado`, `pessoal` |
-| `linha.parar` | `{ predio, linha }` | `nada` |
+| `linha.ordem` | `{ predio, linha, item, n: 1..10, auto }` | `lote`, `estoque`, `trancado`, `ocupado`, `pessoal`, `inexistente` |
+| `linha.parar` | `{ predio, linha }` | `nada`, `inexistente` |
 | `estoque.reserva`, `estoque.vendeCidade` | `{ item, n }`, `{ item, sim: bool }` | `valor` |
 | `cidade.importarAuto` | `{ sim: bool }` (D48) | `valor` |
 | `deposito.vender` | `{ item, n }` | `limite`, `nada`, `valor` |
 | `deposito.auto` | `{ item, acima: n \| null }` | `valor` |
-| `importar` | `{ item, n }` | `creditos`, `trancado` |
+| `importar` | `{ item, n }` (n de 1 a 1.000) | `creditos`, `trancado`, `valor` |
 | `emprestimo.tomar` | `{ valor }` (múltiplo de 1.000) | `valor`, `limiteAno`, `limiteDivida` |
 | `emprestimo.pagarJuros`, `.pagarParcela`, `.quitar` | `{}` | `nada`, `creditos` |
-| `arcologia.iniciar` | `{ etapa }` | `marco`, `creditos`, `emObra`, `trancado` |
-| `acelerar` | `{ alvo: { predio, linha }, minutos: 1 \| 5 \| 10 \| 30 \| 60 }` (etapas só se o dono pedir, D13) | `creditos`, `nada` |
-| `decisao.escolher`, `decisao.adiar` | `{ id, opcao }`, `{ id }` | `inexistente`, `prazo` |
+| `arcologia.iniciar` | `{ etapa }` | `marco`, `creditos`, `emObra`, `trancado`, `nada` (já pronta), `valor` (etapa que não existe) |
+| `acelerar` | `{ alvo: { predio, linha }, minutos: 1 \| 5 \| 10 \| 30 \| 60 }` (etapas só se o dono pedir, D13) | `creditos`, `nada`, `valor`, `inexistente` |
+| `decisao.escolher`, `decisao.adiar` | `{ id, opcao }`, `{ id }` | `inexistente`, `prazo`; `creditos` no escolher (a opção custa mais que o caixa) |
 | `holding.identidade` | `{ nome, cor, modo: 'normal' \| 'livre' }` (nova partida) | `valor` |
 
 A lista fechada de códigos vive em `fonte/contratos/codigos.js`; um teste confere que todo código tem frase em
@@ -418,8 +418,10 @@ q.via.previa({ modo: 'reta' | 'curva' | 'continua' | 'grade' | 'melhorar' | 'dem
       arestas /* melhorar e demolir: um item por aresta pedida */, devolve /* demolir; custo = -devolve */ }
                                                               // até 1 ms por chamada (meta da UI)
 q.zona.previa({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia /* bem-estar da cidade, D11 */ }
-q.construir.previa({ tipo, x, z, rot }) → { ok, codigo?, x, z, rot /* ajustados à frente da via */, custo, manutencaoHora,
-  alcance, efeitos: [{ camada, delta }] }
+q.construir.previa({ tipo, x, z, rot }) → { ok, codigo?, dados? /* faltam em 'creditos' */, x, z, rot /* ajustados à frente
+  da via */, custo /* já soma custoDemolir */, custoDemolir /* prédios de zona sob a planta, D54 */, manutencaoHora, alcance,
+  pegada, demolir: [ref], semRede /* produtor de rede numa via sem canos nem cabos: liga só depois de melhorar */,
+  efeitos: [{ camada, delta }] }
 q.predio(ref) → { ref, tipo, modelo, nome, zona, nivel, estado: 'obra' | 'ok' | 'abandonado', obra: { fase, progresso, fimTique, semMaterial } | null,
   moradia: { lares, moradores, capacidade, escolaridade: [4], bemEstar, fatores: [{ id, v }], tarifa, contribuicaoHora } | null,
   trabalho: { vagas: [4], ocupadas: [4], clientes, produtividade, fatores: [{ id, v }] } | null, nivelProx: { pontos, meta, falta: [codigo] } | null,
@@ -430,20 +432,36 @@ q.predio(ref) → { ref, tipo, modelo, nome, zona, nivel, estado: 'obra' | 'ok' 
 q.camada(id) → { id, fonte: 'predios' | 'arestas' | 'grade' | 'celulas', dados: Float32Array, grade: { n, passo, origem } | null,
   tipo: 'seq' | 'div' | 'cat', escala: { min, max, meio?, unidade }, categorias: [{ v, chave }] | null,
   legenda: [{ v, chave }], resumo: { chave, params }, versao }
-q.avisosPredios() → { versao, idx: Int32Array, glifo: Uint8Array, gravidade: Uint8Array }
-q.deposito() → { janela: { fimTique, vendidas, max: 100 }, itens: [{ item, estoque, reserva, precoBase, precoVenda, vendeCidade, auto }] }
-q.emprestimo() → { disponivelAno, tomadoAno, limiteAno: 50000, divida, dividaMax: 500000, taxa: 0.10, jurosDevidos,
-  contratos: [{ id, ano, valor, saldo, ini, fim, mora }] }
-q.orcamento() → { receitas: { moradores, cidade, deposito, marcos }, despesas: { servicos, vias, ligacao, salarios, juros,
-  importacao, importacaoCidade }, naoPago: { servicos, salarios }, saldoHora, caixa,
-  serie: [{ mes, caixa, receitas, despesas, moradores, bemEstar, desemprego }] }
-q.producao() → { itens: [{ item, estoque, produzHora, consomeHora, cidadeHora /* demanda da cidade, D48 */, reserva }],
-  predios: [{ ref, tipo, nivel, linhas }], frota: { usados, total, fila, atrasoMedio } }
-q.arcologia() → { plano, partes: [{ id, nome, etapas: [{ id, nome, estado, marco, creditos, materiais: [{ item, pede, entregue, estoque }],
-  minutos, fase, progresso, efeitos }] }], progressoTotal }
-q.holding() → { nome, cor, influencia, legado, efeitos: { descontoLadrilho, atratividade }, divisoes, valuation }
-q.marcos() · q.objetivos() · q.decisoes() · q.mural({ desde }) · q.demanda() · q.cidade() · q.catalogo(categoria) ·
-q.ladrilhos() · q.sugestoes() · q.aresta(ref) · q.avisos({ perto, limite }) · q.viasPerto(x, z, raio) · q.hash()
+q.avisosPredios() → { versao, idx: Int32Array, glifo: Uint8Array /* índice em nomes */, gravidade: Uint8Array,
+  nomes: [glifo] }                                             // com os 'info'; o filtro de gravidade é da UI
+q.deposito() → { janela: { fimTique, vendidas, max: 100 }, itens: [{ item, estoque, reserva, precoBase, precoVenda,
+  precoImportacao, vendeCidade, auto }], importarAuto /* D48 */, importacoes: [{ id, item, n, fim /* tique da chegada */ }] }
+q.emprestimo() → { disponivelAno, tomadoAno, limiteAno: 50000, divida, principal, dividaMax: 500000, taxa: 0.10, mora, passo,
+  prazoAnos, jurosDevidos, jurosHora, parcela /* a de pagarParcela */, ano /* do calendário, D67 */,
+  contratos: [{ id, ano, valor, saldo, juros, ini, fim, mora }] }
+q.orcamento() → { receitas: { moradores /* a cidade e os moradores de luxo da Arcologia */, cidade, deposito, marcos, aporte? },
+  despesas: { servicos, vias, ligacao, salarios, juros, importacao, importacaoCidade }, naoPago: { servicos, salarios },
+  investimentosHora, saldoHora, fluxoCaixaHora /* saldoHora sem os juros, que correm como dívida */, caixa, eficiencia,
+  caixaZerado, totais /* livro-caixa acumulado por categoria */, serie: [{ mes, caixa, receitas, despesas, moradores, bemEstar, desemprego }] }
+q.producao() → { itens: [{ item, estoque, produzHora, consomeHora, cidadeHora /* demanda da cidade, D48 */, reserva, precoBase,
+  liberado }],
+  predios: [{ ref, tipo, nivel, produtividade, linhas: [{ item, n, auto, ativa, rodando, progresso, fimTique, parada,
+  sugestaoLote }] }], frota: { usados, total, fila, atrasoMedio, esperaMax, filaMax, feitas, porDestino }, armazem: { usado,
+  capacidade }, importarAuto /* D48 */,
+  esperando: { item: unidades } /* obras da cidade paradas na última rodada, D48 */ }
+q.arcologia() → { plano, nome, partes: [{ id, nome, etapas: [{ id, parte, nome, estado, marco, requisito, recusa, creditos,
+  materiais: [{ item, pede, entregue, aCaminho, estoque }], minutos, fases, fase, progresso, materiaisFrac, parada, efeitos,
+  xp, ini, fim, previsao }], futuras: [{ id, nome, prazo, creditos, materiais }] }], progressoTotal,
+  valor /* créditos pagos e materiais entregues: entra no valuation, D49 */, alturas: { blade, legacy, ponte } | null,
+  efeitos: { vagas: [4], moradoresLuxo, contribuicaoLuxoHora, vias, portoes, agua }, inaugurada }
+q.demanda() → { resBaixa, resMedia, resAlta, comBaixa, comAlta, escritorio, industria, R, C, I, E, fatores: { zona: [{ id, v }] },
+  ativas: [zona] /* as liberadas no marco */ }
+q.sugestoes() → [{ id, tipo: 'via', via, pontos } | { id, tipo: 'zona', zona, pontos } | { id, tipo: 'melhorar', via, arestas: [ref],
+  pontos } | { id, tipo: 'construir', construir, x, z, rot } | { id, tipo: 'no', x, z, ref, energiaMW }]   // D36
+q.holding() → { nome, cor, influencia, legado, efeitos: { descontoLadrilho, atratividade }, divisoes, valuation, empresa, jogador,
+  pais, ato, conselheiros: [{ id, nome, curto, cargo }] /* D77 a D83 */ }
+q.marcos() · q.objetivos() · q.decisoes() · q.mural({ desde }) · q.cidade() · q.catalogo(categoria) ·
+q.ladrilhos() · q.aresta(ref) · q.avisos({ perto, limite }) · q.viasPerto(x, z, raio) · q.hash()
 ```
 
 Os formatos da última linha seguem o desenho da simulação (seção 16.4) e ficam escritos com um exemplo em
@@ -552,6 +570,7 @@ S.agregados = {                                  // escrito por S2a/S2b, lido po
   populacao, lares, popHora, bemEstarMedio, bemEstarTarifa, tarifa,
   demanda: { resBaixa, resMedia, resAlta, comBaixa, comAlta, escritorio, industria, R, C, I, E, fatores },
   empregos: { vagas: [4], ocupadas: [4], desemprego: [4] },
+  // S2a, com a cidade viva: bemEstarSuave (média de 1 mês sem arredondar), empregos.taxa (0 a 1), empregos.trabalhadores
   redes: { agua: { oferta, demanda }, esgoto: {...}, energia: {...}, importado: { energia } },
   trajeto: { porZona: Float32Array } | null,     // S1c (M1b); null no M1a
   mercadoria: { producao, consumo, importada } | null,   // S2b (M1b)
@@ -568,6 +587,13 @@ sim.formas.registrar({ tipo: 'via' | 'plataforma' | 'cava', ref, contorno, cota 
 sim.colocaveis.registrar(tipo, def)                     // S2a (serviços), S3a (prédios da Holding): o comando construir é um só
 sim.camadas.registrar(id, fn);  sim.avisos.registrar(codigo, fn)   // cada domínio registra as suas
 sim.travessia.registrar(fn)                             // X4 (M1b): validar() de S1b pergunta se o trecho sobre água vira ponte
+// acréscimos da onda 3, atribuídos direto no objeto (fonte/contratos/interno.js os descreve):
+sim.holding.registrarChegada(nome, fn); .folha(ref); .ocupados() → [4]; .estoque(item)   // S3a (X1b soma as vagas dela em ocupados)
+sim.economia = { eficiencia(), caixaZerado(), regras(), data(t), efeitos(tipo), somarMedidor(nome, v, motivo) }   // S3a
+sim.cidade = { efeito(id, { x?, z?, raio?, demanda?, valor?, bemEstar?, atratividade? }), remover(id), lista() }  // S2a; X1b (D49)
+sim.arcologia = { vagas(), moradoresLuxo(), contribuicaoHora(), valor(), estado(id) }  // X1b: a economia soma contribuicaoHora
+                                                        // na renda dos moradores e valor no valuation (D49)
+// a linha de produção guarda nLote, o n do lote em andamento (a ordem n vale para o próximo)               // S3a
 ```
 
 ### 2.11 Perguntas que sobem ao dono
@@ -1660,6 +1686,21 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   calibrados em 3 a 5 fotos aéreas reais; as capturas do A10 que já existem no M1a; A6 com o save do robô; README com
   números medidos; montagem em `previa/` e publicação em dois commits (fonte e "Montagem ...").
 - **Depende de:** onda 3.
+- **Entregue em 03/10/2026** (C1a e C1b, revisadas; retomadas depois da pausa). **C1a:** robô dentro das metas A4 do
+  M1a (semente robo-1: marco 1 em 0:14, marco 3 em 1:07, empréstimo só em 2020 e 2021 e quitado em 2024, 2.816
+  moradores em 2 h contra 353 na base), A8 no Chromium (tique 1.800 com o mesmo hash do Node), valuation com a obra da
+  Arcologia (D49), objetivo de ligar a Vila às redes depois da primeira avenida, sugestões da Holding de frente para a
+  via, greide do nó de entrada, demanda da torre.e3 com raio, avisos 'info' no mapa, textos do bem-estar em dólar,
+  camadas Zonas e Nível atualizando com o jogo parado, contratos registrados (2.6), defeitos achados e corrigidos (o
+  q.barra mudava a partida pelo cache do custo dos serviços; a demanda da cidade por hora aparecia 35 vezes maior; o
+  robô importava em dobro). **A2 ainda vermelho:** a lago.e1 sai aos 0:20 por 60 mil com a cidade rendendo 4 mil por
+  hora, e a Contribuição e a população ficam menores com a Arcologia em 6 h (a riqueza já é maior). **C1b:** API do
+  render ligada (ancoras, marcador, `camadas.mostrar`, `R.resolucao`, `projetar` com frente), aquecimento que espera
+  os domínios sob demanda (0 compilações depois de pronto na bancada aberta, bairro, rua, planos e na Nova partida, no
+  'pc' e no Média), os 2 'ShaderMaterial' sem dono explicados (programas já descartados), CAS em `pos.glsl.js`,
+  `pessoas.js` fora do worker, cenas.html com os nomes da D88 e D89, "Inspirado em ..." na folha, Configurações com
+  avisos e cores para daltonismo, Prévia 2 montada e README com os números (aberta no 'pc': 73 chamadas e 644 mil
+  triângulos). Notas completas em `docs/entregas/onda3/C1a.md` e `C1b.md`.
 
 #### S1c. Trânsito agregado com efeitos (onda 4; 2 sessões)
 - **Arquivos:** `sim/transito.js`, `sim/tarefas/transito.js`, `ferramentas/testes/transito.teste.mjs`.

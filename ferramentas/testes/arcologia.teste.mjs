@@ -11,11 +11,13 @@ import { ETAPA, ARESTA } from '../../fonte/contratos/flags.js';
 import { ETAPAS, ETAPAS_M2, etapaDe, alturaBlade, alturaLegacy, avancoLegacy, ALTURA_PONTE } from '../../fonte/data/arcologia.js';
 import { PLANOS, PLANO_ESCOLHIDO, GLEBA_ENVELOPE, LAGO, SEDE_CENTRO, TORRE_LAMINA, TORRE_IRMA, cavaDoPlano } from '../../fonte/data/arcologia-plano.js';
 import { REF_CAVA } from '../../fonte/sim/arcologia.js';
+import { contribuicaoHora } from '../../fonte/sim/economia.js';
+import { REGRAS_DONO } from '../../fonte/data/economia.js';
+import { MARCOS } from '../../fonte/data/marcos.js';
 import { criarEstrategia } from '../robo/robo-sim.mjs';
-import { ligarCidadeFalsa } from '../robo/cidade-faz-de-conta.mjs';
 
 const ok = (r) => assert.equal(r.ok, true, JSON.stringify(r));
-const LIMIARES = [0, 400, 1500, 3500, 8000, 15000, 25000, 38000];
+const LIMIARES = MARCOS.map((m) => m.xp);
 const plano = PLANOS[PLANO_ESCOLHIDO];
 
 /** XP até o marco n (o sistema de progresso alcança na rodada). */
@@ -146,10 +148,19 @@ test('efeitos da D49: vias e água, licença, sede operacional, moradores de lux
   const a3 = sim.q.arcologia();
   assert.equal(a3.efeitos.moradoresLuxo, 400);
   assert.equal(a3.efeitos.contribuicaoLuxoHora, 400 * 11, 'faixa de 11 (bem-estar de luxo)');
-  const antes = sim.json.economia.livro.totais.receitas.outras ?? 0;
-  sim.rodar(360, { sincrono: true });
-  const depois = sim.json.economia.livro.totais.receitas.outras ?? 0;
-  assert.ok(Math.abs(depois - antes - 440) < 1, `em 0,1 h entram 440 (${(depois - antes).toFixed(2)})`);
+  // a Contribuição deles entra com a dos moradores (receita 'moradores' e saldo por hora), não em 'outras'
+  const cidadeHora = () => contribuicaoHora(REGRAS_DONO, sim.agregados);
+  assert.ok(Math.abs(sim.q.orcamento().receitas.moradores - cidadeHora() - 4400) < 1e-6, 'q.orcamento soma os 4.400 por hora');
+  const outras = sim.json.economia.livro.totais.receitas.outras ?? 0;
+  let esperado = 0;
+  const antes = sim.json.economia.livro.totais.receitas.moradores ?? 0;
+  for (let t = 0; t < 360; t++) {
+    esperado += (cidadeHora() + 4400) / 3600;
+    sim.rodar(1, { sincrono: true });
+  }
+  const depois = sim.json.economia.livro.totais.receitas.moradores ?? 0;
+  assert.ok(Math.abs(depois - antes - esperado) < 1, `em 0,1 h entram ${esperado.toFixed(2)} (${(depois - antes).toFixed(2)})`);
+  assert.equal(sim.json.economia.livro.totais.receitas.outras ?? 0, outras, 'nada em outras');
   // torre.e4: Legado +5, atratividade, valor em 1,5 km; o marco 7 só com ela pronta
   ateMarco(sim, 6);
   sim.progresso.xp(LIMIARES[7] - sim.json.progresso.xp + 10, 'teste');
@@ -162,7 +173,7 @@ test('efeitos da D49: vias e água, licença, sede operacional, moradores de lux
   sim.rodar(40, { sincrono: true });
   assert.equal(sim.q.holding().legado, legado + 5);
   assert.equal(sim.json.cidade.efeitos['arcologia.torre.e4.atratividade'].atratividade, 5);
-  assert.ok(sim.json.cidade.efeitos['arcologia.torre.e4.valor'].valor > 0);
+  assert.deepEqual([sim.json.cidade.efeitos['arcologia.torre.e4.valor'].raio > 0, sim.json.cidade.efeitos['arcologia.torre.e4.valor'].raio], [true, 1500], 'valor em 1,5 km (D49)');
   assert.equal(sim.progresso.marco().n, 7, 'Arcologia inaugurada em fase inicial');
   const a4 = sim.q.arcologia();
   assert.equal(a4.inaugurada, true);
@@ -318,23 +329,24 @@ test('save mais velho: a seção sem uma etapa nem os avisos de altura carrega c
   assert.deepEqual(C.erros, []);
 });
 
-test('A2: o robô que pula a Arcologia termina mais pobre (cidade de faz de conta, 6 h de jogo)', () => {
+// C1a: na cidade viva da S2a (a de faz de conta era a ponte enquanto a S2a não publicava; com ela o reservatório do
+// Mirror Lake e os efeitos da torre não chegavam a moradores de verdade)
+test('A2: o robô que pula a Arcologia termina mais pobre (cidade da S2a, 6 h de jogo)', () => {
   const jogar = (pular) => {
     const sim = criarSimulacao({ semente: 'robo-arco' });
-    const falsa = ligarCidadeFalsa(sim, { moradoresIniciais: 350 });
     if (pular) {
       const cmd = sim.cmd.bind(sim);
       sim.cmd = (n, a) => (n === 'arcologia.iniciar' ? { ok: false, codigo: 'trancado' } : cmd(n, a));
     }
-    const est = criarEstrategia(sim, { cidadeFalsa: falsa });
+    const est = criarEstrategia(sim, {});
     for (let t = 0; t < 6 * 3600; t++) {
       if (t % 20 === 0) est.passo();
       sim.rodar(1, { sincrono: true });
     }
     assert.deepEqual(sim.erros, []);
-    // patrimônio: o valuation da S3a (caixa, dívida, prédios e estoque) e a obra da Arcologia, que é da Holding
+    // patrimônio: o valuation (caixa, dívida, prédios, estoque e, pela D49, o valor da obra da Arcologia)
     return {
-      riqueza: sim.q.holding().valuation + sim.q.arcologia().valor,
+      riqueza: sim.q.holding().valuation,
       contribuicao: sim.json.economia.livro.totais.receitas.moradores ?? 0,
       populacao: sim.agregados.populacao,
       marco: sim.progresso.marco().n,

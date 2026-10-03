@@ -433,7 +433,8 @@ export async function criarRender(canvas, opcoes = {}) {
     },
     /**
      * Promessa do aquecimento dos programas (D66, motor/quadro.js): resolve com o relatório quando a rodada final
-     * termina, de 2,5 a 12 s depois do primeiro quadro. O app segura a tela de carga até ela.
+     * termina: de 2,5 s depois do primeiro quadro (com o código sob demanda e os setores da vista carregados e um
+     * mínimo de quadros seguidos) até 60 s numa máquina muito lenta (AQUECER). O app segura a tela de carga até ela.
      */
     aquecido: () => quadro.aquecimento?.promessa ?? Promise.resolve(null),
     get stats() {

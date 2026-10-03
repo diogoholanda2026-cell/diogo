@@ -15,9 +15,13 @@
 // prontos, o renderer.compileAsync do three (KHR_parallel_shader_compile) compila domínio por domínio: a cena da
 // sombra no alvo dela e cada filho da cena (um domínio por grupo) no alvo HDR, com o mesmo tom do quadro, mais o que
 // os domínios pedirem em ctx.quadro.aquecer (um Set: add(objeto | lista | () => objetos), para o que ainda não está na
-// cena, como a etapa seguinte da Arcologia). Uma segunda rodada pega o que os domínios trouxeram na carga (depois de
-// 2,5 s, com prédios e vias prontos, ou aos 12 s); quando ela termina, o vigia (capacidades.js) passa a contar cada
-// programa novo como compilação depois de pronto.
+// cena, como a etapa seguinte da Arcologia). Uma segunda rodada pega o que os domínios trouxeram na carga; quando ela
+// termina, o vigia (capacidades.js) passa a contar cada programa novo como compilação depois de pronto. A rodada final
+// espera (C1b) os domínios sob demanda (o código e o GLSL que chegam por import(): árvores, gente, caminhões,
+// colocáveis, obras e marcadores) e alguns quadros seguidos com tudo carregado (o assado dos impostores e as malhas
+// que os domínios montam no quadro depois da chegada); prédios e vias com o que a vista pede só até 12 s. Antes, numa
+// máquina ocupada (o SwiftShader leva 5 s por quadro na carga), a final saía antes de o código sob demanda chegar e os
+// programas dele compilavam depois de pronto.
 // A sombra própria mora em render/sombra/mapa.js; a classe segue exportada daqui para o índice do render.
 import * as THREE from 'three';
 import { Pos, forcaCas } from './pos.js';
@@ -36,8 +40,22 @@ export const TETO_QPS = Object.freeze({ livre: 0, coberto: 10, foto: 0, teste: 0
 /** Tolerância do teto de qps: um quadro até 1 ms adiantado ainda desenha (o rAF oscila em volta do intervalo). */
 const FOLGA_MS = 1;
 
-/** Rodadas do aquecimento: a final depois de esperaMs com os domínios carregados, ou aos tetoMs. */
-export const AQUECER = Object.freeze({ esperaMs: 2500, tetoMs: 12000, dominios: ['predios', 'vias', 'pedestres', 'caminhoes'] });
+/**
+ * Rodadas do aquecimento. A final vem depois de esperaMs e de minQuadros quadros seguidos com os domínios carregados:
+ * os de setores (dominios: o que a vista pede) contam só até tetoMs; os sob demanda (sobDemanda: o pronto() deles diz
+ * que o código chegou ou falhou) até tetoSobDemandaMs e tetoSobDemandaQuadros desenhados, os dois: com a thread presa
+ * (no SwiftShader, a nova partida desenhou 4 quadros em 72 s e o import() não tinha voltado), o relógio sozinho
+ * soltava a final cedo demais. No PC do dono os 120 quadros passam em 2 s e o teto é o do relógio.
+ */
+export const AQUECER = Object.freeze({
+  esperaMs: 2500,
+  tetoMs: 12000,
+  minQuadros: 4,
+  tetoSobDemandaMs: 60000,
+  tetoSobDemandaQuadros: 120,
+  dominios: ['predios', 'vias'],
+  sobDemanda: ['vegetacao', 'pedestres', 'caminhoes', 'colocaveis', 'obras', 'marcadores'],
+});
 
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
 
@@ -96,6 +114,8 @@ export class Aquecimento {
     this._novas = false;
     this._geracao = 0; // sobe a cada troca de perfil: a rodada que ainda estava no ar deixa de valer
     this._resolvida = false;
+    this._seguidos = 0; // quadros seguidos com os domínios carregados (a final pede minQuadros)
+    this._quadros = 0; // quadros desde a primeira rodada (o teto dos sob demanda pede tetoSobDemandaQuadros)
     this.msThread = 0; // a parte síncrona das rodadas (a thread parada montando os programas)
     this.promessa = new Promise((ok) => (this._ok = ok));
   }
@@ -121,7 +141,7 @@ export class Aquecimento {
 
   /** Relatório para R.stats e a página de teste. */
   relatorio() {
-    return { estado: this.estado, rodadas: this.rodadas, ms: Math.round(this.ms), msThread: Math.round(this.msThread), programas: this.programas, fontes: this.fontes.size, grupos: this.grupos };
+    return { estado: this.estado, rodadas: this.rodadas, ms: Math.round(this.ms), msThread: Math.round(this.msThread), programas: this.programas, fontes: this.fontes.size, grupos: this.grupos, esperando: this._esperando ?? [], final: this._final ?? null };
   }
 
   /**
@@ -135,30 +155,47 @@ export class Aquecimento {
       this._perfil = ctx.perfil;
       if (troca) this._reiniciar();
     }
-    if (this._pendente) return false;
     if (this.estado === 'pronto') {
-      if (!this._novas) return false;
+      if (this._pendente || !this._novas) return false;
       this._novas = false;
       return this._rodada(alvo, 'extra');
     }
     if (this.rodadas === 0) {
+      if (this._pendente) return false;
       this.t0 = tMs;
       this._c0 = agora();
+      this._seguidos = 0;
+      this._quadros = 0;
       return this._rodada(alvo, 'primeira');
     }
+    this._quadros++;
+    // conta os quadros também enquanto a primeira rodada compila: os domínios seguem montando por trás
     const dt = tMs - this.t0;
-    if ((dt >= this.op.esperaMs && this._carregados()) || dt >= this.op.tetoMs) return this._rodada(alvo, 'final');
-    return false;
+    const faltam = this._faltando(this.op.sobDemanda);
+    if (dt < this.op.tetoMs) faltam.push(...this._faltando(this.op.dominios));
+    // a página de teste mostra quem a carga ainda espera
+    if (faltam.join() !== (this._esperando ?? []).join()) {
+      this._esperando = faltam;
+      this._publicar();
+    }
+    this._seguidos = faltam.length ? 0 : this._seguidos + 1;
+    if (this._pendente) return false;
+    const pronta = dt >= this.op.esperaMs && this._seguidos >= this.op.minQuadros;
+    const teto = dt >= this.op.tetoSobDemandaMs && this._quadros >= this.op.tetoSobDemandaQuadros;
+    if (!pronta && !teto) return false;
+    // por que a final saiu (página de teste): tudo carregado, ou o teto com quem ainda faltava
+    this._final = { motivo: pronta ? 'carregado' : 'teto', ms: Math.round(dt), quadros: this._quadros, faltavam: faltam };
+    return this._rodada(alvo, 'final');
   }
 
-  // prédios e vias com o que a vista pede (os setores da oficina chegam nos primeiros segundos)
-  _carregados() {
-    return this.op.dominios.every((n) => {
+  // os domínios da lista que ainda não estão prontos (sem o domínio na cena ou sem pronto(), nada a esperar)
+  _faltando(nomes = []) {
+    return nomes.filter((n) => {
       try {
         const d = this.ctx.dominio?.(n);
-        return typeof d?.pronto === 'function' ? !!d.pronto() : true;
+        return typeof d?.pronto === 'function' && !d.pronto();
       } catch (e) {
-        return true;
+        return false;
       }
     });
   }
@@ -170,6 +207,10 @@ export class Aquecimento {
     this._pendente = null;
     this.estado = 'espera';
     this.rodadas = 0;
+    this._seguidos = 0;
+    this._quadros = 0;
+    this._esperando = [];
+    this._final = null;
     this.programas = 0;
     this.ms = 0;
     this.msThread = 0;

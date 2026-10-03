@@ -3,9 +3,10 @@
 //   Vídeo: qualidade (Auto, Ultra, Alta, PC, Média, Leve, cada uma com o orçamento) com "Manter esta qualidade? 10 s"
 //     (volta sozinha), resolução dinâmica e nitidez (CAS) da PC1 e da PC2, "Sempre dia", painel de desempenho (F9) e
 //     o Teste de desempenho.
-//   Interface, Controles (mira, borda do mouse e as teclas), Som (5 canais, segundo plano, vibração), Jogo (salvamento
-//   automático, dicas), Acessibilidade, Salvamento (salvar, saves, exportar, importar, armazenamento, recomeçar) e
-//   Sobre (versão, placa, capacidades e licenças).
+//   Interface (com o filtro dos avisos da X3a), Controles (mira, borda do mouse e as teclas), Som (5 canais, segundo
+//   plano, vibração), Jogo (salvamento automático, dicas), Acessibilidade (com a paleta das camadas para daltonismo),
+//   Salvamento (salvar, saves, exportar, importar, armazenamento, recomeçar) e Sobre (versão, placa, capacidades e
+//   licenças).
 // Teclado: Page Up e Page Down (ou [ e ]) trocam a aba; Esc fecha.
 import { signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
@@ -26,6 +27,7 @@ import { usarEstilo } from '../estilo.js';
 import { CSS_CORPO } from './estilo.js';
 import { mudarPrefs, rotuloSlot, exportarSave } from './comum.js';
 import { fraseFalha } from './Carregar.jsx';
+import { FILTROS_AVISOS, filtroAtual } from '../../mundo/marcadores.js';
 
 export const ABAS = Object.freeze(['video', 'interface', 'controles', 'som', 'jogo', 'acessibilidade', 'salvamento', 'sobre']);
 export const QUALIDADES = Object.freeze(['auto', 'ultra', 'alta', 'pc', 'media', 'leve']);
@@ -194,6 +196,10 @@ function Interface({ ui }) {
       <Liga ui={ui} k="pausarTelas" padrao={toque} rotulo={t('u2.cfg.pausarTelas')} exp={t('u2.cfg.pausarTelasExp')} />
       <Liga ui={ui} k="cenasMarco" padrao rotulo={t('u2.cfg.cenasMarco')} exp={t('u2.cfg.cenasMarcoExp')} />
       {toque ? null : <Liga ui={ui} k="cartaoNoPC" rotulo={t('u2.cfg.cartaoNoPC')} exp={t('u2.cfg.cartaoNoPCExp')} />}
+      {/* o filtro dos marcadores de aviso (X3a, prefs.avisos): o mesmo do popover das Camadas */}
+      <Linha rotulo={t('u2.cfg.avisos')} exp={t('u2.cfg.avisosExp')} k="avisos">
+        <Segmentado a="cfg.avisos" rotulo={t('u2.cfg.avisos')} valor={filtroAtual(p)} aoTrocar={(v) => mudarPrefs(ui, { avisos: v })} opcoes={FILTROS_AVISOS.map((v) => ({ v, rotulo: t(`x3.filtro.${v}`) }))} />
+      </Linha>
     </div>
   );
 }
@@ -260,6 +266,8 @@ function Acessibilidade({ ui }) {
       <Linha rotulo={t('u2.cfg.movimento')} exp={t('u2.cfg.movimentoExp')} k="reduzirMovimento">
         <Segmentado a="cfg.movimento" rotulo={t('u2.cfg.movimento')} valor={mov} aoTrocar={(v) => mudarPrefs(ui, { reduzirMovimento: v === 'sim' ? true : v === 'nao' ? false : null })} opcoes={['sistema', 'sim', 'nao'].map((v) => ({ v, rotulo: t(`u2.cfg.mov.${v}`) }))} />
       </Linha>
+      {/* a paleta das camadas para daltonismo (X3a, prefs.daltonismo) */}
+      <Liga ui={ui} k="daltonismo" rotulo={t('u2.cfg.daltonismo')} exp={t('u2.cfg.daltonismoExp')} />
     </div>
   );
 }

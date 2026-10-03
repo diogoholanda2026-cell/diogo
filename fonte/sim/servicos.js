@@ -347,12 +347,16 @@ function efeitosPrevia(sim, tipo, def, L) {
 /** Manutenção por hora de jogo dos serviços prontos (a S3a soma e paga, D41); uma conta por tique. */
 const CUSTO = new WeakMap();
 export function custoServicos(sim) {
+  // o cache vale enquanto nenhum prédio mudar (a versão do diário sobe a cada marcar): só o tique e a contagem deixavam
+  // um q.barra no meio do tique guardar o custo de antes de uma obra de serviço terminar, e a economia pagava esse valor
+  // (C1a: a consulta mudava a partida; o A8 pegou o hash do navegador diferente do Node)
   const c = CUSTO.get(sim);
-  if (c && c.tique === sim.tique && c.n === sim.tabelas.predios.vivos) return c.v;
+  const versao = sim.mudancas?.versao ?? -1;
+  if (c && c.tique === sim.tique && c.n === sim.tabelas.predios.vivos && c.versao === versao) return c.v;
   const P = sim.tabelas.predios;
   let v = 0;
   for (let i = 0; i < P.n; i++) if (P.tipo[i] === TIPO_PREDIO.SERVICO && funciona(P, i)) v += manutencaoDe(SERVICOS[SERVICOS_ORDEM[P.modelo[i]]]);
-  CUSTO.set(sim, { tique: sim.tique, n: P.vivos, v });
+  CUSTO.set(sim, { tique: sim.tique, n: P.vivos, versao, v });
   return v;
 }
 

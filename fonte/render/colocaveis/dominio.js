@@ -7,12 +7,14 @@
 /** Fábrica do domínio sob demanda. */
 export function criarDominioColocaveis(ctx) {
   let real = null;
+  let falhou = false;
   const chegou = import('./desenho.js')
     .then((m) => {
       real = m.criarColocaveis(ctx);
       return real;
     })
     .catch((e) => {
+      falhou = true;
       console.error('colocaveis: o domínio não carregou', e);
       return null;
     });
@@ -32,7 +34,8 @@ export function criarDominioColocaveis(ctx) {
       const r = await chegou;
       return r?.preparar(op) ?? null;
     },
-    pronto: () => !!real?.pronto(),
+    // o aquecimento da carga espera o domínio chegar (motor/quadro.js, AQUECER.sobDemanda); a falha não prende
+    pronto: () => falhou || !!real?.pronto(),
     medidas: () => real?.medidas() ?? null,
     caixa: (i) => real?.caixa(i) ?? null,
     silhueta: (tipo, nivel) => real?.silhueta(tipo, nivel) ?? null,

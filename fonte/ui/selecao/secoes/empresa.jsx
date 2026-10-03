@@ -5,6 +5,7 @@
 //     de tempo (D13: 1, 5, 10, 30 e 60 min de jogo, com o preço em dólar).
 //   Prédio: nível de 1 a 3 com o que o próximo pede, trabalhadores por escolaridade, produtividade e a distância ao
 //     armazém (D47).
+// Na aba Produção, o "Inspirado em ..." com a referência real do modelo (R5), como na folha do serviço.
 import { useState, useEffect } from 'preact/hooks';
 import { t, temTexto } from '../../textos.js';
 import * as fmt from '../../formato.js';
@@ -21,6 +22,7 @@ import { Bloco, Par, Avisos, Obra, navegar } from '../Folha.jsx';
 import { Trabalho } from './comercial.jsx';
 import { ITENS, PREDIOS_HOLDING } from '../../../data/holding.js';
 import { COMPRA_TEMPO, REGRAS_DONO } from '../../../data/economia.js';
+import { COLOCAVEIS } from '../../../data/colocaveis.js';
 
 /** Nome do item ('Concreto'); item desconhecido, o próprio id. */
 export const nomeItem = (item) => (temTexto(`s3.item.${item}`) ? t(`s3.item.${item}`) : item ?? '');
@@ -158,11 +160,14 @@ export function SecaoEmpresa({ ui, sel, p, aba }) {
   if (aba === 'predio') return <Predio p={p} />;
   const tempo = ui.obterSim()?.espelho?.tempo;
   const linhas = h.linhas ?? [];
+  const ref = COLOCAVEIS[p?.id ?? p?.tipo]?.referencia ?? null;
   return (
     <>
       <Avisos ui={ui} p={p} sel={sel} />
       <Obra p={p} />
       {p.faz ? <p class="fl-texto">{p.faz}</p> : null}
+      {/* a referência real do modelo (R5), como na folha do serviço */}
+      {ref ? <p class="fl-nota">{t('folha.inspirado', { ref })}</p> : null}
       {linhas.length ? (
         // a chave do prédio e da linha: ir ao fornecedor (Voltar) não leva o lote escolhido de um prédio para o outro
         linhas.map((l, i) => <Linha key={`${p.ref}:${i}`} ui={ui} p={p} l={l} i={i} mult={tempo?.mult ?? 0} tique={tempo?.tique ?? 0} />)

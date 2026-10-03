@@ -239,6 +239,12 @@ function criarCaminhoes(ctx) {
     }
     return m;
   });
+  // a falha do import não prende o aquecimento da carga (motor/quadro.js, AQUECER.sobDemanda): pronto() conta como chegada
+  let falhou = false;
+  carga.catch((e) => {
+    falhou = true;
+    console.error('caminhoes: o modelo dos caminhões não carregou', e);
+  });
 
   const planos = new Map(); // id da entrega → { pl, caminho }
   const conhecidos = new Map(); // id → { item, n, visual } (o caminhão que ainda anda depois de a entrega sair)
@@ -369,8 +375,8 @@ function criarCaminhoes(ctx) {
       animar = b;
     },
     preparar: () => carga,
-    /** O modelo e o material chegaram (o aquecimento da carga pode esperar por isso). */
-    pronto: () => !!mod,
+    /** O modelo e o material chegaram, ou falharam (o aquecimento da carga espera por isso). */
+    pronto: () => !!mod || falhou,
     /** Cenas: entregas de mostra ([{ id, item, n, caminho, tIni, tFim, visual }]), desenhadas como as da simulação. */
     amostras(lista) {
       amostras = lista ?? [];

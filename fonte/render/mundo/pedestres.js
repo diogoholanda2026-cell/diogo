@@ -169,6 +169,12 @@ function criarPedestres(ctx) {
     }
     return m;
   });
+  // a falha do import não prende o aquecimento da carga (motor/quadro.js, AQUECER.sobDemanda): pronto() conta como chegada
+  let falhou = false;
+  carga.catch((e) => {
+    falhou = true;
+    console.error('pedestres: a figura de gente não carregou', e);
+  });
 
   // ---------------------------------------------------------------------------------------------- estado
   const gente = [];
@@ -697,8 +703,8 @@ function criarPedestres(ctx) {
       return gente.reduce((a, p) => a + p.corpos.length, 0);
     },
     preparar: () => carga,
-    /** A figura e o material chegaram (o aquecimento da carga pode esperar por isso). */
-    pronto: () => !!mod,
+    /** A figura e o material chegaram, ou falharam (o aquecimento da carga espera por isso). */
+    pronto: () => !!mod || falhou,
     /** Cenas: adianta a gente `seg` segundos sem desenhar (junto com trafego.avancar, quadro a quadro). */
     avancarUm(dt, ctxQ = ctx) {
       const vias = ctxQ.dominio('vias');

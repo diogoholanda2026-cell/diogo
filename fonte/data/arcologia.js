@@ -68,7 +68,7 @@ export const ETAPAS = /* @__PURE__ */ congelar([
     creditos: 250000, materiais: { vidro: 50, aco: 30, serrada: 20 }, minutos: 10, xp: 1500, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'atratividade', v: 5 },
-      { tipo: 'valor', v: 120, raio: 900 },
+      { tipo: 'valor', v: 120, raio: 1500 },
       { tipo: 'legado', v: 5 },
       { tipo: 'helicoptero' },
     ],

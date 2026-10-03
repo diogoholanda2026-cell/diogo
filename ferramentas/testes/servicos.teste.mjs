@@ -314,3 +314,23 @@ test('camada Serviços por aresta, efeitos da prévia e q.cidade com a lista dos
   assert.ok('educacao' in cid.cobertura);
 });
 
+
+// C1a: o A8 pegou uma consulta que mudava a partida. O custo dos serviços ficava em cache pelo tique e pela contagem de
+// prédios; um q.barra entre dois tiques guardava o valor de antes de a obra de um serviço terminar no tique seguinte, e
+// a economia pagava esse valor. Agora a versão do diário entra na chave.
+test('q.barra entre os tiques não muda a partida (custo dos serviços em cache)', () => {
+  const jogar = (consultar) => {
+    const sim = criarSimulacao({ semente: 'pureza-servicos' });
+    for (const id of ['captacao', 'usina']) {
+      const s = sim.q.sugestoes().find((x) => x.id === id);
+      const pv = sim.q.construir.previa({ tipo: s.construir, x: s.x, z: s.z, rot: s.rot });
+      assert.equal(sim.cmd('construir', { tipo: s.construir, x: pv.x, z: pv.z, rot: pv.rot }).ok, true, id);
+    }
+    for (let t = 0; t < 400; t++) {
+      sim.rodar(1, { sincrono: true });
+      if (consultar) sim.q.barra();
+    }
+    return { hash: sim.q.hash(), caixa: sim.holding.caixa() };
+  };
+  assert.deepEqual(jogar(true), jogar(false));
+});

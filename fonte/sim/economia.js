@@ -53,9 +53,14 @@ function prediosComBemEstar(sim) {
   return out;
 }
 
+/**
+ * Contribuição por hora de jogo: a dos moradores da cidade e a dos moradores de luxo da Arcologia (torre.e3, D49), que
+ * também são moradores e pagam a Contribuição na faixa do bem-estar deles (sim.arcologia.contribuicaoHora da X1b).
+ */
 const rendaHora = (sim) => {
   const regras = regrasDe(sim);
-  return contribuicaoHora(regras, sim.agregados, regras.renda.tarifaPor === 'predio' ? prediosComBemEstar(sim) : null);
+  const cidade = contribuicaoHora(regras, sim.agregados, regras.renda.tarifaPor === 'predio' ? prediosComBemEstar(sim) : null);
+  return cidade + finito(sim.arcologia?.contribuicaoHora?.());
 };
 
 // ------------------------------------------------------------------------------------------------ empréstimo
@@ -300,9 +305,12 @@ export function consultaHolding(sim) {
   };
 }
 
-/** Patrimônio (seção 12.7 do desenho): caixa − dívida + prédios da Holding pelo custo + estoque a preço base. */
+/**
+ * Patrimônio (seção 12.7 do desenho): caixa − dívida + prédios da Holding pelo custo + estoque a preço base + a obra da
+ * Arcologia (D49: créditos pagos e materiais entregues, sim.arcologia.valor da X1b), que é da Holding.
+ */
 export function valuation(sim) {
-  return sim.holding.caixa() - divida(sim).divida + valorHolding(sim);
+  return sim.holding.caixa() - divida(sim).divida + valorHolding(sim) + finito(sim.arcologia?.valor?.());
 }
 
 // ------------------------------------------------------------------------------------------------ o tique

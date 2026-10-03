@@ -77,6 +77,8 @@ export function registrar(registrarTextos) {
     's3.objetivo.cidade.avenida': 'Ligue a rodovia à gleba com a primeira avenida',
     's3.objetivo.cidade.captacao': 'Construa a captação no rio, acima da Vila',
     's3.objetivo.cidade.agua': 'Leve água à Vila de Santa Cida',
+    's3.objetivo.cidade.vila': 'Troque as ruas de terra da Vila por ruas com água e luz ({n} casas)',
+    's3.objetivo.cidade.ligacao': 'Leve a rua da Vila até a primeira quadra do bairro novo',
     's3.objetivo.cidade.zonas': 'Zoneie as primeiras quadras ({n} células)',
     's3.objetivo.cidade.energia': 'Ponha a usina solar e leve energia às casas',
     's3.objetivo.cidade.mil': 'Chegue a {n} moradores',

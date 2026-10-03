@@ -29,7 +29,7 @@ export const MARCOS = /* @__PURE__ */ congelar([
     ],
   },
   {
-    n: 1, nome: 'Povoado', xp: 400, licencas: 0,
+    n: 1, nome: 'Povoado', xp: 500, licencas: 0,
     libera: ['servico.clinica', 'servico.escolaF', 'servico.delegacia', 'holding.olaria', 'item.argila', 'item.tijolo', 'item.serrada'],
     m1b: ['servico.termica', 'holding.manejo', 'holding.serraria', 'item.madeira'],
   },

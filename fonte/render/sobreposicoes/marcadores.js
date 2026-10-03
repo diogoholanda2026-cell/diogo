@@ -9,12 +9,15 @@ import { PRIORIDADE } from '../camera/selecao.js';
 function criarCasca(ctx) {
   let real = null;
   let morto = false;
+  let chegou = false; // o desenho chegou ou falhou: o aquecimento da carga não espera mais (motor/quadro.js)
   const carregado = import('./desenhoMarcadores.js').then(
     (m) => {
       if (!morto) real = m.criarMarcadores(ctx);
+      chegou = true;
       return real;
     },
     (e) => {
+      chegou = true;
       console.error('render: o desenho dos marcadores não carregou', e);
       return null;
     },
@@ -25,6 +28,7 @@ function criarCasca(ctx) {
     nome: 'marcadores',
     /** Promessa do desenho (cenas e testes). */
     carregado: () => carregado,
+    pronto: () => chegou,
     quadro: (tMs, c) => real?.quadro(tMs, c),
     mostrados: () => real?.mostrados() ?? [],
     medidas: () => real?.medidas() ?? null,

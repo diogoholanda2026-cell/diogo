@@ -196,10 +196,14 @@ export function ocupadosHolding(sim) {
   return v.map((x) => Math.round(x * p.ocupacao));
 }
 
-/** Frota da Holding (D47): 6 no começo; com armazém, os caminhões dele por nível; mais os efeitos das etapas. */
+/**
+ * Frota da Holding (D47 e seção 13.4 do desenho): 6 no começo, +6 por nível de armazém e +6 com a torre.e2. No M1 o
+ * estoque é um só (os armazéns somam capacidade), e a frota segue o nível do maior armazém: um segundo Escritório de
+ * Obra dá estoque, não caminhões (a garagem, que compra mais, é do M1b).
+ */
 export function frotaTotal(sim) {
   const arm = armazens(sim);
-  let base = arm.length ? arm.reduce((a, x) => a + x.caminhoes, 0) : PRODUCAO.frotaInicial;
+  let base = arm.length ? arm.reduce((a, x) => Math.max(a, x.caminhoes), 0) : PRODUCAO.frotaInicial;
   const ef = sim.json.holding?.efeitos ?? {};
   for (const k of Object.keys(ef)) base += Math.max(0, Math.floor(finito(ef[k]?.caminhoes)));
   return base;

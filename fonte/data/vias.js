@@ -1,6 +1,8 @@
 // Tipos de via do M1 (seção 2.3, D22) com o perfil transversal e as regras do traçado e das células. Uma fonte só para
-// a simulação (custo, regras), o render (perfil) e a UI (catálogo). F0 criou; dona: S1b. Custos e manutenção:
-// (calibrar).
+// a simulação (custo, regras), o render (perfil) e a UI (catálogo). F0 criou; dona: S1b. Custos e manutenção
+// calibrados pelo robô na C1a (eram 30, 32, 70 e 130 por metro e 150, 150, 300, 500 e 20 por km por hora: a quadra de
+// 112 m custava 14 mil e rendia uns 1.500 por hora, e a cidade não crescia; em US$, a rua de 12 por metro dá US$ 7.200
+// por metro com calçada, canos e cabos). (calibrar)
 //
 // Perfil: da borda ESQUERDA para a direita, olhando de a para b. Cada parte: { parte, largura, sentido?, piso?, detalhe? }.
 // sentido +1 = faixa de a para b; -1 = de b para a (mão à direita). O meio-fio (0,15 m) fica dentro da calçada.
@@ -15,19 +17,19 @@ export const VIAS = congelar({
   rua: {
     nome: 'Rua', largura: 16, faixas: [1, 1], mao: 'dupla',
     perfil: [calcada(3), { parte: 'estacionamento', largura: 3 }, faixa(-1), faixa(1), calcada(3)],
-    velocidade: 40, capFaixa: 700, custoM: 30, manutKmH: 150, declive: 0.12, raioMin: 20, marco: 0,
+    velocidade: 40, capFaixa: 700, custoM: 12, manutKmH: 60, declive: 0.12, raioMin: 20, marco: 0,
     zona: true, redes: true, constroi: true, melhoraPara: ['ruaMao', 'avenida', 'avenidaG'],
   },
   ruaMao: {
     nome: 'Rua de mão única', largura: 16, faixas: [2, 0], mao: 'unica',
     perfil: [calcada(3), { parte: 'estacionamento', largura: 3 }, faixa(1), faixa(1), calcada(3)],
-    velocidade: 40, capFaixa: 700, custoM: 32, manutKmH: 150, declive: 0.12, raioMin: 20, marco: 2,
+    velocidade: 40, capFaixa: 700, custoM: 13, manutKmH: 60, declive: 0.12, raioMin: 20, marco: 2,
     zona: true, redes: true, constroi: true, melhoraPara: ['rua', 'avenida', 'avenidaG'],
   },
   avenida: {
     nome: 'Avenida', largura: 24, faixas: [2, 2], mao: 'dupla',
     perfil: [calcada(3), faixa(-1), faixa(-1), { parte: 'canteiro', largura: 4, detalhe: 'palmeiras' }, faixa(1), faixa(1), calcada(3)],
-    velocidade: 50, capFaixa: 800, custoM: 70, manutKmH: 300, declive: 0.1, raioMin: 40, marco: 0,
+    velocidade: 50, capFaixa: 800, custoM: 28, manutKmH: 120, declive: 0.1, raioMin: 40, marco: 0,
     zona: true, redes: true, constroi: true, melhoraPara: ['avenidaG'],
   },
   avenidaG: {
@@ -36,7 +38,7 @@ export const VIAS = congelar({
       calcada(3.5), faixa(-1), faixa(-1), faixa(-1), { parte: 'canteiro', largura: 4, detalhe: 'arvores' },
       faixa(1), faixa(1), faixa(1), calcada(3.5),
     ],
-    velocidade: 60, capFaixa: 850, custoM: 130, manutKmH: 500, declive: 0.08, raioMin: 60, marco: 4,
+    velocidade: 60, capFaixa: 850, custoM: 52, manutKmH: 200, declive: 0.08, raioMin: 60, marco: 4,
     zona: true, redes: true, constroi: true, melhoraPara: [],
   },
   rodovia: {
@@ -51,7 +53,7 @@ export const VIAS = congelar({
   terra: {
     nome: 'Rua de terra', largura: 10, faixas: [1, 1], mao: 'dupla',
     perfil: [faixa(-1, 5, 'terra'), faixa(1, 5, 'terra')],
-    velocidade: 30, capFaixa: 400, custoM: null, manutKmH: 20, declive: 0.15, raioMin: 15, marco: null,
+    velocidade: 30, capFaixa: 400, custoM: null, manutKmH: 8, declive: 0.15, raioMin: 15, marco: null,
     zona: false, redes: false, constroi: false, melhoraPara: ['rua'], doMapa: true,
   },
 });

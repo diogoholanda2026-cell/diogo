@@ -433,6 +433,7 @@ function criarObras(ctx) {
   // os shaders vêm sob demanda (materiais/shaders/obra.glsl.js), pedidos já na criação do render: chegam antes da
   // rodada final do aquecimento (os programas compilam na carga, D66) e ficam fora do pacote principal (A1)
   let pronto = false; // os shaders chegaram
+  let fimCarga = false; // chegaram ou falharam: o aquecimento da carga não espera mais (motor/quadro.js, D66)
   let mats = {};
   let sombras = {};
   let geos = {};
@@ -460,7 +461,9 @@ function criarObras(ctx) {
     }
     pronto = true;
     sujo = true;
-  }).catch((e) => console.warn('obras: os shaders não carregaram', e));
+  })
+    .catch((e) => console.warn('obras: os shaders não carregaram', e))
+    .finally(() => (fimCarga = true));
   const obras = new Map(); // idx -> { caixas, cascas, gruas, nivel, chave } (null: peças a fazer no próximo refazer)
   const chaveObra = (P, i) => `${P.flags[i] & (PREDIO.OBRA | PREDIO.OBRA_NIVEL)}:${P.obraIni[i]}:${P.obraFim[i]}:${P.x[i]}:${P.z[i]}:${P.modelo[i]}:${P.nivel[i]}:${P.semente[i]}`;
   let sujo = true;
@@ -602,6 +605,8 @@ function criarObras(ctx) {
     },
     /** Força refazer, com todas as peças novas de uma vez (cenas e testes). */
     refazer: () => refazer(agoraMs(), Infinity),
+    /** Os shaders chegaram (ou falharam): o aquecimento da carga espera por eles. */
+    pronto: () => fimCarga,
     medidas() {
       if (!pronto) return { ...dom.contagem, tris: 0 };
       const t = (v) => listas[v].mesh.count * geos[v].tris;

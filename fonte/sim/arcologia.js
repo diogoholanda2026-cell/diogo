@@ -9,11 +9,12 @@
 // ARCOLOGIA (os 8 portões) e o reservatório na rede de água. O marco 7 pede a torre.e4 pronta.
 //
 // Publica: comando arcologia.iniciar, consulta arcologia, espelho.arcologia, evento etapa e sim.arcologia (vagas,
-// moradores de luxo e o valor da obra, para quem precisar). Estado na seção 'arcologia' (save e hash).
+// moradores de luxo, a Contribuição deles, que a economia soma na dos moradores, e o valor da obra, que entra na
+// valuation). Estado na seção 'arcologia' (save e hash).
 import { ETAPA, ARESTA } from '../contratos/flags.js';
 import { ORDEM } from '../contratos/interno.js';
 import { refDe } from '../contratos/espelho.js';
-import { RODADA, HORA } from '../comum/relogio.js';
+import { RODADA } from '../comum/relogio.js';
 import { cos, sen, hipot } from '../comum/util.js';
 import {
   ETAPAS, ETAPAS_ORDEM, ETAPAS_M2, etapaDe, duracaoDe, avancoDaTorre, alturaBlade, alturaLegacy, ALTURA_PONTE,
@@ -328,12 +329,7 @@ function sistema(sim, k, fatias, T) {
     atualizarDisponiveis(sim);
     anunciarAlturas(sim);
   }
-  // a Contribuição dos moradores de luxo da torre.e3, na faixa do bem-estar deles (regra do dono)
-  const luxo = j.efeitos.luxo;
-  if (luxo > 0) {
-    const regras = sim.economia?.regras?.() ?? REGRAS_DONO;
-    sim.holding.receber((luxo * tarifaPelasRegras(regras, j.efeitos.bemEstarLuxo)) / HORA, 'arcologia');
-  }
+  // a Contribuição dos moradores de luxo da torre.e3 entra com a dos moradores (economia.js lê contribuicaoLuxo)
   publicar(sim);
 }
 
@@ -363,6 +359,12 @@ function iniciar(sim, { etapa } = {}) {
 // ------------------------------------------------------------------------------------------------ consulta
 
 const data = (t) => (t >= 0 ? { tique: t, ...dataDoTique(t) } : null);
+
+/** Contribuição por hora de jogo dos moradores de luxo da torre.e3, na faixa do bem-estar deles (regra do dono). */
+function contribuicaoLuxo(sim) {
+  const j = J(sim);
+  return j.efeitos.luxo > 0 ? j.efeitos.luxo * tarifaPelasRegras(sim.economia?.regras?.() ?? REGRAS_DONO, j.efeitos.bemEstarLuxo) : 0;
+}
 
 /** Uma etapa para as telas (formato de contratos/consultas.js, com os campos a mais do Livro). */
 function etapaVista(sim, def) {
@@ -422,7 +424,7 @@ function consulta(sim) {
     efeitos: {
       vagas: [...j.efeitos.vagas],
       moradoresLuxo: j.efeitos.luxo,
-      contribuicaoLuxoHora: j.efeitos.luxo > 0 ? j.efeitos.luxo * tarifaPelasRegras(sim.economia?.regras?.() ?? REGRAS_DONO, j.efeitos.bemEstarLuxo) : 0,
+      contribuicaoLuxoHora: contribuicaoLuxo(sim),
       vias: j.vias.length,
       portoes: j.portoes.length,
       agua: j.produtor >= 0 ? (ETAPAS[0].efeitos.find((x) => x.tipo === 'agua')?.moradores ?? 0) : 0,
@@ -495,6 +497,7 @@ export function registrar(sim) {
   sim.arcologia = {
     vagas: () => [...J(sim).efeitos.vagas],
     moradoresLuxo: () => J(sim).efeitos.luxo,
+    contribuicaoHora: () => contribuicaoLuxo(sim),
     valor: () => valorDaObra(sim),
     estado: (id) => estadoDe(sim, id),
   };

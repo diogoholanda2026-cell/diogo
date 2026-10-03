@@ -41,7 +41,9 @@ export const CONSULTAS = congelar({
   },
   'zona.previa': { dono: 'S1b', formato: '({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia }' },
   'construir.previa': {
-    dono: 'S2a e S3a', formato: '({ tipo, x, z, rot }) → { ok, codigo?, x, z, rot, custo, manutencaoHora, alcance, efeitos: [{ camada, delta }] }',
+    dono: 'S2a e S3a',
+    formato:
+      '({ tipo, x, z, rot }) → { ok, codigo?, dados? (faltam em creditos), x, z, rot, custo (já soma custoDemolir), custoDemolir (prédios de zona sob a planta, D54), manutencaoHora, alcance, pegada, demolir: [ref], semRede (produtor de rede de frente para via sem canos nem cabos: constrói, mas só liga depois de melhorar), efeitos: [{ camada, delta }] }',
   },
   predio: {
     dono: 'S2a (S3a a parte holding)',
@@ -53,41 +55,56 @@ export const CONSULTAS = congelar({
     formato:
       "(id) → { id, fonte: 'predios' | 'arestas' | 'grade' | 'celulas', dados: Float32Array, grade: { n, passo, origem } | null, tipo: 'seq' | 'div' | 'cat', escala: { min, max, meio?, unidade }, categorias: [{ v, chave }] | null, legenda: [{ v, chave }], resumo: { chave, params }, versao }",
   },
-  avisosPredios: { dono: 'S2a', formato: '() → { versao, idx: Int32Array, glifo: Uint8Array, gravidade: Uint8Array }' },
+  avisosPredios: {
+    dono: 'S2a',
+    formato: "() → { versao, idx: Int32Array, glifo: Uint8Array (índice em nomes), gravidade: Uint8Array, nomes: ['glifo', ...] (GLIFOS_AVISO de sim/predios.js) } (com os 'info'; o filtro de gravidade é da UI)",
+  },
   deposito: {
     dono: 'S3a',
-    formato: '() → { janela: { fimTique, vendidas, max: 100 }, itens: [{ item, estoque, reserva, precoBase, precoVenda, vendeCidade, auto }] }',
+    formato:
+      '() → { janela: { fimTique, vendidas, max: 100 }, itens: [{ item, estoque, reserva, precoBase, precoVenda, precoImportacao, vendeCidade, auto }], importarAuto (D48), importacoes: [{ id, item, n, fim /* tique da chegada */ }] }',
   },
   emprestimo: {
     dono: 'S3a',
     formato:
-      '() → { disponivelAno, tomadoAno, limiteAno: 50000, divida, dividaMax: 500000, taxa: 0.10, jurosDevidos, contratos: [{ id, ano, valor, saldo, ini, fim, mora }] }',
+      '() → { disponivelAno, tomadoAno, limiteAno: 50000, divida, principal, dividaMax: 500000, taxa: 0.10, mora, passo, prazoAnos, jurosDevidos, jurosHora, parcela (a de pagarParcela), ano (do calendário, D67), contratos: [{ id, ano, valor, saldo, juros, ini, fim, mora }] }',
   },
   orcamento: {
     dono: 'S3a',
     formato:
-      '() → { receitas: { moradores, cidade, deposito, marcos }, despesas: { servicos, vias, ligacao, salarios, juros, importacao, importacaoCidade }, naoPago: { servicos, salarios }, saldoHora, caixa, serie: [{ mes, caixa, receitas, despesas, moradores, bemEstar, desemprego }] }',
+      '() → { receitas: { moradores (a cidade e os moradores de luxo da Arcologia), cidade, deposito, marcos, aporte? }, despesas: { servicos, vias, ligacao, salarios, juros, importacao, importacaoCidade }, naoPago: { servicos, salarios }, investimentosHora, saldoHora, fluxoCaixaHora (saldoHora sem os juros, que correm como dívida), caixa, eficiencia, caixaZerado, totais (livro-caixa acumulado: { receitas, despesas, investimentos } por categoria), serie: [{ mes, caixa, receitas, despesas, moradores, bemEstar, desemprego }] }',
   },
   producao: {
     dono: 'S3a',
     formato:
-      '() → { itens: [{ item, estoque, produzHora, consomeHora, cidadeHora, reserva }], predios: [{ ref, tipo, nivel, linhas }], frota: { usados, total, fila, atrasoMedio } }',
+      '() → { itens: [{ item, estoque, produzHora, consomeHora, cidadeHora, reserva, precoBase, liberado }], predios: [{ ref, tipo, nivel, produtividade, linhas: [{ item, n, auto, ativa, rodando, progresso, fimTique, parada, sugestaoLote }] }], frota: { usados, total, fila, atrasoMedio, esperaMax, filaMax, feitas, porDestino: { destino: { viagens, espera, viagem } } }, armazem: { usado, capacidade }, importarAuto (D48), esperando: { item: unidades } (obras da cidade paradas na última rodada, D48) }',
   },
   arcologia: {
     dono: 'X1b',
     formato:
-      '() → { plano, partes: [{ id, nome, etapas: [{ id, nome, estado, marco, creditos, materiais: [{ item, pede, entregue, estoque }], minutos, fase, progresso, efeitos }] }], progressoTotal }',
+      '() → { plano, nome, partes: [{ id, nome, etapas: [{ id, parte, nome, estado, marco, requisito, recusa, creditos, materiais: [{ item, pede, entregue, aCaminho, estoque }], minutos, fases, fase, progresso, materiaisFrac, parada, efeitos, xp, ini, fim, previsao }], futuras: [{ id, nome, prazo, creditos, materiais }] }], progressoTotal, valor (créditos pagos e materiais entregues: entra no valuation, D49), alturas: { blade, legacy, ponte } | null, efeitos: { vagas: [4], moradoresLuxo, contribuicaoLuxoHora, vias, portoes, agua }, inaugurada }',
   },
-  holding: { dono: 'S3a', formato: '() → { nome, cor, influencia, legado, efeitos: { descontoLadrilho, atratividade }, divisoes, valuation }' },
+  holding: {
+    dono: 'S3a',
+    formato:
+      '() → { nome, cor, influencia, legado, efeitos: { descontoLadrilho, atratividade }, divisoes, valuation, empresa, jogador, pais, ato, conselheiros: [{ id, nome, curto, cargo }] (D77 a D83) }',
+  },
   marcos: { dono: 'S3a', formato: 'seção 16.4 do desenho da simulação' },
   objetivos: { dono: 'S3a', formato: '() → [{ id, texto, quem, dominio, feito, total, alvo, recompensa }]' },
   decisoes: { dono: 'S3a', formato: 'seção 15.3 do desenho da simulação' },
   mural: { dono: 'S3a', formato: '({ desde }) → [post]' },
-  demanda: { dono: 'S2a', formato: '() → { resBaixa, resMedia, resAlta, comBaixa, comAlta, escritorio, industria, fatores: { zona: [{ id, v }] } }' },
+  demanda: {
+    dono: 'S2a',
+    formato: '() → { resBaixa, resMedia, resAlta, comBaixa, comAlta, escritorio, industria, R, C, I, E, fatores: { zona: [{ id, v }] }, ativas: [zona] (as liberadas no marco) }',
+  },
   cidade: { dono: 'S2a', formato: 'seção 16.4 do desenho da simulação' },
   catalogo: { dono: 'S2a e S3a', formato: '(categoria) → [{ tipo, nome, custo, manutencaoHora, marco, liberado }]' },
   ladrilhos: { dono: 'S1a', formato: '() → { estado: Uint8Array(256), preco: Float64Array(256), licencas }' },
-  sugestoes: { dono: 'S1a', formato: '() → [{ id, tipo, pontos | x, z }] (primeira hora, D36)' },
+  sugestoes: {
+    dono: 'S1a',
+    formato:
+      "() → [{ id, tipo: 'via', via, pontos } | { id, tipo: 'zona', zona, pontos (contorno) } | { id, tipo: 'melhorar', via, arestas: [ref], pontos } | { id, tipo: 'construir', construir, x, z, rot } | { id, tipo: 'no', x, z, ref, energiaMW }] (primeira hora, D36)",
+  },
   aresta: { dono: 'S1b', formato: '(ref) → { ref, tipo, nome, comprimento, fluxo?, manutencaoHora }' },
   avisos: { dono: 'S2a e X3b', formato: '({ perto, limite }) → [{ id, gravidade, codigo, params, alvo }]' },
   viasPerto: { dono: 'S1b', formato: '(x, z, raio) → [{ ref, t, d }]' },

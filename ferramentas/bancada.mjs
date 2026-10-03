@@ -4,7 +4,8 @@
 //   node ferramentas/bancada.mjs [--cenas aberta,rua,horizonte] [--perfis leve,media,ultra] [--pasta previa]
 //        [--saida <pasta>] [--quadros 120] [--tam 1376x768] [--consulta "sintetica=1"] [--semClip] [--familias] [--voo]
 //        [--fontes] (grava o GLSL final de cada programa em <saida>/<cena>-<perfil>-glsl/) [--vel 1|2|4] (padrão 4x)
-//        [--compilacoes] (falha com programa compilado depois de pronto; sem ela, só avisa)
+//        [--compilacoes] (falha com programa compilado depois de pronto; sem ela, só avisa) [--aquecer 150] (segundos
+//        de espera pelo aquecimento: no SwiftShader um quadro da carga leva até 5 s)
 // A cena 'jogo' abre o jogo sem ?cena= (a vista de depuração da F0). --familias confere os tetos por família em
 // qualquer cena (sem ela, só na 'aberta' do Média e do 'pc', onde a 4.8 e a D66 os fixam). --voo também roda
 // R.bancada() e guarda o relatório do render (com o tempo de placa por passe, a memória e as compilações).
@@ -227,11 +228,19 @@ export function conferirOrcamento(pior, perfil, { familias = false, memoria = nu
 }
 
 // ---------- página ----------
-// gancho no WebGL2: guarda a fonte de cada programa ligado
+// gancho no WebGL2: guarda a fonte de cada programa ligado e, quando o three apaga um programa (material descartado,
+// como os de gerar texturas: as folhas e o assado dos impostores), o estado da ligação antes de apagar. Sem isso, a
+// leitura depois do aquecimento perguntava a um programa apagado (null) e a bancada dizia "não ligou" (C1b).
 const GANCHO = `(() => {
   const P = WebGL2RenderingContext.prototype;
-  const fontes = new WeakMap(), tipos = new WeakMap(), anexos = new WeakMap();
+  const fontes = new WeakMap(), tipos = new WeakMap(), anexos = new WeakMap(), apagados = new WeakMap();
   const lista = []; window.__programasGL = lista;
+  window.__ligouGL = (gl, p) => (apagados.has(p) ? apagados.get(p) : !!gl.getProgramParameter(p, gl.LINK_STATUS));
+  window.__atributosGL = (gl, p) => (apagados.has(p) ? null : gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES));
+  const dp = P.deleteProgram; P.deleteProgram = function (p) {
+    if (p && !apagados.has(p)) { try { apagados.set(p, !!this.getProgramParameter(p, this.LINK_STATUS)); } catch (e) { apagados.set(p, false); } }
+    return dp.call(this, p);
+  };
   const cs = P.createShader; P.createShader = function (t) { const s = cs.call(this, t); if (s) tipos.set(s, t); return s; };
   const ss = P.shaderSource; P.shaderSource = function (s, src) { fontes.set(s, src); return ss.call(this, s, src); };
   const at = P.attachShader; P.attachShader = function (p, s) { const l = anexos.get(p) || []; l.push(s); anexos.set(p, l); return at.call(this, p, s); };
@@ -277,7 +286,7 @@ async function amostrarNaPagina({ n, v, esperaAquecer }) {
     if (vistos.has(chave)) continue;
     vistos.add(chave);
     const gl = pr.gl;
-    programas.push({ vs: pr.vs, fs: pr.fs, link: !!gl.getProgramParameter(pr.p, gl.LINK_STATUS), atributosGl: gl.getProgramParameter(pr.p, gl.ACTIVE_ATTRIBUTES) });
+    programas.push({ vs: pr.vs, fs: pr.fs, link: window.__ligouGL(gl, pr.p), atributosGl: window.__atributosGL(gl, pr.p) });
   }
   const vigia = R?._ctx?.capac?.programas;
   const depois = (vigia?.depois || []).map((p) => ({ nome: p.nome, msBloqueio: p.msBloqueio, msCompilar: p.msCompilar, quadro: p.quadro }));
@@ -289,7 +298,7 @@ async function amostrarNaPagina({ n, v, esperaAquecer }) {
 
 function lerArgs(argv) {
   const o = { cenas: ['aberta', 'rua', 'horizonte'], perfis: ['leve', 'media', 'pc'], pasta: 'previa', saida: join(tmpdir(), 'heldopolis-bancada'),
-    quadros: 120, tam: '1376x768', consulta: '', semClip: false, familias: false, voo: false, fontes: false, teto: 300, vel: 4, compilacoes: false, aquecer: 60 };
+    quadros: 120, tam: '1376x768', consulta: '', semClip: false, familias: false, voo: false, fontes: false, teto: 300, vel: 4, compilacoes: false, aquecer: 150 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = () => argv[++i];
     if (k === '--cenas') o.cenas = v().split(',');
@@ -333,10 +342,11 @@ export async function rodarBancada(o) {
       page.on('pageerror', (e) => erros.push(e.message));
       page.on('console', (m) => { if (m.type() === 'error') erros.push('console: ' + m.text()); });
       const t0 = Date.now();
-      await page.goto(`http://localhost:${srv.porta}/index.html?${q}`);
+      // a carga também espera até o teto (com a máquina ocupada, os 30 s do padrão do Playwright não bastam)
+      await page.goto(`http://localhost:${srv.porta}/index.html?${q}`, { timeout: o.teto * 1000 });
       let pronto = true;
       try { await page.waitForFunction(() => window.__pronto === true, null, { timeout: o.teto * 1000, polling: 250 }); } catch (e) { pronto = false; }
-      const med = pronto ? await page.evaluate(amostrarNaPagina, { n: o.quadros, v: VELOCIDADES[o.vel ?? 4], esperaAquecer: (o.aquecer ?? 60) * 1000 }) : null;
+      const med = pronto ? await page.evaluate(amostrarNaPagina, { n: o.quadros, v: VELOCIDADES[o.vel ?? 4], esperaAquecer: (o.aquecer ?? 150) * 1000 }) : null;
       let voo = null;
       if (pronto && o.voo) voo = await page.evaluate(async () => { try { return JSON.parse(JSON.stringify(await window.__held.R.bancada())); } catch (e) { return { erro: String(e) }; } });
       const base = `${cena}-${perfil}${o.semClip ? '-semClip' : ''}`;
@@ -362,11 +372,13 @@ export async function rodarBancada(o) {
         const familias = o.familias || (cena === 'aberta' && (perfil === 'media' || perfil === 'pc'));
         falhas.push(...conferirOrcamento(med.pior, perfil, { familias, memoria: med.stats?.memoria }));
       }
-      // nenhuma compilação depois de pronto (D66): aviso, ou falha com --compilacoes
+      // nenhuma compilação depois de pronto (D66): aviso, ou falha com --compilacoes. Sem a rodada final o vigia nunca
+      // marcou pronto e o "0 depois de pronto" não prova nada: com --compilacoes o aquecimento que não terminou também
+      // falha (aumente --aquecer numa máquina ocupada)
       const avisos = [];
-      if (med && med.aquecido === false && med.stats?.aquecimento) avisos.push(`o aquecimento não terminou em ${o.aquecer ?? 60} s`);
+      if (med && med.aquecido === false && med.stats?.aquecimento) avisos.push(`o aquecimento não terminou em ${o.aquecer ?? 150} s`);
       for (const d of med?.depois || []) avisos.push(`programa compilado depois de pronto: ${d.nome} (bloqueio ${d.msBloqueio ?? '?'} ms, quadro ${d.quadro})`);
-      if (o.compilacoes) falhas.push(...avisos.filter((a) => a.startsWith('programa')));
+      if (o.compilacoes) falhas.push(...avisos);
       const res = med?.resultado;
       if (res && (res.ok === false || res.falhas?.length)) falhas.push(...(res.falhas?.length ? res.falhas.map((x) => 'cena: ' + x) : ['cena: ok = false']));
       const rel = { cena, perfil, semClip: o.semClip, vel: o.vel ?? 4, ms: Date.now() - t0, quadros: med?.quadros || 0, pior: med?.pior || null, medio: med?.medio || null,

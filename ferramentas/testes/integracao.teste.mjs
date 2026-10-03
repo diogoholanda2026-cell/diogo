@@ -3,7 +3,7 @@
 // Roda sozinho: node ferramentas/testes/integracao.teste.mjs (o simular --testes descobre).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
@@ -125,4 +125,81 @@ test("perfil 'pc' (D66, I2): está no contrato e as tabelas dos domínios dão a
   for (const arq of ['ambiente/campoAlturas.js', 'mundo/props.js', 'mundo/trafego.js', 'mundo/terreno.js', 'mundo/vias.js', 'mundo/predios.js', 'materiais/texturas-chao.js']) {
     assert.ok(!leitura.test(readFileSync(join(RAIZ, 'fonte/render', arq), 'utf8')), arq);
   }
+});
+
+test('prévia (C1b): o índice das cenas só aponta para cenas, vistas e telas que existem, com os nomes da D88 e D89', async () => {
+  const html = readFileSync(join(RAIZ, 'fonte/web/cenas.html'), 'utf8');
+  assert.doesNotMatch(html, /Sede v2|sede v2|Torre Lâmina/, 'nomes velhos: a sede v3 é o Park of Future Dreams e a torre, a Blade Tower');
+  assert.doesNotMatch(html.replace(/<!--[\s\S]*?-->/g, ''), /[—–]/, 'travessão');
+  const { listarCenas } = await import('../../fonte/render/cenas/index.js');
+  const { VISTAS_SEDE, etapasDaCena } = await import('../../fonte/render/cenas/planos.js');
+  const { VISTAS: VISTAS_BAIRRO } = await import('../../fonte/render/cenas/bairro.js');
+  const { VISTAS_RUA } = await import('../../fonte/render/cenas/rua.js');
+  const { VISTAS_CAMADAS, CAMADAS_CENA } = await import('../../fonte/render/cenas/camadas.js');
+  const { VISTAS_COSTA } = await import('../../fonte/render/cenas/costa.js');
+  const vistas = { planos: VISTAS_SEDE, bairro: VISTAS_BAIRRO, rua: VISTAS_RUA, camadas: VISTAS_CAMADAS, costa: VISTAS_COSTA };
+  // as telas registradas em qualquer arquivo da interface
+  const telas = new Set();
+  const dir = join(RAIZ, 'fonte/ui');
+  for (const f of readdirSync(dir, { recursive: true })) {
+    if (!/\.jsx?$/.test(f)) continue;
+    for (const m of readFileSync(join(dir, f), 'utf8').matchAll(/registrarTela\('([^']+)'/g)) telas.add(m[1]);
+  }
+  const cenas = new Set(listarCenas());
+  const links = [...html.matchAll(/href="index\.html(\?[^"]*)?"/g)].map((m) => new URLSearchParams((m[1] ?? '').replace(/&amp;/g, '&')));
+  assert.ok(links.length >= 40, `${links.length} links`);
+  for (const q of links) {
+    const cena = q.get('cena');
+    if (cena) assert.ok(cenas.has(cena), `cena ${cena} não existe`);
+    const v = q.get('vista');
+    if (v && vistas[cena]) assert.ok(Object.hasOwn(vistas[cena], v), `vista ${v} não existe na cena ${cena}`);
+    if (q.get('etapas')) assert.ok(etapasDaCena(q.get('etapas')), `etapas ${q.get('etapas')}`);
+    // a cena das camadas cai na Zonas com um id que não conhece: o link mostraria outra camada
+    if (cena === 'camadas' && q.get('camada')) assert.ok(CAMADAS_CENA.includes(q.get('camada')), `camada ${q.get('camada')} não existe na cena`);
+    if (q.get('tela')) assert.ok(telas.has(q.get('tela')), `tela ${q.get('tela')} não registrada`);
+    if (q.get('menu')) assert.ok(['0', 'nova', 'continuar'].includes(q.get('menu')), `menu=${q.get('menu')}`);
+  }
+  // em destaque o que é novo desde a Prévia 1c (C1b, item 4)
+  const destaque = html.slice(0, html.indexOf('<div class="anterior">'));
+  for (const [rotulo, re] of [
+    ['jogo do começo', /menu=nova/],
+    ['sede v3 aérea, avenida, mar e noite', /vista=aerea[\s\S]*vista=avenida[\s\S]*vista=mar[\s\S]*vista=noite/],
+    ['obra das torres', /etapas=torre\.e\d:[\d.]+&amp;vista=obra/],
+    ['Dream Bridge e helicóptero', /vista=ponte[\s\S]*heli=\d+/],
+    ['colocáveis', /cena=servicos/],
+    ['rua com gente e caminhões', /cena=rua/],
+    ['camadas', /cena=camadas/],
+    ['Teste de desempenho', /tela=testeDesempenho/],
+  ]) assert.match(destaque, re, rotulo);
+  // a página de teste com o perfil escolhido (?q= pelo seletor): um link dela sem data-auto
+  assert.match(destaque, /<a class="c"(?![^>]*data-auto)[^>]*href="index\.html\?cena=aberta&amp;painel=1"/);
+});
+
+test('traçado sugerido (C1b): com a câmera rente ao chão o trecho atrás dela é cortado no plano, sem espelhar', async () => {
+  const THREE = await import('three');
+  const { projetarNaTela } = await import('../../fonte/render/camera/raio.js');
+  const { recortarNaFrente } = await import('../../fonte/ui/guia/regras.js');
+  // a 2 m do chão, olhando para -z; a via vai de 200 m na frente a 200 m atrás
+  const cam = new THREE.PerspectiveCamera(50, 2, 0.5, 5000);
+  cam.position.set(0, 2, 0);
+  cam.lookAt(0, 2, -100);
+  cam.updateMatrixWorld();
+  const projetar = (p) => projetarNaTela(cam, 1000, 500, p);
+  const via = [[3, 0, -200], [3, 0, -50], [3, 0, 50], [3, 0, 200]];
+  // o ponto de trás projeta espelhado (do outro lado da tela): ligado, cruzaria a tela
+  assert.equal(projetar(via[2]).frente, false);
+  const [trecho, ...resto] = recortarNaFrente(projetar, via);
+  assert.equal(resto.length, 0, 'um trecho só');
+  assert.equal(trecho.length, 3, 'os dois pontos da frente e o corte');
+  for (const p of trecho) assert.ok(p.frente && p.prof > 0.99, 'nada atrás da câmera');
+  // o corte fica no plano de 1 m e à direita do centro, como a via (x = 3), longe de y espelhado
+  const c = trecho[2];
+  assert.ok(Math.abs(c.prof - 1) < 1e-6 && c.x > 500, JSON.stringify(c));
+  // fechado (a quadra): o contorno cortado continua um polígono só, sem os cantos de trás
+  const quadra = [[-20, 0, -60], [20, 0, -60], [20, 0, 40], [-20, 0, 40]];
+  const [poli] = recortarNaFrente(projetar, quadra, true);
+  assert.equal(poli.length, 4);
+  for (const p of poli) assert.ok(p.prof > 0.99);
+  // tudo atrás: nada a desenhar
+  assert.deepEqual(recortarNaFrente(projetar, [[0, 0, 20], [0, 0, 80]]), []);
 });

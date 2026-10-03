@@ -1,6 +1,9 @@
 // Serviços e utilidades (seção 8.1 do desenho da simulação, D50, D52, D60): os 8 do M1a (captação, poço, usina solar,
 // praça, clínica, escola fundamental, delegacia e bombeiros) e os 6 do M1b, que ficam prontos nos dados e trancados
-// pela parte. Dona: S2a. Custos, capacidades e alcances: (calibrar).
+// pela parte. Dona: S2a. Custos, capacidades e alcances: (calibrar). Custos de construção do M1a calibrados pelo robô na
+// C1a (eram captação 25 mil, poço 8, usina 30, praça 3, clínica 20, escola 25, delegacia 20 e bombeiros 25 mil: a
+// cidade gastava o caixa da primeira hora em poucos prédios e não cobria os bairros; em US$, a clínica de 10 mil dá
+// US$ 6 milhões, a usina de 8 MW, US$ 9,6 milhões).
 //
 // Serviço: { nome, categoria, barra: 'servicos' | 'lazer' (a categoria da barra de construção, D24), custo,
 //   manutencaoHora (unidades por hora de jogo), capacidade (água em m³/h, energia em kW, cobertura em moradores ou
@@ -32,43 +35,43 @@ export const FRACAO_ESTUDANTES = 0.12;
 
 export const SERVICOS = congelar({
   captacao: {
-    nome: 'Captação de água', categoria: 'agua', barra: 'servicos', custo: 25000, manutencaoHora: 800, capacidade: 30,
+    nome: 'Captação de água', categoria: 'agua', barra: 'servicos', custo: 15000, manutencaoHora: 800, capacidade: 30,
     raio: null, empregos: [4, 4, 2, 0], planta: [24, 32], marco: 0, parte: 'M1a', xp: 40, obraTiques: 60,
     consumo: { agua: 0, energia: 60 }, margem: 40, faz: 'tira água do rio e põe na rede, para uns 5 mil moradores',
   },
   poco: {
-    nome: 'Poço artesiano', categoria: 'agua', barra: 'servicos', custo: 8000, manutencaoHora: 300, capacidade: 4.8,
+    nome: 'Poço artesiano', categoria: 'agua', barra: 'servicos', custo: 5000, manutencaoHora: 300, capacidade: 4.8,
     raio: null, empregos: [2, 1, 0, 0], planta: [16, 16], marco: 0, parte: 'M1a', xp: 20, obraTiques: 40,
     consumo: { agua: 0, energia: 15 }, recurso: 'subterranea', faz: 'bombeia o lençol para a rede, uns 800 moradores',
   },
   solar: {
-    nome: 'Usina solar', categoria: 'energia', barra: 'servicos', custo: 30000, manutencaoHora: 600, capacidade: 8000,
+    nome: 'Usina solar', categoria: 'energia', barra: 'servicos', custo: 16000, manutencaoHora: 600, capacidade: 8000,
     raio: null, empregos: [2, 2, 2, 0], planta: [48, 48], marco: 0, parte: 'M1a', xp: 40, obraTiques: 90,
     consumo: { agua: 0.01, energia: 0 }, faz: 'gera 8 MW, com bateria para a noite',
   },
   praca: {
-    nome: 'Praça', categoria: 'lazer', barra: 'lazer', custo: 3000, manutencaoHora: 60, capacidade: null, raio: 300,
+    nome: 'Praça', categoria: 'lazer', barra: 'lazer', custo: 1500, manutencaoHora: 60, capacidade: null, raio: 300,
     empregos: [0, 0, 0, 0], planta: [32, 32], marco: 0, parte: 'M1a', xp: 20, obraTiques: 30,
     consumo: { agua: 0.02, energia: 5 }, faz: 'dá lazer a quem mora a até 300 m pela rua',
   },
   clinica: {
-    nome: 'Clínica', categoria: 'saude', barra: 'servicos', custo: 20000, manutencaoHora: 700, capacidade: 8000,
+    nome: 'Clínica', categoria: 'saude', barra: 'servicos', custo: 10000, manutencaoHora: 700, capacidade: 8000,
     raio: 1200, carga: 'moradores', empregos: [5, 10, 8, 2], planta: [40, 48], marco: 1, parte: 'M1a', xp: 50, obraTiques: 90,
     consumo: { agua: 0.15, energia: 60 }, faz: 'atende a saúde de até 8 mil moradores a 1,2 km pela rua',
   },
   escolaF: {
-    nome: 'Escola fundamental', categoria: 'educacao', barra: 'servicos', custo: 25000, manutencaoHora: 900,
+    nome: 'Escola fundamental', categoria: 'educacao', barra: 'servicos', custo: 12000, manutencaoHora: 900,
     capacidade: 600, raio: 1500, carga: 'estudantes', educa: [0, 1], empregos: [5, 10, 12, 3], planta: [48, 64], marco: 1,
     parte: 'M1a', xp: 50, obraTiques: 90, consumo: { agua: 0.2, energia: 50 },
     faz: 'ensina 600 alunos a até 1,5 km pela rua',
   },
   delegacia: {
-    nome: 'Delegacia', categoria: 'seguranca', barra: 'servicos', custo: 20000, manutencaoHora: 800, capacidade: 10000,
+    nome: 'Delegacia', categoria: 'seguranca', barra: 'servicos', custo: 10000, manutencaoHora: 800, capacidade: 10000,
     raio: 1500, carga: 'moradores', empregos: [6, 12, 10, 2], planta: [32, 40], marco: 1, parte: 'M1a', xp: 50,
     obraTiques: 90, consumo: { agua: 0.08, energia: 40 }, faz: 'cuida da segurança de até 10 mil moradores',
   },
   bombeiros: {
-    nome: 'Quartel de bombeiros', categoria: 'bombeiros', barra: 'servicos', custo: 25000, manutencaoHora: 900,
+    nome: 'Quartel de bombeiros', categoria: 'bombeiros', barra: 'servicos', custo: 12000, manutencaoHora: 900,
     capacidade: 12000, raio: 1800, carga: 'moradores', empregos: [8, 14, 6, 2], planta: [32, 40], marco: 2, parte: 'M1a',
     xp: 60, obraTiques: 90, consumo: { agua: 0.3, energia: 40 }, faz: 'protege até 12 mil moradores a 1,8 km pela rua',
   },

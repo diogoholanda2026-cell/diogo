@@ -317,29 +317,37 @@ export function sistemaCrescimento(sim) {
   }
 }
 
-/** Uma tentativa de nascimento na zona z: torneio de frentes pelo valor do terreno. */
+/**
+ * Uma tentativa de nascimento na zona z: torneio de frentes pelo valor do terreno; a frente onde nenhum modelo cabe
+ * (a ponta da quadra, o fundo raso) fica sem espaço por 5 rodadas e o torneio repete, até CRESCIMENTO.tentativas vezes
+ * (C1a: sem isso, numa quadra de 112 m com as pontas livres a maior parte das tentativas morria na ponta e a zona com
+ * demanda e lugar não nascia).
+ */
 function tentar(sim, f, z, rng) {
   const C = sim.tabelas.celulas;
   const j = sim.json.cidade;
   const T = sim.tique;
   const def = ZONAS[ZONAS_ORDEM[z]];
-  let melhor = -1;
-  let mv = -Infinity;
-  for (let k = 0; k < CRESCIMENTO.torneio; k++) {
-    const c = frenteNumero(f, z, rng.int(0, f.total[z] - 1));
-    if (c < 0 || (j.semEspaco[c] ?? 0) > T) continue;
-    const val = valorEm(sim, C.x[c], C.z[c]);
-    if (val < def.valor.min) continue; // a zona cara só nasce no terreno que vale o mínimo dela
-    const v = val * (1 + (def.valor.peso < 0 ? -0.5 : 0.5)) + bonusPerto(sim, z, C.x[c], C.z[c]);
-    if (v > mv) {
-      mv = v;
-      melhor = c;
+  for (let t = 0; t < CRESCIMENTO.tentativas; t++) {
+    let melhor = -1;
+    let mv = -Infinity;
+    for (let k = 0; k < CRESCIMENTO.torneio; k++) {
+      const c = frenteNumero(f, z, rng.int(0, f.total[z] - 1));
+      if (c < 0 || (j.semEspaco[c] ?? 0) > T) continue;
+      const val = valorEm(sim, C.x[c], C.z[c]);
+      if (val < def.valor.min) continue; // a zona cara só nasce no terreno que vale o mínimo dela
+      const v = val * (1 + (def.valor.peso < 0 ? -0.5 : 0.5)) + bonusPerto(sim, z, C.x[c], C.z[c]);
+      if (v > mv) {
+        mv = v;
+        melhor = c;
+      }
     }
+    if (melhor < 0) return -1;
+    const i = nascerNaFrente(sim, melhor, z, rng);
+    if (i >= 0) return i;
+    j.semEspaco[melhor] = T + CRESCIMENTO.semEspaco;
   }
-  if (melhor < 0) return -1;
-  const i = nascerNaFrente(sim, melhor, z, rng);
-  if (i < 0) j.semEspaco[melhor] = T + CRESCIMENTO.semEspaco;
-  return i;
+  return -1;
 }
 
 /** Bônus de lugar dos efeitos de área com demanda para a zona (X1b: torre.e3 puxa a residencial média em 1,5 km). */

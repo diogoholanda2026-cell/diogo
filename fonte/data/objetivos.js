@@ -12,8 +12,12 @@ export const OBJETIVOS = /* @__PURE__ */ congelar([
   { id: 'cidade.avenida', dominio: 'cidade', quem: 'iris', medida: 'rodoviaGleba', total: 1, recompensa: { xp: 40, creditos: 0 }, alvo: 'sugestao:avenida' },
   { id: 'cidade.captacao', dominio: 'cidade', quem: 'cida', medida: 'servico:captacao', total: 1, requer: 'vila.agua:captacao', recompensa: { xp: 30, creditos: 0 }, alvo: 'sugestao:captacao' },
   { id: 'cidade.agua', dominio: 'cidade', quem: 'cida', medida: 'redeAgua', total: 1, recompensa: { xp: 30, creditos: 0 }, alvo: 'sugestao:captacao' },
-  { id: 'cidade.zonas', dominio: 'cidade', quem: 'iris', medida: 'celulasZoneadas', total: 300, recompensa: { xp: 20, creditos: 0 }, alvo: 'sugestao:quadra1' },
   { id: 'cidade.energia', dominio: 'cidade', quem: 'caio', medida: 'redeEnergia', total: 1, recompensa: { xp: 30, creditos: 0 }, alvo: 'sugestao:usina' },
+  // C1a: a Vila na rede logo depois da primeira avenida (o começo não pune: as casas das ruas de terra ficam sem água
+  // nem energia, e a demanda residencial nasce perto de 0), e a rede da Vila até a primeira quadra antes de zonear
+  { id: 'cidade.vila', dominio: 'cidade', quem: 'cida', medida: 'vilaNaRede', recompensa: { xp: 40, creditos: 0 }, total: 1, alvo: 'sugestao:vila' },
+  { id: 'cidade.ligacao', dominio: 'cidade', quem: 'iris', medida: 'redeAte:quadra1', total: 1, recompensa: { xp: 20, creditos: 0 }, alvo: 'sugestao:ligacao' },
+  { id: 'cidade.zonas', dominio: 'cidade', quem: 'iris', medida: 'celulasZoneadas', total: 300, recompensa: { xp: 20, creditos: 0 }, alvo: 'sugestao:quadra1' },
   { id: 'cidade.mil', dominio: 'cidade', quem: 'cida', medida: 'moradores', total: 1000, recompensa: { xp: 50, creditos: 5000 } },
   { id: 'cidade.saudeEducacao', dominio: 'cidade', quem: 'cida', medida: 'servicos:clinica,escolaF', total: 2, marco: 1, recompensa: { xp: 60, creditos: 5000 }, alvo: 'ferramenta:servicos' },
   { id: 'cidade.media', dominio: 'cidade', quem: 'iris', medida: 'celulasZona:resMedia', total: 200, marco: 2, recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:zonas' },

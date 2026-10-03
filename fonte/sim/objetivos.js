@@ -9,10 +9,11 @@ import { MARCOS } from '../data/marcos.js';
 import { ZONAS_ORDEM } from '../data/zonas.js';
 import { SERVICOS_ORDEM } from '../data/servicos.js';
 import { ORDEM } from '../contratos/interno.js';
-import { TIPO_PREDIO, ETAPA, GRAVIDADES } from '../contratos/flags.js';
+import { TIPO_PREDIO, ETAPA, GRAVIDADES, PREDIO } from '../contratos/flags.js';
 import { RODADA } from '../comum/relogio.js';
 import { componentes, noPerto } from './vias/grafo.js';
 import { noDeEntrada } from './mundo/vila.js';
+import { VIAS, VIAS_ORDEM } from '../data/vias.js';
 import { portaoNorte } from './mundo/areas.js';
 import { finito } from './holding/base.js';
 import { temMarca } from './historia.js';
@@ -53,6 +54,54 @@ function rodoviaLigaGleba(sim) {
   if (a < 0 || b < 0) return false;
   const { comp } = componentes(G);
   return comp[a] >= 0 && comp[a] === comp[b];
+}
+
+/** Casas da Vila (sim.json.mapa.predios) vivas e as que têm água e energia: { total, servidas }. */
+function vilaNaRede(sim) {
+  const P = sim.tabelas.predios;
+  let total = 0;
+  let servidas = 0;
+  for (const ref of sim.json.mapa?.predios ?? []) {
+    if (!P?.vivaRef(ref)) continue;
+    const i = ref % 1048576;
+    total++;
+    if (!(P.flags[i] & (PREDIO.SEM_AGUA | PREDIO.SEM_ENERGIA | PREDIO.ABANDONADO))) servidas++;
+  }
+  return { total, servidas };
+}
+
+/**
+ * A rede da Vila (as vias com calçada ligadas à rua principal dela) chega ao primeiro canto da sugestão (uma quadra)?
+ * Pelo componente das redes da S2a (só vias com canos e cabos contam, D52).
+ */
+function redeAteSugestao(sim, id) {
+  if (!sim.grafo || !sim.q.sugestoes || !sim.json.mapa?.ruas?.principal?.length) return false;
+  const s = sim.q.sugestoes().find((x) => x.id === id);
+  if (!s?.pontos?.length) return false;
+  const A = sim.tabelas.arestas;
+  const ref = sim.json.mapa.ruas.principal.find((r) => A.vivaRef(r));
+  if (ref === undefined) return false;
+  // componentes das vias com canos e cabos calculados aqui, sem o cache das redes: a medida roda também em q.barra e
+  // q.retomar, e recalcular o cache fora do sistema das redes mudava a partida (o A8 pegou: hash do navegador diferente)
+  const pai = new Int32Array(sim.tabelas.nos.n);
+  for (let i = 0; i < pai.length; i++) pai[i] = i;
+  const raiz = (i) => {
+    while (pai[i] !== i) i = pai[i] = pai[pai[i]];
+    return i;
+  };
+  for (let e = 0; e < A.n; e++) {
+    if (A.viva[e] !== 1 || !VIAS[VIAS_ORDEM[A.tipo[e]]]?.redes) continue;
+    const ra = raiz(A.a[e]);
+    const rb = raiz(A.b[e]);
+    if (ra !== rb) pai[Math.max(ra, rb)] = Math.min(ra, rb);
+  }
+  const alvo = raiz(A.a[ref % 1048576]);
+  // qualquer canto da quadra serve (a grade pode encaixar a ligação num canto ou no meio de um lado)
+  for (const [x, z] of s.pontos) {
+    const n = noPerto(sim.grafo, x, z, 12);
+    if (n >= 0 && raiz(n) === alvo) return true;
+  }
+  return false;
 }
 
 /** Etapas da Arcologia pelo espelho (X1b), ou a lista do M1a ainda trancada. */
@@ -101,6 +150,17 @@ function medir(sim, obj) {
       return { feito: finito(ag.redes?.agua?.oferta) > 0 ? 1 : 0, total: 1 };
     case 'redeEnergia':
       return { feito: finito(ag.redes?.energia?.oferta) > 0 ? 1 : 0, total: 1 };
+    case 'vilaNaRede': {
+      // casas da Vila com água e energia (as das ruas de terra só depois de melhorar a rua, D52): 90% fecham. Sem água
+      // ou sem energia na cidade a S2a não marca a falta em casa nenhuma (o aviso só aparece quando o recurso existe),
+      // então a conta pede as duas redes com oferta: sem isso o objetivo fechava sozinho no começo
+      const v = vilaNaRede(sim);
+      const meta = Math.max(1, Math.ceil(0.9 * v.total));
+      const redes = finito(ag.redes?.agua?.oferta) > 0 && finito(ag.redes?.energia?.oferta) > 0;
+      return { feito: redes ? Math.min(meta, v.servidas) : 0, total: meta, params: { n: v.total } };
+    }
+    case 'redeAte':
+      return { feito: redeAteSugestao(sim, arg) ? 1 : 0, total: 1 };
     case 'celulasZoneadas':
       return { feito: Math.min(obj.total, contarCelulas(sim)), total: obj.total, params: { n: obj.total } };
     case 'celulasZona':

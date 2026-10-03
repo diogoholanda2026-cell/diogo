@@ -13,6 +13,7 @@
 import { ITENS_ORDEM, precoBase } from '../../data/holding.js';
 import { ECONOMIA } from '../../data/economia.js';
 import { ORDEM } from '../../contratos/interno.js';
+import { PREDIO } from '../../contratos/flags.js';
 import { RODADA, HORA } from '../../comum/relogio.js';
 import { regrasDe, efeitosAtivos } from './base.js';
 import { disponivelVenda, tirarEstoque, porEstoque, itensProducao, prediosProducao, armazemPerto, ehItem } from './producao.js';
@@ -67,7 +68,13 @@ export function comprarParaObra(sim, ref, nivel, materiais) {
   const m = M(sim);
   const lista = ITENS_ORDEM.filter((k) => Number.isFinite(materiais?.[k]) && materiais[k] > 0);
   if (!m || !lista.length) return { espera: false };
-  for (const k of lista) m.demandaRodada[k] = (m.demandaRodada[k] ?? 0) + materiais[k];
+  // a demanda por hora conta cada obra uma vez: a obra parada tenta de novo a cada rodada (crescimento.js) e, contada
+  // em toda tentativa, uma obra de 8 de concreto parada por 1 hora aparecia como 1.440 por hora na tela Holding (C1a,
+  // revisão); o que ela ainda espera fica em `esperando`
+  const P = sim.tabelas.predios;
+  const i = P?.idxVivo ? P.idxVivo(ref) : -1;
+  const retomada = i >= 0 && (P.flags[i] & PREDIO.SEM_MATERIAL) !== 0;
+  if (!retomada) for (const k of lista) m.demandaRodada[k] = (m.demandaRodada[k] ?? 0) + materiais[k];
   const dependente = nivel >= 3 && sim.progresso.liberado('regra.dependencia') && sim.progresso.marco().n >= 3;
   const plano = lista.map((k) => {
     const pede = Math.ceil(materiais[k]);

@@ -133,9 +133,9 @@ export const PERFIS = congelar(['ultra', 'alta', 'pc', 'media', 'leve']);
 export const FAMILIAS = congelar(['terreno', 'predios', 'colocaveis', 'arvores', 'vias', 'vida', 'arcologia', 'sombra', 'resto']);
 
 /**
- * Teto da família 'arcologia' no quadro (D63 a D66): de perto (cenas torre e planos, a sede v2 inteira no LOD0), por
- * perfil, e na vista aberta (tudo no LOD1), no Alta e no 'pc'. No Média a vista aberta segue a 4.8 (60 mil); de perto
- * dá cerca de 75 mil (medido pela SEDE2).
+ * Teto da família 'arcologia' no quadro (D63 a D66, D88 a D90): de perto (cenas torre e planos, a sede v3, Park of
+ * Future Dreams, inteira no LOD0), por perfil, e na vista aberta (tudo no LOD1), no Alta e no 'pc'. No Média a vista
+ * aberta segue a 4.8 (60 mil); de perto dá cerca de 75 mil (medido pela SEDE2).
  */
 export const TETO_ARCOLOGIA = congelar({ perto: { ultra: 250000, alta: 250000, pc: 250000, media: 90000 }, aberta: 60000 }); // aberta: 60 mil com a sede v3 (D88 a D90)
 

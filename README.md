@@ -20,6 +20,19 @@ Jogo de construção no estilo **SimCity BuildIt**, em 3D, feito para celular (t
 
 ![Modos de obra: draga, obra linear, aprovação e replantio](arte/telas/08-modos-de-obra.png)
 
+## Jogo novo: Prévia 2, M1a jogável
+
+O jogo está sendo refeito do zero (three.js r186 em WebGL2 e Preact), no nível do Cities: Skylines II, com a Holding Held, Heldópolis e o Park of Future Dreams. Até a publicação do M1, o link acima continua com o jogo anterior; o novo fica na prévia, **https://diogoholanda2026-cell.github.io/diogo/previa/cenas.html**, que abre em destaque a Prévia 2: a Nova partida (jan. 2020), a sede v3 (aérea, avenida, mar e noite), a obra da Blade Tower e da Legacy Tower com a Dream Bridge e o helicóptero, os prédios colocáveis, a rua com gente e caminhões, as camadas e o Teste de desempenho. O documento que manda é [`docs/PROJETO.md`](docs/PROJETO.md).
+
+Medido em 03/10/2026 no Chromium de teste (WebGL por software), na bancada `aberta` (a cidade sintética de 12 mil prédios), 1376 x 768, pior quadro de 120 com o sol andando em 4x, antes e depois do fechamento da onda 3:
+
+| Perfil | Chamadas | Triângulos | Sombra (chamadas / triângulos) | Vídeo | Compilações depois de pronto |
+|---|---|---|---|---|---|
+| PC do dono | 73 para 73 | 643 mil para 644 mil | 14 / 269 mil para 14 / 270 mil | 331 MB | 7 para 0 |
+| Média | 63 para 62 | 271 mil para 271 mil | 7 / 54 mil | 168 MB | 0 para 0 |
+
+Os tetos são 800 chamadas e 2,5 milhões de triângulos no PC (D66) e 300 e 900 mil no Média. As 7 compilações depois de pronto (árvores, gente, caminhão, marcador e o prédio de perto) vinham de código que chega sob demanda depois da rodada final do aquecimento; agora a rodada final espera esse código. Nenhum programa deixa de ligar (os dois "ShaderMaterial" que a bancada acusava eram os geradores das folhas e dos impostores, já descartados quando ela olhava). JS principal de 2.045 KB (teto de 2.355 KB, D91), mais 395 KB sob demanda em 51 pedaços; worker da oficina com 225 KB. O tempo de placa por passe no software não vale para o PC do dono: o número de verdade sai do Teste de desempenho (Configurações) ou da página de teste no PC dele.
+
 ## Instalar no celular (recomendado)
 
 O melhor formato para este jogo é um **app instalável (PWA) servido pelo GitHub Pages**. No Poco X7:

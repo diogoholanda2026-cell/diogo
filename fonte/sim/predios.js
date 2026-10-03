@@ -850,7 +850,11 @@ export function piorAviso(mascara, problema = 0) {
   return null;
 }
 
-/** q.avisosPredios() → { versao, idx, glifo, gravidade, nomes } (os nomes dos glifos pelo índice). */
+/**
+ * q.avisosPredios() → { versao, idx, glifo, gravidade, nomes } (os nomes dos glifos pelo índice). Vão todos os avisos,
+ * os de informação também (desemprego, bem-estar baixo): o filtro "Graves e atenção" da UI é quem os tira (desenho da
+ * UI 8.9: "todos · só graves e atenção · nenhum").
+ */
 export function avisosPredios(sim) {
   const P = sim.tabelas.predios;
   const idx = [];
@@ -859,7 +863,7 @@ export function avisosPredios(sim) {
   for (let i = 0; i < P.n; i++) {
     if (!P.viva[i] || !P.avisos[i]) continue;
     const a = piorAviso(P.avisos[i], P.problema[i]);
-    if (!a || a.g === 'info') continue;
+    if (!a) continue;
     idx.push(i);
     glifo.push(a.glifo);
     grav.push(a.gravidade);
@@ -980,6 +984,16 @@ const acaoDoAviso = (codigo) => ACOES[codigo] ?? null;
 
 // ------------------------------------------------------------------------------------------------ camadas
 
+/**
+ * Versão de uma camada pelos próprios dados (FNV-1a dos valores): muda quando o dado muda, também com o jogo pausado
+ * (zona pintada, prédio demolido), e fica igual entre rodadas sem mudança (o render não recebe a camada à toa).
+ */
+function versaoDosDados(dados, extra = 0) {
+  let h = Math.imul(2166136261 ^ extra, 16777619);
+  for (let k = 0; k < dados.length; k++) h = Math.imul(h ^ ((dados[k] | 0) + 7 * k), 16777619);
+  return h >>> 0;
+}
+
 function camadaZonas(sim) {
   const C = sim.tabelas.celulas;
   const dados = new Float32Array(C.n);
@@ -995,7 +1009,7 @@ function camadaZonas(sim) {
   return {
     id: 'zonas', fonte: 'celulas', dados, grade: null, tipo: 'cat', escala: { min: 0, max: ZONAS_ORDEM.length - 1, unidade: '' },
     categorias: cats, legenda: cats.filter((x) => x.v), resumo: { chave: 'camada.zonas.resumo', params: { pintadas, ocupadas } },
-    versao: sim.json.cidade.rodada,
+    versao: versaoDosDados(dados, ocupadas),
   };
 }
 
@@ -1012,7 +1026,7 @@ function camadaNivel(sim) {
   return {
     id: 'nivel', fonte: 'predios', dados, grade: null, tipo: 'cat', escala: { min: 1, max: 5, unidade: '' }, categorias: cats,
     legenda: cats, resumo: { chave: 'camada.nivel.resumo', params: { n1: conta[0], n2: conta[1], n3: conta[2], n4: conta[3], n5: conta[4] } },
-    versao: sim.json.cidade.rodada,
+    versao: versaoDosDados(dados),
   };
 }
 

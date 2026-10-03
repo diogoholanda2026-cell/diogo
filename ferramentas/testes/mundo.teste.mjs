@@ -19,6 +19,7 @@ import { normalizarForma } from '../../fonte/sim/formas.js';
 import { montarSave, lerSave, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { VIAS_ORDEM } from '../../fonte/data/vias.js';
 import { MAPA_HELDOPOLIS } from '../../fonte/data/mapa-heldopolis.js';
+import { MARCOS } from '../../fonte/data/marcos.js';
 import { GLEBA_ENVELOPE, PLANOS, PLANO_ESCOLHIDO } from '../../fonte/data/arcologia-plano.js';
 import { gerarTerreno, esquecerTerreno, terrenoBase, rioEm, aguaEm, costaEm } from '../../fonte/sim/mundo/terreno.js';
 import { aplainar, aplainarTudo, formaDaAresta } from '../../fonte/sim/mundo/aplainar.js';
@@ -672,6 +673,13 @@ test('áreas (D55) e sugestões (D36, D90): formato, dentro da área inicial, av
     const pv = sim.q.via.previa({ modo: 'grade', tipo: 'rua', pontos: [[qx0, qz0], [qx1, qz0], [qx1, qz1]] });
     assert.ok(pv.ok, `${q.id}: ${JSON.stringify(pv.erros)}`);
   }
+  // C1a: os prédios da Holding sugeridos ficam de frente para uma via ("Usar sugestão" sem 'acesso'): o Escritório, o
+  // Areal e a Olaria (marco 1) na estrada de terra e no caminho do barreiro desde o começo; a Pedreira na avenida
+  sim.progresso.xp(MARCOS[1].xp, 'teste');
+  sim.rodar(20, { sincrono: true });
+  const previaDe = (id) => sim.q.construir.previa({ tipo: porId[id].construir, x: porId[id].x, z: porId[id].z, rot: porId[id].rot });
+  for (const id of ['escritorio', 'areal', 'olaria']) assert.ok(previaDe(id).ok, `${id}: ${previaDe(id).codigo}`);
+  assert.equal(previaDe('pedreira').codigo, 'acesso');
   // a avenida constrói trecho a trecho, em ordem (como o robô), no declive da avenida, e o último trecho encaixa no
   // portão norte pela reta radial (chegando de viés, a lateral da pista entra no disco: código 'gleba')
   const pts = porId.avenida.pontos;
@@ -682,6 +690,8 @@ test('áreas (D55) e sugestões (D36, D90): formato, dentro da área inicial, av
     if (k === pts.length - 2) assert.ok(pv.encaixes.some((e) => e.portao === 'norte'), 'a avenida não chega ao portão norte');
     assert.ok(sim.cmd('via.construir', { plano }).ok, `avenida, trecho ${k}`);
   }
+  sim.rodar(20, { sincrono: true });
+  assert.ok(previaDe('pedreira').ok, `pedreira: ${previaDe('pedreira').codigo}`);
 });
 
 // ------------------------------------------------------------------------------------------------ save

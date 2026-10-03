@@ -27,7 +27,7 @@ import { comercioPerto } from '../bemestar.js';
 /** Pesos e tetos dos fatores (seção 6.4). (calibrar) */
 export const DEMANDA = Object.freeze({
   res: { base: 40, vagas: 35, desemprego: -35, vazias: -30, bemEstar: 0.5, impulso: 25, impulsoAte: 2000, atratividade: 10 },
-  com: { base: 30, consumo: 50, vazias: -30, maoDeObra: 10, clientesPorMorador: 0.3, clientesPorVaga: 4 },
+  com: { base: 30, consumo: 50, excesso: -45, vazias: -30, maoDeObra: 10, clientesPorMorador: 0.3, clientesPorVaga: 4 },
   ind: { base: 30, maoDeObra: 35, bens: 25, vazias: -30, vagasPorVagaComercio: 1 },
   esc: { base: 10, superior: 50, valor: 15, vazias: -30 },
   semRodovia: -25, suavizar: 0.8,
@@ -118,13 +118,39 @@ function atratividade(sim) {
   return v;
 }
 
-/** Bônus de demanda por zona: decisões do Conselho (S3a) e efeitos de área (sim.cidade). */
+/**
+ * Fração das frentes livres da zona z dentro do raio de um efeito de área (amostra de até 64). Sem raio, a cidade
+ * inteira (1). A torre.e3 (D49) dá +20 de residencial média só num raio de 1,5 km: a demanda da zona leva a parte das
+ * frentes que estão no raio, e o nascimento prefere as de dentro (bonusPerto, crescimento.js).
+ */
+export function fracaoNoRaio(sim, z, ef) {
+  if (!(ef.raio > 0) || !Number.isFinite(ef.x) || !Number.isFinite(ef.z)) return 1;
+  const C = sim.tabelas.celulas;
+  const amostra = amostraDeFrentes(sim, z, 64);
+  if (!amostra.length) return 0;
+  const r2 = ef.raio * ef.raio;
+  let dentro = 0;
+  for (const c of amostra) {
+    const dx = C.x[c] - ef.x;
+    const dz = C.z[c] - ef.z;
+    if (dx * dx + dz * dz <= r2) dentro++;
+  }
+  return dentro / amostra.length;
+}
+
+/** Bônus de demanda por zona: decisões do Conselho (S3a) e efeitos de área (sim.cidade, na parte das frentes no raio). */
 function bonusDeZona(sim) {
   const out = {};
   const dec = typeof sim.economia?.efeitos === 'function' ? sim.economia.efeitos('demanda') : [];
   for (const e of dec) if (e.zona) out[e.zona] = (out[e.zona] ?? 0) + (+e.v || 0);
   const ef = sim.json.cidade.efeitos;
-  for (const id of Object.keys(ef).sort()) for (const [z, v] of Object.entries(ef[id].demanda ?? {})) out[z] = (out[z] ?? 0) + (+v || 0);
+  for (const id of Object.keys(ef).sort()) {
+    for (const [z, v] of Object.entries(ef[id].demanda ?? {})) {
+      const iz = ZONAS_ORDEM.indexOf(z);
+      if (iz <= 0) continue;
+      out[z] = (out[z] ?? 0) + (+v || 0) * fracaoNoRaio(sim, iz, ef[id]);
+    }
+  }
   return out;
 }
 
@@ -160,6 +186,9 @@ export function calcularDemanda(sim) {
   const capCom = r.com.vagas * D.com.clientesPorVaga;
   let C = soma('com', 'base', D.com.base);
   C += soma('com', 'consumo', D.com.consumo * (clientes > 0 ? Math.max(0, clientes - capCom) / clientes : 0));
+  // comércio além dos clientes (C1a): sem este termo a demanda ficava em 40 (base e mão de obra) com as lojas abandonando
+  // por falta de clientes, e o jogador seguia pintando comércio
+  if (capCom > clientes) C += soma('com', 'excesso', D.com.excesso * Math.min(1, (capCom - clientes) / capCom / 0.3));
   C += soma('com', 'vazias', D.com.vazias * Math.min(1, (r.com.vagas ? 1 - r.com.ocupadas / r.com.vagas : 0) / 0.3));
   const basicaOciosa = (W * ((ESTUDO_BASE[0] * d[0] + ESTUDO_BASE[1] * d[1]) || 0)) / Math.max(1, W);
   C += soma('com', 'maoDeObra', D.com.maoDeObra * Math.min(1, basicaOciosa / 0.2));
@@ -232,7 +261,7 @@ export function sistemaDemanda(sim) {
       const v = clamp(fam[f] * parte + b, 0, 100);
       j.demanda[id] = Math.round(v * 1000) / 1000;
       ag.demanda[id] = Math.round(v);
-      fatores[id] = pesos[k] > 0 ? [...calc.fatores[f], { id: 'parte', v: Math.round(parte * 100) }, ...(b ? [{ id: 'decisao', v: b }] : [])] : [];
+      fatores[id] = pesos[k] > 0 ? [...calc.fatores[f], { id: 'parte', v: Math.round(parte * 100) }, ...(b ? [{ id: 'decisao', v: Math.round(b * 10) / 10 }] : [])] : [];
     });
   }
   ag.demanda.R = Math.round(fam.res);

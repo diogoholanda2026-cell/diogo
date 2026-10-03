@@ -8,13 +8,16 @@ import { porEstoque } from '../../fonte/sim/holding/producao.js';
 import { obrasEsperando } from '../../fonte/sim/holding/mercado.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { PREDIOS_HOLDING } from '../../fonte/data/holding.js';
+import { MARCOS } from '../../fonte/data/marcos.js';
+import { PREDIO } from '../../fonte/contratos/flags.js';
+import { idxDaRef } from '../../fonte/contratos/espelho.js';
 import { simS3a, predioHolding, fixarCidade } from '../robo/cidade-faz-de-conta.mjs';
 
 const ok = (r) => assert.equal(r.ok, true, JSON.stringify(r));
 
 /** Dá XP até o marco n (sem requisito). */
 function ateMarco(sim, n) {
-  const lim = [0, 400, 1500, 3500, 8000, 15000, 25000, 38000];
+  const lim = MARCOS.map((m) => m.xp);
   sim.progresso.xp(Math.max(0, lim[n] - sim.json.progresso.xp), 'teste');
   sim.rodar(20, { sincrono: true });
   assert.equal(sim.progresso.marco().n, n);
@@ -152,6 +155,26 @@ test('mercado da cidade (D48): até o marco 2 vende o que há; do 3 em diante a 
   assert.ok(sim.q.producao().itens.find((i) => i.item === 'concreto').cidadeHora > 0, 'a demanda da cidade por hora');
 });
 
+// C1a (revisão): a obra parada tenta de novo a cada rodada; contada em toda tentativa, a demanda da cidade por hora
+// (a coluna "Cidade" da tela Holding, D48) chegava a 100 vezes a de verdade
+test('demanda da cidade por hora (D48): a obra parada conta uma vez, não a cada tentativa', () => {
+  const sim = simS3a({ semente: 'demanda-uma', populacao: 2000, bemEstar: 50 });
+  ateMarco(sim, 3);
+  ok(sim.cmd('cidade.importarAuto', { sim: false }));
+  sim.rodar(20, { sincrono: true });
+  const ref = predioHolding(sim, 'pedreira', 400, 0);
+  const i = idxDaRef(ref);
+  const pedido = () => sim.json.mercado.demandaRodada.concreto ?? 0;
+  assert.equal(sim.holding.comprarParaObra(ref, 3, { concreto: 8 }).espera, true);
+  assert.equal(pedido(), 8, 'a primeira tentativa conta');
+  sim.tabelas.predios.flags[i] |= PREDIO.SEM_MATERIAL; // como crescimento.js marca a obra parada
+  for (let k = 0; k < 5; k++) assert.equal(sim.holding.comprarParaObra(ref, 3, { concreto: 8 }).espera, true);
+  assert.equal(pedido(), 8, 'as tentativas da obra parada não contam de novo');
+  sim.rodar(20, { sincrono: true });
+  assert.equal(obrasEsperando(sim)?.item, 'concreto', 'o que espera segue no aviso');
+  sim.tabelas.predios.flags[i] &= ~PREDIO.SEM_MATERIAL;
+});
+
 test('importação a 160% com entrega em 40 s; Depósito automático acima de N', () => {
   const sim = simS3a({ semente: 'importar', populacao: 500, bemEstar: 50 });
   assert.equal(sim.cmd('importar', { item: 'aco', n: 5 }).codigo, 'trancado', 'aço só no marco 3');
@@ -207,6 +230,17 @@ test('frota (D47): 6 caminhões, o resto na fila; entrega tira do estoque; trata
   assert.equal(f.fila, 0);
   assert.ok(f.atrasoMedio > 0, 'as duas da fila esperaram');
   assert.ok(f.porDestino['torre.e1'].viagens === 8);
+});
+
+test('frota (D47, 13.4): um segundo Escritório de Obra soma estoque, não caminhões', () => {
+  const sim = simS3a({ semente: 'frota2', populacao: 2000, bemEstar: 50 });
+  predioHolding(sim, 'escritorioObra', 0, 0);
+  sim.rodar(20, { sincrono: true });
+  const cap1 = sim.q.producao().armazem.capacidade;
+  predioHolding(sim, 'escritorioObra', 300, 0);
+  sim.rodar(20, { sincrono: true });
+  assert.equal(sim.q.producao().frota.total, 6, 'a frota segue o nível do maior armazém');
+  assert.equal(sim.q.producao().armazem.capacidade, 2 * cap1, 'o estoque soma');
 });
 
 test('torre.e2 (D49): +15% de produtividade e +6 caminhões pelo efeito da Holding', () => {

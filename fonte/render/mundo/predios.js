@@ -388,6 +388,15 @@ function criarPredios(ctx) {
   const amostrasLonge = qs.has('amostrasLonge') ? Number(qs.get('amostrasLonge')) || 0 : SOMBRA_LONGE_AMOSTRAS;
   const materialLonge = criarMaterialEdificio(ctx, { barata: true, nomes: nomesLonge, amostras: amostrasLonge });
   const variantesLonge = new Map(); // bancadaLonge
+  // o programa do LOD0 (Mesh comum com o 'edificio', com normal: o three decide o sombreamento por ela) compila na
+  // carga (D66): o primeiro setor de perto pode chegar da oficina depois da rodada final do aquecimento, e o 'edificio'
+  // compilava no meio do jogo (C1b)
+  const geoMolde = new THREE.BufferGeometry();
+  geoMolde.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+  geoMolde.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(6), 2));
+  const moldeLod0 = new THREE.Mesh(geoMolde, material);
+  moldeLod0.name = 'predios:aquecer-lod0';
+  ctx.quadro?.aquecer?.add?.(moldeLod0);
   const reg = new RegistroAnexos();
 
   // tabelas na GPU
@@ -1415,6 +1424,8 @@ function criarPredios(ctx) {
         F.vis.descartar();
         F.sombra.descartar();
       }
+      ctx.quadro?.aquecer?.delete?.(moldeLod0);
+      geoMolde.dispose();
       tabela.dispose();
       obra.dispose();
       material.dispose();

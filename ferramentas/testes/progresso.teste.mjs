@@ -41,7 +41,8 @@ test('XP: +1 por morador acima do recorde, vias a cada 100 m, prédio da Holding
 
 test('marcos: limiares da D51, prêmio de 10 mil x n, licenças a partir do 2 e eventos', () => {
   const sim = simS3a({ semente: 'marcos' });
-  assert.deepEqual(MARCOS.map((m) => m.xp), [0, 400, 1500, 3500, 8000, 15000, 25000, 38000]);
+  // D51 com o marco 1 em 500 (C1a: o robô calibra os limiares; com 400 o marco 1 chegava aos 8 min, a meta é de 10 a 15)
+  assert.deepEqual(MARCOS.map((m) => m.xp), [0, 500, 1500, 3500, 8000, 15000, 25000, 38000]);
   const eventos = [];
   sim.on('marco', (d) => eventos.push(d));
   const desbloqueios = [];

@@ -9,6 +9,7 @@ import { CONSELHEIROS, EXECUTIVOS, JOGADOR } from '../../fonte/data/nomes.js';
 import { condicoesImportacao } from '../../fonte/sim/holding/mercado.js';
 import { registrar as registrarTextosS3 } from '../../fonte/ui/textos/s3.js';
 import { simS3a, predioHolding, fixarCidade } from '../robo/cidade-faz-de-conta.mjs';
+import { criarSimulacao } from '../../fonte/sim/estado.js';
 
 const ok = (r) => assert.equal(r.ok, true, JSON.stringify(r));
 
@@ -144,4 +145,43 @@ test('dados da história: 3 decisões com data, opções e padrão; textos de to
   const PROIBIDAS = /\b(google|alphabet|swift|covid|corona|sars|wuhan|suez|ever given|ucr[aâ]nia|r[uú]ssia|crimeia|putin|trump|biden|obama|china|chin[eê]s|estados unidos|eua|brasil|tail[aâ]ndia|nvidia|openai|chatgpt|microsoft|apple|amazon|lehman|silicon valley bank|svb)\b/i;
   const ruins = Object.entries(textos).filter(([, v]) => PROIBIDAS.test(v)).map(([k]) => k);
   assert.deepEqual(ruins, []);
+});
+
+// C1a (revisão): os dois objetivos novos do começo na cidade da S2a. A Vila só fecha com as casas das ruas de terra
+// servidas (a melhoria da rua leva canos e cabos, D52), e não fecha sozinha antes de haver água e energia na cidade (sem
+// o recurso a S2a não marca a falta em casa nenhuma); a ligação fecha quando a rede da rua principal chega à quadra 1.
+test('cidade.vila e cidade.ligacao: a Vila na rede depois de melhorar as ruas de terra; a rede até a primeira quadra', () => {
+  const sim = criarSimulacao({ semente: 'obj-vila' });
+  // os de antes já feitos (avenida, captação, água e energia), como depois da primeira avenida
+  sim.json.objetivos.feitos.push('cidade.avenida', 'cidade.captacao', 'cidade.agua', 'cidade.energia');
+  const sug = (id) => sim.q.sugestoes().find((x) => x.id === id);
+  const cidade = () => sim.q.objetivos().find((o) => o.dominio === 'cidade');
+  let o = cidade();
+  assert.equal(o.id, 'cidade.vila');
+  assert.equal(o.feito, 0, 'sem água nem energia na cidade a Vila não conta como servida');
+  assert.ok(o.total >= 50 && o.params.n >= o.total, JSON.stringify(o));
+  for (const id of ['captacao', 'usina']) {
+    const s = sug(id);
+    const pv = sim.q.construir.previa({ tipo: s.construir, x: s.x, z: s.z, rot: s.rot });
+    ok(sim.cmd('construir', { tipo: s.construir, x: pv.x, z: pv.z, rot: pv.rot }));
+  }
+  sim.rodar(200, { sincrono: true });
+  o = cidade();
+  assert.equal(o.id, 'cidade.vila', 'só a rua principal tem canos: as casas das ruas de terra ficam sem');
+  assert.ok(o.feito > 0 && o.feito < o.total, `${o.feito} de ${o.total}`);
+  const v = sug('vila');
+  assert.equal(v.tipo, 'melhorar');
+  ok(sim.cmd('via.melhorar', { arestas: v.arestas, tipo: v.via, sessao: 'vila' }));
+  sim.rodar(200, { sincrono: true });
+  assert.equal(sug('vila'), undefined, 'sem rua de terra para melhorar, a sugestão some');
+  o = cidade();
+  assert.equal(o.id, 'cidade.ligacao');
+  assert.equal(o.feito, 0);
+  assert.ok(sim.json.objetivos.feitos.includes('cidade.vila'));
+  const l = sug('ligacao');
+  ok(sim.cmd('via.construir', { plano: { modo: 'reta', tipo: l.via, pontos: l.pontos, sessao: 'ligacao' } }));
+  sim.rodar(40, { sincrono: true });
+  assert.equal(cidade().id, 'cidade.zonas');
+  assert.ok(sim.json.objetivos.feitos.includes('cidade.ligacao'));
+  assert.deepEqual(sim.erros, []);
 });
