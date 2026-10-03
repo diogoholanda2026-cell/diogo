@@ -1,6 +1,6 @@
 # Estado do jogo novo (28/09/2026)
 
-## ONDE PAROU (03/10/2026, pausa pedida pelo dono)
+## ONDE PAROU (03/10/2026)
 
 **Onda 3: etapas 1 e 2 prontas, revisadas, integradas e gravadas.** Etapa 1 (S2a, S3a, R2b, R4b, U1b) em `32b7805`;
 etapa 2 (SEDE3 e R5: área inicial de 6 x 5, sede v3 e os 24 colocáveis) em `d81dcf0`, com a integração depois (testes
@@ -9,7 +9,8 @@ de outras parcelas fora do disco da sede, cena rua no cruzamento novo, plataform
 Notas completas em `docs/entregas/onda3/`. Testes: tudo verde menos o subteste 14 de geracao-vias (tráfego), um
 defeito da fila em `render/mundo/trafego.js` passado à R3b. Montagem: só o aviso A1 (JS principal em 1.892 KB).
 
-**Etapa 3 pausada pelo dono em 03/10/2026** (base `9b001b5`). Com 2 agentes por vez na máquina de 4 núcleos, só a R3b e
+**Etapa 3 retomada em 03/10/2026** (workflow wjgbdsjw5, run wf_a19386c5-cff; o resto deste parágrafo vale até ela
+terminar). **Etapa 3 pausada pelo dono em 03/10/2026** (base `9b001b5`). Com 2 agentes por vez na máquina de 4 núcleos, só a R3b e
 a U2a tinham começado: o parcial delas está no commit "Pausa: R3b e U2a em andamento", sem nota e sem revisão, com os
 testes verdes na pausa (inclusive o tráfego da geracao-vias). A X1b e a X3a não começaram. Para retomar: relance
 `onda.js` com `{nome: 'Onda 3, etapa 3 (retomada)', base: '9b001b543c45e10801ec414cd87210936724f816', etapas: [[{id:
