@@ -352,10 +352,12 @@ function construirPredios(sim, mapa, base, ruas) {
             const rot = atan2(-lx, -lz); // a frente olha para a via
             if (cabe(base, oc, area, cx, cz, rot, w, dd)) {
               const nivel = rng.chance(0.5) ? 2 : 1;
-              // a plataforma fica no chão da rua em frente, até 0,3 m abaixo: nunca acima (o chão subiria na borda da
-              // pista) nem muito abaixo (a casa afundada e o chão caindo na borda da pista)
-              const teto = pistaDaAresta(G, e, s + w / 2) - CHAO_ABAIXO_DA_PISTA;
-              const i = criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d: dd, base, rng, teto, piso: teto - PLATAFORMA_ABAIXO_DA_RUA });
+              // a plataforma fica no chão da rua em frente, até 0,3 m abaixo do meio da frente: nunca acima do chão da
+              // rua em nenhum ponto da frente (na rua em rampa, a ponta de baixo; senão o chão subiria na borda da pista
+              // ali) nem muito abaixo (a casa afundada e o chão caindo na borda da pista)
+              const meio = pistaDaAresta(G, e, s + w / 2) - CHAO_ABAIXO_DA_PISTA;
+              const teto = chaoDaRuaNaFrente(G, e, s, s + w);
+              const i = criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d: dd, base, rng, teto, piso: meio - PLATAFORMA_ABAIXO_DA_RUA });
               oc.retangulo(cx, cz, rot, w, dd, 1, true);
               feitos.push(i);
               moradores += P.moradores[i];
@@ -394,6 +396,17 @@ function cabe(base, oc, area, cx, cz, rot, w, d) {
 
 /** A plataforma de uma casa da Vila fica até isto abaixo do chão da rua em frente (m). */
 const PLATAFORMA_ABAIXO_DA_RUA = 0.3;
+
+/**
+ * O chão mais baixo da rua ao longo da frente da casa (de s0 a s1 na aresta): as amostras da grade entre a plataforma
+ * e a pista ficam com a cota da plataforma, e a plataforma acima da rua em qualquer ponto da frente levantaria o chão
+ * na borda da pista ali (a aresta é reta entre os patamares: nove pontos pegam as pontas e o meio).
+ */
+function chaoDaRuaNaFrente(G, e, s0, s1) {
+  let m = Infinity;
+  for (let k = 0; k <= 8; k++) m = Math.min(m, pistaDaAresta(G, e, s0 + ((s1 - s0) * k) / 8));
+  return m - CHAO_ABAIXO_DA_PISTA;
+}
 
 function criarPredio(sim, { modelo, nivel, cx, cz, rot, w, d, base, rng, teto = Infinity, piso = -Infinity }) {
   const P = sim.tabelas.predios;

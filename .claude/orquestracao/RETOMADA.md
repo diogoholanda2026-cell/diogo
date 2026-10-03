@@ -1,26 +1,22 @@
 # Estado do jogo novo (28/09/2026)
 
-## ONDE PAROU (02/10/2026, pausa pedida pelo dono)
+## ONDE PAROU (03/10/2026)
 
-**03/10/2026: retomada.** Etapa 2 relançada (workflow wfoluyj1e, run wf_3c913d07-93f, base `32b7805`), continuando do
-commit da pausa. O resto desta seção vale até ela terminar.
+**Onda 3: etapas 1 e 2 prontas, revisadas, integradas e gravadas.** Etapa 1 (S2a, S3a, R2b, R4b, U1b) em `32b7805`;
+etapa 2 (SEDE3 e R5: área inicial de 6 x 5, sede v3 e os 24 colocáveis) em `d81dcf0`, com a integração depois (testes
+de outras parcelas fora do disco da sede, cena rua no cruzamento novo, plataformas da Vila abaixo do chão da rua em
+`sim/mundo/vila.js`, domínio dos colocáveis no índice, mata fora do disco, teto da sede na vista aberta de 60 mil).
+Notas completas em `docs/entregas/onda3/`. Testes: tudo verde menos o subteste 14 de geracao-vias (tráfego), um
+defeito da fila em `render/mundo/trafego.js` passado à R3b. Montagem: só o aviso A1 (JS principal em 1.892 KB).
 
-**Onda 3 pausada no meio da etapa 2.** Nada rodando. A etapa 1 (S2a, S3a, R2b, R4b, U1b) está pronta, revisada e
-gravada (`32b7805`; notas nas fichas e em `docs/entregas/onda3/`). A etapa 2 (SEDE3 e R5, base `32b7805`) foi
-interrompida duas vezes (reinício do contêiner e a pausa) **sem nota e sem revisão**: o trabalho parcial está no commit
-"Pausa: SEDE3 e R5 em andamento", com os testes vermelhos (arcologia-render, bemestar, casca, celulas, crescimento,
-geracao-vias, redes, servicos, vias e zonas), porque o mapa e a área inicial novos (D90) estão pela metade.
+**Etapa 3 rodando** (R3b, U2a, X1b, X3a), com a base no commit da integração. Ao terminar: ler os resultados, testes
+verdes, `montar.mjs`, juntar as notas nas fichas, gravar e escrever a C1 (JS principal acima do teto, calibração do
+começo, robô com a coroa de quadras dentro do disco, greide do nó de entrada, os dois 'ShaderMaterial' sem dono,
+bancada no PC do dono). Para o dono ver na prévia: Helix Labs e Compass Tower lendo como silos, fachada do Horizon Ring
+monótona de perto, parque central ralo, anéis acinzentados à noite.
 
-**Para retomar:**
-1. Se o contêiner foi reciclado, copie `.claude/orquestracao/*` para `scratchpad/cs2/` (regra 1 abaixo).
-2. Relance a etapa 2 com `onda.js`: `{nome: 'Onda 3, etapa 2 (retomada)', base: '32b7805b337155c389c6546d694034b66adb75fd',
-   etapas: [[{id: 'SEDE3'}, {id: 'R5'}]]}`. Os textos de SEDE3 e R5 já começam com ONDE PAROU (continuar, não recomeçar).
-3. Ao terminar: ler os resultados, `simular.mjs --testes` verde, `montar.mjs`, juntar as notas nas fichas
-   (`docs/entregas/onda3/`), gravar e lançar a etapa 3 (R3b, U2a, X1b, X3a) com a base nova. Depois a C1 (texto a
-   escrever: JS principal em 1.897 KB contra o teto de 1.638, calibração do começo, bancada no PC do dono).
-
-Decisões até a D90 registradas (sede v3, nomes em inglês, área inicial de 6 x 5). `previa/` continua a Prévia 1c
-publicada (nada montado depois dela). Aguardando também a medição do dono na página de teste da Prévia 1c.
+Decisões até a D90 registradas. `previa/` continua a Prévia 1c. Aguardando também a medição do dono na página de teste
+da Prévia 1c.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
