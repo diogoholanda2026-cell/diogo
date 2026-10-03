@@ -8,6 +8,11 @@ https://diogoholanda2026-cell.github.io/diogo/previa/cenas.html. Onda 3 inteira 
 da Holding, A2 em 6 sementes). Testes ok; montagem sem aviso; 0 compilações depois de pronto. CI "Robô de equilíbrio"
 consertado (`4da958c`: rodava um script do jogo antigo; agora `npm ci` e `simular:testes`; verde nos commits `4da958c` e `21aad60`).
 
+**Medida do dono na Prévia 2 (03/10/2026, `docs/pesquisa/pc-dono/medida-2026-10-03.md`):** 21 qps na vista do jogo, com o
+terreno em 36 ms de 46 (80%); vista aberta a 23 a 25 qps. **PC3 rodando** (terreno de perto, programas das ferramentas
+no aquecimento, sombreadores das árvores que levam 2 s para compilar no Direct3D 11), base no commit "PC3: medida do
+dono". Depois da PC3: integrar, montar a Prévia 2b e pedir nova medida ao dono.
+
 **Esperando o dono:** jogar a Prévia 2 e medir no PC dele (Teste de desempenho e página de teste com ?q=), e julgar o
 visual: anéis da sede como muralha listrada sem sombra no chão, Helix Labs e Compass Tower como silos, parque central
 ralo, Supertrees como varetas, árvores de rua facetadas, traseira dos carros clara com o sol baixo, cabine do caminhão
