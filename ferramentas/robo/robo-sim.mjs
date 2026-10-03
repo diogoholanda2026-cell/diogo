@@ -19,7 +19,7 @@ import { dataDoTique, ANO_INICIAL } from '../../fonte/data/historia.js';
 import { SEDE_CENTRO, GLEBA_ENVELOPE } from '../../fonte/data/arcologia-plano.js';
 import { idxDaRef } from '../../fonte/contratos/espelho.js';
 import { AGUA, ETAPA, PREDIO, TIPO_PREDIO } from '../../fonte/contratos/flags.js';
-import { ANO } from '../../fonte/comum/relogio.js';
+import { ANO, MES } from '../../fonte/comum/relogio.js';
 import { frentesLivres } from '../../fonte/sim/zonas/crescimento.js';
 import { daHolding } from '../../fonte/sim/mundo/ladrilhos.js';
 import { aguaEm } from '../../fonte/sim/mundo/terreno.js';
@@ -695,7 +695,7 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
    * lago.e1 espera a Pedreira e o Areal terem metade da brita e da areia (a obra parada só prende o caixa).
    */
   function arcologia() {
-    if (!temComando(sim, 'arcologia.iniciar') || !sim.q.arcologia) return;
+    if (!temComando(sim, 'arcologia.iniciar') || !sim.q.arcologia || E.semArcologia) return;
     const et = proximaEtapa();
     if (!et) return;
     const precoImp = (item) => Math.ceil(1.6 * (precoBase(item) || 0));
@@ -731,7 +731,14 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
       const falta = Math.max(0, m.pede - m.estoque - importando(m.item));
       if (falta > 0 && !produz(m.item)) cmd('importar', { item: m.item, n: Math.min(100, falta) });
     }
-    cmd('arcologia.iniciar', { etapa: et.id });
+    const r = cmd('arcologia.iniciar', { etapa: et.id });
+    if (!r.ok && r.codigo === 'trancado') {
+      // a etapa liberada não sai para este jogador (o A2 tranca a Arcologia): solta o estoque guardado para ela e não
+      // junta mais (C1c)
+      E.semArcologia = true;
+      for (const [item, n] of Object.entries(E.reserva ?? {})) if (n > 0) cmd('estoque.reserva', { item, n: 0 });
+      E.reserva = {};
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- finanças
@@ -746,13 +753,16 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     if (ano <= 2 && ((caixa() < 25000 && o.fluxoCaixaHora < 2000) || quer) && e.disponivelAno >= 10000) {
       cmd('emprestimo.tomar', { valor: Math.min(50000, e.disponivelAno) });
     }
-    // do ano 3 em diante, paga antes de gastar (financas roda primeiro no passo): os juros e uma parcela sempre que o
-    // caixa passa da folga, e quita quando dá; a dívida cai e some antes do ano 6 (2025)
+    // do ano 3 em diante, amortiza no calendário (C1c): no máximo uma parcela (10% do principal, com os juros) a cada 2
+    // meses no ano 3 e uma por mês do ano 4 em diante, e quita quando o caixa cobre a dívida, do ano 4 em diante; a
+    // dívida some antes do ano 6 (2025). Antes pagava sempre que o caixa passava da folga: o prêmio do marco 4 ia
+    // inteiro para a dívida de 10% ao ano (5% por hora de jogo) e as quadras paravam no ano 3
     if (ano >= 3 && e.divida > 0) {
-      const folga = 12000;
-      if (caixa() > e.divida + folga) cmd('emprestimo.quitar', {});
-      else if (e.parcela > 0 && caixa() > folga + e.parcela + e.jurosDevidos) cmd('emprestimo.pagarParcela', {});
-      else if (e.jurosDevidos > 500 && caixa() > folga + e.jurosDevidos) cmd('emprestimo.pagarJuros', {});
+      const mes = Math.floor(sim.tique / MES);
+      if (ano >= 4 && caixa() > e.divida + 12000) cmd('emprestimo.quitar', {});
+      else if (mes >= (E.proximaParcela ?? 0) && e.parcela > 0 && caixa() > 5000 + e.parcela + e.jurosDevidos) {
+        if (cmd('emprestimo.pagarParcela', {}).ok) E.proximaParcela = mes + (ano === 3 ? 2 : 1);
+      }
     }
   }
 

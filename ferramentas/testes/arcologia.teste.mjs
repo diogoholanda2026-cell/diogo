@@ -331,9 +331,10 @@ test('save mais velho: a seção sem uma etapa nem os avisos de altura carrega c
 
 // C1a: na cidade viva da S2a (a de faz de conta era a ponte enquanto a S2a não publicava; com ela o reservatório do
 // Mirror Lake e os efeitos da torre não chegavam a moradores de verdade)
-test('A2: o robô que pula a Arcologia termina mais pobre (cidade da S2a, 6 h de jogo)', () => {
-  const jogar = (pular) => {
-    const sim = criarSimulacao({ semente: 'robo-arco' });
+test('A2: o robô que pula a Arcologia termina mais pobre (cidade da S2a, 6 h de jogo, 6 sementes)', () => {
+  // D92: uma semente só oscila uns 0,2 na razão da Contribuição; o critério é a média de 6 sementes, e a riqueza em todas
+  const jogar = (semente, pular) => {
+    const sim = criarSimulacao({ semente });
     if (pular) {
       const cmd = sim.cmd.bind(sim);
       sim.cmd = (n, a) => (n === 'arcologia.iniciar' ? { ok: false, codigo: 'trancado' } : cmd(n, a));
@@ -353,14 +354,25 @@ test('A2: o robô que pula a Arcologia termina mais pobre (cidade da S2a, 6 h de
       etapas: sim.espelho.arcologia.etapas.filter((e) => e.estado === ETAPA.PRONTA).length,
     };
   };
-  const com = jogar(false);
-  const sem = jogar(true);
-  assert.ok(com.etapas >= 1, 'o robô fez a Arcologia');
-  assert.equal(sem.etapas, 0);
-  assert.ok(com.riqueza > sem.riqueza, `com a Arcologia ${Math.round(com.riqueza)}, sem ${Math.round(sem.riqueza)}`);
-  // a obra não vale só no papel (o valor dela conta o que foi pago): a cidade rende mais com as etapas (o reservatório,
-  // o XP e os marcos que elas adiantam), então o patrimônio a mais não é o próprio gasto devolvido
-  assert.ok(com.contribuicao > 1.2 * sem.contribuicao, `Contribuição com ${Math.round(com.contribuicao)}, sem ${Math.round(sem.contribuicao)}`);
-  assert.ok(com.populacao >= sem.populacao, `moradores com ${com.populacao}, sem ${sem.populacao}`);
-  assert.ok(com.marco >= sem.marco);
+  const SEMENTES = ['robo-arco', 'robo-1', 'semente-a', 'semente-b', 'semente-c', 'semente-d'];
+  let razaoC = 0;
+  let razaoP = 0;
+  let marcoCom = 0;
+  let marcoSem = 0;
+  for (const semente of SEMENTES) {
+    const com = jogar(semente, false);
+    const sem = jogar(semente, true);
+    assert.ok(com.etapas >= 1, `${semente}: o robô fez a Arcologia`);
+    assert.equal(sem.etapas, 0);
+    assert.ok(com.riqueza > sem.riqueza, `${semente}: riqueza com a Arcologia ${Math.round(com.riqueza)}, sem ${Math.round(sem.riqueza)}`);
+    razaoC += com.contribuicao / Math.max(1, sem.contribuicao) / SEMENTES.length;
+    razaoP += com.populacao / Math.max(1, sem.populacao) / SEMENTES.length;
+    marcoCom += com.marco;
+    marcoSem += sem.marco;
+  }
+  // a obra não vale só no papel (o valor dela conta o que foi pago): a cidade rende mais e cresce mais com as etapas (o
+  // reservatório, o XP e os marcos que elas adiantam), então o patrimônio a mais não é o próprio gasto devolvido
+  assert.ok(razaoC >= 1.05, `Contribuição com / sem, média de ${SEMENTES.length} sementes: ${razaoC.toFixed(3)}`);
+  assert.ok(razaoP >= 1.05, `moradores com / sem, média de ${SEMENTES.length} sementes: ${razaoP.toFixed(3)}`);
+  assert.ok(marcoCom >= marcoSem, `marcos somados com ${marcoCom}, sem ${marcoSem}`);
 });

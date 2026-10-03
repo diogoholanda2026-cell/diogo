@@ -8,7 +8,11 @@
 //          { item: n } (entregues por caminhão do armazém, D47), minutos (min de jogo em 1x, D42), xp, fases (ids das
 //          4 fases, textos em ui/textos/x1.js), efeitos [{ tipo, ... }] (D49), alturas? (corte da obra do par) }.
 // Progresso = trabalho / duração, e o trabalho só anda enquanto há material para a fase (min de entregue / pedido por
-// item) e caixa (D41). Números de partida, marcados (calibrar): a C1 calibra com o robô.
+// item) e caixa (D41). Créditos calibrados pela C1c (D92) contra a economia do M1a medida pelo robô: um terço dos de
+// partida (60, 150, 300, 350 e 250 mil), porque a cidade do M1a rende uns 4 mil por hora aos 20 min e 25 a 35 mil por
+// hora com 6 a 9 mil moradores em 6 h, e a lago.e1 por 60 mil derrubava o começo; a lago.e1 por 20 mil custa pouco mais
+// que uma captação (15 mil, água para 5 mil) e dá água para 6 mil, os portões e 300 XP. Materiais, minutos e XP ainda
+// de partida (calibrar).
 import { congelar } from '../comum/util.js';
 import { MINUTO } from '../comum/relogio.js';
 import { TORRE_LAMINA, TORRE_IRMA, PAR, TRECHOS_HORIZON } from './arcologia-plano.js';
@@ -34,7 +38,7 @@ const FASES_TORRE = ['fundacao', 'estrutura', 'fachada', 'acabamento'];
 export const ETAPAS = /* @__PURE__ */ congelar([
   {
     id: 'lago.e1', parte: 'lago', nome: 'Reservatório e portões', marco: 0, requisito: null,
-    creditos: 60000, materiais: { brita: 50, areia: 50 }, minutos: 5, xp: 300, fases: FASES_LAGO,
+    creditos: 20000, materiais: { brita: 50, areia: 50 }, minutos: 5, xp: 300, fases: FASES_LAGO,
     efeitos: [
       { tipo: 'vias' },
       { tipo: 'agua', capacidade: 36, moradores: 6000 },
@@ -43,12 +47,12 @@ export const ETAPAS = /* @__PURE__ */ congelar([
   },
   {
     id: 'torre.e1', parte: 'torre', nome: 'Fundações e pódio', marco: 3, requisito: 'lago.e1',
-    creditos: 150000, materiais: { concreto: 60, brita: 60, aco: 20 }, minutos: 10, xp: 600, fases: FASES_TORRE,
+    creditos: 50000, materiais: { concreto: 60, brita: 60, aco: 20 }, minutos: 10, xp: 600, fases: FASES_TORRE,
     efeitos: [{ tipo: 'licenca', n: 1 }],
   },
   {
     id: 'torre.e2', parte: 'torre', nome: 'Sede operacional', marco: 4, requisito: 'torre.e1',
-    creditos: 300000, materiais: { concreto: 120, aco: 60, vidro: 40 }, minutos: 15, xp: 1000, fases: FASES_TORRE,
+    creditos: 100000, materiais: { concreto: 120, aco: 60, vidro: 40 }, minutos: 15, xp: 1000, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'holding', produtividade: 0.15, caminhoes: 6 },
       { tipo: 'vagas', vagas: [0, 0, 600, 600] },
@@ -56,7 +60,7 @@ export const ETAPAS = /* @__PURE__ */ congelar([
   },
   {
     id: 'torre.e3', parte: 'torre', nome: 'Moradias de luxo', marco: 5, requisito: 'torre.e2',
-    creditos: 350000, materiais: { concreto: 100, aco: 60, vidro: 60 }, minutos: 15, xp: 1200, fases: FASES_TORRE,
+    creditos: 115000, materiais: { concreto: 100, aco: 60, vidro: 60 }, minutos: 15, xp: 1200, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'moradores', n: 400, bemEstar: 75 },
       // no M1b também a residencial alta e o escritório (D49)
@@ -65,7 +69,7 @@ export const ETAPAS = /* @__PURE__ */ congelar([
   },
   {
     id: 'torre.e4', parte: 'torre', nome: 'Coroa e heliponto', marco: 6, requisito: 'torre.e3',
-    creditos: 250000, materiais: { vidro: 50, aco: 30, serrada: 20 }, minutos: 10, xp: 1500, fases: FASES_TORRE,
+    creditos: 85000, materiais: { vidro: 50, aco: 30, serrada: 20 }, minutos: 10, xp: 1500, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'atratividade', v: 5 },
       { tipo: 'valor', v: 120, raio: 1500 },

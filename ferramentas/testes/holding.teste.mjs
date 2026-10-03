@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addNo, addAresta, removerAresta } from '../../fonte/sim/vias/grafo.js';
 import { porEstoque } from '../../fonte/sim/holding/producao.js';
-import { obrasEsperando } from '../../fonte/sim/holding/mercado.js';
+import { obrasEsperando, ITENS_DA_CADEIA } from '../../fonte/sim/holding/mercado.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { PREDIOS_HOLDING } from '../../fonte/data/holding.js';
 import { MARCOS } from '../../fonte/data/marcos.js';
@@ -311,4 +311,24 @@ test('revisão: a rota do caminhão segue o grafo de agora (trocar a via no mesm
   addAresta(G, a, b, 'avenida');
   const naAvenida = pedir();
   assert.ok(naAvenida < naRua, `rua ${naRua} tiques, avenida ${naAvenida}`);
+});
+
+test('entrada da D48 (C1c): do marco 3 em diante a obra de nível 3 a 5 depende da Holding só nos itens da cadeia dela', () => {
+  assert.deepEqual(ITENS_DA_CADEIA, ['brita', 'areia', 'argila', 'tijolo', 'concreto']);
+  const sim = simS3a({ semente: 'cadeia', populacao: 3000, bemEstar: 62 });
+  ateMarco(sim, 3);
+  const c0 = sim.holding.caixa();
+  // vidro, aço e cimento a Holding do M1a só importaria a 160% para vender a 100%: a obra importa sozinha
+  assert.deepEqual(sim.holding.comprarParaObra(-1, 3, { vidro: 2, aco: 3, cimento: 1 }), { espera: false, vendidas: 0, importadas: 0 });
+  assert.equal(sim.holding.caixa(), c0, 'sem perda na Importação para a cidade');
+  // o item da cadeia segue a D48: a Holding importa a 160% e vende a 100% só ele
+  assert.deepEqual(sim.holding.comprarParaObra(-1, 4, { vidro: 2, concreto: 2 }), { espera: false, vendidas: 0, importadas: 2 });
+  assert.ok(Math.abs(c0 - sim.holding.caixa() - 2 * 170 * 0.6) < 1e-9);
+  // desligada a importação para a cidade, só o item da cadeia faz a obra esperar, e só ele entra no aviso
+  ok(sim.cmd('cidade.importarAuto', { sim: false }));
+  assert.equal(sim.holding.comprarParaObra(-1, 5, { vidro: 2, aco: 1 }).espera, false);
+  assert.equal(sim.holding.comprarParaObra(-1, 5, { vidro: 2, tijolo: 3 }).espera, true);
+  sim.rodar(20, { sincrono: true });
+  assert.deepEqual(obrasEsperando(sim), { item: 'tijolo', n: 3 });
+  assert.deepEqual(sim.erros, []);
 });
