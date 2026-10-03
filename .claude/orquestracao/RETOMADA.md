@@ -2,17 +2,20 @@
 
 ## ONDE PAROU (03/10/2026)
 
-**Onda 3 fechada e revisada** (etapas em `32b7805`, `d81dcf0`, `9b001b5`, `7a930af`; fechamento C1a e C1b em
-`ce46785`; notas em `docs/entregas/onda3/`). Falta antes da Prévia 2: dois agentes avulsos rodando ao mesmo tempo, um
-calibrando a Arcologia para o A2 ficar verde (D92; nota em `scratchpad/novo/C1c/nota.md`) e outro nas pendências do
-guia da primeira hora e das camadas (nota em `scratchpad/novo/C1d/nota.md`). Ao terminarem: testes verdes, montar em
-`previa/` (o integrador; a C1b já deixou a Prévia 2 conferida em `scratchpad/novo/C1b/previa2`), publicar em dois
-commits (fonte e "Montagem ..."), conferir o GitHub Pages e mandar o link ao dono com as capturas
-(`scratchpad/novo/C1b/capturas/`) e o que ele julga: anéis da sede como muralha listrada sem sombra no chão, Helix Labs
-e Compass Tower como silos, parque central ralo, cabine do caminhão lisa, gente low-poly, primeira quadra sugerida de
-indústria, manutenção das 24 avenidas da sede, cor da Holding nos caixilhos, 307 px livres com alerta em 986 x 443.
+**Prévia 2 "M1a jogável" publicada** (fonte `ae3f72e`, montagem `d2f1c6a`; GitHub Pages ok):
+https://diogoholanda2026-cell.github.io/diogo/previa/cenas.html. Onda 3 inteira revisada e integrada (notas em
+`docs/entregas/onda3/`); D91 (teto do JS em 2,3 MB) e D92 (etapas da Arcologia a um terço, D48 só nos itens da cadeia
+da Holding, A2 em 6 sementes). Testes ok; montagem sem aviso; 0 compilações depois de pronto. CI "Robô de equilíbrio"
+consertado (`4da958c`: rodava um script do jogo antigo; agora `npm ci` e `simular:testes`).
 
-Decisões até a D92 registradas. Aguardando também a medição do dono na página de teste da Prévia 1c.
+**Esperando o dono:** jogar a Prévia 2 e medir no PC dele (Teste de desempenho e página de teste com ?q=), e julgar o
+visual: anéis da sede como muralha listrada sem sombra no chão, Helix Labs e Compass Tower como silos, parque central
+ralo, Supertrees como varetas, árvores de rua facetadas, traseira dos carros clara com o sol baixo, cabine do caminhão
+lisa e gente low-poly; e decidir: manutenção das 24 avenidas da sede (recomendação: no custo da Arcologia), primeira
+quadra sugerida de indústria, Areal como segunda sugestão do objetivo da Pedreira, cor da Holding nos caixilhos e 307
+px livres com alerta em 986 x 443. Próximo passo recomendado: uma passada visual (sede, rua e árvores) antes da onda 4.
+
+Decisões até a D92 registradas.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
