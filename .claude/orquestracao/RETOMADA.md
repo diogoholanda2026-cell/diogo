@@ -6,7 +6,7 @@
 https://diogoholanda2026-cell.github.io/diogo/previa/cenas.html. Onda 3 inteira revisada e integrada (notas em
 `docs/entregas/onda3/`); D91 (teto do JS em 2,3 MB) e D92 (etapas da Arcologia a um terço, D48 só nos itens da cadeia
 da Holding, A2 em 6 sementes). Testes ok; montagem sem aviso; 0 compilações depois de pronto. CI "Robô de equilíbrio"
-consertado (`4da958c`: rodava um script do jogo antigo; agora `npm ci` e `simular:testes`).
+consertado (`4da958c`: rodava um script do jogo antigo; agora `npm ci` e `simular:testes`; verde nos commits `4da958c` e `21aad60`).
 
 **Esperando o dono:** jogar a Prévia 2 e medir no PC dele (Teste de desempenho e página de teste com ?q=), e julgar o
 visual: anéis da sede como muralha listrada sem sombra no chão, Helix Labs e Compass Tower como silos, parque central
