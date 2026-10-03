@@ -12,10 +12,12 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
 
-import { CAMADAS_UI, PALETA, paleta, paraRender, valorNaTabela, modeloLegenda, rampaDivergente, luminancia, contraste, escalaDe } from '../../fonte/ui/mundo/camadas.js';
+import { CAMADAS_UI, PALETA, paleta, paraRender, valorNaTabela, modeloLegenda, rampaDivergente, luminancia, contraste, escalaDe, criarVigiaDiario, diarioMarcou, faixasDoBemEstar } from '../../fonte/ui/mundo/camadas.js';
 import { escolherAvisos, AVISOS_DA_CAMADA, GLIFOS_PADRAO, FILTROS_AVISOS, filtroAtual } from '../../fonte/ui/mundo/marcadores.js';
 import * as uiMarcadores from '../../fonte/ui/mundo/marcadores.js';
-import { dinheiro } from '../../fonte/ui/formato.js';
+import { dinheiro, dinheiroPorHora } from '../../fonte/ui/formato.js';
+import { indiceZona } from '../../fonte/data/zonas.js';
+import { REGRAS_DONO } from '../../fonte/data/economia.js';
 import { mapaAtlas, GLIFOS_ATLAS, PRIMEIRO_DIGITO, ATLAS } from '../../fonte/ui/glifos/atlas.js';
 import { glifo } from '../../fonte/ui/glifos/glifos.js';
 import { marcosDaSede, areasDoEspelho, colocar, centroide, valeNaDistancia, ROTULOS } from '../../fonte/ui/mundo/rotulos.js';
@@ -220,6 +222,18 @@ test('legendas: títulos, pontas, marcas e categorias com os textos de verdade (
   // C1a: as faixas não trazem a Contribuição em unidades de desenho (D68, D87); o valor em dólar fica no resumo
   assert.ok(bem.marcas[0].dica.includes('menor Contribuição') && !/\d+ por morador/.test(bem.marcas[0].dica), bem.marcas[0].dica);
   assert.ok(bem.gradiente.startsWith('linear-gradient(90deg,'));
+  // C1d: sob a rampa, a Contribuição de cada faixa em dólar por hora (5, 8 e 11 da regra do dono, D68 e D87), cada uma
+  // na largura da faixa na rampa, e a da cidade agora (a tarifa do resumo) marcada
+  assert.equal(bem.faixas, null, 'sem o formato do dinheiro por hora, sem as faixas');
+  const fx = modeloLegenda(bemReal, { t, num, dinheiro, porHora: dinheiroPorHora }).faixas;
+  assert.deepEqual(fx.map((f) => f.texto), ['US$ 3.000/h', 'US$ 4.800/h', 'US$ 6.600/h']);
+  assert.deepEqual(fx.map((f) => f.tarifa), REGRAS_DONO.renda.tarifas);
+  assert.deepEqual(fx.map((f) => [f.ini, f.fim]), [[0, 0.305], [0.305, 0.605], [0.605, 1]]);
+  assert.deepEqual(fx.map((f) => f.atual), [false, false, true]);
+  assert.equal(fx[0].dica, 'Bem-estar de 0 a 30: Contribuição de US$ 3.000/h por morador');
+  assert.ok(fx.every((f) => !/[—–]|\?\?/.test(f.dica)));
+  assert.deepEqual(faixasDoBemEstar({ ...bemReal, resumo: { chave: 'camada.bemEstar.resumo', params: { media: 40, tarifa: 8 } } }, { t, porHora: dinheiroPorHora }).map((f) => f.atual), [false, true, false]);
+  assert.equal(modeloLegenda(casos[2].d, { t, num, porHora: dinheiroPorHora }).faixas, null, 'só o Bem-estar tem faixas');
   const serv = modeloLegenda(casos[4].d, { t, num });
   assert.deepEqual(serv.pontas, ['Sem atendimento', 'Bem atendido']);
   assert.equal(serv.resumo, 'Atendimento médio das ruas: 47%');
@@ -249,7 +263,7 @@ test('filtro dos avisos: só os da camada ligada, graves e atenção, nenhum, e 
   assert.equal(h.find((m) => m.idx === 1).gravidade, 'grave', 'grave continua losango');
   assert.equal(escolherAvisos(av, { max: 2 }).length, 2);
   assert.deepEqual(FILTROS_AVISOS, ['todos', 'importantes', 'nenhum']);
-  assert.equal(filtroAtual({}), 'todos');
+  assert.equal(filtroAtual({}), 'importantes', 'sem prefs: o padrão de PREFS_PADRAO');
   // todo glifo das camadas e dos avisos tem célula no atlas
   const mapa = mapaAtlas();
   for (const lista of Object.values(AVISOS_DA_CAMADA)) for (const g of lista) assert.ok(mapa[g] !== undefined, `atlas sem ${g}`);
@@ -516,4 +530,114 @@ test('dados de prova da cena: todas as camadas da cena e os avisos na cidade de 
   assert.equal(av.idx.length, av.glifo.length);
   const muitos = avisosSinteticos({ predios: prediosTeste(120) }, { muitos: true });
   assert.ok(muitos.idx.length >= 3000 && muitos.idx.length < 3500, `${muitos.idx.length}`);
+});
+
+// ------------------------------------------------------------------------------------------------ C1d: diário e filtro
+
+test('diário: a camada olha só o domínio dela; rodando, os prédios esperam a rodada e a célula pintada não', () => {
+  const vazio = { versao: 9, tudo: { terreno: false, floresta: false, vias: false, celulas: false, predios: false }, realocado: [], nos: new Int32Array(0), arestas: new Int32Array(0), celulas: new Int32Array(0), predios: new Int32Array(0) };
+  const com = (dom) => ({ ...vazio, [dom]: Int32Array.from([3]) });
+  assert.equal(diarioMarcou(vazio, 'celulas'), false);
+  assert.equal(diarioMarcou(com('celulas'), 'celulas'), true);
+  assert.equal(diarioMarcou(com('celulas'), 'celulas', { rodando: true }), true, 'a zona pintada com o jogo andando');
+  assert.equal(diarioMarcou(com('predios'), 'celulas'), false, 'outro domínio');
+  assert.equal(diarioMarcou(com('predios'), 'predios'), true, 'pausado: o prédio construído ou demolido');
+  assert.equal(diarioMarcou(com('predios'), 'predios', { rodando: true }), false, 'rodando: a obra marca a cada tique e o dado vem na rodada');
+  assert.equal(diarioMarcou(com('arestas'), 'arestas', { rodando: true }), true);
+  assert.equal(diarioMarcou(com('celulas'), 'grade'), false, 'a grade não olha o diário');
+  assert.equal(diarioMarcou({ ...vazio, tudo: { ...vazio.tudo, celulas: true } }, 'celulas'), true, 'tudo (carregar, anel cheio)');
+  assert.equal(diarioMarcou({ ...vazio, tudo: { ...vazio.tudo, vias: true } }, 'arestas'), true);
+  assert.equal(diarioMarcou({ ...vazio, realocado: ['predios'] }, 'predios'), true);
+  assert.equal(diarioMarcou(null, 'celulas'), false);
+
+  // com a simulação de verdade: pausada, a zona pintada marca as células e a vigia acusa uma vez
+  const sim = criarSimulacao({ semente: 'c1d-diario', modo: 'livre' });
+  assert.ok(sim.cmd('via.construir', { plano: { modo: 'reta', tipo: 'rua', pontos: [[-760, -480], [-280, -480]], sessao: 1, encaixe: false } }).ok);
+  const vigia = criarVigiaDiario();
+  vigia.base(sim);
+  assert.equal(vigia.olhar(sim, 'celulas'), false, 'nada novo');
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -450, raio: 40 }, zona: indiceZona('resBaixa') }).ok);
+  assert.equal(vigia.olhar(sim, 'grade'), false, 'a grade não liga para a pintura');
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -600, z: -450, raio: 40 }, zona: indiceZona('resBaixa') }).ok);
+  assert.equal(vigia.olhar(sim, 'celulas'), true, 'a pintura com o jogo pausado');
+  assert.equal(vigia.olhar(sim, 'celulas'), false, 'a mesma pintura não acusa duas vezes');
+  // outra partida: começa de novo, sem acusar
+  const outra = criarSimulacao({ semente: 'c1d-diario', modo: 'livre' });
+  assert.equal(vigia.olhar(outra, 'celulas'), false);
+});
+
+let corpoCamadas = null;
+/** O corpo das camadas (JSX) montado pelo esbuild, com os sinais da mesma cópia. */
+async function camadasJsx() {
+  if (corpoCamadas) return corpoCamadas;
+  const { build } = await import('esbuild');
+  const abs = (p) => JSON.stringify(join(RAIZ, 'fonte', p));
+  const entrada = `export * as M from ${abs('ui/telas/corpo/Camadas.jsx')}; export { signal } from '@preact/signals';`;
+  const r = await build({
+    stdin: { contents: entrada, resolveDir: RAIZ, loader: 'js' }, bundle: true, write: false, format: 'esm', platform: 'node',
+    logLevel: 'silent', jsx: 'automatic', jsxImportSource: 'preact', nodePaths: [join(RAIZ, 'node_modules')],
+  });
+  corpoCamadas = await import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'));
+  return corpoCamadas;
+}
+
+test('camada Zonas ligada com o jogo pausado: a zona pintada vai ao render em até 250 ms; sem mudança, nada se consulta', async () => {
+  const { M, signal: sinal } = await camadasJsx();
+  const sim = criarSimulacao({ semente: 'c1d-camadas', modo: 'livre' });
+  assert.ok(sim.cmd('via.construir', { plano: { modo: 'reta', tipo: 'rua', pontos: [[-760, -480], [-280, -480]], sessao: 1, encaixe: false } }).ok);
+  const mostrados = [];
+  let consultas = 0;
+  const ui = {
+    R: { camadas: { mostrar: (p) => mostrados.push(p), ocultar: () => {} } },
+    loja: { camada: sinal(null), prefs: sinal({}), ferramenta: sinal(null), avisar: () => {} },
+    consultar: (nome, id) => (consultas++, sim.q.camada(id)),
+    obterSim: () => sim,
+    t,
+  };
+  M.ligar(ui);
+  ui.loja.camada.value = 'zonas';
+  assert.equal(mostrados.length, 1, 'ligar a camada manda o dado');
+  const c0 = consultas;
+  for (const tMs of [1000, 1300, 3500, 6000]) M.quadro(ui, tMs);
+  assert.equal(consultas, c0, 'pausado e sem comando, nada se consulta');
+  // pinta com o jogo pausado (o relógio não anda): a camada vai de novo na olhada seguinte do diário
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: -700, z: -540, x2: -340, z2: -486 }, zona: indiceZona('resBaixa') }).ok);
+  M.quadro(ui, 6100);
+  assert.equal(mostrados.length, 1, 'antes de 250 ms da última olhada, espera');
+  M.quadro(ui, 6300);
+  assert.equal(mostrados.length, 2, 'a zona pintada não apareceu com o jogo pausado');
+  const pintadas = [...mostrados[1].dados].filter((v) => v === indiceZona('resBaixa')).length;
+  assert.ok(pintadas > 0, 'o dado novo traz as células pintadas');
+  // sem mudança: nem consulta nem envio
+  const c1 = consultas;
+  for (const tMs of [6600, 9000, 12000]) M.quadro(ui, tMs);
+  assert.equal(consultas, c1);
+  assert.equal(mostrados.length, 2);
+  ui.loja.camada.value = null;
+});
+
+test('filtro dos avisos: o padrão é "Graves e atenção" (C1d); quem já escolheu outro mantém', async () => {
+  const guardado = new Map();
+  const antes = globalThis.localStorage;
+  globalThis.localStorage = { getItem: (k) => guardado.get(k) ?? null, setItem: (k, v) => guardado.set(k, String(v)), removeItem: (k) => guardado.delete(k) };
+  try {
+    const { lerPrefs, gravarPrefs, PREFS_PADRAO, CHAVE_PREFS } = await import('../../fonte/ui/prefs.js');
+    assert.equal(PREFS_PADRAO.avisos, 'importantes');
+    assert.equal(filtroAtual(lerPrefs()), 'importantes', 'jogador novo');
+    // preferências de antes da C1d, sem o filtro gravado (nunca escolheu): o padrão novo
+    guardado.set(CHAVE_PREFS, JSON.stringify({ som: 0.3, dicas: false }));
+    assert.equal(filtroAtual(lerPrefs()), 'importantes');
+    assert.equal(lerPrefs().som, 0.3);
+    // quem escolheu "Todos" mantém, também depois de gravar outra preferência
+    guardado.set(CHAVE_PREFS, JSON.stringify({ som: 0.3, avisos: 'todos' }));
+    assert.equal(filtroAtual(lerPrefs()), 'todos');
+    gravarPrefs({ ...lerPrefs(), musica: 0.2 });
+    assert.equal(filtroAtual(lerPrefs()), 'todos');
+    // o padrão tira o desemprego ('info') do mapa e deixa os graves e os de atenção
+    const av = { versao: 1, idx: Int32Array.from([1, 2, 3]), glifo: Uint8Array.from([9, 3, 6]), gravidade: Uint8Array.from([0, 2, 1]), nomes: GLIFOS_PADRAO };
+    assert.deepEqual(escolherAvisos(av, { filtro: PREFS_PADRAO.avisos }).map((m) => m.glifo), ['semAgua', 'semMaterial']);
+  } finally {
+    if (antes === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = antes;
+  }
 });

@@ -1,6 +1,7 @@
 // Cenas da vitrine da U2a (sistema): entrada ("Clique para entrar"), menu inicial com a capa e o Continuar, nova
 // partida, saves, configurações (vídeo com o PC e a resolução dinâmica, som, salvamento), teste de desempenho com um
-// resultado da PC1 e da PC2, painel do F9 e a primeira hora (dica com a mão fantasma e o anel de guia em Vias).
+// resultado da PC1 e da PC2, painel do F9 e a primeira hora (dica com a mão fantasma e o anel de guia em Vias; C1d: as
+// ruas de terra da Vila sugeridas para melhorar, uma linha por rua, com o "Usar sugestão" na ferramenta de via).
 //   node ferramentas/vitrine-ui.mjs <pasta> u2-entrada,u2-menu,u2-nova,u2-carregar,u2-config,u2-teste 1376x768,986x443
 // A vitrine usa o jogo falso (sim-falsa.js), sem salvamento: as cenas põem nele o que o menu e os saves leem.
 import { Inicio } from '../../../fonte/ui/inicio/Entrada.jsx';
@@ -11,6 +12,7 @@ import { dicaAtual } from '../../../fonte/ui/guia/Dica.jsx';
 import { DICAS } from '../../../fonte/ui/guia/dicas.js';
 import { AnelGuia } from '../../../fonte/ui/guia/Guia.jsx';
 import { usarEstiloGuia } from '../../../fonte/ui/guia/estilo.js';
+import { ferramentas } from '../../../fonte/ui/ferramentas/sessao.js';
 
 const AGORA = Date.now();
 
@@ -177,7 +179,11 @@ export function registrar(registrarCenaVitrine) {
       acionar('configuracoes.aba', 'interface');
       await esperarSeletor(esperar, '[data-a="cfg.avisos"]');
     },
-    conferir: conferirTexto('[data-tela="configuracoes"]', /Avisos sobre os prédios.*Todos.*Graves e atenção.*Nenhum/, 'interface'),
+    conferir: () => [
+      ...conferirTexto('[data-tela="configuracoes"]', /Avisos sobre os prédios.*Todos.*Graves e atenção.*Nenhum/, 'interface')(),
+      // C1d: o padrão é "Graves e atenção" (o desemprego da cidade, 'info', não enche o mapa)
+      ...(document.querySelector('[data-a="cfg.avisos"][data-k="importantes"][aria-checked="true"]') ? [] : ['o filtro padrão não é "Graves e atenção"']),
+    ],
   });
   registrarCenaVitrine('u2-config-acessibilidade', {
     async preparar({ ui, jogo, esperar, acionar }) {
@@ -215,6 +221,38 @@ export function registrar(registrarCenaVitrine) {
       await esperarSeletor(esperar, '[data-painel="desempenho"]');
     },
     conferir: conferirTexto('[data-painel="desempenho"]', /qps.*chamadas.*triângulos/, 'painel'),
+  });
+  // primeira hora (C1d): o objetivo da Vila na rede aberto, a câmera sobre a Vila e a ferramenta de via em Melhorar; o
+  // fantasma tracejado segue cada rua de terra (uma linha por rua, a curva do espelho) e o "Usar sugestão" aparece
+  registrarCenaVitrine('u2-sugestao-vila', {
+    sim: 'real',
+    async preparar({ sim, ui, R, esperar }) {
+      usarEstiloGuia();
+      const barra0 = sim.q.barra;
+      const vila = { id: 'cidade.vila', texto: 's3.objetivo.cidade.vila', params: { n: 66 }, paramsChave: {}, quem: 'cida', dominio: 'cidade', feito: 0, total: 60, alvo: null, recompensa: { xp: 40, creditos: 0 } };
+      sim.q.barra = () => {
+        const b = barra0();
+        return { ...b, objetivos: [vila, ...(b.objetivos ?? []).filter((o) => o.dominio === 'arcologia')] };
+      };
+      ui.ui.loja.barra.value = sim.q.barra();
+      const s = sim.q.sugestoes().find((x) => x.id === 'vila');
+      const xs = s.pontos.map((p) => p[0]);
+      const zs = s.pontos.map((p) => p[1]);
+      R.camera.definir({ x: (Math.min(...xs) + Math.max(...xs)) / 2, z: (Math.min(...zs) + Math.max(...zs)) / 2, dist: 420, guinada: 16, inclinacao: 52 });
+      ferramentas.abrir('via', { tipoVia: 'rua', modo: 'melhorar' });
+      await esperarSeletor(esperar, '[data-a="sugestao.usar"][data-k="vila"]');
+      await esperar(120);
+    },
+    conferir: () => {
+      const f = [];
+      const chip = document.querySelector('[data-a="sugestao.usar"][data-k="vila"]');
+      if (!chip) f.push('sem o "Usar sugestão" das ruas da Vila');
+      else if (chip.style.display === 'none') f.push('o "Usar sugestão" ficou fora da tela');
+      const d = document.querySelector('.sugestoes .sug-svg path')?.getAttribute('d') ?? '';
+      const ruas = (d.match(/M/g) ?? []).length;
+      if (ruas < 4) f.push(`o traçado das ruas de terra tem ${ruas} linhas (uma por rua)`);
+      return f;
+    },
   });
   // primeira hora: a dica da via com a mão fantasma e o anel de guia em Vias
   registrarCenaVitrine('u2-dica', {

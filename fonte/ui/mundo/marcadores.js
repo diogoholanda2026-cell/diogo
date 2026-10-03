@@ -63,8 +63,8 @@ export function mudarFiltro(ui, filtro) {
   }
 }
 
-/** O filtro atual (padrão 'todos'). */
-export const filtroAtual = (prefs) => (FILTROS_AVISOS.includes(prefs?.avisos) ? prefs.avisos : 'todos');
+/** O filtro atual (padrão 'importantes', como PREFS_PADRAO.avisos). */
+export const filtroAtual = (prefs) => (FILTROS_AVISOS.includes(prefs?.avisos) ? prefs.avisos : 'importantes');
 
 export function registrar(ui) {
   const { loja } = ui;

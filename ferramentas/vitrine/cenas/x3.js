@@ -1,7 +1,8 @@
 // Cenas da vitrine da X3a (camadas, marcadores e rótulos): o popover das camadas aberto pelo trilho com a Água ligada
-// (as categorias na legenda), a legenda do Bem-estar (rampa divergente com o cinza no 60 e as marcas das faixas da
-// Contribuição) e a da Recursos com as obras paradas por falta de material. A simulação falsa ganha aqui uma q.camada
-// e uma q.avisosPredios no formato da S2a.
+// (as categorias na legenda e o filtro dos avisos em "Graves e atenção", o padrão da C1d), a legenda do Bem-estar (rampa
+// divergente com o cinza no 60, as marcas das faixas e, sob a rampa, a Contribuição de cada faixa em dólar por hora com a
+// da cidade em destaque) e a da Recursos com as obras paradas por falta de material. A simulação falsa ganha aqui uma
+// q.camada e uma q.avisosPredios no formato da S2a.
 //   node ferramentas/vitrine-ui.mjs <pasta> x3-camadas,x3-legenda-bemestar,x3-legenda-recursos 986x443,1376x768
 import { PREDIO } from '../../../fonte/contratos/flags.js';
 
@@ -69,6 +70,7 @@ export function registrar(registrarCenaVitrine) {
     conferir: () => [
       ...conferirTexto('.x3-pop', /Zonas.*Bem-estar.*Água.*Energia.*Serviços.*Recursos/s, 'grade das camadas')(),
       ...conferirTexto('.x3-pop', /Graves e atenção/, 'filtro dos avisos')(),
+      ...(document.querySelector('.x3-pop [data-a="x3.filtro"][data-k="importantes"][aria-checked="true"]') ? [] : ['o filtro padrão não é "Graves e atenção"']),
       ...conferirTexto('.x3-leg', /Com água.*Racionada.*Sem água/s, 'legenda da Água')(),
       ...(document.querySelector('.x3-pop [data-k="agua"][aria-pressed="true"]') ? [] : ['a Água não ficou marcada no popover']),
     ],
@@ -87,6 +89,9 @@ export function registrar(registrarCenaVitrine) {
       ...conferirTexto('.x3-leg .x3-escala', /0.*30.*60.*100/s, 'escala')(),
       // a Contribuição em dólar (D68, D87): 11 unidades de desenho são US$ 6.600
       ...conferirTexto('.x3-leg', /Contribuição de US\$ 6\.600/, 'resumo em dólar')(),
+      // C1d: a Contribuição de cada faixa (5, 8 e 11 por morador, D68 e D87) e a da cidade (11) em destaque
+      ...conferirTexto('.x3-leg .x3-faixas', /US\$ 3\.000\/h.*US\$ 4\.800\/h.*US\$ 6\.600\/h/s, 'faixas em dólar')(),
+      ...conferirTexto('.x3-leg .x3-faixa.x3-atual', /^US\$ 6\.600\/h$/, 'faixa da cidade')(),
     ],
   });
   // a Recursos: os recursos por categoria e as obras paradas por falta de material com "Próxima"

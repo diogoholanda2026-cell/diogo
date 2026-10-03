@@ -9,6 +9,7 @@
 //   arestas (R3a) e células (R2a): o próprio dono reserva o 0; a categórica usa o valor como índice da cor (1 a 7)
 //   grade (R2a): a contínua vai de 0 a 255; os recursos vão como categoria (o recurso que domina, 1 a 6)
 // Na categórica, cores[k] é a cor do valor k (a cor 0 não aparece).
+import { REGRAS_DONO } from '../../data/economia.js';
 
 /** Camadas que o popover mostra, na ordem (D29: as 6 do M1a; o Valor do terreno entra quando a simulação tiver). */
 export const CAMADAS_UI = Object.freeze([
@@ -185,6 +186,72 @@ export function valorNaTabela(pedido, v) {
   return Number.isFinite(r) ? Math.max(0, Math.min(255, r)) : 0;
 }
 
+// ------------------------------------------------------------------------------------------------ diário
+
+/**
+ * Domínios do diário (sim.mudancas, 2.4) que mudam o dado de cada fonte de camada fora da virada da rodada: a zona
+ * pintada marca as células, o prédio construído ou demolido marca os prédios, a via feita marca as arestas. A grade
+ * (recursos, valor) só muda no tique.
+ */
+export const DOMINIOS_DA_FONTE = Object.freeze({ celulas: Object.freeze(['celulas']), predios: Object.freeze(['predios']), arestas: Object.freeze(['arestas']), grade: Object.freeze([]) });
+
+/**
+ * Com o relógio andando, os prédios mudam a cada tique (obra, moradores) e o dado deles chega na virada da rodada:
+ * rodando, só a célula (a zona pintada) e a via contam; pausado, todo domínio da fonte conta (só um comando muda).
+ */
+const SO_COMANDO = Object.freeze(['celulas', 'arestas']);
+
+/**
+ * O resultado de sim.mudancas.desde(v) marcou o domínio da camada? (puro) fonte: a da camada ('celulas', 'predios',
+ * 'arestas', 'grade'); rodando: o relógio andou desde a última olhada.
+ */
+export function diarioMarcou(res, fonte, { rodando = false } = {}) {
+  if (!res) return false;
+  for (const dom of DOMINIOS_DA_FONTE[fonte] ?? []) {
+    if (rodando && !SO_COMANDO.includes(dom)) continue;
+    const tudo = dom === 'arestas' ? res.tudo?.vias || res.tudo?.arestas : res.tudo?.[dom];
+    if (tudo || res.realocado?.includes(dom) || res[dom]?.length) return true;
+  }
+  return false;
+}
+
+/**
+ * Vigia do diário para a camada ligada (sem Preact; Camadas.jsx usa): base(sim) guarda a versão do diário quando o
+ * dado foi consultado; olhar(sim, fonte) diz se depois disso o diário marcou o domínio da camada (e avança a versão).
+ * Outra simulação (partida nova ou carregada) começa de novo, sem marcar. A versão vem da resposta de desde() (o
+ * contrato da 2.4); sem nada novo, a olhada custa um desde() vazio.
+ */
+export function criarVigiaDiario() {
+  let simVista = null;
+  let versao = -1;
+  let tique = null;
+  const tiqueDe = (sim) => sim?.espelho?.tempo?.tique ?? sim?.tique ?? null;
+  const vigia = {
+    base(sim) {
+      simVista = sim ?? null;
+      tique = tiqueDe(sim);
+      const m = sim?.mudancas;
+      versao = Number.isFinite(m?.versao) ? m.versao : m?.desde ? m.desde(Number.MAX_SAFE_INTEGER)?.versao ?? -1 : -1;
+    },
+    olhar(sim, fonte) {
+      const m = sim?.mudancas;
+      if (!m?.desde) return false;
+      if (sim !== simVista || versao < 0) {
+        vigia.base(sim);
+        return false;
+      }
+      const t = tiqueDe(sim);
+      const rodando = t !== tique;
+      tique = t;
+      if (Number.isFinite(m.versao) && m.versao === versao) return false;
+      const res = m.desde(versao);
+      versao = res?.versao ?? versao;
+      return diarioMarcou(res, fonte, { rodando });
+    },
+  };
+  return vigia;
+}
+
 // ------------------------------------------------------------------------------------------------ legenda
 
 const curto = (s) => typeof s === 'string' && s.length <= 18;
@@ -193,12 +260,39 @@ const curto = (s) => typeof s === 'string' && s.length <= 18;
 export const PARAMS_DINHEIRO = Object.freeze(['tarifa']);
 
 /**
- * Modelo da legenda (puro): { id, titulo, tipo: 'cat' | 'seq' | 'div', itens: [{ cor, texto }] (categórica),
- * gradiente (CSS), pontas: [texto do mínimo, texto do máximo], marcas: [{ pos (0 a 1), texto, dica }], resumo, extra }.
- * t: a função de textos; num: o formatador de números (fmt.numero); dinheiro: o de dinheiro (fmt.dinheiro, para os
- * PARAMS_DINHEIRO); extra: linha a mais (obras paradas na Recursos).
+ * Faixas da Contribuição na legenda do Bem-estar (D11, D68, D87): as três faixas da regra do dono (REGRAS_DONO.renda)
+ * em posição na rampa, com o valor por morador por hora em dólar. [{ ini, fim (0 a 1), de, ate, tarifa, texto, dica,
+ * atual }]; atual: a faixa da cidade agora (a tarifa do resumo). porHora: fmt.dinheiroPorHora.
  */
-export function modeloLegenda(d, { t, num = (n) => String(n), dinheiro = null, daltonico = false, extra = null } = {}) {
+export function faixasDoBemEstar(d, { t, porHora, regras = REGRAS_DONO } = {}) {
+  const r = regras?.renda;
+  if (!r?.faixas?.length || !porHora) return null;
+  const { min, max } = escalaDe(d);
+  const pos = (v) => Math.min(1, Math.max(0, (v - min) / (max - min)));
+  const atual = d?.resumo?.params?.tarifa;
+  return r.faixas.map(([de, ate, tarifa], k) => {
+    const valor = porHora(tarifa);
+    return {
+      ini: k === 0 ? 0 : pos(r.limiares?.[k - 1] ?? de),
+      fim: k === r.faixas.length - 1 ? 1 : pos(r.limiares?.[k] ?? ate),
+      de,
+      ate,
+      tarifa,
+      texto: valor,
+      dica: t ? t('x3.legenda.faixa', { de, ate, valor }) : valor,
+      atual: tarifa === atual,
+    };
+  });
+}
+
+/**
+ * Modelo da legenda (puro): { id, titulo, tipo: 'cat' | 'seq' | 'div', itens: [{ cor, texto }] (categórica),
+ * gradiente (CSS), pontas: [texto do mínimo, texto do máximo], marcas: [{ pos (0 a 1), texto, dica }], faixas (só no
+ * Bem-estar, com porHora: faixasDoBemEstar), resumo, extra }. t: a função de textos; num: o formatador de números
+ * (fmt.numero); dinheiro: o de dinheiro (fmt.dinheiro, para os PARAMS_DINHEIRO); porHora: o de dinheiro por hora
+ * (fmt.dinheiroPorHora, para as faixas); extra: linha a mais (obras paradas na Recursos).
+ */
+export function modeloLegenda(d, { t, num = (n) => String(n), dinheiro = null, porHora = null, daltonico = false, extra = null } = {}) {
   if (!d) return null;
   const p = paleta(d, { daltonico });
   const titulo = t(`camada.${d.id}`);
@@ -222,7 +316,8 @@ export function modeloLegenda(d, { t, num = (n) => String(n), dinheiro = null, d
     else if (pos > 0.001 && pos < 0.999) marcas.push({ pos, texto: valor(m.v), dica: texto });
   }
   const paradas = p.cores.map((c, k) => `${c} ${Math.round((100 * k) / (p.cores.length - 1))}%`);
-  return { id: d.id, titulo, tipo: p.tipo, gradiente: `linear-gradient(90deg, ${paradas.join(', ')})`, pontas, marcas, resumo, extra };
+  const faixas = d.id === 'bemEstar' ? faixasDoBemEstar(d, { t, porHora }) : null;
+  return { id: d.id, titulo, tipo: p.tipo, gradiente: `linear-gradient(90deg, ${paradas.join(', ')})`, pontas, marcas, faixas, resumo, extra };
 }
 
 /** Números dos parâmetros do resumo formatados em pt-BR (inteiros; o dinheiro em dólar; o resto como veio). */

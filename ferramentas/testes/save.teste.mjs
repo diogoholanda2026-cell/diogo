@@ -340,6 +340,7 @@ async function ui() {
   const abs = (p) => JSON.stringify(fonte(p));
   const entrada = `
     export * as regras from ${abs('ui/guia/regras.js')};
+    export * as loja from ${abs('ui/loja.js')};
     export * as dicas from ${abs('ui/guia/dicas.js')};
     export * as nova from ${abs('ui/inicio/NovaPartida.jsx')};
     export * as carga from ${abs('ui/inicio/carga.js')};
@@ -404,6 +405,136 @@ test('primeira hora: a avenida sugerida fecha o objetivo e o anel e o traçado s
   const o = objetivos.find((x) => x.id === 'cidade.avenida');
   assert.ok(!o || o.feito >= o.total, `objetivo da avenida: ${JSON.stringify(o)}`);
   assert.deepEqual(regras.sugestoesAbertas({ objetivos, lista: sim.q.sugestoes() }).map((s) => s.id).includes('avenida'), false);
+});
+
+/** A interface mínima do "Usar sugestão" sobre a simulação de verdade (consultas e comandos síncronos, Promise na volta). */
+function uiDaSim(sim, pedidos = [], avisos = []) {
+  return {
+    SESSAO: 'teste',
+    obterSim: () => sim,
+    consultar: (nome, ...a) => nome.split('.').reduce((o, k) => o?.[k], sim.q)?.(...a) ?? null,
+    comando: async (nome, args) => (pedidos.push([nome, args]), sim.cmd(nome, args)),
+    loja: { avisar: (x) => avisos.push(x) },
+    frase: (r) => r.codigo,
+  };
+}
+
+test('primeira hora (C1d): a Vila e a ligação no guia; as ruas de terra num via.melhorar com as arestas relidas na hora', async () => {
+  const { regras } = await ui();
+  const sim = criarSimulacao({ semente: SEMENTE });
+  assert.equal(regras.SUGESTAO_DO_OBJETIVO['cidade.vila'], 'vila');
+  assert.equal(regras.SUGESTAO_DO_OBJETIVO['cidade.ligacao'], 'ligacao');
+  const vila = [{ id: 'cidade.vila', feito: 0, total: 60 }];
+  assert.equal(regras.categoriaGuiada({ objetivos: vila }), 'vias', 'a Vila na rede aponta Vias');
+  assert.equal(regras.categoriaGuiada({ objetivos: [{ id: 'cidade.ligacao', feito: 0, total: 1 }] }), 'vias');
+  const lista = sim.q.sugestoes();
+  const v = lista.find((s) => s.id === 'vila');
+  assert.equal(v.tipo, 'melhorar');
+  assert.ok(v.arestas.length >= 4, `ruas de terra: ${v.arestas.length}`);
+  assert.deepEqual(regras.sugestoesAbertas({ objetivos: vila, lista }).map((s) => s.id), ['vila']);
+  assert.deepEqual(regras.sugestoesAbertas({ objetivos: [{ id: 'cidade.ligacao', feito: 0, total: 1 }], lista }).map((s) => s.id), ['ligacao']);
+  assert.equal(regras.ferramentaServe(v, { tipo: 'via', maquina: { modo: 'melhorar' } }), true, 'a ferramenta de via serve');
+  assert.equal(regras.ferramentaServe(v, { tipo: 'zona' }), false);
+  assert.deepEqual(regras.comandosDaSugestao(v, 'teste'), [['via.melhorar', { arestas: v.arestas, tipo: v.via, sessao: 'teste.melhorar' }]]);
+  // o traçado de cada rua: a curva do espelho (9 pontos, nas pontas os nós da sugestão)
+  const tracos = regras.tracosDaMelhoria(v, sim.espelho.vias.arestas);
+  assert.equal(tracos.length, v.arestas.length);
+  for (const [k, tr] of tracos.entries()) {
+    assert.equal(tr.length, 9);
+    const ponta = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.5;
+    assert.ok((ponta(tr[0], v.pontos[2 * k]) && ponta(tr[8], v.pontos[2 * k + 1])) || (ponta(tr[0], v.pontos[2 * k + 1]) && ponta(tr[8], v.pontos[2 * k])), `rua ${k}`);
+  }
+  assert.equal(regras.tracosDaMelhoria(v, null).length, v.arestas.length, 'sem o espelho, o par de nós');
+  // o jogador melhora uma rua antes: o "Usar sugestão" relê as arestas na hora e não manda a que já é rua
+  const [primeira] = v.arestas;
+  assert.ok(sim.cmd('via.melhorar', { arestas: [primeira], tipo: v.via, sessao: 'jogador' }).ok);
+  const pedidos = [];
+  const avisos = [];
+  const r = await regras.usarSugestao(uiDaSim(sim, pedidos, avisos), v);
+  assert.ok(r.ok, JSON.stringify({ r, pedidos: pedidos.map((p) => p[0]), avisos }));
+  assert.equal(pedidos[0][0], 'via.melhorar');
+  assert.ok(!pedidos[0][1].arestas.includes(primeira), 'a rua já melhorada saiu da lista relida');
+  assert.deepEqual(avisos, []);
+  assert.equal(sim.q.sugestoes().find((s) => s.id === 'vila'), undefined, 'sem rua de terra, a sugestão some');
+  // de novo, sem nada a melhorar: nada a mandar e nenhum aviso
+  const r2 = await regras.usarSugestao(uiDaSim(sim, pedidos, avisos), v);
+  assert.deepEqual(r2, { ok: false, feitos: 0 });
+  assert.equal(pedidos.length, 1);
+  assert.deepEqual(avisos, []);
+});
+
+test('primeira hora (C1d): a Pedreira sem acesso aponta a avenida (Vias); com a avenida, a Pedreira; construída, sai', async () => {
+  const { regras } = await ui();
+  const sim = criarSimulacao({ semente: SEMENTE });
+  const lista = sim.q.sugestoes();
+  const pedreira = lista.find((s) => s.id === 'pedreira');
+  const av = lista.find((s) => s.id === 'avenida');
+  let consultas = 0;
+  const previaDe = (s) => (consultas++, sim.q.construir.previa({ tipo: s.construir, x: s.x, z: s.z, rot: s.rot ?? 0 }));
+  assert.equal(previaDe(pedreira).codigo, 'acesso', 'antes da avenida, a Pedreira não tem via');
+  assert.equal(regras.viaQueServe(pedreira, lista), av, 'a avenida passa ao lado dela');
+  const objetivos = [{ id: 'cidade.zonas', feito: 0, total: 300 }, { id: 'holding.pedreiraAreal', feito: 0, total: 2 }];
+  let itens = regras.resolverSugestoes({ objetivos, lista, previaDe });
+  assert.deepEqual(itens.map((x) => [x.objetivo, x.s.id, x.de?.id ?? null]), [['cidade.zonas', 'quadra1', null], ['holding.pedreiraAreal', 'avenida', 'pedreira']]);
+  assert.deepEqual(regras.sugestoesAbertas({ objetivos, lista, previaDe }).map((s) => s.id), ['quadra1', 'avenida']);
+  // o anel: com a troca, a Holding aponta Vias (a avenida primeiro), não Empresas
+  const so = [objetivos[1]];
+  assert.equal(regras.categoriaGuiada({ objetivos: so }), 'empresas');
+  assert.equal(regras.categoriaGuiada({ objetivos: so, trocas: { 'holding.pedreiraAreal': 'vias' } }), 'vias');
+  // com a avenida e a avenida aberta junto, a troca não repete o traçado
+  assert.deepEqual(regras.sugestoesAbertas({ objetivos: [{ id: 'cidade.avenida', feito: 0, total: 1 }, ...so], lista, previaDe }).map((s) => s.id), ['avenida']);
+  for (const [nome, args] of regras.comandosDaSugestao(av)) assert.ok(sim.cmd(nome, args).ok);
+  itens = regras.resolverSugestoes({ objetivos: so, lista, previaDe });
+  assert.deepEqual(itens.map((x) => x.s.id), ['pedreira'], 'com a avenida, a Pedreira volta');
+  // construída no lugar sugerido: a prévia recusa o lugar e o fantasma sai (o objetivo espera as linhas)
+  const [[nome, args]] = regras.comandosDaSugestao(pedreira, 'teste', (p) => sim.q.construir.previa(p));
+  assert.ok(sim.cmd(nome, args).ok);
+  assert.deepEqual(regras.resolverSugestoes({ objetivos: so, lista, previaDe }), []);
+  // sem dinheiro a sugestão fica (o jogador junta); o 'acesso' sem via sugerida perto some
+  assert.deepEqual(regras.resolverSugestoes({ objetivos: so, lista, previaDe: () => ({ ok: false, codigo: 'creditos' }) }).map((x) => x.s.id), ['pedreira']);
+  assert.deepEqual(regras.resolverSugestoes({ objetivos: so, lista: [pedreira], previaDe: () => ({ ok: false, codigo: 'acesso' }) }), []);
+  assert.ok(consultas > 0);
+});
+
+test('primeira hora (C1d): a lista do mapa é relida quando os objetivos mudam ou chega um evento que muda o mapa, nunca por quadro', async () => {
+  const { regras, loja } = await ui();
+  const sim = criarSimulacao({ semente: SEMENTE });
+  let nSug = 0;
+  let nPrevia = 0;
+  const q0 = sim.q.sugestoes;
+  const p0 = sim.q.construir.previa;
+  sim.q.sugestoes = (...a) => (nSug++, q0(...a));
+  sim.q.construir.previa = (...a) => (nPrevia++, p0(...a));
+  const ui1 = { obterSim: () => sim };
+  loja.reiniciarLoja();
+  loja.aplicarBarra({ ...loja.barra.peek(), objetivos: [{ id: 'cidade.vila', feito: 0, total: 60 }, { id: 'holding.pedreiraAreal', feito: 0, total: 2 }] });
+  const ids = () => regras.sugestoesAgora(ui1).map((x) => x.s.id);
+  assert.deepEqual(ids(), ['vila', 'avenida']);
+  const n0 = regras.sugestoesAgora(ui1).find((x) => x.s.id === 'vila').s.arestas.length;
+  for (let k = 0; k < 30; k++) regras.sugestoesAgora(ui1);
+  assert.equal(regras.categoriaAgora(ui1), 'vias', 'o anel aponta Vias');
+  assert.equal(nSug, 1, 'a lista não é relida a cada quadro');
+  assert.equal(nPrevia, 1, 'nem a prévia da Pedreira');
+  // um evento que não muda o mapa: nada
+  loja.registrarEvento('financas', {});
+  regras.sugestoesAgora(ui1);
+  assert.equal(nSug, 1);
+  // duas ruas melhoradas pelo jogador: o evento 'construido' faz reler, e a sugestão 'vila' encolhe
+  const v = sim.q.sugestoes().find((s) => s.id === 'vila');
+  nSug = 0;
+  assert.ok(sim.cmd('via.melhorar', { arestas: v.arestas.slice(0, 2), tipo: v.via, sessao: 'jogador' }).ok);
+  loja.registrarEvento('construido', { tipo: 'via', refs: v.arestas.slice(0, 2) });
+  const v2 = regras.sugestoesAgora(ui1).find((x) => x.s.id === 'vila').s;
+  assert.equal(v2.arestas.length, n0 - 2);
+  assert.equal(nSug, 1);
+  // o objetivo da Vila fechou e abriu a ligação: relê pela chave dos objetivos
+  loja.aplicarBarra({ ...loja.barra.peek(), objetivos: [{ id: 'cidade.ligacao', feito: 0, total: 1 }] });
+  assert.deepEqual(ids(), ['ligacao']);
+  assert.equal(nSug, 2);
+  // outra partida: lista própria
+  const outra = criarSimulacao({ semente: SEMENTE });
+  assert.deepEqual(regras.sugestoesAgora({ obterSim: () => outra }).map((x) => x.s.id), ['ligacao']);
+  loja.reiniciarLoja();
 });
 
 test('dicas: uma por vez, cada uma uma vez, a da velocidade só no mouse; nova partida e textos da U2', async () => {

@@ -1,15 +1,16 @@
-// Peças da primeira hora no mundo e no HUD (dona: U2a): o anel de guia sobre o botão da categoria e o fantasma
-// tracejado das sugestões com o "Usar sugestão". O fantasma segue a câmera: os pontos passam por R.projetar a cada
-// quadro (ui.aoQuadro) e vão direto aos atributos do SVG, sem redesenhar o componente.
+// Peças da primeira hora no mundo e no HUD (dona: U2a; C1d): o anel de guia sobre o botão da categoria e o fantasma
+// tracejado das sugestões com o "Usar sugestão" (a via, a quadra, o prédio e as ruas de terra da Vila a melhorar, uma
+// linha por rua). O fantasma segue a câmera: os pontos passam por R.projetar a cada quadro (ui.aoQuadro) e vão direto
+// aos atributos do SVG, sem redesenhar o componente.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { categoriaAgora, sugestoesAgora, usarSugestao, caixaDaQuadra, recortarNaFrente } from './regras.js';
+import { categoriaAgora, sugestoesAgora, usarSugestao, caixaDaQuadra, recortarNaFrente, tracosDaMelhoria } from './regras.js';
 import { t } from '../textos.js';
 import { Glifo } from '../glifos/Glifo.jsx';
 import { alturaEm } from '../../comum/altura.js';
 
 /** Anel que pulsa sobre o botão da categoria (a posição sai do retângulo do botão, duas vezes por segundo). */
-export function AnelGuia() {
-  const cat = categoriaAgora();
+export function AnelGuia({ ui }) {
+  const cat = categoriaAgora(ui);
   const [r, setR] = useState(null);
   useEffect(() => {
     if (!cat) return setR(null);
@@ -28,9 +29,9 @@ export function AnelGuia() {
 
 const xy = (p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
 
-/** Pontos do mundo de uma sugestão (contorno fechado na quadra; um ponto no prédio). */
+/** Pontos do mundo de uma sugestão (contorno fechado na quadra; um ponto no prédio; os nós das ruas a melhorar). */
 export function pontosDaSugestao(s) {
-  if (s.tipo === 'via') return s.pontos;
+  if (s.tipo === 'via' || s.tipo === 'melhorar') return s.pontos;
   if (s.tipo === 'zona') {
     const [x0, z0, x1, z1] = caixaDaQuadra(s);
     return [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -38,19 +39,30 @@ export function pontosDaSugestao(s) {
   return [[s.x, s.z]];
 }
 
+/** O ponto da lista mais perto do centro dela (o botão das ruas a melhorar fica sobre uma rua no meio da Vila). */
+function pontoDoMeio(pts) {
+  const c = pts.reduce((a, p) => [a[0] + p[0] / pts.length, a[1] + p[2] / pts.length], [0, 0]);
+  let melhor = pts[0];
+  for (const p of pts) if (Math.hypot(p[0] - c[0], p[2] - c[1]) < Math.hypot(melhor[0] - c[0], melhor[2] - c[1])) melhor = p;
+  return melhor;
+}
+
 function Sugestao({ ui, s, usar }) {
   const forma = useRef(null);
   const chip = useRef(null);
   const [ocupado, setOcupado] = useState(false);
   useEffect(() => {
-    const pts = pontosDaSugestao(s);
     const sim = ui.obterSim?.();
     const ter = sim?.espelho?.terreno;
-    const mundo = pts.map(([x, z]) => [x, ter?.altura ? alturaEm(ter, x, z) + 1 : 0, z]);
-    // ponto do botão: o meio do traçado (ou o próprio lugar)
+    const noMundo = ([x, z]) => [x, ter?.altura ? alturaEm(ter, x, z) + 1 : 0, z];
+    // as ruas a melhorar: uma linha por rua (a curva do espelho), não um traçado só pelos nós
+    const tracos = s.tipo === 'melhorar' ? tracosDaMelhoria(s, sim?.espelho?.vias?.arestas).map((tr) => tr.map(noMundo)) : null;
+    const mundo = tracos ? tracos.flat() : pontosDaSugestao(s).map(noMundo);
+    if (!mundo.length) return undefined;
+    // ponto do botão: o meio do traçado (ou o próprio lugar; nas ruas a melhorar, o ponto de rua mais perto do centro)
     const meio = mundo[Math.floor((mundo.length - 1) / 2)];
     const fim = mundo[mundo.length - 1];
-    const ancora = s.tipo === 'via' ? [(meio[0] + fim[0]) / 2, (meio[1] + fim[1]) / 2, (meio[2] + fim[2]) / 2] : s.tipo === 'zona' ? [(mundo[0][0] + mundo[2][0]) / 2, mundo[0][1], (mundo[0][2] + mundo[2][2]) / 2] : meio;
+    const ancora = tracos ? pontoDoMeio(mundo) : s.tipo === 'via' ? [(meio[0] + fim[0]) / 2, (meio[1] + fim[1]) / 2, (meio[2] + fim[2]) / 2] : s.tipo === 'zona' ? [(mundo[0][0] + mundo[2][0]) / 2, mundo[0][1], (mundo[0][2] + mundo[2][2]) / 2] : meio;
     const solta = ui.aoQuadro(() => {
       const R = ui.R;
       if (!R?.projetar || !forma.current) return;
@@ -65,7 +77,7 @@ function Sugestao({ ui, s, usar }) {
         const [c] = recortarNaFrente(R.projetar, mundo, true);
         forma.current.setAttribute('points', c ? c.map(xy).join(' ') : '');
       } else {
-        const d = recortarNaFrente(R.projetar, mundo).map((t) => `M${t.map(xy).join('L')}`).join('');
+        const d = (tracos ?? [mundo]).flatMap((tr) => recortarNaFrente(R.projetar, tr)).map((t) => `M${t.map(xy).join('L')}`).join('');
         forma.current.setAttribute('d', d || 'M0,0');
       }
       if (chip.current) {
@@ -80,7 +92,7 @@ function Sugestao({ ui, s, usar }) {
   return (
     <>
       <svg class="sug-svg" aria-hidden="true">
-        {s.tipo === 'via' ? <path ref={forma} /> : s.tipo === 'zona' ? <polygon ref={forma} /> : <circle ref={forma} r="22" />}
+        {s.tipo === 'via' || s.tipo === 'melhorar' ? <path ref={forma} /> : s.tipo === 'zona' ? <polygon ref={forma} /> : <circle ref={forma} r="22" />}
       </svg>
       {usar ? (
         <button

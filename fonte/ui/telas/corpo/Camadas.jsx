@@ -1,18 +1,20 @@
 // Corpo das camadas (desenho da UI 8.12 e 8.9; D29; X3a), sob demanda: vem na primeira vez que o trilho abre o popover
 // ou que alguém liga uma camada (a folha, a faixa de alerta, a ferramenta de colocar). Três peças:
 //   ligar(ui)        ouve loja.camada e manda o pedido ao render (R.camadas.mostrar / ocultar); quadro(ui, t) confere a
-//                    versão do dado quando a rodada vira (no máximo a cada 2 s; pausado, nada) e manda de novo quando
-//                    mudou (a tabela de prédios só sobe nessa hora)
+//                    versão do dado quando a rodada vira (no máximo a cada 2 s) e quando o diário (sim.mudancas) marca
+//                    o domínio da camada (até 4 vezes por segundo: a zona pintada com o jogo pausado aparece na hora), e
+//                    manda de novo quando mudou
 //   PopoverCamadas   grade de 2 colunas com as camadas (glifo e nome) e, embaixo, o filtro dos avisos
 //   LegendaCamada    chip de até 360 px embaixo ao centro: a rampa com o mínimo e o máximo (e a unidade) ou as
-//                    categorias, a frase do resumo (dinheiro em dólar, D68), o X para desligar; na Recursos, as obras
-//                    paradas por falta de material (pela flag do prédio) com "Próxima" (voa de uma em uma)
+//                    categorias, a frase do resumo (dinheiro em dólar, D68), o X para desligar; no Bem-estar, a
+//                    Contribuição por morador de cada faixa em dólar por hora sob a rampa (a da cidade agora em
+//                    destaque); na Recursos, as obras paradas por falta de material (pela flag do prédio) com "Próxima"
 import { signal, effect } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
 import { Botao } from '../../comp/Botao.jsx';
 import { Segmentado } from '../../comp/Segmentado.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
-import { CAMADAS_UI, paraRender, modeloLegenda } from '../../mundo/camadas.js';
+import { CAMADAS_UI, paraRender, modeloLegenda, criarVigiaDiario } from '../../mundo/camadas.js';
 import { FILTROS_AVISOS, filtroAtual, mudarFiltro } from '../../mundo/marcadores.js';
 import { PREDIO } from '../../../contratos/flags.js';
 import { RODADA } from '../../../comum/relogio.js';
@@ -31,10 +33,12 @@ const CSS = `
 .x3-cam[aria-pressed='true'] .glifo{color:var(--ac)}
 .x3-pop .segmentado{width:100%}
 .x3-pop .segmentado .seg{flex:1;font-size:var(--t12)}
-.x3-leg{position:absolute;left:50%;bottom:calc(var(--mB) + 60px);transform:translateX(-50%);width:min(360px,calc(100% - 32px));
+/* a legenda fica no mundo (sem zoom): a folga sobre a barra de construção e sob a barra de cima acompanha o zoom do HUD
+   (1,25 em 1080 p: com 60 px fixos ela encostava na barra de construção) */
+.x3-leg{position:absolute;left:50%;bottom:calc(var(--mB) + 60px * var(--zoom, 1));transform:translateX(-50%);width:min(360px,calc(100% - 32px));
   padding:var(--e2) var(--e3) var(--e3);border-radius:var(--r2);background:var(--s0);box-shadow:var(--luz),var(--sombra1);pointer-events:auto;
   color:var(--t1)}
-.x3-leg.x3-alto{bottom:auto;top:calc(var(--mC) + 100px)}
+.x3-leg.x3-alto{bottom:auto;top:calc(var(--mC) + 100px * var(--zoom, 1))}
 .x3-leg-cab{display:flex;align-items:center;gap:var(--e2);min-height:32px}
 .x3-leg-cab .glifo{color:var(--ac);flex:none}
 .x3-leg-tit{flex:1;font-size:var(--t12);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--t2)}
@@ -47,6 +51,11 @@ const CSS = `
 .x3-cats{display:flex;flex-wrap:wrap;gap:var(--e1) var(--e3);margin:var(--e1) 0 2px;font-size:var(--t12);font-weight:600}
 .x3-cat{display:flex;align-items:center;gap:6px}
 .x3-cat i{width:12px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.x3-faixas{display:flex;margin-top:2px;font-size:var(--t12);font-weight:600;color:var(--ch)}
+.x3-faixa{position:relative;flex:none;min-width:0;padding:4px 2px 0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.x3-faixa::before{content:'';position:absolute;top:0;left:3px;right:3px;height:2px;border-radius:1px;background:var(--fio2)}
+.x3-faixa.x3-atual{font-weight:750}
+.x3-faixa.x3-atual::before{background:var(--ch)}
 .x3-resumo{margin-top:var(--e1);font-size:var(--t12);font-weight:500;color:var(--t2);line-height:1.3}
 .x3-extra{display:flex;align-items:center;gap:var(--e2);margin-top:var(--e2);font-size:var(--t12);font-weight:600}
 .x3-extra .glifo{color:var(--al);flex:none}
@@ -73,7 +82,17 @@ const atual = signal(null);
 const paradas = signal([]);
 let ligado = false;
 let tConferido = -Infinity;
+let tDiario = -Infinity;
 let rodadaConferida = -1;
+/** Olha o diário da simulação (células, prédios, vias) desde a última consulta da camada. */
+const vigia = criarVigiaDiario();
+/**
+ * Intervalo (ms) entre duas olhadas no diário: pausado, a pintura aparece em até um quarto de segundo; com o relógio
+ * andando, em até 1 s (a cidade crescendo marca células e a Zonas de uma cidade grande custa alguns ms por consulta).
+ */
+const MS_DIARIO = 250;
+const MS_DIARIO_RODANDO = 1000;
+let tiqueDiario = null;
 const daltonicoDe = (p) => !!(p?.daltonismo ?? p?.paletaDaltonismo);
 /** A rodada da simulação (os dados das camadas mudam na virada dela); -1 sem relógio. */
 const rodadaDe = (ui) => {
@@ -103,6 +122,7 @@ function aplicar(ui, id, dado = null) {
   }
   const d = dado ?? ui.consultar('camada', id);
   rodadaConferida = rodadaDe(ui);
+  vigia.base(ui.obterSim());
   if (id === 'recursos') conferirParadas(ui);
   if (!d?.dados) {
     atual.value = null;
@@ -135,20 +155,40 @@ export function ligar(ui) {
   });
 }
 
+/** Consulta a camada de novo e manda ao render se o dado mudou (a versão subiu). */
+function reconsultar(ui, a) {
+  if (a.id === 'recursos') conferirParadas(ui);
+  const d = ui.consultar('camada', a.id);
+  vigia.base(ui.obterSim());
+  if (d && (d.versao ?? 0) !== a.versao) aplicar(ui, a.id, d);
+}
+
 /**
- * Com a camada ligada, a cada 2 s e só quando a rodada virou (pausado, nada): dado novo (a versão subiu) vai de novo ao
- * render. A consulta refaz a camada inteira (a Recursos custa uns 7 ms), por isso não roda a cada 2 s sem motivo.
+ * Com a camada ligada: a cada 250 ms (pausado) ou 1 s (rodando) olha o diário, e se ele marcou o domínio da camada (a
+ * zona pintada, o prédio feito ou demolido com o jogo pausado, a via) consulta de novo; a cada 2 s, quando a rodada
+ * virou, também. Pausado e sem comando, nada se consulta. A consulta refaz a camada inteira (a Recursos custa uns 7 a
+ * 15 ms; ela é por grade e não olha o diário), e o dado só vai ao render quando a versão muda.
  */
 export function quadro(ui, tMs) {
   const a = atual.peek();
-  if (!a || tMs - tConferido < 2000) return;
+  if (!a) return;
+  const tique = ui.obterSim()?.espelho?.tempo?.tique ?? null;
+  if (tMs - tDiario >= (tique === tiqueDiario ? MS_DIARIO : MS_DIARIO_RODANDO)) {
+    tDiario = tMs;
+    tiqueDiario = tique;
+    if (vigia.olhar(ui.obterSim(), a.d?.fonte)) {
+      rodadaConferida = rodadaDe(ui);
+      tConferido = tMs;
+      reconsultar(ui, a);
+      return;
+    }
+  }
+  if (tMs - tConferido < 2000) return;
   tConferido = tMs;
   const rodada = rodadaDe(ui);
   if (rodada >= 0 && rodada === rodadaConferida) return;
   rodadaConferida = rodada;
-  if (a.id === 'recursos') conferirParadas(ui);
-  const d = ui.consultar('camada', a.id);
-  if (d && (d.versao ?? 0) !== a.versao) aplicar(ui, a.id, d);
+  reconsultar(ui, a);
 }
 
 // ------------------------------------------------------------------------------------------------ popover
@@ -219,7 +259,7 @@ export function LegendaCamada({ ui }) {
   if (!a || a.id !== loja.camada.value) return null;
   const obras = a.id === 'recursos' ? paradas.value : null;
   const extra = obras ? (obras.length === 1 ? t('x3.legenda.obraParada') : obras.length ? t('x3.legenda.obrasParadas', { n: fmt.numero(obras.length) }) : t('x3.legenda.semObrasParadas')) : null;
-  const m = modeloLegenda(a.d, { t, num: (n) => fmt.numero(n), dinheiro: fmt.dinheiro, daltonico: a.daltonico, extra });
+  const m = modeloLegenda(a.d, { t, num: (n) => fmt.numero(n), dinheiro: fmt.dinheiro, porHora: fmt.dinheiroPorHora, daltonico: a.daltonico, extra });
   if (!m) return null;
   const glifo = CAMADAS_UI.find((c) => c.id === a.id)?.glifo ?? 'camadas';
   const alto = !!loja.ferramenta.value;
@@ -257,6 +297,15 @@ export function LegendaCamada({ ui }) {
             ))}
             <span>{m.pontas[1]}</span>
           </div>
+          {m.faixas ? (
+            <div class="x3-faixas" role="list" aria-label={t('x3.legenda.faixas')} data-faixas="contribuicao">
+              {m.faixas.map((f) => (
+                <span role="listitem" class={`x3-faixa num${f.atual ? ' x3-atual' : ''}`} style={{ width: `${(100 * (f.fim - f.ini)).toFixed(1)}%` }} title={`${f.dica} (${fmt.dicaHora()})`} data-dica="hora" data-tarifa={f.tarifa}>
+                  {f.texto}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
       {m.resumo ? <div class="x3-resumo">{m.resumo}</div> : null}

@@ -22,5 +22,8 @@ export function registrar(registrarTextos) {
     'x3.legenda.semObrasParadas': 'Nenhuma obra parada por falta de material',
     'x3.legenda.proxima': 'Próxima',
     'x3.legenda.sintetica': 'Dados de prova da cidade sintética',
+    // faixas da Contribuição na legenda do Bem-estar (C1d; D11, D68, D87)
+    'x3.legenda.faixas': 'Contribuição por morador em cada faixa de bem-estar',
+    'x3.legenda.faixa': 'Bem-estar de {de} a {ate}: Contribuição de {valor} por morador',
   });
 }

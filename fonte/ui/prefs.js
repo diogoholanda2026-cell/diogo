@@ -14,6 +14,10 @@ export const PREFS_PADRAO = Object.freeze({
   sempreDia: false,
   contraste: false,
   reduzirMovimento: null, // null segue o sistema
+  // filtro dos avisos sobre os prédios (desenho da UI 8.9; X3a): 'todos' | 'importantes' | 'nenhum'. Padrão "Graves e
+  // atenção" (C1d): com os avisos 'info' no mapa, o desemprego da cidade marcava todo prédio residencial. Quem já
+  // escolheu outro filtro tem a escolha gravada e mantém (lerPrefs só completa o que falta)
+  avisos: 'importantes',
 });
 
 /** Lê as preferências (com os padrões para o que faltar). */
