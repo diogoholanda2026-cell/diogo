@@ -67,9 +67,9 @@ const invariantes = (sim) => {
 
 test('nascimento pela demanda: de frente para a via, em obra, até 3 por tique e 60 obras abertas; invariantes', () => {
   const sim = criarSimulacao({ semente: 'cres-nascer', modo: 'livre' });
-  const ruas = [-300, -170, -40];
-  for (const z of ruas) rua(sim, [[-760, z], [-200, z]]);
-  pintar(sim, { modo: 'retangulo', x: -760, z: -360, x2: -200, z2: 20 }, 'resBaixa');
+  const ruas = [-380, -250, -120];
+  for (const z of ruas) rua(sim, [[1000, z], [1560, z]]);
+  pintar(sim, { modo: 'retangulo', x: 1000, z: -440, x2: 1560, z2: -60 }, 'resBaixa');
   demandaFixa(sim, ['resBaixa']);
   const P = sim.tabelas.predios;
   const vistos = new Set();
@@ -119,12 +119,12 @@ test('nascimento pela demanda: de frente para a via, em obra, até 3 por tique e
 
 test('zona de uma parte futura (M1b) não nasce, mesmo pintada e com demanda', () => {
   const sim = criarSimulacao({ semente: 'cres-trancada', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
+  rua(sim, [[1000, -380], [1480, -380]]);
   // resAlta é do M1b: a pintura pode existir, mas nada nasce mesmo com demanda forçada
   const zAlta = indiceZona('resAlta');
   const C = sim.tabelas.celulas;
   const cels = [];
-  for (let c = 0; c < C.n; c++) if (C.viva[c] && C.estado[c] === CELULA.LIVRE && Math.abs(C.z[c] + 300) < 60 && C.x[c] < -300) cels.push(c);
+  for (let c = 0; c < C.n; c++) if (C.viva[c] && C.estado[c] === CELULA.LIVRE && Math.abs(C.z[c] + 380) < 60 && C.x[c] < 1460) cels.push(c);
   for (const c of cels) {
     C.zona[c] = zAlta;
     C.marcar(c);
@@ -146,8 +146,8 @@ test('zona de uma parte futura (M1b) não nasce, mesmo pintada e com demanda', (
 
 test('obra sem material (D48): fica no canteiro com o aviso e o alerta da cidade; retoma quando a Holding vende', () => {
   const sim = criarSimulacao({ semente: 'cres-material', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  pintar(sim, { modo: 'circulo', x: -520, z: -270, raio: 30 }, 'resBaixa');
+  rua(sim, [[1000, -380], [1480, -380]]);
+  pintar(sim, { modo: 'circulo', x: 1240, z: -350, raio: 30 }, 'resBaixa');
   const real = sim.holding.comprarParaObra;
   let pedidos = 0;
   sim.holding.comprarParaObra = () => {
@@ -179,10 +179,10 @@ test('obra sem material (D48): fica no canteiro com o aviso e o alerta da cidade
 
 test('níveis: com água e energia sobe ao 2; o 3 pede saúde e educação na via (q.predio diz o que falta); evento predioNivel', () => {
   const sim = criarSimulacao({ semente: 'cres-nivel', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: 1e5, no: refNo(sim, -760, -300) });
-  sim.redes.produtor({ tipo: 'energia', ref: 2, capacidade: 1e6, no: refNo(sim, -760, -300) });
-  pintar(sim, { modo: 'circulo', x: -520, z: -270, raio: 30 }, 'resBaixa');
+  rua(sim, [[1000, -380], [1480, -380]]);
+  sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: 1e5, no: refNo(sim, 1000, -380) });
+  sim.redes.produtor({ tipo: 'energia', ref: 2, capacidade: 1e6, no: refNo(sim, 1000, -380) });
+  pintar(sim, { modo: 'circulo', x: 1240, z: -350, raio: 30 }, 'resBaixa');
   const P = sim.tabelas.predios;
   const i = nascer(sim, 'resBaixa', sim.rng('teste'));
   assert.ok(i >= 0);
@@ -209,7 +209,7 @@ test('níveis: com água e energia sobe ao 2; o 3 pede saúde e educação na vi
   assert.equal(P.nivel[i], 2);
   const q = sim.q.predio(P.ref(i));
   assert.ok(q.nivelProx.falta.includes('saude') && q.nivelProx.falta.includes('educacao'), JSON.stringify(q.nivelProx));
-  for (const [tipo, x] of [['clinica', -600], ['escolaF', -440]]) {
+  for (const [tipo, x] of [['clinica', 1160], ['escolaF', 1320]]) {
     const p = sim.q.construir.previa({ tipo, x, z: -340 });
     assert.ok(p.ok, `${tipo}: ${p.codigo}`);
     const r = sim.cmd('construir', { tipo, x: p.x, z: p.z, rot: p.rot });
@@ -234,12 +234,12 @@ test('níveis: com água e energia sobe ao 2; o 3 pede saúde e educação na vi
 
 test('abandono (D42): âmbar aos 180 tiques de problema, vermelho aos 360, abandona aos 600; o marcado sai na hora; volta 120 depois', () => {
   const sim = criarSimulacao({ semente: 'cres-abandono', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  rua(sim, [[-760, -100], [-280, -100]]);
+  rua(sim, [[1000, -380], [1480, -380]]);
+  rua(sim, [[1000, -180], [1480, -180]]);
   // energia na rua dos prédios; a água da cidade está na outra rua, sem ligação: a falta é deste bairro
-  sim.redes.produtor({ tipo: 'energia', ref: 2, capacidade: 1e6, no: refNo(sim, -760, -300) });
-  sim.redes.produtor({ tipo: 'agua', ref: 3, capacidade: 1e5, no: refNo(sim, -760, -100) });
-  pintar(sim, { modo: 'circulo', x: -520, z: -270, raio: 40 }, 'resBaixa');
+  sim.redes.produtor({ tipo: 'energia', ref: 2, capacidade: 1e6, no: refNo(sim, 1000, -380) });
+  sim.redes.produtor({ tipo: 'agua', ref: 3, capacidade: 1e5, no: refNo(sim, 1000, -180) });
+  pintar(sim, { modo: 'circulo', x: 1240, z: -350, raio: 40 }, 'resBaixa');
   const P = sim.tabelas.predios;
   const rng = sim.rng('teste');
   const a = nascer(sim, 'resBaixa', rng);
@@ -285,7 +285,7 @@ test('abandono (D42): âmbar aos 180 tiques de problema, vermelho aos 360, aband
   sim.rodar(RODADA + 1, { sincrono: true });
   assert.ok(demolidos.some(([refs]) => refs.includes(ro)), 'o abandonado marcado saiu');
   // a água chega ao bairro: 120 tiques depois o abandonado sai (o lote volta a nascer pela demanda)
-  sim.redes.produtor({ tipo: 'agua', ref: 4, capacidade: 1e5, no: refNo(sim, -760, -300) });
+  sim.redes.produtor({ tipo: 'agua', ref: 4, capacidade: 1e5, no: refNo(sim, 1000, -380) });
   const t0 = sim.tique;
   let saiu = -1;
   for (let t = 0; t < 300 && saiu < 0; t++) {
@@ -323,13 +323,13 @@ test('a primeira água na rua principal da Vila não abandona as casas das ruas 
 /** Uma partida com o mesmo roteiro: vias, pintura, produtores e serviços; cresce pela demanda. */
 function partida(semente) {
   const sim = criarSimulacao({ semente, modo: 'livre' });
-  for (const z of [-300, -170]) rua(sim, [[-760, z], [-200, z]]);
-  rua(sim, [[-480, -300], [-480, -170]]);
-  sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: 5000, no: refNo(sim, -760, -300) });
-  sim.redes.produtor({ tipo: 'energia', ref: 2, capacidade: 50000, no: refNo(sim, -760, -300) });
-  pintar(sim, { modo: 'retangulo', x: -760, z: -360, x2: -490, z2: -110 }, 'resBaixa');
-  pintar(sim, { modo: 'retangulo', x: -470, z: -360, x2: -200, z2: -110 }, 'comBaixa');
-  const p = sim.q.construir.previa({ tipo: 'praca', x: -600, z: -240 });
+  for (const z of [-380, -250]) rua(sim, [[1000, z], [1560, z]]);
+  rua(sim, [[1280, -380], [1280, -250]]);
+  sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: 5000, no: refNo(sim, 1000, -380) });
+  sim.redes.produtor({ tipo: 'energia', ref: 2, capacidade: 50000, no: refNo(sim, 1000, -380) });
+  pintar(sim, { modo: 'retangulo', x: 1000, z: -440, x2: 1270, z2: -190 }, 'resBaixa');
+  pintar(sim, { modo: 'retangulo', x: 1290, z: -440, x2: 1560, z2: -190 }, 'comBaixa');
+  const p = sim.q.construir.previa({ tipo: 'praca', x: 1160, z: -320 });
   if (p.ok) sim.cmd('construir', { tipo: 'praca', x: p.x, z: p.z, rot: p.rot });
   return sim;
 }

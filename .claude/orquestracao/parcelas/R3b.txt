@@ -5,6 +5,7 @@ Qualidade: gente com silhueta real em LOD (nada de bonecos), roupas e tons de pe
 Meça a bancada aberta no 'pc' e no Média antes e depois. Capturas (no máximo 4, 1376 x 768, ?q=pc): rua às 10h e às 18h, um cruzamento com fila e um caminhão na via.
 Testes: os da R3a verdes e os novos (prioridade no cruzamento sem dois carros dentro ao mesmo tempo em 300 s; caminhão seguindo o caminho da entrega).
 Da etapa 2: a cena rua mudou de lugar com o mapa novo (o ponto RUA de render/cenas/rua.js saiu do disco da sede para o cruzamento (1082,3; 529,4) da cidade sintética nova); confira as vistas antes de capturar.
+Defeito herdado que é seu (render/mundo/trafego.js): com a cena rua no cruzamento novo (1082,3; 529,4), o teste 14 de geracao-vias (tráfego, linha 739) acha 1 carro dentro do outro, sempre igual: aresta 585 perto de (1228,6; 797,4), carros 25 e 189 a 3,8 m (mínimo 4,19 m) no quadro 1005; em (1261,5; 353,1) dá 6 casos (aresta 1074, carros parados); no cruzamento seguinte (1170,7; 530,3) passa. É defeito da fila, não do lugar: corrija a fila (sem mudar o ponto da cena) e deixe o teste verde.
 Contexto da onda 3 (vale para todas as parcelas da onda, que termina no M1a jogável):
 - Decisões novas do dono: D63 a D90 no docs/PROJETO.md (2.1). Leia as linhas inteiras. As que mudam o M1a:
   - D67: calendário com data real. O jogo começa em jan. 2020 (a D42 fica: 1 h de jogo = 6 meses; mês = 600 tiques). A interface mostra "jan. 2020", nunca "Mês 3 · Ano 2".
@@ -17,4 +18,5 @@ Contexto da onda 3 (vale para todas as parcelas da onda, que termina no M1a jog�
 - JS principal em 1.897 KB, acima do teto de 1.638 (A1), depois da etapa 1: a C1 decide (simulação sob demanda ou teto novo para o PC). Não piore: toda tela, cena, gerador grande e texto longo novo entra sob demanda (import dinâmico). Meça com node ferramentas/montar.mjs --saida <pasta temporária sua> e diga o tamanho na entrega.
 - Régua de qualidade: Cities: Skylines II e megaprojetos reais; nada de maquete, cartum, verde-lima, formas quadradas e robóticas, Torre em bolo.
 - A Prévia 1c (SEDE2, PC1, I2 e PC2) está no repositório: leia as notas de entrega no fim das fichas que tocam os seus arquivos (R1a, R2a, R4a, X1a, U1a e as da onda 2).
+- Testes no começo da etapa 3: tudo verde menos o subteste 14 de geracao-vias (tráfego), um defeito da fila que a R3b corrige; não é seu se você não é a R3b.
 - A onda roda em três etapas: etapa 1 (S2a, S3a, R2b, R4b, U1b), etapa 2 (SEDE3 e R5) e etapa 3 (R3b, U2a, X1b, X3a). Quem é de uma etapa encontra o que as anteriores publicaram (as notas de entrega da etapa 1 estão no fim das fichas e, completas, em docs/entregas/onda3/). As outras parcelas da sua etapa rodam ao mesmo tempo: só os seus arquivos; o que precisar fora, pendência.

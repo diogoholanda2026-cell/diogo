@@ -50,9 +50,9 @@ test('catálogo: serviços e lazer do M1a pela barra, o marco tranca, o M1b fica
 
 test('prévia grudada na frente da via; o comando com a prévia dá o mesmo lugar; obra até ficar pronto; invariantes', () => {
   const sim = criarSimulacao({ semente: 'serv-colocar', modo: 'livre' });
-  const [e] = rua(sim, [[-760, -300], [-280, -300]]);
+  const [e] = rua(sim, [[960, -300], [1440, -300]]);
   const caixa0 = sim.holding.caixa();
-  const { previa, r } = colocar(sim, 'clinica', -520, -330, 0);
+  const { previa, r } = colocar(sim, 'clinica', 1200, -330, 0);
   assert.ok(previa.ok, previa.codigo);
   // ao norte da via (-z), a frente encosta na calçada e olha para ela (+z): rot = 0
   assert.ok(Math.abs(previa.z - (-300 - 8 - SERVICOS.clinica.planta[1] / 2 - 1)) < 0.5, `z ${previa.z}`);
@@ -68,7 +68,7 @@ test('prévia grudada na frente da via; o comando com a prévia dá o mesmo luga
   assert.ok(P.flags[i] & PREDIO.OBRA);
   assert.equal(P.obraFim[i] - P.obraIni[i], SERVICOS.clinica.obraTiques);
   // a prévia de novo no mesmo lugar bate na clínica
-  assert.equal(sim.q.construir.previa({ tipo: 'clinica', x: -520, z: -330, rot: 0 }).codigo, 'colisao');
+  assert.equal(sim.q.construir.previa({ tipo: 'clinica', x: 1200, z: -330, rot: 0 }).codigo, 'colisao');
   const vistos = [];
   sim.on('obraFim', (d) => vistos.push(d.ref));
   sim.rodar(SERVICOS.clinica.obraTiques + 1, { sincrono: true });
@@ -85,16 +85,16 @@ test('prévia grudada na frente da via; o comando com a prévia dá o mesmo luga
 
 test('recusas: marco, valor, sem acesso, captação longe da água e créditos', () => {
   const sim = criarSimulacao({ semente: 'serv-recusas' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  assert.equal(sim.q.construir.previa({ tipo: 'clinica', x: -520, z: -330 }).codigo, 'marco');
+  rua(sim, [[960, -300], [1440, -300]]);
+  assert.equal(sim.q.construir.previa({ tipo: 'clinica', x: 1200, z: -330 }).codigo, 'marco');
   assert.equal(sim.q.construir.previa({ tipo: 'nada', x: 0, z: 0 }).codigo, 'valor');
   assert.equal(sim.cmd('construir', { tipo: 'praca', x: NaN, z: 0 }).codigo, 'valor');
   assert.equal(sim.q.construir.previa({ tipo: 'praca', x: 3000, z: 3000 }).codigo, 'acesso');
   // a captação pede água a até 40 m do fundo: no meio da rua, longe do rio, não
-  assert.equal(sim.q.construir.previa({ tipo: 'captacao', x: -520, z: -330 }).codigo, 'agua');
+  assert.equal(sim.q.construir.previa({ tipo: 'captacao', x: 1200, z: -330 }).codigo, 'agua');
   // créditos: a Holding sem caixa
   sim.holding.pagar(sim.holding.caixa(), 'teste');
-  const p = sim.q.construir.previa({ tipo: 'praca', x: -520, z: -330 });
+  const p = sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -330 });
   assert.equal(p.codigo, 'creditos');
   assert.equal(sim.cmd('construir', { tipo: 'praca', x: p.x, z: p.z, rot: p.rot }).codigo, 'creditos');
   assert.deepEqual(sim.erros, []);
@@ -102,9 +102,9 @@ test('recusas: marco, valor, sem acesso, captação longe da água e créditos',
 
 test('cobertura cai com a distância pela via e não passa para um componente sem ligação', () => {
   const sim = criarSimulacao({ semente: 'serv-cobertura', modo: 'livre' });
-  const es = rua(sim, [[-760, -300], [-120, -300]], 'avenida');
-  const solta = rua(sim, [[-760, -200], [-280, -200]]);
-  const { r } = colocar(sim, 'praca', -700, -330);
+  const es = rua(sim, [[960, -300], [1600, -300]], 'avenida');
+  const solta = rua(sim, [[960, -200], [1440, -200]]);
+  const { r } = colocar(sim, 'praca', 1020, -330);
   assert.ok(r?.ok);
   terminarObra(sim, idxDaRef(r.id));
   sistemaCargas(sim);
@@ -135,12 +135,12 @@ test('cobertura cai com a distância pela via e não passa para um componente se
 
 test('conta incremental igual à inteira, bit a bit; eficiência cai com a carga acima da capacidade', () => {
   const sim = criarSimulacao({ semente: 'serv-incremental', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  rua(sim, [[-520, -300], [-520, 100]]);
-  const a = colocar(sim, 'clinica', -700, -330).r;
+  rua(sim, [[960, -300], [1440, -300]]);
+  rua(sim, [[1200, -300], [1200, 100]]);
+  const a = colocar(sim, 'clinica', 1020, -330).r;
   terminarObra(sim, idxDaRef(a.id));
   garantirCobertura(sim);
-  const b = colocar(sim, 'clinica', -480, -100).r;
+  const b = colocar(sim, 'clinica', 1240, -100).r;
   assert.ok(b?.ok);
   terminarObra(sim, idxDaRef(b.id));
   // a segunda clínica entra pela conta incremental (só a origem nova)
@@ -175,8 +175,8 @@ test('conta incremental igual à inteira, bit a bit; eficiência cai com a carga
 
 test('demolir: o serviço devolve 50%; a zona custa os materiais (D54); Arcologia e ref velha recusadas', () => {
   const sim = criarSimulacao({ semente: 'serv-demolir', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  const { r } = colocar(sim, 'delegacia', -520, -330);
+  rua(sim, [[960, -300], [1440, -300]]);
+  const { r } = colocar(sim, 'delegacia', 1200, -330);
   const caixa = sim.holding.caixa();
   const d = sim.cmd('demolir', { refs: [r.id] });
   assert.ok(d.ok, d.codigo);
@@ -199,10 +199,10 @@ test('demolir: o serviço devolve 50%; a zona custa os materiais (D54); Arcologi
 test('acesso pela frente segue a via partida por um cruzamento; salvar e carregar continua com o mesmo hash', () => {
   const sim = criarSimulacao({ semente: 'serv-partida', modo: 'livre' });
   const plano = (pontos) => ({ plano: { modo: 'reta', tipo: 'rua', pontos, sessao: 1, encaixe: true } });
-  assert.ok(sim.cmd('via.construir', plano([[-760, -300], [-280, -300]])).ok);
+  assert.ok(sim.cmd('via.construir', plano([[960, -300], [1440, -300]])).ok);
   const A = sim.tabelas.arestas;
   // a clínica fica a leste do ponto onde o T vai chegar, do outro lado da rua
-  const { r } = colocar(sim, 'clinica', -425, -330);
+  const { r } = colocar(sim, 'clinica', 1295, -330);
   assert.ok(r?.ok, r?.codigo);
   const i = idxDaRef(r.id);
   terminarObra(sim, i);
@@ -212,7 +212,7 @@ test('acesso pela frente segue a via partida por um cruzamento; salvar e carrega
   const antes = AC.e;
   assert.ok(antes >= 0);
   // o T parte a aresta da clínica: o pedaço que fica com o idx encurta e o acesso tem de ir para o pedaço novo
-  assert.ok(sim.cmd('via.construir', plano([[-450, -100], [-450, -300]])).ok);
+  assert.ok(sim.cmd('via.construir', plano([[1270, -100], [1270, -300]])).ok);
   sim.rodar(40, { sincrono: true });
   acessoDe(sim, i, AC);
   assert.ok(AC.e >= 0 && A.viva[AC.e]);
@@ -232,10 +232,10 @@ test('acesso pela frente segue a via partida por um cruzamento; salvar e carrega
 test('prédios soltos pela via demolida: o acesso refeito na hora é o mesmo da conta do zero (carregar)', () => {
   const sim = criarSimulacao({ semente: 'serv-soltos', modo: 'livre' });
   const plano = (pontos) => ({ plano: { modo: 'reta', tipo: 'rua', pontos, sessao: 1, encaixe: false } });
-  const r1 = sim.cmd('via.construir', plano([[-760, -300], [-280, -300]]));
-  assert.ok(r1.ok && sim.cmd('via.construir', plano([[-760, -240], [-280, -240]])).ok);
+  const r1 = sim.cmd('via.construir', plano([[960, -300], [1440, -300]]));
+  assert.ok(r1.ok && sim.cmd('via.construir', plano([[960, -240], [1440, -240]])).ok);
   const zr = indiceZona('resBaixa');
-  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: -760, z: -300, x2: -280, z2: -240 }, zona: zr }).ok);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 960, z: -300, x2: 1440, z2: -240 }, zona: zr }).ok);
   const C = sim.tabelas.celulas;
   const P = sim.tabelas.predios;
   const rng = sim.rng('teste');
@@ -271,9 +271,9 @@ test('prédios soltos pela via demolida: o acesso refeito na hora é o mesmo da 
 
 test('colocar sobre prédios de zona cobra a demolição deles (D54), como a via', () => {
   const sim = criarSimulacao({ semente: 'serv-d54', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
+  rua(sim, [[960, -300], [1440, -300]]);
   const zr = indiceZona('resBaixa');
-  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -330, raio: 40 }, zona: zr }).ok);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: 1200, z: -330, raio: 40 }, zona: zr }).ok);
   const C = sim.tabelas.celulas;
   const P = sim.tabelas.predios;
   const rng = sim.rng('teste');
@@ -282,7 +282,7 @@ test('colocar sobre prédios de zona cobra a demolição deles (D54), como a via
     const i = nascerNaFrente(sim, c, zr, rng);
     if (i >= 0) terminarObra(sim, i);
   }
-  const p = sim.q.construir.previa({ tipo: 'praca', x: -520, z: -330 });
+  const p = sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -330 });
   assert.ok(p.ok, p.codigo);
   assert.ok(p.demolir.length > 0, 'a praça cai sobre as casas');
   const esperado = p.demolir.reduce((s, ref) => s + sim.q.predio(ref).custoDemolir, 0);
@@ -299,10 +299,10 @@ test('colocar sobre prédios de zona cobra a demolição deles (D54), como a via
 
 test('camada Serviços por aresta, efeitos da prévia e q.cidade com a lista dos serviços', () => {
   const sim = criarSimulacao({ semente: 'serv-camada', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  const p = sim.q.construir.previa({ tipo: 'escolaF', x: -520, z: -330 });
+  rua(sim, [[960, -300], [1440, -300]]);
+  const p = sim.q.construir.previa({ tipo: 'escolaF', x: 1200, z: -330 });
   assert.ok(Array.isArray(p.efeitos) && p.efeitos[0].camada === 'servicos');
-  const { r } = colocar(sim, 'escolaF', -520, -330);
+  const { r } = colocar(sim, 'escolaF', 1200, -330);
   terminarObra(sim, idxDaRef(r.id));
   sistemaCargas(sim);
   const c = sim.q.camada('servicos');

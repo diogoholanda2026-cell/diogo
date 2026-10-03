@@ -56,16 +56,16 @@ const sem = (sim, i, bit) => !!(sim.tabelas.predios.flags[i] & bit);
 
 test('oferta e demanda por componente: sem produtor fica sem; com produtor ligado, atende; o reservatório registrado conta', () => {
   const sim = criarSimulacao({ semente: 'redes-basico', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  const casas = povoar(sim, -520, -280, 60);
+  rua(sim, [[-760, -480], [-280, -480]]);
+  const casas = povoar(sim, -520, -460, 60);
   assert.ok(casas.length >= 4, `${casas.length} casas`);
   sistemaRedes(sim);
   for (const i of casas) assert.ok(sem(sim, i, PREDIO.SEM_AGUA) && sem(sim, i, PREDIO.SEM_ENERGIA) && !sem(sim, i, PREDIO.RACIONADO));
   assert.equal(sim.agregados.redes.agua.oferta, 0);
   assert.ok(sim.agregados.redes.agua.demanda > 0);
   // o produtor que outro domínio registra (X1b: o reservatório de lago.e1), no nó oeste
-  const id = sim.redes.produtor({ tipo: 'agua', ref: 77, capacidade: 100, no: refNo(sim, -760, -300) });
-  sim.redes.produtor({ tipo: 'energia', ref: 78, capacidade: 1e5, no: refNo(sim, -760, -300) });
+  const id = sim.redes.produtor({ tipo: 'agua', ref: 77, capacidade: 100, no: refNo(sim, -760, -480) });
+  sim.redes.produtor({ tipo: 'energia', ref: 78, capacidade: 1e5, no: refNo(sim, -760, -480) });
   sistemaRedes(sim);
   for (const i of casas) assert.ok(!sem(sim, i, PREDIO.SEM_AGUA) && !sem(sim, i, PREDIO.SEM_ENERGIA));
   assert.equal(sim.agregados.redes.agua.oferta, 100);
@@ -84,11 +84,11 @@ test('oferta e demanda por componente: sem produtor fica sem; com produtor ligad
 
 test('racionamento dos mais distantes: com oferta para metade, ficam sem as casas da ponta, longe do produtor', () => {
   const sim = criarSimulacao({ semente: 'redes-racionar', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  const casas = povoar(sim, -520, -280, 240, 60);
+  rua(sim, [[-760, -480], [-280, -480]]);
+  const casas = povoar(sim, -520, -460, 240, 60);
   assert.ok(casas.length >= 10, `${casas.length} casas`);
   const total = casas.reduce((s, i) => s + consumoDe(sim, i, 'agua'), 0);
-  sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: total / 2, no: refNo(sim, -760, -300) });
+  sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: total / 2, no: refNo(sim, -760, -480) });
   sistemaRedes(sim);
   const P = sim.tabelas.predios;
   const cortadas = casas.filter((i) => sem(sim, i, PREDIO.SEM_AGUA));
@@ -127,8 +127,8 @@ test('componente sem ligação não recebe; rua de terra não leva rede e melhor
   for (const i of naPrincipal) assert.ok(!sem(sim, i, PREDIO.SEM_AGUA), 'casa da rua principal com água');
   for (const i of naTerra) assert.ok(sem(sim, i, PREDIO.SEM_AGUA) && !sem(sim, i, PREDIO.RACIONADO), 'casa da rua de terra sem ligação');
   // outra rua solta, longe: sem ligação com o produtor
-  rua(sim, [[-760, -300], [-280, -300]]);
-  const soltas = povoar(sim, -520, -280, 40);
+  rua(sim, [[-760, -480], [-280, -480]]);
+  const soltas = povoar(sim, -520, -460, 40);
   sistemaRedes(sim);
   for (const i of soltas) assert.ok(sem(sim, i, PREDIO.SEM_AGUA));
   // melhorar a rua da praia (terra) para rua: as casas dela entram na rede da principal
@@ -153,9 +153,10 @@ test('energia de fora só pelo nó de entrada, até 5 MW e a preço por kW; nenh
   const N = sim.tabelas.nos;
   const x = N.x[ent];
   const z = N.z[ent];
-  // a avenida sugerida sai do nó de entrada para o norte (D36); aqui uma rua reta dele
-  rua(sim, [[x, z], [x + 20, z + 200]]);
-  const casas = povoar(sim, x + 10, z + 100, 80);
+  // a avenida sugerida sai do nó de entrada (D36); aqui uma rua reta dele, para o leste (para o sul ela entra no disco
+  // da sede, D90)
+  rua(sim, [[x, z], [x + 200, z]]);
+  const casas = povoar(sim, x + 100, z, 80);
   assert.ok(casas.length >= 3);
   sistemaRedes(sim);
   for (const i of casas) {
@@ -180,8 +181,9 @@ test('energia de fora só pelo nó de entrada, até 5 MW e a preço por kW; nenh
 
 test('produtor de frente para a estrada de terra: a prévia avisa (semRede, nada na rede) e o prédio pronto mostra o aviso', () => {
   const sim = criarSimulacao({ semente: 'redes-terra', modo: 'livre' });
-  // a estrada de terra da Vila passa por x = -950 perto de z = 320 (o rio acima da Vila)
-  const p = sim.q.construir.previa({ tipo: 'captacao', x: -957, z: 321, rot: 0 });
+  // a estrada de terra da Vila sai do fim da rua principal, em (-935, 300), para o norte; perto de z = 280 o rio acima
+  // da Vila ainda fica na margem da captação
+  const p = sim.q.construir.previa({ tipo: 'captacao', x: -955, z: 280, rot: 0 });
   assert.ok(p.ok, p.codigo);
   assert.equal(p.semRede, true);
   assert.deepEqual(p.efeitos, [{ camada: 'agua', delta: 0 }]);
@@ -193,21 +195,21 @@ test('produtor de frente para a estrada de terra: a prévia avisa (semRede, nada
   const q = sim.q.predio(r.id);
   assert.ok(q.avisos.some((a) => a.codigo === 'semRede' && a.gravidade === 'grave'), JSON.stringify(q.avisos));
   // numa rua com calçada a prévia promete a capacidade
-  rua(sim, [[-760, -300], [-280, -300]]);
-  const s = sim.q.construir.previa({ tipo: 'solar', x: -520, z: -340 });
+  rua(sim, [[-760, -480], [-280, -480]]);
+  const s = sim.q.construir.previa({ tipo: 'solar', x: -520, z: -520 });
   assert.ok(s.ok, s.codigo);
   assert.equal(s.semRede, false);
   assert.deepEqual(s.efeitos, [{ camada: 'energia', delta: 8000 }]);
   // serviço que não é produtor não leva a marca
-  assert.equal(sim.q.construir.previa({ tipo: 'praca', x: -520, z: -340 }).semRede, false);
+  assert.equal(sim.q.construir.previa({ tipo: 'praca', x: -520, z: -520 }).semRede, false);
   assert.deepEqual(sim.erros, []);
 });
 
 test('camadas Água e Energia (categóricas por prédio) e o balanço não muda o hash duas vezes seguidas', () => {
   const sim = criarSimulacao({ semente: 'redes-camadas', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  povoar(sim, -520, -280, 60);
-  sim.redes.produtor({ tipo: 'energia', ref: 1, capacidade: 1e5, no: refNo(sim, -760, -300) });
+  rua(sim, [[-760, -480], [-280, -480]]);
+  povoar(sim, -520, -460, 60);
+  sim.redes.produtor({ tipo: 'energia', ref: 1, capacidade: 1e5, no: refNo(sim, -760, -480) });
   sim.rodar(40, { sincrono: true });
   for (const id of ['agua', 'energia']) {
     const c = sim.q.camada(id);

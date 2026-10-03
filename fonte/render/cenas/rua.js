@@ -6,13 +6,17 @@
 // A cena espera a oficina entregar os setores de vias e de prédios da vista, povoa o tráfego e deixa os carros
 // andando; o resultado traz as medidas das vias, dos objetos e dos carros e as famílias do quadro.
 
-/** O cruzamento da avenida com a rua no Sudeste da cidade sintética (nó 409) e as vistas. */
-export const RUA = Object.freeze({ x: 907, z: 526.3 });
+/**
+ * O cruzamento da avenida com a rua no Sudeste da cidade sintética (nó 336) e as vistas. Com a área inicial da D90 o
+ * cruzamento de antes, em (907, 526,3), caiu no disco da sede; este é o mais perto fora dele (133 m da borda), na mesma
+ * avenida, e as vistas andaram junto (175,3 m para leste e 3,1 m para o sul).
+ */
+export const RUA = Object.freeze({ x: 1082.3, z: 529.4 });
 export const VISTAS_RUA = Object.freeze({
   // na faixa da direita da avenida, 30 m antes do cruzamento, olhando para leste
-  rasante: { x: 880, z: 531.2, dist: 16, inclinacao: 4, guinada: 92 },
-  300: { x: 912, z: 520, dist: 300, inclinacao: 32, guinada: 38 },
-  cruzamento: { x: 907, z: 526.3, dist: 70, inclinacao: 48, guinada: 62 },
+  rasante: { x: 1055.3, z: 534.3, dist: 16, inclinacao: 4, guinada: 92 },
+  300: { x: 1087.3, z: 523.1, dist: 300, inclinacao: 32, guinada: 38 },
+  cruzamento: { x: 1082.3, z: 529.4, dist: 70, inclinacao: 48, guinada: 62 },
   orla: { x: 1543, z: 1570, dist: 30, inclinacao: 5, guinada: 110 },
 });
 

@@ -139,46 +139,46 @@ function tempos(lista, fn) {
 
 test('encaixe (D18): nó, ponto na aresta, 90 e 45 graus, prolongamento, quadra, passo de 15 graus e múltiplo de 8 m', () => {
   const sim = novaSim('vias-encaixe');
-  const { r } = via(sim, 'rua', [[-500, -400], [-300, -400]]);
+  const { r } = via(sim, 'rua', [[1200, -300], [1400, -300]]);
   assert.ok(r?.ok, 'rua de base');
   const N = sim.tabelas.nos;
   // nó que existe: A cai no nó (a menos da tolerância)
-  const fim = [...criadas(r)].flatMap((e) => [sim.tabelas.arestas.a[e], sim.tabelas.arestas.b[e]]).find((n) => N.x[n] === -300 && N.z[n] === -400);
+  const fim = [...criadas(r)].flatMap((e) => [sim.tabelas.arestas.a[e], sim.tabelas.arestas.b[e]]).find((n) => N.x[n] === 1400 && N.z[n] === -300);
   assert.ok(fim !== undefined, 'nó no fim da rua');
-  let enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-296, -404], [-296, -300]] });
+  let enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1404, -304], [1404, -200]] });
   assert.equal(enc.encaixes[0].tipo, 'no');
-  assert.deepEqual(enc.pontos[0], [-300, -400]);
+  assert.deepEqual(enc.pontos[0], [1400, -300]);
   // ponto sobre a aresta, e dali 90 graus
-  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-452, -404], [-449, -300]] });
+  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1248, -304], [1251, -200]] });
   assert.equal(enc.encaixes[0].tipo, 'aresta');
-  assert.ok(Math.abs(enc.pontos[0][1] + 400) < 1e-6, 'A no eixo da rua');
+  assert.ok(Math.abs(enc.pontos[0][1] + 300) < 1e-6, 'A no eixo da rua');
   const ang = enc.encaixes.find((x) => x.indice === 1 && x.tipo === 'angulo');
   assert.equal(ang?.valor, 90);
   assert.ok(Math.abs(enc.pontos[1][0] - enc.pontos[0][0]) < 1e-6, 'B na perpendicular');
   // 45 graus a partir do ponto na aresta
-  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-452, -400], [-380, -330]] });
+  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1248, -300], [1320, -230]] });
   assert.equal(enc.encaixes.find((x) => x.indice === 1 && x.tipo === 'angulo')?.valor, 45);
   const [ax, az] = enc.pontos[0];
   const [bx, bz] = enc.pontos[1];
   assert.ok(Math.abs(Math.abs(bx - ax) - Math.abs(bz - az)) < 1e-6, 'B a 45 graus');
   // prolongamento da via numa ponta solta, com o comprimento múltiplo de 8 m
-  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-300, -400], [-203, -402]] });
+  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1400, -300], [1497, -302]] });
   assert.ok(enc.encaixes.some((x) => x.tipo === 'prolongamento' && x.valor === 0));
-  assert.ok(Math.abs(enc.pontos[1][1] + 400) < 1e-6, 'B no prolongamento');
-  const L = Math.hypot(enc.pontos[1][0] + 300, enc.pontos[1][1] + 400);
+  assert.ok(Math.abs(enc.pontos[1][1] + 300) < 1e-6, 'B no prolongamento');
+  const L = Math.hypot(enc.pontos[1][0] - 1400, enc.pontos[1][1] + 300);
   assert.ok(Math.abs(L / 8 - Math.round(L / 8)) < 1e-9 && enc.encaixes.some((x) => x.tipo === 'comprimento' && x.valor === L));
   // quadra: paralela à rua a meia largura + 48 m + meia largura (um bloco de 6 células)
-  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-520, -470], [-520, -330]] });
+  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1180, -370], [1180, -230]] });
   const quadra = enc.encaixes.find((x) => x.tipo === 'quadra');
   assert.equal(quadra?.valor, 64);
-  assert.ok(Math.abs(enc.pontos[1][1] - (-400 + 64)) < 1e-6, 'B a um bloco da rua');
+  assert.ok(Math.abs(enc.pontos[1][1] - (-300 + 64)) < 1e-6, 'B a um bloco da rua');
   assert.ok(enc.guias.some((g) => g.tipo === 'quadra'));
   // passo de 15 graus longe de tudo, e o encaixe desligado não mexe no ponto
-  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-600, -150], [-500, -155]] });
+  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1100, -50], [1200, -55]] });
   assert.ok(enc.encaixes.some((x) => x.tipo === 'passo'));
-  assert.ok(Math.abs(enc.pontos[1][1] + 150) < 1e-6);
-  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[-600, -150], [-500, -155]], encaixe: false });
-  assert.deepEqual(enc.pontos, [[-600, -150], [-500, -155]]);
+  assert.ok(Math.abs(enc.pontos[1][1] + 50) < 1e-6);
+  enc = encaixarTraco(sim, { modo: 'reta', tipo: 'rua', pontos: [[1100, -50], [1200, -55]], encaixe: false });
+  assert.deepEqual(enc.pontos, [[1100, -50], [1200, -55]]);
   assert.equal(enc.encaixes.length, 0);
 });
 
@@ -221,37 +221,37 @@ test('cruzamento divide as duas vias; perto do nó passa pelo nó; ângulo míni
   const sim = novaSim('vias-cruzamento', 'livre');
   const A = sim.tabelas.arestas;
   const N = sim.tabelas.nos;
-  const { r } = via(sim, 'rua', [[-500, -400], [-300, -400]]);
+  const { r } = via(sim, 'rua', [[1200, -300], [1400, -300]]);
   assert.ok(r?.ok);
   // um ponto da rua longe dos nós dela
   const nosRua = new Set(criadas(r).flatMap((e) => [A.a[e], A.b[e]]));
-  let xc = -470;
+  let xc = 1230;
   while ([...nosRua].some((n) => Math.abs(N.x[n] - xc) < 24)) xc += 4;
   const antes = A.vivos;
-  const c = via(sim, 'rua', [[xc, -480], [xc, -320]]);
+  const c = via(sim, 'rua', [[xc, -380], [xc, -220]]);
   assert.ok(c.p.ok, JSON.stringify(c.p.erros));
   assert.equal(c.p.divisoes, 1);
   assert.ok(c.p.segmentos.length >= 2, 'o traço também se divide no cruzamento');
   assert.ok(c.r.ok);
   assert.equal(A.vivos, antes + 1 + c.p.segmentos.length, 'a rua dividida vira duas e o traço entra com os trechos dele');
-  const no = [...Array(N.n).keys()].find((n) => N.viva[n] && Math.abs(N.x[n] - xc) < 1e-6 && Math.abs(N.z[n] + 400) < 1e-6);
+  const no = [...Array(N.n).keys()].find((n) => N.viva[n] && Math.abs(N.x[n] - xc) < 1e-6 && Math.abs(N.z[n] + 300) < 1e-6);
   assert.ok(no !== undefined, 'nó no cruzamento');
   assert.equal(N.grau[no], 4);
   assert.equal(N.raio[no], VIAS.rua.largura / 2 + 2);
   // perto de um nó (a menos de 8 m) o traço passa por ele em vez de dividir a rua
-  const perto = via(sim, 'rua', [[xc + 5, -480], [xc + 5, -320]], { construir: false, encaixe: false });
+  const perto = via(sim, 'rua', [[xc + 5, -380], [xc + 5, -220]], { construir: false, encaixe: false });
   assert.equal(perto.p.divisoes, 0);
   // ângulo abaixo de 30 graus com a rua
-  const agudo = via(sim, 'rua', [[-420, -400], [-300, -440]], { construir: false });
+  const agudo = via(sim, 'rua', [[1280, -300], [1400, -340]], { construir: false });
   assert.ok(codigos(agudo.p).includes('angulo'), JSON.stringify(codigos(agudo.p)));
   // traçado curto (menos de 16 m)
-  assert.ok(codigos(via(sim, 'rua', [[-600, -150], [-590, -150]], { construir: false, encaixe: false }).p).includes('curto'));
+  assert.ok(codigos(via(sim, 'rua', [[1100, -50], [1110, -50]], { construir: false, encaixe: false }).p).includes('curto'));
   // raio mínimo por tipo: a mesma curva serve para a rua (20 m) e não para a avenida grande (60 m)
-  const curva = [[-600, -250], [-560, -250], [-560, -210]];
+  const curva = [[1100, -150], [1140, -150], [1140, -110]];
   const pr = via(sim, 'rua', curva, { modo: 'curva', construir: false });
   assert.ok(!codigos(pr.p).includes('raio'), JSON.stringify(pr.p.erros));
   assert.ok(codigos(via(sim, 'avenidaG', curva, { modo: 'curva', construir: false }).p).includes('raio'));
-  assert.ok(codigos(via(sim, 'rua', [[-100, -300], [-60, -280], [-100, -260]], { modo: 'curva', construir: false }).p).includes('raio'));
+  assert.ok(codigos(via(sim, 'rua', [[1600, -200], [1640, -180], [1600, -160]], { modo: 'curva', construir: false }).p).includes('raio'));
   assert.deepEqual(sim.validar(), []);
   assert.deepEqual(conferirEspelho(sim.espelho, { alturaEm: (x, z) => sim.alturaEm(x, z) }), []);
 });
@@ -276,11 +276,11 @@ test('declive por tipo (greide seguindo o chão), água sem travessia, gleba com
   assert.ok(!codigos(pp).includes('agua') && pp.segmentos.some((s) => s.ponte), JSON.stringify(pp.erros));
   // gleba: não entra, mas chega ao portão
   assert.ok(codigos(via(sim, 'rua', [[0, 100], [0, 400]], { construir: false }).p).includes('gleba'));
-  const portao = via(sim, 'rua', [[250, 20], [250, 180]], { construir: false });
+  const portao = via(sim, 'rua', [[200, -720], [200, -622]], { construir: false });
   assert.ok(!codigos(portao.p).includes('gleba'), JSON.stringify(portao.p.erros));
   assert.ok(portao.p.encaixes.some((x) => x.portao === 'norte'));
   // fora dos ladrilhos da Holding
-  assert.ok(codigos(via(sim, 'rua', [[900, -300], [1100, -300]], { construir: false }).p).includes('ladrilho'));
+  assert.ok(codigos(via(sim, 'rua', [[1950, -500], [2150, -500]], { construir: false }).p).includes('ladrilho'));
   // marco (fora do Modo livre): mão única e avenida grande ainda trancadas no marco 0
   const normal = novaSim('vias-regras-marco');
   assert.ok(codigos(via(normal, 'ruaMao', [[-500, -200], [-300, -200]], { construir: false }).p).includes('marco'));
@@ -325,7 +325,7 @@ test('custo: comprimento x custo por metro x (1 + 2 x declive) mais demolições
   // sem créditos: recusa com o quanto falta, e nada muda
   sim.holding.pagar(sim.holding.caixa() - 100, 'teste');
   const n = sim.tabelas.arestas.vivos;
-  const sem = via(sim, 'rua', [[-500, -200], [-300, -200]]);
+  const sem = via(sim, 'rua', [[1200, -300], [1400, -300]]);
   const erro = sem.p.erros.find((x) => x.codigo === 'creditos');
   assert.ok(erro && erro.dados.faltam > 0);
   assert.equal(sim.cmd('via.construir', { plano: sem.args }).codigo, 'creditos');
@@ -383,8 +383,8 @@ test('desfazer (D32): até 10 ações da sessão com reembolso integral; ocupado
   const n0 = A.vivos;
   const c0 = C.vivos;
   const s = 11;
-  const a = via(sim, 'rua', [[-500, -300], [-300, -300]], { sessao: s });
-  const b = via(sim, 'rua', [[-452, -380], [-452, -220]], { sessao: s });
+  const a = via(sim, 'rua', [[1200, -300], [1400, -300]], { sessao: s });
+  const b = via(sim, 'rua', [[1248, -380], [1248, -220]], { sessao: s });
   assert.ok(a.r?.ok && b.r?.ok && b.p.divisoes === 1);
   assert.equal(sim.cmd('via.desfazer', { sessao: 99 }).codigo, 'nada', 'outra sessão não desfaz');
   assert.ok(sim.cmd('via.desfazer', { sessao: s }).ok);
@@ -395,12 +395,12 @@ test('desfazer (D32): até 10 ações da sessão com reembolso integral; ocupado
   assert.equal(C.vivos, c0);
   assert.equal(hashChao(sim), chao0, 'o chão volta bit a bit (aplainar puro)');
   // só as 10 últimas ações
-  for (let k = 0; k < 12; k++) assert.ok(via(sim, 'rua', [[-600 + k * 24, -150], [-600 + k * 24, -110]], { sessao: 12, encaixe: false }).r?.ok);
+  for (let k = 0; k < 12; k++) assert.ok(via(sim, 'rua', [[1100 + k * 24, -150], [1100 + k * 24, -110]], { sessao: 12, encaixe: false }).r?.ok);
   let desfeitas = 0;
   while (sim.cmd('via.desfazer', { sessao: 12 }).ok) desfeitas++;
   assert.equal(desfeitas, REGRAS_VIAS.desfazerMax);
   // com prédio nascido nas células criadas: ocupado
-  const c = via(sim, 'rua', [[-500, -250], [-300, -250]], { sessao: 13 });
+  const c = via(sim, 'rua', [[1200, -250], [1400, -250]], { sessao: 13 });
   assert.ok(c.r?.ok);
   const e = criadas(c.r)[0];
   const lado = celulasDaAresta(sim, e).filter((x) => C.lado[x] === 1 && C.linha[x] < 2 && C.estado[x] === CELULA.LIVRE);
@@ -461,21 +461,21 @@ test('prévia igual à obra: a coluna que o nó novo corta, a grade encaixada em
   const A = sim.tabelas.arestas;
   // avenida com casas dos dois lados; ruas cruzando a 70 e 110 graus: a prévia avisa toda casa que a obra derruba,
   // inclusive a da coluna de células que o nó novo corta (ela fica a mais de meia largura + 4 m da rua nova)
-  const av = via(sim, 'avenida', [[-600, -200], [-300, -200]], { encaixe: false });
+  const av = via(sim, 'avenida', [[1100, -300], [1400, -300]], { encaixe: false });
   assert.ok(av.r?.ok);
-  sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: -620, z: -260, x2: -280, z2: -140 }, zona: indiceZona('resBaixa') });
+  sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1080, z: -360, x2: 1420, z2: -240 }, zona: indiceZona('resBaixa') });
   assert.ok(casasNasArestas(sim, criadas(av.r)) >= 20, 'casas na avenida');
   let foraDaFaixa = 0;
-  for (const [x, ang] of [[-560, 70], [-505, 70], [-472, 110], [-428, 110], [-395, 70], [-351, 110]]) {
+  for (const [x, ang] of [[1140, 70], [1195, 70], [1228, 110], [1272, 110], [1305, 70], [1349, 110]]) {
     const a = (ang * Math.PI) / 180;
-    const args = { modo: 'reta', tipo: 'rua', pontos: [[x, -260], [x + Math.cos(a) * 120, -260 + Math.sin(a) * 120]], encaixe: false, sessao: 21 };
+    const args = { modo: 'reta', tipo: 'rua', pontos: [[x, -360], [x + Math.cos(a) * 120, -360 + Math.sin(a) * 120]], encaixe: false, sessao: 21 };
     const pv = sim.q.via.previa(args);
     assert.ok(pv.ok, JSON.stringify(pv.erros));
     const avisadas = pv.demolir.predios.map((ref) => idxDaRef(ref));
     const longe = avisadas.filter((i) => {
       const cs = [];
       for (let c = 0; c < C.n; c++) if (C.viva[c] && C.predio[c] === i) cs.push(c);
-      return cs.every((c) => Math.abs((C.x[c] - x) * Math.sin(a) - (C.z[c] + 260) * Math.cos(a)) >= VIAS.rua.largura / 2 + 4);
+      return cs.every((c) => Math.abs((C.x[c] - x) * Math.sin(a) - (C.z[c] + 360) * Math.cos(a)) >= VIAS.rua.largura / 2 + 4);
     });
     foraDaFaixa += longe.length;
     const v0 = P.vivos;
@@ -488,9 +488,9 @@ test('prévia igual à obra: a coluna que o nó novo corta, a grade encaixada em
   assert.ok(foraDaFaixa > 0, 'algum cruzamento cortou a coluna de uma casa fora da faixa da rua nova');
   // grade: B encaixa como na reta (nó que existe, ângulo, múltiplo de 8 m) e C anda na perpendicular do AB encaixado
   const N = sim.tabelas.nos;
-  let enc = encaixarTraco(sim, { modo: 'grade', tipo: 'rua', pontos: [[-800, -300], [-603, -203], [-603, -90]] });
+  let enc = encaixarTraco(sim, { modo: 'grade', tipo: 'rua', pontos: [[900, -400], [1097, -303], [1097, -190]] });
   const noB = enc.encaixes.find((x) => x.indice === 1 && x.tipo === 'no');
-  assert.ok(noB && enc.ancoras[1]?.tipo === 'no' && N.x[enc.ancoras[1].no] === -600, JSON.stringify(enc.encaixes));
+  assert.ok(noB && enc.ancoras[1]?.tipo === 'no' && N.x[enc.ancoras[1].no] === 1100, JSON.stringify(enc.encaixes));
   assert.ok(!enc.encaixes.some((x) => x.indice === 2), 'o canto C não recebe encaixe de B');
   enc = encaixarTraco(sim, { modo: 'grade', tipo: 'rua', pontos: [[-900, 300], [-702, 303], [-702, 420]] });
   assert.deepEqual(enc.pontos[1], [-700, 300]);
@@ -509,12 +509,12 @@ test('prévia igual à obra: a coluna que o nó novo corta, a grade encaixada em
   assert.ok(pagos < caixa0);
   for (const ref of praia) assert.equal(VIAS_ORDEM[vila.tabelas.arestas.tipo[idxDaRef(ref)]], 'rua');
   // desfazer a demolição recusa se nasceu prédio onde a via passava (ela voltaria por cima dele)
-  const b = via(sim, 'rua', [[-600, 160], [-400, 160]], { encaixe: false, sessao: 23 });
-  const a2 = via(sim, 'rua', [[-600, 200], [-400, 200]], { encaixe: false, sessao: 23 });
+  const b = via(sim, 'rua', [[1100, -160], [1300, -160]], { encaixe: false, sessao: 23 });
+  const a2 = via(sim, 'rua', [[1100, -120], [1300, -120]], { encaixe: false, sessao: 23 });
   assert.ok(b.r?.ok && a2.r?.ok);
   assert.ok(sim.cmd('via.demolir', { arestas: b.r.dados.arestas, sessao: 24 }).ok);
   const ea = criadas(a2.r)[0];
-  const livres = celulasDaAresta(sim, ea).filter((c) => C.estado[c] === CELULA.LIVRE && C.z[c] < 200 && C.linha[c] <= 4);
+  const livres = celulasDaAresta(sim, ea).filter((c) => C.estado[c] === CELULA.LIVRE && C.z[c] < -120 && C.linha[c] <= 4);
   let alto = -1;
   for (const k of [...new Set(livres.map((c) => C.coluna[c]))].sort((x, y) => x - y)) {
     const planta = livres.filter((c) => C.coluna[c] === k || C.coluna[c] === k + 1);
@@ -551,18 +551,18 @@ test('prévia igual à obra: a coluna que o nó novo corta, a grade encaixada em
 test('nomes, q.aresta e q.viasPerto: o nome passa para as metades, continua em linha reta e troca o prefixo', () => {
   const sim = novaSim('vias-nomes', 'livre');
   const A = sim.tabelas.arestas;
-  const { r } = via(sim, 'rua', [[-500, -300], [-300, -300]]);
+  const { r } = via(sim, 'rua', [[1200, -300], [1400, -300]]);
   const e0 = criadas(r)[0];
   const nome = sim.q.aresta(refDe(e0, A.ger[e0])).nome;
   assert.match(nome, /^Rua /);
   for (const e of criadas(r)) assert.equal(sim.q.aresta(refDe(e, A.ger[e])).nome, nome);
   // cruzar divide a rua: as metades ficam com o nome
-  via(sim, 'rua', [[-452, -380], [-452, -220]]);
-  const perto = sim.q.viasPerto(-470, -300, 20);
+  via(sim, 'rua', [[1248, -380], [1248, -220]]);
+  const perto = sim.q.viasPerto(1230, -300, 20);
   assert.ok(perto.length >= 1 && perto.every((x, k) => k === 0 || x.d >= perto[k - 1].d) && perto.every((x) => x.d <= 20));
   assert.equal(sim.q.aresta(perto[0].ref).nome, nome);
   // continuar em linha reta a partir da ponta mantém o nome
-  const cont = via(sim, 'rua', [[-300, -300], [-200, -300]]);
+  const cont = via(sim, 'rua', [[1400, -300], [1500, -300]]);
   assert.equal(sim.q.aresta(cont.r.dados.arestas[0]).nome, nome);
   // melhorar para avenida troca o prefixo
   const refs = vivas(sim).filter((e) => sim.q.aresta(refDe(e, A.ger[e])).nome === nome).map((e) => refDe(e, A.ger[e]));
@@ -577,10 +577,10 @@ test('nomes, q.aresta e q.viasPerto: o nome passa para as metades, continua em l
 
 test('prévia pura; duas partidas iguais dão o mesmo hash; save e carga no meio dão o mesmo fim', () => {
   const roteiro = [
-    ['via.construir', { plano: { modo: 'reta', tipo: 'avenida', pontos: [[-560, -420], [-240, -420]], sessao: 1 } }],
-    ['via.construir', { plano: { modo: 'grade', tipo: 'rua', pontos: [[-560, -380], [-336, -380], [-336, -156]], sessao: 1 } }],
-    ['via.construir', { plano: { modo: 'curva', tipo: 'rua', pontos: [[-240, -420], [-150, -380], [-120, -260]], sessao: 1 } }],
-    ['zona.pintar', { pincel: { modo: 'circulo', x: -450, z: -330, raio: 60 }, zona: 1 }],
+    ['via.construir', { plano: { modo: 'reta', tipo: 'avenida', pontos: [[1100, -340], [1420, -340]], sessao: 1 } }],
+    ['via.construir', { plano: { modo: 'grade', tipo: 'rua', pontos: [[1100, -300], [1324, -300], [1324, -76]], sessao: 1 } }],
+    ['via.construir', { plano: { modo: 'curva', tipo: 'rua', pontos: [[1420, -340], [1510, -300], [1540, -180]], sessao: 1 } }],
+    ['zona.pintar', { pincel: { modo: 'circulo', x: 1210, z: -250, raio: 60 }, zona: 1 }],
     ['via.demolir', { arestas: null, sessao: 1 }],
     ['via.desfazer', { sessao: 1 }],
     ['via.melhorar', { arestas: null, tipo: 'avenida', sessao: 1 }],
@@ -637,16 +637,17 @@ test('chão ao menos 5 cm abaixo da pista em toda a seção: vias do mapa, rampa
   // rampa no pé do morro e travessas: a 90 graus e oblíqua
   assert.ok(fazer('rua', [[-800, -520], [-800, -700]]));
   assert.ok(fazer('rua', [[-880, -560], [-700, -620]]));
-  fazer('rua', [[-460, -600], [-340, -610]]);
-  // na planície: cruzamentos a 90, 60, 45 e 30 graus, avenida, curvas e pontas soltas
-  assert.ok(fazer('avenida', [[-600, -300], [-200, -300]]));
-  assert.ok(fazer('rua', [[-520, -400], [-520, -150]], { encaixe: false }));
-  assert.ok(fazer('rua', [[-440, -420], [-440 + 140, -420 + 242]], { encaixe: false }));
-  assert.ok(fazer('rua', [[-360, -400], [-360 + 150, -400 + 150]], { encaixe: false }));
-  fazer('rua', [[-320, -380], [-320 + 190, -380 + 110]], { encaixe: false });
-  assert.ok(fazer('rua', [[-600, -150], [-520, -120], [-470, -40]], { modo: 'curva', encaixe: false }));
-  assert.ok(fazer('rua', [[-150, -250], [-40, -210], [-20, -100]], { modo: 'curva', encaixe: false }));
-  assert.ok(fazer('rua', [[-100, -500], [-100 + 16, -500 + 112], [-100 + 112, -500 + 112]], { modo: 'grade' }));
+  fazer('rua', [[-480, -600], [-360, -610]]);
+  // na planície do leste e no bolsão plano do nordeste (fora do disco da sede, D90): cruzamentos a 90, 60, 45 e 30
+  // graus, avenida, curvas e pontas soltas
+  assert.ok(fazer('avenida', [[1080, -260], [1480, -260]]));
+  assert.ok(fazer('rua', [[1160, -360], [1160, -110]], { encaixe: false }));
+  assert.ok(fazer('rua', [[1240, -380], [1240 + 140, -380 + 242]], { encaixe: false }));
+  assert.ok(fazer('rua', [[1320, -360], [1320 + 150, -360 + 150]], { encaixe: false }));
+  fazer('rua', [[1360, -340], [1360 + 190, -340 + 110]], { encaixe: false });
+  assert.ok(fazer('rua', [[1080, -110], [1160, -80], [1210, 0]], { modo: 'curva', encaixe: false }));
+  assert.ok(fazer('rua', [[900, -800], [1010, -760], [1030, -650]], { modo: 'curva', encaixe: false }));
+  assert.ok(fazer('rua', [[700, -700], [700 + 16, -700 + 112], [700 + 112, -700 + 112]], { modo: 'grade' }));
   assert.ok(feitas.length >= 20, `${feitas.length} arestas`);
   assert.deepEqual(formasForaDeDia(sim), [], 'toda forma registrada é a de agora');
   // vias novas: o chão fica abaixo da pista menos 5 cm e a seção não afunda
@@ -660,15 +661,15 @@ test('chão ao menos 5 cm abaixo da pista em toda a seção: vias do mapa, rampa
   assert.ok(todas.acima <= -FOLGA_CHAO, `chão ${todas.acima.toFixed(3)} m em ${JSON.stringify(todas.onde)}`);
   assert.ok(todas.abaixo >= -CHAO_ABAIXO_DA_PISTA - 0.6, `chão ${todas.abaixo.toFixed(3)} m em ${JSON.stringify(todas.ondeAbaixo)}`);
   // faixa plana de 8 m: as amostras da grade até 8 m além da pista de uma via reta isolada têm a cota dela
-  const iso = via(sim, 'rua', [[200, -200], [460, -200]], { encaixe: false });
+  const iso = via(sim, 'rua', [[900, -880], [1160, -880]], { encaixe: false });
   assert.ok(iso.r?.ok);
   const T = sim.espelho.terreno;
   let conferidas = 0;
   for (const e of criadas(iso.r)) {
     for (let x = -4096; x <= 4096; x += 8) {
-      if (x < 240 || x > 420) continue;
+      if (x < 940 || x > 1120) continue;
       for (const dz of [-16, -8, 0, 8, 16]) {
-        const z = -200 + dz;
+        const z = -880 + dz;
         const i = (x + 4096) / 8;
         const j = (z + 4096) / 8;
         const A = sim.tabelas.arestas;

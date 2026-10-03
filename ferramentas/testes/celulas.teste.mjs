@@ -79,7 +79,7 @@ test('blocos: células de 8 m com 6 de fundo dos dois lados, de frente para a vi
   const sim = novaSim('celulas-blocos');
   const A = sim.tabelas.arestas;
   const C = sim.tabelas.celulas;
-  const es = via(sim, 'rua', [[-600, -200], [-400, -200]]);
+  const es = via(sim, 'rua', [[1100, -260], [1300, -260]]);
   const meia = VIAS.rua.largura / 2;
   const q = [0, 0];
   const d = [0, 0];
@@ -121,11 +121,11 @@ test('blocos: células de 8 m com 6 de fundo dos dois lados, de frente para a vi
 test('esquinas: cruzamento, T e L sem sobreposição (7 m) nem buraco; fica a de linha menor e depois o bloco mais antigo', () => {
   // grade: as colunas de cada rua caem nas linhas da outra, e a esquina fecha certinho
   const g = novaSim('celulas-esquinas-grade');
-  via(g, 'rua', [[-600, -300], [-376, -300], [-376, -76]], { modo: 'grade' });
+  via(g, 'rua', [[1100, -360], [1324, -360], [1324, -136]], { modo: 'grade' });
   assert.equal(paresPerto(g, REGRAS_CELULAS.esquina), 0, 'células de blocos diferentes a menos de 7 m');
   const m = VIAS.rua.largura / 2 + REGRAS_CELULAS.folgaVia;
-  const cx = -488;
-  const cz = -188;
+  const cx = 1212;
+  const cz = -248;
   for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
     const q = [Math.min(cx + sx * m, cx + sx * 40), Math.min(cz + sz * m, cz + sz * 40), Math.max(cx + sx * m, cx + sx * 40), Math.max(cz + sz * m, cz + sz * 40)];
     assert.ok(maiorVazio(g, q) <= 5.7, `vão na esquina da grade ${JSON.stringify(q)}: ${maiorVazio(g, q).toFixed(2)} m`);
@@ -137,15 +137,15 @@ test('esquinas: cruzamento, T e L sem sobreposição (7 m) nem buraco; fica a de
   const sim = novaSim('celulas-esquinas');
   const C = sim.tabelas.celulas;
   const A = sim.tabelas.arestas;
-  via(sim, 'rua', [[-600, -200], [-400, -200]]);
-  via(sim, 'rua', [[-500, -300], [-500, -100]]); // cruzamento
-  via(sim, 'rua', [[-300, -300], [-300, -100]]); // a haste do T
-  via(sim, 'rua', [[-300, -300], [-160, -300]], { encaixe: true }); // o L na ponta dela
-  via(sim, 'rua', [[-400, -200], [-300, -200]], { encaixe: true }); // o T
+  via(sim, 'rua', [[1100, -260], [1300, -260]]);
+  via(sim, 'rua', [[1200, -360], [1200, -160]]); // cruzamento
+  via(sim, 'rua', [[1400, -360], [1400, -160]]); // a haste do T
+  via(sim, 'rua', [[1400, -360], [1540, -360]], { encaixe: true }); // o L na ponta dela
+  via(sim, 'rua', [[1300, -260], [1400, -260]], { encaixe: true }); // o T
   assert.equal(paresPerto(sim, REGRAS_CELULAS.esquina), 0, 'células de blocos diferentes a menos de 7 m');
   for (const q of [
-    [-500 + m, -200 + m, -500 + 40, -200 + 40], [-500 - 40, -200 - 40, -500 - m, -200 - m],
-    [-300 - 40, -200 + m, -300 - m, -200 + 40], [-300 + m, -300 + m, -300 + 40, -300 + 40],
+    [1200 + m, -260 + m, 1200 + 40, -260 + 40], [1200 - 40, -260 - 40, 1200 - m, -260 - m],
+    [1400 - 40, -260 + m, 1400 - m, -260 + 40], [1400 + m, -360 + m, 1400 + 40, -360 + 40],
   ]) assert.ok(maiorVazio(sim, q) <= 6.4, `vão na esquina ${JSON.stringify(q)}: ${maiorVazio(sim, q).toFixed(2)} m`);
   // nenhuma célula válida a menos de meia largura + 4 m de outra via; toda célula que caiu na esquina tem uma válida de
   // outro bloco a menos de 7 m que vem antes dela (linha menor; mesma linha: aresta mais antiga)
@@ -174,19 +174,19 @@ test('esquinas: cruzamento, T e L sem sobreposição (7 m) nem buraco; fica a de
 test('T com encaixe: a via que sai do meio de outra anda para o passo das células dela e as duas esquinas fecham', () => {
   for (const [base, haste] of [['avenida', 'rua'], ['rua', 'avenida'], ['avenida', 'avenida']]) {
     const sim = novaSim('celulas-esquinas-t');
-    via(sim, base, [[-600, -200], [-280, -200]]);
+    via(sim, base, [[1100, -260], [1420, -260]]);
     // o toque cai fora do passo; o começo anda até 4 m ao longo da via de baixo
-    const args = { modo: 'reta', tipo: haste, pontos: [[-437, -200], [-437, -60]], sessao: 1, encaixe: true };
+    const args = { modo: 'reta', tipo: haste, pontos: [[1263, -260], [1263, -120]], sessao: 1, encaixe: true };
     const p = sim.q.via.previa(args);
     assert.ok(p.ok, JSON.stringify(p.erros));
     const a = p.encaixes.find((x) => x.indice === 0);
     assert.ok(a?.tipo === 'aresta' && a.passo, JSON.stringify(p.encaixes));
     const X = p.pontos[0][0];
-    assert.ok(X !== -437 && Math.abs(X + 437) <= 4, `A em ${X}`);
+    assert.ok(X !== 1263 && Math.abs(X - 1263) <= 4, `A em ${X}`);
     assert.ok(sim.cmd('via.construir', { plano: args }).ok);
     const mb = VIAS[base].largura / 2 + REGRAS_CELULAS.folgaVia;
     const mh = VIAS[haste].largura / 2 + REGRAS_CELULAS.folgaVia;
-    for (const q of [[X + mh, -200 + mb, X + 40, -200 + 40], [X - 40, -200 + mb, X - mh, -200 + 40]]) {
+    for (const q of [[X + mh, -260 + mb, X + 40, -260 + 40], [X - 40, -260 + mb, X - mh, -260 + 40]]) {
       assert.ok(maiorVazio(sim, q) <= 5.7, `${base} e ${haste}: vão na esquina ${JSON.stringify(q)} de ${maiorVazio(sim, q).toFixed(2)} m`);
     }
     assert.equal(paresPerto(sim, REGRAS_CELULAS.esquina), 0, `${base} e ${haste}: células de blocos diferentes a menos de 7 m`);
@@ -214,18 +214,19 @@ test('células inválidas: água, declive, ladrilho, gleba, curva fechada e outr
   };
   assert.ok(contar(via(sim, 'rua', [[-700, 650], [-500, 650]])).AGUA > 10, 'beira da lagoa');
   assert.ok(contar(via(sim, 'rua', [[-700, -570], [-500, -570]])).DECLIVE > 10, 'pé do morro');
-  assert.ok(contar(via(sim, 'rua', [[990, 0], [990, 200]])).LADRILHO > 10, 'divisa dos ladrilhos');
-  assert.ok(contar(via(sim, 'rua', [[-380, 300], [-380, 500]])).GLEBA > 10, 'beira da gleba');
-  assert.ok(contar(via(sim, 'rua', [[-300, 0], [-270, 30], [-300, 60]], { modo: 'curva' })).CURVA > 5, 'lado de dentro da curva');
+  assert.ok(contar(via(sim, 'rua', [[2014, -400], [2014, -200]])).LADRILHO > 10, 'divisa dos ladrilhos');
+  assert.ok(contar(via(sim, 'rua', [[-640, 100], [-640, 300]])).GLEBA > 10, 'beira da gleba');
+  assert.ok(contar(via(sim, 'rua', [[1400, -300], [1430, -270], [1400, -240]], { modo: 'curva' })).CURVA > 5, 'lado de dentro da curva');
   // duas ruas paralelas a 40 m: as células do meio ficam inválidas pela outra via
-  const a = via(sim, 'rua', [[-200, -450], [0, -450]]);
-  const b = via(sim, 'rua', [[-200, -410], [0, -410]]);
+  const a = via(sim, 'rua', [[1100, -300], [1300, -300]]);
+  const b = via(sim, 'rua', [[1100, -260], [1300, -260]]);
   assert.ok((contar([...a, ...b]).VIA ?? 0) > 10);
-  // nenhuma célula válida com o centro na água ou fora dos ladrilhos
+  // nenhuma célula válida com o centro na água ou fora dos ladrilhos (a área inicial da D90: x de -1.024 a 2.048, z de
+  // -1.536 a 1.024)
   const T = sim.espelho.terreno;
   for (const c of validas(sim)) {
     assert.equal(aguaEm(T, C.x[c], C.z[c]), AGUA.TERRA, `célula ${c} válida na água`);
-    assert.ok(Math.abs(C.x[c]) < 1024 && Math.abs(C.z[c]) < 1024, `célula ${c} fora dos ladrilhos`);
+    assert.ok(C.x[c] > -1024 && C.x[c] < 2048 && C.z[c] > -1536 && C.z[c] < 1024, `célula ${c} fora dos ladrilhos`);
   }
   invariantes(sim);
 });
@@ -235,14 +236,14 @@ test('células inválidas: água, declive, ladrilho, gleba, curva fechada e outr
 test('dividir a aresta mantém as células e a pintura; alargar a via passa a pintura para a célula nova (até 4 m)', () => {
   const sim = novaSim('celulas-divisao');
   const C = sim.tabelas.celulas;
-  const es = via(sim, 'rua', [[-600, -200], [-400, -200]]);
+  const es = via(sim, 'rua', [[1100, -260], [1300, -260]]);
   const z = indiceZona('resBaixa');
-  const r = sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: -610, z: -260, x2: -390, z2: -140 }, zona: z });
+  const r = sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1090, z: -320, x2: 1310, z2: -200 }, zona: z });
   assert.ok(r.ok && r.dados.n > 100);
   const chave = (c) => `${Math.round(C.x[c] * 10)},${Math.round(C.z[c] * 10)}`;
   const antes = new Map(vivas(sim).filter((c) => C.aresta[c] >= 0 && es.includes(C.aresta[c])).map((c) => [chave(c), C.zona[c]]));
   // uma rua cruza no meio: a rua de antes se divide
-  via(sim, 'rua', [[-492, -300], [-492, -100]]);
+  via(sim, 'rua', [[1208, -360], [1208, -160]]);
   let iguais = 0;
   let mudou = 0;
   for (const c of vivas(sim)) {
@@ -256,7 +257,7 @@ test('dividir a aresta mantém as células e a pintura; alargar a via passa a pi
   assert.equal(mudou, 0, 'a pintura fica nas células');
   // alargar a rua (16 para 24 m) afasta as células 4 m: a pintura vai junto
   const A = sim.tabelas.arestas;
-  const ruas = [...new Set(vivas(sim).map((c) => C.aresta[c]))].filter((e) => A.viva[e] && Math.abs(A.p[8 * e + 1] + 200) < 1e-6 && Math.abs(A.p[8 * e + 7] + 200) < 1e-6);
+  const ruas = [...new Set(vivas(sim).map((c) => C.aresta[c]))].filter((e) => A.viva[e] && Math.abs(A.p[8 * e + 1] + 260) < 1e-6 && Math.abs(A.p[8 * e + 7] + 260) < 1e-6);
   const pintadas = vivas(sim).filter((c) => ruas.includes(C.aresta[c]) && C.zona[c] === z).length;
   assert.ok(sim.cmd('via.melhorar', { arestas: ruas.map((e) => refDe(e, A.ger[e])), tipo: 'avenida' }).ok);
   const depois = vivas(sim).filter((c) => ruas.includes(C.aresta[c]) && C.zona[c] === z);
@@ -274,17 +275,17 @@ test('pincel: quadra, círculo, retângulo e lista; prévia igual à pintura; ap
   const sim = novaSim('celulas-pincel', 'normal');
   const C = sim.tabelas.celulas;
   // uma quadra fechada de 112 m entre eixos (grade de 1 x 1)
-  const g = sim.q.via.previa({ modo: 'grade', tipo: 'rua', pontos: [[-600, -300], [-488, -300], [-488, -188]], sessao: 1 });
+  const g = sim.q.via.previa({ modo: 'grade', tipo: 'rua', pontos: [[1100, -360], [1212, -360], [1212, -248]], sessao: 1 });
   assert.ok(g.ok, JSON.stringify(g.erros));
-  assert.ok(sim.cmd('via.construir', { plano: { modo: 'grade', tipo: 'rua', pontos: [[-600, -300], [-488, -300], [-488, -188]], sessao: 1 } }).ok);
+  assert.ok(sim.cmd('via.construir', { plano: { modo: 'grade', tipo: 'rua', pontos: [[1100, -360], [1212, -360], [1212, -248]], sessao: 1 } }).ok);
   const z = indiceZona('resBaixa');
   // quadra: o toque no miolo pega os quatro blocos de dentro até o fundo pedido
-  const miolo = { modo: 'quadra', x: -544, z: -244 };
+  const miolo = { modo: 'quadra', x: 1156, z: -304 };
   const pv = sim.q.zona.previa({ pincel: miolo, zona: z });
   assert.ok(pv.celulas instanceof Int32Array && pv.celulas.length > 50);
   assert.equal(pv.comPredio, 0);
   assert.equal(pv.efeitoMedia, 0, 'sem a S2a o efeito é 0');
-  const centro = [-544, -244];
+  const centro = [1156, -304];
   for (const c of pv.celulas) {
     assert.ok(Math.abs(C.x[c] - centro[0]) < 56 && Math.abs(C.z[c] - centro[1]) < 56, `célula ${c} fora da quadra`);
     assert.equal(C.estado[c], CELULA.LIVRE);
@@ -297,12 +298,12 @@ test('pincel: quadra, círculo, retângulo e lista; prévia igual à pintura; ap
   for (const c of pv.celulas) assert.equal(C.zona[c], z);
   assert.equal(sim.cmd('zona.pintar', { pincel: miolo, zona: z }).codigo, 'nada');
   // círculo e retângulo (girado) pegam só células válidas dentro da forma
-  const circ = sim.q.zona.previa({ pincel: { modo: 'circulo', x: -600, z: -250, raio: 30 }, zona: indiceZona('comBaixa') });
+  const circ = sim.q.zona.previa({ pincel: { modo: 'circulo', x: 1100, z: -310, raio: 30 }, zona: indiceZona('comBaixa') });
   assert.ok(circ.celulas.length > 0);
-  for (const c of circ.celulas) assert.ok(Math.hypot(C.x[c] + 600, C.z[c] + 250) <= 30 && C.estado[c] !== CELULA.INVALIDA);
-  const ret = sim.q.zona.previa({ pincel: { modo: 'retangulo', x: -700, z: -320, x2: -620, z2: -170, rot: 0 }, zona: indiceZona('industria') });
+  for (const c of circ.celulas) assert.ok(Math.hypot(C.x[c] - 1100, C.z[c] + 310) <= 30 && C.estado[c] !== CELULA.INVALIDA);
+  const ret = sim.q.zona.previa({ pincel: { modo: 'retangulo', x: 1000, z: -380, x2: 1080, z2: -230, rot: 0 }, zona: indiceZona('industria') });
   assert.ok(ret.celulas.length > 0);
-  for (const c of ret.celulas) assert.ok(C.x[c] >= -700 && C.x[c] <= -620 && C.z[c] >= -320 && C.z[c] <= -170);
+  for (const c of ret.celulas) assert.ok(C.x[c] >= 1000 && C.x[c] <= 1080 && C.z[c] >= -380 && C.z[c] <= -230);
   // lista de células; apagar é a zona 0
   const lista = [...pv.celulas].slice(0, 5);
   assert.equal(sim.cmd('zona.pintar', { pincel: { modo: 'celulas', celulas: lista }, zona: 0 }).dados.n, 5);
@@ -318,7 +319,7 @@ test('prédio: pintar outra zona marca para sair ao ser abandonado e voltar à z
   const sim = novaSim('celulas-predio');
   const C = sim.tabelas.celulas;
   const P = sim.tabelas.predios;
-  const [e] = via(sim, 'rua', [[-600, -200], [-500, -200]]);
+  const [e] = via(sim, 'rua', [[1100, -260], [1200, -260]]);
   const z = indiceZona('resBaixa');
   const lado = celulasDaAresta(sim, e).filter((c) => C.lado[c] === 1 && C.linha[c] < 2 && C.coluna[c] < 2);
   assert.equal(lado.length, 4);
@@ -333,7 +334,7 @@ test('prédio: pintar outra zona marca para sair ao ser abandonado e voltar à z
   assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'celulas', celulas: lado }, zona: z }).ok);
   assert.ok(!(P.flags[i] & PREDIO.DEMOLIR_AO_ABANDONAR));
   // a quadra não pinta por cima de célula ocupada
-  const q = sim.q.zona.previa({ pincel: { modo: 'quadra', x: -550, z: -180 }, zona: indiceZona('industria') });
+  const q = sim.q.zona.previa({ pincel: { modo: 'quadra', x: 1150, z: -240 }, zona: indiceZona('industria') });
   assert.ok([...q.celulas].every((c) => C.predio[c] < 0));
   invariantes(sim);
 });

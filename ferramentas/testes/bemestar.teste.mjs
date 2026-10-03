@@ -24,10 +24,10 @@ import { gerarCidadeSintetica, SINTETICA } from '../cidade-sintetica.mjs';
 /** Uma rua reta de 480 m com água e energia de produtores registrados no nó oeste (como o reservatório da X1b). */
 function ruaComRedes(semente, { agua = 1000, energia = 1e6 } = {}) {
   const sim = criarSimulacao({ semente, modo: 'livre' });
-  const plano = { modo: 'reta', tipo: 'rua', pontos: [[-760, -300], [-280, -300]], sessao: 1, encaixe: false };
+  const plano = { modo: 'reta', tipo: 'rua', pontos: [[-760, -480], [-280, -480]], sessao: 1, encaixe: false };
   assert.ok(sim.cmd('via.construir', { plano }).ok);
   const N = sim.tabelas.nos;
-  const no = noPerto(sim.grafo, -760, -300, 12);
+  const no = noPerto(sim.grafo, -760, -480, 12);
   const ref = refDe(no, N.ger[no]);
   const prod = {};
   if (agua) prod.agua = sim.redes.produtor({ tipo: 'agua', ref: 1, capacidade: agua, no: ref });
@@ -66,8 +66,8 @@ function servico(sim, tipo, x, z) {
 
 test('A2 do bem-estar (D50): água, energia, praça e comércio dão 60 ou menos; com saúde e educação passa de 61', () => {
   const { sim } = ruaComRedes('bem-a2');
-  pintar(sim, -520, -270, 30, 'resBaixa');
-  pintar(sim, -650, -270, 60, 'comBaixa');
+  pintar(sim, -520, -450, 30, 'resBaixa');
+  pintar(sim, -650, -450, 60, 'comBaixa');
   const rng = sim.rng('teste');
   const res = nascer(sim, 'resBaixa', rng);
   assert.ok(res >= 0);
@@ -78,15 +78,15 @@ test('A2 do bem-estar (D50): água, energia, praça e comércio dão 60 ou menos
   // serviço ideal: a cidade toda empregada e o quadro de pessoal completo
   sim.json.cidade.desemprego = [0, 0, 0, 0];
   sim.json.cidade.ocupacao = [1, 1, 1, 1];
-  servico(sim, 'praca', -500, -340);
+  servico(sim, 'praca', -500, -520);
   sistemaCargas(sim);
   const f1 = [];
   const b1 = calcularBemEstar(sim, res, f1);
   const termo = (f, id) => f.find((x) => x.id === id)?.v ?? 0;
   assert.ok(termo(f1, 'lazer') > 0 && termo(f1, 'comercio') > 0, JSON.stringify(f1));
   assert.ok(b1 <= 60, `sem saúde e educação: ${b1}`);
-  servico(sim, 'clinica', -560, -340);
-  servico(sim, 'escolaF', -420, -350);
+  servico(sim, 'clinica', -560, -520);
+  servico(sim, 'escolaF', -420, -530);
   sistemaCargas(sim);
   const f2 = [];
   const b2 = calcularBemEstar(sim, res, f2);
@@ -99,7 +99,7 @@ test('A2 do bem-estar (D50): água, energia, praça e comércio dão 60 ou menos
 
 test('falta de água e de energia: -25 cada; a falta da cidade inteira não abandona a Vila (alerta da cidade)', () => {
   const { sim, prod } = ruaComRedes('bem-redes');
-  pintar(sim, -520, -270, 30, 'resBaixa');
+  pintar(sim, -520, -450, 30, 'resBaixa');
   const res = nascer(sim, 'resBaixa', sim.rng('teste'));
   sistemaRedes(sim);
   sim.json.cidade.desemprego = [0, 0, 0, 0];
@@ -159,13 +159,13 @@ test('coluna predios.bemEstar (a tarifa por prédio da S3a lê) e o efeito previ
   assert.ok(P.bemEstar instanceof Float32Array);
   sim.rodar(3 * RODADA, { sincrono: true });
   // a Vila (sem água nem energia) fica em 0; uma rua com redes promete 40 ou mais: a média sobe
-  const pv = sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -270, raio: 30 }, zona: indiceZona('resBaixa') });
+  const pv = sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -450, raio: 30 }, zona: indiceZona('resBaixa') });
   assert.ok(pv.celulas.length > 0);
   assert.ok(pv.efeitoMedia > 0, `efeito ${pv.efeitoMedia}`);
-  const com = sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -270, raio: 30 }, zona: indiceZona('comBaixa') });
+  const com = sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -450, raio: 30 }, zona: indiceZona('comBaixa') });
   assert.equal(com.efeitoMedia, 0, 'comércio não entra na média do bem-estar');
   const h = sim.hash();
-  sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -270, raio: 30 }, zona: indiceZona('resBaixa') });
+  sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -450, raio: 30 }, zona: indiceZona('resBaixa') });
   assert.equal(sim.hash(), h, 'a prévia não muda o estado');
 });
 

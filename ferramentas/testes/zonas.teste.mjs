@@ -135,8 +135,8 @@ test('indústria sem ligação com a rodovia perde demanda (D52); sem indústria
   sim.rodar(RODADA, { sincrono: true });
   assert.ok(!sim.q.demanda().fatores.industria.some((f) => f.id === 'rodovia'));
   // uma rua solta, sem ligação com a Vila nem com a rodovia, pintada de indústria
-  rua(sim, [[-760, -300], [-280, -300]]);
-  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -270, raio: 60 }, zona: indiceZona('industria') }).ok);
+  rua(sim, [[-760, -480], [-280, -480]]);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -450, raio: 60 }, zona: indiceZona('industria') }).ok);
   sim.rodar(RODADA, { sincrono: true });
   const f = sim.q.demanda().fatores.industria;
   assert.ok(f.some((x) => x.id === 'rodovia' && x.v < 0), JSON.stringify(f));
@@ -152,17 +152,17 @@ test('valor do terreno: grade de 256 x 256 de 32 m, base 100; sobe perto de um s
   assert.equal(g.n, VALOR.n);
   assert.equal(g.passo, 32);
   assert.equal(g.dados.length, 256 * 256);
-  rua(sim, [[-760, -300], [-280, -300]]);
+  rua(sim, [[-760, -480], [-280, -480]]);
   sim.rodar(3 * RODADA, { sincrono: true });
-  const perto = valorEm(sim, -520, -330);
+  const perto = valorEm(sim, -520, -510);
   const longe = valorEm(sim, 3000, -3000);
   assert.ok(perto >= VALOR.base, `perto da via ${perto}`);
-  const p = sim.q.construir.previa({ tipo: 'clinica', x: -520, z: -330 });
+  const p = sim.q.construir.previa({ tipo: 'clinica', x: -520, z: -510 });
   const r = sim.cmd('construir', { tipo: 'clinica', x: p.x, z: p.z, rot: p.rot });
   assert.ok(r.ok, r.codigo);
   terminarObra(sim, idxDaRef(r.id));
   sim.rodar(6 * RODADA, { sincrono: true });
-  assert.ok(valorEm(sim, -520, -270) > perto + 10, `com a clínica: ${valorEm(sim, -520, -270)} (antes ${perto})`);
+  assert.ok(valorEm(sim, -520, -450) > perto + 10, `com a clínica: ${valorEm(sim, -520, -450)} (antes ${perto})`);
   assert.ok(Math.abs(valorEm(sim, 3000, -3000) - longe) < 1e-3, 'longe não muda');
   assert.equal(valorEm(sim, 1e6, 0), 0, 'fora da grade');
   // efeito de área com número inválido não envenena a grade (o NaN ficaria nela para sempre pela suavização)
@@ -181,8 +181,8 @@ test('valor do terreno: grade de 256 x 256 de 32 m, base 100; sobe perto de um s
 
 test('camadas Zonas e Nível: só as zonas da parte atual na legenda; contagem por nível; pintura aparece na camada', () => {
   const sim = criarSimulacao({ semente: 'zonas-camadas', modo: 'livre' });
-  rua(sim, [[-760, -300], [-280, -300]]);
-  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -270, raio: 40 }, zona: indiceZona('resMedia') }).ok);
+  rua(sim, [[-760, -480], [-280, -480]]);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'circulo', x: -520, z: -450, raio: 40 }, zona: indiceZona('resMedia') }).ok);
   const z = sim.q.camada('zonas');
   assert.equal(z.fonte, 'celulas');
   assert.deepEqual(z.legenda.map((x) => x.chave), ['zona.resBaixa', 'zona.resMedia', 'zona.comBaixa', 'zona.industria']);
