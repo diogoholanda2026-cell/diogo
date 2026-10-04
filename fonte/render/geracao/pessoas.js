@@ -209,10 +209,12 @@ function figuraLOD0() {
   // cabelo longo: a mecha atrás, da nuca até o meio das costas (some no shader se não for longo)
   const ml = [[-0.075, 1.64, -0.1], [0.075, 1.64, -0.1], [0.1, 1.3, -0.12], [-0.1, 1.3, -0.12]];
   const mf = ml.map(([x, y, z]) => [x * 1.05, y, z - 0.045]);
-  F.poli([mf[3], mf[2], mf[1], mf[0]], P.CABELO_LONGO, M.TRONCO);
-  F.poli([ml[1], ml[2], mf[2], mf[1]].reverse(), P.CABELO_LONGO, M.TRONCO);
-  F.poli([ml[3], ml[0], mf[0], mf[3]].reverse(), P.CABELO_LONGO, M.TRONCO);
-  F.poli([ml[2], ml[3], mf[3], mf[2]].reverse(), P.CABELO_LONGO, M.TRONCO);
+  // as faces para fora (o material é de uma face só: virada para dentro, a mecha sumia vista de trás): as costas, os
+  // dois lados e o alto, que sai da nuca (a de baixo só se vê de baixo)
+  F.poli([mf[0], mf[1], mf[2], mf[3]], P.CABELO_LONGO, M.TRONCO);
+  F.poli([ml[1], ml[2], mf[2], mf[1]], P.CABELO_LONGO, M.TRONCO);
+  F.poli([ml[3], ml[0], mf[0], mf[3]], P.CABELO_LONGO, M.TRONCO);
+  F.poli([ml[1], mf[1], mf[0], ml[0]], P.CABELO_LONGO, M.TRONCO);
   // braços (6 lados): o punho, o cotovelo, o meio do braço e o deltoide que afina para dentro do ombro (fechado em cima:
   // a câmera de cima não vê o tubo oco), a manga curta no deltoide; a mão achatada, de frente para a coxa
   for (const lado of [1, -1]) {

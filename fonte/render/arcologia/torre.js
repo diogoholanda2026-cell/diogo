@@ -49,10 +49,12 @@ export const LUZ = Object.freeze({
 });
 
 /**
- * Andares da faixa de LED dos anéis e das torres ovais (pedido do dono de 04/10/2026): 3 andares contínuos no meio da
- * altura (uns 19 m), entre duas marquises; nas ovais, na mesma altura e espessura da do Horizon Ring.
+ * Andares da faixa de LED de um anel (D93, pedido do dono de 04/10/2026): um terço dos andares, no terço do meio da
+ * altura, contínua em volta toda. Ímpar, para a faixa centrada no meio da altura cair inteira entre duas lajes (a moldura
+ * das marquises): 9 dos 25 andares do Horizon Ring (de 51,2 a 108,8 m) e 7 dos 19 do Meridian Ring (de 37,9 a 82,1 m).
+ * As torres ovais levam a do Horizon Ring (a mesma faixa de altura).
  */
-export const LED_ANDARES = 3;
+export const andaresLed = (andares) => 2 * Math.round((andares / 3 - 1) / 2) + 1;
 
 /**
  * Acabamento do material opaco: [r, g, b, pacote] com rugosidade e metal em 4 bits, a classe de luz e o padrão.
@@ -76,11 +78,22 @@ export const VIDRO = Object.freeze({
 /** Dado do vértice de vidro: [tipo, semente, face com aletas (0 ou 1), marca (1: a lanterna de uma coroa)]. */
 export const vid = (tipo, semente = 0, aletas = 0, marca = 0) => [tipo, semente, aletas, marca];
 
+/** Passos da semente do vidro dos anéis (o shader lê o mesmo número; ver vidAnel). */
+export const SEM_ANEL = 64;
+
 /**
- * Dado do vértice de vidro dos anéis e das torres ovais: [tipo, centro da faixa de LED (a parte inteira) + semente,
- * pé-direito, setor] (o setor diz ao shader se a marquise daquele trecho já está em geometria, uniforme uLodSetor).
+ * Semente do vidro dos anéis no meio de um de SEM_ANEL passos. Ela divide o float com o centro da faixa de LED (60,
+ * 80, 900), e a interpolação do varying erra uns 6e-6 ali: o hash das salas, com a semente vezes 29, sorteava de novo a
+ * cada pixel (o chuvisco das salas acesas e das persianas). No meio do passo o shader a recupera exata.
  */
-export const vidAnel = (tipo, semente, ledMeio, pe, setor) => [tipo, Math.floor(ledMeio) + Math.min(0.999, Math.max(0, semente)), pe, setor];
+export const semAnel = (semente) => (Math.min(SEM_ANEL - 1, Math.max(0, Math.floor(semente * SEM_ANEL))) + 0.5) / SEM_ANEL;
+
+/**
+ * Dado do vértice de vidro dos anéis e das torres ovais: [tipo, centro da faixa de LED (a parte inteira) + semente
+ * (semAnel), pé-direito, setor + 32 x andares da faixa] (o setor diz ao shader se a marquise daquele trecho já está em
+ * geometria, uniforme uLodSetor; sem faixa, 0 andares).
+ */
+export const vidAnel = (tipo, semente, ledMeio, pe, setor, ledAndares = 0) => [tipo, Math.floor(ledMeio) + semAnel(semente), pe, setor + 32 * ledAndares];
 
 /** Setores com LOD de marquise (16 trechos de anel e as 2 torres ovais; uniforme vec4[5]). */
 export const SETORES = 20;
@@ -1590,7 +1603,6 @@ varying vec2 vUvM;
 #define G_LUZ_LANTERNA ${LUZ_NOITE.lanterna.toFixed(3)}
 #define G_LUZ_ARO ${LUZ_NOITE.aro.toFixed(3)}
 #define G_LUZ_LED ${LUZ_NOITE.led.toFixed(3)}
-#define G_LED_ANDARES ${LED_ANDARES.toFixed(1)}
 float gCorte( vec3 p ) {
   float s = dot( p.xz - uCorteEixo.xy, uCorteEixo.zw );
   float lado = s < -uCorteH.w ? uCorteH.x : ( s > uCorteH.w ? uCorteH.y : uCorteH.z );
@@ -1715,14 +1727,14 @@ void gVidroPainel( float col, float fl, float fv, float sem, float esp ) {
   fEmi += vec3( 0.5, 0.6, 0.8 ) * ocupado * ( 1.0 - acesa ) * 0.006 * gH1( vec2( un, fl ) * 1.9 + 4.3 ) * uNoite * G_LUZ_JANELA * ( 1.0 - longe ) * ( 1.0 - esp );
   fTint *= mix( vec3( 1.0 ), vec3( 0.5, 0.58, 0.75 ), uNoite );
 }
-// A faixa de LED dos anéis e das torres ovais (D88; pedido do dono de 04/10/2026): três andares (uns 19 m) no meio da
-// altura, contínua, entre duas marquises; nas ovais, na mesma altura e espessura da do Horizon Ring. De dia, uma faixa
+// A faixa de LED dos anéis e das torres ovais (D88, D93): um terço dos andares no terço do meio da altura, contínua, entre
+// duas marquises; nas ovais, na mesma faixa de altura da do Horizon Ring. De dia, uma faixa
 // escura de vidro especial (grafite espelhado, os pixels de LED atrás dele numa grade de 0,6 m, as juntas a cada 3,2 m e
 // o filete de inox nas bordas); à noite, a fachada de mídia viva: luz champanhe que corre o anel em ondas largas, um
 // veio mais fino que sobe na diagonal, o tom frio que passa devagar, as bordas acesas que emolduram a faixa e um clarão
 // que dá a volta (o que se lê de longe na vista aberta). Sem arco-íris: a luz da Holding é champanhe
-void gLed( float u, float y, float meio, float pe ) {
-  float H = G_LED_ANDARES * pe;
+void gLed( float u, float y, float meio, float pe, float n ) {
+  float H = n * pe;
   float t = clamp( ( y - ( meio - 0.5 * H ) ) / H, 0.0, 1.0 );
   float longe = smoothstep( 0.2, 0.6, max( fwidth( u ), 1e-3 ) );
   float pontos = mix( gLinha( u / 0.6, 0.4 ) * gLinha( y / 0.6, 0.4 ), 0.16, longe );
@@ -1735,7 +1747,7 @@ void gLed( float u, float y, float meio, float pe ) {
   fInc = vec2( 0.0 );
   float junta = gLinha( u / 3.2, 0.012 );
   fTint = mix( fTint, vec3( 0.3 ), junta );
-  float onda = 0.5 + 0.5 * sin( u / 55.0 - uTempo * 0.5 + 0.9 * sin( u / 270.0 + uTempo * 0.05 ) );
+  float onda = 0.5 + 0.5 * sin( u / 55.0 - uTempo * 0.5 + 0.9 * sin( u / 270.0 + uTempo * 0.05 ) + t * 2.4 );
   float veio = 0.5 + 0.5 * sin( u / 21.0 + t * 1.6 - uTempo * 1.1 );
   float clarao = exp( -pow( ( mod( u - uTempo * 42.0, 1150.0 ) - 575.0 ) / 60.0, 2.0 ) );
   float fria = smoothstep( 0.55, 1.0, sin( u / 610.0 + uTempo * 0.08 ) );
@@ -1753,9 +1765,11 @@ void gLed( float u, float y, float meio, float pe ) {
 // com os dormitórios de descanso) acesos pela agenda, em salas, com o forro aceso perto do teto (as linhas quentes da
 // Apple Park à noite); o apagado fica escuro de verdade. No LOD1 (e nos setores sem a geometria) a marquise sai daqui:
 // a testa branca fina, o topo deitado (com a luz de uma face horizontal) visto do alto e o forro visto de baixo
-void gVidroAnel( float u, float y, float sem, float pe, float meio, float setor, float painel ) {
-  if ( abs( y - meio ) < 0.5 * G_LED_ANDARES * pe ) {
-    gLed( u, y, meio, pe );
+void gVidroAnel( float u, float y, float sem, float pe, float meio, float setorLed, float painel ) {
+  float nLed = floor( setorLed / 32.0 + 0.001 );
+  float setor = setorLed - 32.0 * nLed;
+  if ( abs( y - meio ) < 0.5 * nLed * pe ) {
+    gLed( u, y, meio, pe, nLed );
     return;
   }
   float yy = y / pe;
@@ -1779,9 +1793,11 @@ void gVidroAnel( float u, float y, float sem, float pe, float meio, float setor,
   float onda = gRuido( vec2( u / 47.0 + sem * 11.0, fl * 0.43 + sem * 3.0 ) ) - 0.5;
   fIncM.y += ( fv - 0.5 ) * 0.05 * perto + onda * 0.1;
   fInc = ( vec2( hq, gH1( vec2( col, fl ) * 2.3 + 7.1 ) ) - 0.5 ) * 0.01 * perto;
-  // persianas: em parte dos painéis a persiana clara desce um pouco
+  // persianas: em parte dos painéis a persiana clara desce um pouco. Só de perto (o painel com mais de uns 10 pixels):
+  // de meia distância um painel em cinco com a persiana clara virava um mosaico de pontos no anel inteiro
   float pers = step( 0.8, hq ) * ( 0.15 + 0.45 * gH1( vec2( col * 1.7, fl * 2.3 ) ) );
-  fAlb = mix( fAlb, vec3( 0.12, 0.115, 0.105 ), step( 1.0 - pers, fv ) * 0.7 * perto );
+  float pertoPers = 1.0 - smoothstep( 0.04, 0.12, fwu / painel );
+  fAlb = mix( fAlb, vec3( 0.12, 0.115, 0.105 ), step( 1.0 - pers, fv ) * 0.7 * pertoPers );
   // a sombra da marquise logo abaixo dela: o vidro reflete o forro à sombra e a sala escurece perto do teto
   float somb = smoothstep( 0.7, 0.96, fv );
   fTint *= 1.0 - 0.45 * somb;
@@ -1792,10 +1808,9 @@ void gVidroAnel( float u, float y, float sem, float pe, float meio, float setor,
   fMet = mix( fMet, 0.7, mont );
   fRug = mix( fRug, 0.35, mont );
   fAlb = mix( fAlb, vec3( 0.2, 0.2, 0.19 ), mont );
-  // noite: as salas (4 painéis no escritório, 3 na sala de aula) acesas pela agenda; o andar em trechos de ~150 m (a
-  // equipe ou a turma que ficou acende junto); os dormitórios de descanso da faculdade, quentes e acesos até tarde
-  // (as zonas acesas são trechos inteiros de andar, de dezenas de metros, e não salas sorteadas uma a uma: o sorteio por
-  // sala virava um chuvisco de pontos brancos de longe)
+  // noite: as salas (4 painéis no escritório, 3 na sala de aula) acesas pela agenda, em trechos de andar de dezenas de
+  // metros (a equipe ou a turma que ficou acende junto; o sorteio sala a sala virava um chuvisco de pontos brancos de
+  // longe); os dormitórios de descanso da faculdade, quentes e acesos até tarde
   float escola = step( setor, 7.5 );
   float fr = gAcesas( uHora );
   float sala = floor( col / mix( 4.0, 3.0, escola ) );
@@ -1928,8 +1943,9 @@ void gFachada() {
     fRug = 0.03;
     fAlb = vec3( 0.05, 0.06, 0.06 );
   } else if ( tipo < 7.5 ) {
-    // anéis (painéis de 3,2 m) e torres ovais (1,5 m)
-    gVidroAnel( u, y, fract( vC.y ), vC.z, floor( vC.y ), vC.w, tipo > 6.5 ? 1.5 : 3.2 );
+    // anéis (painéis de 3,2 m) e torres ovais (1,5 m); a semente volta exata ao meio do passo (semAnel)
+    float semA = ( floor( fract( vC.y ) * ${SEM_ANEL}.0 ) + 0.5 ) / ${SEM_ANEL}.0;
+    gVidroAnel( u, y, semA, vC.z, floor( vC.y ), vC.w, tipo > 6.5 ? 1.5 : 3.2 );
   } else if ( tipo < 8.5 ) {
     // Codex (o Black Diamond): vidro quase preto, espelho do céu nas facetas, andares de 4,5 m com o caixilho fino; à
     // noite, poucas salas de leitura acesas em luz quente
@@ -2075,9 +2091,11 @@ void gOpaco() {
   else if ( cls > 6.5 && cls < 7.5 ) oEmi = vec3( 1.0, 0.88, 0.7 ) * mix( 0.01, 0.45, uNoite );
   // Supertrees à noite (o espetáculo de luz de Gardens by the Bay): a malha da copa e a treliça do tronco acesas em
   // violeta, magenta e branco quente que trocam devagar, cada árvore no seu tempo; nas barras (sem malha no padrão), os
-  // pontos de luz a cada 2,5 m. Com 0,3 a copa inteira estourava em branco na exposição da noite (uma taça acesa)
+  // pontos de luz a cada 2,5 m. Com 0,3 a copa inteira estourava em branco na exposição da noite (uma taça acesa).
+  // A fase anda devagar pelo chão (a onda que passa pelo bosque): o sorteio por célula de 60 m cortava a copa que caía
+  // na divisa em duas cores, numa linha reta
   else if ( cls > 7.5 && cls < 8.5 ) {
-    float fase = gH1( floor( vGPosMundo.xz / 60.0 ) ) * 6.2832;
+    float fase = dot( vGPosMundo.xz, vec2( 0.012, 0.009 ) );
     float ciclo = 0.5 + 0.5 * sin( uTempo * 0.35 + fase + vGPosMundo.y * 0.05 );
     vec3 show = mix( mix( vec3( 0.62, 0.3, 1.0 ), vec3( 1.0, 0.32, 0.7 ), ciclo ), vec3( 1.0, 0.78, 0.5 ), smoothstep( 0.7, 1.0, sin( uTempo * 0.13 + fase ) ) );
     float linha = oPad > 12.5 ? oMalha : max( gLinha( p.x / 2.5, 0.25 ), gLinha( p.y / 2.5, 0.25 ) );

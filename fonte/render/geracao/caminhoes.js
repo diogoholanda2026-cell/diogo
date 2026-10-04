@@ -8,8 +8,9 @@
 // moldura preta e limpadores, painel da grade com as aletas, para-choque de plástico grafite com os faróis nas quinas,
 // teto com a pala de sol, quinas arredondadas com normais suaves, janela da porta, retrovisores grandes em braço,
 // degraus, para-lamas e o tanque. LOD0 com cabine, chassi, rodas duplas atrás, faróis e lanternas; LOD1 em caixas, com
-// as pontas que acendem (o mesmo de antes). A frente olha para +z e a origem fica no chão, no meio. aParte2: a parte (PARTE_CAMINHAO) e, na carga, o índice do
-// palete (1 a 10) ou 0 no monte. A cabine tem a cor da Holding (espelho.holding.cor) ou branca no frete contratado.
+// as pontas que acendem (o mesmo de antes). A frente olha para +z e a origem fica no chão, no meio. aParte2: a parte
+// (PARTE_CAMINHAO) e, na carga, o índice do palete (1 a 10) ou 0 no monte. A cabine tem a cor da Holding
+// (espelho.holding.cor) ou branca no frete contratado.
 // Só a thread principal usa (sob demanda, mundo/caminhoes.js), com os trechos GLSL do material; não registra tipo na
 // oficina.
 
@@ -180,6 +181,8 @@ function base(M) {
   // painel da grade: aletas pretas largas entre o para-choque e o para-brisa, e a tomada de ar de baixo
   for (let k = 0; k < 4; k++) quadFrente(-0.78, 0.78, 1.3 + 0.13 * k, 1.37 + 0.13 * k, P.PRETO, 0.004);
   quadFrente(-0.92, 0.92, yp + 0.04, yp + 0.13, P.PRETO, 0.004);
+  // o painel de baixo, do para-choque ao piso da cabine (sem ele, uma fresta escura separava o para-choque da cabine)
+  quadFrente(-wc + 0.03, wc - 0.03, 0.95, yp + 0.005, P.PLASTICO, 0);
   // pala de sol sobre o para-brisa
   caixa(M, -wc + 0.12, yt - 0.04, zFr(yt) - 0.1, wc - 0.12, yt + 0.06, zFr(yt) + 0.16, P.PRETO, { tras: null });
   // janelas das portas (o vidro desce até a base do para-brisa; a coluna da frente acompanha a quina)
@@ -238,10 +241,11 @@ function base(M) {
       const p = (a, rr, x) => [x, r + Math.sin(a) * rr, zR0 + Math.cos(a) * rr];
       const xo = s * (w - 0.01);
       const xi = s * (w - 0.36);
+      // na ordem dos pontos as duas faces olham para dentro do lado +x: viradas para fora (de lado e de cima)
       const fora = [p(a0, r + 0.03, xo), p(a0, r + 0.12, xo), p(a1, r + 0.12, xo), p(a1, r + 0.03, xo)];
-      M.poli(s > 0 ? fora : [...fora].reverse(), P.PRETO);
+      M.poli(s > 0 ? [...fora].reverse() : fora, P.PRETO);
       const cima = [p(a0, r + 0.12, xo), p(a0, r + 0.12, xi), p(a1, r + 0.12, xi), p(a1, r + 0.12, xo)];
-      M.poli(s > 0 ? cima : [...cima].reverse(), P.PRETO);
+      M.poli(s > 0 ? [...cima].reverse() : cima, P.PRETO);
     }
     caixa(M, s > 0 ? w - 0.58 : -w + 0.02, 1.08, zR1 - 0.62, s > 0 ? w - 0.02 : -w + 0.58, 1.16, zR2 + 0.62, P.PRETO);
   }
@@ -406,8 +410,8 @@ export function malhaCaminhao(corpo, lod = 0) {
  * Caminhões da Holding (geracao/caminhoes.js, mundo/caminhoes.js): as partes dos carros e mais a caçamba, a madeira,
  * a carga (cor da instância; o monte baixa e os paletes somem pela quantidade), o balão da betoneira (gira em volta
  * do eixo, listrado com a cor da cabine), o baú e o plástico grafite do para-choque. A pintura é de verniz (0,36) e o
- * vidro reflete o céu (0,1): nada de espelho branco com o sol baixo. aCab: cor da cabine (sRGB 0 a 255) e as luzes (bit 0 farol, 1
- * freio) mais 4 vezes a fase do balão (0 a 63); aCarga: cor da carga e a quantidade (0 a 10 unidades).
+ * vidro reflete o céu (0,1): nada de espelho branco com o sol baixo. aCab: cor da cabine (sRGB 0 a 255) e as luzes
+ * (bit 0 farol, 1 freio) mais 4 vezes a fase do balão (0 a 63); aCarga: cor da carga e a quantidade (0 a 10 unidades).
  */
 export const CAMINHAO_VERTICE_PARS = /* glsl */ `
 attribute vec2 aParte2;

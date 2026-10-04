@@ -362,6 +362,20 @@ test('lote (VIS1b): as árvores do lote vão para a vegetação da R2b, com esp�
   assert.equal(plantios.length, 1, 'replantou sem mudança nos lotes');
   dom.descartar();
   assert.deepEqual(plantios.at(-1), ['lotes', null]);
+  // a vegetação vem sob demanda (motor/quadro.js): sem ela no primeiro quadro, as árvores esperam e são plantadas
+  // quando ela chega, mesmo sem os lotes mudarem
+  const ctx2 = { ...ctx, cena: new THREE.Scene(), vegetacao: undefined };
+  let dom2 = null;
+  L.registrar({ registrarDominio: (nome, f) => (dom2 = f(ctx2)) });
+  const quadro2 = (t) => dom2.quadro(t, { ...ctx2, dominio: (nome) => (nome === 'predios' ? pred : null), sol: { dia: 1 } });
+  quadro2(0);
+  const depois = [];
+  ctx2.vegetacao = { plantar: (dono, itens) => depois.push([dono, itens]) };
+  quadro2(16);
+  quadro2(32);
+  assert.equal(depois.length, 1, 'plantou quando a vegetação chegou, uma vez');
+  assert.deepEqual(Array.from(depois[0][1]), Array.from(lista));
+  dom2.descartar();
 });
 
 /** O domínio 'predios' sobre a cidade sintética, com o relógio na mão (performance.now) e a câmera em cima de i. */

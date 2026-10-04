@@ -358,6 +358,41 @@ test('caminhões gerados: carroceria pela carga, paletes por unidade, monte, nor
   // o material: a pintura de verniz e o vidro que reflete o céu (nada de espelho branco com o sol baixo)
   const rug = (p) => Number(new RegExp(`p == ${p}[^}]*?gCamRug = ([\\d.]+)`).exec(G.CAMINHAO_FRAGMENTO_COR)?.[1]);
   assert.ok(rug(0) >= 0.3 && rug(1) >= 0.1 && rug(15) >= 0.5, `rugosidades ${rug(0)}, ${rug(1)}, ${rug(15)}`);
+  // revisão da VIS1b: o para-lama da roda dianteira virado para fora (de lado e de cima; virado para dentro, o
+  // FrontSide o descartava e ele sumia) e o painel de baixo da frente, do para-choque ao piso da cabine (sem fresta)
+  {
+    const { roda: r, l } = G.CAMINHAO;
+    const w = l / 2;
+    const zR0 = zF - 1.28;
+    const m = G.malhaCaminhao('bau', 0);
+    let lado = 0;
+    let cima = 0;
+    let errados = 0;
+    let painel = 0;
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const ids = [m.indices[t], m.indices[t + 1], m.indices[t + 2]];
+      const V = ids.map((i) => [m.posicao[3 * i], m.posicao[3 * i + 1], m.posicao[3 * i + 2]]);
+      const parte = m.parte[2 * ids[0]];
+      const u = V[1].map((x, k) => x - V[0][k]);
+      const v = V[2].map((x, k) => x - V[0][k]);
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const c = [0, 1, 2].map((k) => (V[0][k] + V[1][k] + V[2][k]) / 3);
+      const rv = V.map((q) => Math.hypot(q[1] - r, q[2] - zR0));
+      if (parte === P.PRETO && c[1] > r && rv.every((x) => x > r + 0.025 && x < r + 0.125)) {
+        if (V.every((q) => Math.abs(Math.abs(q[0]) - (w - 0.01)) < 1e-5)) {
+          lado++;
+          if (Math.sign(n[0]) !== Math.sign(c[0])) errados++;
+        } else if (rv.every((x) => Math.abs(x - (r + 0.12)) < 1e-5)) {
+          cima++;
+          if (n[1] * (c[1] - r) + n[2] * (c[2] - zR0) <= 0) errados++;
+        }
+      }
+      if (parte === P.PLASTICO && n[2] > 0 && Math.abs(n[0]) + Math.abs(n[1]) < 1e-9 && c[1] > 0.95 && c[1] < G.CAMINHAO.yCab) painel++;
+    }
+    assert.ok(lado >= 12 && cima >= 12, `para-lamas: ${lado} faces de lado e ${cima} de cima`);
+    assert.equal(errados, 0, `${errados} faces do para-lama viradas para dentro`);
+    assert.equal(painel, 2, 'o painel de baixo da frente');
+  }
 });
 
 // ------------------------------------------------------------------------------------------------ gente
@@ -452,6 +487,27 @@ test('gente: figura com silhueta (LOD0 e LOD1), faces para fora, juntas iguais �
       if (m.corpo[2 * i + 1] === G.MEMBRO.TRONCO && Math.abs(m.posicao[3 * i + 1] - 1.24) < 0.002) peito.add(`${m.posicao[3 * i].toFixed(3)},${m.posicao[3 * i + 2].toFixed(3)}`);
     }
     assert.ok(peito.size >= 8, `peito com ${peito.size} pontos`);
+    // revisão: a mecha do cabelo longo com as faces para fora (virada para dentro, sumia vista de trás)
+    const mecha = [];
+    for (let t = 0; t < m.indices.length; t += 3) if (m.corpo[2 * m.indices[t]] === P.CABELO_LONGO) mecha.push(t);
+    const meio = [0, 0, 0];
+    for (const t of mecha) for (let q = 0; q < 3; q++) for (let k = 0; k < 3; k++) meio[k] += m.posicao[3 * m.indices[t + q] + k] / (3 * mecha.length);
+    let dentro = 0;
+    for (const t of mecha) {
+      const V = [0, 1, 2].map((q) => [0, 1, 2].map((k) => m.posicao[3 * m.indices[t + q] + k]));
+      const u = V[1].map((x, k) => x - V[0][k]);
+      const v = V[2].map((x, k) => x - V[0][k]);
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const c = [0, 1, 2].map((k) => (V[0][k] + V[1][k] + V[2][k]) / 3 - meio[k]);
+      if (n[0] * c[0] + n[1] * c[1] + n[2] * c[2] <= 0) dentro++;
+    }
+    assert.ok(mecha.length >= 6 && dentro === 0, `cabelo longo: ${dentro} de ${mecha.length} faces viradas para dentro`);
+  }
+  // o degradê de oclusão do pé ao peito precisa da cor suave (com a cor flat, cada faixa da perna era um degrau)
+  {
+    const SH = await import('../../fonte/render/materiais/shaders/pessoa.glsl.js');
+    assert.ok(/smoothstep\( 0\.05, 1\.2, position\.y \)/.test(SH.PESSOA_VERTICE_NORMAL));
+    assert.ok(!/flat varying vec4 vPessoa/.test(SH.PESSOA_VERTICE_PARS + SH.PESSOA_FRAGMENTO_PARS), 'vPessoa flat');
   }
   // aparência: mulheres e homens, alturas reais, os 5 tons de pele, roupas sem verde-lima, cabelo longo e saia
   const { hashF } = await import('../../fonte/render/geracao/malhaVia.js');

@@ -5,7 +5,7 @@
 //         vira um reflexo que corre pela lataria, não um bloco claro numa face plana), estufa com as colunas, para-brisa
 //         e vidro de trás inclinados, janelas das portas com a coluna do meio, para-choques com a parte de baixo em
 //         plástico, placa Mercosul na frente e atrás, faróis, grade, lanternas que dobram a quina, retrovisores, caixas
-//         de roda e rodas de 8 lados com o aro
+//         de roda e rodas de 7 lados com o aro
 //   LOD1  12 a 24 triângulos: a carroceria e a cabine em caixas, com as pontas que acendem à noite (o mesmo de antes)
 // A cor vem da instância (a frota: branco, prata, preto e cinza passam de 80%); aParte diz o que é cada vértice
 // (pintura, vidro, pneu, farol, lanterna, cromado, aro, placa, plástico) para o shader (mundo/trafego.js).
@@ -146,7 +146,10 @@ export function tampa(M, anel, normais, dz, partes, bojo = 0.04) {
     const L = anel[k];
     const R = anel[n - 1 - k];
     const ny = (normais[k][1] + normais[n - 1 - k][1]) * 0.35;
-    meio.push({ p: [(L[0] + R[0]) / 2, (L[1] + R[1]) / 2, (L[2] + R[2]) / 2 + dz * bojo], n: norma([0, ny, dz]) });
+    // o par de cima fica no plano da ponta: estufado, ele abria uma fresta em V entre a tampa e o tampo (de cima se
+    // via o chão por ela)
+    const b = k === n / 2 - 1 ? 0 : bojo;
+    meio.push({ p: [(L[0] + R[0]) / 2, (L[1] + R[1]) / 2, (L[2] + R[2]) / 2 + dz * b], n: norma([0, ny, dz]) });
   }
   const emite = (vs, parte) => {
     const pts = [];
@@ -187,8 +190,13 @@ function caixa(M, x0, y0, z0, x1, y1, z1, parte, topo = parte, frente = parte, t
   M.poli([[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], tras);
 }
 
-/** Roda: cilindro de n lados no eixo x, com normais suaves no pneu e o aro de fora. */
-function roda(M, x, y, z, r, larg, lado, n = 8) {
+/**
+ * Roda: cilindro de n lados no eixo x, com normais suaves no pneu, o flanco preto e o aro por cima dele (sem o flanco,
+ * o vão entre o aro e a banda mostrava a lataria atrás: a roda virava uma calota cinza pintada no lado do carro).
+ * cima: false tira a metade de cima da banda, que nos carros de passeio fica dentro da carroceria (o painel do lado
+ * cobre a roda acima do eixo); com ela o carro passava de 400 triângulos.
+ */
+function roda(M, x, y, z, r, larg, lado, n = 8, { cima = true } = {}) {
   const pts = [];
   for (let k = 0; k < n; k++) {
     const a = (Math.PI * 2 * k) / n + Math.PI / n;
@@ -199,11 +207,15 @@ function roda(M, x, y, z, r, larg, lado, n = 8) {
   for (let k = 0; k < n; k++) {
     const [z0, y0] = pts[k];
     const [z1, y1] = pts[(k + 1) % n];
+    if (!cima && y0 > -1e-6 && y1 > -1e-6) continue;
     const q = [[xf, y + y0 * r, z + z0 * r], [xf, y + y1 * r, z + z1 * r], [xd, y + y1 * r, z + z1 * r], [xd, y + y0 * r, z + z0 * r]];
     const nq = [[0, y0, z0], [0, y1, z1], [0, y1, z1], [0, y0, z0]];
     M.poli(lado > 0 ? q : [...q].reverse(), PARTE.PRETO, lado > 0 ? nq : [...nq].reverse());
   }
-  const aro = pts.map(([zz, yy]) => [xf + lado * 0.003, y + yy * r * 0.62, z + zz * r * 0.62]);
+  const disco = (raio, fora) => pts.map(([zz, yy]) => [xf + lado * fora, y + yy * r * raio, z + zz * r * raio]);
+  const flanco = disco(1, 0.001);
+  M.poli(lado > 0 ? [...flanco].reverse() : flanco, PARTE.PRETO);
+  const aro = disco(0.62, 0.004);
   M.poli(lado > 0 ? [...aro].reverse() : aro, PARTE.ARO);
 }
 
@@ -218,7 +230,8 @@ function caixaDeRoda(M, xl, y, z, r0, r1, lado, parte) {
     const a1 = (Math.PI * (k + 1)) / n;
     const p = (a, r) => [lado * xl, y + Math.sin(a) * r, z + Math.cos(a) * r];
     const q = [p(a0, r0), p(a0, r1), p(a1, r1), p(a1, r0)];
-    M.poli(lado > 0 ? q : [...q].reverse(), parte);
+    // na ordem de q a face olha para dentro (-x do lado +x): vira para fora dos dois lados
+    M.poli(lado > 0 ? [...q].reverse() : q, parte);
   }
 }
 
@@ -370,13 +383,16 @@ function carroLOD0(m) {
     const zb = zVT;
     const xi = w - 0.09;
     const yp = yc - 0.5;
+    // todas viradas para dentro da caçamba (o material é de uma face só: virada para fora, a parede some e a caçamba
+    // vira um buraco para o chão)
     M.poli([[-xi, yp, zb], [xi, yp, zb], [xi, yp, za], [-xi, yp, za]], PARTE.PLASTICO);
-    M.poli([[-xi, yp, za], [-xi, yp, zb], [-xi, yTras, zb], [-xi, yTras, za]], PARTE.PLASTICO);
-    M.poli([[xi, yp, zb], [xi, yp, za], [xi, yTras, za], [xi, yTras, zb]], PARTE.PLASTICO);
+    M.poli([[-xi, yp, za], [-xi, yTras, za], [-xi, yTras, zb], [-xi, yp, zb]], PARTE.PLASTICO);
+    M.poli([[xi, yp, zb], [xi, yTras, zb], [xi, yTras, za], [xi, yp, za]], PARTE.PLASTICO);
     M.poli([[-xi, yp, za], [-xi, yTras, za], [xi, yTras, za], [xi, yp, za]].reverse(), PARTE.PLASTICO);
-    // a parede da cabine na caçamba, com as normais abauladas nos cantos (chapa de verdade, não um espelho plano)
+    // a parede da cabine na caçamba, com as normais abauladas nos cantos (chapa de verdade, não um espelho plano); sobe
+    // 3 cm por cima da base do vidro de trás (rente a ela, a emenda deixava uma linha de pontos claros)
     const nc = (sx, sy) => norma([sx * 0.35, sy * 0.25, -1]);
-    M.poli([[xi, yc, zb], [-xi, yc, zb], [-xi, yp, zb], [xi, yp, zb]], PARTE.PINTURA, [nc(1, 1), nc(-1, 1), nc(-1, -1), nc(1, -1)]);
+    M.poli([[xi, yp, zb], [-xi, yp, zb], [-xi, yc + 0.03, zb], [xi, yc + 0.03, zb]], PARTE.PINTURA, [nc(1, -1), nc(-1, -1), nc(-1, 1), nc(1, 1)]);
   }
 
   // estufa: da base do vidro de trás ao teto e à base do para-brisa, com a caída do teto e o teto abaulado
@@ -414,7 +430,9 @@ function carroLOD0(m) {
   const yJ = yc + 0.04;
   const xNa = (y) => wb + ((wr - wb) * (y - yc)) / (hR - yc);
   const zA = (y) => zPB + ((z(fTF) - zPB) * (y - yc)) / (hR - yc) - 0.08;
-  const zC = (y) => (m.cacamba ? zVT + 0.06 : zVT + ((z(fTT) - zVT) * (y - yc)) / (hR - yc) + 0.12);
+  // a borda de trás acompanha o vidro de trás (na picape ele é quase em pé: com a borda reta, o vidro da porta passava
+  // da cabine no alto)
+  const zC = (y) => zVT + ((z(fTT) - zVT) * (y - yc)) / (hR - yc) + (m.cacamba ? 0.06 : 0.12);
   const zB = z(fTT) + (z(fTF) - z(fTT)) * (m.cacamba ? 0.55 : 0.47);
   for (const s of [-1, 1]) {
     const v = (zz, y) => [s * (xNa(y) + 0.005), y, zz];
@@ -436,7 +454,7 @@ function carroLOD0(m) {
   const eixoT = -m.eixos / 2 + m.c * 0.02;
   for (const zz of [eixoF, eixoT]) {
     for (const lado of [-1, 1]) {
-      roda(M, lado * (w - 0.1), m.roda, zz, m.roda, 0.22, lado, 7);
+      roda(M, lado * (w - 0.1), m.roda, zz, m.roda, 0.22, lado, 7, { cima: false });
       caixaDeRoda(M, w + 0.004, m.roda, zz, m.roda + 0.01, m.roda + (m.plastico ? 0.11 : 0.065), lado, m.plastico ? PARTE.PLASTICO : PARTE.PRETO);
     }
   }

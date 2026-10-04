@@ -696,6 +696,87 @@ test('carros de perto (VIS1b): lataria curva, para-choque, placa, vidros e retro
   assert.ok(rug(10) >= 0.4 && rug(11) >= 0.5, 'placa e plástico foscos');
 });
 
+/**
+ * Raios de câmeras acima do horizonte (20 a 75 graus, em volta) para pontos sorteados na caixa do modelo: a fração em
+ * que a primeira face atingida está de costas para o raio. O material é de uma face só (FrontSide): uma face de costas
+ * na frente é um furo (a câmera vê o que está atrás, o chão ou o miolo do carro).
+ */
+function vistosDeCostas(m) {
+  const T = [];
+  for (let t = 0; t < m.indices.length; t += 3) {
+    const v = [0, 1, 2].map((q) => [0, 1, 2].map((k) => m.posicao[3 * m.indices[t + q] + k]));
+    const e1 = v[1].map((x, k) => x - v[0][k]);
+    const e2 = v[2].map((x, k) => x - v[0][k]);
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    if (Math.hypot(...n) > 1e-12) T.push({ a: v[0], e1, e2, n });
+  }
+  const mn = [0, 1, 2].map((k) => Math.min(...T.map((f) => f.a[k])));
+  const mx = [0, 1, 2].map((k) => Math.max(...T.map((f) => f.a[k])));
+  const R = 2 * Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+  let h = 1;
+  const rnd = () => ((h = (Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) + 0x9e3779b9) | 0) >>> 0) / 4294967296;
+  let n = 0;
+  let costas = 0;
+  for (let az = 0; az < 24; az++) {
+    for (const el of [20, 35, 55, 75]) {
+      const a = (az / 24) * 2 * Math.PI;
+      const e = (el * Math.PI) / 180;
+      const o = [(mn[0] + mx[0]) / 2 + Math.sin(a) * Math.cos(e) * R, Math.sin(e) * R, (mn[2] + mx[2]) / 2 + Math.cos(a) * Math.cos(e) * R];
+      for (let k = 0; k < 24; k++) {
+        const alvo = [mn[0] + rnd() * (mx[0] - mn[0]), 0.1 + rnd() * (mx[1] - 0.1), mn[2] + rnd() * (mx[2] - mn[2])];
+        const d = alvo.map((x, q) => x - o[q]);
+        const l = Math.hypot(...d);
+        for (let q = 0; q < 3; q++) d[q] /= l;
+        let melhor = null;
+        for (const f of T) {
+          const p = [d[1] * f.e2[2] - d[2] * f.e2[1], d[2] * f.e2[0] - d[0] * f.e2[2], d[0] * f.e2[1] - d[1] * f.e2[0]];
+          const det = f.e1[0] * p[0] + f.e1[1] * p[1] + f.e1[2] * p[2];
+          if (Math.abs(det) < 1e-14) continue;
+          const s = [o[0] - f.a[0], o[1] - f.a[1], o[2] - f.a[2]];
+          const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det;
+          if (u < 0 || u > 1) continue;
+          const qq = [s[1] * f.e1[2] - s[2] * f.e1[1], s[2] * f.e1[0] - s[0] * f.e1[2], s[0] * f.e1[1] - s[1] * f.e1[0]];
+          const w = (d[0] * qq[0] + d[1] * qq[1] + d[2] * qq[2]) / det;
+          if (w < 0 || u + w > 1) continue;
+          const dist = (f.e2[0] * qq[0] + f.e2[1] * qq[1] + f.e2[2] * qq[2]) / det;
+          if (dist > 1e-7 && (!melhor || dist < melhor.dist)) melhor = { dist, f };
+        }
+        if (!melhor) continue;
+        n++;
+        if (melhor.f.n[0] * d[0] + melhor.f.n[1] * d[1] + melhor.f.n[2] * d[2] > 0) costas++;
+      }
+    }
+  }
+  return costas / n;
+}
+
+test('carros de perto (VIS1b, revisão): sem furo visto de cima (caçamba da picape, caixas de roda) e a roda com o pneu preto', () => {
+  for (let i = 0; i < MODELOS.length; i++) {
+    const m = MODELOS[i];
+    const v = malhaVeiculo(i, 0);
+    // a caçamba com as paredes de dentro viradas para fora era um buraco para o chão (6% dos raios na picape) e as
+    // caixas de roda viradas para dentro sumiam (perto de 1% nos outros)
+    const f = vistosDeCostas(v);
+    assert.ok(f < 0.005, `${m.id}: ${(100 * f).toFixed(2)}% dos raios veem uma face de costas`);
+    if (m.onibus || m.caminhao) continue;
+    // a roda: o flanco preto atrás do aro, na face de fora (sem ele, o vão entre o aro e a banda mostrava a lataria)
+    const w = m.l / 2;
+    let flanco = 0;
+    for (let t = 0; t < v.indices.length; t += 3) {
+      const ids = [v.indices[t], v.indices[t + 1], v.indices[t + 2]];
+      if (!ids.every((k) => v.parte[k] === PARTE.PRETO && Math.abs(Math.abs(v.posicao[3 * k]) - (w + 0.011)) < 0.002)) continue;
+      const A = ids.map((k) => [v.posicao[3 * k], v.posicao[3 * k + 1], v.posicao[3 * k + 2]]);
+      const u = A[1].map((x, k) => x - A[0][k]);
+      const q = A[2].map((x, k) => x - A[0][k]);
+      const nx = u[1] * q[2] - u[2] * q[1];
+      if (Math.sign(nx) === Math.sign(A[0][0])) flanco += Math.abs(nx) / 2;
+    }
+    const r = m.roda;
+    const area7 = (7 / 2) * r * r * Math.sin((2 * Math.PI) / 7);
+    assert.ok(Math.abs(flanco - 4 * area7) < 0.02, `${m.id}: flanco de ${flanco.toFixed(3)} m² nas 4 rodas`);
+  }
+});
+
 test('tráfego pela heurística (M1a): hora, tipo de via e zonas; teto do Média; semáforo com fases que não se cruzam', async () => {
   const { fatorHora, fatorZona, densidade, faseSemaforo, PERFIL_TRAFEGO, PARADA, distanciaNaFila } = await import('../../fonte/render/mundo/trafego.js');
   const { VIA_FRAGMENTO_PARS } = await import('../../fonte/render/materiais/shaders/via.glsl.js');
@@ -892,11 +973,15 @@ test('árvores de rua (VIS1b): o setor dá as listas, a vegetação da R2b plant
   const ctx = { cena, ganchos, perfil: { id: 'pc' }, medidas: { familia: (m) => m }, sombra: { projetor: (m) => projetados.push(m), soltar() {}, marcar() {} } };
   let dom = null;
   P.registrar({ registrarDominio: (n, f) => (dom = f(ctx)) });
-  const st = { s: 1, dist: 10, objetos: { copa: { n: 2, mat: new Float32Array(32), bytes: new Uint8Array(8) }, palmeira: { n: 1, mat: new Float32Array(16), bytes: new Uint8Array(4) } } };
-  dom.quadro(0, { ...ctx, dominio: () => ({ versaoObjetos: 1, setoresPerto: () => [st] }), sim: { espelho: { tempo: {} } }, sol: { dia: 1 } });
+  const um = (n) => ({ n, mat: new Float32Array(16 * n), bytes: new Uint8Array(4 * n), ids: new Uint32Array(n) });
+  const st = { s: 1, dist: 10, objetos: { copa: um(2), palmeira: um(1), posteSimples: um(3), semaforo: um(1) } };
+  // setoresPerto é um gerador, como o de vias.js (uma lista consumida duas vezes deixava a rua sem poste)
+  const vias = { versaoObjetos: 1, *setoresPerto() { yield st; } };
+  dom.quadro(0, { ...ctx, dominio: () => vias, sim: { espelho: { tempo: {} } }, sol: { dia: 1 } });
   assert.equal(cena.getObjectByName('props:copa0'), undefined);
   assert.ok(!cena.children.some((o) => /copa|palmeira/.test(o.name)) && projetados.length === 0);
-  assert.equal(dom.instancias, 0, 'as árvores do setor não viram instância do props');
+  assert.equal(dom.instancias, 4, 'os postes e o semáforo do setor (e nenhuma árvore) viram instância do props');
+  assert.deepEqual(Object.fromEntries(Object.entries(dom.medidas()).map(([k, v]) => [k, v.n])), { posteSimples: 3, posteDuplo: 0, posteRural: 0, semaforo: 1 });
   // a vegetação traduz copa em oiti e palmeira em palmeira-imperial (o texto do arquivo dela: arvoresDaRua)
   const { readFileSync } = await import('node:fs');
   const veg = readFileSync(new URL('../../fonte/render/mundo/vegetacao.js', import.meta.url), 'utf8');

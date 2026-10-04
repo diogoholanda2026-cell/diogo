@@ -13,10 +13,12 @@ terreno em 36 ms de 46 (80%). **PC3 feita e publicada na Prévia 2b** (fonte `6c
 do jogo pela proporção no SwiftShader (uns 17 ms estimados na RX 550, meta 12), 0 compilações usando as ferramentas.
 Falta a nova medida do dono; próximos cortes na nota da PC3 (`docs/entregas/onda3/PC3.md`).
 
-**VIS1 rodando** (04/10/2026, pedido do dono "continue a criação do jogo"): VIS1a (acabamento da sede v3: anéis,
-Helix e Compass, parque, Supertrees, sombra) e VIS1b (rua: árvores da R2b na calçada e no lote, carros, caminhões, gente),
-ao mesmo tempo, base no commit "VIS1: textos". Se parar no meio, grave o parcial e relance com ONDE PAROU. Ao terminar:
-integrar, Prévia 2c, pedir ao dono a medida e o olhar. Depois, a onda 4 (S1c, S2b, S3b, X4, R6, X3b, U2b e a C2).
+**VIS1 entregue e integrada** (04/10/2026, notas em `docs/entregas/vis1/`): faixa de LED de um terço (9 e 7 andares),
+vidro dos anéis, Helix e Compass, parque e Supertrees; carros, caminhões, gente e árvores de rua pela vegetação.
+**VIS1c e VIS1d rodando** (bloqueiam a Prévia 2c): VIS1c = folhas no assado dos impostores, alcance das árvores da
+cidade, impostor no passe de sombra, sede no uso do solo; VIS1d = ambiente mais baixo com o sol abaixo de 12 graus e
+sombra longa de até 3,2 km. Se parar no meio, grave o parcial e relance com ONDE PAROU. Ao terminar: integrar, montar a
+Prévia 2c, pedir ao dono a medida e o olhar; depois a SEDE4 (D97) e a onda 4 (com MOV1 e R4c).
 
 **Esperando o dono:** jogar a Prévia 2 e medir no PC dele (Teste de desempenho e página de teste com ?q=), e julgar o
 visual: anéis da sede como muralha listrada sem sombra no chão, Helix Labs e Compass Tower como silos, parque central

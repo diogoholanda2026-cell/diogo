@@ -16,8 +16,6 @@ import * as impostor from '../geracao/impostor.js';
 import * as perfilVia from '../geracao/perfilVia.js';
 import * as malhaVia from '../geracao/malhaVia.js';
 import * as cruzamento from '../geracao/cruzamento.js';
-import * as veiculos from '../geracao/veiculos.js';
-import * as veiculosLuxo from '../geracao/veiculos-luxo.js';
 import * as planoPredio from '../geracao/planoPredio.js';
 import * as malhaPredio from '../geracao/malhaPredio.js';
 import * as fundir from '../geracao/fundir.js';
@@ -27,12 +25,13 @@ import * as colocaveis from '../colocaveis/index.js';
 import * as campoAlturas from '../ambiente/campoAlturas.js';
 
 /**
- * Índice fixo dos módulos que registram geradores. A figura de gente (geracao/pessoas.js, R3b) não entra: ela roda na
- * thread principal, sob demanda (mundo/pedestres.js), e aqui só pesaria no teto do worker.
+ * Índice fixo dos módulos que registram geradores. A figura de gente (geracao/pessoas.js, R3b) e os carros
+ * (geracao/veiculos.js e veiculos-luxo.js, com registrar() vazio) não entram: rodam na thread principal, sob demanda
+ * (mundo/pedestres.js e mundo/trafego.js), e aqui só pesariam no teto do worker.
  */
 export const MODULOS_OFICINA = Object.freeze([
-  ruido, arvores, impostor, perfilVia, malhaVia, cruzamento, veiculos, veiculosLuxo, planoPredio, malhaPredio,
-  fundir, quantizar, ponte, colocaveis, campoAlturas,
+  ruido, arvores, impostor, perfilVia, malhaVia, cruzamento, planoPredio, malhaPredio, fundir, quantizar, ponte,
+  colocaveis, campoAlturas,
 ]);
 
 const TIPOS = new Set([...TIPOS_OFICINA, 'prova']);

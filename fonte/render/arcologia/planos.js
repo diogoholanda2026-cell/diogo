@@ -285,7 +285,7 @@ export function alvosDosSetores(plano, cota = GLEBA_ENVELOPE.cota) {
           const s = setorDoAnel(p, de + 1);
           alvos.set(s, { arco: [p.cx, p.cz, p.raio, de, Math.min(p.ate, de + 45)], y0: cota, y1: cota + p.altura });
         }
-      } else if (p.tipo === 'oval') alvos.set(SETOR_OVAL[parte.id], { ponto: [p.x, p.z], y0: cota, y1: cota + p.altura });
+      } else if (p.tipo === 'oval' && SETOR_OVAL[parte.id] != null) alvos.set(SETOR_OVAL[parte.id], { ponto: [p.x, p.z], y0: cota, y1: cota + p.altura });
       else if (p.tipo === 'supertree' && !alvos.has(SETOR_PARQUE)) alvos.set(SETOR_PARQUE, { ponto: [...plano.centro], y0: cota, y1: cota + 50 });
     }
   }

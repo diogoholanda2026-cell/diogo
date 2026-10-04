@@ -199,7 +199,8 @@ function criarProps(ctx) {
   function compactar(vias) {
     const Pp = porPerfil(PERFIL_PROPS, ctx.perfil);
     let h = Math.imul(vias.versaoObjetos + 1, 0x01000193);
-    const perto = vias.setoresPerto(Pp.postes);
+    // setoresPerto é um gerador: vira lista (a chave e as listas passam duas vezes por ela)
+    const perto = [...vias.setoresPerto(Pp.postes)];
     for (const st of perto) h = Math.imul(h ^ st.s, 0x01000193);
     if (h === chave) return;
     chave = h;

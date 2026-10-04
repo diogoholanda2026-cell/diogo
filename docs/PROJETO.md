@@ -1718,6 +1718,30 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   avisos e cores para daltonismo, Prévia 2 montada e README com os números (aberta no 'pc': 73 chamadas e 644 mil
   triângulos). Notas completas em `docs/entregas/onda3/C1a.md` e `C1b.md`.
 
+#### VIS1. Passada visual: sede e rua (fatia vertical; VIS1a e VIS1b ao mesmo tempo)
+- **VIS1a (sede):** `render/arcologia/*` (menos `obra.js` e `heli.js`), `render/cenas/{planos,torre}.js`,
+  `ferramentas/testes/arcologia-render.teste.mjs`. Faixa de LED de um terço dos andares (D93), vidro dos anéis que lê
+  como vidro, marquises com sombra, pé dos anéis plantado, Helix e Compass como torres, parque e Supertrees.
+- **VIS1b (rua):** `render/geracao/{veiculos,caminhoes,pessoas}.js`, `render/materiais/shaders/pessoa.glsl.js`,
+  `render/mundo/{trafego,caminhoes,props,lotes}.js`, `render/cenas/rua.js` e os testes da vida e das vias. Árvores de rua
+  e de lote pela vegetação da R2b, carros de 360 a 400 triângulos, cabine do caminhão, gente de 400 triângulos.
+- **Entregue em 04/10/2026** (VIS1a e VIS1b, revisadas). Faixa de LED com 9 andares no Horizon Ring (51,2 a 108,8 m) e
+  7 no Meridian Ring (37,9 a 82,1 m), número ímpar para caber entre marquises; o revisor da VIS1a tirou o pontilhado do
+  vidro (semente presa a 64 passos) e o da VIS1b fechou os furos da picape, dos para-lamas e do cabelo. Família
+  arcologia: 42,4 mil triângulos na vista aberta, 230 mil de perto; rua -26% e bairro -24% de triângulos; 0 compilações
+  depois de pronto; testes verdes. Ficaram para a VIS1c as folhas e a sombra das árvores de longe e o chão da sede sem
+  pasto, para a VIS1d a sombra longa do entardecer e para a SEDE4 o dado da faixa de LED (`ledNoMeio`) e o parque.
+  Notas completas em `docs/entregas/vis1/VIS1a.md` e `VIS1b.md`.
+
+#### VIS1c e VIS1d. Árvores com folha e sombra; sombra longa do entardecer (fatia vertical; ao mesmo tempo)
+- **VIS1c:** `materiais/shaders/folha.glsl.js`, `mundo/vegetacao.js`, `geracao/{impostor,arvores}.js`, o uso do solo
+  em `mundo/terreno.js`, `mataDaSede` em `data/arcologia-plano.js`, a limpeza de `shaders/via.glsl.js`. Folhas no
+  assado dos impostores, alcance das árvores da cidade, impostor no passe de sombra, a sede no uso do solo.
+- **VIS1d:** `ambiente/{sol,ibl,ceu,exposicao,sombraLonge,luzNoite}.js`, `motor/perfis.js`,
+  `shaders/{sombra,terreno}.glsl.js` no que for da sombra. Ambiente mais baixo com o sol abaixo de 12 graus e sombra
+  longa de até 3,2 km das torres e dos anéis.
+- **Entrega:** a Prévia 2c.
+
 #### SEDE4. Sede v4: Canopy Bridges, água e floresta (fatia vertical, depois da VIS1; 2 sessões)
 - **Arquivos:** `data/arcologia-plano.js` (pontes, lago, Halo Lake, mata e a posição das 3 torres no eixo das
   avenidas), `render/arcologia/*` (menos `obra.js` e `heli.js`), `render/cenas/{torre,planos}.js`,

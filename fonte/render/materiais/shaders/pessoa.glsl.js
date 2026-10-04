@@ -23,7 +23,7 @@ attribute vec3 aVar;
 attribute vec4 aPessoa;
 attribute vec4 aRoupa;
 attribute vec4 aRoupa2;
-flat varying vec4 vPessoa;   // albedo linear e rugosidade
+varying vec4 vPessoa;   // albedo linear e rugosidade (suave: o degradê de oclusão corre pela face, sem degrau)
 const float PESSOA_QUADRIL = ${f(JUNTA.quadril)};
 const float PESSOA_JOELHO = ${f(JUNTA.joelho)};
 const float PESSOA_OMBRO = ${f(JUNTA.ombro)};
@@ -124,7 +124,7 @@ vec3 transformed = pessoaPos;
 
 /** Fragmento: declarações. */
 export const PESSOA_FRAGMENTO_PARS = /* glsl */ `
-flat varying vec4 vPessoa;
+varying vec4 vPessoa;
 `;
 /** Fragmento: a cor (troca o #include <color_fragment>). */
 export const PESSOA_FRAGMENTO_COR = /* glsl */ `

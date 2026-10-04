@@ -14,6 +14,7 @@ import {
   malhasTorre, malhasTorreLod1, malhaSombraTorre, malhasPar, malhaSombraPar, trechosCorpo, contornoTrecho, medidasTorre,
   NIVEL, Malha, DIST_LOD0, LUZ_NOITE, torno, cilindro, materiais, descartarMateriais, atualizarArcologia, UNIFORMES,
   CHAVES, criarPar, criarTorre, criarAquecimento, VIDRO, LUZ, malhaJato, FONTES, medidasDoPar, SETORES, MEIO_VAO_CORTE,
+  andaresLed, PADRAO, corLinear, vidAnel, semAnel, SEM_ANEL,
 } from '../../fonte/render/arcologia/torre.js';
 import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { assentarHora, VISTAS as VISTAS_TORRE } from '../../fonte/render/cenas/torre.js';
@@ -23,7 +24,10 @@ import {
 } from '../../fonte/render/arcologia/planos.js';
 import { ORCAMENTO } from '../../fonte/contratos/render.js';
 import { ETAPA, AGUA, ARESTA } from '../../fonte/contratos/flags.js';
-import { montarParte, malhasNovas, setorDoAnel, SETOR_OVAL, PECAS, PECAS_COM_LOD } from '../../fonte/render/arcologia/partes.js';
+import {
+  montarParte, malhasNovas, setorDoAnel, SETOR_OVAL, SETOR_PARQUE, PECAS, PECAS_COM_LOD, faixaLed, PE_ANEL, PE_OVAL, BAL_OVAL,
+  corposDaOval, gruposDeSupertrees, PARQUE,
+} from '../../fonte/render/arcologia/partes.js';
 import { cavarTerreno, descavar, materialAgua } from '../../fonte/render/arcologia/lago.js';
 import { materialFantasma } from '../../fonte/render/arcologia/fantasma.js';
 import {
@@ -602,7 +606,7 @@ test('plano: malhas sem NaN e tudo dentro da gleba (a sede inteira, com a paisag
   const r = malhasDoPlano('A', { chao: chaoPlano, prontas: 'todas' });
   for (const [nome, m] of [['vidro', r.comum.vidro], ['opaco', r.comum.opaco], ['agua', r.agua], ['efeitos', r.efeitos], ...[...r.setores].map(([s, m]) => [`setor ${s}`, m])]) conferirMalha(m, nome);
   assert.ok(r.agua.triangulos > 0, 'sem água');
-  assert.equal(r.setores.size, 18, '16 trechos de anel e 2 ovais');
+  assert.equal(r.setores.size, 19, '16 trechos de anel, 2 ovais e o parque');
   for (const c of r.caixas) assert.ok(PARTES_ORDEM[c.idx] === c.parte, `idx da parte ${c.parte}`);
   assert.equal(new Set(r.caixas.filter((c) => c.trecho).map((c) => c.trecho)).size, 8, 'caixas dos 8 trechos do Horizon Ring');
   let fora = 0;
@@ -672,13 +676,14 @@ test('anéis: vidro curvo nos raios de fora e de dentro, altura do anel, uma mar
     let lajes = 0;
     for (let l = 1; l < p.andares; l++) {
       const yl = l * pe;
-      if (Math.abs(yl - meio) < pe / 2 - 0.01) continue;
+      if (Math.abs(yl - meio) < faixaLed(pe, p.andares) - 0.01) continue;
       lajes++;
       let n = 0;
       for (const { opaco } of setores.values()) for (let i = 0; i < opaco.p.length; i += 3) if (Math.abs(opaco.p[i + 1] - COTA - yl - 0.25) < 1e-6 && opaco.n[i + 1] > 0.99) n++;
       assert.ok(n > 40, `${p.id}: marquise da laje ${l}`);
     }
-    assert.ok(lajes >= p.andares - 2, `${p.id}: ${lajes} lajes com marquise`);
+    // todas as lajes menos as de dentro da faixa de LED (um terço dos andares, D93)
+    assert.equal(lajes, p.andares - andaresLed(p.andares), `${p.id}: ${lajes} lajes com marquise`);
     assert.equal(d0.vidro.triangulos, 0, 'o LOD0 só traz as marquises');
     assert.ok(PECAS_COM_LOD.has('anel') && PECAS_COM_LOD.has('oval'));
   }
@@ -774,7 +779,8 @@ test('torres do bosque: Codex de 300 m (vidro escuro facetado e o átrio de livr
     }
   }
   assert.ok(Math.abs(h.codex - 300) < 0.5, `Codex com ${h.codex} m`);
-  assert.ok(h.helix >= 180 && h.helix < 182, `Helix com ${h.helix} m`);
+  // a Helix com a lanterna de corte inclinado acima dos 180 m do corpo
+  assert.ok(h.helix > 190 && h.helix < 205, `Helix com ${h.helix} m`);
   // a Compass com a agulha passa dos 180 m do corpo
   assert.ok(h.compass > 180 && h.compass < 230);
 });
@@ -820,6 +826,252 @@ test('parque: Supertrees com o tronco de treliça e a copa em funil de nervuras 
   assert.ok(luz > 100, 'a treliça acende à noite');
   const [pas] = pecasDe('passarela');
   assert.ok(pas.cota >= 20 && pas.cota <= 25);
+});
+
+// ------------------------------------------------------------------------------------------------ VIS1a (acabamento)
+
+/** Padrão, classe de luz e luminância de cada vértice de uma malha opaca. */
+const dadosOpaco = (m, i) => {
+  const pk = Math.round(m.c[4 * i + 3]);
+  return { pad: pk & 15, luz: (pk >> 4) & 15, lum: 0.2126 * m.c[4 * i] + 0.7152 * m.c[4 * i + 1] + 0.0722 * m.c[4 * i + 2] };
+};
+
+test('VIS1a: faixa de LED com um terço dos andares no terço do meio (D93), emoldurada por duas marquises, e a das ovais na mesma altura', () => {
+  // um terço dos andares, ímpar (a faixa centrada cai entre duas lajes): 9 no Horizon Ring, 7 no Meridian Ring
+  assert.equal(andaresLed(HORIZON.andares), 9);
+  assert.equal(andaresLed(MERIDIAN.andares), 7);
+  const peH = HORIZON.altura / HORIZON.andares;
+  const peM = MERIDIAN.altura / MERIDIAN.andares;
+  // Horizon de uns 53 a 107 m (aqui 51,2 a 108,8), Meridian de uns 40 a 80 m (37,9 a 82,1)
+  assert.ok(Math.abs(HORIZON.altura / 2 - faixaLed(peH, HORIZON.andares) - 53) < 2.5 && Math.abs(HORIZON.altura / 2 + faixaLed(peH, HORIZON.andares) - 107) < 2.5);
+  assert.ok(Math.abs(MERIDIAN.altura / 2 - faixaLed(peM, MERIDIAN.andares) - 40) < 2.5 && Math.abs(MERIDIAN.altura / 2 + faixaLed(peM, MERIDIAN.andares) - 80) < 2.5);
+  for (const p of [pecasDe('anel').find((q) => q.id === 'meridian'), pecasDe('anel').find((q) => q.id === 'horizon.6')]) {
+    const peA = p.altura / p.andares;
+    const meio = (p.led.y0 + p.led.y1) / 2;
+    const meia = faixaLed(peA, p.andares);
+    assert.ok(Math.abs(meio - p.altura / 2) < 0.01, `${p.id}: a faixa no meio da altura`);
+    // as bordas da faixa caem em lajes
+    for (const yb of [meio - meia, meio + meia]) assert.ok(Math.abs(yb / peA - Math.round(yb / peA)) < 1e-6, `${p.id}: borda fora da laje`);
+    const setores = new Map();
+    const d0 = { chao: chaoPlano, ...malhasNovas(), lod: 0, setor: (k) => setores.get(k) ?? setores.set(k, { opaco: new Malha('opaco') }).get(k) };
+    montarParte({ id: p.id, pecas: [p] }, d0);
+    const temLaje = (yl) => [...setores.values()].some(({ opaco }) => {
+      for (let i = 0; i < opaco.p.length; i += 3) if (Math.abs(opaco.p[i + 1] - COTA - yl - 0.25) < 1e-6 && opaco.n[i + 1] > 0.99) return true;
+      return false;
+    });
+    // as lajes de dentro da faixa sem marquise; as duas das bordas com ela (a moldura da faixa)
+    for (let yl = meio - meia + peA; yl < meio + meia - 0.01; yl += peA) assert.ok(!temLaje(yl), `${p.id}: marquise dentro da faixa a ${yl.toFixed(1)} m`);
+    assert.ok(temLaje(meio - meia) && temLaje(meio + meia), `${p.id}: a faixa sem as marquises da borda`);
+    // o shader do vidro sabe a faixa pelo centro (a parte inteira do dado), pelo pé-direito e pelos andares (vC.w)
+    const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+    montarParte({ id: p.id, pecas: [p] }, d);
+    const i = d.vidro.c.findIndex((_, k) => k % 4 === 0 && d.vidro.c[k] === VIDRO.anel);
+    assert.equal(Math.floor(d.vidro.c[i + 1]), Math.floor(meio));
+    assert.ok(Math.abs(d.vidro.c[i + 2] - peA) < 1e-6);
+    assert.equal(Math.floor(d.vidro.c[i + 3] / 32), andaresLed(p.andares));
+    assert.equal(d.vidro.c[i + 3] % 32, setorDoAnel(p, p.de + 1));
+  }
+  // as ovais: a faixa na mesma faixa de altura da do Horizon Ring (a régua de 6,4 m e os 9 andares)
+  assert.ok(Math.abs(PE_OVAL - peH) < 1e-9);
+  for (const id of ['helix', 'compass']) {
+    const parte = A.partes.find((q) => q.id === id);
+    const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+    montarParte(parte, d);
+    const k = d.vidro.c.findIndex((_, j) => j % 4 === 0 && d.vidro.c[j] === VIDRO.oval);
+    assert.equal(Math.floor(d.vidro.c[k + 1]), HORIZON.altura / 2, `${id}: centro da faixa`);
+    assert.ok(Math.abs(d.vidro.c[k + 2] - peH) < 1e-6, `${id}: pé-direito da faixa`);
+    assert.equal(Math.floor(d.vidro.c[k + 3] / 32), andaresLed(HORIZON.andares), `${id}: andares da faixa`);
+    // a faixa inteira num corpo só (os recuos da Compass ficam acima dela)
+    const meia = faixaLed(peH, HORIZON.andares);
+    const corpo = corposDaOval(parte.pecas[0]).find((c) => c.y0 <= HORIZON.altura / 2 && c.y1 >= HORIZON.altura / 2);
+    assert.ok(corpo.y0 <= HORIZON.altura / 2 - meia && corpo.y1 >= HORIZON.altura / 2 + meia, `${id}: recuo no meio da faixa`);
+  }
+  // o pódio das torres não tem faixa
+  const pod = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+  montarParte({ id: 'torre', pecas: pecasDe('podio') }, pod);
+  const kp = pod.vidro.c.findIndex((_, j) => j % 4 === 0 && pod.vidro.c[j] === VIDRO.anel);
+  assert.equal(Math.floor(pod.vidro.c[kp + 3] / 32), 0);
+});
+
+test('VIS1a: o pé dos anéis assenta no jardim (canaleta escura colada no vidro, canteiro com a sebe, passeio), sem faixa clara', () => {
+  const p = pecasDe('anel').find((q) => q.id === 'horizon.6');
+  const rF = p.raio + p.fundo / 2;
+  const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+  montarParte({ id: p.id, pecas: [p] }, d);
+  let claros = 0;
+  let canaleta = [Infinity, -Infinity];
+  let folha = 0;
+  for (let i = 0; i < d.opaco.vertices; i++) {
+    const y = d.opaco.p[3 * i + 1] - COTA;
+    const r = raioDe(d.opaco.p[3 * i], d.opaco.p[3 * i + 2]);
+    if (y > 1 || r < rF - 0.5 || r > rF + PE_ANEL.passeio + 0.01) continue;
+    const { pad, lum } = dadosOpaco(d.opaco, i);
+    if (lum > 0.3) claros++;
+    if (pad === PADRAO.folha) folha++;
+    if (r < rF + 0.01) canaleta[0] = Math.min(canaleta[0], lum);
+    if (Math.abs(r - (rF + PE_ANEL.canaleta)) < 0.01 && y < 0.2) canaleta[1] = Math.max(canaleta[1], lum);
+  }
+  assert.equal(claros, 0, 'a faixa clara de maquete no pé do anel');
+  assert.ok(folha > 40, 'o canteiro com a folhagem');
+  assert.ok(canaleta[0] < canaleta[1] * 0.5, 'a oclusão do pé (a canaleta mais escura colada no vidro)');
+  // de perto, a sebe em volume no setor do trecho
+  const setores = new Map();
+  const d0 = { chao: chaoPlano, ...malhasNovas(), lod: 0, setor: (k) => setores.get(k) ?? setores.set(k, { opaco: new Malha('opaco') }).get(k) };
+  montarParte({ id: p.id, pecas: [p] }, d0);
+  let sebe = 0;
+  for (const { opaco } of setores.values()) for (let i = 0; i < opaco.vertices; i++) if (Math.abs(opaco.p[3 * i + 1] - COTA - PE_ANEL.alturaSebe) < 1e-6) sebe++;
+  assert.ok(sebe > 40, 'a sebe do pé no LOD0');
+});
+
+test('VIS1a: Helix e Compass são torres, não silos (pódio largo, a Helix gira e afina com a lanterna, a Compass recua em terraços)', () => {
+  const helix = A.partes.find((q) => q.id === 'helix').pecas[0];
+  const compass = A.partes.find((q) => q.id === 'compass').pecas[0];
+  const ch = corposDaOval(helix);
+  const cc = corposDaOval(compass);
+  // os dois com pódio mais largo que o fuste
+  for (const c of [ch, cc]) assert.ok(c[0].podio && c[0].e0 > 1.3 && c[1].e0 <= 1);
+  // a Helix: o fuste gira e afina até o topo
+  assert.ok(ch.some((c) => c.gira && c.e1 < c.e0));
+  // a Compass: três corpos que recuam (a escala cai a cada um), com os cortes em lajes da régua de 6,4 m
+  const fuste = cc.filter((c) => !c.podio);
+  assert.equal(fuste.length, 3);
+  for (let k = 1; k < fuste.length; k++) assert.ok(fuste[k].e0 < fuste[k - 1].e1 - 0.08, 'recuo');
+  for (const c of cc) assert.ok(Math.abs(c.y0 / PE_OVAL - Math.round(c.y0 / PE_OVAL)) < 1e-6);
+  // os terraços plantados nos recuos (e no teto do pódio) com o guarda-corpo de vidro e árvores
+  const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+  montarParte({ id: 'compass', pecas: [compass] }, d);
+  for (const c of cc.slice(0, -1)) {
+    let jardim = 0;
+    for (let i = 0; i < d.opaco.vertices; i++) if (Math.abs(d.opaco.p[3 * i + 1] - COTA - c.y1) < 1e-6 && dadosOpaco(d.opaco, i).pad === PADRAO.folha) jardim++;
+    assert.ok(jardim > 40, `terraço a ${c.y1} m`);
+  }
+  assert.ok(d.arvores.length >= 12, 'árvores nos terraços');
+  let parapeito = 0;
+  for (let i = 0; i < d.vidro.c.length; i += 4) if (d.vidro.c[i] === VIDRO.parapeito) parapeito++;
+  assert.ok(parapeito > 100);
+  // a Helix: as espinhas de bronze que sobem com a torção e a lanterna acesa acima do teto
+  const h = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+  montarParte({ id: 'helix', pecas: [helix] }, h);
+  let lanterna = 0;
+  let yLant = 0;
+  for (let i = 0; i < h.vidro.vertices; i++) {
+    if (h.vidro.c[4 * i] !== VIDRO.lanterna) continue;
+    lanterna++;
+    yLant = Math.max(yLant, h.vidro.p[3 * i + 1] - COTA);
+  }
+  assert.ok(lanterna > 100 && yLant > helix.altura + 15, `lanterna até ${yLant}`);
+  const bronze = corLinear('#cbbb9d');
+  let espinha = 0;
+  const giros = new Set();
+  for (let i = 0; i < h.opaco.vertices; i++) {
+    if (Math.abs(h.opaco.c[4 * i] - bronze[0]) > 1e-6) continue;
+    espinha++;
+    if (h.opaco.p[3 * i + 1] - COTA > 20) giros.add(Math.round(Math.atan2(h.opaco.p[3 * i + 2] - helix.z, h.opaco.p[3 * i] - helix.x) * 20));
+  }
+  assert.ok(espinha > 100 && giros.size > 10, 'as espinhas que giram');
+  // a marquise curta das ovais (a leitura vertical, de vidro)
+  assert.ok(BAL_OVAL <= 1.5);
+});
+
+test('VIS1a: o parque com caminhos sinuosos, espelhos d\'água, praças de pedra portuguesa e as árvores de desenho', () => {
+  const parte = A.partes.find((q) => q.id === 'parque');
+  const jardim = parte.pecas.find((q) => q.tipo === 'jardim');
+  const d = { chao: chaoPlano, ...malhasNovas(), lod: 1, mata: mataDaSede };
+  montarParte({ id: 'parque', pecas: parte.pecas }, d);
+  conferirMalha(d.agua, 'espelhos');
+  // os espelhos em arco (8 segmentos cada): uns 6, fora das praças
+  assert.ok(d.agua.triangulos >= 6 * 16, 'os espelhos d\'água');
+  let portuguesa = 0;
+  let caminho = 0;
+  for (let i = 0; i < d.opaco.vertices; i++) {
+    const { pad } = dadosOpaco(d.opaco, i);
+    if (pad === PADRAO.portuguesa) portuguesa++;
+    if (pad === PADRAO.piso && d.opaco.p[3 * i + 1] - COTA > 0.205 && d.opaco.p[3 * i + 1] - COTA < 0.215) caminho++;
+  }
+  assert.ok(portuguesa > 200, 'as praças de pedra portuguesa');
+  assert.ok(caminho > 8 * 60, 'os caminhos sinuosos');
+  // os espelhos ficam dentro do parque, fora das praças dos bosques de Supertrees
+  const grupos = gruposDeSupertrees(parte.pecas);
+  assert.equal(grupos.length, 3, 'três bosques de Supertrees');
+  for (let i = 0; i < d.agua.vertices; i++) {
+    const x = d.agua.p[3 * i];
+    const z = d.agua.p[3 * i + 2];
+    assert.ok(raioDe(x, z) > jardim.r0 && raioDe(x, z) < jardim.r1);
+    for (const g of grupos) assert.ok(Math.hypot(x - g.x, z - g.z) > g.raio - 0.5, 'espelho sobre a praça');
+  }
+  // as árvores de desenho (não da mata): as palmeiras-imperiais do caminho em anel e os oitis dos sinuosos
+  const desenho = d.arvores.filter((a) => !a.mata);
+  assert.ok(desenho.filter((a) => a.especie === 'palmeira').length > 80);
+  assert.ok(desenho.filter((a) => a.especie === 'oiti').length > 60);
+  for (const a of desenho) assert.ok(raioDe(a.x, a.z) > jardim.r0 - 1 && raioDe(a.x, a.z) < jardim.r1 + 1);
+  // os bosques densos da mata do parque (para a vegetação, quando a grade não os pinta), de 7 em 7 m
+  assert.ok(d.arvores.filter((a) => a.mata).length > 1500);
+  assert.ok(PARQUE.anel.r > jardim.r0 && PARQUE.anel.r < jardim.r1);
+});
+
+test('VIS1a: Supertrees de Gardens by the Bay (tronco vivo com treliça, copa larga em malha nas duas faces, detalhe de perto)', () => {
+  const st = pecasDe('supertree');
+  assert.ok(st.length >= 12);
+  for (const p of st) assert.ok(p.altura >= 25 && p.altura <= 50);
+  const [s] = st;
+  const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+  montarParte({ id: 'parque', pecas: [s] }, d);
+  let malha = 0;
+  let cima = 0;
+  let baixo = 0;
+  let tronco = 0;
+  for (let i = 0; i < d.opaco.vertices; i++) {
+    const { pad, luz } = dadosOpaco(d.opaco, i);
+    if (pad === PADRAO.malha) {
+      malha++;
+      assert.equal(luz, LUZ.arvoreLuz, 'a malha da copa acende');
+      if (d.opaco.n[3 * i + 1] > 0.2) cima++;
+      if (d.opaco.n[3 * i + 1] < -0.2) baixo++;
+    }
+    if (pad === PADRAO.troncoVivo) tronco++;
+  }
+  assert.ok(malha > 100 && cima > 40 && baixo > 40, 'a copa em malha com as duas faces');
+  assert.ok(tronco > 50, 'o tronco vivo');
+  // a copa larga (diâmetro de mais de metade da altura), não vareta
+  let rCopa = 0;
+  for (let i = 0; i < d.opaco.vertices; i++) if (d.opaco.p[3 * i + 1] - COTA > s.altura * 0.9) rCopa = Math.max(rCopa, Math.hypot(d.opaco.p[3 * i] - s.x, d.opaco.p[3 * i + 2] - s.z));
+  assert.ok(2 * rCopa > s.altura * 0.55, `copa de ${(2 * rCopa).toFixed(1)} m`);
+  // de perto, as barras do tronco e as nervuras no setor do parque (o LOD0); de longe, só a casca
+  const setores = new Map();
+  const d0 = { chao: chaoPlano, ...malhasNovas(), lod: 0, setor: (k) => setores.get(k) ?? setores.set(k, { opaco: new Malha('opaco') }).get(k) };
+  montarParte({ id: 'parque', pecas: [s] }, d0);
+  assert.deepEqual([...setores.keys()], [SETOR_PARQUE]);
+  assert.ok(setores.get(SETOR_PARQUE).opaco.triangulos > 300);
+  assert.ok(tris(d.opaco) < 600, `Supertree de longe com ${tris(d.opaco)} triângulos`);
+});
+
+test('VIS1a: a semente do vidro dos anéis sobrevive ao erro da interpolação (sem chuvisco de pixel nas salas)', () => {
+  // o float leva o centro da faixa (60, 80, 900 no pódio) e a semente; o varying erra alguns ulp de float32, e o hash
+  // das salas (a semente vezes 29) sorteava de novo a cada pixel. A semente fica no meio de um passo de 1/64
+  const ulp = (v) => 2 ** (Math.floor(Math.log2(Math.abs(v))) - 23);
+  for (const [meio, s] of [[60, 0], [60, 1], [80, 0.999], [80, 0.37254], [900, 0.41], [120, 0.5]]) {
+    const c = vidAnel(VIDRO.anel, s, meio, 6.4, 3, 9);
+    const q = semAnel(s);
+    assert.ok(q > 0 && q < 1 && Math.abs(q * SEM_ANEL - Math.floor(q * SEM_ANEL) - 0.5) < 1e-9, `semente ${q} fora do meio do passo`);
+    const v = Math.fround(c[1]);
+    for (let e = -16; e <= 16; e++) {
+      const x = Math.fround(v + e * ulp(v));
+      assert.equal(Math.floor(x), Math.floor(meio), `centro da faixa com erro de ${e} ulp`);
+      // o que o shader faz: ( floor( fract( vC.y ) * 64 ) + 0.5 ) / 64
+      assert.equal((Math.floor((x - Math.floor(x)) * SEM_ANEL) + 0.5) / SEM_ANEL, q, `semente com erro de ${e} ulp`);
+    }
+  }
+  // as sementes dos anéis e das ovais do plano já saem quantizadas
+  const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
+  for (const parte of A.partes.filter((q) => ['meridian', 'horizon', 'helix', 'compass', 'torre'].includes(q.id))) montarParte(parte, d);
+  let n = 0;
+  for (let i = 0; i < d.vidro.c.length; i += 4) {
+    if (d.vidro.c[i] !== VIDRO.anel && d.vidro.c[i] !== VIDRO.oval) continue;
+    n++;
+    const f = d.vidro.c[i + 1] - Math.floor(d.vidro.c[i + 1]);
+    assert.ok(Math.abs(f * SEM_ANEL - Math.floor(f * SEM_ANEL) - 0.5) < 1e-6);
+  }
+  assert.ok(n > 1000);
 });
 
 test('partes: cada tipo de peça monta sem NaN e dá caixa de seleção, no real, no fantasma e na sombra', () => {
@@ -884,9 +1136,11 @@ test('plano no jogo: as partes prontas pelas etapas do espelho, o resto em fanta
   assert.equal(n.agua.triangulos, 0);
 });
 
-test('setores: os alvos dos 18 setores e a distância da câmera a cada um (LOD por setor)', () => {
+test('setores: os alvos dos 19 setores e a distância da câmera a cada um (LOD por setor)', () => {
   const al = alvosDosSetores(A, COTA);
-  assert.equal(al.size, 18);
+  assert.equal(al.size, 19);
+  // o parque (o detalhe das Supertrees de perto) pela distância ao centro
+  assert.deepEqual(al.get(SETOR_PARQUE).ponto, [CX, CZ]);
   for (let s = 0; s < 16; s++) assert.ok(al.get(s)?.arco, `setor ${s}`);
   assert.ok(al.get(SETOR_OVAL.helix).ponto && al.get(SETOR_OVAL.compass).ponto);
   // da câmera no centro, a 100 m de altura: o Meridian a uns 442 m, o Horizon a uns 729 m
@@ -935,15 +1189,18 @@ test('chamadas: a sede construída cabe na família do pc (as torres, o comum, o
 // ------------------------------------------------------------------------------------------------ cenas e domínio
 
 test('cenas: as vistas da sede v3 (aérea, avenida, mar, noite e as da X1b) na hora pedida e fora dos prédios', () => {
-  assert.deepEqual(Object.keys(VISTAS_SEDE).sort(), ['aerea', 'avenida', 'heli', 'mar', 'noite', 'noiteAerea', 'obra', 'ponte']);
+  assert.deepEqual(Object.keys(VISTAS_SEDE).sort(), ['aerea', 'avenida', 'heli', 'mar', 'noite', 'noiteAerea', 'obra', 'parque', 'ponte']);
   const aneis = pecasDe('anel');
   for (const [id, v] of Object.entries(VISTAS_SEDE)) {
     const r = raioDe(v.de[0], v.de[2]);
     for (const p of aneis) assert.ok(!(r > p.raio - p.fundo / 2 - 3 && r < p.raio + p.fundo / 2 + 3 && v.de[1] < p.altura + 2), `${id}: a câmera dentro de um anel`);
     assert.ok(r > PODIO.raio + 20, `${id}: a câmera no pódio`);
     assert.ok(v.fov > 20 && v.fov < 90 && v.hora >= 0 && v.hora < 24);
-    // todas olham para a sede
-    assert.ok(raioDe(v.alvo[0], v.alvo[2]) < 100, `${id}: não olha o centro`);
+    // todas olham para a sede; a do parque, para o bosque grande de Supertrees
+    if (id === 'parque') {
+      const g = gruposDeSupertrees(A.partes.find((q) => q.id === 'parque').pecas).sort((a, b) => b.n - a.n)[0];
+      assert.ok(Math.hypot(v.alvo[0] - g.x, v.alvo[2] - g.z) < g.raio, 'a vista do parque fora do bosque de Supertrees');
+    } else assert.ok(raioDe(v.alvo[0], v.alvo[2]) < 100, `${id}: não olha o centro`);
   }
   assert.equal(VISTAS_SEDE.aerea.hora, 17.5);
   assert.ok(raioDe(VISTAS_SEDE.aerea.de[0], VISTAS_SEDE.aerea.de[2]) > 2000, 'a aérea pega o disco inteiro');
