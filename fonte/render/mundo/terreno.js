@@ -18,7 +18,10 @@ import {
   MORPH_INICIO,
 } from '../materiais/shaders/terreno.glsl.js';
 import { modoMateriais, carregarCC0 } from '../materiais/texturas-chao.js';
-import { AGUA, PREDIO, TIPO_PREDIO, CELULA } from '../../contratos/flags.js';
+import { AGUA, PREDIO, TIPO_PREDIO, CELULA, ETAPA } from '../../contratos/flags.js';
+import {
+  PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, TRECHOS_HORIZON, GLEBA_ENVELOPE, mataDaSede,
+} from '../../data/arcologia-plano.js';
 import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { pedeTudo } from '../ponte.js';
@@ -662,11 +665,270 @@ export function caixaPredio(P, i, out = [0, 0, 0, 0]) {
 
 const cruza = (a, b) => a && b && a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 
+// a sede no uso do solo (VIS1c) ------------------------------------------------------------------
+
+const RAD = Math.PI / 180;
+const USO_PISO = Object.freeze([0, 1, 0, 0]);
+const USO_GRAMA = Object.freeze([0, 0, 0, 1]);
+/** Densidade da mata na grade (0 a 1) a partir da qual o chão da sede fica com a mata (a copa pintada e as árvores). */
+export const MATA_DA_SEDE = 0.4;
+
+/** Plano da sede no espelho (o escolhido, ou o padrão), como render/arcologia/planos.js (planoDoJogo). */
+const planoDaSede = (esp) => PLANOS[esp?.arcologia?.plano ?? PLANO_ESCOLHIDO ?? PLANO_PADRAO] ?? PLANOS[PLANO_PADRAO];
+
+/** As células de mata do parque na grade (uma em cada 5 por lado) e a densidade de cada uma, pela forma da grade. */
+let amostrasDoParque = null;
+function celulasDoParque(F) {
+  const chave = `${F.n}|${F.passo}|${F.origem[0]}|${F.origem[1]}`;
+  if (amostrasDoParque?.chave === chave) return amostrasDoParque;
+  const [x0, z0, x1, z1] = GLEBA_ENVELOPE.caixa;
+  const i0 = Math.max(0, Math.floor((x0 - F.origem[0]) / F.passo));
+  const i1 = Math.min(F.n - 1, Math.ceil((x1 - F.origem[0]) / F.passo));
+  const j0 = Math.max(0, Math.floor((z0 - F.origem[1]) / F.passo));
+  const j1 = Math.min(F.n - 1, Math.ceil((z1 - F.origem[1]) / F.passo));
+  const idx = [];
+  const val = [];
+  for (let j = j0; j <= j1; j += 5) {
+    for (let i = i0; i <= i1; i += 5) {
+      const d = mataDaSede(F.origem[0] + (i + 0.5) * F.passo, F.origem[1] + (j + 0.5) * F.passo);
+      if (d === null || d < 0.6) continue;
+      idx.push(j * F.n + i);
+      val.push(Math.round(d * 255));
+    }
+  }
+  amostrasDoParque = { chave, idx: Int32Array.from(idx), val: Uint8Array.from(val) };
+  return amostrasDoParque;
+}
+
+/**
+ * true se a mata do parque da sede está pintada na grade da floresta: a S1a pinta quando o parque fica pronto, e as
+ * cenas da sede pintam a da simulação de prova (render/cenas/torre.js, pintarMataDaSede). Conta as células de mata do
+ * parque (mataDaSede de 0,6 para cima), uma em cada 5 por lado: pintado quando 90% delas têm a densidade de mataDaSede.
+ * As células saem uma vez por forma de grade (o sinal 'arcologia' chega a cada tique da obra).
+ */
+export function parquePintado(F) {
+  if (!F?.dens) return false;
+  const { idx, val } = celulasDoParque(F);
+  let iguais = 0;
+  for (let k = 0; k < idx.length; k++) if (Math.abs(F.dens[idx[k]] - val[k]) <= 1) iguais++;
+  return idx.length > 0 && iguais >= 0.9 * idx.length;
+}
+
+/**
+ * Partes da sede que mudam o chão: as prontas pelas etapas do espelho (a mesma regra de partesProntas em
+ * render/arcologia/planos.js: a torre com a torre.e4, o lago com a lago.e1, as outras com todas as etapas delas, os
+ * trechos do Horizon Ring um a um) e o parque quando a mata dele está pintada na grade (parquePintado).
+ * @returns {Set<string>}
+ */
+export function partesDaSedeNoChao(esp) {
+  const etapas = esp?.arcologia?.etapas ?? [];
+  const estado = (id) => etapas.find((e) => e.id === id)?.estado;
+  const partes = new Set();
+  if (estado('torre.e4') === ETAPA.PRONTA) partes.add('torre');
+  if (estado('lago.e1') === ETAPA.PRONTA) partes.add('lago');
+  for (const id of [...PARTES_ORDEM.filter((p) => p !== 'torre' && p !== 'lago' && p !== 'horizon'), ...TRECHOS_HORIZON.map((t) => t.id)]) {
+    const delas = etapas.filter((e) => e.id === id || e.id.startsWith(`${id}.`));
+    if (delas.length && delas.every((e) => e.estado === ETAPA.PRONTA)) partes.add(id);
+  }
+  if (parquePintado(esp?.floresta)) partes.add('parque');
+  return partes;
+}
+
+/** Raio da planta (m) das torres do bosque no chão, com o pódio delas (render/arcologia/partes.js). */
+const raioDaPlanta = (p) => (p.tipo === 'codex' ? 38 : 1.5 * Math.max(p.a ?? 20, p.b ?? 20) + 3);
+
+/**
+ * As formas da sede que mudam o chão com estas partes prontas, montadas uma vez por conjunto de partes (o disco inteiro
+ * tem uns 165 mil texels: percorrer as 35 peças do plano em cada um custava uns 190 ms no refazer). Coroas em volta de
+ * um centro, com o arco delas: o pódio, o leito do lago, a praça, os anéis e os arcos do anel viário; círculos: as
+ * torres do bosque; trechos retos: os portões e as avenidas. As vias internas entram com o lago pronto (a X1b liga o
+ * anel viário, os portões e as avenidas no grafo com a lago.e1: no jogo o grafo já carimba a via; nas cenas, que
+ * desenham as vias do plano sem o grafo, é isto que limpa o chão debaixo delas).
+ */
+const formasPorPartes = new WeakMap();
+function formasDaSede(plano, partes) {
+  const f0 = formasPorPartes.get(partes);
+  if (f0 && f0.plano === plano && f0.n === partes.size) return f0;
+  const [cx, cz] = plano.centro;
+  const coroas = [];
+  const circulos = [];
+  const trechos = [];
+  const coroa = (r0, r1, c = null, de = 0, ate = 360) => {
+    const proprio = c?.cx != null && (c.cx !== cx || c.cz !== cz);
+    coroas.push({ r0, r1, de, arco: ate - de, proprio, cx: proprio ? c.cx : cx, cz: proprio ? c.cz : cz });
+  };
+  for (const parte of plano.partes) {
+    for (const p of parte.pecas) {
+      if (p.tipo === 'podio') {
+        if (partes.has('torre')) coroa(0, p.raio, p);
+      } else if (p.tipo === 'reservatorio') {
+        if (partes.has('lago')) coroa(p.r0, p.r1, p);
+      } else if (p.tipo === 'anel') {
+        if (partes.has(p.id) || partes.has(parte.id)) coroa(p.raio - p.fundo / 2, p.raio + p.fundo / 2, p, p.de, p.ate);
+      } else if (p.tipo === 'codex' || p.tipo === 'oval') {
+        if (partes.has(parte.id)) circulos.push([p.x, p.z, raioDaPlanta(p)]);
+      }
+    }
+  }
+  if (partes.has('lago') || partes.has('parque')) {
+    const praca = plano.paisagem?.praca;
+    if (praca) coroa(praca.r0, praca.r1, praca);
+    for (const via of plano.vias ?? []) {
+      const meia = via.largura / 2;
+      if (via.arco) {
+        coroa(via.arco.r - meia, via.arco.r + meia, via.arco, via.arco.de, via.arco.ate);
+        continue;
+      }
+      const P = via.pontos;
+      for (let k = 0; k + 3 < P.length; k += 2) {
+        const [ax, az, bx, bz] = [P[k], P[k + 1], P[k + 2], P[k + 3]];
+        const vx = bx - ax;
+        const vz = bz - az;
+        trechos.push({ ax, az, vx, vz, l2: vx * vx + vz * vz || 1, meia, caixa: [Math.min(ax, bx) - meia, Math.min(az, bz) - meia, Math.max(ax, bx) + meia, Math.max(az, bz) + meia] });
+      }
+    }
+  }
+  const f = { plano, n: partes.size, coroas: juntarCoroas(coroas), circulos, trechos, parque: partes.has('parque') };
+  formasPorPartes.set(partes, f);
+  return f;
+}
+
+/**
+ * Junta as coroas do mesmo centro e dos mesmos raios com arcos que se tocam (os 8 arcos do anel viário, os trechos
+ * prontos do Horizon Ring): a volta inteira vira uma coroa sem conta de ângulo.
+ */
+function juntarCoroas(coroas) {
+  const grupos = new Map();
+  for (const c of coroas) {
+    const k = `${c.cx}|${c.cz}|${c.r0}|${c.r1}`;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(c);
+  }
+  const saida = [];
+  for (const g of grupos.values()) {
+    if (g.some((c) => c.arco >= 360)) {
+      saida.push({ ...g[0], de: 0, arco: 360 });
+      continue;
+    }
+    const arcos = g.map((c) => [((c.de % 360) + 360) % 360, c.arco]).sort((a, b) => a[0] - b[0]);
+    const juntos = [];
+    for (const [de, arco] of arcos) {
+      const u = juntos[juntos.length - 1];
+      if (u && de <= u[0] + u[1] + 1e-6) u[1] = Math.max(u[1], de + arco - u[0]);
+      else juntos.push([de, arco]);
+    }
+    // o último que passa de 360 emenda com o primeiro
+    const u = juntos[juntos.length - 1];
+    if (juntos.length > 1 && juntos[0][0] <= 1e-6 && u[0] + u[1] >= 360 - 1e-6) {
+      juntos[0] = [u[0], u[1] + juntos[0][1]];
+      juntos.pop();
+    }
+    for (const [de, arco] of juntos) saida.push({ ...g[0], de, arco: arco >= 360 - 1e-6 ? 360 : arco });
+  }
+  return saida;
+}
+
+/** Ângulo (graus, de 0 a 360) do ponto em volta de um centro, a mesma conta de pontoDoArco. */
+const anguloEm = (x, z, cx, cz) => (((Math.atan2(z - cz, x - cx) / RAD) % 360) + 360) % 360;
+
+/**
+ * Uso do solo da sede num ponto ([R, G, B, A] de 0 a 1, ou null onde ela não muda o chão), pelo plano (as peças de
+ * data/arcologia-plano.js): piso no pódio com a torre pronta, no leito do lago, na praça e nas vias internas com o lago
+ * pronto, na planta dos anéis e das torres do bosque prontas. Com o parque pronto (a mata dele pintada na grade), o
+ * disco inteiro é jardim: gramado onde a grade não tem mata (os gramados, os caminhos e as praças do parque, debaixo
+ * das malhas da Arcologia), e a mata dos bosques fica com a copa pintada e as árvores de perto. Piso e gramado apagam
+ * o pasto do chão: nada de moita nem árvore solta nas praças e nos gramados.
+ * @param {object} plano  PLANOS[id]
+ * @param {Set<string>} partes  partesDaSedeNoChao (as formas saem uma vez por conjunto: não mexer nele depois)
+ * @param {number} mata  densidade da mata da grade no ponto (0 a 1)
+ * @returns {readonly number[] | null}
+ */
+export function usoDaSede(plano, x, z, partes, mata = 0) {
+  return usoNasFormas(formasDaSede(plano, partes), x, z, mata);
+}
+
+/** usoDaSede com as formas já montadas (formasDaSede). */
+function usoNasFormas(f, x, z, mata) {
+  const [cx, cz] = f.plano.centro;
+  const r = Math.hypot(x - cx, z - cz);
+  if (r > GLEBA_ENVELOPE.raio) return null;
+  let ang = -1;
+  const C = f.coroas;
+  for (let k = 0; k < C.length; k++) {
+    const c = C[k];
+    const rr = c.proprio ? Math.hypot(x - c.cx, z - c.cz) : r;
+    if (rr < c.r0 || rr > c.r1) continue;
+    if (c.arco >= 360) return USO_PISO;
+    let a;
+    if (c.proprio) a = anguloEm(x, z, c.cx, c.cz);
+    else {
+      if (ang < 0) ang = anguloEm(x, z, cx, cz);
+      a = ang;
+    }
+    if ((((a - c.de) % 360) + 360) % 360 <= c.arco) return USO_PISO;
+  }
+  const O = f.circulos;
+  for (let k = 0; k < O.length; k++) if (Math.hypot(x - O[k][0], z - O[k][1]) <= O[k][2]) return USO_PISO;
+  const T = f.trechos;
+  for (let k = 0; k < T.length; k++) {
+    const t = T[k];
+    const b = t.caixa;
+    if (x < b[0] || x > b[2] || z < b[1] || z > b[3]) continue;
+    const u = Math.min(1, Math.max(0, ((x - t.ax) * t.vx + (z - t.az) * t.vz) / t.l2));
+    if (Math.hypot(x - t.ax - t.vx * u, z - t.az - t.vz * u) <= t.meia) return USO_PISO;
+  }
+  if (f.parque && mata < MATA_DA_SEDE) return USO_GRAMA;
+  return null;
+}
+
+/**
+ * Carimba a sede no uso do solo nos recortes (em metros), por cima do resto (max por canal), com a mata de cada ponto
+ * lida na grade da floresta do espelho. Nada se nenhuma parte muda o chão.
+ */
+function carimbarSede(esp, buf, lado, mapa, recortes) {
+  const caixa = GLEBA_ENVELOPE.caixa;
+  if (!recortes.some((rc) => cruza(rc, caixa))) return;
+  const partes = partesDaSedeNoChao(esp);
+  if (!partes.size) return;
+  const formas = formasDaSede(planoDaSede(esp), partes);
+  const F = esp.floresta;
+  const mataEm = (x, z) => {
+    if (!F?.dens) return 0;
+    const i = Math.floor((x - F.origem[0]) / F.passo);
+    const j = Math.floor((z - F.origem[1]) / F.passo);
+    return i < 0 || j < 0 || i >= F.n || j >= F.n ? 0 : F.dens[j * F.n + i] / 255;
+  };
+  const t = mapa.lado / lado;
+  for (const rc of recortes) {
+    if (!cruza(rc, caixa)) continue;
+    const i0 = Math.max(0, Math.floor((Math.max(rc[0], caixa[0]) - mapa.ox) / t));
+    const j0 = Math.max(0, Math.floor((Math.max(rc[1], caixa[1]) - mapa.oz) / t));
+    const i1 = Math.min(lado - 1, Math.floor((Math.min(rc[2], caixa[2]) - mapa.ox) / t));
+    const j1 = Math.min(lado - 1, Math.floor((Math.min(rc[3], caixa[3]) - mapa.oz) / t));
+    for (let j = j0; j <= j1; j++) {
+      const z = mapa.oz + (j + 0.5) * t;
+      for (let i = i0; i <= i1; i++) {
+        const x = mapa.ox + (i + 0.5) * t;
+        const u = usoNasFormas(formas, x, z, mataEm(x, z));
+        if (!u) continue;
+        const k = 4 * (j * lado + i);
+        for (let q = 0; q < 4; q++) {
+          const v = Math.round(u[q] * 255);
+          if (v > buf[k + q]) buf[k + q] = v;
+        }
+      }
+    }
+  }
+}
+
+/** Chave das partes da sede que mudam o chão (o domínio refaz o disco quando ela muda). */
+export const chaveDaSede = (esp) => [...partesDaSedeNoChao(esp)].sort().join(',');
+
 /**
  * Uso do solo (RGBA8 lado x lado sobre o mapa): R via (asfalto e calçada escura), G piso (lotes e calçadas), B terra
  * batida (ruas de terra, obra), A gramado dos lotes. Refaz o retângulo ret = [x0, z0, x1, z1] em metros, ou uma lista
- * deles, numa passada só pelas tabelas (tudo sem ret). Devolve os texels refeitos, [i0, j0, i1, j1] (uma lista se ret
- * era uma lista).
+ * deles, numa passada só pelas tabelas (tudo sem ret). A sede entra por último (usoDaSede: as partes prontas e, com o
+ * parque, o disco inteiro). Devolve os texels refeitos, [i0, j0, i1, j1] (uma lista se ret era uma lista).
  */
 export function rasterizarUso(esp, buf, lado, mapa, ret = null) {
   const t = mapa.lado / lado;
@@ -783,6 +1045,7 @@ export function rasterizarUso(esp, buf, lado, mapa, ret = null) {
       }
     }
   }
+  if (recortes.length) carimbarSede(esp, buf, lado, mapa, recortes);
   return ret != null && Array.isArray(ret[0]) ? texels : texels[0];
 }
 
@@ -1385,6 +1648,7 @@ function criarTerreno(ctx) {
       U.uTerUso.value = tu;
     }
     guardarCaixas(esp);
+    estado.chaveSede = chaveDaSede(esp);
     rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
     estado.texUso.needsUpdate = true;
     // mapa de cor
@@ -1689,9 +1953,23 @@ function criarTerreno(ctx) {
       const floresta = pedeTudo(d, 'floresta') ? [[estado.mapa.ox, estado.mapa.oz, estado.mapa.ox + estado.mapa.lado, estado.mapa.oz + estado.mapa.lado]] : d.floresta ?? [];
       if (d.terreno?.length) refazerTerreno(esp, d.terreno, true);
       if (floresta.length) refazerTerreno(esp, floresta, false);
-      const uso = mudancasDeUso(d, esp);
+      let uso = mudancasDeUso(d, esp);
+      if (uso !== 'tudo') {
+        // a sede (VIS1c): uma parte ficou pronta ou a mata do parque foi pintada (ou apagada) refaz o disco; a mata
+        // mexida dentro dele com o parque pronto refaz o pedaço (o gramado fica onde a grade não tem mata)
+        const caixa = GLEBA_ENVELOPE.caixa;
+        const naSede = floresta.filter((r) => cruza(r, caixa));
+        if (d.arcologia || naSede.length) {
+          const chave = chaveDaSede(esp);
+          if (chave !== estado.chaveSede) {
+            estado.chaveSede = chave;
+            uso = juntarRetangulos([...uso, [...caixa]]);
+          } else if (chave.includes('parque') && naSede.length) uso = juntarRetangulos([...uso, ...naSede]);
+        }
+      }
       if (uso === 'tudo') {
         guardarCaixas(esp);
+        estado.chaveSede = chaveDaSede(esp);
         rasterizarUso(esp, estado.uso, LADO_USO, estado.mapa);
         estado.texUso.needsUpdate = true;
         sujarCor([estado.mapa.ox, estado.mapa.oz, estado.mapa.ox + estado.mapa.lado, estado.mapa.oz + estado.mapa.lado]);

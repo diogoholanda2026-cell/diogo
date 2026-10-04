@@ -10,13 +10,22 @@
 // equinócio (sol a 9 graus) expõem 9,8: a fachada ao sol perto de 0,7 na tela e o chão à sombra ainda legível.
 // A troca é suave (constante de 1 s real); um salto grande (cena nova, hora forçada) vai direto. Também dá o limiar
 // do bloom: 1,1 de dia (só o sol refletido e o céu estourado) e 0,8 de noite (janelas, postes, faróis).
+// Com o sol baixo a luz do ambiente cai (VIS1d, ceu.js, AMBIENTE_SOL_BAIXO: o fator kAmb do estado do céu) e a
+// exposição devolve uma parte dela: abre por kAmb elevado a -`ambiente` (com o mínimo de 0,28, 1,66 vez), por cima do
+// teto (às 17h30 a conta já pede 10,3 e o fim da tarde chega ao teto; a noite não muda, kAmb vale 1). A sombra longa
+// escurece bem mais que o chão ao sol, e a cena não apaga: o chão ao sol fica perto do que era (o sol rasante dá pouco
+// ao chão, que vivia do céu) e a fachada ao sol, mais acesa, fica abaixo do mais claro de antes na aérea (o céu e o mar
+// eram o mais claro).
 
-export const EXPOSICAO = Object.freeze({ referencia: Math.PI, chave: 1.6, gama: 0.75, minima: 0.5, maxima: 14, constante: 1, solMedida: 0.42 });
+export const EXPOSICAO = Object.freeze({ referencia: Math.PI, chave: 1.6, gama: 0.75, minima: 0.5, maxima: 14, constante: 1, solMedida: 0.42, ambiente: 0.4 });
 
 const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
 /** Luz medida para a exposição: a do chão ou a parte da luz direta do sol, a maior. */
 export const luzMedida = (est, E = EXPOSICAO) => Math.max(est.eChao, est.solIrr ? E.solMedida * luma(est.solIrr) : 0);
+
+/** O quanto a exposição abre com a luz do ambiente baixada pelo sol baixo (kAmb do estado do céu; 1 sem ele). */
+export const aberturaAmbiente = (est, E = EXPOSICAO) => (est.kAmb ?? 1) ** -E.ambiente;
 
 /**
  * Exposição alvo para uma luz no chão (luminância na horizontal, unidade do céu).
@@ -37,7 +46,7 @@ export class Exposicao {
 
   /** @param {{ eChao: number, noite: number }} est  estado do céu; dt em segundos reais (0: vai direto) */
   atualizar(est, dt) {
-    this.alvo = this.fixa ?? exposicaoAlvo(luzMedida(est));
+    this.alvo = this.fixa ?? exposicaoAlvo(luzMedida(est)) * aberturaAmbiente(est);
     const salto = Math.abs(Math.log2(this.alvo / this.valor));
     if (!(dt > 0) || salto > 1.5) this.valor = this.alvo;
     else this.valor *= (this.alvo / this.valor) ** (1 - Math.exp(-dt / EXPOSICAO.constante));

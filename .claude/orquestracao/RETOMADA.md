@@ -15,10 +15,9 @@ Falta a nova medida do dono; próximos cortes na nota da PC3 (`docs/entregas/ond
 
 **VIS1 entregue e integrada** (04/10/2026, notas em `docs/entregas/vis1/`): faixa de LED de um terço (9 e 7 andares),
 vidro dos anéis, Helix e Compass, parque e Supertrees; carros, caminhões, gente e árvores de rua pela vegetação.
-**VIS1c e VIS1d rodando** (bloqueiam a Prévia 2c): VIS1c = folhas no assado dos impostores, alcance das árvores da
-cidade, impostor no passe de sombra, sede no uso do solo; VIS1d = ambiente mais baixo com o sol abaixo de 12 graus e
-sombra longa de até 3,2 km. Se parar no meio, grave o parcial e relance com ONDE PAROU. Ao terminar: integrar, montar a
-Prévia 2c, pedir ao dono a medida e o olhar; depois a SEDE4 (D97) e a onda 4 (com MOV1 e R4c).
+**VIS1c e VIS1d entregues; Prévia 2c publicada** (04/10/2026): árvores com folha e sombra de longe, sede sem pasto,
+sombra do entardecer a 50% e longa até 3,5 km. Esperando a medida e o olhar do dono na Prévia 2c. Próximo: a SEDE4
+(D97, texto pronto em `.claude/orquestracao/parcelas/SEDE4.txt`) e depois a onda 4 (com MOV1 e R4c).
 
 **Esperando o dono:** jogar a Prévia 2 e medir no PC dele (Teste de desempenho e página de teste com ?q=), e julgar o
 visual: anéis da sede como muralha listrada sem sombra no chão, Helix Labs e Compass Tower como silos, parque central

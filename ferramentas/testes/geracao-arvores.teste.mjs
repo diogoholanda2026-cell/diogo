@@ -12,10 +12,16 @@ import {
   copasNoRetangulo, valorCopas, vegetacaoPintada, arvoreDaCopa, moitaDaCopa, alturaDossel, REDES_COPA, SUBREDES,
 } from '../../fonte/render/geracao/arvores.js';
 import { QUADROS, AZIMUTES, ANEIS, direcaoDoQuadro, quadrosDaVista, dispor, celulaDoQuadro, cameraDoQuadro } from '../../fonte/render/geracao/impostor.js';
+import * as THREE from 'three';
 import {
   GLSL_GERAR_FOLHAS, GLSL_ARVORE, GLSL_ARV_SOMBRA, GLSL_IMP_ASSAR, GLSL_IMPOSTOR, GLSL_IMP_QUADROS, LADO_FOLHAS, CORES_COPA,
+  GLSL_IMP_SOMBRA, IMP_RECUO_SOMBRA,
 } from '../../fonte/render/materiais/shaders/folha.glsl.js';
-import { escolherLods, esmaecer, matrizArvore, gerarLadrilho, plantaveis, PERFIL_VEGETACAO, PASSO_ARVORE, LADRILHO } from '../../fonte/render/mundo/vegetacao.js';
+import {
+  escolherLods, esmaecer, matrizArvore, gerarLadrilho, plantaveis, PERFIL_VEGETACAO, PASSO_ARVORE, LADRILHO, alcanceDaFonte,
+  registrar as registrarVegetacao,
+} from '../../fonte/render/mundo/vegetacao.js';
+import { PERFIS, porPerfil } from '../../fonte/render/motor/perfis.js';
 import { terraPorDirecao, geometriaFora, alturaFora, sementeFora, ANEL_FORA } from '../../fonte/render/mundo/fora.js';
 import { geometriaAgua, sentidoDoRio } from '../../fonte/render/mundo/agua.js';
 import { GLSL_AGUA_FRAGMENTO, AGUAS, RIO } from '../../fonte/render/materiais/shaders/agua.glsl.js';
@@ -318,7 +324,9 @@ function mat2DoGlsl(txt, nomes, c, s) {
 }
 
 test('impostor: o giro da carta é o mesmo da árvore instanciada (LOD0 e LOD1), na direção e na normal', () => {
-  const vert = GLSL_IMPOSTOR.vertice.match(/mat2 aRot = mat2\(([^;]+)\);/);
+  // a rotação da carta mora na função comum ao desenho e à sombra (GLSL_IMP_CARTA, nos pars do vértice)
+  const vert = GLSL_IMPOSTOR.verticePars.match(/mat2 aRot = mat2\(([^;]+)\);/);
+  assert.match(GLSL_IMPOSTOR.vertice, /vImpGiro = vec2\( cos\( aImpPos\.w \), sin\( aImpPos\.w \) \);/);
   const frag = GLSL_IMPOSTOR.mapa.match(/aNl\.xz = mat2\(([^;]+)\) \* aNl\.xz;/);
   assert.ok(vert && frag, 'as duas rotações do impostor');
   const m = new Float32Array(16);
@@ -397,11 +405,12 @@ test('plantar: só as árvores válidas entram (espécie da tabela, coordenadas 
 
 test('shaders: nenhuma precisão média; folhas, árvores, sombra e impostores com poucas leituras', () => {
   const proibida = ['med', 'iump'].join('');
-  const textos = [GLSL_GERAR_FOLHAS.fragmento, ...Object.values(GLSL_ARVORE), ...Object.values(GLSL_ARV_SOMBRA), GLSL_IMP_ASSAR.fragmento, ...Object.values(GLSL_IMPOSTOR), GLSL_AGUA_FRAGMENTO.cor];
+  const textos = [GLSL_GERAR_FOLHAS.fragmento, ...Object.values(GLSL_ARVORE), ...Object.values(GLSL_ARV_SOMBRA), GLSL_IMP_ASSAR.fragmento, ...Object.values(GLSL_IMPOSTOR), ...Object.values(GLSL_IMP_SOMBRA), GLSL_AGUA_FRAGMENTO.cor];
   for (const t of textos) assert.ok(!t.includes(proibida));
   const amostradores = (t) => (t.match(/uniform\s+highp\s+sampler\w+/g) ?? []).length;
   assert.equal(amostradores(GLSL_ARVORE.fragmentoPars), 1);
   assert.equal(amostradores(GLSL_IMPOSTOR.fragmentoPars), 2);
+  assert.equal(amostradores(GLSL_IMP_SOMBRA.fragmentoPars), 1);
   // as 8 células do atlas de folhas
   for (let k = 0; k < 7; k++) assert.match(GLSL_GERAR_FOLHAS.fragmento, new RegExp(`k == ${k}`));
   assert.ok(LADO_FOLHAS.alta >= 1024 && LADO_FOLHAS.leve <= 512);
@@ -529,10 +538,194 @@ test('PC3: os programas da sombra das árvores e do assado dos impostores são p
   const fonte = readFileSync(new URL('../../fonte/render/mundo/vegetacao.js', import.meta.url), 'utf8');
   // o material do assado nasce com o GLSL (não no próprio assado) e os três grupos compilam já, cada um no seu alvo
   assert.match(fonte, /assador = criarAssadorImpostores\(U, modelos\[0\]\[0\]\.geo\);/);
-  assert.match(fonte, /aq\.compilar\(sombras\.map\(\(b\) => b\.malha\), \{ sombra: true \}\)/);
+  assert.match(fonte, /aq\.compilar\(\[\.\.\.sombras\.map\(\(b\) => b\.malha\), imp\.gemeo\]\.filter\(Boolean\), \{ sombra: true \}\)/);
   assert.match(fonte, /aq\.compilar\(\[assador\.cena\], \{ alvo: alvoAssar, cena: assador\.cena \}\)/);
   // e nada desenha antes de prontos: nem as árvores (a sombra delas) nem o assado; o aquecimento final espera
   assert.match(fonte, /if \(!comGlsl \|\| !programasProntos\) return;/);
   assert.match(fonte, /pronto: \(\) => \(comGlsl && programasProntos\) \|\| glslFalhou \|\| morto,/);
   assert.ok(!/function assarImpostores[\s\S]*?new THREE\.ShaderMaterial[\s\S]*?\n}\n/.test(fonte.slice(fonte.indexOf('function assarImpostores'), fonte.indexOf('// ----', fonte.indexOf('function assarImpostores')))), 'o assado não cria o material');
+});
+
+// ------------------------------------------------------------------------------------------------ VIS1c
+
+/** Coeficiente do reforço do alfa pelo mip num trecho (aT.a * ( 1.0 + aMip * k )). */
+const reforco = (t) => Number(/aT\.a \* \( 1\.0 \+ aMip \* ([\d.]+) \)/.exec(t)?.[1]);
+
+test('VIS1c: o assado dos impostores recorta as folhas com o reforço do alfa pelo mip, como o LOD0 e o LOD1', () => {
+  const k = reforco(GLSL_ARVORE.mapa);
+  assert.ok(k > 0, 'o reforço do LOD0 e do LOD1');
+  // o recorte do assado é o do desenho: com o mesmo coeficiente e o mesmo corte de 0,5
+  assert.match(GLSL_IMP_ASSAR.fragmento, /if \( vArvCel < 6\.5 && aT\.a \* \( 1\.0 \+ aMip \* [\d.]+ \) < 0\.5 \) discard;/);
+  assert.equal(reforco(GLSL_IMP_ASSAR.fragmento), k);
+  assert.equal(reforco(GLSL_ARV_SOMBRA.fragmento), k);
+  // o quadro do assado do PC (128 px) lê o atlas de folhas uns 3 mips abaixo: uma carta de folha com 35% de cobertura
+  // média no mip some sem o reforço e fica com ele (a copa cheia de longe, não os galhos)
+  const passa = (a, mip, reforcado) => a * (1 + (reforcado ? k : 0) * mip) >= 0.5;
+  assert.equal(passa(0.35, 3, false), false);
+  assert.equal(passa(0.35, 3, true), true);
+  // e no mip 0 (de perto) o recorte não muda: a folha fica com o desenho dela
+  assert.equal(passa(0.49, 0, true), false);
+});
+
+test('VIS1c: alcance por dono: a rua, os lotes e as plantadas até 1.000 m no PC; a mata e as moitas no de antes', () => {
+  const alta = PERFIL_VEGETACAO.alta;
+  assert.equal(porPerfil(PERFIL_VEGETACAO, PERFIS.pc), alta, 'o PC herda do Alta');
+  assert.deepEqual(alcanceDaFonte(alta, 'cidade'), [1000, 200]);
+  assert.deepEqual(alcanceDaFonte(alta, 'mata'), [650, 150]);
+  assert.deepEqual(alcanceDaFonte(alta, 'moitas'), [alta.moitas, alta.faixaMoitas]);
+  for (const [id, pv] of Object.entries(PERFIL_VEGETACAO)) {
+    assert.ok(pv.cidade >= pv.perto && pv.faixaCidade > 0 && pv.faixaCidade < pv.cidade / 2, id);
+  }
+  // sem o alcance da cidade (uma tabela antiga), vale o da mata
+  assert.deepEqual(alcanceDaFonte({ perto: 400, faixa: 100 }, 'cidade'), [400, 100]);
+});
+
+/** O domínio 'vegetacao' num contexto de mentira (sem GPU): a cena, a sombra própria e a câmera, sem chão. */
+async function vegetacaoDeTeste() {
+  let fabrica = null;
+  registrarVegetacao({ registrarTextura() {}, registrarDominio: (nome, f) => (fabrica = f) });
+  const projetores = [];
+  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.5, 5000);
+  camera.position.set(0, 10, 0);
+  camera.lookAt(0, 0, -1000);
+  camera.updateMatrixWorld(true);
+  const ctx = {
+    cena: new THREE.Scene(), perfil: PERFIS.pc, camera, quadros: 0, stats: { instancias: {} },
+    ganchos: { aplicar: (m) => m }, textura: () => null, medidas: { familia: (o) => o }, ouvir: () => () => {},
+    dominio: () => null, sim: { espelho: { terreno: null } },
+    sombra: {
+      projetor(fonte, op = {}) {
+        const g = new THREE.Mesh(fonte.geometry, op.material);
+        projetores.push({ fonte, gemeo: g, material: op.material });
+        return g;
+      },
+      soltar(fonte) {
+        const i = projetores.findIndex((p) => p.fonte === fonte);
+        if (i >= 0) projetores.splice(i, 1);
+      },
+      marcar() {},
+    },
+  };
+  const api = fabrica(ctx);
+  await import('../../fonte/render/materiais/shaders/folha.glsl.js');
+  for (let i = 0; i < 50 && !api.pronto(); i++) await new Promise((ok) => setTimeout(ok, 0));
+  assert.ok(api.pronto(), 'o GLSL das árvores chegou');
+  return { api, ctx, projetores };
+}
+
+test('VIS1c: o domínio desenha as árvores da cidade até o alcance delas, esmaecendo no fim, e o impostor projeta sombra', async () => {
+  const { api, ctx, projetores } = await vegetacaoDeTeste();
+  // as árvores de um lote em fila, de 30 m a 1.100 m da câmera, na frente dela
+  const dist = [30, 300, 700, 850, 950, 1100];
+  ctx.vegetacao.plantar('lotes', dist.map((d) => ({ x: 0, y: 0, z: -d, especie: 'oiti', altura: 9 })));
+  const m = api.preparar();
+  assert.equal(m.lod0 + m.lod1 + m.impostores, 5, 'até 1.000 m (a de 1.100 m fica de fora)');
+  assert.equal(m.lod0, 1);
+  assert.equal(m.impostores, 4);
+  const imp = ctx.cena.getObjectByName('arvores:impostores');
+  const g = imp.geometry;
+  assert.equal(g.instanceCount, 4);
+  // o esmaecer de cada impostor (byte 2 do aInst) pela distância: inteiro até 800 m, caindo até 1.000 m
+  const fade = (k) => g.attributes.aInst.array[4 * k + 2];
+  const zs = [...g.attributes.aImpPos.array.subarray(0, 16)].filter((_, i) => i % 4 === 2);
+  const porDist = Object.fromEntries(zs.map((z, k) => [-z, fade(k)]));
+  assert.equal(porDist[300], 255);
+  assert.equal(porDist[700], 255);
+  assert.ok(porDist[850] < 255 && porDist[950] < porDist[850] && porDist[950] > 0, `esmaecer ${porDist[850]} e ${porDist[950]}`);
+  // o gêmeo do impostor na sombra própria: a mesma geometria (as instâncias não vão duas vezes) e o material da carta
+  // virada para o sol
+  const gem = projetores.find((p) => p.fonte === imp);
+  assert.ok(gem, 'o impostor projeta');
+  assert.equal(gem.material.name, 'arvore-impostor-sombra');
+  assert.equal(gem.gemeo.geometry, g);
+  assert.equal(gem.gemeo.visible, true);
+  // a geometria cresce (mais de 256 árvores): o gêmeo segue a geometria nova
+  ctx.vegetacao.plantar('lotes', Array.from({ length: 600 }, (_, k) => ({ x: (k % 30) * 12 - 180, y: 0, z: -300 - Math.floor(k / 30) * 12, especie: 'oiti', altura: 9 })));
+  api.preparar();
+  assert.equal(imp.geometry.instanceCount, 600);
+  assert.equal(gem.gemeo.geometry, imp.geometry);
+  // sem árvore nenhuma o gêmeo some (nenhuma chamada na sombra)
+  ctx.vegetacao.plantar('lotes', null);
+  api.preparar();
+  assert.equal(gem.gemeo.visible, false);
+  api.descartar();
+  assert.ok(!projetores.some((p) => p.fonte === imp), 'o descarte solta o gêmeo');
+});
+
+test('VIS1c (revisão): o atlas de folhas guarda a cor multiplicada pelo alfa e arvCor divide em qualquer mip', () => {
+  assert.match(GLSL_GERAR_FOLHAS.fragmento, /gl_FragColor = vec4\( clamp\( c\.rgb, 0\.0, 1\.0 \) \* c\.a, c\.a \);/);
+  assert.match(GLSL_ARVORE.fragmentoPars, /vec3 arvCor\( vec4 t \) \{\s*return t\.rgb \/ max\( t\.a, [\d.e-]+ \);\s*\}/);
+  for (const t of [GLSL_ARVORE.mapa, GLSL_IMP_ASSAR.fragmento]) assert.match(t, /arvCor\( aT \)/);
+  // um texel do mip 1 (a média de 2 x 2): a folha da palma (cor 0,4) com a borda de alfa 0,3 e o fundo da célula, que
+  // na palma e na embaúba tem cor (0,5) com alfa 0
+  const texels = [[0.4, 1], [0.4, 0.3], [0.5, 0], [0.5, 0]];
+  const media = (f) => texels.reduce((s, t) => s + f(t), 0) / texels.length;
+  const a = media(([, al]) => al);
+  const multiplicado = media(([c, al]) => c * al) / a;
+  const cheio = media(([c]) => c) / a;
+  assert.ok(Math.abs(multiplicado - 0.4) < 1e-9, 'a cor da folha, sem clarear nem escurecer');
+  assert.ok(cheio > 1.3, `com a cor cheia a divisão clareava ${cheio.toFixed(2)} (3,5 vezes)`);
+});
+
+test('VIS1c (revisão): a moita plantada nos jardins fica no alcance das moitas, não no da cidade', async () => {
+  const alta = PERFIL_VEGETACAO.alta;
+  assert.deepEqual(alcanceDaFonte(alta, 'cidade', ESPECIE.moita), [alta.moitas, alta.faixaMoitas]);
+  assert.deepEqual(alcanceDaFonte(alta, 'mata', ESPECIE.moita), [alta.moitas, alta.faixaMoitas]);
+  assert.deepEqual(alcanceDaFonte(alta, 'cidade', ESPECIE.oiti), [alta.cidade, alta.faixaCidade]);
+  const { api, ctx } = await vegetacaoDeTeste();
+  // um lote com um oiti a 300 m e moitas a 100, 160 e 300 m (servicos.js e holding.js plantam moitas nos jardins):
+  // antes da VIS1c a moita esmaecia aos 170 m pela espécie; o alcance por dono não pode levá-la a 1.000 m
+  ctx.vegetacao.plantar('lotes', [
+    { x: 0, y: 0, z: -300, especie: 'oiti', altura: 9 },
+    { x: 2, y: 0, z: -100, especie: 'moita', altura: 3 },
+    { x: 4, y: 0, z: -160, especie: 'moita', altura: 3 },
+    { x: 6, y: 0, z: -300, especie: 'moita', altura: 3 },
+  ]);
+  const m = api.preparar();
+  assert.equal(m.lod0 + m.lod1 + m.impostores, 3, 'a moita de 300 m fica de fora');
+  const g = ctx.cena.getObjectByName('arvores:impostores').geometry;
+  const imp = Array.from({ length: g.instanceCount }, (_, k) => ({ z: g.attributes.aImpPos.array[4 * k + 2], esp: g.attributes.aInst.array[4 * k + 3], fade: g.attributes.aInst.array[4 * k + 2] }));
+  assert.deepEqual(imp.map((i) => i.z).sort((a, b) => a - b), [-300, -160]);
+  const moita = imp.find((i) => i.esp === ESPECIE.moita);
+  assert.ok(moita.fade > 0 && moita.fade < 255, `a moita de 160 m esmaece (${moita.fade})`);
+  assert.equal(imp.find((i) => i.esp === ESPECIE.oiti).fade, 255);
+  api.descartar();
+});
+
+test('VIS1c: a sombra do impostor é a carta virada para o sol com o desenho da copa, recuada ao longo da luz', () => {
+  const t = Object.values(GLSL_IMP_SOMBRA).join('\n');
+  // a direção para o sol é o eixo z da câmera da sombra (ortográfica), a mesma para todas as árvores
+  assert.match(GLSL_IMP_SOMBRA.vertice, /vec3 aParaSol = normalize\( vec3\( viewMatrix\[ 0 \]\[ 2 \], viewMatrix\[ 1 \]\[ 2 \], viewMatrix\[ 2 \]\[ 2 \] \) \);/);
+  assert.match(GLSL_IMP_SOMBRA.vertice, /impCarta\( aParaSol, aQ, aUv \) - aParaSol \* \( impRaio \* /);
+  // a carta do desenho e a da sombra saem da mesma função (o mesmo giro e as mesmas vistas)
+  assert.match(GLSL_IMPOSTOR.vertice, /impCarta\( aParaCam, aQ, aUv \)/);
+  // pequeno: uma leitura de textura, sem laço, derivadas antes de qualquer ramo; o recorte e o esmaecer do desenho
+  assert.equal((GLSL_IMP_SOMBRA.fragmento.match(/\btexture(?:Lod|Grad)?\(/g) ?? []).length, 1);
+  assert.ok(!/\bfor\s*\(|\bwhile\s*\(/.test(GLSL_IMP_SOMBRA.fragmento + GLSL_IMP_SOMBRA.vertice));
+  const f = GLSL_IMP_SOMBRA.fragmento;
+  assert.ok(f.indexOf('dFdx') < f.indexOf('if ('), 'derivada antes do ramo');
+  assert.match(f, /aA \* \( 1\.0 \+ aLod \* 0\.35 \) < 0\.5/);
+  assert.match(GLSL_IMPOSTOR.mapa, /aA \* \( 1\.0 \+ aLod \* 0\.35 \)/);
+  assert.match(f, /vImpFade < 0\.999/);
+  assert.ok(f.length < 1200, `fragmento com ${f.length} caracteres`);
+  assert.ok(t.includes('gImpEsfera'));
+  // o recuo ao longo da luz não muda a sombra no chão: a projeção de cada canto da carta pela direção do sol é a mesma
+  const L = [0.42, 0.78, -0.46];
+  const nl = Math.hypot(...L);
+  const l = L.map((v) => v / nl);
+  const noChao = (p) => [p[0] - (l[0] * p[1]) / l[1], p[2] - (l[2] * p[1]) / l[1]];
+  const R = 6;
+  for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const dir = [l[2], 0, -l[0]].map((v) => v / Math.hypot(l[2], l[0]));
+    const cima = [l[1] * dir[2] - l[2] * dir[1], l[2] * dir[0] - l[0] * dir[2], l[0] * dir[1] - l[1] * dir[0]];
+    const p = [0, 1, 2].map((i) => [0, 6, 0][i] + (dir[i] * a + cima[i] * b) * R);
+    const q = p.map((v, i) => v - l[i] * R * IMP_RECUO_SOMBRA);
+    const [p0, q0] = [noChao(p), noChao(q)];
+    assert.ok(Math.abs(p0[0] - q0[0]) < 1e-9 && Math.abs(p0[1] - q0[1]) < 1e-9);
+  }
+  // com o sol a pino o chão debaixo do centro da copa fica atrás da carta recuada (na sombra), em todas as espécies
+  for (let e = 0; e < N_ESPECIES; e++) {
+    const { centroY, raio } = gerarArvore(e, 0, 1).medidas;
+    assert.ok(centroY > IMP_RECUO_SOMBRA * raio, `${ESPECIES[e].id}: centro a ${centroY.toFixed(1)} m, recuo ${(IMP_RECUO_SOMBRA * raio).toFixed(1)} m`);
+  }
 });

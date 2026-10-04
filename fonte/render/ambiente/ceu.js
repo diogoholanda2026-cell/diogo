@@ -56,6 +56,33 @@ export const CIDADE = Object.freeze([0.02, 0.0105, 0.0042]);
  */
 export const SAT_LUZ_CEU = 0.4;
 
+/**
+ * Luz do ambiente com o sol baixo (VIS1d). Abaixo de uns 12 graus o céu enche a sombra com quase a luz que o sol
+ * rasante dá ao chão (às 17h30 o céu dá 0,13 contra 0,10 do sol no chão) e, com a neblina por cima, a sombra no chão
+ * ficava com uns 75% da luz do chão ao sol; nas fotos de entardecer em cidade e no CS2 a sombra longa fica perto da
+ * metade, com o sol quente e o céu claro. O fator multiplica a luz do céu que ilumina (o IBL que o chão, a água, as fachadas, a Arcologia e as
+ * árvores leem, cena.environmentIntensity, e a luz do céu no ar baixo da neblina) entre `inicio` e `fim` graus: desce
+ * de 12 a 9 graus, fica no `minimo` até `ate` e volta a 1 até `fim`, onde o sol direto já é fraco (sem sol não há
+ * sombra a firmar; o crepúsculo e a hora azul ficam como eram). A exposição devolve uma parte (exposicao.js,
+ * EXPOSICAO.ambiente): a sombra escurece bem mais que o chão ao sol, a luz fica mais quente e menos azul na sombra, e
+ * o céu do fundo, que não lê o ambiente, fica mais claro. Acima de 12 graus nada muda. Medido na aérea das 17h30
+ * (nota da VIS1d; a tela levada à luz linear, como a VIS1a mediu): no gramado do parque a sombra fica com 50% da luz
+ * do chão ao sol (eram 76%), o miolo das sombras com 43% (eram 69%), a sombra menos azul e o sol mais quente; a cena
+ * fica 10% mais escura na tela em média, o chão ao sol 7%.
+ */
+export const AMBIENTE_SOL_BAIXO = Object.freeze({ inicio: 12, cheio: 9, ate: 7.5, fim: 3.5, minimo: 0.28 });
+
+/**
+ * Fator da luz do ambiente pela elevação do sol (radianos): 1 acima de 12 graus e abaixo do fim, o mínimo entre 9 e
+ * 7,5 graus, com rampas suaves entre eles.
+ * @example fatorAmbiente(30 * Math.PI / 180) // 1
+ */
+export function fatorAmbiente(elev, A = AMBIENTE_SOL_BAIXO) {
+  const g = (elev * 180) / Math.PI;
+  const w = (1 - suave(A.cheio, A.inicio, g)) * suave(A.fim, A.ate, g);
+  return 1 - (1 - A.minimo) * w;
+}
+
 /** Dia do ano das cenas fixas (?cena=, sem ?dia=): o equinócio de março, com o pôr do sol perto das 18h10. */
 export const DIA_CENAS = 80;
 
@@ -259,6 +286,8 @@ export function estadoCeu(ast, clima = {}, brilhoCidade = 0.6, alvo = {}) {
   const luaH = Math.max(0, ast.lua.dir[1]);
   alvo.eChao = LUMA.reduce((s, k, i) => s + k * (alvo.solIrr[i] * solH + alvo.luaIrr[i] * luaH + alvo.ceuIrr[i]), 0);
   alvo.solH = solH;
+  // a luz do ambiente com o sol baixo (VIS1d)
+  alvo.kAmb = fatorAmbiente(ast.sol.elevacao);
   return alvo;
 }
 
@@ -681,6 +710,19 @@ export class Ambiente {
     return { ast, est };
   }
 
+  /**
+   * O estado do céu para a luz do ar baixo da neblina: a luz do céu com o fator do sol baixo (VIS1d), como a sombra (o
+   * véu do ar não volta a encher a sombra longa). O mesmo objeto do quadro quando o fator é 1.
+   */
+  estadoDoAr() {
+    const e = this.est;
+    if (!(e.kAmb < 1)) return e;
+    const a = Object.assign(this._estAr ??= {}, e);
+    a.ceuIrr = (this._ceuAr ??= [0, 0, 0]);
+    for (let i = 0; i < 3; i++) a.ceuIrr[i] = e.ceuIrr[i] * e.kAmb;
+    return a;
+  }
+
   /** Nascer e pôr do sol do dia do ano atual. */
   nascerEPor() {
     const esp = this.ctx.sim?.espelho;
@@ -720,7 +762,7 @@ export class Ambiente {
     this.ceu.atualizar(this.est, this.ast);
     this.sol.atualizar(this.ast, this.est);
     this.exposicao.atualizar(this.est, dt);
-    this.neblina.atualizar(this.est, { umidade: umidadeManha(hora, this.nascerEPor().nascer), nuvens: clima.nuvens ?? 0.3 });
+    this.neblina.atualizar(this.estadoDoAr(), { umidade: umidadeManha(hora, this.nascerEPor().nascer), nuvens: clima.nuvens ?? 0.3 });
     this.ibl.atualizar(hora, this.est);
     ctx.sol.dia = this.ast.dia;
     // com uma cor de fundo na cena (a depuração), o céu sai

@@ -5,15 +5,25 @@
 // numa praça; os postes, o brilho da cidade, a luz no chão suavizada e a força da noite; a colisão da câmera com a
 // cidade pela grade da CPU; o voo pelo caminho ótimo de van Wijk e Nuij; e o árbitro de gestos (80 ms, mira 56 px
 // acima do dedo, borda, cancelamento, toque curto e longo, dois dedos que inclinam ou aproximam, o cursor parado do
-// mouse). Roda sozinho:
+// mouse). Da VIS1d, a sombra longa: a marcha de longe pelos prédios (a torre de 500 m com 3,2 km de sombra com o sol a
+// 9 graus, sem engordar e sem esticar os morros), as grades dela refeitas por retângulo, o retângulo sujo até o
+// alcance de longe, o passe do campo como um programa só, a marcha que não lê além do alcance (os ladrilhos vizinhos
+// dão a mesma sombra na borda) e a ponta da sombra longa que anda pelo degrau inteiro. Roda sozinho:
 //   node --test ferramentas/testes/luz-e-entrada.teste.mjs (o simular --testes descobre)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Campo, VAZIO, DILATA, NIVEIS, paraMeia, rasterizarPeca, ladrilhoDasPecas, unirRet, juntarRet, areaRet } from '../../fonte/render/ambiente/campoAlturas.js';
-import { alturaDaSombra, haoNoCampo, degrauDaHora, direcaoDoDegrau, retanguloAfetado, ALCANCE, DEGRAU_HORAS, DEGRAUS_DIA, LADO_LADRILHOS, LADRILHOS_MAX, metaLadrilhos } from '../../fonte/render/ambiente/sombraLonge.js';
+import {
+  alturaDaSombra, haoNoCampo, degrauDaHora, direcaoDoDegrau, retanguloAfetado, ALCANCE, DEGRAU_HORAS, DEGRAUS_DIA, LADO_LADRILHOS,
+  LADRILHOS_MAX, metaLadrilhos, Altos, alturaDaSombraLonge, ALCANCE_LONGE, caixaDaMarchaLonge, alcanceDoTopo, FOLGA_HMAX,
+  misturaDoCampo,
+} from '../../fonte/render/ambiente/sombraLonge.js';
 import { postesDasVias, brilhoDosPostes, forcaNoite, forcaJanelas, POSTES, SUAVE, pesosSuaves, NOITE_LUZ } from '../../fonte/render/ambiente/luzNoite.js';
-import { MARCHA, PASSO_NIVEL1, distanciaDaMarcha } from '../../fonte/render/materiais/shaders/sombra.glsl.js';
+import {
+  MARCHA, PASSO_NIVEL1, distanciaDaMarcha, MARCHA_LONGE, passoLonge, CAMPO_PASSE, MISTURA_CAMPO, CAMPO_MISTURA, SOMBRA_LONGE_PARS,
+} from '../../fonte/render/materiais/shaders/sombra.glsl.js';
+import { GLSL_TER_VERTICE } from '../../fonte/render/materiais/shaders/terreno.glsl.js';
 import { criarEntrada, GESTOS } from '../../fonte/render/camera/entrada.js';
 import { criarCamera, caminhoVoo } from '../../fonte/render/camera/camera.js';
 import { terrenoPlano } from '../../fonte/sim/substitutos.js';
@@ -630,4 +640,279 @@ test('sombra de longe: a marcha que para pelo maior da região dá a mesma sombr
   }
   assert.ok(passos[0] / 120 < 20, `sol alto: a marcha para cedo (${(passos[0] / 120).toFixed(1)} passos de 48)`);
   assert.ok(passos[1] / 120 > 40, `sol baixo: quase inteira (${(passos[1] / 120).toFixed(1)})`);
+});
+
+// ------------------------------------------------------------------------------------------------ sombra longa (VIS1d)
+
+/** Campo do 'pc' (8.192 m a 4 m) com o chão plano em 0, um morro de 300 m a noroeste e uma torre de 511 m no centro. */
+function campoComTorre({ H = 511, x = 172, z = 174, lado = 40 } = {}) {
+  const c = new Campo({ N: 2048, tam: 8192 });
+  c.refazerChao(null, 0, [0, 0, c.N - 1, c.N - 1]);
+  // o morro (chão, não cidade): um cone de 300 m e 600 m de raio em (-3400, 3400), longe da sombra da torre
+  for (let j = 0; j < c.N; j++) {
+    for (let i = 0; i < c.N; i++) {
+      const d = Math.hypot(c.gx + (i + 0.5) * c.passo + 3400, c.gz + (j + 0.5) * c.passo - 3400);
+      if (d < 600) c.chao[j * c.N + i] = 300 * (1 - d / 600);
+    }
+  }
+  c.compor(c.trocarLadrilho('t', ladrilhoDasPecas([caixa(x, z, lado, lado, H)], c.N, c.passo, c.gx, c.gz)));
+  return c;
+}
+
+test('sombra longa: a torre de 500 m faz 3,2 km de sombra com o sol a 9 graus, sem engordar; os morros não esticam', () => {
+  const c = campoComTorre();
+  const altos = new Altos(c);
+  altos.atualizar(c, [0, 0, c.N - 1, c.N - 1]);
+  const longe = { altos };
+  assert.equal(altos.passo, 8, 'células finas de 8 m no pc');
+  assert.equal(altos.passoSalto, passoLonge(c.passo), 'saltos de 64 m');
+  assert.ok(ALCANCE_LONGE >= 3200 && ALCANCE_LONGE <= 4000, `alcance de longe ${ALCANCE_LONGE}`);
+  const tan = Math.tan(9 * RAD);
+  const H = 511;
+  let achou = 0;
+  let total = 0;
+  for (let ang = 0; ang < 360; ang += 23) {
+    const ux = Math.cos(ang * RAD);
+    const uz = Math.sin(ang * RAD);
+    for (let D = 950; D <= 3200; D += 150) {
+      // o receptor na célula; o sol na linha do centro dela ao da torre
+      const [i, j] = c.celula(172 - ux * D, 174 - uz * D);
+      const x0 = c.gx + (i + 0.5) * c.passo;
+      const z0 = c.gz + (j + 0.5) * c.passo;
+      const d = Math.hypot(172 - x0, 174 - z0);
+      const dir = [(172 - x0) / d, (174 - z0) / d, tan, 1];
+      assert.ok(alturaDaSombra(c, i, j, dir) < 0, `a marcha de perto sozinha não chega a ${d.toFixed(0)} m`);
+      const s = alturaDaSombra(c, i, j, dir, Infinity, longe);
+      total++;
+      if (s > 0) achou++;
+      // nunca mais alta que a do canto da torre mais perto (meia diagonal de 28 m, com a dilatação e uma célula fina)
+      assert.ok(s <= H - (d - 45) * tan + 1e-3, `ângulo ${ang}, ${d.toFixed(0)} m: sombra alta demais ${s.toFixed(1)}`);
+      // a 40 m do eixo (a torre tem 20 m de meia largura): sem sombra
+      const lx = -dir[1] * 40;
+      const lz = dir[0] * 40;
+      const [il, jl] = c.celula(x0 + lx, z0 + lz);
+      const xl = c.gx + (il + 0.5) * c.passo;
+      const zl = c.gz + (jl + 0.5) * c.passo;
+      const sl = alturaDaSombra(c, il, jl, [dir[0], dir[1], tan, 1], Infinity, longe);
+      assert.ok(sl < 0.5, `ângulo ${ang}, ${d.toFixed(0)} m: sombra a 40 m do eixo (${sl.toFixed(1)}; ${xl}, ${zl})`);
+    }
+  }
+  assert.equal(achou, total, `a sombra da torre chega a todos os receptores até 3,2 km: ${achou} de ${total}`);
+  // depois da ponta (sol a 9 graus: 3,23 km) e contra o sol, nada
+  const [ip, jp] = c.celula(172 + 3400, 174);
+  assert.ok(alturaDaSombra(c, ip, jp, [-1, 0, tan, 1], Infinity, longe) < 0, 'além da ponta');
+  const [ia, ja] = c.celula(172 - 1500, 174);
+  assert.ok(alturaDaSombra(c, ia, ja, [-1, 0, tan, 1], Infinity, longe) < 0, 'do lado do sol');
+  // o morro de 300 m a oeste: a sombra dele para no alcance da marcha de perto (a de longe é só da cidade)
+  const [im, jm] = c.celula(-3400 + 600 + ALCANCE + 300, 3400);
+  assert.ok(alturaDaSombra(c, im, jm, [-1, 0, tan, 1], Infinity, longe) < 0, 'o morro não estica até 3 km');
+  const [in_, jn] = c.celula(-3400 + 600 + 300, 3400);
+  assert.ok(alturaDaSombra(c, in_, jn, [-1, 0, tan, 1], Infinity, longe) > 0, 'mas faz a sombra de perto');
+});
+
+test('sombra longa: o maior da região para a marcha sem mudar a sombra, e sem prédio alto ela nem começa', () => {
+  const c = campoComTorre();
+  // uma cidade baixa (6 a 40 m) a leste da torre
+  const pecas = [];
+  for (let k = 0; k < 300; k++) pecas.push(caixa(600 + ((k * 97) % 2400), -800 + ((k * 61) % 1600), 14, 12, 6 + ((k * 13) % 35)));
+  c.compor(c.trocarLadrilho('c', ladrilhoDasPecas(pecas, c.N, c.passo, c.gx, c.gz)));
+  const altos = new Altos(c);
+  altos.atualizar(c, [0, 0, c.N - 1, c.N - 1]);
+  for (const tan of [Math.tan(9 * RAD), Math.tan(20 * RAD), Math.tan(52 * RAD)]) {
+    for (let k = 0; k < 80; k++) {
+      const i = 1100 + ((k * 37) % 700);
+      const j = 900 + ((k * 53) % 300);
+      const dir = [-1, 0.02 * ((k % 5) - 2), tan, 1];
+      const n = Math.hypot(dir[0], dir[1]);
+      dir[0] /= n;
+      dir[1] /= n;
+      const caixaM = caixaDaMarchaLonge([i, j, i, j], [dir], c.passo, c.gx, c.gz);
+      const hMax = altos.maximoNaCaixa(...caixaM) + 1;
+      const s0 = alturaDaSombra(c, i, j, dir, Infinity, { altos });
+      const s1 = alturaDaSombra(c, i, j, dir, Infinity, { altos, hMax });
+      assert.equal(s1, s0, `tan ${tan.toFixed(2)}, (${i}, ${j})`);
+    }
+  }
+  // sem a torre alta na região (a caixa da marcha não a alcança), o maior é o da cidade baixa: a marcha de longe não
+  // começa (o maior menos o alcance de perto vezes a tangente fica abaixo do chão)
+  const tan = Math.tan(9 * RAD);
+  const caixaSul = caixaDaMarchaLonge([1100, 200, 1300, 300], [[-1, 0, tan, 1]], c.passo, c.gx, c.gz);
+  const hSul = altos.maximoNaCaixa(...caixaSul);
+  assert.ok(hSul < 60 && hSul - ALCANCE * tan < 0, `região sem torre: ${hSul}`);
+  assert.equal(alturaDaSombraLonge(altos, 0, 0, [-1, 0, tan, 1], -3, hSul), -3, 'sem prédio alto a montante, nada');
+  assert.equal(alturaDaSombraLonge(altos, 0, 0, [-1, 0, tan, 0], -3), -3, 'sem sol, nada');
+  // com o sol a 52 graus (10h) nem a torre de 511 m passa do alcance de perto
+  assert.ok(511 - ALCANCE * Math.tan(52 * RAD) < 0, 'às 10h a marcha de longe não começa');
+});
+
+test('sombra longa: as grades refeitas por retângulo batem com as inteiras; a de saltos cobre as vizinhas', () => {
+  const c = new Campo({ N: 512, tam: 4096 }); // 8 m, como no Média: células finas de 16 m e saltos de 128 m
+  c.refazerChao(null, 0, [0, 0, c.N - 1, c.N - 1]);
+  const inc = new Altos(c);
+  inc.atualizar(c, [0, 0, c.N - 1, c.N - 1]);
+  assert.equal(inc.passo, 16);
+  assert.equal(inc.passoSalto, 128);
+  const torres = [[-900, 300, 180], [1200, -1500, 300], [5, 5, 452], [1900, 1900, 120]];
+  let r = null;
+  for (const [x, z, h] of torres) {
+    r = c.trocarLadrilho(`t${x}`, ladrilhoDasPecas([caixa(x, z, 30, 50, h)], c.N, c.passo, c.gx, c.gz));
+    c.compor(r);
+    const { antes, depois } = inc.atualizar(c, r);
+    assert.ok(antes < -1000 && Math.abs(depois - h) < 1e-3, `torre nova de ${h} m: ${antes} -> ${depois}`);
+  }
+  // tira a de 452 m: o retângulo dela diz a altura de antes (a sombra velha precisa sair)
+  r = c.trocarLadrilho('t5', null);
+  c.compor(r);
+  const fora = inc.atualizar(c, r);
+  assert.ok(Math.abs(fora.antes - 452) < 1e-3 && fora.depois < -1000, JSON.stringify(fora));
+  const cheio = new Altos(c);
+  cheio.atualizar(c, [0, 0, c.N - 1, c.N - 1]);
+  assert.deepEqual(Array.from(inc.fino), Array.from(cheio.fino), 'fina igual');
+  assert.deepEqual(Array.from(inc.saltos), Array.from(cheio.saltos), 'saltos iguais');
+  assert.deepEqual(Array.from(inc.meiaSaltos), Array.from(cheio.meiaSaltos), 'meia precisão igual');
+  // a célula de saltos é o maior das finas dela e das 8 vizinhas
+  const { N, NS } = cheio;
+  const R = MARCHA_LONGE.refino;
+  for (let a = 0; a < N; a++) {
+    for (let b = 0; b < N; b++) {
+      const v = cheio.fino[b * N + a];
+      if (v < -1000) continue;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const cx = Math.floor(a / R) + dx;
+          const cy = Math.floor(b / R) + dy;
+          if (cx < 0 || cy < 0 || cx >= NS || cy >= NS) continue;
+          assert.ok(cheio.saltos[cy * NS + cx] >= v, `saltos (${cx}, ${cy}) por cima da fina (${a}, ${b})`);
+        }
+      }
+    }
+  }
+  assert.equal(cheio.maximoNaCaixa(-Infinity, -Infinity, Infinity, Infinity), 300);
+  assert.equal(cheio.maximoNaCaixa(1700, 1700, 2000, 2000), 120);
+});
+
+test('sombra longa: um prédio alto que nasce ou some suja a faixa da sombra dele até o alcance de longe', () => {
+  const tempo = { diaDoAno: 80, mes: 3, ano: 1 };
+  const sol = direcaoDoDegrau('sol', 87, tempo, { latitude: -23.5, norteAz: 0 }); // 17h24, uns 10 graus
+  assert.equal(alcanceDoTopo(-1e4, [sol]), ALCANCE, 'sem prédio, a marcha de perto');
+  assert.equal(alcanceDoTopo(20, [sol]), ALCANCE, 'um sobrado não passa da marcha de perto');
+  assert.ok(Math.abs(alcanceDoTopo(511, [sol]) - 511 / sol[2]) < 1e-6 && 511 / sol[2] > 2500, 'a Blade Tower às 17h24');
+  assert.equal(alcanceDoTopo(511, [[1, 0, Math.tan(6 * RAD), 1]]), ALCANCE_LONGE, 'a Blade Tower com o sol a 6 graus: o alcance inteiro');
+  const anel = alcanceDoTopo(172, [sol]);
+  assert.ok(anel > ALCANCE && anel < ALCANCE_LONGE && Math.abs(anel - 172 / sol[2]) < 1e-6, `o anel: ${anel}`);
+  assert.equal(alcanceDoTopo(511, [[1, 0, 1.3, 1]]), ALCANCE, 'com o sol alto, a de perto basta');
+  const perto = retanguloAfetado([1000, 1000, 1010, 1010], [sol], 4, 2048);
+  const longe = retanguloAfetado([1000, 1000, 1010, 1010], [sol], 4, 2048, ALCANCE_LONGE);
+  assert.ok(sol[0] < -0.9, 'o sol a oeste');
+  // o sol a oeste: a sombra vai para leste (i maior)
+  assert.ok(perto[2] < 1010 + ALCANCE / 4 + 12, `de perto: ${perto}`);
+  assert.ok(longe[2] >= 1010 + Math.floor((ALCANCE_LONGE / 4) * 0.95), `de longe: ${longe}`);
+});
+
+test('sombra longa: o passe do campo é um programa só (sem defines por estado; grades e alcance por uniforme)', () => {
+  assert.doesNotMatch(CAMPO_PASSE, /#\s*(if|ifdef|ifndef|define)\b/, 'sem pré-processador');
+  for (const u of ['uniform highp sampler2D uAltos', 'uniform highp sampler2D uSaltos', 'uniform vec4 uLonge']) assert.ok(CAMPO_PASSE.includes(u), u);
+  assert.equal((CAMPO_PASSE.match(/sampler2D/g) ?? []).length, 4, 'quatro amostradores no passe (a guarda do Mali pede até 16)');
+  assert.ok(CAMPO_PASSE.includes(`k < ${MARCHA_LONGE.passosMax}`) && CAMPO_PASSE.includes(`r < ${MARCHA_LONGE.refino}`), 'laços de tamanho fixo');
+  assert.ok(CAMPO_PASSE.includes('sombraEm( uv, uDirA )') && CAMPO_PASSE.includes('sombraEm( uv, uDirB )'), 'os dois modos seguem pela marcha de longe');
+  // o alcance cabe nos passos: do fim da marcha de perto ao de longe, no passo do 'pc' (64 m) e do Média (128 m)
+  for (const p of [4, 8]) assert.ok(ALCANCE + MARCHA_LONGE.passosMax * passoLonge(p) >= ALCANCE_LONGE, `passo do campo ${p} m`);
+});
+
+test('sombra longa: a marcha de longe não lê além do alcance, e o maior do ladrilho dá a mesma sombra na borda dele', () => {
+  const tan = Math.tan(7.5 * RAD); // a Blade Tower faz mais de 3,5 km de sombra
+  const dir = [1, 0, tan, 1]; // o sol a leste
+  const L = 512; // ladrilho do pc (2.048 m)
+  let lidas = 0;
+  let longe = 0;
+  for (const xTorre of [1440, 1466, 1478, 1490, 1494, 1502, 1514, 1530]) {
+    const c = campoComTorre({ x: xTorre, z: 174, lado: 36 });
+    const altos = new Altos(c);
+    altos.atualizar(c, [0, 0, c.N - 1, c.N - 1]);
+    const finoEm = altos.finoEm.bind(altos);
+    let x0 = 0;
+    altos.finoEm = (x, z) => {
+      longe = Math.max(longe, Math.hypot(x - x0, z - 174));
+      lidas++;
+      return finoEm(x, z);
+    };
+    // os receptores das 24 últimas colunas do ladrilho 0 e das 24 primeiras do 1, na linha da torre
+    const [, j] = c.celula(0, 174);
+    for (let i = L - 24; i < L + 24; i++) {
+      x0 = c.gx + (i + 0.5) * c.passo;
+      const a = Math.floor(i / L);
+      const b = Math.floor(j / L);
+      const lad = [a * L, b * L, (a + 1) * L - 1, (b + 1) * L - 1];
+      const hMax = altos.maximoNaCaixa(...caixaDaMarchaLonge(lad, [dir], c.passo, c.gx, c.gz)) + FOLGA_HMAX;
+      const s0 = alturaDaSombra(c, i, j, dir, Infinity, { altos });
+      const s1 = alturaDaSombra(c, i, j, dir, Infinity, { altos, hMax });
+      assert.equal(s1, s0, `torre em ${xTorre}, coluna ${i}: o maior do ladrilho mudou a sombra (${s0.toFixed(1)} para ${s1.toFixed(1)})`);
+    }
+  }
+  assert.ok(lidas > 0 && longe <= ALCANCE_LONGE, `a marcha leu a ${longe.toFixed(0)} m do receptor`);
+});
+
+test('sombra longa: entre os degraus a ponta anda pelo degrau inteiro (não salta no começo e fica parada)', () => {
+  const { potencia } = MISTURA_CAMPO;
+  // as pontas: a mesma conta nos dois extremos, a reta onde as duas são sombra de verdade
+  for (const [r, g, a] of [[-0.3, 40, 0], [60, -0.2, 0], [30, 80, 0], [-0.4, -0.2, 0], [12, 3, 2]]) {
+    assert.equal(misturaDoCampo(r, g, a, 0), r);
+    assert.ok(Math.abs(misturaDoCampo(r, g, a, 1) - g) < 1e-9);
+  }
+  for (const t of [0.1, 0.5, 0.9]) assert.ok(Math.abs(misturaDoCampo(30, 80, 0, t) - (30 + 50 * t)) < 1e-9, 'duas sombras: a reta');
+  assert.ok(Math.abs(misturaDoCampo(-0.3, 40, 0, 0.5) - (-0.3 + 40.3 * 0.5 ** potencia)) < 1e-9, 'a que chega entra devagar');
+  assert.ok(misturaDoCampo(40, -0.3, 0, 0.5) < 40 - 40.3 * 0.5, 'a que sai, cedo');
+  // o GLSL é a mesma conta, no fragmento (gancho) e no vértice do chão
+  assert.equal(potencia, 3);
+  assert.match(CAMPO_MISTURA, /t \* t \* t : 1\.0 - u \* u \* u/);
+  assert.match(CAMPO_MISTURA, new RegExp(`smoothstep\\( ${MISTURA_CAMPO.chao[0].toFixed(1)}, ${MISTURA_CAMPO.chao[1].toFixed(1)}, min\\( c\\.r, c\\.g \\) - c\\.a \\)`));
+  assert.match(SOMBRA_LONGE_PARS, /gCampoMistura\( c, gCampoT \)/);
+  assert.match(GLSL_TER_VERTICE.pars, /float gCampoMistura\( vec4 c, float t \)/);
+  assert.match(GLSL_TER_VERTICE.normal, /gCampoMistura\( tCampo, gCampoT \)/);
+  // a sombra do anel (160 m) e da Blade Tower (511 m) num degrau do fim da tarde, no chão plano: a parte das células
+  // que trocam de sombra no degrau que troca nos piores 2% dele (andando por igual, 2%)
+  const tempo = { diaDoAno: 80, mes: 3, ano: 1 };
+  const mapa = { latitude: -23.5, norteAz: 0 };
+  const casos = [
+    { nome: 'anel, 17h12', H: 160, lado: 400, k: 86, max: 0.6 },
+    { nome: 'anel, 17h24', H: 160, lado: 400, k: 87, max: 0.75 },
+    { nome: 'Blade Tower, 17h12', H: 511, lado: 40, k: 86, max: 0.4 },
+  ];
+  for (const { nome, H, lado, k, max } of casos) {
+    const c = campoComTorre({ H, x: 0, z: 0, lado });
+    const altos = new Altos(c);
+    altos.atualizar(c, [0, 0, c.N - 1, c.N - 1]);
+    const A = direcaoDoDegrau('sol', k, tempo, mapa);
+    const B = direcaoDoDegrau('sol', k + 1, tempo, mapa);
+    const n = Math.hypot(A[0] + B[0], A[1] + B[1]);
+    const [ux, uz] = [-(A[0] + B[0]) / n, -(A[1] + B[1]) / n];
+    const celulas = [];
+    for (let D = lado / 2; D < ALCANCE_LONGE; D += 16) {
+      for (let e = -lado; e <= lado; e += 16) {
+        const [i, j] = c.celula(ux * D - uz * e, uz * D + ux * e);
+        const y = c.altura(c.gx + (i + 0.5) * c.passo, c.gz + (j + 0.5) * c.passo);
+        celulas.push([alturaDaSombra(c, i, j, A, Infinity, { altos }), alturaDaSombra(c, i, j, B, Infinity, { altos }), y]);
+      }
+    }
+    // na sombra com o viés e a meia penumbra do gancho no 'pc'
+    const pior = (f) => {
+      const na = (t) => celulas.map(([r, g, y]) => f(r, g, y, t) - 0.6 > y + 1.04);
+      let antes = na(0);
+      let maior = 0;
+      let total = 0;
+      for (let q = 1; q <= 50; q++) {
+        const agora = na(q / 50);
+        const d = agora.reduce((m, v, i) => m + (v !== antes[i]), 0);
+        maior = Math.max(maior, d);
+        total += d;
+        antes = agora;
+      }
+      return { parte: maior / total, total };
+    };
+    const reta = pior((r, g, y, t) => r + (g - r) * t);
+    const curva = pior(misturaDoCampo);
+    assert.ok(reta.total > 50, `${nome}: ${reta.total} células trocam de sombra no degrau`);
+    assert.ok(reta.parte > 0.2, `${nome}: com a reta, ${(100 * reta.parte).toFixed(0)}% da troca em 2% do degrau`);
+    assert.ok(curva.parte < max * reta.parte, `${nome}: ${(100 * curva.parte).toFixed(0)}% em 2% do degrau (a reta: ${(100 * reta.parte).toFixed(0)}%)`);
+  }
 });

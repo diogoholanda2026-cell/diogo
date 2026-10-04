@@ -2,11 +2,28 @@
 // sombra é a própria, render/sombra/mapa.js, lida pelo gancho 'sombra'). Cor e intensidade saem do mesmo modelo do
 // céu (ambiente/ceu.js): de manhã e à tarde o sol esquenta sozinho pela extinção do ar, sem tinta. De noite a luz
 // chave é a lua (azulada, fraca, pela fase); entre os dois, no crepúsculo, a luz direta some e fica a do céu. A
-// direção da luz chave vai para ctx.sol.dir (a sombra anda com ela, em degraus) e a força da sombra cai com a luz.
+// direção da luz chave vai para ctx.sol.dir (a sombra anda com ela, em degraus menores com o sol baixo) e a força da
+// sombra cai com a luz.
 import * as THREE from 'three';
 
 const RAD = Math.PI / 180;
 const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+/** Menor fração do degrau do perfil com o sol baixo (VIS1d). */
+export const DEGRAU_SOL_BAIXO = 0.25;
+
+/**
+ * Degrau do sol da sombra própria (rad) pela elevação dele (VIS1d). Com o sol baixo a ponta de uma sombra longa anda
+ * muito a cada grau (h / sen² e por radiano: a do anel de 160 m anda uns 110 m por grau com o sol a 9 graus, a da
+ * Blade Tower uns 350 m), e o mapa de perto, refeito a cada degrau, a fazia pular. O degrau do perfil cai com sen² e
+ * abaixo de 30 graus, até um quarto dele: a ponta anda em passos de uns 25 m. Acima de 30 graus, o do perfil. O mapa
+ * sai mais vezes só no começo e no fim do dia (um passe de projetores; medido na aérea, ~0,1 ms na RX 550).
+ * @example degrauDoSol(RAD, 60 * RAD) === RAD
+ */
+export function degrauDoSol(base, elev) {
+  const s = Math.sin(Math.max(0, elev));
+  return base * Math.min(1, Math.max(DEGRAU_SOL_BAIXO, (s * s) / 0.25));
+}
 const suave = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -34,7 +51,8 @@ export class Sol {
     if (s.definirCascatas) s.definirCascatas(p.cascatas ?? 1);
     // sem sombra (Leve) fica um alvo mínimo: o gSombraMapa precisa de uma textura de profundidade válida
     s.redimensionar(ligada ? p.tam : 16);
-    s.degrau = (p.degrau ?? 1.5) * RAD;
+    this.degrauBase = (p.degrau ?? 1.5) * RAD;
+    s.degrau = this.degrauBase;
     s.amostras = p.pcf ?? 5;
     s.raioPcf = p.raioPcf ?? 1.2;
     s.ligada = ligada;
@@ -66,7 +84,12 @@ export class Sol {
     L.updateMatrixWorld();
     L.target.updateMatrixWorld();
     this.ctx.sol.dir.copy(this.dir);
-    if (this.ctx.sombra) this.ctx.sombra.forca = suave(0.0008, 0.012, i);
+    const so = this.ctx.sombra;
+    if (so) {
+      so.forca = suave(0.0008, 0.012, i);
+      // o degrau do sol encolhe com o sol baixo (a ponta da sombra longa não pula); com a lua, o do perfil
+      if (this.degrauBase) so.degrau = usaSol ? degrauDoSol(this.degrauBase, ast.sol.elevacao) : this.degrauBase;
+    }
   }
 
   descartar() {

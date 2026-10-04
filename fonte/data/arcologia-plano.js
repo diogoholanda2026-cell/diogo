@@ -444,8 +444,10 @@ const PLANO_A = {
 /**
  * Mata do parque (densidade de 0 a 1, a da grade espelho.floresta) num ponto do disco, ou null fora dele: o anel de
  * floresta em volta do lago, os maciços do parque entre as clareiras, o bosque entre os anéis (com as clareiras das
- * torres e dos caminhos) e a faixa verde atrás do Horizon Ring. Os anéis, as vias, a praça e os gramados ficam abertos.
- * Para a grade da mata (a S1a pinta quando o parque fica pronto; as cenas pintam a da simulação de prova).
+ * torres e dos caminhos) e a faixa verde atrás do Horizon Ring. Os anéis, as vias, a praça, os gramados e as clareiras
+ * ficam abertos, com 0 (VIS1c: com 0,05 e 0,06 o chão pintava pasto ralo ali). Para a grade da mata (a S1a pinta
+ * quando o parque fica pronto; as cenas pintam a da simulação de prova); o uso do solo da sede (render/mundo/terreno.js,
+ * usoDaSede) põe gramado onde ela fica abaixo de 0,4.
  */
 export function mataDaSede(x, z) {
   const dx = x - CX;
@@ -464,16 +466,16 @@ export function mataDaSede(x, z) {
   if (r >= FLORESTA.r0 && r <= FLORESTA.r1) return 0.92;
   if (r > PRACA.r1 + 8 && r < MERIDIAN.raio - MERIDIAN.fundo / 2 - 12) {
     // o parque: maciços nas bordas e gramados abertos no meio (Burle Marx); a clareira do caminho de 290 m
-    if (Math.abs(r - 290) < 9) return 0.05;
-    return ruido > 0.62 ? 0.86 : 0.06;
+    if (Math.abs(r - 290) < 9) return 0;
+    return ruido > 0.62 ? 0.86 : 0;
   }
   const r0 = MERIDIAN.raio + MERIDIAN.fundo / 2 + 10;
   const r1 = HORIZON.raio - HORIZON.fundo / 2 - 10;
   if (r > r0 && r < r1) {
-    if (Math.abs(r - 480) < 9 || Math.abs(r - 688) < 9) return 0.05;
+    if (Math.abs(r - 480) < 9 || Math.abs(r - 688) < 9) return 0;
     for (const t of Object.values(TORRES_DO_BOSQUE)) {
       const [tx, tz] = pontoDoArco(CX, CZ, R_TORRES, t);
-      if (hipot(x - tx, z - tz) < 80) return 0.05;
+      if (hipot(x - tx, z - tz) < 80) return 0;
     }
     return ruido > 0.36 ? 0.88 : 0.1;
   }

@@ -8,7 +8,9 @@
 // dinâmica; quadros-chave da luz do ambiente; ruído das nuvens; e os ganchos publicados. Da PC1 (D66): a escolha do
 // perfil pelo nome da placa (a RX 550 do dono no 'pc'), o perfil 'pc' e os tetos dele, o controle da resolução pelo
 // cronômetro da placa (desce, sobe, não oscila, trava a subida desfeita), o teto de 60 qps, o cronômetro por passe, a
-// memória de vídeo estimada, o aquecimento dos programas e a vigia das compilações depois de pronto. Roda sozinho:
+// memória de vídeo estimada, o aquecimento dos programas e a vigia das compilações depois de pronto. Da VIS1d, a luz
+// do ambiente com o sol baixo (o fator pela altura do sol, a sombra no chão perto da metade às 17h30 sem escurecer a
+// cena, e o fator posto na cena por um uniforme, sem programa novo). Roda sozinho:
 //   node --test ferramentas/testes/motor.teste.mjs (o simular --testes descobre)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,10 +18,10 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { posicaoSol, posicaoLua, nascerEPor, faseDaLua, astros } from '../../fonte/render/ambiente/astro.js';
 import * as C from '../../fonte/render/ambiente/ceu.js';
-import { exposicaoAlvo, Exposicao, EXPOSICAO } from '../../fonte/render/ambiente/exposicao.js';
+import { exposicaoAlvo, Exposicao, EXPOSICAO, luzMedida, aberturaAmbiente } from '../../fonte/render/ambiente/exposicao.js';
 import { umidadeManha, luzDoAr, luzNoCaminho, henyeyGreenstein } from '../../fonte/render/ambiente/neblina.js';
 import { ruidoNuvem, Nuvens } from '../../fonte/render/ambiente/nuvens.js';
-import { horasChave, trecho } from '../../fonte/render/ambiente/ibl.js';
+import { horasChave, trecho, Ibl } from '../../fonte/render/ambiente/ibl.js';
 import { criarCamera, LIMITES_CAMERA } from '../../fonte/render/camera/camera.js';
 import { raioNoTerreno, raioDaTela, projetarNaTela } from '../../fonte/render/camera/raio.js';
 import { SombraPropria, COMPACTAR_ACIMA } from '../../fonte/render/sombra/mapa.js';
@@ -39,7 +41,7 @@ import { lookNoAgxDoThree } from '../../fonte/render/motor/renderizador.js';
 import { LOOK, forcaCas } from '../../fonte/render/motor/pos.js';
 import { Quadro } from '../../fonte/render/motor/quadro.js';
 import { ehDeLonge, Faixas, CAMADA_LONGE } from '../../fonte/render/motor/faixas.js';
-import { Sol } from '../../fonte/render/ambiente/sol.js';
+import { Sol, degrauDoSol, DEGRAU_SOL_BAIXO } from '../../fonte/render/ambiente/sol.js';
 import { registrar as registrarBancada, ligacao } from '../../fonte/render/motor/bancada.js';
 import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { ALBEDOS, ALBEDO_MAXIMO, luminanciaAlbedo } from '../../fonte/render/materiais/biblioteca.js';
@@ -1718,4 +1720,117 @@ test('PC3: o disco de Vogel constante do PCF dá as mesmas amostras (giro da fas
   }
   assert.ok(!/cos\( a \)|sin\( a \)/.test(SOMBRA_PARS), 'sem seno e cosseno por amostra');
   assert.match(SOMBRA_PARS, /mat2 giro = mat2\( cf, sf, -sf, cf \);/);
+});
+
+// ------------------------------------------------------------------------------------------------ sol baixo (VIS1d)
+
+test('luz do ambiente com o sol baixo: 1 acima de 12 graus e sem sol, o mínimo de 9 a 7,5 graus, sem degrau', () => {
+  const A = C.AMBIENTE_SOL_BAIXO;
+  const f = (g) => C.fatorAmbiente(g * RAD);
+  for (const g of [12, 15, 25, 45, 70, 90]) assert.equal(f(g), 1, `${g} graus: nada muda`);
+  for (const g of [A.fim, 2, 0, -5, -30]) assert.equal(f(g), 1, `${g} graus: o crepúsculo e a noite como eram`);
+  for (const g of [9, 8.8, 8, 7.5]) assert.ok(Math.abs(f(g) - A.minimo) < 1e-9, `${g} graus: o mínimo`);
+  assert.ok(A.minimo > 0.2 && A.minimo < 0.5, `mínimo ${A.minimo}`);
+  let ant = f(-10);
+  for (let g = -10; g <= 30; g += 0.05) {
+    const k = f(g);
+    assert.ok(k >= A.minimo - 1e-9 && k <= 1, `${g.toFixed(2)} graus: ${k}`);
+    assert.ok(Math.abs(k - ant) < 0.02, `sem degrau em ${g.toFixed(2)} graus: ${ant} para ${k}`);
+    ant = k;
+  }
+  // o estado do céu leva o fator
+  assert.equal(C.estadoCeu(astroEl(8.8), { nuvens: 0.3 }, 0.6).kAmb, f(8.8));
+  assert.equal(C.estadoCeu(astroEl(45)).kAmb, 1);
+});
+
+test('sol baixo: às 17h30 a sombra no chão cai bem mais que o chão ao sol, com a exposição devolvendo uma parte; às 10h nada muda', () => {
+  const tempo = { diaDoAno: C.DIA_CENAS, mes: 3, ano: 1, clima: { nuvens: 0.3 } };
+  const mapa = { latitude: -23.5, norteAz: 0 };
+  const medir = (hora, comFator) => {
+    const est = C.estadoCeu(astros(hora, tempo, mapa), tempo.clima, 0.6);
+    const k = comFator ? est.kAmb : 1;
+    const e = { ...est, kAmb: k };
+    const exp = exposicaoAlvo(luzMedida(e)) * aberturaAmbiente(e);
+    const sol = C.luma(est.solIrr) * est.solH; // o sol no chão horizontal
+    const ceu = C.luma(est.ceuIrrLuz) * k; // a luz do céu (a da sombra)
+    return { razao: ceu / (ceu + sol), chao: (ceu + sol) * exp, sombra: ceu * exp, fachada: C.luma(est.solIrr) * exp, elev: est.P.elev / RAD, k };
+  };
+  const a = medir(17.5, false);
+  const d = medir(17.5, true);
+  assert.ok(a.elev > 8 && a.elev < 9.5, `o sol das 17h30 a ${a.elev.toFixed(1)} graus`);
+  // linear, sem a neblina: de 0,58 para uns 0,28 (depois do AgX e da neblina da aérea, nota da VIS1d)
+  assert.ok(a.razao > 0.55, `antes: ${a.razao}`);
+  assert.ok(d.razao > 0.2 && d.razao < 0.35, `depois: ${d.razao}`);
+  // a exposição devolve uma parte: o chão ao sol fica perto do que era, a sombra cai mais da metade e a fachada ao sol
+  // acende (na aérea, ainda abaixo do mais claro de antes: o céu e o mar, que também leem menos ambiente)
+  assert.ok(d.chao > 0.9 * a.chao, `chão ao sol: ${a.chao} para ${d.chao}`);
+  assert.ok(d.sombra < 0.5 * a.sombra, `sombra: ${a.sombra} para ${d.sombra}`);
+  assert.ok(d.fachada > a.fachada && d.fachada < 1.8 * a.fachada, `fachada ao sol: ${a.fachada} para ${d.fachada}`);
+  // por cima do teto da exposição só com o sol baixo; de noite (kAmb 1) o teto vale
+  assert.ok(Math.abs(aberturaAmbiente({ kAmb: C.AMBIENTE_SOL_BAIXO.minimo }) - C.AMBIENTE_SOL_BAIXO.minimo ** -EXPOSICAO.ambiente) < 1e-12);
+  assert.equal(aberturaAmbiente({}), 1);
+  const x = new Exposicao();
+  x.atualizar({ ...C.estadoCeu(astroEl(-30)), kAmb: 1 }, 0);
+  assert.equal(x.valor, EXPOSICAO.maxima, 'a noite no teto');
+  // às 10h e ao meio-dia, igual
+  for (const h of [10, 12, 15]) {
+    const x = medir(h, false);
+    const y = medir(h, true);
+    assert.equal(y.k, 1, `${h}h`);
+    assert.equal(y.chao, x.chao, `${h}h`);
+  }
+});
+
+test('sol baixo: o fator vai para a cena por cena.environmentIntensity (um uniforme: sem programa novo nem quadro-chave)', () => {
+  const cena = new THREE.Scene();
+  const falso = { ctx: { cena }, amb: { nascerEPor: () => ({ nascer: 6.1, por: 18.2, meioDia: 12.1 }), tempoCeu: () => ({}), brilhoCidade: 0.6 }, tam: 64, assinatura: () => 'x' };
+  Ibl.prototype.atualizar.call(falso, 17.5, { kAmb: 0.42 });
+  assert.equal(cena.environmentIntensity, 0.42);
+  const pedido = falso.pedido;
+  Ibl.prototype.atualizar.call(falso, 17.5, { kAmb: 1 });
+  assert.equal(cena.environmentIntensity, 1);
+  assert.deepEqual(falso.pedido, pedido, 'os quadros-chave pedidos não dependem do fator');
+  Ibl.prototype.atualizar.call(falso, 17.5, null);
+  assert.equal(cena.environmentIntensity, 1, 'sem estado, 1');
+  // a luz do céu no ar baixo da neblina leva o mesmo fator (o véu do ar não volta a encher a sombra)
+  const est = C.estadoCeu(astroEl(8.5), { nuvens: 0.3 }, 0.6);
+  const ar = C.Ambiente.prototype.estadoDoAr.call({ est });
+  for (let i = 0; i < 3; i++) assert.ok(Math.abs(ar.ceuIrr[i] - est.ceuIrr[i] * est.kAmb) < 1e-12);
+  assert.ok(ar.anel === est.anel && ar.solIrr === est.solIrr, 'o resto do estado é o mesmo');
+  assert.ok(C.luma(luzDoAr(ar).amb) < 0.5 * C.luma(luzDoAr(est).amb), 'o ar baixo com menos céu');
+  const meioDia = C.estadoCeu(astroEl(60));
+  assert.equal(C.Ambiente.prototype.estadoDoAr.call({ est: meioDia }), meioDia, 'com o sol alto, o estado do quadro');
+  // o three passa cena.environmentIntensity a todo material padrão sem envMap próprio (o chão lê pelo atlas, ver o
+  // teste do terreno); se uma versão nova do three mudar isso, a regra da VIS1d deixa de valer na água e nas fachadas
+  const fonte = readFileSync(new URL('../../node_modules/three/src/renderers/WebGLRenderer.js', import.meta.url), 'utf8');
+  assert.match(fonte, /material\.isMeshStandardMaterial[^\n]*material\.envMap === null && scene\.environment !== null[\s\S]{0,80}envMapIntensity\.value = scene\.environmentIntensity/);
+});
+
+test('sol baixo: o degrau da sombra de perto encolhe e a ponta da sombra longa anda em passos curtos', () => {
+  const base = PERFIS.pc.sombra.degrau * RAD;
+  for (const g of [30, 45, 70, 90]) assert.ok(Math.abs(degrauDoSol(base, g * RAD) - base) < 1e-12, `${g} graus: o do perfil`);
+  for (const g of [9, 5, 0, -3]) assert.ok(Math.abs(degrauDoSol(base, g * RAD) - base * DEGRAU_SOL_BAIXO) < 1e-12, `${g} graus: o mínimo`);
+  let ant = degrauDoSol(base, 0);
+  for (let g = 0; g <= 40; g += 0.5) {
+    const d = degrauDoSol(base, g * RAD);
+    assert.ok(d >= ant - 1e-15, `não diminui com o sol subindo (${g} graus)`);
+    ant = d;
+  }
+  // o passo da ponta da sombra do anel de 160 m: h dθ / sen² e (o sol anda ~0,92 grau de elevação por grau no fim da tarde)
+  const ponta = (h, g) => (h * 0.92 * degrauDoSol(base, g * RAD)) / Math.sin(g * RAD) ** 2;
+  assert.ok(ponta(160, 9) < 30, `anel às 17h30: ${ponta(160, 9).toFixed(0)} m por troca do mapa`);
+  assert.ok(ponta(160, 20) < 30 && ponta(160, 30) < 40, `${ponta(160, 20).toFixed(0)} e ${ponta(160, 30).toFixed(0)} m`);
+  // no Sol: com o sol baixo o degrau encolhe; com a lua, o do perfil
+  const cena = new THREE.Scene();
+  const sombra = { degrau: 0, forca: 0, redimensionar() {}, definirCascatas() {} };
+  const ctx = { cena, camera: new THREE.PerspectiveCamera(), sol: { dir: new THREE.Vector3() }, sombra };
+  const sol = new Sol(ctx);
+  sol.configurar(PERFIS.pc);
+  sol.atualizar(astroEl(9), { solIrr: [0.9, 0.6, 0.3], luaIrr: [0, 0, 0] });
+  assert.ok(Math.abs(sombra.degrau - base * DEGRAU_SOL_BAIXO) < 1e-12, 'sol a 9 graus');
+  sol.atualizar(astroEl(50), { solIrr: [3, 3, 3], luaIrr: [0, 0, 0] });
+  assert.ok(Math.abs(sombra.degrau - base) < 1e-12, 'sol a 50 graus');
+  sol.atualizar(astroEl(-30, { dir: [0, 0.8, 0.6], elevacao: 0.9, iluminada: 1, fase: 0.5 }), { solIrr: [0, 0, 0], luaIrr: [0.05, 0.05, 0.06] });
+  assert.ok(Math.abs(sombra.degrau - base) < 1e-12, 'lua: o do perfil');
+  sol.descartar();
 });

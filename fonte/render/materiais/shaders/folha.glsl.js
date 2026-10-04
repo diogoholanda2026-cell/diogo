@@ -207,7 +207,9 @@ void main() {
   // margem de 2% da célula sem folha: os mipmaps não puxam a vizinha
   vec2 m = step( vec2( 0.02 ), uv ) * step( uv, vec2( 0.98 ) );
   if ( k < 7 ) c.a *= m.x * m.y;
-  gl_FragColor = vec4( clamp( c.rgb, 0.0, 1.0 ), c.a );
+  // cor multiplicada pelo alfa: os mipmaps fazem a média ponderada pela cobertura e arvCor divide de volta, sem
+  // escurecer (a média com o vazio) nem clarear (a borda e o fundo de cor cheia da palma e da embaúba)
+  gl_FragColor = vec4( clamp( c.rgb, 0.0, 1.0 ) * c.a, c.a );
 }
 `,
 };
@@ -222,6 +224,11 @@ export const ARV_DENS_LOD1 = 1.7;
 /**
  * Coordenada do atlas de folhas: célula (0 a 7), uv local (a casca repete; as folhas ficam na célula) e o recorte
  * por alfa que guarda a cobertura nos mipmaps (sem isto a copa some de longe: a média do alfa cai abaixo do corte).
+ * arvCor: a cor da folha sem a cobertura. O atlas guarda a cor multiplicada pelo alfa (GLSL_GERAR_FOLHAS), então
+ * cada mip tem a média ponderada pela cobertura e a divisão devolve a cor da folha em qualquer mip: com o reforço do
+ * alfa os texels de pouca cobertura passam no recorte, e sem a divisão a folha de longe saía escura. (Dividir um atlas
+ * de cor cheia, só a partir do mip 1, clareava demais as bordas das folhas finas e as cartas da palma e da embaúba,
+ * que têm cor em toda a célula: o sub-bosque e as palmeiras ficavam verde-amarelados de média distância.)
  */
 export const GLSL_ARV_ATLAS = /* glsl */ `
 uniform highp sampler2D gArvFolhas;
@@ -235,6 +242,9 @@ vec4 arvFolha( float cel, vec2 uvL, out float mip ) {
   vec2 t = vec2( gArvLado, gArvLado * 0.5 );
   mip = max( 0.0, 0.5 * log2( max( dot( dx * t, dx * t ), dot( dy * t, dy * t ) ) ) );
   return textureGrad( gArvFolhas, uv, dx, dy );
+}
+vec3 arvCor( vec4 t ) {
+  return t.rgb / max( t.a, 1e-3 );
 }
 `;
 
@@ -279,7 +289,7 @@ float arvTrans;
   mapa: /* glsl */ `
 float aMip;
 vec4 aT = arvFolha( vArvCel, vArvUv, aMip );
-diffuseColor.rgb *= aT.rgb * 2.0;
+diffuseColor.rgb *= arvCor( aT ) * 2.0;
 // o LOD1 tem poucas cartas grandes: com o recorte do LOD0 a copa ficava rala (gravetos e pontos); mais cheia, ela
 // fica da densidade do LOD0 e do impostor (assado do LOD0)
 #ifdef ARV_LOD1
@@ -402,21 +412,64 @@ varying vec3 vNormalArv;
 void main() {
   float aMip;
   vec4 aT = arvFolha( vArvCel, vArvUv, aMip );
-  if ( vArvCel < 6.5 && aT.a < 0.5 ) discard;
+  // o mesmo recorte do LOD0 e do LOD1, com o reforço do alfa pelo mip: o quadro do assado é pequeno (128 px no PC) e,
+  // sem o reforço, a média do alfa das cartas de folha cai abaixo do corte e só o tronco e os galhos ficam
+  if ( vArvCel < 6.5 && aT.a * ( 1.0 + aMip * 0.45 ) < 0.5 ) discard;
   if ( uModoNormal > 0.5 ) gl_FragColor = vec4( normalize( vNormalArv ) * 0.5 + 0.5, 1.0 );
-  else gl_FragColor = vec4( sqrt( clamp( vCor * aT.rgb * 2.0, 0.0, 1.0 ) ), 1.0 );
+  else gl_FragColor = vec4( sqrt( clamp( vCor * arvCor( aT ) * 2.0, 0.0, 1.0 ) ), 1.0 );
 }
 `,
 };
 
-/** Trechos do material dos impostores (MeshStandardMaterial sobre uma carta instanciada por árvore). */
-export const GLSL_IMPOSTOR = {
-  verticePars: /* glsl */ `
+/**
+ * A carta de cada árvore no vértice (o desenho e a sombra própria): os atributos da instância, o centro e o raio da
+ * esfera do modelo no mundo e a carta virada para quem olha, com as duas vistas do atlas mais perto da direção e o uv
+ * nelas.
+ */
+export const GLSL_IMP_CARTA = /* glsl */ `
 attribute vec4 aImpPos;   // x, y, z da base, giro
 attribute vec2 aImpEsc;   // escala horizontal e vertical
 attribute vec4 aInst;     // tom, semente, esmaecer, espécie (bytes)
 uniform vec2 gImpEsfera[ 8 ];   // por espécie: centro da esfera em y e raio (modelo)
 ${GLSL_IMP_QUADROS}
+float impEsp;      // espécie
+vec3 impCentro;    // centro da esfera no mundo
+float impRaio;     // raio da esfera no mundo
+void impEsfera() {
+  impEsp = floor( aInst.w * 255.0 + 0.5 );
+  vec2 e = gImpEsfera[ int( impEsp ) ];
+  impCentro = aImpPos.xyz + vec3( 0.0, e.x * aImpEsc.y, 0.0 );
+  impRaio = e.y * max( aImpEsc.x, aImpEsc.y );
+}
+// o vértice da carta virada para v (unitário, de onde se olha) em volta do centro da esfera; q: as duas vistas e o
+// peso, uv: o uv do vértice nas duas
+vec3 impCarta( vec3 v, out vec3 q, out vec4 uv ) {
+  vec3 aDir = cross( vec3( 0.0, 1.0, 0.0 ), v );
+  aDir = dot( aDir, aDir ) > 1e-6 ? normalize( aDir ) : vec3( 1.0, 0.0, 0.0 );
+  vec3 aCima = cross( v, aDir );
+  vec3 aP = impCentro + ( aDir * position.x + aCima * position.y ) * impRaio;
+  // para o espaço da árvore: desfaz o giro e a escala. A instância do LOD0 e do LOD1 gira em volta de y por
+  // matrizArvore (mundo.xz = (c x + s z, -s x + c z)); aqui vai a inversa (local.xz = (c x - s z, s x + c z)), senão o
+  // impostor mostra a árvore girada ao contrário e a copa pula de lado na troca do LOD1 para o impostor
+  float aCg = cos( aImpPos.w );
+  float aSg = sin( aImpPos.w );
+  mat2 aRot = mat2( aCg, aSg, -aSg, aCg );
+  vec3 aDl = v;
+  aDl.xz = aRot * aDl.xz;
+  aDl = normalize( aDl / vec3( aImpEsc.x, aImpEsc.y, aImpEsc.x ) );
+  vec3 aL = aP - impCentro;
+  aL.xz = aRot * aL.xz;
+  aL /= vec3( aImpEsc.x, aImpEsc.y, aImpEsc.x ) * gImpEsfera[ int( impEsp ) ].y;
+  q = impostorQuadros( aDl );
+  uv = vec4( impostorUv( q.x, aL, aDl ), impostorUv( q.y, aL, aDl ) );
+  return aP;
+}
+`;
+
+/** Trechos do material dos impostores (MeshStandardMaterial sobre uma carta instanciada por árvore). */
+export const GLSL_IMPOSTOR = {
+  verticePars: /* glsl */ `
+${GLSL_IMP_CARTA}
 flat varying vec4 vImpQ;    // vista a, vista b, peso, espécie
 varying vec4 vImpUv;        // uv local nas vistas a e b
 flat varying vec2 vImpGiro;
@@ -425,32 +478,14 @@ varying float vImpFade;
 `,
   // no lugar de begin_vertex: a carta virada para a câmera em volta do centro da esfera, e as vistas
   vertice: /* glsl */ `
-int aEsp = int( aInst.w * 255.0 + 0.5 );
-vec2 aEf = gImpEsfera[ aEsp ];
-vec3 aC = aImpPos.xyz + vec3( 0.0, aEf.x * aImpEsc.y, 0.0 );
-float aR = aEf.y * max( aImpEsc.x, aImpEsc.y );
-vec3 aParaCam = normalize( cameraPosition - aC );
-vec3 aDir = cross( vec3( 0.0, 1.0, 0.0 ), aParaCam );
-aDir = dot( aDir, aDir ) > 1e-6 ? normalize( aDir ) : vec3( 1.0, 0.0, 0.0 );
-vec3 aCima = cross( aParaCam, aDir );
-vec3 aP = aC + ( aDir * position.x + aCima * position.y ) * aR;
-vec3 transformed = aP;
-// para o espaço da árvore: desfaz o giro e a escala. A instância do LOD0 e do LOD1 gira em volta de y por
-// matrizArvore (mundo.xz = (c x + s z, -s x + c z)); aqui vai a inversa (local.xz = (c x - s z, s x + c z)), senão o
-// impostor mostra a árvore girada ao contrário e a copa pula de lado na troca do LOD1 para o impostor
-float aCg = cos( aImpPos.w );
-float aSg = sin( aImpPos.w );
-mat2 aRot = mat2( aCg, aSg, -aSg, aCg );
-vec3 aDl = aParaCam;
-aDl.xz = aRot * aDl.xz;
-aDl = normalize( aDl / vec3( aImpEsc.x, aImpEsc.y, aImpEsc.x ) );
-vec3 aL = aP - aC;
-aL.xz = aRot * aL.xz;
-aL /= vec3( aImpEsc.x, aImpEsc.y, aImpEsc.x ) * aEf.y;
-vec3 aQ = impostorQuadros( aDl );
-vImpQ = vec4( aQ, float( aEsp ) );
-vImpUv = vec4( impostorUv( aQ.x, aL, aDl ), impostorUv( aQ.y, aL, aDl ) );
-vImpGiro = vec2( aCg, aSg );
+impEsfera();
+vec3 aParaCam = normalize( cameraPosition - impCentro );
+vec3 aQ;
+vec4 aUv;
+vec3 transformed = impCarta( aParaCam, aQ, aUv );
+vImpQ = vec4( aQ, impEsp );
+vImpUv = aUv;
+vImpGiro = vec2( cos( aImpPos.w ), sin( aImpPos.w ) );
 vImpTom = aInst.xy;
 vImpFade = aInst.z;
 objectNormal = aParaCam;
@@ -507,6 +542,61 @@ normal = normalize( ( viewMatrix * vec4( impNormal, 0.0 ) ).xyz );
   reflectedLight.indirectDiffuse += diffuseColor.rgb * directionalLights[ 0 ].color * 0.05;
 }
 #endif
+`,
+};
+
+/**
+ * Quanto a carta da sombra recua para longe do sol, em raios da esfera da árvore. O recuo é ao longo da luz: a sombra
+ * no chão não muda, e a carta do desenho (que passa pelo centro, virada para a câmera) não cai na sombra da própria
+ * árvore numa linha reta no meio da copa. Meio raio: com o sol a pino o chão debaixo da copa (a uns 0,6 raio abaixo do
+ * centro) segue na sombra.
+ */
+export const IMP_RECUO_SOMBRA = 0.5;
+
+/**
+ * Sombra própria dos impostores (o gêmeo projetor, só profundidade): a carta de cada árvore virada para o sol, com a
+ * vista do atlas mais perto da direção dele (o desenho da copa, não um disco), recortada pelo alfa do assado com o
+ * mesmo reforço pelo mip do desenho e o mesmo esmaecer da troca. A câmera da sombra é ortográfica: a direção para o sol
+ * é o eixo z dela, a mesma para todas as árvores. Uma leitura de textura por pixel, sem laço.
+ */
+export const GLSL_IMP_SOMBRA = {
+  verticePars: /* glsl */ `
+${GLSL_IMP_CARTA}
+flat varying vec2 vImpS;    // vista, espécie
+varying vec2 vImpUvS;
+varying float vImpFade;
+`,
+  // no lugar de begin_vertex
+  vertice: /* glsl */ `
+impEsfera();
+vec3 aParaSol = normalize( vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] ) );
+vec3 aQ;
+vec4 aUv;
+vec3 transformed = impCarta( aParaSol, aQ, aUv ) - aParaSol * ( impRaio * ${f1(IMP_RECUO_SOMBRA)} );
+// só a vista mais perto do sol (uma leitura no fragmento)
+bool aPrimeira = aQ.z < 0.5;
+vImpS = vec2( aPrimeira ? aQ.x : aQ.y, impEsp );
+vImpUvS = aPrimeira ? aUv.xy : aUv.zw;
+vImpFade = aInst.z;
+`,
+  fragmentoPars: /* glsl */ `
+uniform highp sampler2D gImpCor;
+uniform vec2 gImpAtlas;   // vistas por linha, espécies
+flat varying vec2 vImpS;
+varying vec2 vImpUvS;
+varying float vImpFade;
+`,
+  // depois de clipping_planes_fragment
+  fragmento: /* glsl */ `
+{
+  vec2 aDx = dFdx( vImpUvS ) * vec2( textureSize( gImpCor, 0 ) ) / gImpAtlas;
+  vec2 aDy = dFdy( vImpUvS ) * vec2( textureSize( gImpCor, 0 ) ) / gImpAtlas;
+  float aLod = clamp( 0.5 * log2( max( dot( aDx, aDx ), dot( aDy, aDy ) ) ), 0.0, 3.5 );
+  float aA = textureLod( gImpCor, ( vImpS + clamp( vImpUvS, 0.0, 1.0 ) ) / gImpAtlas, aLod ).a;
+  if ( any( lessThan( vImpUvS, vec2( 0.0 ) ) ) || any( greaterThan( vImpUvS, vec2( 1.0 ) ) ) ) aA = 0.0;
+  if ( aA * ( 1.0 + aLod * 0.35 ) < 0.5 ) discard;
+  if ( vImpFade < 0.999 && fract( sin( dot( floor( gl_FragCoord.xy ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 ) > vImpFade ) discard;
+}
 `,
 };
 

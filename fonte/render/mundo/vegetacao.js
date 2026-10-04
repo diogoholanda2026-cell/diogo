@@ -5,8 +5,12 @@
 //   LOD0  a árvore inteira (cartas de folhas com recorte), até `lod0` m e dentro do teto de triângulos do perfil
 //   LOD1  poucas cartas grandes viradas para fora, até `lod1` m
 //   impostor  uma carta por árvore com a vista assada mais perto da direção da câmera (geracao/impostor.js), num
-//         atlas só para todas as espécies: 1 chamada, até `perto` m, esmaecendo (pontilhado) na faixa da troca
-// As árvores de LOD0 e LOD1 projetam na sombra própria (ctx.sombra, gêmeos com o recorte das folhas); o impostor não.
+//         atlas só para todas as espécies: 1 chamada, esmaecendo (pontilhado) na faixa do fim do alcance
+// Alcance por dono (VIS1c): a mata e o campo até `perto` m (além dele a copa pintada no chão toma o lugar); a rua, os
+// lotes e as plantadas (praças, a Arcologia) até `cidade` m, porque nada as pinta no chão de longe; a moita, venha de
+// onde vier, até `moitas` m.
+// Todas projetam na sombra própria (ctx.sombra): as de LOD0 e LOD1 com gêmeos de recorte das folhas, o impostor com a
+// carta virada para o sol (até onde as cascatas alcançam: o resto o mapa corta).
 // Fontes das árvores: a mata e o campo (pela pintura do chão), a rua (os setores de vias, quando o domínio 'props'
 // deixa de desenhar as copas dele) e as plantadas por outros domínios (ctx.vegetacao.plantar: lotes, praças, a
 // Arcologia).
@@ -23,20 +27,32 @@ import { hashF } from '../geracao/ruido.js';
 // ------------------------------------------------------------------------------------------------ parâmetros
 
 /**
- * Por perfil (desenho do render 2.10; o 'pc' herda do Alta): alcances dos LODs (m da câmera), o alcance das árvores
- * de perto e a faixa em que elas esmaecem e a copa pintada volta, o das moitas, o lado de cada vista do impostor (px)
- * e os tetos (triângulos do LOD0 e do LOD1, impostores). A mata é densa: os alcances do desenho (150 e 500 m no Alta)
- * valem para árvores soltas; na mata fechada o que pesa é a sobreposição das cartas recortadas (cada camada paga a luz
- * inteira). Medido no SwiftShader na vista da mata (cena costa, ?vista=mata): 187 árvores no LOD0 custavam 5 vezes as
- * 1.496 do LOD1 e 26 vezes os 780 impostores; daí o LOD0 só até 45 m e o impostor (uma carta por árvore) já aos 140 m
- * no Alta.
+ * Por perfil (desenho do render 2.10; o 'pc' herda do Alta): alcances dos LODs (m da câmera), o alcance da mata e do
+ * campo e a faixa em que elas esmaecem e a copa pintada volta, o das árvores da cidade (rua, lotes e plantadas, VIS1c:
+ * nada as pinta no chão de longe, então vão até a metade de cima da vista do bairro) e a faixa delas, o das moitas, o
+ * lado de cada vista do impostor (px) e os tetos (triângulos do LOD0 e do LOD1, impostores). A mata é densa: os
+ * alcances do desenho (150 e 500 m no Alta) valem para árvores soltas; na mata fechada o que pesa é a sobreposição das
+ * cartas recortadas (cada camada paga a luz inteira). Medido no SwiftShader na vista da mata (cena costa, ?vista=mata):
+ * 187 árvores no LOD0 custavam 5 vezes as 1.496 do LOD1 e 26 vezes os 780 impostores; daí o LOD0 só até 45 m e o
+ * impostor (uma carta por árvore) já aos 140 m no Alta.
  */
 export const PERFIL_VEGETACAO = Object.freeze({
-  ultra: { lod0: 70, lod1: 200, perto: 900, faixa: 180, moitas: 240, faixaMoitas: 60, impostor: 192, tris0: 200000, tris1: 120000, impostores: 30000 },
-  alta: { lod0: 45, lod1: 140, perto: 650, faixa: 150, moitas: 170, faixaMoitas: 45, impostor: 128, tris0: 100000, tris1: 60000, impostores: 14000 },
-  media: { lod0: 28, lod1: 90, perto: 420, faixa: 110, moitas: 110, faixaMoitas: 35, impostor: 64, tris0: 40000, tris1: 30000, impostores: 6000 },
-  leve: { lod0: 14, lod1: 50, perto: 240, faixa: 70, moitas: 60, faixaMoitas: 20, impostor: 48, tris0: 12000, tris1: 12000, impostores: 2500 },
+  ultra: { lod0: 70, lod1: 200, perto: 900, faixa: 180, cidade: 1300, faixaCidade: 250, moitas: 240, faixaMoitas: 60, impostor: 192, tris0: 200000, tris1: 120000, impostores: 30000 },
+  alta: { lod0: 45, lod1: 140, perto: 650, faixa: 150, cidade: 1000, faixaCidade: 200, moitas: 170, faixaMoitas: 45, impostor: 128, tris0: 100000, tris1: 60000, impostores: 14000 },
+  media: { lod0: 28, lod1: 90, perto: 420, faixa: 110, cidade: 650, faixaCidade: 150, moitas: 110, faixaMoitas: 35, impostor: 64, tris0: 40000, tris1: 30000, impostores: 6000 },
+  leve: { lod0: 14, lod1: 50, perto: 240, faixa: 70, cidade: 360, faixaCidade: 90, moitas: 60, faixaMoitas: 20, impostor: 48, tris0: 12000, tris1: 12000, impostores: 2500 },
 });
+
+/**
+ * Alcance e faixa de cada tipo de fonte: a mata e o campo, as moitas, e a cidade (rua, lotes e plantadas). Com a
+ * espécie, a moita fica no alcance das moitas venha de onde vier (as plantadas nos jardins dos lotes e dos serviços
+ * também: de longe ela tem um pixel e só gastaria impostor e sombra).
+ */
+export function alcanceDaFonte(pv, tipo, especie = -1) {
+  if (tipo === 'moitas' || especie === ESPECIE.moita) return [pv.moitas, pv.faixaMoitas];
+  if (tipo === 'cidade') return [pv.cidade ?? pv.perto, pv.faixaCidade ?? pv.faixa];
+  return [pv.perto, pv.faixa];
+}
 /** Lado (m) dos ladrilhos da mata e do campo (gerados quando entram no alcance, guardados num cache). */
 export const LADRILHO = 64;
 const MAX_LADRILHOS = 2400;
@@ -322,6 +338,29 @@ export function criarMaterialImpostor(ganchos, U) {
   return ganchos.aplicar(m, GANCHOS_ARVORE);
 }
 
+/**
+ * Material do gêmeo dos impostores na sombra própria (VIS1c): a carta de cada árvore virada para o sol, com o desenho
+ * da copa do atlas e o recorte do assado (sem ela, além do LOD1 as copas ficavam soltas no chão, sem sombra).
+ */
+export function criarMaterialImpostorSombra(U) {
+  const m = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+  m.name = 'arvore-impostor-sombra';
+  m.onBeforeCompile = (sh) => {
+    const { GLSL_IMP_SOMBRA } = F;
+    Object.assign(sh.uniforms, U);
+    let vs = sh.vertexShader;
+    vs = trocar(vs, '#include <common>', `#include <common>\n${GLSL_IMP_SOMBRA.verticePars}`);
+    vs = trocar(vs, '#include <begin_vertex>', GLSL_IMP_SOMBRA.vertice);
+    let fs = sh.fragmentShader;
+    fs = trocar(fs, '#include <common>', `#include <common>\n${GLSL_IMP_SOMBRA.fragmentoPars}`);
+    fs = trocar(fs, '#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${GLSL_IMP_SOMBRA.fragmento}`);
+    sh.vertexShader = vs;
+    sh.fragmentShader = fs;
+  };
+  m.customProgramCacheKey = () => 'arvore-impostor-sombra';
+  return m;
+}
+
 // ------------------------------------------------------------------------------------------------ malhas
 
 /** Geometria do three de uma malha do gerador. */
@@ -430,14 +469,19 @@ class Balde {
   }
 }
 
-/** Os impostores: uma carta (2 triângulos) por árvore, numa geometria instanciada. */
+/**
+ * Os impostores: uma carta (2 triângulos) por árvore, numa geometria instanciada. Com matSombra, o gêmeo na sombra
+ * própria, com a mesma geometria (as instâncias não vão duas vezes para a GPU).
+ */
 class Impostores {
-  constructor(ctx, material) {
+  constructor(ctx, material, matSombra = null) {
     this.ctx = ctx;
     this.material = material;
+    this.matSombra = matSombra;
     this.cap = 0;
     this.n = 0;
     this.malha = null;
+    this.gemeo = null;
     this._garantir(256);
   }
 
@@ -464,12 +508,17 @@ class Impostores {
     if (velha) {
       velha.geometry.dispose();
       velha.geometry = g;
+      if (this.gemeo) this.gemeo.geometry = g;
     } else {
       m.name = 'arvores:impostores';
       m.frustumCulled = false;
       m.visible = false;
       this.ctx.medidas.familia(m, 'arvores');
       this.ctx.cena.add(m);
+      if (this.matSombra && this.ctx.sombra) {
+        this.gemeo = this.ctx.medidas.familia(this.ctx.sombra.projetor(m, { material: this.matSombra }), 'sombra');
+        this.gemeo.visible = false;
+      }
     }
     this.malha = m;
     this.cap = cap;
@@ -490,11 +539,14 @@ class Impostores {
     }
     g.instanceCount = n;
     this.malha.visible = n > 0;
+    if (this.gemeo) this.gemeo.visible = n > 0;
     this.n = n;
   }
 
   descartar() {
     if (!this.malha) return;
+    if (this.gemeo) this.ctx.sombra.soltar(this.malha);
+    this.gemeo = null;
     this.ctx.cena.remove(this.malha);
     this.malha.geometry.dispose();
     this.malha = null;
@@ -676,6 +728,7 @@ function criarVegetacao(ctx) {
   const mats = [criarMaterialArvore(ctx.ganchos, U, 0), criarMaterialArvore(ctx.ganchos, U, 1)];
   const matSombra = criarMaterialSombra(U);
   const matImp = criarMaterialImpostor(ctx.ganchos, U);
+  const matImpSombra = criarMaterialImpostorSombra(U);
   // as malhas (na cena e na sombra própria) só nascem com o GLSL das árvores, que vem sob demanda: até ele chegar,
   // nada de atlas, assado, montagem nem aquecimento das árvores (o aquecimento compila até o escondido)
   let baldes = null;
@@ -701,7 +754,7 @@ function criarVegetacao(ctx) {
     pegarFolhas();
     baldes = [0, 1].map((lod) => modelos[lod].map((M, e) => new Balde(ctx, M.geo, mats[lod], `arvores:${ESPECIES[e].id}:${lod}`)));
     sombras = modelos[1].map((M, e) => new Balde(ctx, M.geo, matSombra, `arvores:${ESPECIES[e].id}:sombra`, matSombra, false));
-    imp = new Impostores(ctx, matImp);
+    imp = new Impostores(ctx, matImp, matImpSombra);
     assador = criarAssadorImpostores(U, modelos[0][0].geo);
     // chegou depois do aquecimento: uma rodada a mais compila os programas das árvores (nada compila no meio do jogo)
     const aq = ctx.quadro?.aquecer;
@@ -727,7 +780,7 @@ function criarVegetacao(ctx) {
     const alvoAssar = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true });
     const ps = [
       aq.compilar([...baldes[0].map((b) => b.malha), ...baldes[1].map((b) => b.malha), imp.malha]),
-      aq.compilar(sombras.map((b) => b.malha), { sombra: true }),
+      aq.compilar([...sombras.map((b) => b.malha), imp.gemeo].filter(Boolean), { sombra: true }),
       aq.compilar([assador.cena], { alvo: alvoAssar, cena: assador.cena }),
     ];
     const fim = () => {
@@ -806,6 +859,9 @@ function criarVegetacao(ctx) {
   // ordem é a distância e o número da candidata (sem limite de listas: um dono por lote passa de milhares)
   let cap = 0;
   let fonteRef = [];
+  // alcance e faixa de cada fonte (alcanceDaFonte): a mata, as moitas ou a cidade
+  let fonteAlc = [];
+  let fonteFaixa = [];
   let candF = new Int32Array(0);
   let candO = new Int32Array(0);
   let ordF = new Int32Array(0);
@@ -855,13 +911,21 @@ function criarVegetacao(ctx) {
       camLarga.copy(cam, false);
       camLarga.fov = Math.min(170, cam.fov * 1.35);
       camLarga.near = 0.5;
-      camLarga.far = pv.perto * 1.2;
+      camLarga.far = Math.max(pv.perto, pv.cidade ?? 0) * 1.2;
       camLarga.updateProjectionMatrix();
       m4.multiplyMatrices(camLarga.projectionMatrix, cam.matrixWorldInverse);
     } else m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     frustum.setFromProjectionMatrix(m4);
-    // fontes: os ladrilhos do alcance (pedidos à fila os que faltam), a rua e as plantadas
+    // fontes: os ladrilhos do alcance (pedidos à fila os que faltam), a rua e as plantadas, cada uma com o seu alcance
     fonteRef = [];
+    fonteAlc = [];
+    fonteFaixa = [];
+    const fonte = (l, tipo) => {
+      const [a, f] = alcanceDaFonte(pv, tipo);
+      fonteRef.push(l);
+      fonteAlc.push(a);
+      fonteFaixa.push(f);
+    };
     const R = pv.perto;
     const i0 = Math.floor((p.x - R) / LADRILHO);
     const i1 = Math.floor((p.x + R) / LADRILHO);
@@ -885,8 +949,8 @@ function criarVegetacao(ctx) {
             continue;
           }
           L.usado = c.quadros ?? 0;
-          if (L.arvores.length) fonteRef.push(L.arvores);
-          if (L.moitas.length && cx * cx + cz * cz < (pv.moitas + LADRILHO) ** 2) fonteRef.push(L.moitas);
+          if (L.arvores.length) fonte(L.arvores, 'mata');
+          if (L.moitas.length && cx * cx + cz * cz < (pv.moitas + LADRILHO) ** 2) fonte(L.moitas, 'moitas');
         }
       }
     }
@@ -894,22 +958,23 @@ function criarVegetacao(ctx) {
     pedir.sort((a, b) => a[0] - b[0]);
     fila.length = 0;
     for (const [, k] of pedir) fila.push(k);
-    if (comRua && ruaArr.length) fonteRef.push(ruaArr);
-    for (const l of plantadas.values()) if (l.length) fonteRef.push(l);
+    if (comRua && ruaArr.length) fonte(ruaArr, 'cidade');
+    for (const l of plantadas.values()) if (l.length) fonte(l, 'cidade');
     // candidatas: dentro do alcance e da vista
     let total = 0;
     for (const l of fonteRef) total += l.length / PASSO_ARVORE;
     garantirTrabalho(Math.min(total, CANDIDATAS_MAX));
     let n = 0;
     fonteRef.forEach((l, f) => {
-      const ehMoita = l.length && l[3] === ESPECIE.moita;
-      const alc = ehMoita ? pv.moitas : R;
+      const alc = fonteAlc[f];
+      const alcMoita = Math.min(alc, pv.moitas);
       for (let o = 0; o < l.length && n < CANDIDATAS_MAX; o += PASSO_ARVORE) {
         const alt = l[o + 4];
         const cy = l[o + 1] + alt * 0.5;
         const d = Math.hypot(l[o] - p.x, cy - p.y, l[o + 2] - p.z);
-        // (também fora: a distância NaN de uma árvore plantada com coordenada inválida)
-        if (!(d <= alc)) continue;
+        // (também fora: a distância NaN de uma árvore plantada com coordenada inválida); a moita plantada fica no
+        // alcance das moitas (alcanceDaFonte)
+        if (!(d <= (l[o + 3] === ESPECIE.moita ? alcMoita : alc))) continue;
         esfera.center.set(l[o], cy, l[o + 2]);
         esfera.radius = Math.max(alt, l[o + 5]) * 0.6 + 2;
         if (!frustum.intersectsSphere(esfera)) continue;
@@ -949,8 +1014,7 @@ function criarVegetacao(ctx) {
       const larg = l[o + 5];
       const sx = larg / ref[e].largura;
       const sy = alt / ref[e].altura;
-      const ehMoita = e === ESPECIE.moita;
-      const fade = ehMoita ? esmaecer(distArr[k], pv.moitas, pv.faixaMoitas) : esmaecer(distArr[k], R, pv.faixa);
+      const fade = e === ESPECIE.moita ? esmaecer(distArr[k], pv.moitas, pv.faixaMoitas) : esmaecer(distArr[k], fonteAlc[ordF[k]], fonteFaixa[ordF[k]]);
       if (fade <= 0.01) continue;
       const tom = Math.round(Math.min(1, Math.max(0, l[o + 7])) * 255);
       const sem = Math.round(Math.min(1, Math.max(0, l[o + 8])) * 255);
@@ -1045,11 +1109,12 @@ function criarVegetacao(ctx) {
       }
       const vias = c.dominio('vias');
       if (comRua && vias?.setoresPerto) {
+        const alcRua = alcanceDaFonte(pv, 'cidade')[0];
         let h = `${vias.versaoObjetos ?? 0}`;
-        for (const st of vias.setoresPerto(pv.perto)) h += `|${st.s}`;
+        for (const st of vias.setoresPerto(alcRua)) h += `|${st.s}`;
         if (h !== chaveRua) {
           chaveRua = h;
-          arvoresDaRua(vias, pv.perto, rua);
+          arvoresDaRua(vias, alcRua, rua);
           ruaArr = Float32Array.from(rua);
           sujo = true;
         }
@@ -1093,7 +1158,7 @@ function criarVegetacao(ctx) {
       for (const b of [...(baldes?.flat() ?? []), ...(sombras ?? [])]) b.descartar();
       imp?.descartar();
       for (const lod of [0, 1]) for (const M of modelos[lod]) M.geo.dispose();
-      for (const m of [...mats, matSombra, matImp]) m.dispose();
+      for (const m of [...mats, matSombra, matImp, matImpSombra]) m.dispose();
       assador?.mat.dispose();
       for (const a of assado?.alvos ?? []) a.dispose();
     },

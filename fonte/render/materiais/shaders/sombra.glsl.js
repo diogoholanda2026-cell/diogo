@@ -4,12 +4,13 @@
 // na borda entre as cascatas e, fora delas, entrega à sombra de longe (sem ela, some na borda); e multiplica a luz do
 // sol pela sombra das nuvens (uma leitura de uma textura de ruído que anda com o vento, coerente com o céu).
 // 'sombraLonge' e 'hao' (R1b) leem uma textura só, o campo (RGBA16F sobre o mapa, ambiente/sombraLonge.js): R e G são
-// a altura da sombra no degrau do sol e no seguinte (degraus de 3 graus, misturados por gCampoT: a sombra anda sem
-// salto), B a visibilidade do céu no chão da vizinhança e A a cota desse chão. Um fragmento está na sombra de longe
+// a altura da sombra no degrau do sol e no seguinte (degraus de 3 graus, misturados por gCampoT em gCampoMistura: a
+// sombra anda sem salto), B a visibilidade do céu no chão da vizinhança e A a cota desse chão. Um fragmento está na sombra de longe
 // quando fica abaixo da altura da sombra; o HAO escurece a luz do ambiente perto do chão entre prédios e no pé deles.
-// Também aqui o passe que escreve o campo na GPU (CAMPO_PASSE). Com a profundidade invertida (EXT_clip_control) o
-// mapa de perto guarda 1 perto da luz: o viés troca de sinal e a comparação do amostrador também (quem troca é
-// render/sombra/mapa.js). Tudo em highp (D44). Fora dos índices.
+// Também aqui o passe que escreve o campo na GPU (CAMPO_PASSE), com a marcha de perto (~900 m, chão e cidade) e a de
+// longe (VIS1d, até 3,5 km, só a cidade: as torres altas e os anéis com o sol baixo). Com a profundidade invertida
+// (EXT_clip_control) o mapa de perto guarda 1 perto da luz: o viés troca de sinal e a comparação do amostrador também
+// (quem troca é render/sombra/mapa.js). Tudo em highp (D44). Fora dos índices.
 
 /**
  * Normal do fragmento no mundo: a da luz nos materiais iluminados; nos outros, a da face pelas derivadas.
@@ -137,12 +138,39 @@ export const SOMBRA_SOL = /* glsl */ `
 `;
 
 /**
+ * Mistura das duas alturas do campo entre os degraus do sol (revisão da VIS1d): reta entre R e G onde as duas são
+ * sombra de verdade (a linha que sobe a fachada anda por igual). Onde uma delas é só o chão (a ponta de uma sombra
+ * longa chegando ou saindo: a célula ao sol guarda a própria cota, não o quanto falta para a sombra), a reta punha a
+ * ponta no lugar novo logo no começo do degrau e a deixava parada no resto: no fim da tarde, de 24% a 50% das células
+ * que trocam de sombra no degrau trocavam nos piores 2% dele (a Blade Tower às 17h12, 41%; andando por igual, 2%). Ali
+ * o tempo se curva, como faria a altura de verdade do lado ao sol (abaixo do chão): a sombra que chega entra devagar
+ * (t elevado a `potencia`) e a que sai, cedo. Com a curva, de 7% a 18% (a Blade, 10%), e no meio do degrau a ponta fica
+ * mais perto de onde o sol a põe. `chao`: de quantos metros acima do chão da célula (A) o lado mais baixo deixa de ser
+ * só o chão.
+ */
+export const MISTURA_CAMPO = Object.freeze({ potencia: 3, chao: [1, 4] });
+
+/** gCampoMistura( c, t ): a altura da sombra no texel c do campo na fração t do degrau (MISTURA_CAMPO). */
+export const CAMPO_MISTURA = /* glsl */ `
+#ifndef G_CAMPO_MISTURA
+#define G_CAMPO_MISTURA
+float gCampoMistura( vec4 c, float t ) {
+  float u = 1.0 - t;
+  float curva = c.g > c.r ? t * t * t : 1.0 - u * u * u;
+  float w = 1.0 - smoothstep( ${MISTURA_CAMPO.chao[0].toFixed(1)}, ${MISTURA_CAMPO.chao[1].toFixed(1)}, min( c.r, c.g ) - c.a );
+  return mix( c.r, c.g, mix( t, curva, w ) );
+}
+#endif
+`;
+
+/**
  * 'sombraLonge': um fragmento em (x, y, z) está na sombra quando y fica abaixo da altura da sombra do campo, com o
  * viés e a meia penumbra em metros (gCampoVies); o ponto anda 3/4 de célula pela normal (a parede lê a rua na frente
  * dela, não o próprio telhado). Fora do mapa, sem sombra.
  */
 export const SOMBRA_LONGE_PARS = /* glsl */ `
 ${CAMPO_PARS}
+${CAMPO_MISTURA}
 uniform float gCampoT;
 uniform vec2 gCampoVies;
 float gSombraLonge( vec3 nW ) {
@@ -150,7 +178,7 @@ float gSombraLonge( vec3 nW ) {
   vec2 uv = ( vGPosMundo.xz + nW.xz * ( 0.75 * gCampoParams.w ) - gCampoParams.xy ) * gCampoParams.z;
   if ( uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0 ) return 1.0;
   vec4 c = texture( gCampoMapa, uv );
-  float s = mix( c.r, c.g, gCampoT ) - gCampoVies.x;
+  float s = gCampoMistura( c, gCampoT ) - gCampoVies.x;
   return smoothstep( s - gCampoVies.y, s + gCampoVies.y, vGPosMundo.y + nW.y * 0.4 );
 }
 `;
@@ -209,6 +237,23 @@ export function distanciaDaMarcha(k) {
 export const PASSO_NIVEL1 = 2;
 
 /**
+ * Marcha de longe (VIS1d): do fim da marcha de perto (ALCANCE, ~903 m) até `fim` (o último passo inteiro antes dele;
+ * nunca lê além), só pelos prédios e pela Arcologia (o topo da cidade sem o chão: os morros seguem com a sombra de
+ * ~900 m), para a sombra das torres altas e dos anéis com o sol baixo (a Blade Tower, de 500 m, faz 3,2 km com o sol
+ * a 9 graus). Duas grades da cidade, montadas na CPU a partir do campo (ambiente/sombraLonge.js, Altos): a fina, de
+ * `celulas` células do campo por lado (8 m no Alta e no 'pc', 16 m no Média), com o maior topo de cada célula, e a de
+ * saltos, de `refino` células finas por lado (64 m e 128 m), com o maior topo da célula e das 8 vizinhas. A marcha
+ * anda em passos do tamanho da célula de saltos: lê a de saltos no meio do passo e só quando ela poderia subir a
+ * sombra lê as `refino` células finas do passo. Para quando o maior topo da região que a marcha alcança (uLonge.w, da
+ * CPU) não subiria mais a sombra; sem prédio alto por perto, nem começa. A sombra engorda no máximo uma célula fina,
+ * como a do nível 1 na marcha de perto.
+ */
+export const MARCHA_LONGE = Object.freeze({ fim: 3500, celulas: 2, refino: 8, passosMax: 48 });
+
+/** Passo da marcha de longe (m) para o passo do campo (m): 64 m no Alta e no 'pc', 128 m no Média. */
+export const passoLonge = (passoCampo) => MARCHA_LONGE.celulas * MARCHA_LONGE.refino * passoCampo;
+
+/**
  * Passe do campo (uma chamada por ladrilho, com viewport e tesoura no alvo): cada texel é uma célula do mapa. A
  * marcha lê o campo bilinear no fim de cada passo e no meio dele e, nos passos longos, também a célula do nível 1 que
  * contém cada uma dessas amostras (texelFetch): medido no campo da cidade sintética às 17h30, fica a menos de 1% da
@@ -217,7 +262,9 @@ export const PASSO_NIVEL1 = 2;
  * vizinhos) e A esse chão. uModo 1 (passo do sol): R copia o G do campo anterior, G marcha para a direção nova, B e A
  * copiam. uDirA e uDirB: xy a direção do sol no chão (unitária), z a tangente da elevação, w 1 se há sol. uHMax: o
  * maior do campo na região que a marcha alcança (com folga para a meia precisão); a marcha para quando nem ele, mais à
- * frente, subiria a sombra (com o sol alto, antes da metade dos passos; o resultado é o mesmo).
+ * frente, subiria a sombra (com o sol alto, antes da metade dos passos; o resultado é o mesmo). Depois dela, a marcha
+ * de longe pelos prédios (MARCHA_LONGE): uAltos e uSaltos as duas grades, uLonge o início, o fim e o passo dela e o
+ * maior topo da cidade na região que ela alcança contra o sol.
  */
 export const CAMPO_PASSE = /* glsl */ `
 uniform sampler2D uAlturas;
@@ -229,6 +276,9 @@ uniform vec4 uDirA;
 uniform vec4 uDirB;
 uniform float uModo;
 uniform float uHMax;
+uniform highp sampler2D uAltos;  // o maior topo da cidade em células finas (VIS1d)
+uniform highp sampler2D uSaltos; // o maior topo na célula de saltos e nas 8 vizinhas
+uniform vec4 uLonge;             // início e fim da marcha de longe (m), o passo dela (m), o maior topo da região
 float gH( vec2 uv ) { return textureLod( uAlturas, uv, 0.0 ).r; }
 // a célula do nível 1 (o maior de 2 x 2 células) que contém o ponto
 float gH1( vec2 uv ) {
@@ -259,11 +309,33 @@ float marchar( vec2 uv, vec4 d ) {
   }
   return s;
 }
+// a marcha de longe, pelos prédios: continua a sombra s da marcha de perto
+float marcharLonge( vec2 uv, vec4 d, float s ) {
+  if ( d.w < 0.5 || uLonge.w - uLonge.x * d.z <= s ) return s;
+  vec2 duv = d.xy / uTam;
+  ivec2 nA = textureSize( uAltos, 0 );
+  ivec2 nS = textureSize( uSaltos, 0 );
+  float pf = uLonge.z / ${MARCHA_LONGE.refino}.0;
+  for ( int k = 0; k < ${MARCHA_LONGE.passosMax}; k ++ ) {
+    float t0 = uLonge.x + float( k ) * uLonge.z;
+    if ( t0 + uLonge.z > uLonge.y || uLonge.w - t0 * d.z <= s ) break;
+    vec2 m = uv + duv * ( t0 + 0.5 * uLonge.z );
+    if ( m.x < 0.0 || m.y < 0.0 || m.x > 1.0 || m.y > 1.0 ) break;
+    if ( texelFetch( uSaltos, clamp( ivec2( m * vec2( nS ) ), ivec2( 0 ), nS - 1 ), 0 ).r - t0 * d.z <= s ) continue;
+    for ( int r = 0; r < ${MARCHA_LONGE.refino}; r ++ ) {
+      float t = t0 + ( float( r ) + 0.5 ) * pf;
+      ivec2 c = clamp( ivec2( ( uv + duv * t ) * vec2( nA ) ), ivec2( 0 ), nA - 1 );
+      s = max( s, texelFetch( uAltos, c, 0 ).r - t * d.z );
+    }
+  }
+  return s;
+}
+float sombraEm( vec2 uv, vec4 d ) { return marcharLonge( uv, d, marchar( uv, d ) ); }
 void main() {
   vec2 uv = gl_FragCoord.xy / uN;
   if ( uModo > 0.5 ) {
     vec4 a = texelFetch( uAnterior, ivec2( gl_FragCoord.xy ), 0 );
-    gl_FragColor = vec4( a.g, marchar( uv, uDirB ), a.b, a.a );
+    gl_FragColor = vec4( a.g, sombraEm( uv, uDirB ), a.b, a.a );
     return;
   }
   float tx = 1.0 / uN;
@@ -285,7 +357,7 @@ void main() {
     m = max( m, ( gH( uv + dd * 8.0 ) - chao ) / ( 8.0 * uPassoM ) );
     soma += m * inversesqrt( 1.0 + m * m );
   }
-  gl_FragColor = vec4( marchar( uv, uDirA ), marchar( uv, uDirB ), 1.0 - soma / 8.0, chao );
+  gl_FragColor = vec4( sombraEm( uv, uDirA ), sombraEm( uv, uDirB ), 1.0 - soma / 8.0, chao );
 }
 `;
 

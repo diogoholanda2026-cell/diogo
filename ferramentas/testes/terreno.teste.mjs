@@ -12,14 +12,18 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { hash2, hashF, valor, gradiente, fbm, worley, copas, texturaOndas, espectroOndas } from '../../fonte/render/geracao/ruido.js';
 import { alturaEm } from '../../fonte/comum/altura.js';
-import { AGUA, TIPO_PREDIO, CELULA } from '../../fonte/contratos/flags.js';
+import { AGUA, TIPO_PREDIO, CELULA, ETAPA } from '../../fonte/contratos/flags.js';
 import {
   alturaComoGLSL, distanciaAgua, codificarAgua, prepararDados, piramideAlturas, limitesAltura, mipsDeMinimos,
   selecionarNos, faixasCDLOD, rasterizarUso, rasterizarCelulas, estacaoSeca, caixaCelula, PERFIL_TERRENO, RAIZ_CDLOD,
   COPA_ALTURA, COPA_MAX, limitesLonge, pesoCompleto, dividirNos, inclinacaoMaxima, INCL_ENCOSTA, LONGE_PIXEL,
   ORDEM_TERRENO, criarMaterialTerreno, criarUniformes, alcanceRelevo, LADO_ALCANCE_RELEVO, memoriaAssadoMB, definesCuboUV,
-  seguirVersao, inclEncosta, limitarAssado,
+  seguirVersao, inclEncosta, limitarAssado, usoDaSede, partesDaSedeNoChao, parquePintado, chaveDaSede, MATA_DA_SEDE,
+  AmbienteChao,
 } from '../../fonte/render/mundo/terreno.js';
+import { PLANOS, PLANO_PADRAO, SEDE_CENTRO, PRACA, MERIDIAN, GLEBA_ENVELOPE, mataDaSede } from '../../fonte/data/arcologia-plano.js';
+import { partesProntas } from '../../fonte/render/arcologia/planos.js';
+import { gerarLadrilho, PASSO_ARVORE, LADRILHO } from '../../fonte/render/mundo/vegetacao.js';
 import { preprocessar, contarPrograma } from '../../fonte/render/motor/capacidades.js';
 import { ORDEM_FUNDO } from '../../fonte/render/ambiente/ceu.js';
 import { lerManifesto, conferirLicencas, normalizarFatia, TETO_BYTES } from '../codificar-texturas.mjs';
@@ -964,4 +968,161 @@ test('PC3: o assado de 8.192² só com a placa que aceita a textura (MAX_TEXTURE
   assert.deepEqual(alcanceRelevo(p4, 8192, 0.001), limitesLonge(p4, 8192, 0.001));
   // o Média (2.048) cabe em qualquer placa WebGL2
   assert.equal(limitarAssado(PERFIL_TERRENO.media, 2048), PERFIL_TERRENO.media);
+});
+
+// ------------------------------------------------------------------------------------------------ a sede (VIS1c)
+
+/** Chão plano em volta da sede (a gleba a 12 m), a grade da floresta e o espelho dela, sem nada pronto. */
+function chaoDaSede() {
+  const [cx, cz] = SEDE_CENTRO;
+  const n = 257;
+  const passo = 8;
+  const origem = [cx - 1024, cz - 1024];
+  const T = { n, passo, origem, altura: new Float32Array(n * n).fill(12), agua: new Uint8Array(n * n).fill(AGUA.TERRA) };
+  const F = { n: 256, passo, origem, dens: new Uint8Array(256 * 256) };
+  return { esp: { terreno: T, floresta: F, arcologia: { plano: PLANO_PADRAO, etapas: [] } }, mapa: { ox: origem[0], oz: origem[1], lado: passo * (n - 1) } };
+}
+
+/** Pinta a mata do parque na grade como a S1a e as cenas (render/cenas/torre.js, pintarMataDaSede). */
+function pintarParque(F) {
+  for (let j = 0; j < F.n; j++) {
+    for (let i = 0; i < F.n; i++) {
+      const d = mataDaSede(F.origem[0] + (i + 0.5) * F.passo, F.origem[1] + (j + 0.5) * F.passo);
+      if (d !== null) F.dens[j * F.n + i] = Math.round(d * 255);
+    }
+  }
+}
+
+test('VIS1c: mataDaSede devolve 0 nos gramados e nas clareiras, e a mata dos bosques segue', () => {
+  const [cx, cz] = SEDE_CENTRO;
+  let gramados = 0;
+  let mata = 0;
+  for (let r = PRACA.r1 + 10; r < MERIDIAN.raio - 40; r += 7) {
+    for (let a = 0; a < 360; a += 3) {
+      const v = mataDaSede(cx + r * Math.cos((a * Math.PI) / 180), cz + r * Math.sin((a * Math.PI) / 180));
+      assert.ok(v === 0 || v >= 0.8, `no parque, ${v} a ${r} m e ${a} graus: ou gramado (0) ou mata`);
+      if (v === 0) gramados++;
+      else mata++;
+    }
+  }
+  assert.ok(gramados > 0 && mata > 0);
+  // o caminho em anel de 290 m e as clareiras das torres do bosque
+  assert.equal(mataDaSede(cx + 290, cz + 3), 0);
+  assert.ok(mataDaSede(cx + 107, cz) > 0.9, 'o anel de floresta');
+});
+
+test('VIS1c: a sede no uso do solo (as partes prontas; com o parque, gramado onde a grade não tem mata)', () => {
+  const { esp, mapa } = chaoDaSede();
+  const plano = PLANOS[PLANO_PADRAO];
+  const [cx, cz] = SEDE_CENTRO;
+  // nada pronto: a sede não mexe no chão
+  assert.equal(partesDaSedeNoChao(esp).size, 0);
+  assert.equal(parquePintado(esp.floresta), false);
+  assert.equal(usoDaSede(plano, cx + 130, cz, new Set()), null);
+  // as partes prontas pela mesma regra do render (partesProntas), com os trechos do Horizon Ring
+  const etapas = [
+    { id: 'torre.e4', estado: ETAPA.PRONTA }, { id: 'lago.e1', estado: ETAPA.PRONTA }, { id: 'meridian.e1', estado: ETAPA.PRONTA },
+    { id: 'meridian.e2', estado: ETAPA.EM_OBRA }, { id: 'horizon.3.e1', estado: ETAPA.PRONTA }, { id: 'codex.e1', estado: ETAPA.PRONTA },
+  ];
+  const comEtapas = { ...esp, arcologia: { plano: PLANO_PADRAO, etapas } };
+  assert.deepEqual([...partesDaSedeNoChao(comEtapas)].sort(), [...partesProntas(comEtapas)].sort());
+  const P = partesDaSedeNoChao(comEtapas);
+  const ponto = (r, graus) => [cx + r * Math.cos((graus * Math.PI) / 180), cz + r * Math.sin((graus * Math.PI) / 180)];
+  const uso = (r, graus, partes, mata = 0) => usoDaSede(plano, ...ponto(r, graus), partes, mata);
+  assert.deepEqual(uso(40, 10, P), [0, 1, 0, 0], 'o pódio com a torre pronta');
+  assert.deepEqual(uso(92, 10, P), [0, 1, 0, 0], 'o leito do lago');
+  assert.deepEqual(uso(130, 10, P), [0, 1, 0, 0], 'a praça com o lago');
+  assert.equal(uso(MERIDIAN.raio, 10, P), null, 'o Meridian Ring ainda em obra');
+  assert.deepEqual(uso(729, 100, P), [0, 1, 0, 0], 'o trecho III do Horizon Ring (de 90 a 135 graus)');
+  assert.equal(uso(729, 10, P), null, 'o trecho I, ainda não');
+  assert.equal(uso(250, 10, P), null, 'sem o parque o jardim fica com o chão de antes');
+  // as vias internas (o anel viário, os portões e as avenidas) com o lago pronto, como a X1b liga no grafo: nas cenas
+  // as vias do plano são desenhadas sem o grafo, e sem isto o pasto e as moitas saíam no meio delas
+  assert.deepEqual(uso(300, 45, P), [0, 1, 0, 0], 'a avenida de 45 graus');
+  assert.deepEqual(uso(300 / Math.cos((2 * Math.PI) / 180), 47, P), [0, 1, 0, 0], 'a 10 m do eixo da avenida');
+  assert.equal(uso(300, 50, P), null, 'a 26 m do eixo, fora da avenida');
+  assert.deepEqual(uso(795, 100, P), [0, 1, 0, 0], 'o anel viário');
+  assert.deepEqual(uso(805, 270, P), [0, 1, 0, 0], 'o portão norte');
+  assert.equal(uso(300, 45, new Set(['torre'])), null, 'sem o lago as vias internas ainda não existem');
+  // com o parque (a mata dele pintada na grade): gramado onde a grade não tem mata; a mata fica com a copa pintada
+  pintarParque(esp.floresta);
+  assert.equal(parquePintado(esp.floresta), true);
+  const comParque = partesDaSedeNoChao(esp);
+  assert.deepEqual([...comParque], ['parque']);
+  assert.notEqual(chaveDaSede(esp), '');
+  assert.deepEqual(uso(130, 10, comParque), [0, 1, 0, 0], 'a praça do pódio');
+  assert.deepEqual(uso(250, 10, comParque, 0), [0, 0, 0, 1], 'gramado');
+  assert.equal(uso(107, 10, comParque, 0.92), null, 'o anel de floresta fica com a mata');
+  assert.equal(uso(590, 10, comParque, MATA_DA_SEDE + 0.1), null, 'a mata do bosque');
+  assert.equal(usoDaSede(plano, cx + GLEBA_ENVELOPE.raio + 5, cz, comParque, 0), null, 'fora do disco');
+  // a grade com outra mata (a natural de antes) não conta como o parque pintado
+  const outra = { ...esp.floresta, dens: esp.floresta.dens.map((v) => (v > 150 ? 255 : v)) };
+  assert.equal(parquePintado(outra), false);
+});
+
+test('VIS1c: nada de moita nem árvore solta nas praças e nos gramados da sede; a mata do parque segue', () => {
+  const { esp, mapa } = chaoDaSede();
+  pintarParque(esp.floresta);
+  const T = esp.terreno;
+  const dados = prepararDados(T, esp.floresta, distanciaAgua(T.agua, T.n));
+  // um ruído que pinta moita e árvore solta no pasto (o da GPU é lido de volta no jogo)
+  const nr = 64;
+  const ruido = new Uint8Array(nr * nr * 4);
+  for (let k = 0; k < nr * nr * 4; k++) ruido[k] = Math.floor(hashF(k, 3, 91) * 255);
+  const lado = 512; // 4 m
+  // a mata da grade na célula do ponto (a que o uso do solo lê): a moita na borda de um maciço é da mata, não do gramado
+  const F = esp.floresta;
+  const mataNaCelula = (x, z) => F.dens[Math.floor((z - F.origem[1]) / F.passo) * F.n + Math.floor((x - F.origem[0]) / F.passo)] / 255;
+  const contar = (buf) => {
+    const A = { T, dados, uso: buf, ladoUso: lado, mapa, ruido, ladoRuido: nr };
+    const n = { gramado: 0, mata: 0 };
+    const [cx, cz] = SEDE_CENTRO;
+    // uma faixa de oeste a leste pelo centro: o parque, o anel de floresta, a praça, os anéis e os bosques
+    for (let x0 = Math.floor((cx - 800) / LADRILHO) * LADRILHO; x0 < cx + 800; x0 += LADRILHO) {
+      const L = gerarLadrilho(A, x0, Math.floor(cz / LADRILHO) * LADRILHO);
+      for (const l of [L.arvores, L.moitas]) {
+        for (let o = 0; o < l.length; o += PASSO_ARVORE) {
+          // (a borda do disco fica de fora: o texel de 4 m do uso do solo cruza a borda)
+          if (mataDaSede(l[o], l[o + 2]) === null || Math.hypot(l[o] - cx, l[o + 2] - cz) > GLEBA_ENVELOPE.raio - 4) continue;
+          if (mataNaCelula(l[o], l[o + 2]) >= MATA_DA_SEDE) n.mata++;
+          else n.gramado++;
+        }
+      }
+    }
+    return n;
+  };
+  // sem a sede no uso do solo, o pasto pintava moitas e árvores soltas nos gramados (o defeito)
+  const antes = contar(new Uint8Array(lado * lado * 4));
+  assert.ok(antes.gramado > 0, `antes: ${antes.gramado} no gramado`);
+  const buf = new Uint8Array(lado * lado * 4);
+  rasterizarUso(esp, buf, lado, mapa);
+  const depois = contar(buf);
+  assert.equal(depois.gramado, 0, 'nenhuma moita nem árvore solta nos gramados, nas praças e nos caminhos');
+  assert.ok(depois.mata > 10, `a mata do parque com ${depois.mata} árvores`);
+  // refazer só um pedaço dá o mesmo que refazer tudo
+  const pedaco = Uint8Array.from(buf);
+  pedaco.fill(7, 0, 4 * lado * 200);
+  rasterizarUso(esp, pedaco, lado, mapa, [mapa.ox, mapa.oz, mapa.ox + mapa.lado, mapa.oz + 200 * 4 - 1]);
+  assert.deepEqual(pedaco, buf);
+});
+
+test('VIS1d: o chão lê a luz do ambiente com o fator do sol baixo (cena.environmentIntensity), como a água e as fachadas', () => {
+  const U = { uTerAmb: { value: null } };
+  const amb = new AmbienteChao(U);
+  const env = new THREE.Texture();
+  env.mapping = THREE.CubeUVReflectionMapping;
+  env.image = { width: 384, height: 512 };
+  const cena = new THREE.Scene();
+  cena.environment = env;
+  const desenhos = [];
+  const renderer = { getRenderTarget: () => null, setRenderTarget() {}, render: (c) => desenhos.push(c) };
+  for (const k of [1, 0.42, 0.7]) {
+    cena.environmentIntensity = k;
+    assert.equal(amb.passe(renderer, cena), true);
+    assert.equal(amb.mat.uniforms.envMapIntensity.value, k, `atlas com o fator ${k}`);
+  }
+  assert.equal(desenhos.length, 3, 'refeito a cada quadro: o fator muda sem esperar o PMREM');
+  assert.match(GLSL_AMB_PASSE.fragmento, /\* envMapIntensity/);
+  amb.alvo.dispose();
+  amb.mat.dispose();
 });

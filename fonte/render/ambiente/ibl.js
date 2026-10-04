@@ -5,6 +5,9 @@
 // (um cubo pequeno e o PMREM) sai em fatias, uma face por quadro e o PMREM no sétimo, só ao cruzar um trecho; os quadros-chave são refeitos
 // quando o dia do ano, as nuvens ou o brilho da cidade mudam (este, 10%). Tamanhos: 256 no Ultra, 128 no Alta, 64 no
 // Média e 32 no Leve. De noite o PMREM leva o brilho da cidade: vidro e água refletem o céu alaranjado.
+// Com o sol baixo a luz do ambiente cai pelo fator do estado do céu (VIS1d, ceu.js, AMBIENTE_SOL_BAIXO), posto em
+// cena.environmentIntensity: um uniforme que o three passa a todo material que lê o ambiente da cena (o chão, pelo
+// atlas dele, lê o mesmo número), sem programa novo e sem refazer os quadros-chave.
 import * as THREE from 'three';
 import { criarMaterialCeu, aplicarEstado, desenharFaces, triangulo } from './ceu.js';
 import { TELA_VERTICE, MISTURA } from '../materiais/shaders/pos.glsl.js';
@@ -57,6 +60,7 @@ export class Ibl {
     this.feito = { a: null, b: null, t: -1 };
     this.estKey = {};
     this.gerados = 0;
+    this.fator = 1; // a luz do ambiente com o sol baixo (cena.environmentIntensity)
   }
 
   configurar(perfil) {
@@ -79,8 +83,10 @@ export class Ibl {
     return `${dia}|${nuv}|${cid}|${this.tam}`;
   }
 
-  /** Escolhe o trecho da hora (os passes vêm depois, no quadro). */
-  atualizar(hora) {
+  /** Escolhe o trecho da hora (os passes vêm depois, no quadro) e põe o fator do sol baixo na cena. */
+  atualizar(hora, est = null) {
+    this.fator = est?.kAmb ?? 1;
+    this.ctx.cena.environmentIntensity = this.fator;
     const horas = horasChave(this.amb.nascerEPor());
     const { i, j, t } = trecho(horas, hora);
     const sig = this.assinatura();
@@ -181,6 +187,7 @@ export class Ibl {
     this.feito = { a: null, b: null, t: -1 };
     this.gerando = null;
     if (this.ctx.cena.environment?.name === 'ibl.mistura') this.ctx.cena.environment = null;
+    this.ctx.cena.environmentIntensity = 1;
   }
 
   descartar() {

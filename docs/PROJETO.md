@@ -1741,6 +1741,18 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   `shaders/{sombra,terreno}.glsl.js` no que for da sombra. Ambiente mais baixo com o sol abaixo de 12 graus e sombra
   longa de até 3,2 km das torres e dos anéis.
 - **Entrega:** a Prévia 2c.
+- **Entregue em 04/10/2026** (VIS1c e VIS1d, revisadas; Prévia 2c). **VIS1c:** folhas de volta no assado dos
+  impostores (o revisor guardou o atlas com a cor multiplicada pelo alfa, sem palmeira lavada), alcance por dono (rua,
+  lotes e plantadas até 1.000 m no 'pc'; mata em 650 m; moitas em 170 m), um gêmeo do impostor na sombra própria
+  ('arvore-impostor-sombra', +0,19 ms estimados no bairro), a sede no uso do solo com as partes prontas e as vias
+  internas (sem pasto nem moita nas praças; o disco refeito em 12 a 42 ms em vez de 180). **VIS1d:** com o sol abaixo
+  de 12 graus o ambiente cai até 0,28 (a sombra no gramado vai de 76% para 50% da luz, menos azul) e a exposição
+  compensa; sombra longa pela marcha de longe até uns 3,46 km para prédios e sede (a Blade faz 3,2 km às 17h30), +0,12
+  ms estimados na aérea e nada na vista do jogo; degrau do sol menor com o sol baixo e a mistura entre degraus curvada
+  (o revisor tirou o salto da ponta da sombra e uma leitura fora do alcance). Pendências: cascatas de perto em passos de
+  uns 25 m e torres fora da cascata (R1a), reflexo da água ao entardecer mais escuro (dono julga), juntar espécies numa
+  chamada (R2b), medir no PC do dono a sombra da mata fechada e a marcha de longe com a cidade vertical. Notas em
+  `docs/entregas/vis1/VIS1c.md` e `VIS1d.md`.
 
 #### SEDE4. Sede v4: Canopy Bridges, água e floresta (fatia vertical, depois da VIS1; 2 sessões)
 - **Arquivos:** `data/arcologia-plano.js` (pontes, lago, Halo Lake, mata e a posição das 3 torres no eixo das

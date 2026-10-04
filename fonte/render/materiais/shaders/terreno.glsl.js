@@ -8,6 +8,7 @@
 // demanda, a importa daqui). Cores em albedo linear (desenho do render 9.2: folhagem de 0,05 a 0,12), nada de
 // verde-limão: a mata vista de avião é verde-escuro com copas mais claras (embaúba prateada, brotos) e, rara, uma
 // florada de ipê ou quaresmeira.
+import { CAMPO_MISTURA } from './sombra.glsl.js';
 
 /** Albedos da copa (sRGB), fonte única para o GLSL e para os testes. */
 export const CORES_COPA = Object.freeze({
@@ -515,6 +516,7 @@ uniform sampler2D gCampoMapa;
 uniform vec4 gCampoParams;
 uniform float gCampoT;
 uniform float gCampoLigado;
+${CAMPO_MISTURA}
 `,
   // no lugar de beginnormal_vertex (que vem antes de begin_vertex no MeshStandardMaterial)
   normal: /* glsl */ `
@@ -596,7 +598,7 @@ if ( gCampoLigado > 0.5 ) {
   vec2 tUVC = ( tW - gCampoParams.xy ) * gCampoParams.z;
   if ( all( greaterThanEqual( tUVC, vec2( 0.0 ) ) ) && all( lessThanEqual( tUVC, vec2( 1.0 ) ) ) ) {
     vec4 tCampo = textureLod( gCampoMapa, tUVC, 0.0 );
-    tLuzV *= 1.0 - smoothstep( 1.0, 4.0, mix( tCampo.r, tCampo.g, gCampoT ) - tHChao );
+    tLuzV *= 1.0 - smoothstep( 1.0, 4.0, gCampoMistura( tCampo, gCampoT ) - tHChao );
   }
 }
 vTer = vec4( tHChao, tCopa, tD, tLuzV * ( ${(1 - 0.8).toFixed(2)} * tCopa + min( ${f(TER_SOMBRA_FOLGA)} * tPassoEf, 16.0 ) ) );

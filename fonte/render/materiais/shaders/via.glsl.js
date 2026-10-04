@@ -1,5 +1,6 @@
-// GLSL das vias (desenho do render 4.4 e 9.1), dos carros e dos objetos da rua. Trechos que entram por onBeforeCompile
-// no MeshStandardMaterial (luz, sombra própria, neblina e os outros ganchos seguem do three e de motor/ganchos.js).
+// GLSL das vias (desenho do render 4.4 e 9.1) e dos objetos da rua (o dos carros mora com o material deles, em
+// mundo/trafego.js). Trechos que entram por onBeforeCompile no MeshStandardMaterial (luz, sombra própria, neblina e
+// os outros ganchos seguem do three e de motor/ganchos.js).
 //
 // Material `via`: tudo no shader, sem textura pintada nem decalque.
 //   asfalto   agregado, manchas, remendos retangulares, fissuras, trilha de pneu mais escura e lisa no meio de cada
@@ -392,68 +393,6 @@ reflectedLight.directDiffuse *= mix( 1.0, vAO, 0.35 );
 export const VIA_FRAGMENTO_MASCARA = /* glsl */ `
 #include <dithering_fragment>
 if ( gViaMascara > 0.5 ) gl_FragColor = vec4( vec3( gViaGrama ), 1.0 );
-`;
-
-// ------------------------------------------------------------------------------------------------ carros
-
-/** Carros instanciados: a parte de cada vértice e a cor, os faróis e as lanternas da instância. */
-export const CARRO_VERTICE_PARS = /* glsl */ `
-attribute float aParte;     // PARTE de veiculos.js
-attribute vec4 aCarro;      // rgb da pintura (sRGB 0..255), luzes (bit 0 farol, bit 1 freio)
-flat varying vec4 vCarro;
-flat varying float vParte;
-varying vec2 vCarroLocal;   // x, y do modelo (os faróis desenhados na ponta do LOD1)
-`;
-export const CARRO_VERTICE_MAIN = /* glsl */ `
-vCarro = aCarro;
-vParte = aParte;
-vCarroLocal = position.xy;
-`;
-export const CARRO_FRAGMENTO_PARS = /* glsl */ `
-flat varying vec4 vCarro;
-flat varying float vParte;
-varying vec2 vCarroLocal;
-uniform float gCarroNoite;
-float gCarroRug = 0.35;
-float gCarroMetal = 0.0;
-vec3 carroLinear( vec3 s ) { return pow( s / 255.0, vec3( 2.2 ) ); }
-`;
-export const CARRO_FRAGMENTO_COR = /* glsl */ `
-{
-  int p = int( vParte + 0.5 );
-  vec3 c;
-  if ( p == 0 ) { c = min( carroLinear( vCarro.rgb ), vec3( 0.78 ) ); gCarroRug = 0.32; }
-  else if ( p == 1 ) { c = vec3( 0.02, 0.025, 0.03 ); gCarroRug = 0.06; }
-  else if ( p == 2 ) { c = vec3( 0.025 ); gCarroRug = 0.85; }
-  else if ( p == 3 ) { c = vec3( 0.55, 0.55, 0.52 ); gCarroRug = 0.15; }
-  else if ( p == 4 ) { c = vec3( 0.25, 0.01, 0.01 ); gCarroRug = 0.2; }
-  else if ( p == 5 ) { c = vec3( 0.62, 0.62, 0.6 ); gCarroRug = 0.45; }
-  else if ( p == 6 ) { c = vec3( 0.32, 0.32, 0.33 ); gCarroRug = 0.3; gCarroMetal = 0.8; }
-  else if ( p == 8 || p == 9 ) { c = min( carroLinear( vCarro.rgb ), vec3( 0.78 ) ); gCarroRug = 0.32; }
-  else { c = vec3( 0.0 ); gCarroRug = 1.0; }
-  diffuseColor.rgb = c;
-}
-`;
-export const CARRO_FRAGMENTO_RUGOSIDADE = /* glsl */ `
-float roughnessFactor = gCarroRug;
-`;
-export const CARRO_FRAGMENTO_METAL = /* glsl */ `
-float metalnessFactor = gCarroMetal;
-`;
-export const CARRO_FRAGMENTO_EMISSIVO = /* glsl */ `
-{
-  int p = int( vParte + 0.5 );
-  int luz = int( vCarro.a + 0.5 );
-  if ( p == 3 && ( luz & 1 ) != 0 ) totalEmissiveRadiance += vec3( 1.0, 0.88, 0.7 ) * 9.0 * gCarroNoite;
-  if ( p == 4 ) totalEmissiveRadiance += vec3( 1.0, 0.04, 0.02 ) * ( ( ( luz & 2 ) != 0 ? 5.0 : 0.0 ) + 2.5 * gCarroNoite * float( luz & 1 ) );
-  // LOD1: os dois faróis (lanternas) numa faixa da ponta, fora do meio (a grade e a placa)
-  if ( p == 8 || p == 9 ) {
-    float x = abs( vCarroLocal.x );
-    float par = step( 0.3, x ) * step( x, 1.15 ) * step( 0.55, vCarroLocal.y ) * step( vCarroLocal.y, 0.82 );
-    if ( p == 8 && ( luz & 1 ) != 0 ) totalEmissiveRadiance += vec3( 1.0, 0.88, 0.7 ) * 6.0 * gCarroNoite * par;
-    if ( p == 9 ) totalEmissiveRadiance += vec3( 1.0, 0.04, 0.02 ) * par * ( ( ( luz & 2 ) != 0 ? 4.0 : 0.0 ) + 1.8 * gCarroNoite * float( luz & 1 ) );
-  }
-}
 `;
 
 // ------------------------------------------------------------------------------------------------ objetos da rua
