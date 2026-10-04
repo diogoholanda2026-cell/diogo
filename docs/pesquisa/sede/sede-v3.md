@@ -102,5 +102,5 @@ rodovia ao norte e a planície e a orla da baía a leste, ainda inteira numa mar
 **Decidido (D90):** a sede fica no sul da área inicial, de frente para o mar, e a área inicial passa de 4 x 4 para 6 x 5
 ladrilhos (o retângulo laranja da imagem).
 
-**Faixa de LED (D93, 04/10/2026):** 3 andares (uns 19 m) nos dois anéis, no meio da altura, e a mesma nas torres da Helix Labs
-e da Compass Tower.
+**Faixa de LED (D93, 04/10/2026):** um terço dos andares, no terço do meio: uns 8 andares no Horizon Ring (53 a 107 m) e uns 6
+no Meridian Ring (40 a 80 m); na Helix Labs e na Compass Tower, a mesma faixa de altura da do Horizon Ring.
