@@ -25,7 +25,12 @@ lisa e gente low-poly; e decidir: manutenção das 24 avenidas da sede (recomend
 quadra sugerida de indústria, Areal como segunda sugestão do objetivo da Pedreira, cor da Holding nos caixilhos e 307
 px livres com alerta em 986 x 443. Próximo passo recomendado: uma passada visual (sede, rua e árvores) antes da onda 4.
 
-Decisões até a D92 registradas.
+**Pedido do dono em 04/10/2026:** faixa de LED com um terço dos andares (D93, passada à VIS1a); mover e girar
+construções prontas (D94, parcela MOV1 na onda 4); moradia no mínimo de classe média alta (D95, na R6 e na S2b); anéis
+mais sofisticados, com conexões entre eles, árvores, lagos e cachoeiras como protagonistas (diálogo D78 da sede v4, depois
+a parcela SEDE4); e o plano por disciplinas em `docs/desenho/producao.md` (D96). Perguntas da sede v4 feitas ao dono.
+
+Decisões até a D96 registradas.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).
