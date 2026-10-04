@@ -13,10 +13,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icones/icone-192.png">
 <link rel="apple-touch-icon" href="icones/icone-192.png">
-<link rel="preload" href="fontes/inter.20261003212558.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fontes/inter.20261004100021.woff2" as="font" type="font/woff2" crossorigin>
 <!-- Primeiro quadro: só HTML e CSS, antes do JS (A1). O app troca a fase, anda a barra e tira a carga. -->
 <style>
-@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(fontes/inter.20261003212558.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(fontes/inter.20261004100021.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 html,body{margin:0;height:100%;background:#0B0F14;color:#EEF2F6;overflow:hidden;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
 body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-feature-settings:'tnum' 1}
 #mundo{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -34,7 +34,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fo
 @media (max-height:420px){#carga .marca{width:44px;height:44px;margin-bottom:14px}#carga .trilho{margin-top:20px}}
 @media (prefers-reduced-motion:reduce){#carga,#carga #carga-barra{transition:none}}
 </style>
-<link rel="stylesheet" href="estilo.20261003212558.css">
+<link rel="stylesheet" href="estilo.20261004100021.css">
 </head>
 <body>
 <canvas id="mundo" aria-label="Heldópolis"></canvas>
@@ -49,7 +49,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fo
 <noscript><p style="position:fixed;bottom:16px;width:100%;text-align:center;z-index:91">Ative o JavaScript para jogar.</p></noscript>
 <script>
 /* Montagem (preenchida pelo montar.mjs): versão, carimbo, app e os endereços dos workers e das texturas. */
-window.__HELD_MONTAGEM__ = {"versao":"3.0.0-dev","carimbo":"20261003212558","app":"previa","unico":false,"workers":{"tarefas":"tarefas.20261003212558.js","oficina":"oficina.20261003212558.js"},"texturas":{"chao-camadas":"materiais/chao-camadas.20261003212558.ktx2"},"basis":"basis/"};
+window.__HELD_MONTAGEM__ = {"versao":"3.0.0-dev","carimbo":"20261004100021","app":"previa","unico":false,"workers":{"tarefas":"tarefas.20261004100021.js","oficina":"oficina.20261004100021.js"},"texturas":{"chao-camadas":"materiais/chao-camadas.20261004100021.ktx2"},"basis":"basis/"};
 
 /* Falha de carga: a tela diz o que houve em vez de ficar parada. */
 addEventListener('error', function (e) {
@@ -62,68 +62,70 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !/[?&
   addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
 }
 </script>
-<link rel="modulepreload" href="parte.20261003212558.ROPLBJLA.js">
-<link rel="modulepreload" href="parte.20261003212558.MZSB6OC6.js">
-<link rel="modulepreload" href="parte.20261003212558.FOF2MGNU.js">
-<link rel="modulepreload" href="parte.20261003212558.UP6XVJAL.js">
-<link rel="modulepreload" href="parte.20261003212558.BL3UOIH2.js">
-<link rel="modulepreload" href="parte.20261003212558.AFM2SZCN.js">
-<link rel="modulepreload" href="parte.20261003212558.AKXUPJCD.js">
-<link rel="modulepreload" href="parte.20261003212558.5WIYEY3Q.js">
-<link rel="modulepreload" href="parte.20261003212558.IET76KQ7.js">
-<link rel="modulepreload" href="parte.20261003212558.JJ23VQ63.js">
-<link rel="modulepreload" href="parte.20261003212558.AWJSLJ24.js">
-<link rel="modulepreload" href="parte.20261003212558.76UCWMRX.js">
-<link rel="modulepreload" href="parte.20261003212558.SPRAF4IN.js">
-<link rel="modulepreload" href="parte.20261003212558.NP6PDYZJ.js">
-<link rel="modulepreload" href="parte.20261003212558.J7CB3OFG.js">
-<link rel="modulepreload" href="parte.20261003212558.F74CD2OK.js">
-<link rel="modulepreload" href="parte.20261003212558.Y5NY7AYC.js">
-<link rel="modulepreload" href="parte.20261003212558.K475HHEX.js">
-<link rel="modulepreload" href="parte.20261003212558.47NUJYQ7.js">
-<link rel="modulepreload" href="parte.20261003212558.7UURG33N.js">
-<link rel="modulepreload" href="parte.20261003212558.72DAPONS.js">
-<link rel="modulepreload" href="parte.20261003212558.B3JRBPYP.js">
-<link rel="modulepreload" href="parte.20261003212558.MUFGIWTT.js">
-<link rel="modulepreload" href="parte.20261003212558.NHK46RLX.js">
-<link rel="modulepreload" href="parte.20261003212558.WQ3ROWDB.js">
-<link rel="modulepreload" href="parte.20261003212558.2LYXNL6P.js">
-<link rel="modulepreload" href="parte.20261003212558.4XSQ4RNL.js">
-<link rel="modulepreload" href="parte.20261003212558.VCPCQV6A.js">
-<link rel="modulepreload" href="parte.20261003212558.B2DHK7MW.js">
-<link rel="modulepreload" href="parte.20261003212558.FZWOO65M.js">
-<link rel="modulepreload" href="parte.20261003212558.ECU73KTZ.js">
-<link rel="modulepreload" href="parte.20261003212558.JGUDKA42.js">
-<link rel="modulepreload" href="parte.20261003212558.K2DKQ2MC.js">
-<link rel="modulepreload" href="parte.20261003212558.HOOGV2LM.js">
-<link rel="modulepreload" href="parte.20261003212558.EFFGZ47M.js">
-<link rel="modulepreload" href="parte.20261003212558.BQ5VROY3.js">
-<link rel="modulepreload" href="parte.20261003212558.URCKN6KX.js">
-<link rel="modulepreload" href="parte.20261003212558.PM6QKFG7.js">
-<link rel="modulepreload" href="parte.20261003212558.Y4GBJX7C.js">
-<link rel="modulepreload" href="parte.20261003212558.4OGT4IYQ.js">
-<link rel="modulepreload" href="parte.20261003212558.SIDZWPFN.js">
-<link rel="modulepreload" href="parte.20261003212558.JLH2E4JU.js">
-<link rel="modulepreload" href="parte.20261003212558.IPCLF2Y7.js">
-<link rel="modulepreload" href="parte.20261003212558.WBXVHL4R.js">
-<link rel="modulepreload" href="parte.20261003212558.HOGZZVOW.js">
-<link rel="modulepreload" href="parte.20261003212558.GLBVWJZS.js">
-<link rel="modulepreload" href="parte.20261003212558.P4AY6WJ4.js">
-<link rel="modulepreload" href="parte.20261003212558.ZMF7GHXG.js">
-<link rel="modulepreload" href="parte.20261003212558.N5MECWWP.js">
-<link rel="modulepreload" href="parte.20261003212558.G2OBGKNW.js">
-<link rel="modulepreload" href="parte.20261003212558.RP2QIHPR.js">
-<link rel="modulepreload" href="parte.20261003212558.2RJU5HG6.js">
-<link rel="modulepreload" href="parte.20261003212558.6XD7BZXS.js">
-<link rel="modulepreload" href="parte.20261003212558.WTWVZ65C.js">
-<link rel="modulepreload" href="parte.20261003212558.SUYGXVW7.js">
-<link rel="modulepreload" href="parte.20261003212558.77YBGPBF.js">
-<link rel="modulepreload" href="parte.20261003212558.5ISVVS6W.js">
-<link rel="modulepreload" href="parte.20261003212558.A2WILLKM.js">
-<link rel="modulepreload" href="parte.20261003212558.OAWL5AEA.js">
-<link rel="modulepreload" href="parte.20261003212558.KZCZA56R.js">
-<link rel="modulepreload" href="parte.20261003212558.5AQ3P52Q.js">
-<link rel="modulepreload" href="parte.20261003212558.J7G3MRBW.js">
-<script type="module" src="jogo.20261003212558.js"></script>
+<link rel="modulepreload" href="parte.20261004100021.OS4LCW5I.js">
+<link rel="modulepreload" href="parte.20261004100021.LCNVOLU4.js">
+<link rel="modulepreload" href="parte.20261004100021.ZPP6WX4I.js">
+<link rel="modulepreload" href="parte.20261004100021.V3BLET5B.js">
+<link rel="modulepreload" href="parte.20261004100021.YP7FOAPF.js">
+<link rel="modulepreload" href="parte.20261004100021.46ALUIA5.js">
+<link rel="modulepreload" href="parte.20261004100021.RSGJDBXN.js">
+<link rel="modulepreload" href="parte.20261004100021.IKNKE4GY.js">
+<link rel="modulepreload" href="parte.20261004100021.IAREOQ5J.js">
+<link rel="modulepreload" href="parte.20261004100021.PTOAQ5W5.js">
+<link rel="modulepreload" href="parte.20261004100021.PXQSDUTA.js">
+<link rel="modulepreload" href="parte.20261004100021.SV5JBEAJ.js">
+<link rel="modulepreload" href="parte.20261004100021.5HWVSDCY.js">
+<link rel="modulepreload" href="parte.20261004100021.54WZKSCY.js">
+<link rel="modulepreload" href="parte.20261004100021.Z7AFIKFT.js">
+<link rel="modulepreload" href="parte.20261004100021.4H3FFU74.js">
+<link rel="modulepreload" href="parte.20261004100021.U3BT7DCV.js">
+<link rel="modulepreload" href="parte.20261004100021.LJLLTLV4.js">
+<link rel="modulepreload" href="parte.20261004100021.HFXJGCW6.js">
+<link rel="modulepreload" href="parte.20261004100021.MHJXMCDQ.js">
+<link rel="modulepreload" href="parte.20261004100021.JSNSDSO7.js">
+<link rel="modulepreload" href="parte.20261004100021.44NRM33Q.js">
+<link rel="modulepreload" href="parte.20261004100021.VI2ZVNYV.js">
+<link rel="modulepreload" href="parte.20261004100021.QAFG2O3Y.js">
+<link rel="modulepreload" href="parte.20261004100021.OG32CLNO.js">
+<link rel="modulepreload" href="parte.20261004100021.SBSOQMAZ.js">
+<link rel="modulepreload" href="parte.20261004100021.ZLY64AT3.js">
+<link rel="modulepreload" href="parte.20261004100021.7IYOTQG3.js">
+<link rel="modulepreload" href="parte.20261004100021.MKSDRWWS.js">
+<link rel="modulepreload" href="parte.20261004100021.AGQ6THH2.js">
+<link rel="modulepreload" href="parte.20261004100021.H4FOBLBW.js">
+<link rel="modulepreload" href="parte.20261004100021.SKJY3ATE.js">
+<link rel="modulepreload" href="parte.20261004100021.R3AGH3EJ.js">
+<link rel="modulepreload" href="parte.20261004100021.FVNOVZOZ.js">
+<link rel="modulepreload" href="parte.20261004100021.BRJ2GM5Y.js">
+<link rel="modulepreload" href="parte.20261004100021.7FJD2LNL.js">
+<link rel="modulepreload" href="parte.20261004100021.34JZC4TH.js">
+<link rel="modulepreload" href="parte.20261004100021.U3SDOWS6.js">
+<link rel="modulepreload" href="parte.20261004100021.FXJKP33S.js">
+<link rel="modulepreload" href="parte.20261004100021.WJWSQAH3.js">
+<link rel="modulepreload" href="parte.20261004100021.64THT7WW.js">
+<link rel="modulepreload" href="parte.20261004100021.QUUNXHTR.js">
+<link rel="modulepreload" href="parte.20261004100021.4WTFDRQO.js">
+<link rel="modulepreload" href="parte.20261004100021.NSOXH6NW.js">
+<link rel="modulepreload" href="parte.20261004100021.Y6SSFZGD.js">
+<link rel="modulepreload" href="parte.20261004100021.CCZ56G3T.js">
+<link rel="modulepreload" href="parte.20261004100021.DHXQW5VH.js">
+<link rel="modulepreload" href="parte.20261004100021.B6QHMT5F.js">
+<link rel="modulepreload" href="parte.20261004100021.GLKU6MRS.js">
+<link rel="modulepreload" href="parte.20261004100021.66IMPIMF.js">
+<link rel="modulepreload" href="parte.20261004100021.SYUTZWGL.js">
+<link rel="modulepreload" href="parte.20261004100021.RF7COQSI.js">
+<link rel="modulepreload" href="parte.20261004100021.SQL5CVJX.js">
+<link rel="modulepreload" href="parte.20261004100021.Z6SE4U74.js">
+<link rel="modulepreload" href="parte.20261004100021.T2SEPUQY.js">
+<link rel="modulepreload" href="parte.20261004100021.UDSZMH66.js">
+<link rel="modulepreload" href="parte.20261004100021.LS4GVQIL.js">
+<link rel="modulepreload" href="parte.20261004100021.FE3TTPIW.js">
+<link rel="modulepreload" href="parte.20261004100021.EPGDUV4Y.js">
+<link rel="modulepreload" href="parte.20261004100021.CMYOWAIM.js">
+<link rel="modulepreload" href="parte.20261004100021.XHB52OZY.js">
+<link rel="modulepreload" href="parte.20261004100021.6IVY5RUC.js">
+<link rel="modulepreload" href="parte.20261004100021.B4AAQDZI.js">
+<link rel="modulepreload" href="parte.20261004100021.FJZ7FYHJ.js">
+<script type="module" src="jogo.20261004100021.js"></script>
 </body>
 </html>
