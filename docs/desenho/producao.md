@@ -92,11 +92,12 @@ quem faz (os agentes do projeto, em `.claude/agents/`).
 
 1. **VIS1** (rodando): sede com acabamento e faixa de LED de um terço dos andares (D93); rua com as árvores da R2b,
    carros, caminhões e gente melhores. Prévia 2c e medida do dono.
-2. **Diálogo da sede v4** (D78, perguntas em aberto): anéis mais sofisticados, conexões entre eles, árvores, lagos e
-   cachoeiras como protagonistas. Depois, a parcela **SEDE4**, com pranchas de referência antes de modelar.
+2. **SEDE4** (sede v4, D97, respostas do dono em 04/10/2026): Canopy Bridges, Mirror Lake grande, Dream Falls de
+   120 m, Halo Lake, mata densa e Hanging Gardens (`docs/pesquisa/sede/sede-v4.md`), com pranchas de referência antes
+   de modelar.
 3. **Onda 4** (fecha o M1), com dois acréscimos pedidos pelo dono:
    - **MOV1**, mover e girar construções prontas (D94);
-   - o padrão residencial alto (D95) entra na **R6** (vida de luxo) e na **S2b** (cidade completa).
+   - o padrão residencial alto (D95) entra na **R4c** (gerador de prédios e catálogo) e na **S2b** (cidade completa).
    - E mais: S1c (trânsito), S3b (Ato 1 inteiro), X4 (ponte), X3b (camadas), U2b (abertura, modo foto e o som
      adaptativo da seção 2.5), e a **C2** publica o M1.
 4. **Áudio**: a trilha e os efeitos da U2b seguem a seção 2.5; a origem da música e a voz são decisões do dono.
@@ -107,4 +108,5 @@ quem faz (os agentes do projeto, em `.claude/agents/`).
 - A origem da música (biblioteca licenciada, compositor ou ferramenta com licença) e da voz (sem voz, voz sintética ou
   dubladores).
 - Salvar na nuvem ou ranking depois do lançamento (hoje, nada de servidor).
-- As perguntas da sede v4 e as regras de mover e girar e do padrão residencial (respostas registradas em D94 e D95).
+- Respondido em 04/10/2026: a sede v4 (D97) e a regra de mover e girar (D94). O padrão residencial segue a D95 (moradia
+  social no mesmo padrão, Vila requalificada no Ato 1) até o dono pedir outra coisa.

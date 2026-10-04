@@ -332,6 +332,9 @@ documentos podem continuar usando o nome de trabalho em português ao lado.
 | Laboratórios, 180 m | **Helix Labs** |
 | Administração, 180 m | **Compass Tower** |
 | Cachoeiras e fontes / lago em anel | **Dream Falls** / **Mirror Lake** |
+| Pontes-jardim entre os anéis (D97) | **Canopy Bridges** (I a VIII) |
+| Espelho d'água ao pé do Horizon Ring (D97) | **Halo Lake** |
+| Terraços verdes na face de dentro dos anéis (D97) | **Hanging Gardens** |
 | Data center do subsolo / acelerador de partículas | **Deep Core** / **Lumen Collider** |
 | Santuário Gaia e as esferas | **Gaia Sanctuary**: **Forest Sphere**, **Savanna Sphere** e **Ocean Sphere** |
 | Circuito de F1 | **Heldópolis Circuit** |

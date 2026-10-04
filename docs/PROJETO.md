@@ -237,9 +237,10 @@ padrão já adotado não trava nada, salvo o plano diretor (D59), que é a decis
 | D91 | Teto do JS principal (A1) | sobe de **1,6 MB para 2,3 MB** minificado enquanto o PC é o alvo (D66): no fim da onda 3 o principal tem 2.045 KB (725 KB com gzip), que o PC do dono carrega do SSD em menos de 1 s. Telas, cenas, geradores e textos longos continuam sob demanda. Quando o Poco X7 voltar, a simulação vai para um worker ou sob demanda e o teto volta a ser medido no celular | decidido pelo integrador ao fechar a onda 3 (03/10/2026); reversível por uma constante em `ferramentas/montar.mjs` |
 | D92 | Calibração da Arcologia no M1a | a lago.e1 por 60 mil, com a cidade rendendo 4 mil por hora, derrubava o começo. Calibrado com o robô: **os créditos das etapas caíram para um terço** (lago.e1 20 mil, torre.e1 50 mil, e2 100 mil, e3 115 mil, e4 85 mil; XP, materiais, minutos e efeitos iguais; as etapas do M2 ainda sem calibrar) e **a D48 vale só para os itens da cadeia da Holding no M1a** (cimento, vidro, aço e serrada a obra importa sozinha, porque a Holding só os importaria a 160% para vender a 100%). O teste A2 mede **6 sementes**: riqueza maior com a Arcologia em todas, e a média da Contribuição e dos moradores pelo menos 5% maior (medido: 1,11 e 1,12; uma semente só oscila uns 0,2). O "não os preços" da D51 vale para os marcos. As regras do dono não mudam | decidido pelo integrador ao fechar a onda 3 (03/10/2026), com as medidas da C1c em `docs/entregas/onda3/C1c.md` |
 | D93 | Faixa de LED da sede | a faixa de LED dos anéis ocupa **um terço dos andares**, no terço do meio da altura e contínua em volta toda: **uns 8 andares no Horizon Ring** (de uns 53 a 107 m dos 160) e **uns 6 no Meridian Ring** (de uns 40 a 80 m dos 120); a da Helix Labs e da Compass Tower fica na mesma faixa de altura da do Horizon Ring. De dia lê como vidro escuro; à noite, viva de longe | pedido do dono (04/10/2026): "a faixa do led tá muito fina" e "aumente para um terço dos andares" (a primeira proposta foi de 3 andares) |
-| D94 | Mover e girar construções prontas | pedido do dono: **poder mover e girar o que já está construído**. Proposta em diálogo: os colocáveis (serviços, prédios da Holding, praças e marcos do complexo) mudam de lugar ou de direção por uns 10% do custo, com uma obra curta, como o mover do Planet Coaster e do Cities: Skylines II; os prédios de zona não (a zona se refaz sozinha); a Arcologia fica fixa. Vira a parcela **MOV1** na onda 4 | pedido do dono (04/10/2026); a regra fina sai da resposta dele |
-| D95 | Padrão residencial | Heldópolis é uma cidade **super rica**: a moradia tem **no mínimo padrão de classe média alta**, em todas as zonas residenciais. Proposta em diálogo: a moradia social da D72 é feita no mesmo padrão, com aluguel simbólico; a Vila de Santa Cida é requalificada pela Holding no Ato 1, como objetivo de Legado. Entra na **R6** (vida de luxo) e na **S2b** (cidade completa), com referências reais de bairros de alto padrão | pedido do dono (04/10/2026) |
+| D94 | Mover e girar construções prontas | **os colocáveis** (serviços, prédios da Holding, praças e marcos do complexo) **mudam de lugar ou de direção por uns 10% do custo**, com uma obra curta, como o mover do Planet Coaster e do Cities: Skylines II; os **prédios de zona não** (a zona se refaz sozinha) e a **Arcologia fica fixa**. Parcela **MOV1** na onda 4 (sim: comando mover com validação de lote e rede, custo e obra; ui: ferramenta com prévia e giro; render: fantasma e troca sem recompilar) | pedido do dono (04/10/2026); regra escolhida por ele entre três opções |
+| D95 | Padrão residencial | Heldópolis é uma cidade **super rica**: a moradia tem **no mínimo padrão de classe média alta**, em todas as zonas residenciais. Como fica (o dono pode mudar): a moradia social da D72 é feita no mesmo padrão, com aluguel simbólico; a Vila de Santa Cida é requalificada pela Holding no Ato 1, como objetivo de Legado. Entra na parcela **R4c** (gerador de prédios e catálogo, onda 4) e na **S2b** (cidade completa), com referências reais de bairros de alto padrão | pedido do dono (04/10/2026) |
 | D96 | Plano de produção por disciplinas | as 18 disciplinas de um estúdio (desenho, fases, sistemas, narrativa, roteiro, conceito, 3D, animação, efeitos, programação, IA, motor, rede, trilha, efeitos sonoros, voz, produção e QA) seguem `docs/desenho/producao.md`: etapas E0 a E7 (pré-produção, fatia vertical, produção, alfa, beta, lançamento, depois), ferramenta, referência de topo e critério de pronto por disciplina. Regras: referência real antes de produzir, medir em vez de estimar, dono no portão | pedido do dono (04/10/2026): "estruturado em quais etapas ser feito e o que usar", com referências de topo |
+| D97 | Sede v4 (pontes, água e floresta) | a sede v3 ganha: **8 Canopy Bridges** (pontes-jardim de uns 230 m, a uns 60 a 72 m, nos eixos das avenidas, com árvores e a faixa de LED por baixo; Codex, Helix e Compass vão para o eixo de 3 avenidas e viram escalas), o **Mirror Lake grande** (de uns 150 a 330, com ilhas de floresta), a **Dream Falls** como 4 quedas de 120 m do teto do Meridian Ring para o lago, o **Halo Lake** ao pé da face de dentro do Horizon Ring (como o lago da McLaren), **mata densa de Mata Atlântica** no parque e entre os anéis e os **Hanging Gardens** em terraços na face de dentro dos anéis (a de fora segue Apple Park). Ficha e referências em `docs/pesquisa/sede/sede-v4.md`. Parcela **SEDE4**, depois da VIS1 | respostas do dono (04/10/2026) às quatro perguntas da D78; todas as recomendações aceitas |
 
 ### 2.2 Estrutura de dados da simulação
 
@@ -1717,6 +1718,21 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   avisos e cores para daltonismo, Prévia 2 montada e README com os números (aberta no 'pc': 73 chamadas e 644 mil
   triângulos). Notas completas em `docs/entregas/onda3/C1a.md` e `C1b.md`.
 
+#### SEDE4. Sede v4: Canopy Bridges, água e floresta (fatia vertical, depois da VIS1; 2 sessões)
+- **Arquivos:** `data/arcologia-plano.js` (pontes, lago, Halo Lake, mata e a posição das 3 torres no eixo das
+  avenidas), `render/arcologia/*` (menos `obra.js` e `heli.js`), `render/cenas/{torre,planos}.js`,
+  `ferramentas/testes/arcologia-render.teste.mjs`; se a cava do lago mudar o relevo, `data/mapa-heldopolis.js` e o
+  gerado `sim/mundo/relevo-assado.js` (com `mapa.mjs --conferir-assado`).
+- **Publica (D97, `docs/pesquisa/sede/sede-v4.md`):** as 8 Canopy Bridges com árvores e a faixa de LED por baixo,
+  Codex, Helix e Compass no eixo de 3 avenidas com pórtico e escala da ponte, o Mirror Lake grande com ilhas e as 8
+  avenidas em pontes baixas, a Dream Falls em 4 quedas de 120 m do teto do Meridian Ring (névoa e luz à noite), o
+  Halo Lake ao pé do Horizon Ring, a mata densa de Mata Atlântica no parque e entre os anéis e os Hanging Gardens na
+  face de dentro dos anéis. Pranchas de referência por peça antes de modelar.
+- **Entrega:** família arcologia até 250 mil triângulos de perto e 60 mil na vista aberta, mata pela vegetação com
+  impostores, 0 compilações depois de pronto, bancada aberta no 'pc' antes e depois; capturas A/B (aérea às 10h e às
+  17h30, avenida, noite) em que pontes, quedas, lagos e mata se leem sem zoom.
+- **Depende de:** VIS1 (mesmos arquivos).
+
 #### S1c. Trânsito agregado com efeitos (onda 4; 2 sessões)
 - **Arquivos:** `sim/transito.js`, `sim/tarefas/transito.js`, `ferramentas/testes/transito.teste.mjs`.
 - **Consome:** grafo, zonas de tráfego pelos agregados, `tarefas.js` da F0.
@@ -1776,6 +1792,29 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   números medidos; publicação em dois commits com `app/` e `arcologia-de-held.html` novos, a montagem antiga em
   `jogo-antigo/` e `antigo/` e `previa/` apagados.
 - **Depende de:** onda 4.
+
+#### MOV1. Mover e girar construções prontas (onda 4; 2 sessões; D94)
+- **Arquivos:** `sim/predios.js` (comando `mover`: novo lugar e giro, validação de lote, de via e de rede, custo de uns
+  10% e obra curta; o prédio guarda produção, estoque, nome e cor), `ui/ferramentas/mover.js` (novo) e
+  `ui/ferramentas/{colocar,sessao}.js` (prévia em fantasma, giro em passos de 15 graus e livre, custo e aviso),
+  `ui/textos/MOV1.js`, `render/colocaveis/dominio.js` (fantasma e troca sem recompilar), testes
+  `ferramentas/testes/mover.teste.mjs` (novo).
+- **Publica:** mover e girar serviços, prédios da Holding, praças e marcos do complexo; prédios de zona e a Arcologia
+  não. Determinístico e no save; desfazer até a obra começar.
+- **Entrega:** testes de validação (lote, água, cobertura dos serviços refeita, linhas de produção mantidas), vitrine
+  da ferramenta, 0 compilações ao usar a ferramenta.
+
+#### R4c. Moradia de alto padrão (onda 4; 2 sessões; D95)
+- **Arquivos:** `render/geracao/planoPredio.js` (tipologias residenciais), `data/predios.js` (tipologias, faixas de
+  andares e, com o robô, a capacidade dos lares), os testes do gerador e do catálogo.
+- **Publica:** nas zonas do jogador, nada abaixo de classe média alta: casas de alto padrão em lote grande (nível 1)
+  até mansões (nível 5); prédios residenciais de padrão alto (varanda gourmet, fachada de pedra e vidro, paisagismo,
+  portaria) até torres de luxo com heliponto. A casa de autoconstrução fica só na Vila de Santa Cida, até a
+  requalificação pela Holding (objetivo de Legado do Ato 1, na S3b). Referências reais de bairros de alto padrão
+  (Jardim Europa e Vila Nova Conceição em São Paulo, Barra da Tijuca no Rio, Balneário Camboriú), uma prancha por
+  tipologia.
+- **Entrega:** as regras do dono intactas (renda de 5/8/11 por morador); se a capacidade mudar, o A2 do robô segue
+  verde; triângulos e chamadas da cidade grande dentro da D66 na bancada; capturas da rua e da vista aberta.
 
 ### 4.6 Ondas, caminho crítico, prévias e portões
 
