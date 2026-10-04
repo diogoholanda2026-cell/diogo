@@ -27,7 +27,7 @@ import {
   criarPar, atualizarArcologia, estadoDoCeu, materiais, descartarMateriais, geometriaDe, Malha, acab, PADRAO, tampa,
   caixa, malhasPar, criarJatos, criarAquecimento, DIST_EFEITOS, UNIFORMES, orientar, hashF, MEIO_VAO_CORTE,
 } from './torre.js';
-import { montarParte, setorDoAnel, SETOR_OVAL, difGraus } from './partes.js';
+import { montarParte, setorDoAnel, SETOR_OVAL, SETOR_PARQUE, difGraus } from './partes.js';
 import { montarLagoAnel, materialAgua, quadroAgua } from './lago.js';
 import { materialFantasma, malhaFantasma, criarFantasma } from './fantasma.js';
 import { estadoObra, criarObra, alturaVidro } from './obra.js';
@@ -285,7 +285,8 @@ export function alvosDosSetores(plano, cota = GLEBA_ENVELOPE.cota) {
           const s = setorDoAnel(p, de + 1);
           alvos.set(s, { arco: [p.cx, p.cz, p.raio, de, Math.min(p.ate, de + 45)], y0: cota, y1: cota + p.altura });
         }
-      } else if (p.tipo === 'oval') alvos.set(SETOR_OVAL[parte.id] ?? 18, { ponto: [p.x, p.z], y0: cota, y1: cota + p.altura });
+      } else if (p.tipo === 'oval') alvos.set(SETOR_OVAL[parte.id], { ponto: [p.x, p.z], y0: cota, y1: cota + p.altura });
+      else if (p.tipo === 'supertree' && !alvos.has(SETOR_PARQUE)) alvos.set(SETOR_PARQUE, { ponto: [...plano.centro], y0: cota, y1: cota + 50 });
     }
   }
   return alvos;
@@ -340,7 +341,8 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
   const cota = chao(cx, cz);
   const res = reservatorioDe(plano);
   const nivelAgua = cota + res.nivel;
-  const base = { chao, nivelAgua, mata };
+  // a água do parque (os espelhos d'água) vai na malha do lago: o mesmo material, nenhuma chamada a mais
+  const base = { chao, nivelAgua, mata, agua };
   const juntar = (parteId, r) => r.caixas.forEach((c, k) => caixas.push({ parte: parteId, idx: PARTES_ORDEM.indexOf(parteId), trecho: r.trechos[k], caixa: c }));
   for (const parte of plano.partes) {
     if (so && !so.has(parte.id)) continue;

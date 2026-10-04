@@ -6,6 +6,7 @@
 //   avenida  da avenida do portão oeste, do alto, olhando o centro pelo pórtico do Horizon Ring
 //   mar      da praia da restinga, ao entardecer, com a lagoa na frente
 //   noite    do parque, às 21h: a faixa de LED dos anéis, as Dream Falls e as fontes acesas
+//   parque   o bosque grande de Supertrees de perto, às 17h, com a praça e o espelho d'água
 // ?olhar=x,y,z,ax,ay,az,fov[,hora] põe a câmera num ponto qualquer (conferir de perto: a ponte, uma coroa, um pórtico).
 // ?etapas= mostra o jogo (X1b) em vez da sede construída: 'todas' (as 5 etapas do M1a prontas: o par, o lago, os portões
 //   e o resto da sede em fantasma) ou '<etapa>:<progresso>' (a obra: as anteriores prontas, esta em obra), com as vias
@@ -46,6 +47,9 @@ export const VISTAS_SEDE = Object.freeze({
   mar: { hora: 18, de: [-700, 10, 1028], alvo: [CX, 120, CZ], fov: 48, chao: true },
   // do parque, de frente para a Dream Fall de 60 graus: o pódio, as fontes no lago, as torres e as faixas de LED
   noite: { hora: 21, de: em(250, 60, 26), alvo: [CX, 80, CZ], fov: 62, chao: true },
+  // VIS1a: o bosque grande de Supertrees de perto, da beira da praça do pódio (a malha da copa, o tronco vivo, a praça
+  // de pedra portuguesa, o espelho d'água e o Meridian Ring atrás)
+  parque: { hora: 17, de: em(170, 0, 14), alvo: [460, 22, 306], fov: 55, chao: true },
   // X1b: a obra do par de dentro do parque (ainda por fazer), do alto: o pódio, o lago, as duas torres subindo com a
   // frente de obra de concreto, as gruas e o fantasma acima do corte
   obra: { hora: 16.5, de: em(390, 128, 190), alvo: [CX, 150, CZ], fov: 50 },

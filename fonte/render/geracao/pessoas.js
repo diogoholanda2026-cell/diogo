@@ -1,5 +1,8 @@
-// Modelos de gente (desenho do render 8), puros: a figura de 1,70 m com a silhueta real (cabeça, pescoço, tronco com
-// ombro, cintura e quadril, braços com mão, pernas com joelho e pé), em LOD0 de cerca de 270 triângulos e LOD1 de 30.
+// Modelos de gente (desenho do render 8; LOD0 refeito na VIS1b), puros: a figura de 1,70 m com a silhueta real, em
+// LOD0 de até 400 triângulos e LOD1 de 30. O LOD0 tem o tronco e a cabeça em 8 lados (quadril, cintura, peito, axila,
+// ombro largo e o pescoço; queixo, maçã do rosto com o nariz, testa e o alto com o cabelo curto), pernas em 6 lados com
+// coxa, joelho, panturrilha e tornozelo, braços com o deltoide, o cotovelo e a mão, e normais suaves em tudo (a figura
+// lê redonda de perto, não um prisma de 6 faces).
 // Cada vértice diz a parte (pele, cabelo, roupa de cima e de baixo, sapato, manga, canela, cabelo longo, saia, bolsa)
 // e o membro (tronco, coxa, canela e braço de cada lado): a caminhada é no vértice (shaders/pessoa.glsl.js), girando
 // a perna no quadril e dobrando o joelho, e o braço no ombro, pela fase da instância. aVar desloca a silhueta para a
@@ -39,7 +42,7 @@ class Figura {
    * Polígono convexo plano (pontos [x, y, z] em ordem anti-horária vista de fora), com a parte, o membro e o
    * deslocamento feminino de cada ponto (dv: função do ponto, ou null).
    */
-  poli(pts, parte, membro, dv = null) {
+  poli(pts, parte, membro, dv = null, nors = null) {
     const [a, b, c] = pts;
     const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
@@ -50,13 +53,14 @@ class Figura {
     }
     const l = Math.hypot(...n) || 1;
     const base = this.nv;
-    for (const p of pts) {
+    pts.forEach((p, k) => {
       this.pos.push(p[0], p[1], p[2]);
-      this.nor.push(n[0] / l, n[1] / l, n[2] / l);
+      if (nors) this.nor.push(nors[k][0], nors[k][1], nors[k][2]);
+      else this.nor.push(n[0] / l, n[1] / l, n[2] / l);
       this.corpo.push(parte, membro);
       const d = dv ? dv(p) : null;
       this.vari.push(d ? d[0] : 0, d ? d[1] : 0, d ? d[2] : 0);
-    }
+    });
     for (let k = 1; k + 1 < pts.length; k++) this.idx.push(base, base + k, base + k + 1);
   }
 
@@ -86,23 +90,43 @@ function anel(n, cx, y, cz, rx, rz, giro = 0) {
   return out;
 }
 
+const norma = (v) => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+
 /**
- * Tubo entre anéis (do de baixo para o de cima), faces para fora; partes por faixa (partes[k] entre o anel k e k+1).
- * tampaCima e tampaBaixo fecham as pontas.
+ * Tubo entre anéis (do de baixo para o de cima), faces para fora, com normais suaves (a média das faces vizinhas em
+ * cada ponto). partes[k]: a parte da faixa entre o anel k e k + 1, ou uma função (k, i, centro) da face. tampaCima e
+ * tampaBaixo fecham as pontas (a de cima com as normais do anel, abaulada).
  */
 function tubo(F, aneis, partes, membro, dv, { tampaCima = null, tampaBaixo = null } = {}) {
   const n = aneis[0].length;
-  for (let k = 0; k + 1 < aneis.length; k++) {
-    const A = aneis[k];
-    const B = aneis[k + 1];
+  const nk = aneis.length;
+  const N = aneis.map((a) => a.map(() => [0, 0, 0]));
+  const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+  const cruz = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  for (let k = 0; k + 1 < nk; k++) {
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       // o anel gira no sentido de x crescente a partir da frente (+z): de fora, a face sobe pela esquerda
-      F.poli([A[i], A[j], B[j], B[i]], partes[k], membro, dv);
+      const f = cruz(sub(aneis[k + 1][j], aneis[k][i]), sub(aneis[k + 1][i], aneis[k][j]));
+      for (const [kk, ii] of [[k, i], [k, j], [k + 1, j], [k + 1, i]]) for (let q = 0; q < 3; q++) N[kk][ii][q] += f[q];
     }
   }
-  if (tampaCima !== null) F.poli([...aneis[aneis.length - 1]], tampaCima, membro, dv);
+  const Nn = N.map((a) => a.map(norma));
+  for (let k = 0; k + 1 < nk; k++) {
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const pts = [aneis[k][i], aneis[k][j], aneis[k + 1][j], aneis[k + 1][i]];
+      const c = [0, 1, 2].map((q) => (pts[0][q] + pts[1][q] + pts[2][q] + pts[3][q]) / 4);
+      const parte = typeof partes === 'function' ? partes(k, i, c) : partes[k];
+      F.poli(pts, parte, membro, dv, [Nn[k][i], Nn[k][j], Nn[k + 1][j], Nn[k + 1][i]]);
+    }
+  }
+  if (tampaCima !== null) F.poli([...aneis[nk - 1]], tampaCima, membro, dv, Nn[nk - 1].map((v) => norma([v[0] * 0.6, v[1] * 0.6 + 0.8, v[2] * 0.6])));
   if (tampaBaixo !== null) F.poli([...aneis[0]].reverse(), tampaBaixo, membro, dv);
+  return Nn;
 }
 
 /** Caixa sem o fundo (topo e 4 lados), com a parte e o membro. */
@@ -119,6 +143,7 @@ function caixa(F, x0, y0, z0, x1, y1, z1, parte, membro, dv = null, fundo = fals
 function femininoTronco(p) {
   const [x, y, z] = p;
   const sx = Math.sign(x);
+  if (y > 1.44) return [-0.008 * sx, 0, 0]; // pescoço
   if (y > 1.36) return [-0.03 * sx, 0, 0]; // ombro mais estreito
   if (y > 1.18) return [-0.012 * sx, 0, z > 0 ? 0.022 : 0]; // busto
   if (y > 0.98) return [-0.025 * sx, 0, 0]; // cintura marcada
@@ -128,60 +153,85 @@ function femininoTronco(p) {
 const femininoBraco = (p) => [-0.028 * Math.sign(p[0]), 0, 0];
 const femininoCoxa = (p) => (p[1] > 0.7 ? [0.012 * Math.sign(p[0]), 0, 0] : [0, 0, 0]);
 
-/** LOD0: a figura inteira (cerca de 270 triângulos). */
+/** LOD0: a figura inteira (até 400 triângulos). */
 function figuraLOD0() {
   const F = new Figura();
-  // pernas: coxa (quadril ao joelho) e canela (joelho ao tornozelo), 6 lados, e o pé
+  // pernas (6 lados): tornozelo, panturrilha (mais cheia atrás), joelho e o alto da coxa, por dentro do quadril; o pé
   for (const lado of [1, -1]) {
     const x = 0.095 * lado;
     const coxa = lado > 0 ? M.COXA_A : M.COXA_B;
     const canela = lado > 0 ? M.CANELA_A : M.CANELA_B;
-    tubo(F, [anel(6, x, JUNTA.joelho, 0.005, 0.058, 0.062), anel(6, x, 0.84, 0, 0.082, 0.088)], [P.BAIXO], coxa, femininoCoxa);
-    tubo(F, [anel(6, x, 0.09, -0.01, 0.04, 0.045), anel(6, x, JUNTA.joelho, 0.005, 0.058, 0.062)], [P.CANELA], canela, null);
-    // pé: do calcanhar à ponta, mais baixo na frente
-    const pts = [[x - 0.05, 0, -0.06], [x + 0.05, 0, -0.06], [x + 0.05, 0, 0.19], [x - 0.05, 0, 0.19]];
-    const t = [[x - 0.048, 0.1, -0.05], [x + 0.048, 0.1, -0.05], [x + 0.045, 0.055, 0.17], [x - 0.045, 0.055, 0.17]];
+    const giro = Math.PI / 6;
+    tubo(F, [anel(6, x, JUNTA.joelho, 0.004, 0.05, 0.053, giro), anel(6, x * 0.92, 0.87, -0.004, 0.07, 0.088, giro)], [P.BAIXO], coxa, femininoCoxa);
+    tubo(F, [anel(6, x, 0.09, -0.012, 0.034, 0.038, giro), anel(6, x, 0.3, -0.016, 0.049, 0.056, giro), anel(6, x, JUNTA.joelho, 0.004, 0.05, 0.053, giro)], [P.CANELA, P.CANELA], canela, null);
+    // pé: do calcanhar à ponta, mais baixo e mais largo na frente
+    const pts = [[x - 0.04, 0, -0.07], [x + 0.04, 0, -0.07], [x + 0.05, 0, 0.18], [x - 0.05, 0, 0.18]];
+    const t = [[x - 0.04, 0.1, -0.06], [x + 0.04, 0.1, -0.06], [x + 0.045, 0.055, 0.165], [x - 0.045, 0.055, 0.165]];
     F.poli([pts[1], t[1], t[2], pts[2]], P.SAPATO, canela);
     F.poli([pts[3], t[3], t[0], pts[0]], P.SAPATO, canela);
     F.poli([pts[2], t[2], t[3], pts[3]], P.SAPATO, canela);
     F.poli([pts[0], t[0], t[1], pts[1]], P.SAPATO, canela);
     F.poli([t[0], t[3], t[2], t[1]], P.SAPATO, canela);
   }
-  // tronco: virilha, quadril, cintura, peito, ombro e a base do pescoço (6 lados, mais largo que fundo)
+  // tronco (8 lados): virilha (escondida entre as coxas), quadril, cintura, peito, ombro e a base do pescoço
+  const g8 = Math.PI / 8;
   const aneisTronco = [
-    anel(6, 0, 0.8, 0, 0.15, 0.1, Math.PI / 6),
-    anel(6, 0, 0.94, 0, 0.175, 0.11, Math.PI / 6),
-    anel(6, 0, 1.06, 0.005, 0.158, 0.1, Math.PI / 6),
-    anel(6, 0, 1.25, 0.01, 0.185, 0.12, Math.PI / 6),
-    anel(6, 0, 1.4, 0, 0.205, 0.1, Math.PI / 6),
-    anel(6, 0, 1.46, 0, 0.07, 0.065, Math.PI / 6),
+    anel(8, 0, 0.77, 0, 0.125, 0.092, g8),
+    anel(8, 0, 0.93, -0.004, 0.172, 0.112, g8),
+    anel(8, 0, 1.06, 0.004, 0.152, 0.098, g8),
+    anel(8, 0, 1.24, 0.012, 0.18, 0.116, g8),
+    anel(8, 0, 1.4, -0.004, 0.19, 0.096, g8),
+    anel(8, 0, 1.465, 0, 0.06, 0.056, g8),
   ];
   tubo(F, aneisTronco, [P.BAIXO, P.BAIXO, P.CIMA, P.CIMA, P.CIMA], M.TRONCO, femininoTronco);
-  // pescoço e cabeça (6 lados): queixo, maçã do rosto, testa e o alto
-  const cab = [anel(6, 0, 1.46, 0.005, 0.055, 0.055), anel(6, 0, 1.51, 0.02, 0.07, 0.085), anel(6, 0, 1.6, 0.015, 0.084, 0.1), anel(6, 0, 1.67, 0.005, 0.068, 0.085)];
-  tubo(F, cab, [P.PELE, P.PELE, P.PELE], M.TRONCO, null);
-  // cabelo: a calota do alto da cabeça, mais baixa atrás (a nuca) e com a franja na testa
-  const c0 = anel(6, 0, 1.6, 0.01, 0.09, 0.106).map(([x, y, z]) => [x, z > 0.05 ? 1.63 : z < -0.05 ? 1.535 : 1.58, z]);
-  const c1 = anel(6, 0, 1.675, 0.005, 0.075, 0.092);
-  tubo(F, [c0, c1], [P.CABELO], M.TRONCO, null);
-  const topo = [0, 1.715, 0];
-  for (let i = 0; i < 6; i++) F.poli([c1[(i + 1) % 6], c1[i], topo], P.CABELO, M.TRONCO);
+  // pescoço e cabeça (8 lados): queixo, boca e mandíbula, maçã do rosto com o nariz, sobrancelha, a linha do cabelo e o
+  // alto (o crânio mais largo que o queixo). O cabelo curto cobre o alto, os lados acima da orelha e a nuca; o rosto e a
+  // testa ficam de pele
+  const nariz = (a) => a.map((p, k) => (k === 0 ? [p[0], p[1], p[2] + 0.013] : p));
+  const cab = [
+    anel(8, 0, 1.465, 0.004, 0.052, 0.052),
+    anel(8, 0, 1.53, 0.02, 0.066, 0.084),
+    nariz(anel(8, 0, 1.59, 0.016, 0.076, 0.098)),
+    anel(8, 0, 1.635, 0.01, 0.081, 0.104),
+    anel(8, 0, 1.678, 0.004, 0.08, 0.1),
+    anel(8, 0, 1.707, 0, 0.058, 0.074),
+  ];
+  const cabelo = (k, i, c) => (k >= 4 || (k === 3 && c[2] < 0.05) || (k === 2 && c[2] < -0.03) || (k === 1 && c[2] < -0.05) ? P.CABELO : P.PELE);
+  const Nc = tubo(F, cab, cabelo, M.TRONCO, null);
+  // o alto da cabeça: leque até o cocuruto
+  const alto = cab[cab.length - 1];
+  const topo = [0, 1.722, -0.006];
+  for (let i = 0; i < 8; i++) {
+    const j = (i + 1) % 8;
+    const nb = (v) => norma([v[0] * 0.5, v[1] * 0.5 + 0.7, v[2] * 0.5]);
+    F.poli([alto[i], alto[j], topo], P.CABELO, M.TRONCO, null, [nb(Nc[5][i]), nb(Nc[5][j]), [0, 1, 0]]);
+  }
   // cabelo longo: a mecha atrás, da nuca até o meio das costas (some no shader se não for longo)
-  caixa(F, -0.085, 1.3, -0.135, 0.085, 1.6, -0.07, P.CABELO_LONGO, M.TRONCO);
-  // braços: do ombro ao cotovelo (manga e braço) e ao punho (antebraço), 4 lados, e a mão que afina até os dedos
+  const ml = [[-0.075, 1.64, -0.1], [0.075, 1.64, -0.1], [0.1, 1.3, -0.12], [-0.1, 1.3, -0.12]];
+  const mf = ml.map(([x, y, z]) => [x * 1.05, y, z - 0.045]);
+  F.poli([mf[3], mf[2], mf[1], mf[0]], P.CABELO_LONGO, M.TRONCO);
+  F.poli([ml[1], ml[2], mf[2], mf[1]].reverse(), P.CABELO_LONGO, M.TRONCO);
+  F.poli([ml[3], ml[0], mf[0], mf[3]].reverse(), P.CABELO_LONGO, M.TRONCO);
+  F.poli([ml[2], ml[3], mf[3], mf[2]].reverse(), P.CABELO_LONGO, M.TRONCO);
+  // braços (6 lados): o punho, o cotovelo, o meio do braço e o deltoide que afina para dentro do ombro (fechado em cima:
+  // a câmera de cima não vê o tubo oco), a manga curta no deltoide; a mão achatada, de frente para a coxa
   for (const lado of [1, -1]) {
     const x = (JUNTA.ombroX + 0.015) * lado;
     const m = lado > 0 ? M.BRACO_A : M.BRACO_B;
-    const aneis = [anel(4, x, 0.84, 0.015, 0.034, 0.038), anel(4, x, 1.12, 0, 0.043, 0.047), anel(4, x * 0.98, 1.26, -0.005, 0.05, 0.052), anel(4, x * 0.97, 1.41, -0.01, 0.052, 0.058)];
-    tubo(F, aneis, [P.ANTEBRACO, P.BRACO, P.CIMA], m, femininoBraco);
-    const dedos = [x, 0.735, 0.02];
-    const w = aneis[0];
-    for (let i = 0; i < 4; i++) F.poli([w[(i + 1) % 4], w[i], dedos], P.PELE, m, femininoBraco);
+    const g6 = Math.PI / 6;
+    const aneis = [anel(6, x, 0.82, 0.018, 0.022, 0.042, g6), anel(6, x, 1.11, 0, 0.04, 0.044, g6), anel(6, x * 0.98, 1.26, -0.004, 0.046, 0.052, g6), anel(6, x * 0.82, 1.405, -0.008, 0.032, 0.042, g6)];
+    tubo(F, aneis, [P.ANTEBRACO, P.BRACO, P.CIMA], m, femininoBraco, { tampaCima: P.CIMA });
+    const mao = aneis[0].map(([px, py, pz]) => [x + (px - x) * 0.7, 0.74, 0.024 + (pz - 0.018) * 0.85]);
+    tubo(F, [mao, aneis[0]], [P.PELE], m, femininoBraco, { tampaBaixo: P.PELE });
   }
   // saia (some no shader se a roupa de baixo não for saia): da cintura até o joelho, abrindo
   tubo(F, [anel(6, 0, 0.53, 0, 0.215, 0.165, Math.PI / 6), anel(6, 0, 1.03, 0, 0.165, 0.11, Math.PI / 6)], [P.SAIA], M.TRONCO, femininoTronco);
-  // bolsa de ombro, do lado B, no quadril
-  caixa(F, -0.27, 0.9, -0.08, -0.205, 1.12, 0.1, P.BOLSA, M.TRONCO, null);
+  // bolsa de ombro, do lado B, no quadril (sem a face encostada no corpo)
+  const [bx0, by0, bz0, bx1, by1, bz1] = [-0.27, 0.9, -0.08, -0.205, 1.12, 0.1];
+  F.poli([[bx0, by0, bz1], [bx0, by1, bz1], [bx0, by1, bz0], [bx0, by0, bz0]], P.BOLSA, M.TRONCO);
+  F.poli([[bx0, by1, bz0], [bx0, by1, bz1], [bx1, by1, bz1], [bx1, by1, bz0]], P.BOLSA, M.TRONCO);
+  F.poli([[bx0, by0, bz1], [bx1, by0, bz1], [bx1, by1, bz1], [bx0, by1, bz1]], P.BOLSA, M.TRONCO);
+  F.poli([[bx1, by0, bz0], [bx0, by0, bz0], [bx0, by1, bz0], [bx1, by1, bz0]], P.BOLSA, M.TRONCO);
   return F.fechar();
 }
 

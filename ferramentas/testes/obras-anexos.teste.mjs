@@ -296,6 +296,74 @@ test('lote: árvores e carros dentro do lote, fora do prédio, sem carro no aban
   assert.ok(arv > 200 && car > 80, `${arv} árvores e ${car} carros`);
 });
 
+test('lote (VIS1b): as árvores do lote vão para a vegetação da R2b, com espécies variadas e o tamanho do plano', async () => {
+  const L = await import('../../fonte/render/mundo/lotes.js');
+  const { PASSO_ARVORE, plantaveis } = await import('../../fonte/render/mundo/vegetacao.js');
+  const { ESPECIE, ESPECIES } = await import('../../fonte/render/geracao/arvores.js');
+  // o setor de verdade: casas e prédios do plano em fila (o gerador veste o lote com copa e palmeira)
+  const ids = ['casa', 'sobrado', 'predio', 'loja'].filter((id) => PREDIOS_ORDEM.includes(id));
+  const n = 24;
+  const num = new Float32Array(n * 6);
+  const ints = new Uint32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    num.set([(i % 6) * 40, 2, Math.floor(i / 6) * 50, 0, 16, 28], 6 * i);
+    ints.set([i, 1000 + i * 7919, PREDIOS_ORDEM.indexOf(ids[i % ids.length]), 1 + (i % 4)], 4 * i);
+  }
+  const s = gerarSetor({ setor: 0, ox: 0, oz: 0, lod0: true, n, num, ints });
+  const grupos = [{ tipo: 'copa', ...s.lote.copa }, { tipo: 'palmeira', ...s.lote.palmeira }];
+  const lista = L.arvoresDosLotes(grupos);
+  const total = s.lote.copa.n + s.lote.palmeira.n;
+  assert.ok(total > 10, `${total} árvores no setor`);
+  assert.equal(lista.length, total * PASSO_ARVORE);
+  // todas plantáveis (espécie da tabela, tamanho finito), na base do plano, com a altura da escala dele
+  assert.equal(plantaveis(lista), lista, 'a vegetação recusaria alguma');
+  const esp = new Set();
+  for (let k = 0; k < total; k++) {
+    const o = k * PASSO_ARVORE;
+    const g = k < s.lote.copa.n ? s.lote.copa : s.lote.palmeira;
+    const j = k < s.lote.copa.n ? k : k - s.lote.copa.n;
+    assert.deepEqual([lista[o], lista[o + 1], lista[o + 2]], [g.mat[16 * j + 12], g.mat[16 * j + 13], g.mat[16 * j + 14]]);
+    const e = lista[o + 3];
+    esp.add(e);
+    if (k >= s.lote.copa.n) assert.equal(e, ESPECIE.palmeira);
+    else assert.ok([ESPECIE.oiti, ESPECIE.mata2, ESPECIE.mata3, ESPECIE.embauba].includes(e), `copa do lote com a espécie ${e}`);
+    // quintal baixo (4 a 10 m), palmeira de jardim (10 a 20 m); a largura na proporção da espécie
+    const alt = lista[o + 4];
+    assert.ok(e === ESPECIE.palmeira ? alt > 10 && alt < 20 : alt > 4 && alt < 10, `altura ${alt.toFixed(1)}`);
+    assert.ok(Math.abs(lista[o + 5] / alt - ESPECIES[e].largura / ESPECIES[e].altura) < 1e-5);
+  }
+  assert.ok(esp.size >= 3, `só ${esp.size} espécies no lote`);
+  // a escolha da copa cobre as quatro espécies pelo hash do item, nos pesos de COPAS_LOTE
+  const conta = new Map();
+  for (let b = 0; b < 256; b++) {
+    const e = L.copaDoLote(b).especie;
+    conta.set(e, (conta.get(e) ?? 0) + 1);
+  }
+  for (const c of L.COPAS_LOTE) assert.ok(Math.abs(conta.get(ESPECIE[c.especie]) / 256 - c.peso) < 0.02, c.especie);
+  // o domínio planta pelo dono 'lotes' (sem malha de árvore na cena) e solta no descarte
+  const THREE = await import('three');
+  const { ganchos } = await import('../../fonte/render/motor/ganchos.js');
+  const plantios = [];
+  const ctx = {
+    cena: new THREE.Scene(), ganchos, perfil: { id: 'pc' }, medidas: { familia: (m) => m },
+    sombra: { projetor() {}, soltar() {}, marcar() {} },
+    vegetacao: { plantar: (dono, itens) => plantios.push([dono, itens]) },
+  };
+  let dom = null;
+  L.registrar({ registrarDominio: (nome, f) => (dom = f(ctx)) });
+  const pred = { lotesVisiveis: () => [{ s: 0, chave: 1, lotes: [s.lote] }] };
+  dom.quadro(0, { ...ctx, dominio: (nome) => (nome === 'predios' ? pred : null), sol: { dia: 1 } });
+  assert.equal(plantios.length, 1);
+  assert.equal(plantios[0][0], 'lotes');
+  assert.deepEqual(Array.from(plantios[0][1]), Array.from(lista));
+  assert.equal(dom.medidas().arvores.n, total);
+  assert.ok(ctx.cena.children.every((o) => o.name.startsWith('lotes:carro')), 'malha de árvore no domínio dos lotes');
+  dom.quadro(16, { ...ctx, dominio: (nome) => (nome === 'predios' ? pred : null), sol: { dia: 1 } });
+  assert.equal(plantios.length, 1, 'replantou sem mudança nos lotes');
+  dom.descartar();
+  assert.deepEqual(plantios.at(-1), ['lotes', null]);
+});
+
 /** O domínio 'predios' sobre a cidade sintética, com o relógio na mão (performance.now) e a câmera em cima de i. */
 async function montarDominio() {
   const THREE = await import('three');

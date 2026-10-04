@@ -1,31 +1,45 @@
-// Modelos de carro da frota brasileira (desenho do render 8), puros: hatch (Onix, Gol), sedã (Virtus, Corolla), SUV
-// (Compass, HR-V), picape média (Hilux, S10), ônibus urbano (Padron de 12 m) e caminhão leve (VUC com baú). Cada um
-// com LOD0 (150 a 400 triângulos: carroceria em seções com ombro e caída do teto, vidros, rodas, faróis e lanternas)
-// e LOD1 (12 a 24 triângulos: a carroceria e a cabine em caixas). Medidas reais, em metros; a frente olha para +z e
-// a origem fica no chão, no meio do carro. A cor vem da instância (a frota: branco, prata, preto e cinza passam de
-// 80%); aParte diz o que é cada vértice (pintura, vidro, pneu, farol, lanterna, cromado, aro) para o shader.
+// Modelos de carro da frota brasileira (desenho do render 8; VIS1b), puros: hatch (Onix, HB20, Polo), sedã (Onix Plus,
+// Virtus, Corolla), SUV (T-Cross, Creta, Compass), picape média (Hilux, S10), ônibus urbano (Padron de 12 m) e caminhão
+// leve (VUC com baú). Medidas reais, em metros; a frente olha para +z e a origem fica no chão, no meio do carro.
+//   LOD0  carros de passeio com 300 a 400 triângulos: carroceria em seções arredondadas com normais suaves (o sol baixo
+//         vira um reflexo que corre pela lataria, não um bloco claro numa face plana), estufa com as colunas, para-brisa
+//         e vidro de trás inclinados, janelas das portas com a coluna do meio, para-choques com a parte de baixo em
+//         plástico, placa Mercosul na frente e atrás, faróis, grade, lanternas que dobram a quina, retrovisores, caixas
+//         de roda e rodas de 8 lados com o aro
+//   LOD1  12 a 24 triângulos: a carroceria e a cabine em caixas, com as pontas que acendem à noite (o mesmo de antes)
+// A cor vem da instância (a frota: branco, prata, preto e cinza passam de 80%); aParte diz o que é cada vértice
+// (pintura, vidro, pneu, farol, lanterna, cromado, aro, placa, plástico) para o shader (mundo/trafego.js).
 
 /**
  * Partes (aParte no shader). FRENTE e TRASEIRA são as faces de ponta do LOD1: pintura de dia e, à noite, os dois
  * faróis (ou as lanternas) desenhados no shader, para a cidade vista de longe ter as filas de luz.
  */
-export const PARTE = Object.freeze({ PINTURA: 0, VIDRO: 1, PRETO: 2, FAROL: 3, LANTERNA: 4, CROMADO: 5, ARO: 6, SOMBRA: 7, FRENTE: 8, TRASEIRA: 9 });
+export const PARTE = Object.freeze({ PINTURA: 0, VIDRO: 1, PRETO: 2, FAROL: 3, LANTERNA: 4, CROMADO: 5, ARO: 6, SOMBRA: 7, FRENTE: 8, TRASEIRA: 9, PLACA: 10, PLASTICO: 11 });
 
 /**
  * Medidas: comprimento, largura, altura do teto, altura da cintura (onde começam os vidros), vão livre, raio da roda,
- * entre-eixos, e as estações da cabine (fração do comprimento a partir da traseira): base do para-brisa, frente do
- * teto, fim do teto, base do vidro de trás.
+ * entre-eixos, e as estações da cabine (fração do comprimento a partir da traseira): base do vidro de trás, fim do
+ * teto, frente do teto e base do para-brisa (nesta ordem: fVT, fTT, fTF, fPB); capô: altura do capô na ponta; traseira:
+ * altura da tampa (porta-malas ou tampa traseira) na ponta; caçamba: a picape.
  */
 export const MODELOS = Object.freeze([
-  { id: 'hatch', nome: 'hatch', c: 3.95, l: 1.72, h: 1.48, cintura: 0.95, vao: 0.16, roda: 0.3, eixos: 2.55, cabine: [0.66, 0.5, 0.18, 0.06], capo: 0.72 },
-  { id: 'seda', nome: 'sedã', c: 4.55, l: 1.76, h: 1.46, cintura: 0.93, vao: 0.15, roda: 0.31, eixos: 2.65, cabine: [0.64, 0.5, 0.26, 0.18], capo: 0.72 },
-  { id: 'suv', nome: 'SUV', c: 4.42, l: 1.82, h: 1.66, cintura: 1.05, vao: 0.2, roda: 0.34, eixos: 2.64, cabine: [0.66, 0.54, 0.14, 0.05], capo: 0.85 },
-  { id: 'picape', nome: 'picape', c: 5.3, l: 1.86, h: 1.8, cintura: 1.12, vao: 0.25, roda: 0.37, eixos: 3.08, cabine: [0.64, 0.56, 0.4, 0.37], capo: 0.95, cacamba: 0.37 },
+  { id: 'hatch', nome: 'hatch', c: 3.95, l: 1.72, h: 1.48, cintura: 0.95, vao: 0.16, roda: 0.3, eixos: 2.55, cabine: [0.7, 0.47, 0.18, 0.06], capo: 0.7, traseira: 0.92 },
+  { id: 'seda', nome: 'sedã', c: 4.55, l: 1.76, h: 1.46, cintura: 0.93, vao: 0.15, roda: 0.31, eixos: 2.65, cabine: [0.68, 0.49, 0.27, 0.17], capo: 0.7, traseira: 0.97 },
+  { id: 'suv', nome: 'SUV', c: 4.42, l: 1.82, h: 1.66, cintura: 1.05, vao: 0.2, roda: 0.34, eixos: 2.64, cabine: [0.7, 0.52, 0.13, 0.04], capo: 0.84, traseira: 1.02, plastico: true },
+  { id: 'picape', nome: 'picape', c: 5.3, l: 1.86, h: 1.8, cintura: 1.12, vao: 0.25, roda: 0.37, eixos: 3.08, cabine: [0.66, 0.55, 0.4, 0.37], capo: 0.98, traseira: 1.1, cacamba: 0.37, plastico: true },
   { id: 'onibus', nome: 'ônibus', c: 12.4, l: 2.5, h: 3.1, cintura: 1.2, vao: 0.3, roda: 0.5, eixos: 6.2, janela: [1.2, 2.55], onibus: true },
   { id: 'caminhao', nome: 'caminhão', c: 7.1, l: 2.3, h: 3.05, cintura: 1.35, vao: 0.3, roda: 0.45, eixos: 3.9, cab: 1.85, caminhao: true },
 ]);
 
-/** Construtor simples de malha (Float32, sem índice compartilhado entre faces: aresta viva). */
+export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const cruz = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+export const norma = (v) => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+const mesmo = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 1e-6;
+
+/** Construtor simples de malha (sem índice compartilhado entre faces: cada face com a parte dela). */
 class Malha {
   constructor() {
     this.pos = [];
@@ -38,26 +52,24 @@ class Malha {
     return this.pos.length / 3;
   }
 
-  /** Polígono convexo plano (pontos [x, y, z] em ordem, vistos de fora no sentido anti-horário). */
-  poli(pts, parte) {
+  /**
+   * Polígono convexo plano (pontos [x, y, z] em ordem, vistos de fora no sentido anti-horário); nors: a normal de cada
+   * ponto (suave) ou nada (a da face).
+   */
+  poli(pts, parte, nors = null) {
     const a = pts[0];
-    const b = pts[1];
-    const c = pts[2];
-    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const u = sub(pts[1], a);
+    let n = cruz(u, sub(pts[2], a));
     // o primeiro trio pode ser colinear: procura um que não seja
-    for (let k = 2; Math.hypot(...n) < 1e-9 && k + 1 < pts.length; k++) {
-      const w = [pts[k + 1][0] - a[0], pts[k + 1][1] - a[1], pts[k + 1][2] - a[2]];
-      n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-    }
-    const cn = Math.hypot(...n) || 1;
+    for (let k = 2; Math.hypot(...n) < 1e-9 && k + 1 < pts.length; k++) n = cruz(u, sub(pts[k + 1], a));
+    n = norma(n);
     const base = this.nv;
-    for (const p of pts) {
+    pts.forEach((p, k) => {
+      const q = nors ? nors[k] : n;
       this.pos.push(p[0], p[1], p[2]);
-      this.nor.push(n[0] / cn, n[1] / cn, n[2] / cn);
+      this.nor.push(q[0], q[1], q[2]);
       this.parte.push(parte);
-    }
+    });
     for (let k = 1; k + 1 < pts.length; k++) this.idx.push(base, base + k, base + k + 1);
   }
 
@@ -77,75 +89,150 @@ class Malha {
 }
 
 /**
- * Loft de seções: secoes[k] = { z, pts: [[x, y], ...] } (mesmo número de pontos, contorno de baixo para cima pela
- * esquerda e de volta pela direita), faces entre seções com a parte de cada lado; tampas nas pontas.
+ * Superfície em grade: G[k][i] = [x, y, z] (anéis ao longo do carro, o mesmo número de pontos em cada um), faces entre
+ * os anéis k e k + 1 e os pontos i e i + 1 (i + 1 volta ao 0 com fechada) com a parte de partes(k, i) (-1 pula).
+ * Normais suaves: em cada ponto, a soma das faces vizinhas pesada pela área (a lataria lê curva de perto). Devolve as
+ * normais da grade (as tampas misturam com elas). M: qualquer construtor com poli(pts, parte, normais) (a cabine dos
+ * caminhões da Holding, geracao/caminhoes.js, usa a mesma).
  */
-function loft(M, secoes, partes, { tampas = true, parteTampa = null } = {}) {
-  const n = secoes[0].pts.length;
-  for (let k = 0; k + 1 < secoes.length; k++) {
-    const A = secoes[k];
-    const B = secoes[k + 1];
-    for (let i = 0; i + 1 < n; i++) {
-      const p = typeof partes === 'function' ? partes(k, i) : partes[i];
+export function superficie(M, G, partes, { fechada = false } = {}) {
+  const nk = G.length;
+  const ni = G[0].length;
+  const nf = fechada ? ni : ni - 1;
+  const N = G.map((a) => a.map(() => [0, 0, 0]));
+  const faces = [];
+  for (let k = 0; k + 1 < nk; k++) {
+    for (let i = 0; i < nf; i++) {
+      const p = partes(k, i);
       if (p < 0) continue;
+      const j = (i + 1) % ni;
+      const A = G[k][i];
+      const B = G[k + 1][i];
+      const C = G[k + 1][j];
+      const D = G[k][j];
       // anti-horário visto de fora (o contorno sobe pela esquerda e desce pela direita, visto da frente)
-      M.poli([[A.pts[i][0], A.pts[i][1], A.z], [B.pts[i][0], B.pts[i][1], B.z], [B.pts[i + 1][0], B.pts[i + 1][1], B.z], [A.pts[i + 1][0], A.pts[i + 1][1], A.z]], p);
+      const n = cruz(sub(C, A), sub(D, B));
+      for (const [kk, ii] of [[k, i], [k + 1, i], [k + 1, j], [k, j]]) for (let q = 0; q < 3; q++) N[kk][ii][q] += n[q];
+      faces.push([k, i, j, p]);
     }
   }
-  if (tampas) {
-    const t0 = secoes[0];
-    const t1 = secoes[secoes.length - 1];
-    const pt = parteTampa ?? (typeof partes === 'function' ? partes(0, 0) : partes[0]);
-    M.poli(t0.pts.map(([x, y]) => [x, y, t0.z]), pt);
-    M.poli([...t1.pts].reverse().map(([x, y]) => [x, y, t1.z]), pt);
+  const Nn = N.map((a) => a.map(norma));
+  for (const [k, i, j, p] of faces) {
+    const pts = [];
+    const nors = [];
+    for (const [kk, ii] of [[k, i], [k + 1, i], [k + 1, j], [k, j]]) {
+      const q = G[kk][ii];
+      if (pts.length && (mesmo(q, pts[pts.length - 1]) || (pts.length === 3 && mesmo(q, pts[0])))) continue;
+      pts.push(q);
+      nors.push(Nn[kk][ii]);
+    }
+    if (pts.length >= 3) M.poli(pts, p, nors);
+  }
+  return Nn;
+}
+
+/**
+ * Tampa de uma ponta em faixas: o anel (simétrico, de baixo pela esquerda, por cima e de volta pela direita, com um
+ * número par de pontos) fechado de baixo para cima por faixas entre os pares de pontos da mesma altura (i e n - 1 - i),
+ * cada faixa em duas metades com a coluna do meio estufada `bojo` m para fora (a ponta curva em planta, como a tampa e
+ * o para-choque de verdade). Normais: a borda com as do anel na grade (a lataria que dobra a quina), o meio de frente:
+ * o reflexo do sol baixo vira uma faixa em pé que corre pela chapa, e não um bloco nem o X de um leque. dz: para onde a
+ * tampa olha (-1 atrás, 1 na frente); partes(k): a parte da faixa k (de baixo para cima).
+ */
+export function tampa(M, anel, normais, dz, partes, bojo = 0.04) {
+  const n = anel.length;
+  const meio = [];
+  for (let k = 0; k < n / 2; k++) {
+    const L = anel[k];
+    const R = anel[n - 1 - k];
+    const ny = (normais[k][1] + normais[n - 1 - k][1]) * 0.35;
+    meio.push({ p: [(L[0] + R[0]) / 2, (L[1] + R[1]) / 2, (L[2] + R[2]) / 2 + dz * bojo], n: norma([0, ny, dz]) });
+  }
+  const emite = (vs, parte) => {
+    const pts = [];
+    const nors = [];
+    for (const [p, nn] of vs) {
+      if (pts.length && (mesmo(p, pts[pts.length - 1]) || (pts.length === 3 && mesmo(p, pts[0])))) continue;
+      pts.push(p);
+      nors.push(nn);
+    }
+    if (pts.length >= 3) M.poli(pts, parte, nors);
+  };
+  for (let k = 0; k + 1 < n / 2; k++) {
+    const L0 = [anel[k], normais[k]];
+    const L1 = [anel[k + 1], normais[k + 1]];
+    const R0 = [anel[n - 1 - k], normais[n - 1 - k]];
+    const R1 = [anel[n - 2 - k], normais[n - 2 - k]];
+    const C0 = [meio[k].p, meio[k].n];
+    const C1 = [meio[k + 1].p, meio[k + 1].n];
+    if (dz > 0) {
+      emite([L0, C0, C1, L1], partes(k));
+      emite([C0, R0, R1, C1], partes(k));
+    } else {
+      emite([C0, L0, L1, C1], partes(k));
+      emite([R0, C0, C1, R1], partes(k));
+    }
   }
 }
 
-/** Seção da carroceria de baixo: arredondada nas quinas (8 pontos), de -w a w, de y0 a y1. */
-function secaoBaixa(w, y0, y1, r = 0.1) {
-  return [[-w + r, y0], [-w, y0 + r], [-w, y1 - r], [-w + r * 0.7, y1], [w - r * 0.7, y1], [w, y1 - r], [w, y0 + r], [w - r, y0]];
-}
-
-/** Caixa de x0..x1, y0..y1, z0..z1 sem o fundo (5 faces, 10 triângulos); topo, frente (+z) e trás podem ter outra parte. */
-function caixa(M, x0, y0, z0, x1, y1, z1, parte, topo = parte, frente = parte, tras = parte) {
-  M.poli([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], parte);
-  M.poli([[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]], parte);
+/**
+ * Caixa de x0..x1, y0..y1, z0..z1 sem o fundo (5 faces, 10 triângulos); topo, frente (+z) e trás podem ter outra
+ * parte. semLado: 1 tira a face de x0 (encostada na carroceria do lado +x), -1 a de x1.
+ */
+function caixa(M, x0, y0, z0, x1, y1, z1, parte, topo = parte, frente = parte, tras = parte, semLado = 0) {
+  if (semLado !== -1) M.poli([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], parte);
+  if (semLado !== 1) M.poli([[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]], parte);
   M.poli([[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], topo);
   M.poli([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], frente);
   M.poli([[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], tras);
 }
 
-/** Roda: cilindro de 6 lados no eixo x, com o aro de fora. */
-function roda(M, x, y, z, r, larg, lado) {
+/** Roda: cilindro de n lados no eixo x, com normais suaves no pneu e o aro de fora. */
+function roda(M, x, y, z, r, larg, lado, n = 8) {
   const pts = [];
-  for (let k = 0; k < 6; k++) {
-    const a = (Math.PI * 2 * k) / 6 + Math.PI / 6;
-    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  for (let k = 0; k < n; k++) {
+    const a = (Math.PI * 2 * k) / n + Math.PI / n;
+    pts.push([Math.cos(a), Math.sin(a)]);
   }
   const xf = x + (lado * larg) / 2;
   const xd = x - (lado * larg) / 2;
-  for (let k = 0; k < 6; k++) {
+  for (let k = 0; k < n; k++) {
     const [z0, y0] = pts[k];
-    const [z1, y1] = pts[(k + 1) % 6];
-    const q = [[xf, y + y0, z + z0], [xf, y + y1, z + z1], [xd, y + y1, z + z1], [xd, y + y0, z + z0]];
-    M.poli(lado > 0 ? q : [...q].reverse(), PARTE.PRETO);
+    const [z1, y1] = pts[(k + 1) % n];
+    const q = [[xf, y + y0 * r, z + z0 * r], [xf, y + y1 * r, z + z1 * r], [xd, y + y1 * r, z + z1 * r], [xd, y + y0 * r, z + z0 * r]];
+    const nq = [[0, y0, z0], [0, y1, z1], [0, y1, z1], [0, y0, z0]];
+    M.poli(lado > 0 ? q : [...q].reverse(), PARTE.PRETO, lado > 0 ? nq : [...nq].reverse());
   }
-  const aro = pts.map(([zz, yy]) => [xf, y + yy * 0.62, z + zz * 0.62]);
+  const aro = pts.map(([zz, yy]) => [xf + lado * 0.003, y + yy * r * 0.62, z + zz * r * 0.62]);
   M.poli(lado > 0 ? [...aro].reverse() : aro, PARTE.ARO);
+}
+
+/**
+ * Caixa de roda: a meia-lua escura do vão do para-lama acima do pneu, na lateral (x = lado * xl), de r0 a r1 do eixo
+ * (no SUV e na picape, a moldura de plástico preto).
+ */
+function caixaDeRoda(M, xl, y, z, r0, r1, lado, parte) {
+  const n = 3;
+  for (let k = 0; k < n; k++) {
+    const a0 = (Math.PI * k) / n;
+    const a1 = (Math.PI * (k + 1)) / n;
+    const p = (a, r) => [lado * xl, y + Math.sin(a) * r, z + Math.cos(a) * r];
+    const q = [p(a0, r0), p(a0, r1), p(a1, r1), p(a1, r0)];
+    M.poli(lado > 0 ? q : [...q].reverse(), parte);
+  }
 }
 
 /**
  * Onde um raio paralelo a z, vindo de fora (sentido -dz), encosta na carroceria já feita em (x, y): o z da face mais de
  * fora, ou null se passa ao lado. Só vale uma face a menos de `janela` m para dentro do plano da ponta (zPonta): uma
- * roda ou a traseira da cabine lá no meio não servem. É o que assenta os faróis e as lanternas no capô e na tampa.
+ * roda ou a traseira da cabine lá no meio não servem. É o que assenta os faróis, as lanternas, a placa e a grade.
  */
 function zNaSuperficie(M, x, y, dz, zPonta, janela = 0.45) {
   let melhor = null;
   const P = M.pos;
-  for (let t = 0; t < M.idx.length; t += 3) {
-    // as luzes já assentadas não contam como carroceria
-    const pt = M.parte[M.idx[t]];
-    if (pt === PARTE.FAROL || pt === PARTE.LANTERNA) continue;
+  // só a carroceria (M.corpo: os índices até ela); rodas, retrovisores e as peças já assentadas não contam
+  const fim = M.corpo ?? M.idx.length;
+  for (let t = 0; t < fim; t += 3) {
     const a = 3 * M.idx[t];
     const b = 3 * M.idx[t + 1];
     const c = 3 * M.idx[t + 2];
@@ -163,54 +250,68 @@ function zNaSuperficie(M, x, y, dz, zPonta, janela = 0.45) {
   return melhor;
 }
 
-/** Célula de luz: afundando mais que DIVIDIR na quina do bico, divide em 4 (uma vez); sai no máximo SAIDA_MAX (m). */
+/** Célula de peça assentada: afundando mais que DIVIDIR na curva da ponta, divide em 4 (uma vez); sai no máximo SAIDA_MAX (m). */
 const DIVIDIR = 0.012;
 const SAIDA_MAX = 0.03;
 
 /**
- * Faróis e lanternas: grades finas de quadriláteros na frente e atrás, cada vértice assentado na carroceria (a face mais
- * de fora naquele x, y, perto da ponta) com um recuo para fora; sem face ali, o plano zF ou zT. Chame depois da
- * carroceria e antes das peças soltas (grade, para-choque). margemF: afastamento do farol da lateral.
+ * Peça assentada na ponta (farol, lanterna, placa, grade, plástico): grade de nx x ny quadriláteros de xa a xb e de y0
+ * a y0 + alt, cada vértice na carroceria (a face mais de fora naquele x, y, perto da ponta) com um recuo para fora; sem
+ * face ali, o plano zPonta. Chame depois da carroceria. dz: 1 na frente, -1 atrás. dividir: a célula que afunda na
+ * curva divide em 4 (os faróis e as lanternas); sem, só sai para fora (a placa, a grade e o plástico, planos).
  */
-function luzes(M, w, zF, zT, yF, yT, alt = 0.14, larg = 0.34, recuo = 0.004, margemF = 0.08) {
-  // grade de nx x ny células que acompanha a curva do bico (um quadrilátero só afundaria no meio)
-  const grade = (xa, xb, y0, dz, zPonta, nx, ny, parte) => {
-    const sup = (x, y) => zNaSuperficie(M, x, y, dz, zPonta);
-    const vert = (x, y) => [x, y, (sup(x, y) ?? zPonta) + dz * recuo];
-    // anti-horário visto de fora: na frente (dz = 1) x cresce para a direita; atrás, para a esquerda
-    const vira = (xb > xa) !== (dz > 0);
-    const celula = (x0, x1, y1, y2, prof) => {
-      const q = [vert(x0, y1), vert(x1, y1), vert(x1, y2), vert(x0, y2)];
-      // quanto a célula afunda na carroceria (a superfície faz barriga dentro dela)
-      let fundo = 0;
-      for (const [a, b] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0.5, 0], [0.5, 1], [0, 0.5], [1, 0.5]]) {
-        const zc = (q[0][2] * (1 - a) + q[1][2] * a) * (1 - b) + (q[3][2] * (1 - a) + q[2][2] * a) * b;
-        const zs = sup(x0 + (x1 - x0) * a, y1 + (y2 - y1) * b);
-        if (zs !== null) fundo = Math.max(fundo, (zs + dz * recuo - zc) * dz);
-      }
-      if (fundo > DIVIDIR && prof < 1) {
-        const xm = (x0 + x1) / 2;
-        const ym = (y1 + y2) / 2;
-        celula(x0, xm, y1, ym, prof + 1);
-        celula(xm, x1, y1, ym, prof + 1);
-        celula(x0, xm, ym, y2, prof + 1);
-        celula(xm, x1, ym, y2, prof + 1);
-        return;
-      }
-      for (const p of q) p[2] += dz * Math.min(SAIDA_MAX, fundo);
-      M.poli(vira ? q.reverse() : q, parte);
-    };
-    for (let j = 0; j < ny; j++) {
-      for (let i = 0; i < nx; i++) {
-        celula(xa + ((xb - xa) * i) / nx, xa + ((xb - xa) * (i + 1)) / nx, y0 + (alt * j) / ny, y0 + (alt * (j + 1)) / ny, 0);
-      }
+function assentar(M, xa, xb, y0, alt, dz, zPonta, nx, ny, parte, recuo = 0.004, dividir = true) {
+  const sup = (x, y) => zNaSuperficie(M, x, y, dz, zPonta);
+  const vert = (x, y) => [x, y, (sup(x, y) ?? zPonta) + dz * recuo];
+  // anti-horário visto de fora: na frente (dz = 1) x cresce para a direita; atrás, para a esquerda
+  const vira = (xb > xa) !== (dz > 0);
+  const celulas = [];
+  const celula = (x0, x1, y1, y2, prof) => {
+    const q = [vert(x0, y1), vert(x1, y1), vert(x1, y2), vert(x0, y2)];
+    // quanto a célula afunda na carroceria (a superfície faz barriga dentro dela)
+    let fundo = 0;
+    for (const [a, b] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0.5, 0], [0.5, 1], [0, 0.5], [1, 0.5]]) {
+      const zc = (q[0][2] * (1 - a) + q[1][2] * a) * (1 - b) + (q[3][2] * (1 - a) + q[2][2] * a) * b;
+      const zs = sup(x0 + (x1 - x0) * a, y1 + (y2 - y1) * b);
+      if (zs !== null) fundo = Math.max(fundo, (zs + dz * recuo - zc) * dz);
     }
+    if (dividir && fundo > DIVIDIR && prof < 1) {
+      const xm = (x0 + x1) / 2;
+      const ym = (y1 + y2) / 2;
+      celula(x0, xm, y1, ym, prof + 1);
+      celula(xm, x1, y1, ym, prof + 1);
+      celula(x0, xm, ym, y2, prof + 1);
+      celula(xm, x1, ym, y2, prof + 1);
+      return;
+    }
+    for (const p of q) p[2] += dz * Math.min(SAIDA_MAX, fundo);
+    celulas.push(vira ? q.reverse() : q);
   };
-  for (const s of [-1, 1]) {
-    grade(s * (w - margemF), s * (w - margemF - larg), yF, 1, zF, 2, 1, PARTE.FAROL);
-    grade(s * (w - 0.08), s * (w - 0.08 - larg), yT, -1, zT, 2, 1, PARTE.LANTERNA);
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      celula(xa + ((xb - xa) * i) / nx, xa + ((xb - xa) * (i + 1)) / nx, y0 + (alt * j) / ny, y0 + (alt * (j + 1)) / ny, 0);
+    }
   }
+  // as células entram depois de todas medidas (uma não serve de superfície para a outra)
+  for (const q of celulas) M.poli(q, parte);
 }
+
+/**
+ * Seção da carroceria de baixo (10 pontos, de baixo pela esquerda, por cima e de volta pela direita): fundo chanfrado,
+ * lateral de baixo até a linha do para-choque (ym), lateral de cima com um pouco de caída, ombro e o tampo (capô,
+ * cintura ou tampa) em yt. ww: meia largura.
+ */
+function secao(ww, y0, ym, yt) {
+  const rb = Math.min(0.1, (ym - y0) * 0.4);
+  const rs = Math.min(0.06, (yt - ym) * 0.3);
+  return [
+    [-ww + rb, y0], [-ww, y0 + rb], [-ww, ym], [-ww + 0.015, yt - rs], [-ww + rs + 0.03, yt],
+    [ww - rs - 0.03, yt], [ww - 0.015, yt - rs], [ww, ym], [ww, y0 + rb], [ww - rb, y0],
+  ];
+}
+
+/** Partes das faces da seção (i de 0 a 9): fundo, lateral de baixo, de cima, ombro, tampo e o espelho; 9 é o assoalho. */
+const FACE = Object.freeze({ CHANFRO: [0, 8], BAIXO: [1, 7], CIMA: [2, 6], OMBRO: [3, 5], TAMPO: 4, FUNDO: 9 });
 
 /** Carro de passeio (hatch, sedã, SUV, picape): LOD0. */
 function carroLOD0(m) {
@@ -221,46 +322,193 @@ function carroLOD0(m) {
   const y0 = m.vao;
   const yc = m.cintura;
   const yCapo = m.capo;
-  // carroceria de baixo: para-choque, capô que sobe até a cintura no para-brisa, porta-malas
+  const yTras = m.traseira;
   const z = (f) => zT + f * m.c;
   const [fPB, fTF, fTT, fVT] = m.cabine;
+  // linha do para-choque (onde a lateral de baixo acaba) atrás e na frente
+  const ymT = y0 + 0.42;
+  const ymF = y0 + 0.4;
+  const zVT = z(fVT);
+  const zPB = z(fPB);
+  // estações da carroceria de baixo, de trás para a frente: [z, meia largura, fundo, para-choque, tampo]. As pontas
+  // encolhem (a traseira e o bico arredondados: nenhuma face grande de frente para a câmera), a lateral é um pouco mais
+  // larga no meio (a planta curva) e o tampo sobe da tampa à cintura e desce da cintura ao capô
+  // a traseira dobra as quinas num quarto de círculo de 0,22 m (em planta e em pé)
   const est = [
-    [z(0), w - 0.1, y0 + 0.08, yCapo - 0.12],
-    [z(0.04), w, y0, m.cacamba ? yc : yCapo - 0.02],
-    [z(fVT), w, y0, yc],
-    [z(fPB), w, y0, yc],
-    [z(0.9), w, y0, yCapo],
-    [z(0.97), w - 0.04, y0 + 0.04, yCapo - 0.05],
-    [z(1), w - 0.12, y0 + 0.12, yCapo - 0.16],
+    [zT, w - 0.22, y0 + 0.11, ymT - 0.02, yTras - 0.1],
+    [zT + 0.065, w - 0.065, y0 + 0.032, ymT, yTras - 0.03],
+    [zT + 0.22, w - 0.01, y0, ymT, yTras],
   ];
-  const secoes = est.map(([zz, ww, a, b]) => ({ z: zz, pts: secaoBaixa(ww, a, b, 0.1) }));
-  // faces: baixo preto (pneus e assoalho), resto pintura; a faixa de baixo dos lados em plástico preto no SUV
-  loft(M, secoes, (k, i) => (i === 7 ? -1 : i === 0 || i === 6 ? (m.id === 'suv' || m.id === 'picape' ? PARTE.PRETO : PARTE.PINTURA) : PARTE.PINTURA), { parteTampa: PARTE.PINTURA });
-  // assoalho
-  M.poli([[-w + 0.1, y0, zF - 0.1], [w - 0.1, y0, zF - 0.1], [w - 0.1, y0, zT + 0.1], [-w + 0.1, y0, zT + 0.1]].reverse(), PARTE.PRETO);
-  // cabine: da base do para-brisa (cintura) ao teto e à base do vidro de trás, com a caída do teto (tumblehome)
-  const wb = w - 0.04;
-  const wr = w - 0.2;
-  const zc = [z(fVT), z(fTT), z(fTF), z(fPB)];
-  const alto = [yc, m.h, m.h, yc];
-  const cab = zc.map((zz, k) => ({ z: zz, pts: [[-wb, yc], [-(k === 0 || k === 3 ? wb - 0.02 : wr), alto[k]], [k === 0 || k === 3 ? wb - 0.02 : wr, alto[k]], [wb, yc]] }));
-  loft(M, cab, (k, i) => (k === 1 ? (i === 1 ? PARTE.PINTURA : PARTE.VIDRO) : PARTE.VIDRO), { tampas: false });
-  // caçamba da picape: o piso afundado e a tampa (caixa aberta desenhada por dentro)
-  if (m.cacamba) {
-    const zc0 = z(0.04);
-    const zc1 = z(fVT) - 0.02;
-    M.poli([[-w + 0.08, yc - 0.45, zc1], [w - 0.08, yc - 0.45, zc1], [w - 0.08, yc - 0.45, zc0], [-w + 0.08, yc - 0.45, zc0]], PARTE.PRETO);
+  if (zVT - zT > 0.4) est.push([zVT, w, y0, ymT, m.cacamba ? yTras : yc]);
+  else est[2][4] = yc;
+  // o capô desce da cintura ao bico, e o bico arredonda em planta (as quinas recuam: o farol dobra a quina)
+  est.push(
+    [zPB, w, y0, ymF, yc],
+    [zF - 0.75, w - 0.006, y0, ymF, yCapo + 0.08],
+    [zF - 0.3, w - 0.03, y0, ymF, yCapo + 0.02],
+    [zF - 0.09, w - 0.12, y0 + 0.03, ymF - 0.02, yCapo - 0.02],
+    [zF, w - 0.32, y0 + 0.1, ymF - 0.05, yCapo - 0.1],
+  );
+  const G = est.map(([zz, ww, a, b, t]) => secao(ww, a, b, t).map(([x, y]) => [x, y, zz]));
+  const nk = G.length;
+  const kVT = est.findIndex((e) => e[0] === zVT);
+  const plastico = (i) => FACE.CHANFRO.includes(i) || (m.plastico && FACE.BAIXO.includes(i));
+  const partes = (k, i) => {
+    if (i === FACE.FUNDO) return k === 0 || k === nk - 2 ? PARTE.PRETO : -1;
+    // a caçamba da picape: aberta em cima entre a tampa e a cabine
+    if (m.cacamba && i === FACE.TAMPO && k === 2 && kVT === 3) return -1;
+    if (plastico(i)) return PARTE.PLASTICO;
+    return PARTE.PINTURA;
+  };
+  const Nn = superficie(M, G, partes, { fechada: true });
+  // as pontas: o miolo da traseira e do bico, abaulados (o plástico de baixo é peça assentada)
+  tampa(M, G[0], Nn[0], -1, () => PARTE.PINTURA, 0.035);
+  tampa(M, G[nk - 1], Nn[nk - 1], 1, () => PARTE.PINTURA, 0.05);
+  // caçamba da picape: o piso, as paredes de dentro, a tampa por dentro e a parede da cabine
+  if (m.cacamba && kVT === 3) {
+    const za = zT + 0.2;
+    const zb = zVT;
+    const xi = w - 0.09;
+    const yp = yc - 0.5;
+    M.poli([[-xi, yp, zb], [xi, yp, zb], [xi, yp, za], [-xi, yp, za]], PARTE.PLASTICO);
+    M.poli([[-xi, yp, za], [-xi, yp, zb], [-xi, yTras, zb], [-xi, yTras, za]], PARTE.PLASTICO);
+    M.poli([[xi, yp, zb], [xi, yp, za], [xi, yTras, za], [xi, yTras, zb]], PARTE.PLASTICO);
+    M.poli([[-xi, yp, za], [-xi, yTras, za], [xi, yTras, za], [xi, yp, za]].reverse(), PARTE.PLASTICO);
+    // a parede da cabine na caçamba, com as normais abauladas nos cantos (chapa de verdade, não um espelho plano)
+    const nc = (sx, sy) => norma([sx * 0.35, sy * 0.25, -1]);
+    M.poli([[xi, yc, zb], [-xi, yc, zb], [-xi, yp, zb], [xi, yp, zb]], PARTE.PINTURA, [nc(1, 1), nc(-1, 1), nc(-1, -1), nc(1, -1)]);
   }
-  // rodas
-  const eixoF = m.eixos / 2 + (m.c * 0.02);
-  const eixoT = -m.eixos / 2 + (m.c * 0.02);
-  for (const zz of [eixoF, eixoT]) for (const lado of [-1, 1]) roda(M, lado * (w - 0.1), m.roda, zz, m.roda, 0.22, lado);
-  // faróis e lanternas assentados no bico e na traseira (antes da grade: a grade não conta como superfície): as
-  // lanternas na tampa do hatch e do SUV, no painel de trás do sedã (porta-malas comprido) e na tampa da caçamba
-  const yLanterna = m.cacamba ? yc - 0.3 : fVT > 0.1 ? yCapo - 0.19 : yc - 0.18;
-  luzes(M, w, zF, zT, yCapo - 0.24, yLanterna, 0.14, 0.3, 0.006, 0.1);
-  M.poli([[-0.35, yCapo - 0.3, zF + 0.001], [0.35, yCapo - 0.3, zF + 0.001], [0.35, yCapo - 0.18, zF + 0.001], [-0.35, yCapo - 0.18, zF + 0.001]], PARTE.PRETO);
+
+  // estufa: da base do vidro de trás ao teto e à base do para-brisa, com a caída do teto e o teto abaulado
+  const wb = w - 0.09;
+  const wr = w - 0.24;
+  const hR = m.h - 0.035;
+  const meio = (y) => [[-wb, y], [-wb, y], [-0.45 * wb, y], [0.45 * wb, y], [wb, y], [wb, y]];
+  const teto = [[-wb, yc], [-wr, hR], [-0.45 * wr, m.h], [0.45 * wr, m.h], [wr, hR], [wb, yc]];
+  const zc = [zVT, z(fTT), z(fTF), zPB];
+  const E = [meio(yc), teto, teto, meio(yc)].map((s, k) => s.map(([x, y]) => [x, y, zc[k]]));
+  superficie(M, E, (k, i) => (i === 0 || i === 4 ? PARTE.PINTURA : k === 1 ? PARTE.PINTURA : PARTE.VIDRO));
+  // colunas A e C: a faixa da cor do carro na borda do para-brisa e do vidro de trás (o vidro não vai de lado a lado)
+  // A, B: a borda do vidro (de baixo para cima); C, D: os pontos de dentro na mesma altura (para onde a faixa cresce);
+  // fora: 1 no para-brisa (olha para a frente), -1 no vidro de trás
+  const coluna = (A, B, C, D, larg, fora) => {
+    const p = (P, Q, t) => [P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t, P[2] + (Q[2] - P[2]) * t];
+    let n = norma(cruz(sub(B, A), sub(C, A)));
+    if (n[2] * fora < 0) n = n.map((x) => -x);
+    const o = (P) => [P[0] + n[0] * 0.004, P[1] + n[1] * 0.004, P[2] + n[2] * 0.004];
+    const q = [o(A), o(B), o(p(B, D, larg)), o(p(A, C, larg))];
+    const nq = cruz(sub(q[1], q[0]), sub(q[2], q[0]));
+    M.poli(nq[0] * n[0] + nq[1] * n[1] + nq[2] * n[2] > 0 ? q : q.reverse(), PARTE.PINTURA);
+  };
+  for (const s of [-1, 1]) {
+    const iB = s < 0 ? 0 : 5; // a borda (sobre a lateral)
+    const iD = s < 0 ? 2 : 3; // o ponto de dentro do vidro
+    const iT = s < 0 ? 1 : 4; // a quina do teto
+    // para-brisa (k = 2 para 3): da quina do teto à base, crescendo para dentro
+    coluna(E[3][iB], E[2][iT], E[3][iD], E[2][iD], 0.16, 1);
+    // vidro de trás (k = 0 para 1)
+    coluna(E[0][iB], E[1][iT], E[0][iD], E[1][iD], 0.2, -1);
+  }
+  // janelas das portas: na lateral da estufa, por dentro das colunas, com a coluna do meio escura entre elas
+  const hJ = hR - 0.05;
+  const yJ = yc + 0.04;
+  const xNa = (y) => wb + ((wr - wb) * (y - yc)) / (hR - yc);
+  const zA = (y) => zPB + ((z(fTF) - zPB) * (y - yc)) / (hR - yc) - 0.08;
+  const zC = (y) => (m.cacamba ? zVT + 0.06 : zVT + ((z(fTT) - zVT) * (y - yc)) / (hR - yc) + 0.12);
+  const zB = z(fTT) + (z(fTF) - z(fTT)) * (m.cacamba ? 0.55 : 0.47);
+  for (const s of [-1, 1]) {
+    const v = (zz, y) => [s * (xNa(y) + 0.005), y, zz];
+    for (const [za, zb] of [[zC, () => zB - 0.05], [() => zB + 0.05, zA]]) {
+      const q = [v(za(yJ), yJ), v(zb(yJ), yJ), v(zb(hJ), hJ), v(za(hJ), hJ)];
+      if (q[1][2] - q[0][2] < 0.15) continue;
+      M.poli(s > 0 ? q.reverse() : q, PARTE.VIDRO);
+    }
+  }
+  M.corpo = M.idx.length;
+  // retrovisores: a carcaça da cor do carro, o espelho virado para trás, na base da coluna A
+  for (const s of [-1, 1]) {
+    const x0 = s > 0 ? wb + 0.02 : -wb - 0.17;
+    const x1 = s > 0 ? wb + 0.17 : -wb - 0.02;
+    caixa(M, x0, yc - 0.01, zPB - 0.26, x1, yc + 0.1, zPB - 0.16, PARTE.PINTURA, PARTE.PINTURA, PARTE.PINTURA, PARTE.VIDRO, s);
+  }
+  // rodas e caixas de roda
+  const eixoF = m.eixos / 2 + m.c * 0.02;
+  const eixoT = -m.eixos / 2 + m.c * 0.02;
+  for (const zz of [eixoF, eixoT]) {
+    for (const lado of [-1, 1]) {
+      roda(M, lado * (w - 0.1), m.roda, zz, m.roda, 0.22, lado, 7);
+      caixaDeRoda(M, w + 0.004, m.roda, zz, m.roda + 0.01, m.roda + (m.plastico ? 0.11 : 0.065), lado, m.plastico ? PARTE.PLASTICO : PARTE.PRETO);
+    }
+  }
+  // faróis e lanternas assentados no bico e na traseira (antes da grade e da placa: as peças não contam como
+  // superfície); as lanternas na tampa do hatch e do SUV, no painel de trás do sedã e na tampa da caçamba
+  const yLanterna = m.cacamba ? yTras - 0.32 : yTras - 0.25;
+  for (const s of [-1, 1]) {
+    assentar(M, s * (w - 0.14), s * (w - 0.45), yCapo - 0.2, 0.1, 1, zF, 1, 1, PARTE.FAROL, 0.006);
+    assentar(M, s * (w - 0.09), s * (w - 0.39), yLanterna, 0.14, -1, zT, 1, 1, PARTE.LANTERNA, 0.006);
+  }
+  // a lanterna dobra a quina: um pedaço na lateral, na chapa entre as estações de 0,065 e 0,22 m
+  for (const s of [-1, 1]) {
+    const x = (zz) => w - 0.065 + (0.055 * (zz - zT - 0.065)) / 0.155 + 0.004;
+    const za = zT + 0.09;
+    const zb = zT + 0.2;
+    const q = [[s * x(za), yLanterna, za], [s * x(zb), yLanterna, zb], [s * x(zb), yLanterna + 0.12, zb], [s * x(za), yLanterna + 0.12, za]];
+    M.poli(s > 0 ? q.reverse() : q, PARTE.LANTERNA);
+  }
+  // grade entre os faróis, a tomada de ar e a placa da frente; atrás, a placa e o difusor de plástico
+  assentar(M, -(w - 0.44), w - 0.44, yCapo - 0.26, 0.12, 1, zF, 2, 1, PARTE.PRETO, 0.004, false);
+  assentar(M, -(w - 0.4), w - 0.4, y0 + 0.1, 0.13, 1, zF, 2, 1, PARTE.PLASTICO, 0.004, false);
+  assentar(M, -0.2, 0.2, y0 + 0.25, 0.13, 1, zF, 1, 1, PARTE.PLACA, 0.007, false);
+  assentar(M, 0.2, -0.2, m.cacamba ? y0 + 0.28 : ymT + 0.06, 0.13, -1, zT, 1, 1, PARTE.PLACA, 0.007, false);
+  assentar(M, w - 0.36, -(w - 0.36), y0 + 0.13, 0.1, -1, zT, 2, 1, PARTE.PLASTICO, 0.004, false);
   return M.fechar();
+}
+
+/**
+ * Normais almofadadas de uma malha em caixas (ônibus e VUC): a da face misturada com a direção do centro da caixa
+ * (expoente 2), na pintura e no cromado. A lataria grande e plana deixa de virar um bloco de luz com o sol baixo.
+ */
+function almofadar(Mx, cx, cy, hx, hy, hz, peso = 0.5) {
+  const { posicao: P, normal: N, parte } = Mx;
+  for (let v = 0; v < parte.length; v++) {
+    if (parte[v] !== PARTE.PINTURA && parte[v] !== PARTE.CROMADO) continue;
+    const r = [(P[3 * v] - cx) / hx, (P[3 * v + 1] - cy) / hy, P[3 * v + 2] / hz];
+    const g = r.map((x) => Math.sign(x) * x * x);
+    const n = norma([N[3 * v] + g[0] * peso, N[3 * v + 1] + g[1] * peso, N[3 * v + 2] + g[2] * peso]);
+    // nunca vira para dentro da face
+    if (n[0] * N[3 * v] + n[1] * N[3 * v + 1] + n[2] * N[3 * v + 2] < 0.5) continue;
+    N.set(n, 3 * v);
+  }
+  return Mx;
+}
+
+/** Laterais retas em loft (ônibus e VUC): seções { z, pts } com o mesmo número de pontos e as tampas. */
+function loft(M, secoes, partes, { tampas = true, parteTampa = null } = {}) {
+  const n = secoes[0].pts.length;
+  for (let k = 0; k + 1 < secoes.length; k++) {
+    const A = secoes[k];
+    const B = secoes[k + 1];
+    for (let i = 0; i + 1 < n; i++) {
+      const p = typeof partes === 'function' ? partes(k, i) : partes[i];
+      if (p < 0) continue;
+      M.poli([[A.pts[i][0], A.pts[i][1], A.z], [B.pts[i][0], B.pts[i][1], B.z], [B.pts[i + 1][0], B.pts[i + 1][1], B.z], [A.pts[i + 1][0], A.pts[i + 1][1], A.z]], p);
+    }
+  }
+  if (tampas) {
+    const t0 = secoes[0];
+    const t1 = secoes[secoes.length - 1];
+    const pt = parteTampa ?? (typeof partes === 'function' ? partes(0, 0) : partes[0]);
+    M.poli(t0.pts.map(([x, y]) => [x, y, t0.z]), pt);
+    M.poli([...t1.pts].reverse().map(([x, y]) => [x, y, t1.z]), pt);
+  }
+}
+
+/** Faróis (frente) e lanternas (atrás) num ônibus ou num VUC. */
+function luzes(M, w, zF, zT, yF, yT, alt, larg, recuo, margemF = 0.08) {
+  for (const s of [-1, 1]) {
+    assentar(M, s * (w - margemF), s * (w - margemF - larg), yF, alt, 1, zF, 2, 1, PARTE.FAROL, recuo);
+    assentar(M, s * (w - 0.08), s * (w - 0.08 - larg), yT, alt, -1, zT, 2, 1, PARTE.LANTERNA, recuo);
+  }
 }
 
 /** Ônibus urbano: caixa com a faixa de janelas, para-brisa inteiro e seis rodas. */
@@ -273,13 +521,14 @@ function onibusLOD0(m) {
   const y0 = m.vao;
   const sec = (ww) => [[-ww + 0.1, y0], [-ww, y0 + 0.1], [-ww, j0], [-ww, j1], [-ww + 0.1, m.h], [ww - 0.1, m.h], [ww, j1], [ww, j0], [ww, y0 + 0.1], [ww - 0.1, y0]];
   const secoes = [{ z: zT, pts: sec(w - 0.02) }, { z: zT + 0.15, pts: sec(w) }, { z: zF - 0.3, pts: sec(w) }, { z: zF, pts: sec(w - 0.05) }];
-  loft(M, secoes, (k, i) => (i === 9 ? -1 : i === 2 || i === 6 ? (k === 2 ? PARTE.VIDRO : PARTE.VIDRO) : PARTE.PINTURA), { parteTampa: PARTE.PINTURA });
+  loft(M, secoes, (k, i) => (i === 9 ? -1 : i === 2 || i === 6 ? PARTE.VIDRO : PARTE.PINTURA), { parteTampa: PARTE.PINTURA });
   // para-brisa e vidro de trás
   M.poli([[-w + 0.1, j0 - 0.3, zF + 0.01], [w - 0.1, j0 - 0.3, zF + 0.01], [w - 0.1, m.h - 0.15, zF + 0.01], [-w + 0.1, m.h - 0.15, zF + 0.01]], PARTE.VIDRO);
   M.poli([[w - 0.2, j0 + 0.2, zT - 0.01], [-w + 0.2, j0 + 0.2, zT - 0.01], [-w + 0.2, j1, zT - 0.01], [w - 0.2, j1, zT - 0.01]], PARTE.VIDRO);
-  for (const zz of [m.eixos / 2 + 0.3, -m.eixos / 2 + 0.3, -m.eixos / 2 - 1.1]) for (const lado of [-1, 1]) roda(M, lado * (w - 0.18), m.roda, zz, m.roda, 0.3, lado);
+  M.corpo = M.idx.length;
+  for (const zz of [m.eixos / 2 + 0.3, -m.eixos / 2 + 0.3, -m.eixos / 2 - 1.1]) for (const lado of [-1, 1]) roda(M, lado * (w - 0.18), m.roda, zz, m.roda, 0.3, lado, 6);
   luzes(M, w, zF, zT, 0.55, 0.7, 0.2, 0.3, 0.012);
-  return M.fechar();
+  return almofadar(M.fechar(), 0, m.h / 2, w, m.h / 2, m.c / 2, 0.35);
 }
 
 /** Caminhão leve (VUC): cabine e baú. */
@@ -302,13 +551,14 @@ function caminhaoLOD0(m) {
   loft(M, [{ z: zCab, pts: cab }, { z: zF - 0.35, pts: cab }, { z: zF, pts: cab.map(([x, y]) => [x * 0.97, y > m.cintura ? y - 0.12 : y]) }],
     (k, i) => (i === 1 ? PARTE.VIDRO : i === 3 ? PARTE.VIDRO : PARTE.PINTURA), { parteTampa: PARTE.PINTURA });
   M.poli([[-w + 0.2, m.cintura + 0.4, zF + 0.01], [w - 0.2, m.cintura + 0.4, zF + 0.01], [w - 0.25, hc - 0.15, zF - 0.1], [-w + 0.25, hc - 0.15, zF - 0.1]], PARTE.VIDRO);
-  for (const zz of [zF - 0.95, zF - 0.95 - m.eixos]) for (const lado of [-1, 1]) roda(M, lado * (w - 0.2), m.roda, zz, m.roda, 0.3, lado);
+  M.corpo = M.idx.length;
+  for (const zz of [zF - 0.95, zF - 0.95 - m.eixos]) for (const lado of [-1, 1]) roda(M, lado * (w - 0.2), m.roda, zz, m.roda, 0.3, lado, 6);
   luzes(M, w, zF, zT, y0 + 0.1, y0 + 0.2, 0.16, 0.3, 0.01, 0.12);
   // para-choque, retrovisores em braço e o tanque de diesel do lado esquerdo, entre os eixos
   caixa(M, -w + 0.02, m.vao + 0.12, zF - 0.02, w - 0.02, y0 + 0.02, zF + 0.1, PARTE.PRETO);
   for (const s of [-1, 1]) caixa(M, s > 0 ? w + 0.02 : -w - 0.14, m.cintura + 0.3, zF - 0.62, s > 0 ? w + 0.14 : -w - 0.02, m.cintura + 0.72, zF - 0.54, PARTE.PRETO);
   caixa(M, w - 0.62, m.vao + 0.18, zF - 1.9, w - 0.12, m.vao + 0.62, zF - 1.35, PARTE.CROMADO);
-  return M.fechar();
+  return almofadar(M.fechar(), 0, m.h / 2, w, m.h / 2, m.c / 2, 0.35);
 }
 
 /** LOD1: carroceria e cabine em caixas (sem fundo), 20 triângulos; as pontas de baixo levam os faróis e as lanternas. */

@@ -643,6 +643,59 @@ test('carros: 6 modelos da frota brasileira em medidas reais, LOD0 de 150 a 400 
   }
 });
 
+test('carros de perto (VIS1b): lataria curva, para-choque, placa, vidros e retrovisores; LOD1 com o custo de antes', async () => {
+  const { CARRO_GLSL } = await import('../../fonte/render/mundo/trafego.js');
+  const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+  for (let i = 0; i < 4; i++) {
+    const m = MODELOS[i];
+    const v = malhaVeiculo(i, 0);
+    const N = (k) => [v.normal[3 * k], v.normal[3 * k + 1], v.normal[3 * k + 2]];
+    const Pt = (k) => [v.posicao[3 * k], v.posicao[3 * k + 1], v.posicao[3 * k + 2]];
+    const partes = new Set(v.parte);
+    for (const p of [PARTE.PLACA, PARTE.PLASTICO, PARTE.VIDRO, PARTE.FAROL, PARTE.LANTERNA, PARTE.ARO]) assert.ok(partes.has(p), `${m.id}: sem a parte ${p}`);
+    let curvos = 0;
+    let pintura = 0;
+    let chapada = 0;
+    let placas = 0;
+    let espelhos = 0;
+    let vidroLado = 0;
+    for (let t = 0; t < v.indices.length; t += 3) {
+      const ids = [v.indices[t], v.indices[t + 1], v.indices[t + 2]];
+      const [A, B, C] = ids.map(Pt);
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
+      const w = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const area = Math.hypot(...n) / 2;
+      if (area < 1e-9) continue;
+      const nf = n.map((x) => x / (2 * area));
+      const parte = v.parte[ids[0]];
+      if (parte === PARTE.PINTURA) {
+        pintura++;
+        if (ids.some((k) => ang(N(k), nf) > (5 * Math.PI) / 180)) curvos++;
+        // a lataria de trás ou da frente chapada (as três normais a menos de 12 graus do eixo): era o bloco claro
+        for (const dz of [-1, 1]) if (ids.every((k) => ang(N(k), [0, 0, dz]) < (12 * Math.PI) / 180)) chapada += area;
+      }
+      if (parte === PARTE.PLACA) placas += area;
+      // o espelho do retrovisor: vidro virado para trás, fora da lateral
+      if (parte === PARTE.VIDRO && nf[2] < -0.9 && Math.abs(A[0] + B[0] + C[0]) / 3 > m.l / 2 - 0.05) espelhos++;
+      if (parte === PARTE.VIDRO && Math.abs(nf[0]) > 0.8) vidroLado += area;
+    }
+    assert.ok(curvos / pintura > 0.6, `${m.id}: só ${curvos} de ${pintura} triângulos de pintura com a normal suave`);
+    assert.ok(chapada < 0.05, `${m.id}: ${chapada.toFixed(2)} m² de pintura chapada de frente ou de trás`);
+    // as duas placas Mercosul (40 x 13 cm)
+    assert.ok(Math.abs(placas - 2 * 0.4 * 0.13) < 0.03, `${m.id}: placas com ${placas.toFixed(3)} m²`);
+    assert.ok(espelhos >= 4, `${m.id}: sem os dois retrovisores`);
+    assert.ok(vidroLado > 0.6, `${m.id}: janelas laterais com ${vidroLado.toFixed(2)} m²`);
+  }
+  // de longe nada muda: o LOD1 de todos os modelos com os mesmos 22 triângulos (20 e a sombra de contato)
+  for (let i = 0; i < MODELOS.length; i++) assert.equal(malhaVeiculo(i, 1).tris, 22, `${MODELOS[i].id} LOD1`);
+  // a pintura é verniz, não espelho; o vidro reflete o céu sem o espelho branco; placa e plástico com a cor deles
+  const rug = (p) => Number(new RegExp(`p == ${p}[^}]*?gCarroRug = ([\\d.]+)`).exec(CARRO_GLSL.cor)?.[1]);
+  assert.ok(/gCarroRug = 0\.36 \+/.test(CARRO_GLSL.cor), 'pintura com rugosidade de verniz');
+  assert.ok(rug(1) >= 0.1, `vidro com rugosidade ${rug(1)}`);
+  assert.ok(rug(10) >= 0.4 && rug(11) >= 0.5, 'placa e plástico foscos');
+});
+
 test('tráfego pela heurística (M1a): hora, tipo de via e zonas; teto do Média; semáforo com fases que não se cruzam', async () => {
   const { fatorHora, fatorZona, densidade, faseSemaforo, PERFIL_TRAFEGO, PARADA, distanciaNaFila } = await import('../../fonte/render/mundo/trafego.js');
   const { VIA_FRAGMENTO_PARS } = await import('../../fonte/render/materiais/shaders/via.glsl.js');
@@ -789,12 +842,11 @@ test('materiais via, carro e objetos montam sobre o MeshStandardMaterial do thre
   const { ganchos } = await import('../../fonte/render/motor/ganchos.js');
   const { criarMaterialVia, criarUniformesVia } = await import('../../fonte/render/mundo/vias.js');
   const { criarMaterialCarro } = await import('../../fonte/render/mundo/trafego.js');
-  const { criarMaterialObjetos, criarMaterialArvore } = await import('../../fonte/render/mundo/props.js');
+  const { criarMaterialObjetos } = await import('../../fonte/render/mundo/props.js');
   const materiais = [
     ['via', criarMaterialVia(ganchos, criarUniformesVia()), ['gViaTab', 'gViaDetalhe', 'gViaLonge']],
     ['carro', criarMaterialCarro(ganchos, { gCarroNoite: { value: 0 } }), ['gCarroNoite']],
     ['obj-rua', criarMaterialObjetos(ganchos, { gObjNoite: { value: 0 }, gObjTempo: { value: 0 }, gObjLuz: { value: new THREE.Color() } }), ['gObjTempo']],
-    ['arvore-rua', criarMaterialArvore(ganchos), []],
   ];
   for (const [nome, m, unis] of materiais) {
     const shader = {
@@ -814,22 +866,43 @@ test('materiais via, carro e objetos montam sobre o MeshStandardMaterial do thre
   assert.ok(shader.vertexShader.includes('attribute uint aId') && shader.fragmentShader.includes('viaMarcas('));
   // a luz da rua entra só pelo gancho `noite` (sem a soma dupla no emissivo da via)
   assert.ok(!shader.fragmentShader.includes('gLuzRua;'));
-  // a palmeira recorta os folíolos pela coordenada da folha (a copa não é uma estrela verde cheia)
-  const palma = criarMaterialArvore(ganchos, { duplo: true });
-  const sp = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader, defines: {} };
-  palma.onBeforeCompile(sp, null);
-  assert.ok(sp.vertexShader.includes('vFolha = aFolha') && /discard/.test(sp.fragmentShader));
+  // o poste e o semáforo em pé no eixo (cone(x, z, y0, y1): a altura no lugar do z plantava peças soltas a metros dele)
   const { MODELOS_PROPS } = await import('../../fonte/render/mundo/props.js');
-  const folha = MODELOS_PROPS.palmeira0().g.getAttribute('aFolha');
-  assert.ok(folha && Array.from(folha.array).some((v) => v > 1), 'palmeira sem a coordenada das folhas');
-  // tronco no eixo y: cone(x, z, y0, y1) com a altura no lugar do z plantava um segundo tronco a 7,65 m e o palmito a
-  // 17 m da palmeira (os "pilares claros" da vista rasante, achados na I1); a árvore cabe na coroa, em volta do eixo
-  for (const nome of ['palmeira0', 'palmeira1', 'copa0', 'copa1']) {
+  for (const nome of Object.keys(MODELOS_PROPS)) {
     const g = MODELOS_PROPS[nome]().g;
     g.computeBoundingBox();
     const b = g.boundingBox;
-    assert.ok(Math.max(-b.min.x, b.max.x, -b.min.z, b.max.z) < 5, `${nome}: peça fora da coroa (${b.min.z.toFixed(1)} a ${b.max.z.toFixed(1)} m em z)`);
+    assert.ok(Math.max(-b.min.x, b.max.x) < 0.5 && Math.max(-b.min.z, b.max.z) < 5 && b.max.y > 5, `${nome}: peça fora do lugar`);
   }
+});
+
+test('árvores de rua (VIS1b): o setor dá as listas, a vegetação da R2b planta oiti e palmeira-imperial, props não desenha copa', async () => {
+  const THREE = await import('three');
+  const P = await import('../../fonte/render/mundo/props.js');
+  const { OBJETOS } = await import('../../fonte/render/geracao/cruzamento.js');
+  const { ESPECIE } = await import('../../fonte/render/geracao/arvores.js');
+  // as listas de árvore do setor vão todas para a vegetação, e só elas
+  assert.deepEqual([...P.ARVORES_DA_RUA].sort(), OBJETOS.filter((t) => !P.TIPOS_DESENHADOS.includes(t)).sort());
+  assert.ok(!Object.keys(P.MODELOS_PROPS).some((k) => /copa|palmeira/.test(k)), 'props ainda tem modelo de árvore');
+  // a vegetação (mundo/vegetacao.js) troca para as árvores da rua quando 'props:copa0' some da cena: o domínio props
+  // não põe árvore nenhuma na cena, nem na sombra própria
+  const cena = new THREE.Scene();
+  const projetados = [];
+  const { ganchos } = await import('../../fonte/render/motor/ganchos.js');
+  const ctx = { cena, ganchos, perfil: { id: 'pc' }, medidas: { familia: (m) => m }, sombra: { projetor: (m) => projetados.push(m), soltar() {}, marcar() {} } };
+  let dom = null;
+  P.registrar({ registrarDominio: (n, f) => (dom = f(ctx)) });
+  const st = { s: 1, dist: 10, objetos: { copa: { n: 2, mat: new Float32Array(32), bytes: new Uint8Array(8) }, palmeira: { n: 1, mat: new Float32Array(16), bytes: new Uint8Array(4) } } };
+  dom.quadro(0, { ...ctx, dominio: () => ({ versaoObjetos: 1, setoresPerto: () => [st] }), sim: { espelho: { tempo: {} } }, sol: { dia: 1 } });
+  assert.equal(cena.getObjectByName('props:copa0'), undefined);
+  assert.ok(!cena.children.some((o) => /copa|palmeira/.test(o.name)) && projetados.length === 0);
+  assert.equal(dom.instancias, 0, 'as árvores do setor não viram instância do props');
+  // a vegetação traduz copa em oiti e palmeira em palmeira-imperial (o texto do arquivo dela: arvoresDaRua)
+  const { readFileSync } = await import('node:fs');
+  const veg = readFileSync(new URL('../../fonte/render/mundo/vegetacao.js', import.meta.url), 'utf8');
+  assert.match(veg, /\['copa', ESPECIE\.oiti, [\d.]+\], \['palmeira', ESPECIE\.palmeira, [\d.]+\]/);
+  assert.match(veg, /comRua = !c\.cena\.getObjectByName\('props:copa0'\)/);
+  assert.ok(ESPECIE.oiti >= 0 && ESPECIE.palmeira >= 0);
 });
 
 test('chão da R2a: o gancho que apaga a pintura da via perto acha a leitura do uso do solo, com e sem o GLSL enxuto', async () => {

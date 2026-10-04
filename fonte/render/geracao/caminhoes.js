@@ -1,24 +1,32 @@
-// Caminhões da Holding (R3b, desenho do render 8), puros: o caminhão médio de cabine avançada da frota brasileira
-// (6x4, uns 8,6 m, como os de obra) com quatro carrocerias, pela carga da entrega:
+// Caminhões da Holding (R3b, desenho do render 8; cabine refeita na VIS1b), puros: o caminhão médio de cabine avançada
+// da frota brasileira (6x4, uns 8,6 m, como os de obra) com quatro carrocerias, pela carga da entrega:
 //   basculante  caçamba de aço com o monte do material (brita, areia, argila, calcário), que sobe com a carga
 //   carroceria  de madeira, com os paletes (tijolo, cimento, aço, vidro, madeira), um por unidade (até 10)
 //   betoneira   o balão listrado que gira (concreto), com a calha e a caixa d'água
 //   bau         a carroceria fechada (sem item)
-// LOD0 com cabine, chassi, rodas duplas atrás, faróis e lanternas; LOD1 em caixas, com as pontas que acendem. A
-// frente olha para +z e a origem fica no chão, no meio. aParte2: a parte (PARTE_CAMINHAO) e, na carga, o índice do
+// A cabine é a de um Mercedes-Benz Atego ou de um Volvo VM: frente lisa com o para-brisa inteiro deitado uns 12 graus,
+// moldura preta e limpadores, painel da grade com as aletas, para-choque de plástico grafite com os faróis nas quinas,
+// teto com a pala de sol, quinas arredondadas com normais suaves, janela da porta, retrovisores grandes em braço,
+// degraus, para-lamas e o tanque. LOD0 com cabine, chassi, rodas duplas atrás, faróis e lanternas; LOD1 em caixas, com
+// as pontas que acendem (o mesmo de antes). A frente olha para +z e a origem fica no chão, no meio. aParte2: a parte (PARTE_CAMINHAO) e, na carga, o índice do
 // palete (1 a 10) ou 0 no monte. A cabine tem a cor da Holding (espelho.holding.cor) ou branca no frete contratado.
 // Só a thread principal usa (sob demanda, mundo/caminhoes.js), com os trechos GLSL do material; não registra tipo na
 // oficina.
 
+import { superficie, tampa, norma, cruz, sub } from './veiculos.js';
+
 /** Partes (aParte2.x no shader); as 10 primeiras como as dos carros. */
 export const PARTE_CAMINHAO = Object.freeze({
   PINTURA: 0, VIDRO: 1, PRETO: 2, FAROL: 3, LANTERNA: 4, CROMADO: 5, ARO: 6, SOMBRA: 7, FRENTE: 8, TRASEIRA: 9,
-  CACAMBA: 10, MADEIRA: 11, CARGA: 12, TAMBOR: 13, BAU: 14,
+  CACAMBA: 10, MADEIRA: 11, CARGA: 12, TAMBOR: 13, BAU: 14, PLASTICO: 15,
 });
 const P = PARTE_CAMINHAO;
 
-/** Medidas (m): comprimento, largura, altura da cabine, comprimento da cabine, piso da carroceria, raio da roda. */
-export const CAMINHAO = Object.freeze({ c: 8.6, l: 2.5, h: 3.1, cab: 1.95, piso: 1.28, roda: 0.52 });
+/**
+ * Medidas (m): comprimento, largura, altura da cabine, comprimento da cabine, piso da carroceria, raio da roda; a
+ * cabine: meia largura, piso, base do para-brisa e o quanto ele deita para trás.
+ */
+export const CAMINHAO = Object.freeze({ c: 8.6, l: 2.5, h: 3.1, cab: 1.95, piso: 1.28, roda: 0.52, wc: 1.19, yCab: 1.1, yVidro: 1.95, deita: 0.2 });
 /** Eixo do balão da betoneira (m): da frente (perto da cabine) ao bocal atrás, mais alto. */
 export const TAMBOR = Object.freeze({ z0: 1.85, y0: 1.95, z1: -3.6, y1: 2.55 });
 /** Carrocerias, na ordem das malhas. */
@@ -41,7 +49,7 @@ export const CARGAS = Object.freeze({
 /** Carroceria e cor de um item (sem item, ou item novo: o baú). */
 export const cargaDe = (item) => CARGAS[item] ?? { corpo: 'bau', cor: [200, 200, 196] };
 
-/** Construtor de malha (faces planas, sem índice compartilhado entre faces). */
+/** Construtor de malha (sem índice compartilhado entre faces: cada face com a parte dela). */
 class Malha {
   constructor() {
     this.pos = [];
@@ -54,8 +62,8 @@ class Malha {
     return this.pos.length / 3;
   }
 
-  /** Polígono convexo plano, anti-horário visto de fora; ci: índice do palete (0 fora da carga). */
-  poli(pts, parte, ci = 0) {
+  /** Polígono convexo plano, anti-horário visto de fora; ci: índice do palete (0 fora da carga); nors: normais suaves. */
+  poli(pts, parte, ci = 0, nors = null) {
     const [a, b, c] = pts;
     const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
@@ -66,11 +74,12 @@ class Malha {
     }
     const l = Math.hypot(...n) || 1;
     const base = this.nv;
-    for (const p of pts) {
+    pts.forEach((p, k) => {
       this.pos.push(p[0], p[1], p[2]);
-      this.nor.push(n[0] / l, n[1] / l, n[2] / l);
+      if (nors) this.nor.push(nors[k][0], nors[k][1], nors[k][2]);
+      else this.nor.push(n[0] / l, n[1] / l, n[2] / l);
       this.parte.push(parte, ci);
-    }
+    });
     for (let k = 1; k + 1 < pts.length; k++) this.idx.push(base, base + k, base + k + 1);
   }
 
@@ -116,55 +125,95 @@ function roda(M, x, y, z, r, larg, lado) {
     const [z0, y0] = pts[k];
     const [z1, y1] = pts[(k + 1) % n];
     const q = [[xf, y + y0, z + z0], [xf, y + y1, z + z1], [xd, y + y1, z + z1], [xd, y + y0, z + z0]];
-    M.poli(lado > 0 ? q : [...q].reverse(), P.PRETO);
+    // o pneu com a normal suave (redondo de perto)
+    const nq = [[0, y0 / r, z0 / r], [0, y1 / r, z1 / r], [0, y1 / r, z1 / r], [0, y0 / r, z0 / r]];
+    M.poli(lado > 0 ? q : [...q].reverse(), P.PRETO, 0, lado > 0 ? nq : [...nq].reverse());
   }
   const aro = pts.map(([zz, yy]) => [xf + lado * 0.004, y + yy * 0.58, z + zz * 0.58]);
   M.poli(lado > 0 ? [...aro].reverse() : aro, P.ARO);
 }
 
-/** Cabine avançada com o chassi, as rodas, os faróis e as lanternas (comum às quatro carrocerias). */
+/**
+ * Cabine avançada (Atego, VM) com o chassi, as rodas, os faróis e as lanternas (comum às quatro carrocerias). A casca
+ * da cabine é uma superfície com normais suaves (geracao/veiculos.js): as quinas arredondadas pegam a luz como chapa
+ * curva, e o sol baixo não vira um bloco claro na frente lisa.
+ */
 function base(M) {
-  const { c, l, h, cab, roda: r } = CAMINHAO;
+  const { c, l, h, cab, roda: r, wc, yCab: yp, yVidro: yv, deita } = CAMINHAO;
   const w = l / 2;
   const zF = c / 2;
   const zT = -c / 2;
   const zc = zF - cab;
-  const y0 = 1.02; // piso da cabine
-  const yv = 1.95; // base do para-brisa e das janelas
-  // cabine: seções de trás para a frente, com a quina da frente chanfrada
-  const sec = (z, k, recuo = 0) => [[-w + k, y0], [-w + k * 0.6, yv], [-w + k + recuo * 0.6, h - 0.08], [-w + k + 0.12 + recuo, h], [w - k - 0.12 - recuo, h], [w - k - recuo * 0.6, h - 0.08], [w - k * 0.6, yv], [w - k, y0]];
-  const secoes = [{ z: zc, pts: sec(zc, 0.04) }, { z: zF - 0.22, pts: sec(zF - 0.22, 0.04) }, { z: zF, pts: sec(zF, 0.12, 0.1) }];
-  for (let k = 0; k + 1 < secoes.length; k++) {
-    const A = secoes[k];
-    const B = secoes[k + 1];
-    for (let i = 0; i + 1 < A.pts.length; i++) {
-      // vidro: a janela de cada lado na frente da cabine; o resto pintado
-      const janela = (i === 1 || i === 5) && k === 1;
-      const lateral = (i === 1 || i === 5) && k === 0;
-      const parte = janela ? P.VIDRO : lateral ? P.PINTURA : P.PINTURA;
-      M.poli([[A.pts[i][0], A.pts[i][1], A.z], [B.pts[i][0], B.pts[i][1], B.z], [B.pts[i + 1][0], B.pts[i + 1][1], B.z], [A.pts[i + 1][0], A.pts[i + 1][1], A.z]], parte);
-    }
+  const yt = h - 0.1; // o teto (a pala de sol passa dele)
+  // a frente: reta até a base do para-brisa e deitando para trás dali ao teto
+  const zFr = (y) => zF - 0.02 - deita * Math.min(1, Math.max(0, (y - yv) / (yt - yv)));
+  const S = { poli: (pts, p, nors) => M.poli(pts, p, 0, nors) };
+  // casca: seções de trás para a frente (8 pontos, aberta embaixo); as da frente acompanham a inclinação e encolhem
+  // nas quinas
+  const sec = (enc, dz) => {
+    const a = wc - enc;
+    const pts = [[-a, yp], [-a, yv - 0.05], [-a + 0.04, yt - 0.12], [-a + 0.16, yt], [a - 0.16, yt], [a - 0.04, yt - 0.12], [a, yv - 0.05], [a, yp]];
+    return pts.map(([x, y]) => [x, y, dz === null ? zc : zFr(y) - dz]);
+  };
+  const G = [sec(0, null), sec(0, 0.34), sec(0.05, 0.09), sec(0.17, 0)];
+  const Nn = superficie(S, G, () => P.PINTURA);
+  tampa(S, G[0], Nn[0], -1, () => P.PINTURA);
+  // a frente lisa, em três faixas (reta embaixo, deitada em cima), com a borda misturada à das quinas
+  const F = G[3];
+  for (const q of [[0, 7, 6, 1], [1, 6, 5, 2], [2, 5, 4, 3]]) {
+    const pts = q.map((i) => F[i]);
+    const n = norma(cruz(sub(pts[1], pts[0]), sub(pts[3], pts[0])));
+    S.poli(pts, P.PINTURA, q.map((i) => norma([n[0] + Nn[3][i][0] * 0.6, n[1] + Nn[3][i][1] * 0.6, n[2] + Nn[3][i][2] * 0.6])));
   }
-  // a janela lateral da porta (um vidro grande na parte de cima, nos dois lados)
+  // peças na frente: um pouco para fora do plano dela (a normal da frente deitada)
+  const sen = deita / Math.hypot(deita, yt - yv);
+  const cos = (yt - yv) / Math.hypot(deita, yt - yv);
+  const naFrente = (x, y, fora) => (y <= yv ? [x, y, zFr(y) + fora] : [x, y + fora * sen, zFr(y) + fora * cos]);
+  const quadFrente = (x0, x1, y0, y1, parte, fora, x0t = x0, x1t = x1) => {
+    M.poli([naFrente(x0, y0, fora), naFrente(x1, y0, fora), naFrente(x1t, y1, fora), naFrente(x0t, y1, fora)], parte);
+  };
+  // para-brisa inteiro: a moldura preta e o vidro por cima dela, com os dois limpadores parados embaixo
+  const xv = wc - 0.24;
+  quadFrente(-xv - 0.05, xv + 0.05, yv - 0.04, yt - 0.12, P.PRETO, 0.004, -xv + 0.02, xv - 0.02);
+  quadFrente(-xv, xv, yv + 0.02, yt - 0.18, P.VIDRO, 0.008, -xv + 0.07, xv - 0.07);
+  for (const x of [-0.62, 0.12]) quadFrente(x, x + 0.5, yv + 0.05, yv + 0.08, P.PRETO, 0.012, x + 0.03, x + 0.53);
+  // painel da grade: aletas pretas largas entre o para-choque e o para-brisa, e a tomada de ar de baixo
+  for (let k = 0; k < 4; k++) quadFrente(-0.78, 0.78, 1.3 + 0.13 * k, 1.37 + 0.13 * k, P.PRETO, 0.004);
+  quadFrente(-0.92, 0.92, yp + 0.04, yp + 0.13, P.PRETO, 0.004);
+  // pala de sol sobre o para-brisa
+  caixa(M, -wc + 0.12, yt - 0.04, zFr(yt) - 0.1, wc - 0.12, yt + 0.06, zFr(yt) + 0.16, P.PRETO, { tras: null });
+  // janelas das portas (o vidro desce até a base do para-brisa; a coluna da frente acompanha a quina)
   for (const s of [-1, 1]) {
-    const x = s * (w - 0.025);
-    const q = [[x + s * 0.005, yv + 0.05, zc + 0.35], [x + s * 0.005, h - 0.2, zc + 0.35], [x + s * 0.005, h - 0.2, zF - 0.3], [x + s * 0.005, yv + 0.05, zF - 0.3]];
-    M.poli(s > 0 ? q : [...q].reverse(), P.VIDRO);
+    const xL = (y) => s * (wc + 0.006 - (0.04 * Math.max(0, y - (yv - 0.05))) / (yt - 0.12 - (yv - 0.05)));
+    const y0 = yv + 0.02;
+    const y1 = yt - 0.24;
+    const q = [[xL(y0), y0, zF - 1.05], [xL(y0), y0, zFr(y0) - 0.42], [xL(y1), y1, zFr(y1) - 0.42], [xL(y1), y1, zF - 1.05]];
+    M.poli(s > 0 ? q.reverse() : q, P.VIDRO);
   }
-  // frente: para-brisa em cima, a grade embaixo, o para-choque com os faróis
-  const fr = secoes[2].pts;
-  M.poli(fr.map(([x, y]) => [x, y, zF]).reverse(), P.PINTURA);
-  M.poli([[fr[1][0] + 0.05, yv + 0.05, zF + 0.004], [fr[6][0] - 0.05, yv + 0.05, zF + 0.004], [fr[5][0] - 0.12, h - 0.18, zF + 0.004], [fr[2][0] + 0.12, h - 0.18, zF + 0.004]], P.VIDRO);
-  // a parede de trás da cabine
-  M.poli(secoes[0].pts.map(([x, y]) => [x, y, zc]), P.PINTURA);
-  M.poli([[-0.62, 1.15, zF + 0.006], [0.62, 1.15, zF + 0.006], [0.62, 1.78, zF + 0.006], [-0.62, 1.78, zF + 0.006]], P.PRETO);
-  // para-choque e faróis nele; degraus e o tanque
-  caixa(M, -w + 0.02, 0.42, zF - 0.1, w - 0.02, 0.95, zF + 0.12, P.PRETO, { tras: null });
+  M.corpo = M.idx.length;
+  // para-choque de plástico grafite com os faróis nas quinas de cima e a placa no meio
+  caixa(M, -w + 0.04, 0.42, zF - 0.1, w - 0.04, 0.95, zF + 0.14, P.PLASTICO, { tras: null });
   for (const s of [-1, 1]) {
     const x0 = s > 0 ? w - 0.5 : -w + 0.12;
-    M.poli([[x0, 0.7, zF + 0.125], [x0 + 0.38, 0.7, zF + 0.125], [x0 + 0.38, 0.88, zF + 0.125], [x0, 0.88, zF + 0.125]], P.FAROL);
-    // retrovisor em braço
-    caixa(M, s > 0 ? w + 0.06 : -w - 0.2, 2.05, zF - 0.42, s > 0 ? w + 0.2 : -w - 0.06, 2.55, zF - 0.34, P.PRETO);
+    M.poli([[x0, 0.72, zF + 0.145], [x0 + 0.38, 0.72, zF + 0.145], [x0 + 0.38, 0.9, zF + 0.145], [x0, 0.9, zF + 0.145]], P.FAROL);
+  }
+  M.poli([[-0.2, 0.5, zF + 0.145], [0.2, 0.5, zF + 0.145], [0.2, 0.63, zF + 0.145], [-0.2, 0.63, zF + 0.145]], P.CROMADO);
+  // retrovisores: o braço que sai da coluna, o espelho grande e o de baixo (a face de trás espelhada)
+  for (const s of [-1, 1]) {
+    const xa = s * wc;
+    const xb = s * (wc + 0.34);
+    const zr = zFr(2.3) - 0.36;
+    caixa(M, Math.min(xa, xb), 2.36, zr - 0.02, Math.max(xa, xb), 2.4, zr + 0.02, P.PRETO, { frente: null, tras: null });
+    const xm0 = s * (wc + 0.3);
+    const xm1 = s * (wc + 0.39);
+    caixa(M, Math.min(xm0, xm1), 1.98, zr - 0.05, Math.max(xm0, xm1), 2.48, zr + 0.03, P.PRETO, { tras: P.CROMADO });
+    caixa(M, Math.min(xm0, xm1), 1.78, zr - 0.04, Math.max(xm0, xm1), 1.94, zr + 0.03, P.PRETO, { tras: P.CROMADO });
+  }
+  // degraus da porta, à frente da roda dianteira
+  for (const s of [-1, 1]) {
+    const xa = s > 0 ? wc - 0.12 : -wc - 0.02;
+    const xb = s > 0 ? wc + 0.02 : -wc + 0.12;
+    for (const y of [0.55, 0.83]) caixa(M, xa, y, zF - 0.62, xb, y + 0.05, zF - 0.2, P.PRETO, { tras: null, frente: null });
   }
   caixa(M, w - 0.75, 0.48, zc - 1.0, w - 0.12, 0.98, zc - 0.25, P.CROMADO, { fundo: true });
   // chassi: as duas longarinas e a traseira com as lanternas
@@ -174,13 +223,26 @@ function base(M) {
     const x0 = s > 0 ? w - 0.42 : -w + 0.1;
     M.poli([[x0 + 0.32, 0.66, zT - 0.006], [x0, 0.66, zT - 0.006], [x0, 0.86, zT - 0.006], [x0 + 0.32, 0.86, zT - 0.006]], P.LANTERNA);
   }
-  // rodas: a dianteira e o tandem de trás com pneus duplos; para-lamas
+  // rodas: a dianteira e o tandem de trás com pneus duplos; o para-lama da dianteira (meia-lua com o topo) e os de trás
   const zR1 = zT + 1.55;
   const zR2 = zT + 2.95;
+  const zR0 = zF - 1.28;
   for (const s of [-1, 1]) {
-    roda(M, s * (w - 0.18), r, zF - 1.28, r, 0.32, s);
+    roda(M, s * (w - 0.18), r, zR0, r, 0.32, s);
     roda(M, s * (w - 0.28), r, zR1, r, 0.55, s);
     roda(M, s * (w - 0.28), r, zR2, r, 0.55, s);
+    const n = 3;
+    for (let k = 0; k < n; k++) {
+      const a0 = (Math.PI * k) / n;
+      const a1 = (Math.PI * (k + 1)) / n;
+      const p = (a, rr, x) => [x, r + Math.sin(a) * rr, zR0 + Math.cos(a) * rr];
+      const xo = s * (w - 0.01);
+      const xi = s * (w - 0.36);
+      const fora = [p(a0, r + 0.03, xo), p(a0, r + 0.12, xo), p(a1, r + 0.12, xo), p(a1, r + 0.03, xo)];
+      M.poli(s > 0 ? fora : [...fora].reverse(), P.PRETO);
+      const cima = [p(a0, r + 0.12, xo), p(a0, r + 0.12, xi), p(a1, r + 0.12, xi), p(a1, r + 0.12, xo)];
+      M.poli(s > 0 ? cima : [...cima].reverse(), P.PRETO);
+    }
     caixa(M, s > 0 ? w - 0.58 : -w + 0.02, 1.08, zR1 - 0.62, s > 0 ? w - 0.02 : -w + 0.58, 1.16, zR2 + 0.62, P.PRETO);
   }
   return { w, zF, zT, zc };
@@ -343,7 +405,8 @@ export function malhaCaminhao(corpo, lod = 0) {
 /**
  * Caminhões da Holding (geracao/caminhoes.js, mundo/caminhoes.js): as partes dos carros e mais a caçamba, a madeira,
  * a carga (cor da instância; o monte baixa e os paletes somem pela quantidade), o balão da betoneira (gira em volta
- * do eixo, listrado com a cor da cabine) e o baú. aCab: cor da cabine (sRGB 0 a 255) e as luzes (bit 0 farol, 1
+ * do eixo, listrado com a cor da cabine), o baú e o plástico grafite do para-choque. A pintura é de verniz (0,36) e o
+ * vidro reflete o céu (0,1): nada de espelho branco com o sol baixo. aCab: cor da cabine (sRGB 0 a 255) e as luzes (bit 0 farol, 1
  * freio) mais 4 vezes a fase do balão (0 a 63); aCarga: cor da carga e a quantidade (0 a 10 unidades).
  */
 export const CAMINHAO_VERTICE_PARS = /* glsl */ `
@@ -418,8 +481,8 @@ export const CAMINHAO_FRAGMENTO_COR = /* glsl */ `
   int p = int( vParte + 0.5 );
   vec3 cab = min( camLinear( vCab.rgb ), vec3( 0.75 ) );
   vec3 c;
-  if ( p == 0 || p == 8 ) { c = cab; gCamRug = 0.3; }
-  else if ( p == 1 ) { c = vec3( 0.02, 0.025, 0.03 ); gCamRug = 0.06; }
+  if ( p == 0 || p == 8 ) { c = cab; gCamRug = 0.36; }
+  else if ( p == 1 ) { c = vec3( 0.03, 0.034, 0.038 ); gCamRug = 0.1; }
   else if ( p == 2 ) { c = vec3( 0.025 ); gCamRug = 0.8; }
   else if ( p == 3 ) { c = vec3( 0.55, 0.55, 0.52 ); gCamRug = 0.15; }
   else if ( p == 4 ) { c = vec3( 0.25, 0.01, 0.01 ); gCamRug = 0.2; }
@@ -435,6 +498,7 @@ export const CAMINHAO_FRAGMENTO_COR = /* glsl */ `
     gCamRug = 0.35;
   }
   else if ( p == 14 ) { c = vec3( 0.7, 0.7, 0.68 ); gCamRug = 0.45; }
+  else if ( p == 15 ) { c = vec3( 0.05, 0.052, 0.055 ); gCamRug = 0.7; }
   else { c = vec3( 0.0 ); gCamRug = 1.0; }
   diffuseColor.rgb = c;
 }

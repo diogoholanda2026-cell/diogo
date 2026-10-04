@@ -3,8 +3,9 @@
 // ?vista= troca a câmera sem sair do lugar: rasante (padrão: no nível da rua, olhando a avenida), 300 (a vista de
 // 300 m do bairro), cruzamento (de cima, a 45 graus: meio-fio, zebras e retenção), fila (a chegada ao cruzamento,
 // com a fila no vermelho e a gente na faixa), caminhao (um comboio de caminhões da Holding pela avenida, com brita,
-// tijolo, areia e concreto, a câmera indo junto) e orla (a avenida da orla com pedra portuguesa); ?hora= a hora do
-// céu (21 dá a noite com a luz da rua e os faróis).
+// tijolo, areia e concreto, a câmera indo junto), calcada (VIS1b: a gente na calçada de perto, a câmera na pista
+// olhando o grupo mais cheio perto do cruzamento, de três quartos) e orla (a avenida da orla com pedra portuguesa);
+// ?hora= a hora do céu (21 dá a noite com a luz da rua e os faróis; 18 põe o sol baixo atrás da câmera na rasante).
 // A cena espera a oficina entregar os setores de vias e de prédios da vista, povoa o tráfego e a gente, adianta a rua
 // 40 s (as filas se formam e a gente se espalha antes da primeira imagem; na vista fila, até o fim de um vermelho com
 // 3 carros parados na chegada pelo oeste) e deixa tudo andando; o resultado traz as medidas das vias, dos objetos,
@@ -31,8 +32,54 @@ export const VISTAS_RUA = Object.freeze({
   fila: { x: 1063, z: 535, dist: 34, inclinacao: 26, guinada: 90 },
   // o comboio (a câmera vai junto do segundo caminhão; esta é a de partida)
   caminhao: { x: 1040, z: 534, dist: 26, inclinacao: 14, guinada: 92 },
+  // a calçada de perto: a de partida (a cena troca pelo grupo mais cheio perto do cruzamento)
+  calcada: { x: 1076, z: 541, dist: 10, inclinacao: 6, guinada: 140 },
   orla: { x: 1543, z: 1570, dist: 30, inclinacao: 5, guinada: 110 },
 });
+
+/**
+ * Vista calcada: o grupo de gente mais cheio (vizinhos a menos de 8 m) a até `raio` m do cruzamento da cena, fora da
+ * travessia, e a câmera na pista (do lado do eixo da via dele), olhando a calçada quase de lado. pessoas: pedestres.amostra(); rede:
+ * a do domínio vias. Devolve { x, z, dist, inclinacao, guinada, n } ou null sem gente.
+ */
+export function vistaDaCalcada(pessoas, rede, raio = 70) {
+  const perto = pessoas.filter((p) => p.estado !== 'esquina' && Math.hypot(p.x - RUA.x, p.z - RUA.z) < raio);
+  let melhor = null;
+  for (const p of perto) {
+    let n = 0;
+    for (const q of perto) if (Math.hypot(q.x - p.x, q.z - p.z) < 8) n += q.n;
+    if (!melhor || n > melhor.n) melhor = { p, n };
+  }
+  if (!melhor) return null;
+  const { p } = melhor;
+  // o ponto do eixo da via mais perto (a curva de Bézier da aresta) dá o lado da pista
+  const ar = rede?.arestas.get(p.e);
+  let ux = RUA.x - p.x;
+  let uz = RUA.z - p.z;
+  if (ar?.p) {
+    let d2 = Infinity;
+    for (let k = 0; k <= 32; k++) {
+      const t = k / 32;
+      const a = (1 - t) ** 3;
+      const b = 3 * (1 - t) ** 2 * t;
+      const c = 3 * (1 - t) * t * t;
+      const d = t ** 3;
+      const x = a * ar.p[0] + b * ar.p[2] + c * ar.p[4] + d * ar.p[6];
+      const z = a * ar.p[1] + b * ar.p[3] + c * ar.p[5] + d * ar.p[7];
+      const q = (x - p.x) ** 2 + (z - p.z) ** 2;
+      if (q < d2) {
+        d2 = q;
+        ux = x - p.x;
+        uz = z - p.z;
+      }
+    }
+  }
+  const l = Math.hypot(ux, uz) || 1;
+  // a câmera fica do lado da pista (a direção do alvo para a câmera é (-sen g, cos g)), girada 50 graus para pegar a
+  // calçada ao comprido, com o grupo no meio
+  const guinada = (Math.atan2(-ux / l, uz / l) * 180) / Math.PI + 50;
+  return { x: p.x, z: p.z, dist: 10, inclinacao: 8, guinada, n: melhor.n };
+}
 
 /** O comboio da vista caminhao: as cargas da Holding do M1a, uma por caminhão. */
 export const COMBOIO = Object.freeze([['brita', 10], ['tijolo', 8], ['areia', 10], ['concreto', 10]]);
@@ -161,6 +208,13 @@ export function registrar(registrarCena) {
       let fila = null;
       if (nome === 'fila' && trafego?.avancar) fila = adiantarAteFila(trafego, vias?.rede, ctx);
       else trafego?.avancar?.(40, ctx);
+      let calcada = null;
+      if (nome === 'calcada') {
+        calcada = vistaDaCalcada(pedestres?.amostra?.() ?? [], vias?.rede);
+        if (calcada) ctx.cameraApi.definir({ x: calcada.x, z: calcada.z, dist: calcada.dist, inclinacao: calcada.inclinacao, guinada: calcada.guinada });
+        else falhas.push('nenhum grupo de gente perto do cruzamento para a vista calcada');
+        ctx.vegetacao?.preparar?.();
+      }
       trafego?.animar?.(true);
       pedestres?.animar?.(true);
       caminhoes?.animar?.(true);
@@ -189,6 +243,9 @@ export function registrar(registrarCena) {
             vista: nome,
             vias: mv,
             objetos: ctx.dominio('props')?.medidas?.() ?? null,
+            arvores: ctx.vegetacao?.medidas?.() ?? null,
+            lotes: ctx.dominio('lotes')?.medidas?.() ?? null,
+            calcada,
             carros: trafego?.medidas?.() ?? null,
             fila,
             pessoas: pedestres?.medidas?.() ?? null,

@@ -158,7 +158,7 @@ export function criarMaterialCaminhao(ganchos, U, SH) {
     s.vertexShader = vs;
     s.fragmentShader = fs;
   };
-  m.customProgramCacheKey = () => 'caminhao-1';
+  m.customProgramCacheKey = () => 'caminhao-2';
   return ganchos.aplicar(m, ganchos.nomes().filter((n) => n !== 'camada'));
 }
 

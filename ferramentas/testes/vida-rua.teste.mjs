@@ -315,6 +315,49 @@ test('caminhões gerados: carroceria pela carga, paletes por unidade, monte, nor
     }
     assert.equal(contra, 0, `${corpo}: ${contra} faces da cabine viradas para dentro`);
   }
+  // a cabine de caminhão de verdade (VIS1b, Atego e VM): para-brisa deitado com a moldura preta, a grade de aletas, o
+  // para-choque de plástico com os faróis, os retrovisores em braço com o espelho para trás, e a casca com normais
+  // suaves (as quinas redondas pegam a luz; a frente lisa não vira um bloco)
+  const { CAMINHAO } = G;
+  for (const corpo of G.CORPOS) {
+    const m = G.malhaCaminhao(corpo, 0);
+    let parabrisa = 0;
+    let deitado = 0;
+    let espelho = 0;
+    let suaves = 0;
+    let pintura = 0;
+    let plastico = 0;
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const ids = [m.indices[t], m.indices[t + 1], m.indices[t + 2]];
+      const V = ids.map((i) => [m.posicao[3 * i], m.posicao[3 * i + 1], m.posicao[3 * i + 2]]);
+      const parte = m.parte[2 * ids[0]];
+      const u = V[1].map((x, k) => x - V[0][k]);
+      const v = V[2].map((x, k) => x - V[0][k]);
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const area = Math.hypot(...n) / 2;
+      if (area < 1e-9) continue;
+      const nf = n.map((x) => x / (2 * area));
+      const c = [0, 1, 2].map((k) => (V[0][k] + V[1][k] + V[2][k]) / 3);
+      if (parte === P.VIDRO && nf[2] > 0.9 && c[1] > CAMINHAO.yVidro) {
+        parabrisa += area;
+        if (nf[1] > 0.12) deitado += area;
+      }
+      if (parte === P.CROMADO && nf[2] < -0.9 && Math.abs(c[0]) > CAMINHAO.wc + 0.2) espelho++;
+      if (parte === P.PLASTICO) plastico += area;
+      if (parte === P.PINTURA && c[2] > zc) {
+        pintura++;
+        const vn = ids.map((i) => [m.normal[3 * i], m.normal[3 * i + 1], m.normal[3 * i + 2]]);
+        if (vn.some((q) => q[0] * nf[0] + q[1] * nf[1] + q[2] * nf[2] < 0.995)) suaves++;
+      }
+    }
+    assert.ok(parabrisa > 1.4 && deitado / parabrisa > 0.9, `${corpo}: para-brisa de ${parabrisa.toFixed(2)} m², ${(deitado / parabrisa).toFixed(2)} deitado`);
+    assert.ok(espelho >= 4, `${corpo}: sem os retrovisores`);
+    assert.ok(plastico > 1, `${corpo}: sem o para-choque de plástico`);
+    assert.ok(suaves / pintura > 0.6, `${corpo}: casca com ${suaves} de ${pintura} faces suaves`);
+  }
+  // o material: a pintura de verniz e o vidro que reflete o céu (nada de espelho branco com o sol baixo)
+  const rug = (p) => Number(new RegExp(`p == ${p}[^}]*?gCamRug = ([\\d.]+)`).exec(G.CAMINHAO_FRAGMENTO_COR)?.[1]);
+  assert.ok(rug(0) >= 0.3 && rug(1) >= 0.1 && rug(15) >= 0.5, `rugosidades ${rug(0)}, ${rug(1)}, ${rug(15)}`);
 });
 
 // ------------------------------------------------------------------------------------------------ gente
@@ -326,7 +369,7 @@ test('gente: figura com silhueta (LOD0 e LOD1), faces para fora, juntas iguais �
   const M = G.MEMBRO;
   for (const lod of [0, 1]) {
     const m = G.malhaPessoa(lod);
-    assert.ok(lod ? m.tris <= 32 : m.tris >= 150 && m.tris <= 300, `LOD${lod}: ${m.tris} triângulos`);
+    assert.ok(lod ? m.tris <= 32 : m.tris >= 300 && m.tris <= 400, `LOD${lod}: ${m.tris} triângulos`);
     let y1 = 0;
     const membros = new Set();
     for (let k = 0; k < m.posicao.length; k += 3) {
@@ -338,7 +381,22 @@ test('gente: figura com silhueta (LOD0 e LOD1), faces para fora, juntas iguais �
     // as pernas andam (coxas dos dois lados) nos dois LODs; no LOD0, canelas e braços também
     assert.ok(membros.has(M.COXA_A) && membros.has(M.COXA_B));
     if (!lod) for (const x of [M.CANELA_A, M.CANELA_B, M.BRACO_A, M.BRACO_B]) assert.ok(membros.has(x));
-    // faces para fora do eixo do membro (o cabelo longo e a bolsa ficam de fora da conta)
+    // faces para fora do eixo do membro (o cabelo longo e a bolsa ficam de fora da conta): o eixo é o centro dos
+    // vértices do membro naquela altura (o braço afina e entra no ombro, a coxa entra no quadril)
+    const eixo = (membro, y) => {
+      let sx = 0;
+      let sz = 0;
+      let n = 0;
+      for (let i = 0; i < m.posicao.length / 3; i++) {
+        const pt = m.corpo[2 * i];
+        if (m.corpo[2 * i + 1] !== membro || pt === G.PARTE_PESSOA.CABELO_LONGO || pt === G.PARTE_PESSOA.BOLSA || pt === G.PARTE_PESSOA.SAPATO) continue;
+        if (Math.abs(m.posicao[3 * i + 1] - y) > 0.05) continue;
+        sx += m.posicao[3 * i];
+        sz += m.posicao[3 * i + 2];
+        n++;
+      }
+      return n ? [sx / n, sz / n] : null;
+    };
     let contra = 0;
     for (let t = 0; t < m.indices.length; t += 3) {
       const ids = [m.indices[t], m.indices[t + 1], m.indices[t + 2]];
@@ -351,12 +409,49 @@ test('gente: figura com silhueta (LOD0 e LOD1), faces para fora, juntas iguais �
       const ln = Math.hypot(...n);
       if (ln < 1e-12 || Math.abs(n[1]) / ln > 0.7) continue;
       const c = [0, 1, 2].map((k) => (V[0][k] + V[1][k] + V[2][k]) / 3);
-      const ax = membro >= 1 && membro <= 4 ? (membro <= 2 ? 0.095 : -0.095) : membro >= 5 ? (membro === 5 ? 0.215 : -0.215) : 0;
-      const r = [c[0] - ax, c[2]];
+      const e = parte === G.PARTE_PESSOA.SAPATO ? [membro <= 2 ? 0.095 : -0.095, 0.05] : eixo(membro, c[1]);
+      if (!e) continue;
+      const r = [c[0] - e[0], c[2] - e[1]];
       const lr = Math.hypot(...r);
       if (lr > 0.01 && (n[0] * r[0] + n[2] * r[1]) / ln / lr < -0.05) contra++;
     }
     assert.equal(contra, 0, `LOD${lod}: ${contra} faces viradas para dentro`);
+  }
+  // de perto (VIS1b): normais suaves (a figura lê redonda, não um prisma de 6 faces), o tronco e a cabeça em 8 lados,
+  // o cabelo curto em cima e atrás com o rosto de pele, ombros de gente (até 0,5 m) e os braços fechados em cima
+  {
+    const m = G.malhaPessoa(0);
+    const P = G.PARTE_PESSOA;
+    let suaves = 0;
+    let total = 0;
+    let cabelo = 0;
+    let rosto = 0;
+    let ombro = 0;
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const ids = [m.indices[t], m.indices[t + 1], m.indices[t + 2]];
+      const V = ids.map((i) => [m.posicao[3 * i], m.posicao[3 * i + 1], m.posicao[3 * i + 2]]);
+      const u = V[1].map((x, k) => x - V[0][k]);
+      const v = V[2].map((x, k) => x - V[0][k]);
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const l = Math.hypot(...n);
+      if (l < 1e-12) continue;
+      const parte = m.corpo[2 * ids[0]];
+      const c = [0, 1, 2].map((k) => (V[0][k] + V[1][k] + V[2][k]) / 3);
+      total++;
+      if (ids.some((i) => (m.normal[3 * i] * n[0] + m.normal[3 * i + 1] * n[1] + m.normal[3 * i + 2] * n[2]) / l < 0.995)) suaves++;
+      if (parte === P.CABELO && c[1] > 1.6) cabelo++;
+      if (parte === P.PELE && c[1] > 1.55 && c[1] < 1.66 && c[2] > 0.05) rosto++;
+      if (c[1] > 1.3 && c[1] < 1.45 && parte !== P.BOLSA) ombro = Math.max(ombro, ...V.map((q) => Math.abs(q[0])));
+    }
+    assert.ok(suaves / total > 0.75, `${suaves} de ${total} triângulos com normal suave`);
+    assert.ok(cabelo >= 16 && rosto >= 4, `cabeça com ${cabelo} faces de cabelo e ${rosto} de rosto`);
+    assert.ok(ombro > 0.2 && ombro < 0.26, `ombros com ${(2 * ombro).toFixed(2)} m`);
+    // o tronco em 8 lados: o anel do peito tem 8 pontos distintos
+    const peito = new Set();
+    for (let i = 0; i < m.posicao.length / 3; i++) {
+      if (m.corpo[2 * i + 1] === G.MEMBRO.TRONCO && Math.abs(m.posicao[3 * i + 1] - 1.24) < 0.002) peito.add(`${m.posicao[3 * i].toFixed(3)},${m.posicao[3 * i + 2].toFixed(3)}`);
+    }
+    assert.ok(peito.size >= 8, `peito com ${peito.size} pontos`);
   }
   // aparência: mulheres e homens, alturas reais, os 5 tons de pele, roupas sem verde-lima, cabelo longo e saia
   const { hashF } = await import('../../fonte/render/geracao/malhaVia.js');

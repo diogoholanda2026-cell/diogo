@@ -7,7 +7,8 @@
 //   aRoupa2   cor de baixo (sRGB 0 a 255) e o tom de pele (0 claro a 255 escuro)
 // A perna gira no quadril e a canela dobra no joelho quando a perna vem para a frente; o braço balança no ombro, ao
 // contrário da perna do mesmo lado (o braço vai à frente com a perna do outro lado); o corpo fica mais alto com a perna
-// de apoio na vertical e desce um pouco com as pernas abertas, no apoio duplo. A cor sai pronta do vértice.
+// de apoio na vertical e desce um pouco com as pernas abertas, no apoio duplo. A cor sai pronta do vértice, com um
+// degradê de oclusão do pé ao peito (VIS1b). As normais suaves vêm do modelo (geracao/pessoas.js).
 // As articulações repetem JUNTA de geracao/pessoas.js (o teste confere): o gerador vem sob demanda e o GLSL não.
 
 /** Quadril, joelho e ombro (m, na figura de 1,70 m), iguais a JUNTA de geracao/pessoas.js. */
@@ -109,6 +110,9 @@ vec3 pessoaPos = position + aVar * aPessoa.z;
   else if ( parte == 10 ) { c = pessoaLinear( vec3( 62.0, 44.0, 34.0 ) ); rug = 0.45; }
   // manga curta: o braço de cima é pele abaixo da manga (a manga fica no anel do ombro, parte 2)
   if ( parte == 5 && ( bits & 32 ) == 0 ) c = pele;
+  // a luz do céu chega menos embaixo (as pernas na sombra do corpo, o pé perto do chão): um degradê do pé ao peito,
+  // de graça no vértice, que tira a figura do chapado de boneco
+  c *= 0.78 + 0.22 * smoothstep( 0.05, 1.2, position.y );
   vPessoa = vec4( c, rug );
 }
 `;
