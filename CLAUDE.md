@@ -14,7 +14,8 @@ visão de longo prazo (Holding, rivais, 12 metrópoles). `docs/desenho/historia.
 natureza (D69: santuário de três esferas, F1, arenas, shopping, parque) e o alvo de qualidade no PC atual (D70). `docs/desenho/cidade.md` trata dos visitantes, do trem-bala, da moradia social,
 dos aeroportos e do gasto dos visitantes (D71 a D76). `docs/pesquisa/sede/sede-v3.md` é a sede v3, o Park of Future
 Dreams do modelo do dono (D88). `docs/desenho/producao.md` é o plano de produção por disciplinas (D96): etapas, ferramentas,
-referências de topo e critério de pronto.
+referências de topo e critério de pronto. `docs/desenho/presenca.md` é o Modo Presença (interiores, helicóptero, F1, arenas,
+propriedades do dono; D100) e `docs/desenho/grupo.md` o governo do grupo (negociar, dirigir e o banco intragrupo; D101).
 
 ## Como o dono trabalha
 - Fala português do Brasil; responda em português: resultado primeiro, frases curtas, sem travessão.

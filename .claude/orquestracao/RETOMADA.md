@@ -26,12 +26,19 @@ lisa e gente low-poly; e decidir: manutenção das 24 avenidas da sede (recomend
 quadra sugerida de indústria, Areal como segunda sugestão do objetivo da Pedreira, cor da Holding nos caixilhos e 307
 px livres com alerta em 986 x 443. Próximo passo recomendado: uma passada visual (sede, rua e árvores) antes da onda 4.
 
-**Pedido do dono em 04/10/2026:** faixa de LED com um terço dos andares (D93, passada à VIS1a); mover e girar
-construções prontas (D94, parcela MOV1 na onda 4); moradia no mínimo de classe média alta (D95, na R6 e na S2b); anéis
-mais sofisticados, com conexões entre eles, árvores, lagos e cachoeiras como protagonistas (diálogo D78 da sede v4, depois
-a parcela SEDE4); e o plano por disciplinas em `docs/desenho/producao.md` (D96). Perguntas da sede v4 feitas ao dono.
+**Pedido do dono em 04/10/2026:** faixa de LED com um terço dos andares (D93, entregue na VIS1a); mover e girar
+construções prontas (D94, MOV1); moradia no mínimo de classe média alta (D95, R4c e S2b); sede v4 com Canopy Bridges,
+Mirror Lake grande, Dream Falls de 120 m, Halo Lake e mata densa (D97, aprovada, parcela SEDE4); plano por disciplinas
+(D96, `docs/desenho/producao.md`).
 
-Decisões até a D96 registradas.
+**Pedido do dono em 06/10/2026 (13 melhorias, por etapa em `producao.md`, seção 5):** D98 colocar com giro livre, motivo
+do vermelho, escolha livre e obras em paralelo (UX1); D99 toque no Poco X7 e app estável (TOQ1); D100 Modo Presença
+(interiores, helicóptero, F1, arenas, propriedades do dono; `docs/desenho/presenca.md`, M2 a M5); D101 governo do grupo
+(dirigir, negociar, banco intragrupo; `docs/desenho/grupo.md`, M3, M5 e M6); D102 animação das obras (OBR2) e fluidez.
+**Workflow lançado em 06/10/2026:** etapa 1 = UX1 e TOQ1; etapa 2 = SEDE4 e MOV1. Depois: OBR2, R4c, S1c, S2b, S3b, X4,
+R6, X3b, U2b e a C2. Se parar no meio, grave o parcial e relance com ONDE PAROU.
+
+Decisões até a D102 registradas.
 
 ## Feito
 - Onda 1 e Prévia 0 (`00368d1`, `87e60d7`). Portão 1: plano A (Baía) adotado por padrão (`4acc370`).

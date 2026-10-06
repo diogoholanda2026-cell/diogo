@@ -241,6 +241,11 @@ padrão já adotado não trava nada, salvo o plano diretor (D59), que é a decis
 | D95 | Padrão residencial | Heldópolis é uma cidade **super rica**: a moradia tem **no mínimo padrão de classe média alta**, em todas as zonas residenciais. Como fica (o dono pode mudar): a moradia social da D72 é feita no mesmo padrão, com aluguel simbólico; a Vila de Santa Cida é requalificada pela Holding no Ato 1, como objetivo de Legado. Entra na parcela **R4c** (gerador de prédios e catálogo, onda 4) e na **S2b** (cidade completa), com referências reais de bairros de alto padrão | pedido do dono (04/10/2026) |
 | D96 | Plano de produção por disciplinas | as 18 disciplinas de um estúdio (desenho, fases, sistemas, narrativa, roteiro, conceito, 3D, animação, efeitos, programação, IA, motor, rede, trilha, efeitos sonoros, voz, produção e QA) seguem `docs/desenho/producao.md`: etapas E0 a E7 (pré-produção, fatia vertical, produção, alfa, beta, lançamento, depois), ferramenta, referência de topo e critério de pronto por disciplina. Regras: referência real antes de produzir, medir em vez de estimar, dono no portão | pedido do dono (04/10/2026): "estruturado em quais etapas ser feito e o que usar", com referências de topo |
 | D97 | Sede v4 (pontes, água e floresta) | a sede v3 ganha: **8 Canopy Bridges** (pontes-jardim de uns 230 m, a uns 60 a 72 m, nos eixos das avenidas, com árvores e a faixa de LED por baixo; Codex, Helix e Compass vão para o eixo de 3 avenidas e viram escalas), o **Mirror Lake grande** (de uns 150 a 330, com ilhas de floresta), a **Dream Falls** como 4 quedas de 120 m do teto do Meridian Ring para o lago, o **Halo Lake** ao pé da face de dentro do Horizon Ring (como o lago da McLaren), **mata densa de Mata Atlântica** no parque e entre os anéis e os **Hanging Gardens** em terraços na face de dentro dos anéis (a de fora segue Apple Park). Ficha e referências em `docs/pesquisa/sede/sede-v4.md`. Parcela **SEDE4**, depois da VIS1 | respostas do dono (04/10/2026) às quatro perguntas da D78; todas as recomendações aceitas |
+| D98 | Colocar com giro livre, escolha livre e obras em paralelo | pedido do dono (06/10/2026): "se não estiver em um ângulo de 90 graus certinho, já não dá para construir, fica vermelho" e "eu escolher qual construção quero iniciar, não ficar refém só das metas, podendo fazer outras paralelas". Diagnóstico no código: o colocável gruda na via mais perto e só gira de 90 em 90 graus (`passoColocar`, `previaColocarLocal`); o vermelho vem de 'acesso' (sem via a 60 m), 'declive' (mais de 4 m ou 12% do lado), 'colisao' com a via e 'marco' (trancado pelo marco); as etapas da Arcologia ficam trancadas até a anterior ficar pronta (`sim/arcologia.js`). **Decidido:** (1) giro **livre** (arrasto ou dois dedos, com ímã de 15 graus e alinhar à via como opção); (2) o **motivo do vermelho** dito na dica ("terreno inclinado, aplainar por US$ X"); (3) **aplainar** automático até uma inclinação maior, com custo; (4) o catálogo mostra tudo o que o marco já liberou, e as etapas da Arcologia **independentes** entre si andam **em paralelo** (a ordem só vale onde a obra depende fisicamente da outra, como o lago antes do parque), limitadas por créditos, materiais e equipes; (5) as metas guiam, não prendem. As regras do dono não mudam. Parcela **UX1** | pedido do dono (06/10/2026) |
+| D99 | Poco X7: toque e app estável antes do resto do celular | revê o "Poco X7 volta depois" da D66 só no que é **gesto e estabilidade**: o dono jogou a prévia no celular e relatou que "mal desliza na tela e o cenário muda de lugar rapidamente". Parcela **TOQ1**: instrumentar o gesto e medir no aparelho (o Teste de desempenho do menu) e no Chromium de teste com toque e CPU limitada; um arrasto que não salta (a câmera nunca anda mais que um teto por quadro), inércia com a velocidade de soltura medida em tempo real, resolução dinâmica que segura o quadro, e o app estável (perda de contexto WebGL já tratada em `renderizador.js`, memória, retomada, instalação). O desempenho completo do Poco X7 (perfil Média, 300 chamadas, 30 qps) segue na etapa E7 | pedido do dono (06/10/2026) |
+| D100 | Modo Presença | o dono **entra** na obra: interior da sede (anéis, torres e subterrâneo), helicóptero de luxo (voo livre antes da obra pronta e a rota Blade ou Legacy até a Lucullus Tower), volta de F1, partida de basquete e de futebol americano e cinema de dentro, e as propriedades do dono (mansões, carros, iates, helicópteros, jatinhos, fazendas e holdings intermediárias, com a colheita do milharal). **Uma estrutura só** (cena sob demanda, personagem, dica de interação, manches no toque) e um conteúdo por parcela, cada um com o diálogo da D78 antes. Etapas: estrutura, voo livre e interior dos anéis e torres no **M2**; subsolo, rota, F1, basquete, mansão e fazenda no **M3**; iates, jatinhos, futebol americano e cinema no **M4**; holdings intermediárias no **M5**. NBA e NFL entram com os nomes fictícios (Associação Libertense de Basquete e Liga Libertense de Futebol Americano). Detalhe e referências em `docs/desenho/presenca.md` | pedido do dono (06/10/2026) |
+| D101 | Governo do grupo | **dirigir** a Holding guarda-chuva e o que ela controla (tela do grupo e diretrizes, M3), **negociar** no mundo corporativo (contratos, parcerias e aquisições por rodadas, M3) e no geopolítico (diplomacia entre países fictícios com Influência, acordos, tarifas e crises, M5 e M6), e o banco do grupo (a **Held Capital**) **emprestar à guarda-chuva** por uma linha intragrupo com condições de mercado e limite (M3). A lei brasileira permite com limites desde a Lei 13.506/2017 e a Resolução CMN 4.693 (a Lei 7.492/1986 art. 17 deixou de proibir). O empréstimo de 50 mil por ano a 10% do dono **não muda**. Detalhe em `docs/desenho/grupo.md` | pedido do dono (06/10/2026) |
+| D102 | Animação das obras e fluidez | **animação das obras** nova (parcela **OBR2**): a sequência de um megaprojeto real (estacas e fundação, núcleo com fôrma trepante, lajes, fachada em módulos, acabamento) com gruas, operários, poeira e faíscas, de cada tipo de construção. **Fluidez** como meta medida: 60 qps com piso de 30 e p95 até 25 ms no PC; atraso do toque até 100 ms; nenhum pico acima de 50 ms em jogo normal; câmera sem salto; transições da interface com curva (os "12 princípios" aplicados à interface) e retorno visual em toda ação (referências: *Game Feel*, de Steve Swink, e as palestras "Juice it or lose it", de Jonasson e Purho, e "The Art of Screenshake", de Jan Willem Nijman). Cortes de custo seguem a PC3; o polimento final é da etapa E5 | pedido do dono (06/10/2026) |
 
 ### 2.2 Estrutura de dados da simulação
 
@@ -1829,7 +1834,41 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   `jogo-antigo/` e `antigo/` e `previa/` apagados.
 - **Depende de:** onda 4.
 
-#### MOV1. Mover e girar construções prontas (onda 4; 2 sessões; D94)
+#### UX1. Colocar com giro livre, motivo do vermelho, escolha livre e obras em paralelo (onda 4, etapa 1; 2 sessões; D98)
+- **Arquivos:** `ui/ferramentas/{colocar,zona,sessao}.js` e `ui/textos/ux1.js` (giro livre, ímã de 15 graus, dica do
+  motivo, aplainar), `sim/predios.js` (`lugarDoColocavel`, `validarLugar`, a prévia e o aplainar do lote),
+  `sim/arcologia.js` e `data/arcologia.js` (dependências físicas entre etapas no lugar da fila única), `ui/telas/` e
+  `ui/selecao/` só no catálogo e no Livro da Arcologia, e os testes das duas partes.
+- **Publica:** o colocável gira livre e gruda na via como opção; a dica diz **por que** está vermelho e o que fazer; o
+  declive até um limite maior é aplainado com custo (o aplainar das vias e da cava do lago já existe); o catálogo mostra
+  tudo o que o marco liberou (o que está trancado diz qual marco falta); as etapas da Arcologia sem dependência física
+  andam juntas.
+- **Entrega:** testes (giro livre, cada código de vermelho com sua dica, aplainar, duas etapas da Arcologia em
+  paralelo, o robô A2 verde), vitrine da ferramenta e capturas da dica.
+- **Depois dela:** a MOV1 reaproveita a ferramenta.
+
+#### TOQ1. Toque no Poco X7 e app estável (onda 4, etapa 1; 2 sessões; D99)
+- **Arquivos:** `render/camera/{entrada,camera}.js` (o árbitro de gestos e a inércia), `render/motor/resolucao.js` (o
+  alvo de quadro no celular), `app/{controle,laco}.js` e `web/sw.js` só na estabilidade e na retomada, a tela de
+  Configurações do toque, e `ferramentas/testes/` da câmera e do toque.
+- **Publica:** um arrasto sem salto (teto de deslocamento por quadro, um raio por quadro e não um por evento, velocidade
+  de soltura limitada e medida no tempo do quadro), pinça e giro com limiares para a mão no vidro de 6,7 polegadas, a
+  sensibilidade em Configurações, o quadro estável por resolução dinâmica e a sessão que volta sem perder nada.
+- **Entrega:** instrumentação do gesto (log de eventos, quadros e salto), medida no Chromium com toque e CPU limitada
+  (4 e 6 vezes), o resultado do Teste de desempenho do dono no celular (pedido a ele depois da prévia), sessão de 30
+  minutos sem recarga, e as notas do que mudou.
+
+#### OBR2. Animação das obras (onda 4; 2 sessões; D102)
+- **Arquivos:** `render/mundo/{obras,anexos}.js`, `render/arcologia/obra.js`, `render/vida/` só nos operários e nas
+  máquinas, `render/materiais/shaders/obra.glsl.js` e os testes de obra.
+- **Publica:** a sequência real de uma obra de grande porte (estacas, núcleo com fôrma trepante, lajes, fachada em
+  módulos, acabamento), gruas e escavadeiras que trabalham de verdade, operários, poeira e faíscas, e o fim da obra com
+  um fecho visível. Cada tipo de construção tem a sua sequência.
+- **Entrega:** capturas da sequência por tipo (casa, prédio, serviço, Blade Tower), 0 compilações depois de pronto, no
+  orçamento de chamadas da obra (D66).
+
+#### MOV1. Mover e girar construções prontas (onda 4, etapa 2; 2 sessões; D94)
+- **Depois da UX1:** reaproveita a ferramenta de colocar (giro livre, motivo do vermelho, aplainar).
 - **Arquivos:** `sim/predios.js` (comando `mover`: novo lugar e giro, validação de lote, de via e de rede, custo de uns
   10% e obra curta; o prédio guarda produção, estoque, nome e cor), `ui/ferramentas/mover.js` (novo) e
   `ui/ferramentas/{colocar,sessao}.js` (prévia em fantasma, giro em passos de 15 graus e livre, custo e aviso),
@@ -1840,7 +1879,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** testes de validação (lote, água, cobertura dos serviços refeita, linhas de produção mantidas), vitrine
   da ferramenta, 0 compilações ao usar a ferramenta.
 
-#### R4c. Moradia de alto padrão (onda 4; 2 sessões; D95)
+#### R4c. Moradia de alto padrão (onda 4, etapa 2; 2 sessões; D95)
 - **Arquivos:** `render/geracao/planoPredio.js` (tipologias residenciais), `data/predios.js` (tipologias, faixas de
   andares e, com o robô, a capacidade dos lares), os testes do gerador e do catálogo.
 - **Publica:** nas zonas do jogador, nada abaixo de classe média alta: casas de alto padrão em lote grande (nível 1)
@@ -1859,7 +1898,7 @@ Onda 0   F0
 Onda 1   S1a  R1a  R2a  R4a  X1a  U1a                          → I0: Prévia 0 "vitrine visual"  → PORTÃO 1
 Onda 2   S1b  R1b  R3a  X2                                      → I1: Prévia 1 "via no polegar"  → PORTÃO 2
 Onda 3   S2a  S3a  R2b  R3b  R4b  R5  U1b  U2a  X1b  X3a       → C1: M1a jogável em previa/
-Onda 4   S1c  S2b  S3b  X4  R6  X3b  U2b                        → C2: M1 em app/
+Onda 4   UX1  TOQ1 | MOV1 OBR2 R4c | S1c  S2b  S3b  X4  R6  X3b  U2b   → C2: M1 em app/
 ```
 
 - **Caminho crítico:** F0, R1a e X1a (a Torre e a luz), Prévia 0, portão 1, S1b, X2, Prévia 1, portão 2, S2a com S3a

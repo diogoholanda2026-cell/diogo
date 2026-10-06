@@ -95,8 +95,11 @@ quem faz (os agentes do projeto, em `.claude/agents/`).
 2. **SEDE4** (sede v4, D97, respostas do dono em 04/10/2026): Canopy Bridges, Mirror Lake grande, Dream Falls de
    120 m, Halo Lake, mata densa e Hanging Gardens (`docs/pesquisa/sede/sede-v4.md`), com pranchas de referência antes
    de modelar.
-3. **Onda 4** (fecha o M1), com dois acréscimos pedidos pelo dono:
-   - **MOV1**, mover e girar construções prontas (D94);
+3. **Onda 4** (fecha o M1), com os acréscimos pedidos pelo dono:
+   - **UX1**, colocar com giro livre, motivo do vermelho e obras em paralelo (D98), e **TOQ1**, o toque no Poco X7 e o
+     app estável (D99), as duas primeiras, porque são o que o dono sente no uso;
+   - **MOV1**, mover e girar construções prontas (D94), sobre a ferramenta da UX1;
+   - **OBR2**, a animação das obras (D102);
    - o padrão residencial alto (D95) entra na **R4c** (gerador de prédios e catálogo) e na **S2b** (cidade completa).
    - E mais: S1c (trânsito), S3b (Ato 1 inteiro), X4 (ponte), X3b (camadas), U2b (abertura, modo foto e o som
      adaptativo da seção 2.5), e a **C2** publica o M1.
@@ -110,3 +113,34 @@ quem faz (os agentes do projeto, em `.claude/agents/`).
 - Salvar na nuvem ou ranking depois do lançamento (hoje, nada de servidor).
 - Respondido em 04/10/2026: a sede v4 (D97) e a regra de mover e girar (D94). O padrão residencial segue a D95 (moradia
   social no mesmo padrão, Vila requalificada no Ato 1) até o dono pedir outra coisa.
+
+## 5. Pedidos do dono de 06/10/2026, por etapa
+
+Regra do dono: as melhorias entram **conforme o projeto chega nas etapas** a que pertencem. Esta tabela diz qual é a
+etapa e a parcela de cada uma; nenhuma estraga uma regra de economia dele (D48, lotes, 150%, empréstimo, renda).
+
+| Pedido | Decisão | Etapa | Parcela |
+|---|---|---|---|
+| Mover uma construção já pronta | D94 | M1, onda 4 (etapa 2) | MOV1 |
+| Colocar sem exigir o ângulo exato de 90 graus (fica vermelho) | D98 | M1, onda 4 (etapa 1) | UX1 |
+| Escolher qual construção iniciar e fazer várias em paralelo | D98 | M1, onda 4 (etapa 1) | UX1 |
+| Jogabilidade no Poco X7 (desliza mal, a cena salta) e app estável | D99 | M1, onda 4 (etapa 1) | TOQ1 |
+| Mais animação nas construções | D102 | M1, onda 4 | OBR2 |
+| Jogo, mecânica e gráficos mais fluidos | D102 | contínuo; polimento na E5 | PC3 e depois, FLU1 na E5 |
+| Moradia de classe média alta no mínimo | D95 | M1, onda 4 | R4c e S2b |
+| Ver o interior da sede (anéis, torres) | D100 | M2 | Modo Presença |
+| Ver o subterrâneo (Deep Core e Lumen Collider) | D100 | M3 | Modo Presença |
+| Pilotar o helicóptero de luxo: voo livre antes da obra pronta | D100 | M2 | Modo Presença |
+| Helicóptero da Blade ou da Legacy até a Lucullus Tower | D100 | M3 | Modo Presença |
+| Volta de teste de F1 | D100 | M3 | Modo Presença |
+| Partida de basquete por dentro | D100 | M3 | Modo Presença |
+| Partida de futebol americano e cinema por dentro | D100 | M4 | Modo Presença |
+| Visitar mansão, carros e fazenda (colher o milho) | D100 | M3 | Modo Presença |
+| Visitar iates e jatinhos | D100 | M4 | Modo Presença |
+| Visitar as holdings intermediárias | D100 | M5 | Modo Presença |
+| Dirigir a Holding guarda-chuva e o que ela controla | D101 | M3 | Governo do grupo |
+| Negociar no mundo corporativo | D101 | M3 | Governo do grupo |
+| O banco do grupo emprestar à guarda-chuva | D101 | M3 | Governo do grupo |
+| Negociar no mundo geopolítico, influenciando o mundo | D101 | M5 (um país) e M6 (global) | Governo do grupo |
+
+Detalhes e referências: `docs/desenho/presenca.md` (Modo Presença) e `docs/desenho/grupo.md` (governo do grupo).
