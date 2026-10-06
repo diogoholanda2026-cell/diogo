@@ -4,9 +4,14 @@
 // das etapas do M2 prontos (D89: o Meridian Ring, as três torres do bosque, o parque e 2 trechos do Horizon Ring até jun.
 // 2026; os outros 6 trechos até 2032), sem jogabilidade.
 //
-// Etapa: { id, parte, nome, marco, requisito (etapa que vem antes), creditos (unidades de desenho, D87), materiais
-//          { item: n } (entregues por caminhão do armazém, D47), minutos (min de jogo em 1x, D42), xp, fases (ids das
-//          4 fases, textos em ui/textos/x1.js), efeitos [{ tipo, ... }] (D49), alturas? (corte da obra do par) }.
+// Etapa: { id, parte, nome, marco, depende (as etapas que precisam estar PRONTAS antes porque a obra depende delas no
+//          chão, D98), creditos (unidades de desenho, D87), materiais { item: n } (entregues por caminhão do armazém,
+//          D47), minutos (min de jogo em 1x, D42), xp, fases (ids das 4 fases, textos em ui/textos/x1.js), efeitos
+//          [{ tipo, ... }] (D49), alturas? (corte da obra do par) }.
+// Obras em paralelo (D98): a ordem só vale onde uma obra depende fisicamente da outra (`depende`: a torre sobe andar
+// depois de andar, o parque pede o lago pronto); o resto anda junto, limitado pelas equipes de obra da Holding
+// (EQUIPES_OBRA, uma por etapa em obra), pelos créditos (pagos na hora de começar) e pelos materiais (o armazém entrega
+// na ordem das etapas, e a que não tem material para a fase espera).
 // Progresso = trabalho / duração, e o trabalho só anda enquanto há material para a fase (min de entregue / pedido por
 // item) e caixa (D41). Créditos calibrados pela C1c (D92) contra a economia do M1a medida pelo robô: um terço dos de
 // partida (60, 150, 300, 350 e 250 mil), porque a cidade do M1a rende uns 4 mil por hora aos 20 min e 25 a 35 mil por
@@ -17,12 +22,15 @@ import { congelar } from '../comum/util.js';
 import { MINUTO } from '../comum/relogio.js';
 import { TORRE_LAMINA, TORRE_IRMA, PAR, TRECHOS_HORIZON } from './arcologia-plano.js';
 
+/** Equipes de obra da Holding: quantas etapas da Arcologia andam ao mesmo tempo (D98). (calibrar) */
+export const EQUIPES_OBRA = 2;
+
 /** Fases de cada etapa (4, D26): o render sobe a obra por elas; os nomes ficam em ui/textos/x1.js. */
 const FASES_LAGO = ['escavacao', 'impermeabilizacao', 'captacao', 'portoes'];
 const FASES_TORRE = ['fundacao', 'estrutura', 'fachada', 'acabamento'];
 
 /**
- * Etapas jogáveis do M1a, na ordem da cadeia (cada uma pede a anterior pronta). Efeitos (D49):
+ * Etapas jogáveis do M1a, na ordem do Livro (o lago e a fundação da torre andam em paralelo, e a torre sobe uma etapa de cada vez). Efeitos (D49):
  *   vias         as vias internas da sede no grafo (ARESTA.ARCOLOGIA) com os 8 portões ligados
  *   agua         o reservatório do Mirror Lake como produtor da rede (capacidade da captação: 6 por mil moradores)
  *   valor        valor do terreno em volta (sim.cidade.efeito: v no centro, cai com e^(-d/raio))
@@ -37,7 +45,7 @@ const FASES_TORRE = ['fundacao', 'estrutura', 'fachada', 'acabamento'];
  */
 export const ETAPAS = /* @__PURE__ */ congelar([
   {
-    id: 'lago.e1', parte: 'lago', nome: 'Reservatório e portões', marco: 0, requisito: null,
+    id: 'lago.e1', parte: 'lago', nome: 'Reservatório e portões', marco: 0, depende: [],
     creditos: 20000, materiais: { brita: 50, areia: 50 }, minutos: 5, xp: 300, fases: FASES_LAGO,
     efeitos: [
       { tipo: 'vias' },
@@ -46,12 +54,12 @@ export const ETAPAS = /* @__PURE__ */ congelar([
     ],
   },
   {
-    id: 'torre.e1', parte: 'torre', nome: 'Fundações e pódio', marco: 3, requisito: 'lago.e1',
+    id: 'torre.e1', parte: 'torre', nome: 'Fundações e pódio', marco: 3, depende: [],
     creditos: 50000, materiais: { concreto: 60, brita: 60, aco: 20 }, minutos: 10, xp: 600, fases: FASES_TORRE,
     efeitos: [{ tipo: 'licenca', n: 1 }],
   },
   {
-    id: 'torre.e2', parte: 'torre', nome: 'Sede operacional', marco: 4, requisito: 'torre.e1',
+    id: 'torre.e2', parte: 'torre', nome: 'Sede operacional', marco: 4, depende: ['torre.e1'],
     creditos: 100000, materiais: { concreto: 120, aco: 60, vidro: 40 }, minutos: 15, xp: 1000, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'holding', produtividade: 0.15, caminhoes: 6 },
@@ -59,7 +67,7 @@ export const ETAPAS = /* @__PURE__ */ congelar([
     ],
   },
   {
-    id: 'torre.e3', parte: 'torre', nome: 'Moradias de luxo', marco: 5, requisito: 'torre.e2',
+    id: 'torre.e3', parte: 'torre', nome: 'Moradias de luxo', marco: 5, depende: ['torre.e2'],
     creditos: 115000, materiais: { concreto: 100, aco: 60, vidro: 60 }, minutos: 15, xp: 1200, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'moradores', n: 400, bemEstar: 75 },
@@ -68,7 +76,7 @@ export const ETAPAS = /* @__PURE__ */ congelar([
     ],
   },
   {
-    id: 'torre.e4', parte: 'torre', nome: 'Coroa e heliponto', marco: 6, requisito: 'torre.e3',
+    id: 'torre.e4', parte: 'torre', nome: 'Coroa e heliponto', marco: 6, depende: ['torre.e3'],
     creditos: 85000, materiais: { vidro: 50, aco: 30, serrada: 20 }, minutos: 10, xp: 1500, fases: FASES_TORRE,
     efeitos: [
       { tipo: 'atratividade', v: 5 },
@@ -85,6 +93,12 @@ export const ETAPAS_ORDEM = Object.freeze(ETAPAS.map((e) => e.id));
 /** Etapa jogável pelo id (null se não for do M1a). */
 export const etapaDe = (id) => ETAPAS.find((e) => e.id === id) ?? null;
 
+/**
+ * Dependências físicas de uma etapa (jogável ou do M2) que ainda não estão prontas, dado o estado de cada id:
+ * `pronta(id)` diz se está pronta. Lista vazia: nada a esperar, a etapa pode andar junto com as outras.
+ */
+export const dependenciasAbertas = (def, pronta) => (def?.depende ?? []).filter((id) => !pronta(id));
+
 /** Duração da etapa em tiques (1x). */
 export const duracaoDe = (et) => Math.max(1, Math.round(et.minutos * MINUTO));
 
@@ -95,16 +109,17 @@ export const duracaoDe = (et) => Math.max(1, Math.round(et.minutos * MINUTO));
  * render ('<parte>.eN', e 'horizon.K.e1' trecho a trecho). prazo: o mês do calendário em que a história as conclui
  * (jun. 2026 para a primeira fase, 2032 para os outros 6 trechos do Horizon Ring). Créditos e materiais (calibrar).
  */
-const futura = (id, parte, nome, prazo, creditos, materiais) => ({ id, parte, nome, prazo, creditos, materiais, m2: true });
+const futura = (id, parte, nome, prazo, creditos, materiais, depende = []) => ({ id, parte, nome, prazo, creditos, materiais, depende, m2: true });
 const JUN_2026 = { ano: 2026, mes: 6 };
 const DEZ_2032 = { ano: 2032, mes: 12 };
 export const ETAPAS_M2 = /* @__PURE__ */ congelar([
-  futura('meridian.e1', 'meridian', 'Estrutura do anel', JUN_2026, 900000, { concreto: 400, aco: 200 }),
-  futura('meridian.e2', 'meridian', 'Escritórios e jardim do teto', JUN_2026, 700000, { vidro: 300, aco: 80 }),
-  futura('codex.e1', 'codex', 'Biblioteca e átrio de livros', JUN_2026, 600000, { concreto: 150, vidro: 200, aco: 90 }),
-  futura('helix.e1', 'helix', 'Laboratórios', JUN_2026, 450000, { concreto: 120, vidro: 120, aco: 70 }),
-  futura('compass.e1', 'compass', 'Administração', JUN_2026, 450000, { concreto: 120, vidro: 120, aco: 70 }),
-  futura('parque.e1', 'parque', 'Parque, floresta e Supertrees', JUN_2026, 300000, { brita: 100, areia: 100, aco: 40 }),
+  futura('meridian.e1', 'meridian', 'Estrutura do anel', JUN_2026, 900000, { concreto: 400, aco: 200 }, ['lago.e1']),
+  futura('meridian.e2', 'meridian', 'Escritórios e jardim do teto', JUN_2026, 700000, { vidro: 300, aco: 80 }, ['meridian.e1']),
+  futura('codex.e1', 'codex', 'Biblioteca e átrio de livros', JUN_2026, 600000, { concreto: 150, vidro: 200, aco: 90 }, ['lago.e1']),
+  futura('helix.e1', 'helix', 'Laboratórios', JUN_2026, 450000, { concreto: 120, vidro: 120, aco: 70 }, ['lago.e1']),
+  futura('compass.e1', 'compass', 'Administração', JUN_2026, 450000, { concreto: 120, vidro: 120, aco: 70 }, ['lago.e1']),
+  // o parque pede o lago pronto (D98): a água e os espelhos d'água são dele
+  futura('parque.e1', 'parque', 'Parque, floresta e Supertrees', JUN_2026, 300000, { brita: 100, areia: 100, aco: 40 }, ['lago.e1']),
   ...TRECHOS_HORIZON.map((t) =>
     futura(`${t.id}.e1`, 'horizon', `${t.nome}: faculdade e escola`, t.fase === 1 ? JUN_2026 : DEZ_2032, 500000, { concreto: 220, vidro: 160, aco: 90 }),
   ),

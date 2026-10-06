@@ -444,7 +444,7 @@ test('zona: pincel substituto pega as células que mudam; a quadra é o bloco da
 test('colocar: Girar vira 90 graus e o substituto gruda a planta na frente da via, virada para ela', () => {
   let e = colocar.criarColocar({ tipo: 'clinica', item: { tipo: 'clinica', pegada: [24, 32], custo: 25000 } });
   e = colocar.passoColocar(e, ev('move', 10, 30));
-  assert.deepEqual(e.efeitos[0], { efeito: 'previa', x: 10, z: 30, rot: 0 });
+  assert.deepEqual(e.efeitos[0], { efeito: 'previa', x: 10, z: 30, rot: 0, giro: 0, alinhar: true });
   e = colocar.passoColocar(e, { tipo: 'girar', sentido: 1 });
   assert.ok(perto(e.rot, Math.PI / 2));
   e = colocar.passoColocar(e, { tipo: 'girar', sentido: -1 });
@@ -460,6 +460,205 @@ test('colocar: Girar vira 90 graus e o substituto gruda a planta na frente da vi
   const longe = colocar.previaColocarLocal(esp, { tipo: 'clinica', x: 10, z: 400, rot: 0 });
   assert.equal(longe.ok, false);
   assert.equal(longe.codigo, 'acesso');
+});
+
+test('colocar (D98): gira a qualquer ângulo, com o ímã de 15 graus, os quartos de volta do botão e o alinhar à via', () => {
+  let e = colocar.criarColocar({ tipo: 'clinica', item: { tipo: 'clinica', pegada: [40, 48], custo: 1000 } });
+  assert.equal(e.alinhar, true);
+  // sem ponto ainda: girar só muda o ângulo, não pede prévia
+  e = colocar.passoColocar(e, { tipo: 'girar', sentido: 1, passo: colocar.PASSO_IMA });
+  assert.deepEqual(e.efeitos, []);
+  assert.equal(colocar.graus(e.rot), 15);
+  e = colocar.passoColocar(e, ev('move', 50, 80));
+  e = colocar.passoColocar(e, { tipo: 'girar', sentido: 1, passo: colocar.PASSO_IMA });
+  assert.equal(colocar.graus(e.rot), 30);
+  assert.equal(colocar.graus(e.giro), 30);
+  assert.deepEqual(e.efeitos[0], { efeito: 'previa', x: 50, z: 80, rot: e.rot, giro: e.giro, alinhar: true });
+  // o botão continua em quartos de volta, e dá a volta sem passar de 360
+  for (let k = 0; k < 4; k++) e = colocar.passoColocar(e, { tipo: 'girar', sentido: 1 });
+  assert.equal(colocar.graus(e.rot), 30);
+  e = colocar.passoColocar(e, { tipo: 'girar', sentido: -1, passo: colocar.PASSO_IMA });
+  e = colocar.passoColocar(e, { tipo: 'girar', sentido: -1, passo: colocar.PASSO_IMA });
+  assert.equal(colocar.graus(e.rot), 0);
+  e = colocar.passoColocar(e, { tipo: 'girar', sentido: -1, passo: colocar.PASSO_IMA });
+  assert.equal(colocar.graus(e.rot), 345);
+  // o puxador manda o ângulo absoluto; o ímã arredonda de 15 em 15 e o livre deixa como está
+  assert.equal(colocar.graus(colocar.imantar((37 * Math.PI) / 180)), 30);
+  assert.equal(colocar.graus(colocar.imantar((38 * Math.PI) / 180)), 45);
+  assert.equal(colocar.graus(colocar.imantar((359 * Math.PI) / 180)), 0);
+  e = colocar.passoColocar(e, { tipo: 'angulo', rot: (37 * Math.PI) / 180, giro: 0.5 });
+  assert.equal(colocar.graus(e.rot), 37);
+  assert.ok(perto(e.giro, 0.5));
+  // alinhar à via liga e desliga; desligando guarda o ângulo efetivo que a prévia mostrava
+  e = colocar.passoColocar(e, { tipo: 'alinhar', rot: 1 });
+  assert.equal(e.alinhar, false);
+  assert.ok(perto(e.rot, 1));
+  assert.equal(e.efeitos[0].alinhar, false);
+  e = colocar.passoColocar(e, { tipo: 'alinhar', valor: true });
+  assert.equal(e.alinhar, true);
+  // a frente do puxador: o azimute da frente (sen rot, cos rot) do centro até o ponto do chão
+  assert.ok(perto(colocar.azimuteDe([0, 0], [0, 10]), 0));
+  assert.ok(perto(colocar.azimuteDe([0, 0], [10, 0]), Math.PI / 2));
+  assert.ok(perto(colocar.azimuteDe([5, 5], [5, -5]), Math.PI));
+  assert.equal(colocar.azimuteDe([0, 0], [0.2, 0.2]), null, 'o dedo em cima do centro não gira à toa');
+});
+
+test('colocar (D98): o substituto gira a planta de verdade ao lado de uma via diagonal e mede o acesso', () => {
+  const { esp, no, aresta } = espelhoTeste();
+  // via diagonal de 37 graus (rua: 16 m, meia largura 8)
+  const a = [0, 0];
+  const b = [Math.cos((37 * Math.PI) / 180) * 400, Math.sin((37 * Math.PI) / 180) * 400];
+  aresta(no(a[0], a[1]), no(b[0], b[1]), 'rua');
+  const dir = [Math.cos((37 * Math.PI) / 180), Math.sin((37 * Math.PI) / 180)];
+  const distVia = (x, z) => Math.abs((x - a[0]) * -dir[1] + (z - a[1]) * dir[0]);
+  const item = { pegada: [40, 48], custo: 1 };
+  for (const g of [0, 15, 37, 90, 135, 180, 253]) {
+    const giro = (g * Math.PI) / 180;
+    const r = colocar.previaColocarLocal(esp, { tipo: 'clinica', x: 200, z: 160, rot: 0, giro, alinhar: true }, item);
+    assert.equal(r.ok, true, `giro ${g}`);
+    assert.equal(r.alinhado, true);
+    assert.equal(colocar.graus(r.giro), g);
+    // os cantos da planta girada: o mais perto fica a 1 m da pista (meia largura 8 + 1), nenhum entra nela
+    const c = cantos(r.x, r.z, r.rot, 40, 48);
+    const menor = Math.min(...c.map(([x, z]) => distVia(x, z)));
+    assert.ok(perto(menor, 8 + 1, 1e-6), `giro ${g}: canto mais perto a ${menor.toFixed(3)} m do eixo`);
+    // a frente com giro 0 olha para a via (a rotação da via soma o giro)
+    assert.ok(perto(colocar.normalizarRot(r.rotVia + giro), r.rot, 1e-9));
+  }
+  // livre: fica onde está, no ângulo dado, sem grudar
+  const l = colocar.previaColocarLocal(esp, { tipo: 'clinica', x: 200, z: 160, rot: 1.1, alinhar: false }, item);
+  assert.equal(l.alinhado, false);
+  assert.ok(perto(l.x, 200) && perto(l.z, 160) && perto(l.rot, 1.1));
+  assert.equal(l.ok, true, 'a via está a menos de 24 m da planta');
+  // longe de toda via: acesso, com a distância que valeu (60 m com alinhar, 24 m sem)
+  const longe = colocar.previaColocarLocal(esp, { tipo: 'clinica', x: 900, z: -900, rot: 0.3 }, item);
+  assert.equal(longe.ok, false);
+  assert.equal(longe.codigo, 'acesso');
+  assert.equal(longe.dados.max, 60);
+  assert.ok(perto(longe.x, 900) && perto(longe.rot, 0.3), 'sem via no ímã, o fantasma fica onde está');
+  assert.equal(colocar.previaColocarLocal(esp, { tipo: 'clinica', x: 900, z: -900, rot: 0, alinhar: false }, item).dados.max, 24);
+  // o tipo que dispensa a via nasce longe dela
+  assert.equal(colocar.previaColocarLocal(esp, { tipo: 'captacao', x: 900, z: -900, rot: 0 }, { ...item, acesso: 'livre' }).ok, true);
+});
+
+/** Os 4 cantos (x, z) de uma planta [w, d] centrada em (cx, cz) com a rotação do espelho. */
+function cantos(cx, cz, rot, w, d) {
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => [cx + c * x + s * z, cz - s * x + c * z]);
+}
+
+test('colocar (D98): a dica de cada bloqueio diz o motivo e o que fazer, com o texto em português e os números certos', () => {
+  const casos = [
+    [{ ok: false, codigo: 'marco', dados: { marco: 4 } }, /marco 4, Vila Próspera|marco 4/, 'ux1.dica.marco'],
+    [{ ok: false, codigo: 'ladrilho', dados: { estado: 'compravel' } }, /compre este ladrilho/, 'ux1.dica.ladrilho.compravel'],
+    [{ ok: false, codigo: 'ladrilho', dados: { estado: 'trancado' } }, /ainda não está à venda/, 'ux1.dica.ladrilho.trancado'],
+    [{ ok: false, codigo: 'gleba' }, /gleba da Arcologia/, 'ux1.dica.gleba'],
+    [{ ok: false, codigo: 'agua', dados: { sobre: true } }, /Em cima da água/, 'ux1.dica.agua.sobre'],
+    [{ ok: false, codigo: 'agua', dados: { margem: 40 } }, /água a até 40 m/, 'ux1.dica.agua.margem'],
+    [{ ok: false, codigo: 'acesso', dados: { max: 60, alinhar: true } }, /Sem via a menos de 60 m: ligue uma via/, 'ux1.dica.acesso.via'],
+    [{ ok: false, codigo: 'acesso', dados: { max: 24, alinhar: false } }, /menos de 24 m da planta/, 'ux1.dica.acesso.livre'],
+    [{ ok: false, codigo: 'colisao', dados: { com: 'via', ref: 7, afastar: 6 } }, /Colide com a via: afaste 6 m/, 'ux1.dica.colisao.via'],
+    [{ ok: false, codigo: 'colisao', dados: { com: 'predio', ref: 9, afastar: 3, nome: 'Clínica' } }, /Colide com Clínica: afaste 3 m/, 'ux1.dica.colisao.predioNome'],
+    [{ ok: false, codigo: 'colisao', dados: { com: 'predio', ref: 9, afastar: 3 } }, /Colide com outro prédio: afaste 3 m/, 'ux1.dica.colisao.predio'],
+    [{ ok: false, codigo: 'declive', dados: { desnivel: 11.4, max: 9.6 } }, /11,4 m de desnível.*9,6 m/, 'ux1.dica.declive'],
+    [{ ok: false, codigo: 'recurso', dados: { recurso: 'rocha' } }, /Pouca rocha/, 'ux1.dica.recurso'],
+    [{ ok: false, codigo: 'creditos', dados: { faltam: 1000 } }, /Faltam US\$/, 'ux1.dica.creditos'],
+    [{ ok: false, codigo: 'valor' }, /Não dá para construir aqui/, 'ux1.dica.outro'],
+    [{ ok: true, aplainar: { custo: 2000, tiques: 30, desnivel: 6 }, custoAplainar: 2000 }, /aplainar por US\$.*0,5 min de jogo/, 'ux1.dica.aplainar'],
+  ];
+  const { montarDica } = sessao;
+  for (const [previa, texto, chave] of casos) {
+    const d = montarDica(previa, { t, fmt });
+    assert.ok(d, previa.codigo ?? 'aplainar');
+    assert.equal(d.chave, chave);
+    assert.match(d.texto, texto, `${previa.codigo}: ${d.texto}`);
+    assert.ok(!d.texto.includes('??') && !/\{\w+\}/.test(d.texto), `texto sem lacuna: ${d.texto}`);
+    assert.ok(d.curto && !d.curto.includes('??') && !/\{\w+\}/.test(d.curto), `curto sem lacuna: ${d.curto}`);
+    assert.ok(d.curto.length <= 28, `o curto cabe no botão: ${d.curto}`);
+    assert.equal(d.tom, previa.ok ? 'info' : 'er');
+  }
+  // a parte que colide vai junto, para o mundo mostrar
+  assert.deepEqual(montarDica(casos[8][0], { t, fmt }).colide, { com: 'via', ref: 7 });
+  assert.deepEqual(montarDica(casos[10][0], { t, fmt }).colide, { com: 'predio', ref: 9 });
+  assert.equal(montarDica({ ok: true }, { t, fmt }), null, 'prévia boa sem aplainar não tem dica');
+  // a via também diz o motivo e o que fazer, com o declive e o máximo do tipo
+  const { dicaDaVia } = sessao;
+  const dv = dicaDaVia({ codigo: 'declive', trecho: 0 }, { segmentos: [{ declive: 0.15, erros: ['declive'] }] }, 'rua', { t, fmt });
+  assert.match(dv.texto, /Declive de 15% e esta via aceita até 12%/);
+  assert.match(dicaDaVia({ codigo: 'declive' }, null, 'rua', { t, fmt }).texto, /Declive acima do que esta via aceita/);
+  for (const c of ['agua', 'vao', 'angulo', 'curto', 'raio', 'ladrilho', 'gleba', 'colisao', 'marco', 'creditos', 'invencao']) {
+    const d = dicaDaVia({ codigo: c, dados: { faltam: 1000 } }, null, 'avenida', { t, fmt });
+    assert.ok(d && !d.texto.includes('??') && !/\{\w+\}/.test(d.texto), `${c}: ${d?.texto}`);
+    assert.equal(d.tom, 'er');
+  }
+  assert.equal(dicaDaVia(null, null, 'rua', { t, fmt }), null);
+  // todo código de recusa do contrato que a ferramenta mostra tem dica (nenhum cai no texto de erro genérico sem querer)
+  for (const c of ['marco', 'ladrilho', 'gleba', 'agua', 'acesso', 'colisao', 'declive', 'recurso', 'creditos']) {
+    assert.notEqual(colocar.dicaDoBloqueio({ ok: false, codigo: c, dados: {} }).chave, 'ux1.dica.outro', c);
+  }
+});
+
+test('sessão (D98): o painel recebe a dica, a colisão fica em vermelho no mundo, e alinhar e giro vão para a prévia e para o comando', async () => {
+  const { esp, no, aresta } = espelhoTeste();
+  aresta(no(-200, 0), no(200, 0), 'rua');
+  const cmds = [];
+  const previas = [];
+  let devolve = null;
+  const sim = {
+    espelho: esp,
+    q: { construir: { previa: (args) => (previas.push(args), devolve ? { ...devolve(args) } : null) } },
+    cmd: (nome, args) => (cmds.push([nome, args]), { ok: true, dados: { ref: 1048600 } }),
+  };
+  const { R, soltar } = montarSessao(sim);
+  try {
+    const item = { tipo: 'clinica', nome: 'Clínica', custo: 1000, pegada: [40, 48] };
+    sessao.ferramentas.abrir('colocar', { item });
+    // colisão com a via de ref 5: a dica diz quanto afastar e o mundo marca a via
+    devolve = (a) => ({ ok: false, codigo: 'colisao', dados: { com: 'via', ref: 1048581, afastar: 6 }, x: a.x, z: a.z, rot: a.rot, alinhado: false, pegada: [40, 48], custo: 1000 });
+    R.enviar('inicio', 10, 40);
+    R.enviar('fim', 10, 40);
+    let s = sessao.sessao.value;
+    assert.equal(s.valido, false);
+    assert.equal(s.dica.codigo, 'colisao');
+    assert.match(s.dica.texto, /afaste 6 m/);
+    assert.match(s.motivo, /Colide: afaste 6 m/, 'o botão e a cota dizem o motivo curto');
+    assert.deepEqual(R.log.filter(([k]) => k === 'demolir').at(-1)[1], [{ tipo: 'aresta', ref: 1048581 }]);
+    // a prévia leva o alinhar e o giro da máquina
+    assert.equal(previas.at(-1).alinhar, true);
+    sessao.ferramentas.girar(1, colocar.PASSO_IMA);
+    sessao.ferramentas.girar(1, colocar.PASSO_IMA);
+    assert.ok(perto(previas.at(-1).rot, (30 * Math.PI) / 180, 1e-9));
+    assert.ok(perto(previas.at(-1).giro, (30 * Math.PI) / 180, 1e-9));
+    // o puxador aponta o chão: sem alinhar à via, o ímã vale para o azimute (47 graus vira 45)
+    sessao.ferramentas.alinhar(false);
+    assert.equal(sessao.sessao.value.maquina.alinhar, false);
+    assert.equal(previas.at(-1).alinhar, false);
+    sessao.ferramentas.girarPara((47 * Math.PI) / 180);
+    assert.equal(colocar.graus(previas.at(-1).rot), 45);
+    sessao.ferramentas.girarPara((47 * Math.PI) / 180, { livre: true });
+    assert.equal(colocar.graus(previas.at(-1).rot), 47);
+    // alinhado e com a via: o ímã vale para o ângulo em relação à via
+    devolve = (a) => ({ ok: true, x: a.x, z: a.z, rot: a.alinhar ? Math.PI + (a.giro ?? 0) : a.rot, alinhado: !!a.alinhar, rotVia: Math.PI, giro: a.giro ?? 0, pegada: [40, 48], custo: 1000 });
+    sessao.ferramentas.alinhar(true);
+    sessao.ferramentas.girarPara(Math.PI + (22 * Math.PI) / 180);
+    assert.equal(colocar.graus(previas.at(-1).giro), 15, '22 graus em relação à via viram 15');
+    // sem colisão a marca do mundo sai
+    assert.deepEqual(R.log.filter(([k]) => k === 'demolir').at(-1)[1], []);
+    // construir manda alinhar como a prévia dizia, e livre põe exatamente onde o fantasma está
+    await sessao.ferramentas.construir();
+    assert.equal(cmds.at(-1)[0], 'construir');
+    assert.equal(cmds.at(-1)[1].alinhar, true);
+    sessao.ferramentas.alinhar(false);
+    devolve = (a) => ({ ok: true, x: a.x, z: a.z, rot: a.rot, alinhado: false, pegada: [40, 48], custo: 1000 });
+    sessao.ferramentas.girarPara(0.5, { livre: true });
+    await sessao.ferramentas.construir();
+    assert.equal(cmds.at(-1)[1].alinhar, false);
+    assert.ok(perto(cmds.at(-1)[1].rot, 0.5, 1e-9));
+    sessao.ferramentas.fechar();
+  } finally {
+    soltar();
+  }
 });
 
 test('demolir: toque alterna, arrasto só soma, Arcologia e rodovia recusam, Holding pede dois toques', () => {

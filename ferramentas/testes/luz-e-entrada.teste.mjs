@@ -420,8 +420,10 @@ test('entrada: o segundo dedo nos primeiros 80 ms é câmera (a pinça não risc
   // afasta os dedos: pinça (depois do limiar de 12 px) aproxima a câmera
   a.ev('pointermove', 1, 250, 300, 1120);
   a.ev('pointermove', 2, 550, 300, 1120);
+  a.E.quadro(1125); // a câmera anda no quadro, não no evento (TOQ1); a pinça entra a partir do ponto em que passou o limiar
   a.ev('pointermove', 1, 200, 300, 1140);
   a.ev('pointermove', 2, 600, 300, 1140);
+  a.E.quadro(1150);
   assert.ok(a.est.dist < 500, `aproximou: ${a.est.dist}`);
   assert.equal(a.est.inclinacao, 45, 'no modo ferramenta os dois dedos não inclinam');
   a.ev('pointerup', 1, 200, 300, 1200);
@@ -459,6 +461,8 @@ test('entrada: toque curto seleciona, toque longo abre o menu, arrasto prende o 
   // arrasto: o ponto do chão que estava sob o dedo continua sob ele
   ev('pointerdown', 1, 400, 300, 3000);
   for (let k = 1; k <= 6; k++) ev('pointermove', 1, 400 + 20 * k, 300, 3000 + 16 * k);
+  assert.equal(est.x, 0, 'os eventos só guardam o dedo: a câmera anda no quadro');
+  E.quadro(3100);
   assert.ok(Math.abs(est.x - -120) < 1e-9, `o mundo andou com o dedo: ${est.x}`);
   ev('pointerup', 1, 520, 300, 3100);
   assert.equal(chamadas.impulso.length, 1, 'soltar em movimento desliza');
@@ -466,18 +470,20 @@ test('entrada: toque curto seleciona, toque longo abre o menu, arrasto prende o 
 });
 
 test('entrada: dois dedos juntos na vertical inclinam (modo decidido e mantido); a pinça aproxima em volta do meio', () => {
-  const { ev, est } = montarEntrada();
+  const { E, ev, est } = montarEntrada();
   ev('pointerdown', 1, 300, 300, 1000);
   ev('pointerdown', 2, 500, 300, 1010);
   for (let k = 1; k <= 8; k++) {
     ev('pointermove', 1, 300, 300 + 5 * k, 1010 + 15 * k);
     ev('pointermove', 2, 500, 300 + 5 * k, 1010 + 15 * k);
+    E.quadro(1011 + 15 * k);
   }
   assert.ok(est.inclinacao > 50, `inclinou: ${est.inclinacao}`);
   assert.equal(est.dist, 500, 'sem zoom');
   // no meio do gesto os dedos se afastam: o modo não troca
   ev('pointermove', 1, 200, 340, 1200);
   ev('pointermove', 2, 600, 340, 1200);
+  E.quadro(1210);
   assert.equal(est.dist, 500, 'o modo inclinar não vira pinça no meio');
   ev('pointerup', 1, 200, 340, 1250);
   ev('pointerup', 2, 600, 340, 1250);
@@ -486,8 +492,10 @@ test('entrada: dois dedos juntos na vertical inclinam (modo decidido e mantido);
   p.ev('pointerdown', 2, 500, 300, 1010);
   p.ev('pointermove', 1, 250, 300, 1030);
   p.ev('pointermove', 2, 550, 300, 1030);
+  p.E.quadro(1031);
   p.ev('pointermove', 1, 150, 300, 1060);
   p.ev('pointermove', 2, 650, 300, 1060);
+  p.E.quadro(1061);
   assert.ok(p.est.dist < 400 && p.est.inclinacao === 45, `pinça: ${p.est.dist}`);
   assert.ok(Math.abs(p.est.x) < 1e-9, 'o meio dos dedos não andou: o alvo fica');
 });

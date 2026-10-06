@@ -6,8 +6,14 @@
 //    em 3 janelas e 3 s depois da última descida. A previsão superestima a subida (a parte fixa do quadro não cresce),
 //    então depois de subir a medida fica abaixo do limiar de descer: histerese sem pisca-pisca. Uma subida desfeita
 //    (descida até 12 s depois dela) pela segunda vez trava o degrau de cima por 1 min.
-//  - pelo tempo de quadro (o Média e aparelhos sem o cronômetro): janelas de 1 s, desce depois de 2 lentas, sobe
-//    depois de 5 boas e 10 s da última descida; uma subida desfeita 2 vezes em 15 s trava o degrau por 2 min.
+//  - pelo tempo de quadro (o Média e aparelhos sem o cronômetro): janelas de 1 s pela MEDIANA dos quadros (um soluço
+//    não derruba a resolução e quadros lentos de verdade, até 2,5 s, contam: antes qualquer quadro acima de 250 ms era
+//    ignorado e o controle ficava cego justo no celular que mais precisa dele), desce depois de 2 lentas (de 1 só se a
+//    mediana passar de 1,8 vezes o alvo, pulando direto ao degrau que cabe pela conta de pixels), sobe depois de 5
+//    boas e 10 s da última descida; uma subida desfeita 2 vezes em 15 s trava o degrau por 2 min.
+//  - em movimento (TOQ1, D99; só nos perfis do caminho do tempo de quadro, o Média e o Leve): enquanto a câmera é mexida
+//    (gesto ou deslize, a entrada avisa a cada quadro) a resolução cai a 72% (piso 0,55) se o quadro já está perto do
+//    alvo, e volta à de antes 280 ms depois de a vista parar; a nitidez (CAS) segue a queda e some na volta.
 // No 'pc' os degraus são 70%, 80%, 90% e 100% da nativa (com o teto de pixels de 1080p); nos outros, os DEGRAUS_PR do
 // perfil. Parada com ?pr= (testes), no estado 'teste' (o Teste de desempenho mede com a resolução travada), com a tela
 // coberta e nos primeiros 3 s (compilação). Abaixo do nominal a composição liga o CAS (nitidez) na medida da queda.
@@ -29,6 +35,15 @@ export const CONTROLE = Object.freeze({
 
 /** Quadros sem resultado do cronômetro até o tempo de quadro assumir. */
 const SEM_GPU = 30;
+
+/** Um intervalo maior que isto entre dois quadros é pausa (aba no fundo, tela coberta), não lentidão. */
+const PAUSA_MS = 2500;
+
+/**
+ * Resolução em movimento: escala sobre a atual, piso da razão de pixels, folga depois de a vista parar (ms) e a fração
+ * do alvo que o tempo de quadro já precisa ter para valer a troca (um aparelho folgado não perde nitidez à toa).
+ */
+export const MOVIMENTO = Object.freeze({ escala: 0.72, piso: 0.55, folgaMs: 280, perto: 0.8 });
 
 const mediana = (l) => {
   const o = [...l].sort((a, b) => a - b);
@@ -157,6 +172,9 @@ export class Resolucao {
     this._perfil = null;
     this._chave = '';
     this._degraus = null;
+    this.dtMedio = 0; // média móvel do tempo de quadro (ms), para o "perto do alvo" da resolução em movimento
+    this.mov = { base: null, perfil: null, tUlt: 0, tCaiu: -1e9 }; // base: a razão de pixels de antes do movimento (null: sem queda)
+    this.trocasMovimento = 0;
   }
 
   get dpr() {
@@ -184,6 +202,7 @@ export class Resolucao {
     this.controle = null;
     this.acc = { t: 0, n: 0 };
     this.r = { lento: 0, bom: 0, ultDesce: -1e9, subiu: {}, desfeitas: {}, bloq: {} };
+    this.mov.base = null;
     if (this.dinamica) {
       this.t0 = null;
       return false;
@@ -229,6 +248,11 @@ export class Resolucao {
     const ctx = this.ctx;
     const chave = `${ctx.perfil.id}|${this.dpr}|${ctx.tela?.w ?? 0}|${ctx.tela?.h ?? 0}`;
     if (chave === this._chave) return false;
+    // uma troca de tela ou de perfil no meio de um movimento: a queda do movimento sai, a conta é do degrau
+    if (this.mov.base !== null) {
+      if (ctx.perfil === this.mov.perfil) ctx.pr = this.mov.base;
+      this.mov.base = null;
+    }
     const perfilNovo = ctx.perfil !== this._perfil;
     const antes = this._degraus;
     const D = this.degraus;
@@ -289,26 +313,34 @@ export class Resolucao {
 
   /**
    * Um quadro desenhado em tMs (o caminho do tempo de quadro, quando o cronômetro não manda). Devolve true se trocou a
-   * razão de pixels (ctx.pr; o quadro refaz a tela).
+   * razão de pixels (ctx.pr; o quadro refaz a tela). A janela de 1 s decide pela mediana dos quadros.
    * @param {string} estado  R.estado
    */
   medir(tMs, estado = 'livre') {
     const dt = this.ultimo ? tMs - this.ultimo : 0;
     this.ultimo = tMs;
     this.semGpu++;
-    if (!this._pode(tMs, estado) || !(dt > 0) || dt > 250) return false;
+    if (dt > 0 && dt < PAUSA_MS) this.dtMedio = this.dtMedio ? this.dtMedio * 0.85 + dt * 0.15 : dt;
+    if (!this._pode(tMs, estado) || !(dt > 0) || dt > PAUSA_MS) return false;
     if (this.modo === 'cronometro') {
       this.acc.t = 0;
       this.acc.n = 0;
+      this.acc.dts = null;
+      return false;
+    }
+    // os quadros de compilação da carga não são o jogo; e com a resolução baixada pelo movimento a medida não vale
+    const aq = this.ctx.quadro?.aquecimento;
+    if (this.mov.base !== null || (aq && aq.estado !== 'pronto')) {
+      this.acc = { t: 0, n: 0 };
       return false;
     }
     const a = this.acc;
     a.t += dt;
     a.n++;
+    (a.dts ??= []).push(dt);
     if (a.t < 1000) return false;
-    const media = a.t / a.n;
-    a.t = 0;
-    a.n = 0;
+    const media = mediana(a.dts);
+    this.acc = { t: 0, n: 0 };
     const pr0 = this.ctx.pr;
     const trocou = this.ajustar(media, 1000 / (this.ctx.perfil.qps ?? 30), tMs);
     if (trocou) {
@@ -317,6 +349,51 @@ export class Resolucao {
       this._trocar(novo, tMs, 'quadro', media);
     }
     return trocou;
+  }
+
+  /**
+   * A câmera está em movimento (gesto ou deslize; a entrada chama a cada quadro). Só no caminho do tempo de quadro (o
+   * Média e o Leve): com o quadro já perto do alvo a resolução cai a 72% enquanto a vista se mexe e volta à de antes 280
+   * ms depois de ela parar (a nitidez volta junto). true se mudou ctx.pr (o quadro refaz a tela no quadro seguinte).
+   */
+  movimento(ativo, tMs) {
+    const ctx = this.ctx;
+    const M = this.mov;
+    if (M.base !== null) {
+      if (ctx.perfil !== M.perfil || this.fixa) {
+        M.base = null; // o perfil mudou ou a dinâmica foi travada: ctx.pr já é de quem mudou
+        return false;
+      }
+      if (ativo) {
+        M.tUlt = tMs;
+        return false;
+      }
+      if (tMs - M.tUlt < MOVIMENTO.folgaMs) return false;
+      const antes = ctx.pr;
+      ctx.pr = M.base;
+      M.base = null;
+      this.acc = { t: 0, n: 0 };
+      return ctx.pr !== antes;
+    }
+    const perfil = ctx.perfil;
+    if (!ativo || this.fixa || perfil.alvoGpu || perfil.nativo || this.t0 === null || tMs - this.t0 < 3000) return false;
+    if (ctx.quadro && ctx.quadro.estado !== 'livre') return false; // a tela coberta, o modo foto e o Teste de desempenho medem parados
+    if (typeof document !== 'undefined' && document.hidden) return false;
+    const aq = ctx.quadro?.aquecimento;
+    if (aq && aq.estado !== 'pronto') return false;
+    // o quadro está perto do alvo? Depois de cair uma vez vale por 20 s (a média cai porque a resolução caiu: sem isso o
+    // segundo arrasto, logo depois do primeiro, não baixaria e engasgaria)
+    if (!(this.dtMedio > (1000 / (perfil.qps ?? 30)) * MOVIMENTO.perto) && tMs - M.tCaiu > 20000) return false;
+    const novo = Math.max(MOVIMENTO.piso, ctx.pr * MOVIMENTO.escala);
+    if (novo >= ctx.pr - 0.04) return false;
+    M.tCaiu = tMs;
+    this.ultimaTroca = { de: ctx.pr, para: novo, modo: 'movimento', ms: +this.dtMedio.toFixed(2), t: Math.round(tMs) };
+    M.base = ctx.pr;
+    M.perfil = perfil;
+    M.tUlt = tMs;
+    ctx.pr = novo;
+    this.trocasMovimento++;
+    return true;
   }
 
   /** Decide o degrau pela média da janela e o alvo em ms (caminho do tempo de quadro). */
@@ -334,7 +411,10 @@ export class Resolucao {
       R.lento = 0;
       R.bom = 0;
     }
-    if (R.lento >= 2 && i > 0) {
+    // muito lento (mediana acima de 1,8 vez o alvo): uma janela basta, e o degrau sai da conta de pixels (um terço do
+    // quadro é fixo, dois terços vão com a área), o maior que cabe no alvo, no mínimo um abaixo
+    const severo = media > alvo * 1.8;
+    if (R.lento >= (severo ? 1 : 2) && i > 0) {
       if (agora - (R.subiu[i] || -1e9) < 15000) {
         R.desfeitas[i] = (R.desfeitas[i] || 0) + 1;
         if (R.desfeitas[i] >= 2) {
@@ -342,7 +422,9 @@ export class Resolucao {
           R.desfeitas[i] = 0;
         }
       }
-      this.ctx.pr = D[i - 1];
+      let j = i - 1;
+      if (severo) while (j > 0 && media * (0.35 + 0.65 * (D[j] / D[i]) ** 2) > alvo) j--;
+      this.ctx.pr = D[j];
       R.lento = R.bom = 0;
       R.ultDesce = agora;
       return true;

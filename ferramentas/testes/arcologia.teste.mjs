@@ -8,7 +8,7 @@ import { criarSimulacao } from '../../fonte/sim/estado.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { componentes, noPerto } from '../../fonte/sim/vias/grafo.js';
 import { ETAPA, ARESTA } from '../../fonte/contratos/flags.js';
-import { ETAPAS, ETAPAS_M2, etapaDe, alturaBlade, alturaLegacy, avancoLegacy, ALTURA_PONTE } from '../../fonte/data/arcologia.js';
+import { ETAPAS, ETAPAS_M2, EQUIPES_OBRA, etapaDe, dependenciasAbertas, alturaBlade, alturaLegacy, avancoLegacy, ALTURA_PONTE } from '../../fonte/data/arcologia.js';
 import { PLANOS, PLANO_ESCOLHIDO, GLEBA_ENVELOPE, LAGO, SEDE_CENTRO, TORRE_LAMINA, TORRE_IRMA, cavaDoPlano } from '../../fonte/data/arcologia-plano.js';
 import { REF_CAVA } from '../../fonte/sim/arcologia.js';
 import { contribuicaoHora } from '../../fonte/sim/economia.js';
@@ -67,7 +67,13 @@ test('etapas: a cadeia do M1a, os marcos e os códigos de arcologia.iniciar; o M
   assert.equal(sim.cmd('arcologia.iniciar', {}).codigo, 'valor');
   assert.equal(sim.cmd('arcologia.iniciar', { etapa: 'meridian.e1' }).codigo, 'trancado', 'o M2 não joga no M1a');
   ateMarco(sim, 3);
-  assert.equal(sim.cmd('arcologia.iniciar', { etapa: 'torre.e1' }).codigo, 'trancado', 'pede o lago pronto');
+  // D98: a fundação da torre não depende do lago no chão (as duas andam juntas); a torre.e2 espera a e1 pronta
+  sim.rodar(40, { sincrono: true });
+  assert.equal(etapa(sim, 'torre.e1').estado, ETAPA.DISPONIVEL);
+  assert.equal(etapa(sim, 'torre.e1').recusa, null);
+  assert.deepEqual(etapa(sim, 'torre.e2').depende, ['torre.e1']);
+  assert.equal(etapa(sim, 'torre.e2').requisito, 'torre.e1');
+  assert.equal(sim.cmd('arcologia.iniciar', { etapa: 'torre.e2' }).codigo, 'marco', 'a torre.e2 abre no marco 4');
   // sem caixa: recusa e não muda nada
   const caixa = sim.holding.caixa();
   sim.holding.pagar(caixa, 'teste');
@@ -375,4 +381,105 @@ test('A2: o robô que pula a Arcologia termina mais pobre (cidade da S2a, 6 h de
   assert.ok(razaoC >= 1.05, `Contribuição com / sem, média de ${SEMENTES.length} sementes: ${razaoC.toFixed(3)}`);
   assert.ok(razaoP >= 1.05, `moradores com / sem, média de ${SEMENTES.length} sementes: ${razaoP.toFixed(3)}`);
   assert.ok(marcoCom >= marcoSem, `marcos somados com ${marcoCom}, sem ${marcoSem}`);
+});
+
+// ------------------------------------------------------------------------------------------------ obras em paralelo (D98)
+
+test('paralelo (D98): o lago e a fundação da torre andam juntos; a torre sobe uma etapa de cada vez; as equipes limitam', () => {
+  const sim = criarSimulacao({ semente: 'arco-paralelo' });
+  ateMarco(sim, 4);
+  abastecer(sim, 'lago.e1');
+  abastecer(sim, 'torre.e1');
+  ok(sim.cmd('arcologia.iniciar', { etapa: 'lago.e1' }));
+  // a segunda obra começa com a primeira em andamento: ninguém prende ninguém
+  ok(sim.cmd('arcologia.iniciar', { etapa: 'torre.e1' }));
+  assert.deepEqual(sim.q.arcologia().equipes, { total: EQUIPES_OBRA, ocupadas: 2 });
+  assert.deepEqual(etapa(sim, 'lago.e1').emParalelo, ['torre.e1']);
+  assert.deepEqual(etapa(sim, 'torre.e1').emParalelo, ['lago.e1']);
+  // a torre.e2 pede a e1 pronta: a ordem física vale onde a obra depende da outra
+  assert.equal(etapa(sim, 'torre.e2').recusa, 'trancado');
+  assert.equal(sim.cmd('arcologia.iniciar', { etapa: 'torre.e2' }).codigo, 'trancado');
+  // as duas andam no mesmo tique, cada uma com os materiais dela e o progresso do total soma as duas
+  let juntas = false;
+  for (let t = 0; t < 600 && !juntas; t += 20) {
+    sim.rodar(20, { sincrono: true });
+    juntas = etapa(sim, 'lago.e1').progresso > 0 && etapa(sim, 'torre.e1').progresso > 0 && etapa(sim, 'lago.e1').estado === ETAPA.EM_OBRA && etapa(sim, 'torre.e1').estado === ETAPA.EM_OBRA;
+  }
+  assert.ok(juntas, 'as duas etapas em obra progridem juntas');
+  const a = sim.q.arcologia();
+  const soma = (etapa(sim, 'lago.e1').progresso + etapa(sim, 'torre.e1').progresso) / ETAPAS.length;
+  assert.ok(Math.abs(a.progressoTotal - soma) < 1e-9, `progresso total ${a.progressoTotal} contra ${soma}`);
+  // save no meio das duas obras: o hash e o fim das duas batem
+  const C = criarSimulacao({ semente: 'arco-paralelo' });
+  aplicarSave(C, migrar(lerSave(montarSave(sim))));
+  assert.equal(C.q.hash(), sim.q.hash());
+  assert.deepEqual(C.q.arcologia().equipes, { total: EQUIPES_OBRA, ocupadas: 2 });
+  ateFicarPronta(sim, 'torre.e1');
+  ateFicarPronta(C, 'torre.e1');
+  assert.equal(C.tique, sim.tique);
+  assert.equal(C.q.hash(), sim.q.hash());
+  // pronta a e1, a e2 abre (sem esperar o lago): o estado dela vira disponível e o comando aceita
+  sim.rodar(40, { sincrono: true });
+  assert.equal(etapa(sim, 'torre.e2').estado, ETAPA.DISPONIVEL);
+  assert.equal(etapa(sim, 'torre.e2').recusa, null);
+  assert.deepEqual(sim.validar(), []);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('paralelo (D98): as equipes de obra limitam as etapas ao mesmo tempo, com a recusa ocupado e sem trancar', () => {
+  const sim = criarSimulacao({ semente: 'arco-equipes' });
+  ateMarco(sim, 3);
+  sim.json.arcologia.equipes = 1; // uma equipe só (uma decisão do Conselho pode mudar, e vai no save)
+  abastecer(sim, 'lago.e1');
+  abastecer(sim, 'torre.e1');
+  ok(sim.cmd('arcologia.iniciar', { etapa: 'lago.e1' }));
+  assert.deepEqual(sim.q.arcologia().equipes, { total: 1, ocupadas: 1 });
+  assert.equal(etapa(sim, 'torre.e1').recusa, 'ocupado');
+  const caixa = sim.holding.caixa();
+  assert.equal(sim.cmd('arcologia.iniciar', { etapa: 'torre.e1' }).codigo, 'ocupado');
+  assert.equal(sim.holding.caixa(), caixa, 'recusa sem cobrar');
+  sim.rodar(40, { sincrono: true });
+  assert.equal(etapa(sim, 'torre.e1').estado, ETAPA.DISPONIVEL, 'ocupado não tranca: segue disponível, esperando uma equipe');
+  ateFicarPronta(sim, 'lago.e1');
+  sim.rodar(40, { sincrono: true });
+  assert.equal(etapa(sim, 'torre.e1').recusa, null, 'a equipe voltou');
+  ok(sim.cmd('arcologia.iniciar', { etapa: 'torre.e1' }));
+  assert.deepEqual(sim.validar(), []);
+  // um save de antes das equipes carrega com o padrão
+  delete sim.json.arcologia.equipes;
+  const C = criarSimulacao({ semente: 'arco-equipes' });
+  aplicarSave(C, migrar(lerSave(montarSave(sim))));
+  assert.equal(C.json.arcologia.equipes, EQUIPES_OBRA);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('dados (D98): toda dependência física existe, não há ciclo, a torre sobe em cadeia, o parque pede o lago e o resto é independente', () => {
+  const todas = [...ETAPAS, ...ETAPAS_M2];
+  const ids = new Set(todas.map((e) => e.id));
+  for (const e of todas) {
+    assert.ok(Array.isArray(e.depende), `${e.id}: depende`);
+    for (const d of e.depende) {
+      assert.ok(ids.has(d), `${e.id} depende de ${d}, que não existe`);
+      assert.notEqual(d, e.id);
+    }
+  }
+  // sem ciclo: a ordenação topológica consome todas
+  const falta = new Map(todas.map((e) => [e.id, new Set(e.depende)]));
+  let andou = true;
+  while (andou && falta.size) {
+    andou = false;
+    for (const [id, deps] of [...falta]) {
+      if ([...deps].every((d) => !falta.has(d))) {
+        falta.delete(id);
+        andou = true;
+      }
+    }
+  }
+  assert.equal(falta.size, 0, `ciclo entre ${[...falta.keys()].join(', ')}`);
+  assert.deepEqual(['lago.e1', 'torre.e1'].map((id) => etapaDe(id).depende), [[], []], 'o lago e a fundação da torre andam em paralelo');
+  assert.deepEqual(['torre.e2', 'torre.e3', 'torre.e4'].map((id) => etapaDe(id).depende), [['torre.e1'], ['torre.e2'], ['torre.e3']]);
+  assert.deepEqual(ETAPAS_M2.find((e) => e.id === 'parque.e1').depende, ['lago.e1']);
+  assert.ok(ETAPAS_M2.filter((e) => e.id.startsWith('horizon.')).every((e) => e.depende.length === 0), 'os trechos do Horizon Ring são independentes');
+  assert.deepEqual(dependenciasAbertas(etapaDe('torre.e3'), (id) => id === 'torre.e2'), []);
+  assert.deepEqual(dependenciasAbertas(etapaDe('torre.e3'), () => false), ['torre.e2']);
 });

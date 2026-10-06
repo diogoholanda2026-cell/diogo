@@ -203,3 +203,47 @@ test('traçado sugerido (C1b): com a câmera rente ao chão o trecho atrás dela
   // tudo atrás: nada a desenhar
   assert.deepEqual(recortarNaFrente(projetar, [[0, 0, 20], [0, 0, 80]]), []);
 });
+
+test('escolha livre (D98): o catálogo mostra tudo o que o marco liberou, o trancado diz o marco, e o objetivo só destaca', async () => {
+  const { itensDaCategoria } = await import('../../fonte/ui/ferramentas/sessao.js');
+  const { categoriaGuiada } = await import('../../fonte/ui/guia/regras.js');
+  const { MARCOS } = await import('../../fonte/data/marcos.js');
+  const sim = criarSimulacao({ semente: 'ux1-livre' });
+  const objetivos = sim.q.barra().objetivos;
+  assert.ok(objetivos.length >= 2, 'a partida abre com objetivos de áreas diferentes');
+  const consultar = (nome, ...a) => sim.q[nome]?.(...a);
+  const itens = (cat) => itensDaCategoria(cat, { consultar, marco: 0 }).itens;
+  const todos = [...itens('servicos'), ...itens('lazer'), ...itens('empresas')];
+  // tudo o que o marco 0 libera está aberto, qualquer que seja o objetivo da vez
+  const liberados = MARCOS[0].libera.filter((id) => /^(servico|holding)\./.test(id)).map((id) => id.split('.')[1]);
+  assert.ok(liberados.length >= 6);
+  for (const tipo of liberados) {
+    const c = todos.find((x) => x.id === tipo);
+    assert.ok(c, `${tipo} está no catálogo`);
+    assert.equal(c.trancado, false, `${tipo} aberto no marco 0`);
+  }
+  // o trancado diz o marco que falta: o da tabela dos marcos (e não só o do catálogo)
+  for (const [tipo, marco] of [['clinica', 1], ['bombeiros', 2], ['olaria', 1], ['concreteira', 3]]) {
+    const c = todos.find((x) => x.id === tipo);
+    assert.equal(c.trancado, true, tipo);
+    assert.equal(c.marco, marco, `${tipo} abre no marco ${marco}`);
+  }
+  // os três objetivos abertos não impedem construir o que nenhum deles pede, e continuam abertos
+  const abertos = objetivos.map((o) => o.id);
+  const areal = sim.q.construir.previa({ tipo: 'areal', x: -942, z: -205 });
+  assert.equal(areal.ok, true, areal.codigo);
+  assert.equal(sim.cmd('construir', { tipo: 'areal', x: areal.x, z: areal.z, rot: areal.rot }).ok, true);
+  // uma rua de terra batida de ligação não é o objetivo da avenida: a praça ao lado dela também sai
+  assert.equal(sim.cmd('via.construir', { plano: { modo: 'reta', tipo: 'rua', pontos: [[1100, -300], [1500, -300]], sessao: 1, encaixe: false } }).ok, true);
+  const praca = sim.q.construir.previa({ tipo: 'praca', x: 1300, z: -330 });
+  assert.equal(praca.ok, true, praca.codigo);
+  assert.equal(sim.cmd('construir', { tipo: 'praca', x: praca.x, z: praca.z, rot: praca.rot }).ok, true);
+  const depois = sim.q.barra().objetivos.map((o) => o.id);
+  for (const id of abertos.filter((x) => x !== 'holding.escritorio')) assert.ok(depois.includes(id), `${id} segue aberto`);
+  // o anel do guia só aponta quando nenhuma ferramenta nem bandeja está aberta: com qualquer uma, o jogador escolhe
+  const guiados = objetivos.map((o) => ({ ...o, feito: 0, total: o.total || 1 }));
+  assert.ok(categoriaGuiada({ objetivos: guiados }), 'o anel destaca a categoria do objetivo');
+  assert.equal(categoriaGuiada({ objetivos: guiados, ferramenta: 'colocar' }), null);
+  assert.equal(categoriaGuiada({ objetivos: guiados, categoriaAberta: 'empresas' }), null);
+  assert.deepEqual(sim.erros, []);
+});

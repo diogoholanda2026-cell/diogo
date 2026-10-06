@@ -8,47 +8,79 @@
 // o dedo nunca esconder a mira; dois dedos movem, aproximam e giram a câmera, sem inclinar; perto da borda da área
 // livre (bordaPx) durante o arrasto a câmera anda sozinha, com velocidade que cresce para dentro da faixa, e a
 // ferramenta recebe o ponto novo a cada quadro.
-// Árbitro: nos primeiros 80 ms (ou até o dedo andar 8 px) um dedo ainda não é gesto; se o segundo dedo chega nesse
+// Árbitro: nos primeiros 80 ms (ou até o dedo andar 10 px) um dedo ainda não é gesto; se o segundo dedo chega nesse
 // tempo, o gesto é de dois dedos e a ferramenta nem começa (a pinça não risca uma via). Com dois dedos, o modo
 // (inclinar ou livre) se decide nos primeiros 80 ms depois de eles começarem a andar e não troca no meio; a pinça só
-// entra depois de 12 px de mudança na distância e o giro depois de 6 graus, sem salto. Um segundo dedo que chega com a
-// ferramenta em curso a cancela (fase 'fim' com cancelado: true) e vira câmera.
+// entra depois de 18 px (ou 10% do vão) de mudança na distância e o giro depois de 8 graus (e 14 px de arco), sem
+// salto (limiares em gesto.js). Um segundo dedo que chega com a ferramenta em curso a cancela (fase 'fim' com
+// cancelado: true) e vira câmera.
+// Quadro (TOQ1, D99): o pointermove só guarda a posição do dedo (e, pelos eventos coalescidos, o rastro para a
+// velocidade de soltura, no tempo do hardware); a câmera anda UMA vez por quadro, em quadro(): um raio, o teto de
+// deslocamento do quadro (o ponto preso não anda mais que 1,6 vez o que o dedo andou) e a câmera posta em dia ali, e
+// não dentro do evento. A soltura mede a velocidade do dedo por mínimos quadrados nos últimos 100 ms de hardware (nunca
+// pelo tempo do quadro), com teto, e passa ao chão sob o dedo; a câmera guarda o teto e a parada limpa. A sensibilidade
+// do arrasto, da pinça e do giro e a inércia vêm das Configurações (opcoes: sensArrasto, sensPinca, sensGiro, inercia).
 // Mouse: com ferramenta, o botão esquerdo usa a ferramenta e o cursor parado manda 'move' com dedos 0 (a prévia segue
 // o cursor, como no CS2); botão do meio arrasta; direito (ou Ctrl) gira e inclina, e o clique direito curto abre o
 // menu; a roda aproxima no cursor; borda da janela move a vista se ligada (bordaMouse). Teclado: WASD e setas movem,
 // Q e E giram, R e F inclinam, + e - aproximam.
+// Estável: ao perder o foco, a aba ir para o fundo ou a página sair, os dedos e a ferramenta em curso se cancelam (um
+// pointerup perdido deixaria um dedo fantasma e o próximo toque viraria pinça); um toque primário com dedos velhos
+// ainda guardados os limpa; um toque nos 12 px de baixo é do gesto do sistema e não começa nada.
 // Evento da ferramenta: { fase: 'inicio' | 'move' | 'fim', x, y, ponto, dedos, tipo: 'toque' | 'mouse' | 'caneta',
 // dedoX, dedoY, cancelado? } (x, y é a mira em px CSS; ponto o chão sob ela, R.raio).
+// ?toque=1: registro por quadro do gesto em window.__toque (toque-log.js).
+import { GESTOS, SOLTURA, Rastro, limiarPinca, limiarGiro, ehPinca, ehGiro, limitarVetor, tetoDoQuadro, aplicarTeto, metrosPorPxEm, opcoesDoToque } from './gesto.js';
+import { criarLogToque, mostrarPainel } from './toque-log.js';
+import { projetarNaTela } from './raio.js';
 
-/** Limiares do árbitro (ui.md 9.1). */
-export const GESTOS = Object.freeze({
-  decidirMs: 80, toqueMs: 250, toquePx: 8, longoMs: 450, pincaPx: 12, giroGraus: 6, andarPx: 4, mousePx: 3,
-});
+export { GESTOS };
 
 /** Rolagem pela borda: velocidade máxima em px de tela por segundo, no fundo da faixa. */
 export const BORDA = Object.freeze({ pxPorS: 900 });
 
-const JANELA_VEL = 90; // ms de movimento usados para a velocidade de soltura
+const JANELA_VEL = 90; // ms de movimento usados para a velocidade de soltura do giro do mouse
 const TECLAS = { arrowup: 'w', arrowdown: 's', arrowleft: 'a', arrowright: 'd' };
 const RAD = Math.PI / 180;
 
 export function criarEntrada(ctx, camera) {
   const canvas = ctx.canvas;
   const dedos = new Map();
-  const st = { modo: 'camera', aoFerramenta: null, aoToque: [], opcoes: { deslocY: 56, bordaPx: 48, bordaMouse: false, area: null } };
+  const st = { modo: 'camera', aoFerramenta: null, aoToque: [], opcoes: { deslocY: 56, bordaPx: 48, bordaMouse: false, area: null, ...opcoesDoToque({}) } };
   const teclas = new Set();
   let gesto = null;
   let pairar = null; // mouse parado sobre o canvas: { x, y, novo }
   const relogio = () => (typeof performance !== 'undefined' ? performance.now() : 0);
   const tempo = (ev) => (ev && Number.isFinite(ev.timeStamp) && ev.timeStamp > 0 ? ev.timeStamp : relogio());
+  // o retângulo do canvas é lido ao tocar e quando a janela muda: ler a cada pointermove força o layout do navegador
+  let rect = null;
   const ptr = (ev) => {
-    const r = canvas.getBoundingClientRect();
-    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    rect ??= canvas.getBoundingClientRect();
+    return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
   };
-  const chao = (x, y) => ctx.raio(x, y);
   const tipoDe = (ev) => (ev.pointerType === 'touch' ? 'toque' : ev.pointerType === 'pen' ? 'caneta' : 'mouse');
   const telaH = () => ctx.tela?.h || canvas.clientHeight || 1;
   const telaW = () => ctx.tela?.w || canvas.clientWidth || 1;
+
+  // ?toque=1: o registro por quadro (window.__toque); o custo do raio e da câmera entra por aqui
+  const depurar = typeof location !== 'undefined' && /[?&]toque=1(&|$)/.test(location.search || '');
+  const log = depurar ? criarLogToque({ projetar: (p) => projetarNaTela(ctx.camera, telaW(), telaH(), p), estado: () => camera.estado() }) : null;
+  if (log && typeof window !== 'undefined') window.__toque = log;
+  const tirarPainel = log ? mostrarPainel(log) : null;
+  let tUltimoFim = 0; // o fim do último gesto: o registro recomeça (a tabela é a do gesto de agora) 3 s depois
+  const chao = (x, y) => {
+    if (!log) return ctx.raio(x, y);
+    const a = relogio();
+    const p = ctx.raio(x, y);
+    log.custo('raio', relogio() - a);
+    return p;
+  };
+  const atualizar = (t) => {
+    if (!log) return camera.atualizar(t);
+    const a = relogio();
+    camera.atualizar(t);
+    log.custo('atualizar', relogio() - a);
+  };
 
   // ---------------------------------------------------------------------------------------------- ferramenta
 
@@ -61,67 +93,111 @@ export function criarEntrada(ctx, camera) {
 
   // ---------------------------------------------------------------------------------------------- câmera
 
-  // amostras recentes do alvo para a velocidade de soltura
-  const rastro = [];
-  const marcar = (t) => {
-    const e = camera.estado();
-    rastro.push({ t, x: e.x, z: e.z, g: e.guinada, i: e.inclinacao });
-    while (rastro.length > 2 && rastro[0].t < t - JANELA_VEL * 2) rastro.shift();
-  };
-  const soltar = (tipo, t) => {
-    const n = rastro.length;
-    if (n < 2) return;
-    const a = rastro.find((r) => r.t >= rastro[n - 1].t - JANELA_VEL) ?? rastro[0];
-    const b = rastro[n - 1];
-    const dt = (b.t - a.t) / 1000;
-    if (dt < 0.012 || t - b.t > 60) return; // parou antes de soltar
-    if (tipo === 'arrastar') camera.impulso({ vx: (b.x - a.x) / dt, vz: (b.z - a.z) / dt });
-    else camera.impulso({ vg: (b.g - a.g) / dt, vi: (b.i - a.i) / dt });
-  };
-  // arrasto: o ponto do chão fica sob o dedo; a câmera do three é posta em dia na hora (vários pointermove chegam
-  // entre dois quadros, e o raio de cada um precisa sair da câmera já movida)
-  const arrastarPara = (ancora, x, y, t) => {
-    const p = ancora ? chao(x, y) : null;
-    if (!p) return false;
-    camera.mover(ancora[0] - p[0], ancora[2] - p[2]);
-    camera.atualizar(t);
-    marcar(t);
-    return true;
-  };
   /** Metros no chão por px de tela na distância do alvo (a vertical esticada pela inclinação). */
   const escala = () => {
     const e = camera.estado();
     const s = (2 * e.dist * Math.tan(((ctx.camera?.fov ?? 40) * RAD) / 2)) / telaH();
     return { s, k: s / Math.max(0.25, Math.sin(e.inclinacao * RAD)), g: e.guinada * RAD };
   };
-  // o mundo anda dx, dy px de tela (arrasto no céu, rolagem pela borda): direita no chão (cos g, sin g), frente
-  // (sin g, -cos g)
-  const moverTela = (dx, dy, t) => {
-    if (!dx && !dy) return;
+  /** O que o mundo anda (m) quando a imagem anda dx, dy px de tela: direita no chão (cos g, sin g), frente (sin g, -cos g). */
+  const telaParaMundo = (dx, dy) => {
     const { s, k, g } = escala();
-    camera.mover(-dx * s * Math.cos(g) + dy * k * Math.sin(g), -dx * s * Math.sin(g) - dy * k * Math.cos(g));
-    camera.atualizar(t);
-    marcar(t);
+    return [-dx * s * Math.cos(g) + dy * k * Math.sin(g), -dx * s * Math.sin(g) - dy * k * Math.cos(g)];
   };
+  // o mundo anda dx, dy px de tela (arrasto no céu, rolagem pela borda); a câmera do three só se põe em dia com t
+  const moverTela = (dx, dy, t = null) => {
+    if (!dx && !dy) return;
+    const [mx, mz] = telaParaMundo(dx, dy);
+    camera.mover(mx, mz);
+    if (t !== null) atualizar(t);
+  };
+  /** Metros por px do chão no ponto p (0 sem a câmera do three, como nos testes sem navegador). */
+  const metrosPorPx = (p) => (ctx.camera?.position ? metrosPorPxEm(ctx.camera.position, p, ctx.camera.fov ?? 40, telaH()) : 0);
+
+  // soltura do giro do mouse (botão direito): as amostras são da câmera, no tempo dos eventos
+  const rastroCam = [];
+  const marcarCam = (t) => {
+    const e = camera.estado();
+    rastroCam.push({ t, g: e.guinada, i: e.inclinacao });
+    while (rastroCam.length > 2 && rastroCam[0].t < t - JANELA_VEL * 2) rastroCam.shift();
+  };
+  const soltarGiro = (t) => {
+    const n = rastroCam.length;
+    if (n < 2 || !st.opcoes.inercia) return;
+    const a = rastroCam.find((r) => r.t >= rastroCam[n - 1].t - JANELA_VEL) ?? rastroCam[0];
+    const b = rastroCam[n - 1];
+    const dt = (b.t - a.t) / 1000;
+    if (dt < 0.012 || t - b.t > 60) return; // parou antes de soltar
+    camera.impulso({ vg: (b.g - a.g) / dt, vi: (b.i - a.i) / dt });
+  };
+
+  /**
+   * A soltura de um arrasto: a velocidade do dedo (px/s do hardware, ajustada em 100 ms) vira a do chão sob o dedo (dois
+   * raios, no dedo e um passo adiante) e a câmera anda ao contrário. Sem raio (céu), a escala do centro.
+   */
+  function soltarComRastro(rastro, x, y, t, sens = 1) {
+    if (!st.opcoes.inercia) return;
+    const v = rastro.velocidade(t);
+    if (!v) return;
+    const [vx, vy] = limitarVetor(v.vx * sens, v.vy * sens, SOLTURA.maxPxS);
+    const pxs = Math.hypot(vx, vy);
+    if (pxs < SOLTURA.minPxS) return;
+    const h = 1 / 60;
+    const p0 = chao(x, y);
+    const p1 = p0 ? chao(x + vx * h, y + vy * h) : null;
+    let mx;
+    let mz;
+    if (p0 && p1) {
+      mx = -(p1[0] - p0[0]) / h;
+      mz = -(p1[2] - p0[2]) / h;
+    } else [mx, mz] = telaParaMundo(vx, vy);
+    log?.solta(t, mx, mz, pxs);
+    camera.impulso({ vx: mx, vz: mz });
+  }
 
   // ---------------------------------------------------------------------------------------------- gestos
 
   function comecarArrasto(d, t, { desde = null } = {}) {
     const o = desde ?? d;
-    gesto = { tipo: 'arrastar', id: d.id, t0: d.t0, ancora: chao(o.x, o.y), ux: o.x, uy: o.y, moveu: false };
-    marcar(t);
-    if (desde && (desde.x !== d.x || desde.y !== d.y)) moverArrasto(d, t);
+    const sens = d.tipo === 'toque' ? st.opcoes.sensArrasto : 1;
+    // fx, fy: o último ponto do dedo lido; vx, vy: o dedo virtual (anda sens vezes o dedo); ux, uy: onde a câmera já o pôs
+    gesto = { tipo: 'arrastar', id: d.id, t0: d.t0, ancora: chao(o.x, o.y), fx: o.x, fy: o.y, vx: o.x, vy: o.y, ux: o.x, uy: o.y, sens, moveu: false, sujo: false, mpp: 0 };
+    log?.referencia(gesto.ancora);
+    if (desde && (desde.x !== d.x || desde.y !== d.y)) {
+      gesto.moveu = Math.hypot(d.x - d.x0, d.y - d.y0) > (d.tipo === 'mouse' ? GESTOS.mousePx : GESTOS.toquePx);
+      gesto.sujo = gesto.moveu;
+    }
   }
 
-  function moverArrasto(d, t) {
-    if (Math.hypot(d.x - d.x0, d.y - d.y0) > (d.tipo === 'mouse' ? GESTOS.mousePx : GESTOS.toquePx)) gesto.moveu = true;
-    if (!gesto.moveu) return;
-    if (!arrastarPara(gesto.ancora, d.x, d.y, t)) {
-      moverTela(d.x - gesto.ux, d.y - gesto.uy, t);
-      gesto.ancora = chao(d.x, d.y); // o chão que aparecer sob o dedo vira a âncora (sem salto na volta)
+  /**
+   * Põe o ponto preso sob o dedo: UM raio, a correção com o teto do quadro (o que sobrar fica para o quadro seguinte) e,
+   * com tFrame, a câmera do three posta em dia (sem tFrame, na soltura, o quadro seguinte a põe).
+   */
+  function aplicarArrasto(d, tFrame) {
+    const g = gesto;
+    g.sujo = false;
+    if (!g.moveu) return;
+    g.vx += (d.x - g.fx) * g.sens;
+    g.vy += (d.y - g.fy) * g.sens;
+    g.fx = d.x;
+    g.fy = d.y;
+    const p = g.ancora ? chao(g.vx, g.vy) : null;
+    if (p) {
+      let dx = g.ancora[0] - p[0];
+      let dz = g.ancora[2] - p[2];
+      const mpp = metrosPorPx(p);
+      if (mpp > 0) {
+        [dx, dz] = aplicarTeto(dx, dz, tetoDoQuadro(Math.hypot(g.vx - g.ux, g.vy - g.uy), mpp, g.mpp));
+        g.mpp = mpp;
+      }
+      camera.mover(dx, dz);
+    } else {
+      moverTela(g.vx - g.ux, g.vy - g.uy);
+      g.ancora = chao(g.vx, g.vy); // o chão que aparecer sob o dedo vira a âncora (sem salto na volta)
     }
-    gesto.ux = d.x;
-    gesto.uy = d.y;
+    g.ux = g.vx;
+    g.uy = g.vy;
+    if (tFrame !== null) atualizar(tFrame);
   }
 
   /** O dedo em espera vira gesto: ferramenta (a partir do ponto em que tocou) ou arrasto da câmera. */
@@ -137,13 +213,15 @@ export function criarEntrada(ctx, camera) {
     const [a, b] = [...dedos.values()];
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
-    rastro.length = 0;
-    marcar(t);
+    rastroCam.length = 0;
+    const rastroC = new Rastro();
+    rastroC.push(t, mx, my);
     gesto = {
-      tipo: 'dois', modo: null, t0: t, tMove: null, e0: camera.estado(), ancora: chao(mx, my),
+      tipo: 'dois', modo: null, t0: t, tMove: null, e0: camera.estado(), ancora: chao(mx, my), sujo: false, rastroC,
       p0: [{ x: a.x, y: a.y }, { x: b.x, y: b.y }], d0: Math.hypot(a.x - b.x, a.y - b.y), ang0: Math.atan2(b.y - a.y, b.x - a.x),
       pinca: null, giro: null,
     };
+    log?.referencia(gesto.ancora);
   }
 
   /** Decide o modo de dois dedos pelo movimento de cada um desde o começo. */
@@ -157,11 +235,12 @@ export function criarEntrada(ctx, camera) {
     const dAng = Math.abs(normalizar(Math.atan2(b.y - a.y, b.x - a.x) - g.ang0)) / RAD;
     const vertical = d1.y * d2.y > 0 && Math.abs(d1.y) > 1.5 * Math.abs(d1.x) && Math.abs(d2.y) > 1.5 * Math.abs(d2.x);
     const passou = t - g.tMove >= GESTOS.decidirMs;
-    if (st.modo !== 'ferramenta' && vertical && Math.abs(dist - g.d0) < GESTOS.pincaPx && dAng < GESTOS.giroGraus) {
+    const viaja = Math.hypot((a.x + b.x) / 2 - (g.p0[0].x + g.p0[1].x) / 2, (a.y + b.y) / 2 - (g.p0[0].y + g.p0[1].y) / 2);
+    if (st.modo !== 'ferramenta' && vertical && Math.abs(dist - g.d0) < limiarPinca(g.d0) && dAng < limiarGiro(g.d0)) {
       if (passou || Math.min(Math.abs(d1.y), Math.abs(d2.y)) >= GESTOS.toquePx) return 'inclinar';
       return null;
     }
-    if (passou || Math.abs(dist - g.d0) > GESTOS.pincaPx || dAng > GESTOS.giroGraus || anda > GESTOS.toquePx) return 'livre';
+    if (passou || ehPinca(dist - g.d0, g.d0, viaja) || ehGiro(dAng, g.d0, viaja) || anda > GESTOS.toquePx) return 'livre';
     return null;
   }
 
@@ -176,53 +255,78 @@ export function criarEntrada(ctx, camera) {
     if (g.modo === 'inclinar') {
       const my0 = (g.p0[0].y + g.p0[1].y) / 2;
       camera.definir({ ...camera.estado(), inclinacao: e0.inclinacao + (my - my0) * 0.25 });
-      camera.atualizar(t);
-      marcar(t);
+      atualizar(t);
       return;
     }
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     const ang = Math.atan2(b.y - a.y, b.x - a.x);
-    // a pinça e o giro entram só depois do limiar, a partir do ponto em que entraram (sem salto)
-    if (g.pinca === null && Math.abs(dist - g.d0) > GESTOS.pincaPx) g.pinca = dist;
-    if (g.giro === null && Math.abs(normalizar(ang - g.ang0)) / RAD > GESTOS.giroGraus) g.giro = ang;
+    // a pinça e o giro entram só depois do limiar (e se não forem só um dedo atrasado), a partir do ponto em que entraram
+    // (sem salto)
+    const viaja = Math.hypot(mx - (g.p0[0].x + g.p0[1].x) / 2, my - (g.p0[0].y + g.p0[1].y) / 2);
+    if (g.pinca === null && ehPinca(dist - g.d0, g.d0, viaja)) g.pinca = dist;
+    if (g.giro === null && ehGiro(normalizar(ang - g.ang0) / RAD, g.d0, viaja)) g.giro = ang;
     const n = { ...camera.estado() };
-    n.dist = g.pinca === null ? e0.dist : e0.dist * (g.pinca / Math.max(1, dist));
-    n.guinada = g.giro === null ? e0.guinada : e0.guinada - normalizar(ang - g.giro) / RAD;
+    n.dist = g.pinca === null ? e0.dist : e0.dist * (g.pinca / Math.max(1, dist)) ** st.opcoes.sensPinca;
+    n.guinada = g.giro === null ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
     camera.definir(n);
-    camera.atualizar(t);
-    // o ponto do chão do meio dos dedos fica sob o meio
-    if (!arrastarPara(g.ancora, mx, my, t)) marcar(t);
+    atualizar(t);
+    // o ponto do chão do meio dos dedos fica sob o meio (o raio sai da câmera já posta em dia)
+    const p = g.ancora ? chao(mx, my) : null;
+    if (p) {
+      camera.mover(g.ancora[0] - p[0], g.ancora[2] - p[2]);
+      atualizar(t);
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- eventos
 
+  /** Cancela tudo o que está em curso (foco perdido, aba no fundo, página saindo): nenhum dedo fantasma fica. */
+  function cancelarTudo() {
+    if (gesto?.tipo === 'ferramenta') {
+      const d = dedos.get(gesto.id);
+      if (d) ferramenta('fim', d, 1, d.tipo, { cancelado: true });
+    }
+    dedos.clear();
+    gesto = null;
+    pairar = null;
+    teclas.clear();
+  }
+
   function inicio(ev) {
+    const tipo = tipoDe(ev);
+    // um toque primário (o primeiro de uma sequência) com dedos de toque ainda guardados: o pointerup deles se perdeu
+    if (tipo === 'toque' && ev.isPrimary === true && [...dedos.values()].some((x) => x.tipo === 'toque')) cancelarTudo();
+    rect = canvas.getBoundingClientRect();
+    const p = ptr(ev);
+    // o gesto do sistema embaixo (a barra de gestos do Android) não é do jogo
+    if (tipo === 'toque' && p.y > telaH() - GESTOS.margemBaixoPx) return;
     try {
       canvas.setPointerCapture?.(ev.pointerId);
     } catch (e) {
       // ponteiro que já saiu (ou sintético): segue sem captura
     }
     const t = tempo(ev);
-    const p = ptr(ev);
-    const tipo = tipoDe(ev);
-    const d = { id: ev.pointerId, ...p, x0: p.x, y0: p.y, t0: t, botao: ev.button, tipo };
+    const d = { id: ev.pointerId, ...p, x0: p.x, y0: p.y, t0: t, botao: ev.button, tipo, rastro: new Rastro() };
+    d.rastro.push(t, p.x, p.y);
     dedos.set(ev.pointerId, d);
     pairar = null;
     camera.parar();
+    if (log && dedos.size === 1 && t - tUltimoFim > 3000) log.limpar();
+    log?.evento('down', t, p.x, p.y);
     const n = dedos.size;
     if (n === 1) {
-      rastro.length = 0;
+      rastroCam.length = 0;
       if (tipo === 'mouse') {
         if (ev.button === 2 || ev.ctrlKey) {
           gesto = { tipo: 'girar', id: d.id, t0: t, e0: camera.estado(), moveu: false };
-          marcar(t);
+          marcarCam(t);
         } else if (ev.button === 0 && st.modo === 'ferramenta') {
           gesto = { tipo: 'ferramenta', id: d.id, t0: t, dispositivo: tipo };
           ferramenta('inicio', p, 1, tipo);
         } else comecarArrasto(d, t);
         return;
       }
-      // toque e caneta: o árbitro espera 80 ms ou 8 px antes de decidir
+      // toque e caneta: o árbitro espera 80 ms ou 10 px antes de decidir
       gesto = { tipo: 'espera', id: d.id, t0: t };
       return;
     }
@@ -248,6 +352,11 @@ export function criarEntrada(ctx, camera) {
     }
     d.x = p.x;
     d.y = p.y;
+    // o rastro do dedo no tempo do hardware: os eventos coalescidos (vários por quadro, mesmo com quadros lentos)
+    const lista = typeof ev.getCoalescedEvents === 'function' ? ev.getCoalescedEvents() : null;
+    if (lista && lista.length > 1) for (const c of lista) d.rastro.push(tempo(c), c.clientX - rect.left, c.clientY - rect.top);
+    else d.rastro.push(t, p.x, p.y);
+    log?.evento('move', t, p.x, p.y, lista?.length ?? 1);
     if (!gesto) return;
     if (gesto.tipo === 'espera') {
       if (Math.hypot(p.x - d.x0, p.y - d.y0) > GESTOS.toquePx) decidirUm(d, t);
@@ -258,7 +367,11 @@ export function criarEntrada(ctx, camera) {
       return;
     }
     if (gesto.tipo === 'arrastar') {
-      if (d.id === gesto.id) moverArrasto(d, t);
+      // só marca: a câmera anda no quadro (um raio por quadro, não um por evento)
+      if (d.id === gesto.id) {
+        if (!gesto.moveu && Math.hypot(d.x - d.x0, d.y - d.y0) > (d.tipo === 'mouse' ? GESTOS.mousePx : GESTOS.toquePx)) gesto.moveu = true;
+        gesto.sujo = gesto.moveu;
+      }
       return;
     }
     if (gesto.tipo === 'girar') {
@@ -266,10 +379,14 @@ export function criarEntrada(ctx, camera) {
       if (!gesto.moveu) return;
       const e0 = gesto.e0;
       camera.definir({ ...camera.estado(), guinada: e0.guinada + (p.x - d.x0) * 0.3, inclinacao: e0.inclinacao + (p.y - d.y0) * 0.2 });
-      marcar(t);
+      marcarCam(t);
       return;
     }
-    if (gesto.tipo === 'dois' && dedos.size >= 2) moverDois(t);
+    if (gesto.tipo === 'dois' && dedos.size >= 2) {
+      const [a, b] = [...dedos.values()];
+      gesto.rastroC.push(t, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      gesto.sujo = true;
+    }
   }
 
   function fim(ev) {
@@ -283,6 +400,8 @@ export function criarEntrada(ctx, camera) {
     const p = ptr(ev);
     d.x = p.x;
     d.y = p.y;
+    log?.evento('up', t, p.x, p.y);
+    tUltimoFim = t;
     const cancelado = ev.type === 'pointercancel';
     const g = gesto;
     if (g.tipo === 'espera') {
@@ -305,7 +424,12 @@ export function criarEntrada(ctx, camera) {
     if ((g.tipo === 'arrastar' || g.tipo === 'girar') && d.id === g.id) {
       if (!cancelado && !dedos.size) {
         if (!g.moveu && t - g.t0 <= GESTOS.longoMs) for (const fn of st.aoToque) fn({ x: p.x, y: p.y, longo: false, botao: d.botao });
-        else if (g.moveu) soltar(g.tipo, t);
+        else if (g.moveu && g.tipo === 'arrastar') {
+          // a velocidade mede-se com a câmera ainda na pose do último quadro (os raios saem dela); depois o que o
+          // dedo andou e ainda não foi aplicado entra, para a vista soltar na posição final do dedo
+          soltarComRastro(d.rastro, g.vx, g.vy, t, g.sens);
+          if (g.sujo || d.x !== g.fx || d.y !== g.fy) aplicarArrasto(d, null);
+        } else if (g.moveu) soltarGiro(t);
       }
       gesto = dedos.size ? { tipo: 'nada' } : null;
       return;
@@ -319,11 +443,14 @@ export function criarEntrada(ctx, camera) {
         const [r] = [...dedos.values()];
         r.x0 = r.x;
         r.y0 = r.y;
-        rastro.length = 0;
-        gesto = { tipo: 'arrastar', id: r.id, t0: t, ancora: chao(r.x, r.y), ux: r.x, uy: r.y, moveu: true };
-        marcar(t);
+        r.rastro.limpar();
+        r.rastro.push(t, r.x, r.y);
+        const sens = r.tipo === 'toque' ? st.opcoes.sensArrasto : 1;
+        gesto = { tipo: 'arrastar', id: r.id, t0: t, ancora: chao(r.x, r.y), fx: r.x, fy: r.y, vx: r.x, vy: r.y, ux: r.x, uy: r.y, sens, moveu: true, sujo: false, mpp: 0 };
+        log?.referencia(gesto.ancora);
       } else if (!dedos.size) {
-        if (!cancelado && g.modo === 'livre') soltar('arrastar', t);
+        const u = g.rastroC.a[g.rastroC.a.length - 1];
+        if (!cancelado && g.modo === 'livre' && u) soltarComRastro(g.rastroC, u.x, u.y, t);
         gesto = null;
       }
       return;
@@ -396,11 +523,24 @@ export function criarEntrada(ctx, camera) {
     return true;
   }
 
+  /** A câmera está sendo mexida (gesto de câmera ou deslize): a resolução dinâmica baixa até a vista parar. */
+  const emMovimento = () => {
+    if (gesto && ((gesto.tipo === 'arrastar' && gesto.moveu) || (gesto.tipo === 'dois' && gesto.modo) || (gesto.tipo === 'girar' && gesto.moveu))) return true;
+    return !!camera.movendo;
+  };
+
   let tAnt = 0;
-  /** A cada quadro: o árbitro no tempo (decidir em 80 ms, toque longo), a borda, o cursor parado e as teclas. */
+  /** A cada quadro: o gesto da câmera (um raio), o árbitro no tempo (decidir em 80 ms, toque longo), a borda, o cursor parado e as teclas. */
   function quadro(tMs) {
-    const dt = tAnt ? Math.min(0.1, Math.max(0, (tMs - tAnt) / 1000)) : 0;
+    const dt = tAnt ? Math.min(0.2, Math.max(0, (tMs - tAnt) / 1000)) : 0;
     tAnt = tMs;
+    if (gesto?.tipo === 'arrastar' && gesto.sujo) {
+      const d = dedos.get(gesto.id);
+      if (d) aplicarArrasto(d, tMs);
+    } else if (gesto?.tipo === 'dois' && gesto.sujo && dedos.size >= 2) {
+      gesto.sujo = false;
+      moverDois(tMs);
+    }
     if (gesto?.tipo === 'espera') {
       const d = dedos.get(gesto.id);
       if (d && st.modo !== 'ferramenta' && tMs - gesto.t0 >= GESTOS.longoMs) {
@@ -422,7 +562,20 @@ export function criarEntrada(ctx, camera) {
       pairar.novo = false;
       ferramenta('move', pairar, 0, 'mouse');
     }
-    if (!teclas.size || !(dt > 0)) return;
+    if (teclas.size && dt > 0) andarComTeclas(dt);
+    // a resolução dinâmica e o registro veem o estado do quadro já com a câmera nova
+    const mexendo = emMovimento();
+    ctx.quadro?.resolucao?.movimento?.(mexendo, tMs);
+    if (log) {
+      const g = gesto?.tipo;
+      const fase = g && g !== 'nada' ? g : camera.movendo ? 'deslize' : 'parado';
+      const d = g === 'arrastar' || g === 'ferramenta' || g === 'espera' ? dedos.get(gesto.id) : null;
+      const c = g === 'dois' ? gesto.rastroC.a[gesto.rastroC.a.length - 1] : null;
+      log.quadro(tMs, { fase, dedo: d ? [d.x, d.y] : c ? [c.x, c.y] : null, pr: ctx.pr ?? null });
+    }
+  }
+
+  function andarComTeclas(dt) {
     const e = camera.estado();
     const v = e.dist * 0.9 * dt;
     const g = e.guinada * RAD;
@@ -443,9 +596,12 @@ export function criarEntrada(ctx, camera) {
   }
 
   const semMenu = (ev) => ev.preventDefault();
-  const perdeuFoco = () => {
-    teclas.clear();
-    pairar = null;
+  const perdeuFoco = () => cancelarTudo();
+  const mudouVisibilidade = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') cancelarTudo();
+  };
+  const mudouTela = () => {
+    rect = null;
   };
   canvas.addEventListener('pointerdown', inicio);
   canvas.addEventListener('pointermove', move);
@@ -459,7 +615,11 @@ export function criarEntrada(ctx, camera) {
     addEventListener('keydown', teclaDesce);
     addEventListener('keyup', teclaSobe);
     addEventListener('blur', perdeuFoco);
+    addEventListener('pagehide', perdeuFoco);
+    addEventListener('resize', mudouTela);
+    addEventListener('orientationchange', mudouTela);
   }
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', mudouVisibilidade);
 
   const api = {
     /** 'camera' ou 'ferramenta' (a UI troca quando abre e fecha uma ferramenta; um gesto em curso termina). */
@@ -482,9 +642,14 @@ export function criarEntrada(ctx, camera) {
         st.aoToque = st.aoToque.filter((f) => f !== fn);
       };
     },
-    /** { deslocY (0 a 72 px), bordaPx, bordaMouse (rolar pela borda da janela no PC), area: { x, y, w, h } | null }. */
+    /**
+     * { deslocY (0 a 72 px), bordaPx, bordaMouse (rolar pela borda da janela no PC), area: { x, y, w, h } | null,
+     *   sensArrasto, sensPinca, sensGiro (0,4 a 2), inercia (bool) }.
+     */
     opcoes(o = {}) {
       if (Number.isFinite(o.deslocY)) o = { ...o, deslocY: Math.max(0, Math.min(72, o.deslocY)) };
+      for (const k of ['sensArrasto', 'sensPinca', 'sensGiro']) if (k in o) o = { ...o, [k]: Number.isFinite(o[k]) ? Math.max(0.4, Math.min(2, o[k])) : 1 };
+      if ('inercia' in o) o = { ...o, inercia: o.inercia !== false };
       Object.assign(st.opcoes, o);
     },
     quadro,
@@ -495,6 +660,12 @@ export function criarEntrada(ctx, camera) {
     get gesto() {
       return gesto?.tipo ?? null;
     },
+    /** O registro do gesto (?toque=1) ou null. */
+    get registro() {
+      return log;
+    },
+    /** Cancela os dedos e a ferramenta em curso (a aba foi para o fundo, o foco saiu). */
+    cancelar: cancelarTudo,
     /** Solta os ouvintes do canvas e da janela (R.descartar: um render novo não herda as teclas do velho). */
     descartar() {
       canvas.removeEventListener('pointerdown', inicio);
@@ -508,11 +679,17 @@ export function criarEntrada(ctx, camera) {
         removeEventListener('keydown', teclaDesce);
         removeEventListener('keyup', teclaSobe);
         removeEventListener('blur', perdeuFoco);
+        removeEventListener('pagehide', perdeuFoco);
+        removeEventListener('resize', mudouTela);
+        removeEventListener('orientationchange', mudouTela);
       }
+      if (typeof document !== 'undefined' && document.removeEventListener) document.removeEventListener('visibilitychange', mudouVisibilidade);
       teclas.clear();
       dedos.clear();
       gesto = null;
       if (ctx.entrada === api) ctx.entrada = null;
+      if (log && typeof window !== 'undefined' && window.__toque === log) delete window.__toque;
+      tirarPainel?.();
     },
   };
   ctx.entrada = api;

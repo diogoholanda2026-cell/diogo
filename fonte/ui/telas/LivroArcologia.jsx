@@ -54,13 +54,25 @@ export const glifoEfeito = (tipo) => ({
   moradores: 'populacao', demanda: 'demanda', atratividade: 'marco', legado: 'legado', helicoptero: 'arcologia',
 })[tipo] ?? 'check';
 
-/** Por que a etapa não começa (null se pode): marco, a etapa de antes ou o caixa. */
+/**
+ * Por que a etapa não começa (null se pode): o marco, a obra de que depende no chão (a ordem física, D98), as equipes
+ * de obra todas ocupadas ou o caixa.
+ */
 export function fraseRecusa(e, etapas = [], caixa = Infinity) {
   if (!e || e.estado >= 2) return null;
   const codigo = e.recusa ?? (e.estado === 0 ? 'marco' : null);
   if (codigo === 'marco') return t('x1.recusa.marco', { n: e.marco, nome: MARCOS[e.marco]?.nome ?? '' });
   if (codigo === 'trancado') return t('x1.recusa.trancado', { etapa: nomeEtapa(etapas.find((x) => x.id === e.requisito) ?? { id: e.requisito }) });
+  if (codigo === 'ocupado') return t('ux1.livro.recusa.ocupado');
   if (e.estado === 1 && Number.isFinite(caixa) && caixa < (e.creditos ?? 0)) return t('x1.recusa.creditos', { v: fmt.dinheiro((e.creditos ?? 0) - caixa) });
+  return null;
+}
+
+/** A frase das obras em paralelo de uma etapa: com quem anda junto, ou que pode começar já (null sem o que dizer). */
+export function fraseParalelo(e, etapas = []) {
+  const outras = (e?.emParalelo ?? []).map((id) => nomeEtapa(etapas.find((x) => x.id === id) ?? { id }));
+  if (e?.estado === 2 && outras.length) return t('ux1.livro.paralelo', { etapa: outras.join(', ') });
+  if (e?.estado === 1 && !e.recusa && (e.emParalelo ?? []).length) return t('ux1.livro.livre');
   return null;
 }
 

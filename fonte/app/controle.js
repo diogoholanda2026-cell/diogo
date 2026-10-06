@@ -12,7 +12,12 @@ import { criarRender, carregarCena } from '../render/index.js';
 import { criarUI } from '../ui/index.jsx';
 import { comando } from '../ui/acoes.js';
 import { lerPrefs, gravarPrefs, aplicarPrefs } from '../ui/prefs.js';
+import { t, registrarTextos } from '../ui/textos.js';
+import { registrar as registrarTextosToque } from '../ui/textos/toq1.js';
+import { avisar } from '../ui/loja.js';
+import { opcoesDoToque } from '../render/camera/gesto.js';
 import { criarLaco } from './laco.js';
+import { ligarContexto, armazenamentoSessao, lerRetomada, limparRetomada } from './estavel.js';
 import * as armazem from './armazem.js';
 import * as diario from './diario.js';
 import * as salvamento from './salvamento.js';
@@ -25,6 +30,27 @@ import * as somMusica from '../som/musica.js';
 export const MODULOS_APP = Object.freeze([armazem, diario, salvamento, som, somInterface, somMundo, somMusica]);
 
 export const SEMENTE_PADRAO = 'heldopolis-1';
+
+/** As preferências do toque (TOQ1, D99) que a entrada do render recebe. */
+export const PREFS_TOQUE = Object.freeze(['toqueArrasto', 'toquePinca', 'toqueGiro', 'toqueInercia']);
+
+/** Aviso de tela cheia da perda do contexto gráfico: DOM puro, sem depender da interface (que pode estar num estado qualquer). */
+function avisoDoContexto(fase) {
+  if (typeof document === 'undefined') return;
+  let el = document.getElementById('aviso-contexto');
+  if (fase === 'seguiu') {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'aviso-contexto';
+    el.setAttribute('role', 'status');
+    el.style.cssText = 'position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;background:rgba(11,15,20,.82);color:#EEF2F6;font:600 15px Inter,system-ui,sans-serif;letter-spacing:.04em;text-align:center;padding:24px';
+    document.body.appendChild(el);
+  }
+  el.textContent = t(fase === 'perdeu' ? 'toq1.contexto.perdeu' : 'toq1.contexto.voltou');
+}
 
 /**
  * Câmeras de partida por tipo de simulação (graus; contrato em fonte/contratos/render.js). A da partida olha da baía
@@ -115,6 +141,8 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
   });
   if (prefs.sempreDia) R.sempreDia(true);
   marcarVidro(R);
+  registrarTextosToque(registrarTextos);
+  R.entrada?.opcoes?.(opcoesDoToque(prefs));
 
   const eventos = new Map();
   let laco = null;
@@ -137,6 +165,7 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
       Object.assign(prefs, p);
       aplicarPrefs(prefs);
       if ('sempreDia' in p) R.sempreDia(!!prefs.sempreDia);
+      if (PREFS_TOQUE.some((k) => k in p)) R.entrada?.opcoes?.(opcoesDoToque(prefs));
       if ('qualidade' in p && !qs.get('q')) {
         R.qualidade(prefs.qualidade);
         marcarVidro(R);
@@ -231,6 +260,11 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
   // segundo plano: pausa e avisa quem salva (U2a salva sem gzip, D31); ao voltar, a velocidade de antes. Com a
   // interface ligada à simulação, o comando passa pelas ações da interface; sem ela (cenas), direto.
   const mudarVelocidade = (v) => (ui && !app.simUIFalsa ? comando('velocidade', { v }, { silencioso: true }) : sim.cmd('velocidade', { v }));
+  const pausarTempo = () => {
+    const v = sim.velocidade ?? 0;
+    if (v) mudarVelocidade(0);
+    return v;
+  };
   laco = criarLaco({
     obterSim: () => sim,
     R,
@@ -240,11 +274,7 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
       for (const fn of aoFundo) fn(oculto);
       app.emitir('segundoPlano', { oculto });
     },
-    pausar: () => {
-      const v = sim.velocidade ?? 0;
-      if (v) mudarVelocidade(0);
-      return v;
-    },
+    pausar: pausarTempo,
     retomar: (v) => mudarVelocidade(v),
   });
   app.laco = laco;
@@ -259,5 +289,47 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
   }
   carga.fase('carga.pronto', 100);
   laco.iniciar();
+
+  // estabilidade (TOQ1, D99): a perda do contexto WebGL recarrega pelo ?menu=continuar levando a câmera e a velocidade
+  // do tempo; a página nova as retoma quando a partida abre (só no jogo de verdade: as cenas e a sintética ficam fora)
+  if (!nomeCena && tipo === 'partida' && !app.simUIFalsa) {
+    app.contexto = ligarContexto({
+      canvas,
+      estado: () => ({ camera: R.camera.estado(), velocidade: sim.velocidade ?? 0 }),
+      pausar: pausarTempo,
+      avisar: avisoDoContexto,
+    });
+    const armazem = armazenamentoSessao();
+    const ret = lerRetomada(armazem);
+    if (ret) {
+      let solta = () => {};
+      const aplicar = () => {
+        solta();
+        limparRetomada(armazem);
+        try {
+          if (ret.camera) R.camera.definir(ret.camera);
+          if (ret.velocidade > 0) mudarVelocidade(ret.velocidade);
+          avisar({ texto: t('toq1.retomou'), gravidade: 'info', glifo: 'ajustes' });
+        } catch (e) {
+          console.warn('retomada: não consegui aplicar', e);
+        }
+        try {
+          const u = new URL(location.href);
+          if (u.searchParams.get('menu') === 'continuar') {
+            u.searchParams.delete('menu');
+            history.replaceState(history.state, '', u.toString());
+          }
+        } catch (e) {
+          // sem histórico
+        }
+      };
+      solta = app.on('carregado', aplicar);
+      // a partida não carregou (sem save): a retomada não fica esperando para sempre
+      setTimeout(() => {
+        solta();
+        limparRetomada(armazem);
+      }, 120000);
+    }
+  }
   return app;
 }

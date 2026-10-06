@@ -2,7 +2,8 @@
 // (lago.e1, o Mirror Lake com o reservatório e os portões; torre.e1 a torre.e4, a Blade Tower e a Legacy Tower), com os
 // materiais entregues pela frota da Holding (D47), o caixa que nunca fica negativo (D41) e os efeitos da D49 no laço.
 //
-// Uma etapa: trancada até o marco que a libera e a anterior pronta; arcologia.iniciar paga os créditos e abre a obra;
+// Uma etapa: trancada até o marco que a libera e as etapas de que depende fisicamente prontas (D98: o resto anda em
+// paralelo, até as equipes de obra acabarem); arcologia.iniciar paga os créditos e abre a obra;
 // os caminhões levam o que há no armazém (o resto chega quando a Holding produz ou importa); o trabalho anda um tique
 // por tique enquanto há material para a fase e caixa; pronta, aplica os efeitos, dá o XP e avisa (evento 'etapa').
 // lago.e1 registra a cava do Mirror Lake no aplainar ao começar e, pronta, liga as vias internas no grafo com a flag
@@ -17,7 +18,8 @@ import { refDe } from '../contratos/espelho.js';
 import { RODADA } from '../comum/relogio.js';
 import { cos, sen, hipot } from '../comum/util.js';
 import {
-  ETAPAS, ETAPAS_ORDEM, ETAPAS_M2, etapaDe, duracaoDe, avancoDaTorre, alturaBlade, alturaLegacy, ALTURA_PONTE,
+  ETAPAS, ETAPAS_ORDEM, ETAPAS_M2, EQUIPES_OBRA, etapaDe, duracaoDe, dependenciasAbertas, avancoDaTorre, alturaBlade, alturaLegacy,
+  ALTURA_PONTE,
 } from '../data/arcologia.js';
 import {
   PLANOS, PLANO_ESCOLHIDO, PARTES_ORDEM, PARTES_NOMES, GLEBA_ENVELOPE, SEDE_CENTRO, cavaDoPlano, PAR,
@@ -53,6 +55,7 @@ export function arcologiaVazia() {
     portoes: [], // refs dos nós dos portões
     efeitos: { vagas: [0, 0, 0, 0], luxo: 0, bemEstarLuxo: 0 },
     marcos: [], // anúncios de altura já feitos no Mural (330, ponte)
+    equipes: EQUIPES_OBRA, // equipes de obra: quantas etapas andam ao mesmo tempo (D98); no save, para uma decisão mudar
   };
 }
 
@@ -82,12 +85,25 @@ export function faseDe(def, e) {
   return Math.min(def.fases.length - 1, Math.floor(progressoDe(def, e) * def.fases.length));
 }
 
-/** A etapa pode começar? null se pode, senão o código de recusa (contrato do comando). */
+/** Etapas dependentes de `def` que ainda não estão prontas (a ordem física da obra, D98). */
+const abertas = (sim, def) => dependenciasAbertas(def, (id) => estadoDe(sim, id) === ETAPA.PRONTA);
+
+/** Equipes de obra da Holding agora (a do save; o padrão são EQUIPES_OBRA). */
+export const equipesDe = (sim) => J(sim).equipes ?? EQUIPES_OBRA;
+
+/** Quantas etapas estão em obra agora (cada uma ocupa uma equipe). */
+export const emObraAgora = (sim) => ETAPAS_ORDEM.filter((id) => J(sim).etapas[id].estado === ETAPA.EM_OBRA).length;
+
+/**
+ * A etapa pode começar? null se pode, senão o código de recusa (contrato do comando): emObra, nada, marco, trancado (uma
+ * obra de que depende ainda não ficou pronta) ou ocupado (as equipes de obra estão todas em outras etapas).
+ */
 function recusa(sim, def, e) {
   if (e.estado === ETAPA.EM_OBRA) return 'emObra';
   if (e.estado === ETAPA.PRONTA) return 'nada';
   if (!sim.progresso.liberado(`etapa.${def.id}`)) return 'marco';
-  if (def.requisito && estadoDe(sim, def.requisito) !== ETAPA.PRONTA) return 'trancado';
+  if (abertas(sim, def).length) return 'trancado';
+  if (emObraAgora(sim) >= equipesDe(sim)) return 'ocupado';
   return null;
 }
 
@@ -129,13 +145,16 @@ function publicar(sim, forcar = false) {
   if (mudou) sim.mudancas.marcar('arcologia');
 }
 
-/** Trancada ou disponível pelo marco e pela etapa anterior; avisa quem ouve quando muda. */
+/**
+ * Trancada ou disponível pelo marco e pelas dependências físicas; avisa quem ouve quando muda. Equipes todas ocupadas
+ * não tranca: a etapa segue disponível e o Livro diz que espera uma equipe (a recusa 'ocupado').
+ */
 function atualizarDisponiveis(sim) {
   for (const def of ETAPAS) {
     const e = J(sim).etapas[def.id];
     if (e.estado === ETAPA.EM_OBRA || e.estado === ETAPA.PRONTA) continue;
     const r = recusa(sim, def, e);
-    const novo = r === null ? ETAPA.DISPONIVEL : ETAPA.TRANCADA;
+    const novo = r === null || r === 'ocupado' ? ETAPA.DISPONIVEL : ETAPA.TRANCADA;
     if (novo !== e.estado) {
       e.estado = novo;
       sim.emitir('etapa', { id: def.id, estado: novo });
@@ -379,7 +398,10 @@ function etapaVista(sim, def) {
     nome: def.nome,
     estado: e.estado,
     marco: def.marco,
-    requisito: def.requisito,
+    depende: [...def.depende],
+    // a primeira obra de que depende e ainda não ficou pronta (a frase "Depois de ..."); null sem espera
+    requisito: abertas(sim, def)[0] ?? null,
+    emParalelo: ETAPAS_ORDEM.filter((id) => id !== def.id && J(sim).etapas[id].estado === ETAPA.EM_OBRA),
     recusa: e.estado === ETAPA.EM_OBRA || e.estado === ETAPA.PRONTA ? null : recusa(sim, def, e),
     creditos: def.creditos,
     materiais: Object.entries(def.materiais).map(([item, pede]) => ({
@@ -411,14 +433,16 @@ function consulta(sim) {
     futuras: ETAPAS_M2.filter((d) => d.parte === id).map((d) => ({ id: d.id, nome: d.nome, prazo: { ...d.prazo }, creditos: d.creditos, materiais: { ...d.materiais } })),
   }));
   const prontas = ETAPAS_ORDEM.filter((id) => j.etapas[id].estado === ETAPA.PRONTA).length;
-  const emObra = ETAPAS.find((d) => j.etapas[d.id].estado === ETAPA.EM_OBRA);
-  const progressoTotal = (prontas + (emObra ? progressoDe(emObra, j.etapas[emObra.id]) : 0)) / ETAPAS.length;
+  // o progresso soma as prontas e o avanço de cada etapa em obra (as obras andam em paralelo, D98)
+  const emObra = ETAPAS.filter((d) => j.etapas[d.id].estado === ETAPA.EM_OBRA);
+  const progressoTotal = (prontas + emObra.reduce((s, d) => s + progressoDe(d, j.etapas[d.id]), 0)) / ETAPAS.length;
   const g = avancoDaTorre(ETAPAS_ORDEM.map((id) => ({ id, estado: j.etapas[id].estado, progresso: progressoDe(etapaDe(id), j.etapas[id]) })));
   return {
     plano: j.plano,
     nome: plano.nome,
     partes,
     progressoTotal,
+    equipes: { total: equipesDe(sim), ocupadas: emObraAgora(sim) },
     valor: valorDaObra(sim),
     alturas: g < 0 ? null : { blade: alturaBlade(g), legacy: alturaLegacy(g), ponte: Math.min(alturaBlade(g), alturaLegacy(g)) >= ALTURA_PONTE },
     efeitos: {
@@ -480,7 +504,7 @@ function validar(sim) {
     }
     if (![0, 1, 2, 3].includes(e.estado)) erros.push(`etapa ${def.id}: estado ${e.estado}`);
     for (const [item, n] of Object.entries(e.entregue)) if (!(n >= 0 && n <= (def.materiais[item] ?? 0))) erros.push(`etapa ${def.id}: ${item} entregue ${n}`);
-    if (e.estado >= ETAPA.EM_OBRA && def.requisito && j.etapas[def.requisito]?.estado !== ETAPA.PRONTA) erros.push(`etapa ${def.id} em obra sem ${def.requisito} pronta`);
+    if (e.estado >= ETAPA.EM_OBRA) for (const dep of abertas(sim, def)) erros.push(`etapa ${def.id} em obra sem ${dep} pronta`);
   }
   return erros;
 }

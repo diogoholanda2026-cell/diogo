@@ -3,7 +3,7 @@
 //   Vídeo: qualidade (Auto, Ultra, Alta, PC, Média, Leve, cada uma com o orçamento) com "Manter esta qualidade? 10 s"
 //     (volta sozinha), resolução dinâmica e nitidez (CAS) da PC1 e da PC2, "Sempre dia", painel de desempenho (F9) e
 //     o Teste de desempenho.
-//   Interface (com o filtro dos avisos da X3a), Controles (mira, borda do mouse e as teclas), Som (5 canais, segundo
+//   Interface (com o filtro dos avisos da X3a), Controles (mira, borda do mouse, o toque da TOQ1 e as teclas), Som (5 canais, segundo
 //   plano, vibração), Jogo (salvamento automático, dicas), Acessibilidade (com a paleta das camadas para daltonismo),
 //   Salvamento (salvar, saves, exportar, importar, armazenamento, recomeçar) e Sobre (versão, placa, capacidades e
 //   licenças).
@@ -28,6 +28,7 @@ import { CSS_CORPO } from './estilo.js';
 import { mudarPrefs, rotuloSlot, exportarSave } from './comum.js';
 import { fraseFalha } from './Carregar.jsx';
 import { FILTROS_AVISOS, filtroAtual } from '../../mundo/marcadores.js';
+import { ControlesToque } from './Toque.jsx';
 
 export const ABAS = Object.freeze(['video', 'interface', 'controles', 'som', 'jogo', 'acessibilidade', 'salvamento', 'sobre']);
 export const QUALIDADES = Object.freeze(['auto', 'ultra', 'alta', 'pc', 'media', 'leve']);
@@ -215,6 +216,8 @@ function Controles({ ui }) {
         <Segmentado a="cfg.mira" rotulo={t('u2.cfg.mira')} valor={p.mira ?? 56} aoTrocar={(v) => mudarPrefs(ui, { mira: v })} opcoes={[0, 40, 56, 72].map((v) => ({ v, rotulo: `${v} px` }))} />
       </Linha>
       {toque ? null : <Liga ui={ui} k="bordaMouse" rotulo={t('u2.cfg.borda')} exp={t('u2.cfg.bordaExp')} />}
+      {/* a sensibilidade do arrasto, da pinça e do giro e a inércia (TOQ1, D99) */}
+      {toque ? <ControlesToque ui={ui} mudar={(p) => mudarPrefs(ui, p)} /> : null}
       <Secao titulo={t('u2.cfg.teclas')}>
         <div class="cfg-teclas">
           {TECLAS.map((k) => [<b class="num">{t(`u2.tecla.${k}`)}</b>, <span>{t(`u2.tecla.${k}.def`)}</span>])}

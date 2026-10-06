@@ -17,16 +17,17 @@ import { hipot, sen, cos, atan2 } from '../comum/util.js';
 import { cantosRetangulo, pontoNoRetangulo } from '../comum/vetor.js';
 import { maisPerto, arcoDoT, tangente } from '../comum/bezier.js';
 import { refDe, CELULA_M, progressoObra, faseObra, FASES_OBRA } from '../contratos/espelho.js';
-import { PREDIO, TIPO_PREDIO, CELULA, AGUA, GRAVIDADES } from '../contratos/flags.js';
+import { PREDIO, TIPO_PREDIO, CELULA, AGUA, GRAVIDADES, LADRILHO } from '../contratos/flags.js';
 import { PREDIOS, PREDIOS_ORDEM, NIVEIS, nivelDoModelo } from '../data/predios.js';
 import { ZONAS, ZONAS_ORDEM, zonaNaParte, PARTE_ATUAL } from '../data/zonas.js';
 import { SERVICOS, SERVICOS_ORDEM, CATEGORIAS_SERVICO } from '../data/servicos.js';
 import * as dadosHolding from '../data/holding.js';
 import { VIAS, VIAS_ORDEM } from '../data/vias.js';
+import { marcoQueLibera } from '../data/marcos.js';
 import { prediosNaCaixa, pontoNoPredio, naGleba, eixoDa, distEixo, MEIA_MAX } from './vias/validar.js';
 import { removerPredio, celulasNaCaixa, revalidarRetangulo } from './zonas/blocos.js';
 import { custoDemolirPredio } from './vias/demolir.js';
-import { daHolding } from './mundo/ladrilhos.js';
+import { daHolding, ladrilhoDe } from './mundo/ladrilhos.js';
 import { aguaEm } from './mundo/terreno.js';
 import { recursoNoPoligono } from './mundo/recursos.js';
 
@@ -346,33 +347,17 @@ const faseDa = (A, e) => {
 
 const MP = { t: 0, d: 0, x: 0, z: 0 };
 
-/** Acesso pela frente (sem células): a via mais perto da frente do prédio, até 24 m. */
+/**
+ * Acesso pela frente (sem células): a via mais perto da frente do prédio, até 24 m. O colocável (serviço ou prédio da
+ * Holding) girado a qualquer ângulo (D98) também vê a via pelos lados, pelo fundo e pelos cantos (acessoDaPlanta).
+ */
 function viaPelaFrente(sim, i, out) {
   const P = sim.tabelas.predios;
   const A = sim.tabelas.arestas;
-  const G = sim.grafo;
-  const fx = sen(P.rot[i]);
-  const fz = cos(P.rot[i]);
-  const off = P.d[i] / 2 + 4;
-  const x = P.x[i] + fx * off;
-  const z = P.z[i] + fz * off;
-  const R = 24 + MEIA_MAX;
-  const ids = Array.from(G.gradeArestas.consultar(x - R, z - R, x + R, z + R));
-  let melhor = -1;
-  let md = Infinity;
-  let mt = 0;
-  for (const e of ids) {
-    if (!A.viva[e]) continue;
-    maisPerto(A.p, x, z, 8 * e, MP);
-    const d = MP.d - VIAS[VIAS_ORDEM[A.tipo[e]]].largura / 2;
-    if (d < md && d <= 24) {
-      md = d;
-      melhor = e;
-      mt = MP.t;
-    }
-  }
-  out.e = melhor;
-  out.s = melhor >= 0 ? arcoDoT(A.arco.subarray(17 * melhor, 17 * melhor + 17), mt) : 0;
+  const zona = P.tipo[i] === TIPO_PREDIO.ZONA;
+  const r = acessoDaPlanta(sim, P.x[i], P.z[i], P.rot[i], P.w[i], P.d[i], { soFrente: zona, semRodovia: !zona });
+  out.e = r.e;
+  out.s = r.e >= 0 ? arcoDoT(A.arco.subarray(17 * r.e, 17 * r.e + 17), r.t) : 0;
 }
 
 /** Acesso pelas células da linha 0 do prédio: a aresta delas e o arco médio das colunas. */
@@ -498,14 +483,51 @@ export function acessoDe(sim, i, out = { e: -1, s: 0 }) {
 // ------------------------------------------------------------------------------------------------ colocar
 
 const MEIA_VOLTA = Math.PI / 2;
-const normRot = (r) => ((r % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+const DOIS_PI = 2 * Math.PI;
+const normRot = (r) => ((r % DOIS_PI) + DOIS_PI) % DOIS_PI;
+
+/**
+ * Regras de colocar (D98), em metros e unidades de desenho:
+ *   imaVia      o fantasma procura a via mais perto até tanto da borda da pista e grudar nela (alinhar à via)
+ *   acesso      via a até tanto da borda da planta (de frente, de lado ou de canto) dá acesso ao colocável
+ *   declive     desnível entre o ponto mais alto e o mais baixo da planta que a plataforma resolve sem custo
+ *   aplainar    até este desnível a planta é aplainada com custo (por m³ movido) e uma obra mais longa; acima, recusa
+ */
+export const COLOCAR = Object.freeze({
+  imaVia: 60,
+  acesso: 24,
+  declive: Object.freeze({ piso: 4, fracao: 0.12 }),
+  aplainar: Object.freeze({ piso: 8, fracao: 0.2, custoM3: 0.35, m3PorTique: 100, tiquesMin: 6, tiquesMax: 45 }),
+});
+
+/** Desnível máximo sem custo (livre) e com aplainar, em metros, de uma planta de lados w e d. */
+export function limitesDeclive(w, d) {
+  const lado = Math.max(w, d);
+  return {
+    livre: Math.max(COLOCAR.declive.piso, COLOCAR.declive.fracao * lado),
+    aplainar: Math.max(COLOCAR.aplainar.piso, COLOCAR.aplainar.fracao * lado),
+  };
+}
+
+/** Marco que libera o colocável (o maior entre o do catálogo e o da tabela de desbloqueios dos marcos). */
+export function marcoDoColocavel(tipo, def) {
+  const id = typeof def?.liberado === 'string' ? def.liberado : SERVICOS[tipo] ? `servico.${tipo}` : `holding.${tipo}`;
+  const m = marcoQueLibera(id);
+  return Math.max(def?.marco ?? 0, m > 0 ? m : 0);
+}
+
+/**
+ * true se o tipo dispensa a via: o que só vale num lugar certo (a margem da água, o recurso natural) ou diz
+ * `acesso: 'livre'` no catálogo pode nascer longe de uma via, e o aviso de sem acesso diz que falta ligar a rua.
+ */
+export const dispensaAcesso = (def) => def?.acesso === 'livre' || !!def?.margem || !!def?.recurso;
 
 /** Via mais perto de (x, z) que dá acesso a um colocável (qualquer uma, menos a rodovia), até 60 m da borda. */
 function viaParaColocar(sim, x, z) {
   const A = sim.tabelas.arestas;
   const G = sim.grafo;
   if (!G) return null;
-  const R = 60 + MEIA_MAX;
+  const R = COLOCAR.imaVia + MEIA_MAX;
   let melhor = null;
   for (const e of Array.from(G.gradeArestas.consultar(x - R, z - R, x + R, z + R))) {
     if (!A.viva[e]) continue;
@@ -513,20 +535,28 @@ function viaParaColocar(sim, x, z) {
     if (!tipo || VIAS_ORDEM[A.tipo[e]] === 'rodovia') continue;
     maisPerto(A.p, x, z, 8 * e, MP);
     const d = MP.d - tipo.largura / 2;
-    if (d <= 60 && (!melhor || d < melhor.d)) melhor = { e, t: MP.t, d, px: MP.x, pz: MP.z, meia: tipo.largura / 2 };
+    if (d <= COLOCAR.imaVia && (!melhor || d < melhor.d)) melhor = { e, t: MP.t, d, px: MP.x, pz: MP.z, meia: tipo.largura / 2 };
   }
   return melhor;
 }
 
 /**
- * Lugar de um colocável de frente para a via: { x, z, rot, w, d, e, contorno, giro } ou { codigo: 'acesso' }.
- * `absoluto`: rot é a rotação final (o comando construir com o x, z, rot da prévia); senão é o giro da ferramenta
- * (0, 90, 180 ou 270 graus somados à frente para a via).
+ * Lugar de um colocável: { x, z, rot, w, d, e, alinhado, rotVia?, giro?, contorno }. Dois modos:
+ *   alinhado (alinhar, o padrão, com uma via a até 60 m): a planta gruda na calçada da via mais perto, de frente para ela,
+ *     e gira por cima disso o ângulo `giro` (qualquer um; sem `giro`, o `rot` de antes, arredondado ao quarto de volta). O
+ *     deslocamento até a calçada leva o raio da planta girada naquela direção, para o canto mais perto ficar a 1 m da pista.
+ *   livre (alinhar desligado, ou sem via a 60 m): a planta fica em (x, z) com a rotação `rot`, a que for.
+ * `absoluto` (o comando construir): rot é a rotação final; no modo alinhado o giro sai de `giro` ou de rot menos a da via.
+ * Devolve só { codigo: 'valor' } com números inválidos. O acesso (a via a 24 m) é conferido em conferirLugar.
  */
-export function lugarDoColocavel(sim, def, { x, z, rot = 0 }, absoluto = false) {
+export function lugarDoColocavel(sim, def, { x, z, rot = 0, giro = null, alinhar = true }, absoluto = false) {
   const [w, d] = plantaDe(def);
-  const v = viaParaColocar(sim, x, z);
-  if (!v) return { codigo: 'acesso' };
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return { codigo: 'valor' };
+  const v = alinhar === false ? null : viaParaColocar(sim, x, z);
+  if (!v) {
+    const r = normRot(Number.isFinite(rot) ? rot : 0);
+    return { x, z, rot: r, w, d, e: -1, alinhado: false, alinhar: alinhar !== false, contorno: cantosRetangulo(x, z, r, w, d) };
+  }
   const A = sim.tabelas.arestas;
   const tg = tangente(A.p, v.t, [0, 0], 8 * v.e);
   const c = hipot(tg[0], tg[1]) || 1;
@@ -536,68 +566,179 @@ export function lugarDoColocavel(sim, def, { x, z, rot = 0 }, absoluto = false) 
   const nx = -tz * lado;
   const nz = tx * lado;
   const rotVia = normRot(atan2(-nx, -nz));
-  let giro = absoluto ? Math.round(normRot(rot - rotVia) / MEIA_VOLTA) % 4 : Math.round(normRot(rot) / MEIA_VOLTA) % 4;
-  if (!Number.isFinite(giro)) giro = 0;
-  const fundo = giro % 2 ? w : d;
-  const off = v.meia + fundo / 2 + 1;
+  // sem `giro` (quem chama como antes: o robô, as sugestões) o ângulo em relação à via arredonda ao quarto de volta mais perto
+  const quarto = (r) => (Math.round(normRot(r) / MEIA_VOLTA) % 4) * MEIA_VOLTA;
+  let rel = Number.isFinite(giro) ? normRot(giro) : quarto(absoluto ? rot - rotVia : rot);
+  if (!Number.isFinite(rel)) rel = 0;
+  const rf = normRot(rotVia + rel);
+  // meia extensão da planta girada na direção da normal: fundo/2 de frente para a via, largura/2 de lado
+  const suporte = (d / 2) * Math.abs(cos(rel)) + (w / 2) * Math.abs(sen(rel));
+  const off = v.meia + suporte + 1;
   const cx = v.px + nx * off;
   const cz = v.pz + nz * off;
-  const rf = normRot(rotVia + giro * MEIA_VOLTA);
-  return { x: cx, z: cz, rot: rf, w, d, e: v.e, giro, contorno: cantosRetangulo(cx, cz, rf, w, d) };
+  return { x: cx, z: cz, rot: rf, w, d, e: v.e, alinhado: true, alinhar: true, rotVia, giro: rel, contorno: cantosRetangulo(cx, cz, rf, w, d) };
 }
 
-/** Pontos de amostra dentro da planta (cantos, meio das bordas e uma grade a cada ~8 m). */
+/**
+ * Acesso de uma planta (x, z, rot, w, d) à via: { e, d (m da borda da pista até a sonda), t } da aresta mais perto, ou
+ * e = -1. A mesma conta do acesso de um prédio já construído (viaPelaFrente): sondas 4 m para fora da frente e, sem via
+ * por ali, dos lados, do fundo e dos cantos, a via a até 24 m de alguma. `semRodovia` para o colocável (a rodovia do
+ * mapa não dá acesso a quem constrói: a prévia e o prédio pronto contam igual).
+ */
+function acessoDaPlanta(sim, x, z, rot, w, d, { semRodovia = false, soFrente = false } = {}) {
+  const A = sim.tabelas.arestas;
+  const G = sim.grafo;
+  const fora = { e: -1, d: Infinity, t: 0 };
+  if (!G) return fora;
+  const fx = sen(rot);
+  const fz = cos(rot);
+  const R = COLOCAR.acesso + MEIA_MAX;
+  const procurar = (px, pz) => {
+    let r = { e: -1, d: Infinity, t: 0 };
+    for (const e of Array.from(G.gradeArestas.consultar(px - R, pz - R, px + R, pz + R))) {
+      if (!A.viva[e]) continue;
+      const id = VIAS_ORDEM[A.tipo[e]];
+      if (semRodovia && id === 'rodovia') continue;
+      maisPerto(A.p, px, pz, 8 * e, MP);
+      const dd = MP.d - VIAS[id].largura / 2;
+      if (dd < r.d && dd <= COLOCAR.acesso) r = { e, d: dd, t: MP.t };
+    }
+    return r;
+  };
+  const off = d / 2 + 4;
+  let melhor = procurar(x + fx * off, z + fz * off);
+  if (melhor.e >= 0 || soFrente) return melhor;
+  // eixo da largura: (cos rot, -sen rot); da frente: (sen rot, cos rot)
+  const hw = w / 2 + 4;
+  const hd = d / 2 + 4;
+  for (const [a, b] of [[hw, 0], [-hw, 0], [0, -hd], [hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) {
+    const q = procurar(x + fz * a + fx * b, z - fx * a + fz * b);
+    if (q.e >= 0 && q.d < melhor.d) melhor = q;
+  }
+  return melhor;
+}
+
+/** Amostras dentro da planta (cantos, bordas e uma grade a cada ~8 m): pares x, z e o peso de cada uma (m²). */
 function amostrasDaPlanta(L, passo = 8) {
   const out = [];
+  const pesos = [];
   const fx = sen(L.rot);
   const fz = cos(L.rot);
   const nu = Math.max(1, Math.round(L.w / passo));
   const nv = Math.max(1, Math.round(L.d / passo));
+  const celula = (L.w / nu) * (L.d / nv);
   for (let a = 0; a <= nu; a++) {
     for (let b = 0; b <= nv; b++) {
       const u = (a / nu - 0.5) * L.w;
       const vv = (b / nv - 0.5) * L.d;
       // eixo da frente (largura) é (cos rot, -sen rot); o fundo é a frente (sen, cos)
       out.push(L.x + u * fz + vv * fx, L.z - u * fx + vv * fz);
+      pesos.push(celula * (a === 0 || a === nu ? 0.5 : 1) * (b === 0 || b === nv ? 0.5 : 1));
     }
   }
-  return out;
+  return { pts: out, pesos };
+}
+
+/** Menor deslocamento (m) que separa dois retângulos (contornos de 8 números): 0 se já estão separados. */
+function penetracao(c1, c2) {
+  let menor = Infinity;
+  for (const c of [c1, c2]) {
+    for (let k = 0; k < 2; k++) {
+      const ax = c[2 * (k + 1)] - c[2 * k];
+      const az = c[2 * (k + 1) + 1] - c[2 * k + 1];
+      const L = hipot(ax, az) || 1;
+      const nx = -az / L;
+      const nz = ax / L;
+      let a0 = Infinity;
+      let a1 = -Infinity;
+      let b0 = Infinity;
+      let b1 = -Infinity;
+      for (let j = 0; j < 4; j++) {
+        const p = c1[2 * j] * nx + c1[2 * j + 1] * nz;
+        const q = c2[2 * j] * nx + c2[2 * j + 1] * nz;
+        if (p < a0) a0 = p;
+        if (p > a1) a1 = p;
+        if (q < b0) b0 = q;
+        if (q > b1) b1 = q;
+      }
+      const ov = Math.min(a1, b1) - Math.max(a0, b0);
+      if (ov <= 0) return 0;
+      if (ov < menor) menor = ov;
+    }
+  }
+  return menor === Infinity ? 0 : menor;
 }
 
 /**
- * Confere o lugar (sem mudar nada). Devolve { codigo, demolir: [idx de prédios de zona sob a planta], cota }.
+ * Confere o lugar (sem mudar nada). Devolve { codigo, dados?, demolir: [idx de prédios de zona sob a planta], cota, e,
+ * aplainar? }. `dados` diz o que a interface precisa para a dica de cada recusa (o motivo e o que fazer):
+ *   marco     { marco }                      ladrilho { estado: 'compravel' | 'trancado' }     agua { sobre | margem }
+ *   acesso    { max, alinhar }               colisao  { com: 'via' | 'predio', ref, afastar, nome? }
+ *   declive   { desnivel, max, livre }       recurso  { recurso, media, minimo }
+ * `aplainar` (planta sobre declive entre o livre e o máximo, e só com `{ aplainar: true }`): { desnivel, livre, max, volume,
+ * custo, tiques }.
  */
-export function conferirLugar(sim, tipo, def, L) {
+export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = false } = {}) {
   const P = sim.tabelas.predios;
   const A = sim.tabelas.arestas;
   const T = sim.espelho.terreno;
-  if (!colocavelLiberado(sim, tipo, def)) return { codigo: 'marco' };
-  const pts = amostrasDaPlanta(L);
+  if (!colocavelLiberado(sim, tipo, def)) return { codigo: 'marco', dados: { marco: marcoDoColocavel(tipo, def) } };
+  const { pts, pesos } = amostrasDaPlanta(L);
+  const alturas = new Float64Array(pts.length / 2);
   let hmin = Infinity;
   let hmax = -Infinity;
   for (let k = 0; k < pts.length; k += 2) {
     const x = pts[k];
     const z = pts[k + 1];
-    if (sim.espelho.ladrilhos && !daHolding(sim, x, z)) return { codigo: 'ladrilho' };
+    if (sim.espelho.ladrilhos && !daHolding(sim, x, z)) {
+      const [i, j] = ladrilhoDe(x, z);
+      const est = i >= 0 ? sim.espelho.ladrilhos.estado[j * sim.espelho.ladrilhos.n + i] : LADRILHO.TRANCADO;
+      return { codigo: 'ladrilho', dados: { estado: est === LADRILHO.COMPRAVEL ? 'compravel' : 'trancado' } };
+    }
     if (naGleba(sim, x, z, 0)) return { codigo: 'gleba' };
-    if (T?.agua && aguaEm(T, x, z) !== AGUA.TERRA) return { codigo: 'agua' };
+    if (T?.agua && aguaEm(T, x, z) !== AGUA.TERRA) return { codigo: 'agua', dados: { sobre: true } };
     const h = sim.alturaEm(x, z);
+    alturas[k / 2] = h;
     if (h < hmin) hmin = h;
     if (h > hmax) hmax = h;
   }
-  if (hmax - hmin > Math.max(4, 0.12 * Math.max(L.w, L.d))) return { codigo: 'declive' };
-  // vias que cortam a planta
+  // acesso à via: pelas sondas da planta (a mesma conta do prédio construído); quem só vale num lugar certo dispensa
+  const ac = acessoDaPlanta(sim, L.x, L.z, L.rot, L.w, L.d, { semRodovia: true });
+  const e = ac.e;
+  if (e < 0 && !dispensaAcesso(def)) return { codigo: 'acesso', dados: { max: L.alinhar ? COLOCAR.imaVia : COLOCAR.acesso, alinhar: L.alinhar }, e };
+  // declive: até o livre a plataforma resolve; até o máximo é aplainar com custo (só para quem aceita pagar, como a
+  // interface, que mostra o custo antes: quem chama sem o saber, como antes, para no livre); acima, recusa
+  const lim = limitesDeclive(L.w, L.d);
+  const desnivel = hmax - hmin;
+  const teto = aceitaAplainar ? lim.aplainar : lim.livre;
+  if (desnivel > teto) return { codigo: 'declive', dados: { desnivel, max: teto, livre: lim.livre }, e };
+  const cota = Math.floor(sim.alturaEm(L.x, L.z) * 100) / 100;
+  let aplainar = null;
+  if (desnivel > lim.livre) {
+    // volume movido (corte mais aterro) até a cota da plataforma, pela regra do trapézio sobre as amostras
+    let soma = 0;
+    for (let k = 0; k < alturas.length; k++) soma += Math.abs(alturas[k] - cota) * pesos[k];
+    const volume = Math.round(soma);
+    const r = COLOCAR.aplainar;
+    aplainar = {
+      desnivel, livre: lim.livre, max: lim.aplainar, volume, custo: Math.round(volume * r.custoM3),
+      tiques: Math.min(r.tiquesMax, Math.max(r.tiquesMin, Math.round(volume / r.m3PorTique))),
+    };
+  }
+  // vias que cortam a planta: a pior invasão da pista vira o quanto afastar
   const R = Math.max(L.w, L.d) / 2 + MEIA_MAX;
   const ids = Array.from(sim.grafo.gradeArestas.consultar(L.x - R, L.z - R, L.x + R, L.z + R));
   const DE = { d: 0, s: 0 };
-  for (const e of ids) {
-    if (!A.viva[e]) continue;
-    const meia = VIAS[VIAS_ORDEM[A.tipo[e]]].largura / 2;
-    const ex = eixoDa(sim, e);
+  for (const a of ids) {
+    if (!A.viva[a]) continue;
+    const meia = VIAS[VIAS_ORDEM[A.tipo[a]]].largura / 2;
+    const ex = eixoDa(sim, a);
+    let pen = -Infinity;
     for (let k = 0; k < pts.length; k += 2) {
       distEixo(ex, pts[k], pts[k + 1], DE, meia + 1);
-      if (DE.d < meia - 0.25) return { codigo: 'colisao' };
+      if (DE.d < meia - 0.25 && meia - DE.d > pen) pen = meia - DE.d;
     }
+    if (pen > -Infinity) return { codigo: 'colisao', dados: { com: 'via', ref: refDe(a, A.ger[a]), afastar: Math.ceil(pen + 1) }, e };
   }
   // prédios: de zona saem (CS2); serviço e Holding batem
   const demolir = [];
@@ -611,34 +752,37 @@ export function conferirLugar(sim, tipo, def, L) {
   for (const i of prediosNaCaixa(sim, caixa[0], caixa[1], caixa[2], caixa[3])) {
     if (!sobrepoe(P, i, L)) continue;
     if (P.tipo[i] === TIPO_PREDIO.ZONA) demolir.push(i);
-    else return { codigo: 'colisao' };
+    else {
+      const c2 = cantosRetangulo(P.x[i], P.z[i], P.rot[i], P.w[i], P.d[i]);
+      const k = tipoDoPredio(sim, i);
+      return { codigo: 'colisao', dados: { com: 'predio', ref: P.ref(i), afastar: Math.max(1, Math.ceil(penetracao(L.contorno, c2) + 0.5)), nome: k.def?.nome ?? null }, e };
+    }
   }
   // água na margem (captação, ETE): água a até `margem` metros do fundo da planta
   if (def.margem && T?.agua) {
     const fx = sen(L.rot);
     const fz = cos(L.rot);
     let achou = false;
-    const meio = L.giro % 2 ? L.w : L.d;
     for (let s = -1; s <= 1 && !achou; s += 0.5) {
       for (let m = 0; m <= def.margem && !achou; m += 4) {
         // o fundo fica do lado oposto à frente
-        const off = meio / 2 + m;
+        const off = L.d / 2 + m;
         const lx = fz * s * (L.w / 2);
         const lz = -fx * s * (L.w / 2);
         if (aguaEm(T, L.x - fx * off + lx, L.z - fz * off + lz) !== AGUA.TERRA) achou = true;
       }
     }
-    if (!achou) return { codigo: 'agua' };
+    if (!achou) return { codigo: 'agua', dados: { margem: def.margem }, e };
   }
   if (def.recurso && sim.espelho.recursos) {
     const r = recursoNoPoligono(sim.espelho.recursos, def.recurso, L.contorno);
-    if (!(r.media >= 20)) return { codigo: 'recurso' };
+    if (!(r.media >= 20)) return { codigo: 'recurso', dados: { recurso: def.recurso, media: Math.round(r.media ?? 0), minimo: 20 }, e };
   }
   if (typeof def.validar === 'function') {
     const c = def.validar(sim, L);
-    if (c) return { codigo: c };
+    if (c) return { codigo: c, e };
   }
-  return { codigo: null, demolir, cota: Math.floor(sim.alturaEm(L.x, L.z) * 100) / 100 };
+  return { codigo: null, demolir, cota, aplainar, e };
 }
 
 function sobrepoe(P, i, L) {
@@ -652,8 +796,12 @@ function sobrepoe(P, i, L) {
 export const manutencaoDe = (def) => def?.manutencaoHora ?? def?.manutencao ?? def?.manut ?? 0;
 
 /**
- * q.construir.previa({ tipo, x, z, rot }) → { ok, codigo?, x, z, rot, custo, custoDemolir, manutencaoHora, alcance, efeitos,
- * pegada, demolir }. O custo já soma a demolição dos prédios de zona sob a planta (D54).
+ * q.construir.previa({ tipo, x, z, rot, giro?, alinhar?, aplainar?, absoluto? }) → { ok, codigo?, dados?, x, z, rot, alinhado, rotVia,
+ * giro, via, custo, custoDemolir, custoAplainar, aplainar, manutencaoHora, alcance, efeitos, pegada, demolir }. O custo já soma a
+ * demolição dos prédios de zona sob a planta (D54) e o aplainar. `alinhar` (padrão sim) gruda na via mais perto até 60 m
+ * e gira `giro` (ou `rot`) por cima; com alinhar falso, ou sem via a 60 m, a planta fica em (x, z) com a rotação `rot`.
+ * `aplainar` (padrão não; a interface sempre manda sim) aceita o declive até o máximo pagando o aplainar; sem ele o
+ * declive acima do livre recusa, como antes.
  */
 export function previaConstruir(sim, args = {}) {
   const { tipo } = args;
@@ -661,18 +809,24 @@ export function previaConstruir(sim, args = {}) {
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   if (!def || !num(args.x) || !num(args.z)) return { ok: false, codigo: 'valor', x: args.x, z: args.z, rot: args.rot ?? 0, custo: 0, manutencaoHora: 0, alcance: 0, efeitos: [] };
   const base = { custo: def.custo ?? 0, manutencaoHora: manutencaoDe(def), alcance: def.raio ?? def.alcance ?? 0, pegada: plantaDe(def) };
-  const L = lugarDoColocavel(sim, def, { x: args.x, z: args.z, rot: num(args.rot) ? args.rot : 0 }, !!args.absoluto);
+  const L = lugarDoColocavel(sim, def, { x: args.x, z: args.z, rot: num(args.rot) ? args.rot : 0, giro: num(args.giro) ? args.giro : null, alinhar: args.alinhar !== false }, !!args.absoluto);
   if (L.codigo) return { ok: false, codigo: L.codigo, x: args.x, z: args.z, rot: args.rot ?? 0, ...base, efeitos: [] };
-  const c = conferirLugar(sim, tipo, def, L);
+  const c = conferirLugar(sim, tipo, def, L, { aplainar: args.aplainar === true });
+  L.e = c.e ?? L.e;
   const P = sim.tabelas.predios;
+  const A = sim.tabelas.arestas;
   const dem = custoDosDemolidos(sim, c.demolir);
+  const apl = c.aplainar?.custo ?? 0;
   const out = {
-    ...base, custo: base.custo + dem, custoDemolir: dem, x: L.x, z: L.z, rot: L.rot, efeitos: efeitosDaPrevia(sim, tipo, def, L),
+    ...base, custo: base.custo + dem + apl, custoDemolir: dem, custoAplainar: apl, aplainar: c.aplainar ?? null,
+    x: L.x, z: L.z, rot: L.rot, alinhado: L.alinhado, rotVia: L.rotVia ?? null, giro: L.giro ?? null,
+    via: L.e >= 0 && A.viva[L.e] ? refDe(L.e, A.ger[L.e]) : null,
+    efeitos: efeitosDaPrevia(sim, tipo, def, L),
     demolir: (c.demolir ?? []).map((i) => P.ref(i)),
     // produtor de rede de frente para uma rua sem canos nem cabos (terra): pode construir, mas não liga até melhorar
     semRede: produtorDeRede(tipo, def) && !viaComRede(sim, L.e),
   };
-  if (c.codigo) return { ok: false, codigo: c.codigo, ...out };
+  if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null, ...out };
   const caixa = sim.holding.caixa();
   if (caixa < out.custo) return { ok: false, codigo: 'creditos', dados: { faltam: out.custo - caixa }, ...out };
   return { ok: true, ...out };
@@ -703,17 +857,21 @@ function efeitosDaPrevia(sim, tipo, def, L) {
   return out;
 }
 
-/** comando construir { tipo, x, z, rot } (o x, z e rot da prévia; rot é a rotação final). */
+/**
+ * comando construir { tipo, x, z, rot, giro?, alinhar?, aplainar? } (o x, z e rot da prévia; rot é a rotação final). `alinhar` falso
+ * põe a planta exatamente em (x, z, rot); o padrão gruda na via como a prévia, com o `giro` dela (sem ele, o ângulo em
+ * relação à via arredonda ao quarto de volta, como antes). O aplainar entra no custo e alonga a obra.
+ */
 export function construir(sim, args = {}) {
   const { tipo } = args;
   const def = sim.colocaveis.obter(tipo);
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   if (!def || !num(args.x) || !num(args.z)) return { ok: false, codigo: 'valor' };
-  const L = lugarDoColocavel(sim, def, { x: args.x, z: args.z, rot: num(args.rot) ? args.rot : 0 }, true);
+  const L = lugarDoColocavel(sim, def, { x: args.x, z: args.z, rot: num(args.rot) ? args.rot : 0, giro: num(args.giro) ? args.giro : null, alinhar: args.alinhar !== false }, true);
   if (L.codigo) return { ok: false, codigo: L.codigo };
-  const c = conferirLugar(sim, tipo, def, L);
-  if (c.codigo) return { ok: false, codigo: c.codigo };
-  const custo = (def.custo ?? 0) + custoDosDemolidos(sim, c.demolir);
+  const c = conferirLugar(sim, tipo, def, L, { aplainar: args.aplainar === true });
+  if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null };
+  const custo = (def.custo ?? 0) + custoDosDemolidos(sim, c.demolir) + (c.aplainar?.custo ?? 0);
   if (sim.holding.caixa() < custo) return { ok: false, codigo: 'creditos', dados: { faltam: custo - sim.holding.caixa() } };
   if (custo > 0 && !sim.holding.pagar(custo, 'construcao')) return { ok: false, codigo: 'creditos' };
   const P = sim.tabelas.predios;
@@ -738,7 +896,8 @@ export function construir(sim, args = {}) {
   P.nivel[i] = 1;
   P.estilo[i] = 0;
   P.semente[i] = sim.rng('construir').u32();
-  const dur = Math.max(1, def.obraTiques ?? 60);
+  // o aplainar é uma obra curta antes da obra do prédio: soma os tiques de terraplenagem
+  const dur = Math.max(1, def.obraTiques ?? 60) + (c.aplainar?.tiques ?? 0);
   P.flags[i] = PREDIO.OBRA | (servico ? 0 : PREDIO.HOLDING);
   P.obraIni[i] = T;
   P.obraFim[i] = T + dur;
@@ -756,7 +915,7 @@ export function construir(sim, args = {}) {
   if (def.xp) sim.progresso.xp(def.xp, servico ? 'servico' : 'holding');
   if (demolidos.length) sim.emitir('demolido', { tipo: 'predio', refs: demolidos });
   sim.emitir('construido', { tipo, refs: [ref] });
-  return { ok: true, id: ref, dados: { ref, demolidos } };
+  return { ok: true, id: ref, dados: { ref, demolidos, aplainar: c.aplainar ?? null } };
 }
 
 // ------------------------------------------------------------------------------------------------ demolir
@@ -898,7 +1057,12 @@ export function consultaAvisos(sim, { perto = null, limite = 20 } = {}) {
 
 // ------------------------------------------------------------------------------------------------ catálogo
 
-/** q.catalogo(categoria) → [{ tipo, nome, custo, manutencaoHora, marco, liberado, grupo, capacidade, alcance, pegada, faz }]. */
+/**
+ * q.catalogo(categoria) → [{ tipo, nome, custo, manutencaoHora, marco, marcoLibera, liberado, grupo, capacidade, alcance,
+ * pegada, faz, acesso }]. Tudo o que o marco já liberou vem `liberado` (a escolha é livre: nem o objetivo nem a etapa do
+ * guia prendem, D98); o que não, diz em `marcoLibera` qual marco falta. `acesso`: 'via' pede uma via a até 24 m da planta;
+ * 'livre' (margem da água, recurso natural) pode nascer longe dela.
+ */
 export function catalogo(sim, categoria) {
   const out = [];
   const tipos = sim.colocaveis.tipos();
@@ -910,8 +1074,9 @@ export function catalogo(sim, categoria) {
     if (!parteOk(def.parte)) continue;
     out.push({
       tipo, nome: def.nome ?? tipo, categoria: barra, grupo: BARRAS.includes(def.categoria) ? null : def.categoria ?? null, custo: def.custo ?? 0,
-      manutencaoHora: manutencaoDe(def), marco: def.marco ?? 0, liberado: colocavelLiberado(sim, tipo, def),
+      manutencaoHora: manutencaoDe(def), marco: def.marco ?? 0, marcoLibera: marcoDoColocavel(tipo, def), liberado: colocavelLiberado(sim, tipo, def),
       capacidade: def.capacidade ?? null, alcance: def.raio ?? def.alcance ?? 0, pegada: plantaDe(def), faz: def.faz ?? null,
+      acesso: dispensaAcesso(def) ? 'livre' : 'via',
     });
   }
   return out;
@@ -969,6 +1134,10 @@ export function consultaPredio(sim, ref) {
     if (!(P.avisos[i] & a.bit)) continue;
     const g = a.bit === AV.ABANDONO && P.problema[i] >= ABANDONO.vermelho ? 'grave' : a.gravidade;
     out.avisos.push({ codigo: a.codigo, gravidade: g, desde: Math.max(0, T - P.problema[i]), acao: acaoDoAviso(a.codigo) });
+  }
+  // colocável sem via a 24 m (nasceu longe dela, D98): o aviso diz para ligar uma via; a zona tem o seu bit
+  if (k.tipo !== 'zona' && via.e < 0 && !out.avisos.some((a) => a.codigo === 'semAcesso')) {
+    out.avisos.push({ codigo: 'semAcesso', gravidade: 'grave', desde: Math.max(0, T - (P.obraIni[i] ?? 0)), acao: acaoDoAviso('semAcesso') });
   }
   for (const fn of partesPredio) fn(sim, i, out);
   if (k.tipo === 'holding' && typeof sim.holding.folha === 'function') out.holding = sim.holding.folha(ref) ?? null;

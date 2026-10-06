@@ -20,7 +20,7 @@ import { Vazio } from '../../comp/Vazio.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
 import { tomarAba } from '../../hud/Menu.jsx';
 import {
-  nomeParte, nomeEtapa, nomeTrecho, fraseEfeito, glifoEfeito, fraseRecusa, faltaImportar, custoImportar, alvoDaParte,
+  nomeParte, nomeEtapa, nomeTrecho, fraseEfeito, glifoEfeito, fraseRecusa, fraseParalelo, faltaImportar, custoImportar, alvoDaParte,
   iniciarEtapa, importarFalta, importando, verNoMapa,
 } from '../LivroArcologia.jsx';
 
@@ -67,6 +67,7 @@ function Entrega({ e }) {
 /** Uma etapa do Ato 1. */
 function Etapa({ ui, e, n, de, parte, etapas, caixa, dep }) {
   const recusa = fraseRecusa(e, etapas, caixa);
+  const paralelo = fraseParalelo(e, etapas);
   const falta = e.estado === 1 || e.estado === 2 ? faltaImportar(e, importando(dep)) : [];
   const custoFalta = custoImportar(falta, dep);
   const fases = e.fases ?? [];
@@ -78,6 +79,7 @@ function Etapa({ ui, e, n, de, parte, etapas, caixa, dep }) {
       class="livro-etapa"
     >
       <Linha glifo="arcologia" cor="var(--ch)" titulo={nomeEtapa(e)} sub={recusa ?? (e.estado === 3 && e.fim ? t('x1.data.fim', { data: data(e.fim) }) : e.estado === 2 && e.ini ? t('x1.data.inicio', { data: data(e.ini) }) : null)} />
+      {paralelo ? <Chip glifo="obra" texto={paralelo} estado={e.estado === 2 ? 'ch' : 'ok'} class="livro-paralelo" /> : null}
       {e.estado === 2 ? (
         <>
           <Barra valor={e.progresso ?? 0} estado="ch" rotulo={nomeEtapa(e)} texto={`${t('x1.fase', { n: (e.fase ?? 0) + 1, de: fases.length || 4, nome: nomeFase })} · ${fmt.pct(e.progresso ?? 0)}`} />
@@ -101,7 +103,7 @@ function Etapa({ ui, e, n, de, parte, etapas, caixa, dep }) {
       <Entrega e={e} />
       <div class="eco-acoes">
         {e.estado === 1 ? (
-          <Botao a="livro.iniciar" k={e.id} rotulo={t('x1.iniciar', { v: fmt.dinheiro(e.creditos ?? 0) })} principal class="bt-pri" desligado={caixa < (e.creditos ?? 0)} onClick={() => iniciarEtapa(e.id)}>
+          <Botao a="livro.iniciar" k={e.id} rotulo={t('x1.iniciar', { v: fmt.dinheiro(e.creditos ?? 0) })} principal class="bt-pri" desligado={caixa < (e.creditos ?? 0) || e.recusa === 'ocupado'} onClick={() => iniciarEtapa(e.id)}>
             <Glifo n="construir" tam={18} />
             {t('x1.iniciar', { v: fmt.dinheiro(e.creditos ?? 0) })}
           </Botao>
@@ -136,6 +138,7 @@ function Ato1({ ui, a, caixa, dep }) {
       <div class="gest-col">
         <Indicador rotulo={t('x1.sede')} valor={fmt.pct(a.progressoTotal ?? 0)} sub={t('x1.total', { n: etapas.filter((e) => e.estado === 3).length, de: etapas.length })} glifo="arcologia" grande />
         <Barra valor={a.progressoTotal ?? 0} estado={a.inaugurada ? 'ok' : 'ch'} rotulo={t('x1.sede')} />
+        {a.equipes ? <Indicador rotulo={t('ux1.livro.equipes')} valor={t('ux1.livro.equipes.valor', { n: a.equipes.ocupadas, de: a.equipes.total })} sub={t('ux1.livro.equipes.sub')} glifo="obra" /> : null}
         {Number.isFinite(a.valor) ? <Indicador rotulo={t('x1.investido')} valor={fmt.dinheiro(a.valor)} sub={t('x1.investido.sub')} glifo="valuation" /> : null}
         {al ? (
           <Indicador rotulo={t('x1.alturas')} valor={t('x1.alturas.valor', { b: fmt.numero(al.blade), l: fmt.numero(al.legacy) })} sub={al.ponte ? t('x1.ponte.pronta') : t('x1.ponte.espera')} glifo="nivel" />

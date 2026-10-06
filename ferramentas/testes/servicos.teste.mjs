@@ -12,7 +12,7 @@ import { CELULA, PREDIO, TIPO_PREDIO } from '../../fonte/contratos/flags.js';
 import { indiceZona } from '../../fonte/data/zonas.js';
 import { SERVICOS, SERVICOS_ORDEM } from '../../fonte/data/servicos.js';
 import { garantirCobertura, coberturaNoPonto, sistemaCargas, buscar, atualizarServico } from '../../fonte/sim/servicos.js';
-import { trans, acessoDe } from '../../fonte/sim/predios.js';
+import { trans, acessoDe, limitesDeclive, COLOCAR, dispensaAcesso } from '../../fonte/sim/predios.js';
 import { terminarObra, nascerNaFrente } from '../../fonte/sim/zonas/crescimento.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 
@@ -89,7 +89,14 @@ test('recusas: marco, valor, sem acesso, captação longe da água e créditos',
   assert.equal(sim.q.construir.previa({ tipo: 'clinica', x: 1200, z: -330 }).codigo, 'marco');
   assert.equal(sim.q.construir.previa({ tipo: 'nada', x: 0, z: 0 }).codigo, 'valor');
   assert.equal(sim.cmd('construir', { tipo: 'praca', x: NaN, z: 0 }).codigo, 'valor');
-  assert.equal(sim.q.construir.previa({ tipo: 'praca', x: 3000, z: 3000 }).codigo, 'acesso');
+  // fora das áreas da Holding o motivo é o ladrilho (D98: o motivo mais básico primeiro); sem via por perto, o acesso
+  const fora = sim.q.construir.previa({ tipo: 'praca', x: 3000, z: 3000 });
+  assert.equal(fora.codigo, 'ladrilho');
+  assert.equal(fora.dados.estado, 'trancado');
+  assert.equal(sim.q.construir.previa({ tipo: 'praca', x: 2200, z: -300 }).dados.estado, 'compravel');
+  const sem = sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -1280 });
+  assert.equal(sem.codigo, 'acesso');
+  assert.deepEqual(sem.dados, { max: 60, alinhar: true });
   // a captação pede água a até 40 m do fundo: no meio da rua, longe do rio, não
   assert.equal(sim.q.construir.previa({ tipo: 'captacao', x: 1200, z: -330 }).codigo, 'agua');
   // créditos: a Holding sem caixa
@@ -333,4 +340,192 @@ test('q.barra entre os tiques não muda a partida (custo dos serviços em cache)
     return { hash: sim.q.hash(), caixa: sim.holding.caixa() };
   };
   assert.deepEqual(jogar(true), jogar(false));
+});
+
+// ------------------------------------------------------------------------------------------------ colocar com giro livre (D98)
+
+/** Terreiro de teste: 32 x 32 m, livre de via (dispensa o acesso), para medir o declive e o aplainar sem rua. */
+function comTerreiro(sim) {
+  sim.colocaveis.registrar('terreiro', { nome: 'Terreiro', custo: 1000, planta: [32, 32], marco: 0, parte: 'M1a', holding: true, acesso: 'livre', obraTiques: 40, modelo: 0, tipoPredio: TIPO_PREDIO.HOLDING });
+}
+
+/** Varre o mapa (a leste da gleba) até achar um ponto onde a prévia livre do tipo satisfaz o filtro. */
+function achar(sim, tipo, filtro, { rot = 0, x0 = 1100, x1 = 2000, z0 = -1400, z1 = 900, passo = 40 } = {}) {
+  for (let z = z0; z <= z1; z += passo) {
+    for (let x = x0; x <= x1; x += passo) {
+      const p = sim.q.construir.previa({ tipo, x, z, rot, alinhar: false, aplainar: true });
+      if (filtro(p)) return { x, z, p };
+    }
+  }
+  return null;
+}
+
+test('colocar (D98): a planta gira de verdade na colisão com a via e a recusa diz quanto afastar', () => {
+  const sim = criarSimulacao({ semente: 'ux1-giro', modo: 'livre' });
+  rua(sim, [[960, -300], [1440, -300]]);
+  // praça 32 x 32 sem alinhar, a 25 m do eixo: de lado cabe (a pista acaba a 8 m do eixo), em losango o canto invade
+  const livre = (rot) => sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -325, rot, alinhar: false });
+  assert.equal(livre(0).ok, true);
+  const losango = livre(Math.PI / 4);
+  assert.equal(losango.codigo, 'colisao');
+  assert.equal(losango.dados.com, 'via');
+  assert.ok(Number.isInteger(losango.dados.ref));
+  // o canto entra uns 5,6 m na pista: afastar 7 m (a invasão mais 1 m de folga)
+  assert.ok(losango.dados.afastar >= 6 && losango.dados.afastar <= 8, `afastar ${losango.dados.afastar}`);
+  // alinhada, a planta girada 45 graus por cima da via encosta o canto a 1 m da pista e vale
+  const alin = sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -325, rot: 0, giro: Math.PI / 4 });
+  assert.equal(alin.ok, true);
+  assert.equal(alin.alinhado, true);
+  // o centro afasta o raio da planta girada na direção da via: meia largura 8 + 1 + (16 cos 45 + 16 sen 45)
+  assert.ok(Math.abs(-300 - alin.z - (8 + 1 + 16 * Math.SQRT2)) < 0.05, `z ${alin.z}`);
+  assert.ok(Math.abs(alin.rot - (alin.rotVia + Math.PI / 4)) < 1e-9);
+  // o quarto de volta de antes (giro como rot, sem giro) continua dando o mesmo lugar
+  const quarto = sim.q.construir.previa({ tipo: 'clinica', x: 1200, z: -330, rot: Math.PI / 2 });
+  const quarto2 = sim.q.construir.previa({ tipo: 'clinica', x: 1200, z: -330, rot: 0, giro: Math.PI / 2 });
+  assert.equal(quarto.ok, true);
+  assert.deepEqual([quarto.x, quarto.z, quarto.rot], [quarto2.x, quarto2.z, quarto2.rot]);
+  assert.ok(Math.abs(-300 - quarto.z - (8 + 1 + 40 / 2)) < 0.05, 'de lado: a largura (40) é a que encosta na via');
+  // sem `giro` o ângulo em relação à via arredonda ao quarto de volta, como antes (o robô e as sugestões chamam assim)
+  const antiga = sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -325, rot: Math.PI / 4 });
+  const zero = sim.q.construir.previa({ tipo: 'praca', x: 1200, z: -325, rot: 0 });
+  assert.equal(antiga.ok, true);
+  assert.ok(Math.abs(antiga.giro - Math.PI / 2) < 1e-9, `45 graus sem giro arredondam para ${antiga.giro}`);
+  assert.equal(zero.giro, 0);
+  // o comando põe onde a prévia mostrou, a qualquer ângulo (com o giro da prévia), e a obra guarda a rotação
+  const r = sim.cmd('construir', { tipo: 'praca', x: alin.x, z: alin.z, rot: alin.rot, giro: alin.giro, alinhar: true });
+  assert.equal(r.ok, true, r.codigo);
+  const i = idxDaRef(r.id);
+  assert.ok(Math.abs(sim.tabelas.predios.rot[i] - alin.rot) < 1e-6);
+  assert.ok(Math.abs(sim.tabelas.predios.x[i] - alin.x) < 1e-6);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('colocar (D98): o declive da planta girada e a faixa de aplainar com custo pelo volume e obra mais longa', () => {
+  const sim = criarSimulacao({ semente: 'ux1-aplainar', modo: 'livre' });
+  comTerreiro(sim);
+  const lim = limitesDeclive(32, 32);
+  assert.deepEqual(lim, { livre: 4, aplainar: 8 });
+  assert.deepEqual(limitesDeclive(64, 48), { livre: 7.68, aplainar: 12.8 });
+  const a = achar(sim, 'terreiro', (p) => p.ok && p.aplainar);
+  assert.ok(a, 'o mapa tem lugar que pede aplainar');
+  const ap = a.p.aplainar;
+  assert.ok(ap.desnivel > lim.livre && ap.desnivel <= lim.aplainar, `desnível ${ap.desnivel}`);
+  assert.equal(ap.livre, 4);
+  assert.equal(ap.max, 8);
+  assert.ok(ap.volume > 0);
+  assert.equal(ap.custo, Math.round(ap.volume * COLOCAR.aplainar.custoM3), 'custo proporcional ao volume movido');
+  assert.ok(ap.tiques >= COLOCAR.aplainar.tiquesMin && ap.tiques <= COLOCAR.aplainar.tiquesMax);
+  assert.equal(a.p.custoAplainar, ap.custo);
+  assert.equal(a.p.custo, 1000 + ap.custo, 'o custo da prévia já soma o aplainar');
+  // a pegada gira de verdade na medida do declive: o mesmo centro, outro ângulo, outro desnível
+  const girada = sim.q.construir.previa({ tipo: 'terreiro', x: a.x, z: a.z, rot: Math.PI / 4, alinhar: false, aplainar: true });
+  const igual = girada.ok && girada.aplainar && Math.abs(girada.aplainar.desnivel - ap.desnivel) < 1e-9;
+  assert.ok(!igual, 'a pegada girada mede outro terreno (o desnível muda com o ângulo)');
+  // acima do máximo: declive, com o desnível e o máximo na recusa
+  const d = achar(sim, 'terreiro', (p) => p.codigo === 'declive');
+  assert.ok(d);
+  const semAplainar = sim.q.construir.previa({ tipo: 'terreiro', x: a.x, z: a.z, rot: 0, alinhar: false });
+  assert.equal(semAplainar.codigo, 'declive', 'sem aceitar o aplainar a prévia de antes recusa');
+  assert.ok(d.p.dados.desnivel > d.p.dados.max && d.p.dados.max === 8, JSON.stringify(d.p.dados));
+  // abaixo do livre: sem custo de aplainar
+  const plano = achar(sim, 'terreiro', (p) => p.ok && !p.aplainar);
+  assert.ok(plano);
+  assert.equal(plano.p.custoAplainar, 0);
+  assert.equal(plano.p.custo, 1000);
+  // construir paga o aplainar, alonga a obra e deixa a plataforma plana na cota
+  const caixa0 = sim.holding.caixa();
+  // quem chama sem aceitar o aplainar (o robô, as sugestões) continua recusando o declive acima do livre, como antes
+  const sem = sim.cmd('construir', { tipo: 'terreiro', x: a.p.x, z: a.p.z, rot: a.p.rot, alinhar: false });
+  assert.equal(sem.codigo, 'declive');
+  assert.equal(sem.dados.max, 4, 'o máximo sem aplainar é o livre');
+  assert.equal(sim.holding.caixa(), caixa0, 'a recusa não cobra');
+  const r = sim.cmd('construir', { tipo: 'terreiro', x: a.p.x, z: a.p.z, rot: a.p.rot, alinhar: false, aplainar: true });
+  assert.equal(r.ok, true, r.codigo);
+  assert.equal(r.dados.aplainar.custo, ap.custo);
+  assert.equal(caixa0 - sim.holding.caixa(), 1000 + ap.custo);
+  const P = sim.tabelas.predios;
+  const i = idxDaRef(r.id);
+  assert.equal(P.obraFim[i] - P.obraIni[i], 40 + ap.tiques, 'a obra curta do aplainar soma os tiques de terraplenagem');
+  for (const [dx, dz] of [[-12, -12], [12, -12], [-12, 12], [12, 12], [0, 0]]) assert.ok(Math.abs(sim.alturaEm(a.p.x + dx, a.p.z + dz) - P.y[i]) < 0.05, `plano em ${dx},${dz}`);
+  assert.deepEqual(conferirEspelho(sim.espelho, { alturaEm: (x, z) => sim.alturaEm(x, z) }), []);
+  assert.deepEqual(sim.validar(), []);
+  // sem caixa para o aplainar: recusa com o que falta, sem mudar nada
+  sim.holding.pagar(sim.holding.caixa() - 1000, 'teste');
+  const b = achar(sim, 'terreiro', (p) => p.codigo === 'creditos' && p.aplainar, { x0: 1300 });
+  assert.ok(b, 'um lugar que pede aplainar e o caixa não paga');
+  assert.equal(b.p.dados.faltam, b.p.custo - 1000);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('colocar (D98): cada código de vermelho traz o seu dado (marco, gleba, água, acesso, recurso, colisão com prédio)', () => {
+  const sim = criarSimulacao({ semente: 'ux1-codigos' });
+  comTerreiro(sim);
+  rua(sim, [[1100, -300], [1500, -300]]);
+  // marco: a clínica abre no marco 1 (o catálogo diz o mesmo)
+  const m = sim.q.construir.previa({ tipo: 'clinica', x: 1300, z: -330 });
+  assert.equal(m.codigo, 'marco');
+  assert.equal(m.dados.marco, 1);
+  assert.equal(sim.q.catalogo('servicos').find((x) => x.tipo === 'clinica').marcoLibera, 1);
+  assert.equal(sim.q.catalogo('lazer').find((x) => x.tipo === 'praca').marcoLibera, 0);
+  // gleba: o centro do disco da sede
+  assert.equal(sim.q.construir.previa({ tipo: 'terreiro', x: 200, z: 190, rot: 0, alinhar: false }).codigo, 'gleba');
+  // água: em cima do mar
+  const ag = achar(sim, 'terreiro', (p) => p.codigo === 'agua');
+  assert.ok(ag && ag.p.dados.sobre === true);
+  // acesso: a praça sem via a 60 m (alinhar) e a 24 m (livre), e o que dispensa a via vale
+  const sem = sim.q.construir.previa({ tipo: 'praca', x: 1300, z: -1280 });
+  assert.equal(sem.codigo, 'acesso');
+  assert.deepEqual(sem.dados, { max: 60, alinhar: true });
+  assert.equal(sim.q.construir.previa({ tipo: 'praca', x: 1300, z: -1280, alinhar: false }).dados.max, 24);
+  assert.equal(dispensaAcesso(sim.colocaveis.obter('terreiro')), true);
+  assert.equal(dispensaAcesso(sim.colocaveis.obter('praca')), false);
+  assert.equal(dispensaAcesso(sim.colocaveis.obter('captacao')), true, 'o que só vale na margem da água dispensa a via');
+  assert.equal(dispensaAcesso(sim.colocaveis.obter('pedreira')), true, 'o que só vale sobre o recurso dispensa a via');
+  // recurso: a pedreira numa planície sem rocha diz o recurso e quanto tem
+  const rec = sim.q.construir.previa({ tipo: 'pedreira', x: 1200, z: -330 });
+  assert.equal(rec.codigo, 'recurso');
+  assert.equal(rec.dados.recurso, 'rocha');
+  assert.ok(rec.dados.media < rec.dados.minimo);
+  // colisão com prédio: a segunda praça em cima da primeira diz qual é e quanto afastar
+  const um = sim.q.construir.previa({ tipo: 'praca', x: 1300, z: -330 });
+  assert.equal(um.ok, true);
+  const feito = sim.cmd('construir', { tipo: 'praca', x: um.x, z: um.z, rot: um.rot });
+  assert.equal(feito.ok, true);
+  const dois = sim.q.construir.previa({ tipo: 'praca', x: 1304, z: -330 });
+  assert.equal(dois.codigo, 'colisao');
+  assert.equal(dois.dados.com, 'predio');
+  assert.equal(dois.dados.ref, feito.id);
+  assert.ok(dois.dados.afastar >= 1 && dois.dados.afastar <= 40, `afastar ${dois.dados.afastar}`);
+  assert.equal(dois.dados.nome, SERVICOS.praca.nome);
+  // e o comando recusa com o mesmo código e os mesmos dados
+  const c = sim.cmd('construir', { tipo: 'praca', x: dois.x, z: dois.z, rot: dois.rot });
+  assert.equal(c.codigo, 'colisao');
+  assert.equal(c.dados.com, 'predio');
+  assert.deepEqual(sim.erros, []);
+});
+
+test('colocar (D98): o colocável girado vê a via por qualquer lado, e o que dispensa a via nasce sem ela com o aviso de sem acesso', () => {
+  const sim = criarSimulacao({ semente: 'ux1-acesso', modo: 'livre' });
+  comTerreiro(sim);
+  rua(sim, [[960, -300], [1440, -300]]);
+  // clínica livre, de costas para a via (rot 180 graus), a 30 m dela: a frente olha para longe, o fundo vê a via
+  const p = sim.q.construir.previa({ tipo: 'clinica', x: 1200, z: -335, rot: Math.PI, alinhar: false });
+  assert.equal(p.ok, true, p.codigo);
+  assert.ok(p.via !== null, 'a prévia diz a via do acesso');
+  const r = sim.cmd('construir', { tipo: 'clinica', x: p.x, z: p.z, rot: p.rot, alinhar: false });
+  assert.equal(r.ok, true, r.codigo);
+  const ac = acessoDe(sim, idxDaRef(r.id));
+  assert.ok(ac.e >= 0, 'o prédio construído de costas também tem acesso (cobertura e redes saem da via)');
+  assert.equal(sim.q.predio(r.id).avisos.some((a) => a.codigo === 'semAcesso'), false);
+  // o terreiro longe de toda via: nasce, e a folha avisa que falta a via
+  const lugar = achar(sim, 'terreiro', (p) => p.ok && !p.aplainar && p.via === null, { rot: 0.4, z0: -1100, z1: -700 });
+  assert.ok(lugar, 'um lugar plano longe de via');
+  const t = lugar.p;
+  assert.equal(t.via, null);
+  const r2 = sim.cmd('construir', { tipo: 'terreiro', x: t.x, z: t.z, rot: t.rot, alinhar: false });
+  assert.equal(r2.ok, true, r2.codigo);
+  assert.equal(acessoDe(sim, idxDaRef(r2.id)).e, -1);
+  assert.equal(sim.q.predio(r2.id).avisos.some((a) => a.codigo === 'semAcesso' && a.acao === 'construirVia'), true);
+  assert.deepEqual(sim.validar(), []);
+  assert.deepEqual(sim.erros, []);
 });

@@ -2,6 +2,9 @@
 // do nível da rua (10 m) à cidade inteira (9 km), guinada livre, inclinação de 3 graus (o horizonte à vista) a 88
 // (de cima), campo vertical de 40 graus. Movimento com inércia e amortecimento crítico: o arrasto é direto (o chão
 // fica sob o dedo) e, ao soltar, a vista desliza e para; o zoom vai suave na direção do cursor ou do meio da pinça.
+// Inércia (TOQ1, D99): integrada pela conta exata (a velocidade cai como e^(-t/tau) e o deslocamento do quadro é
+// v x tau x (1 - e^(-dt/tau))), então um quadro lento anda o mesmo caminho que vários rápidos; a velocidade de soltura
+// tem teto em px de tela (medidos no centro) e a vista para limpa: abaixo de 6 px/s, ou ao bater na borda do mapa.
 // Colisão: a câmera fica 2 m acima do chão (alturaEm, D4, ou a superfície do mar, espelho.mapa.nivelMar) e do campo de
 // alturas da cidade (ctx.alturaCidade, R1b, a grade da CPU: sem ler a GPU). Perto dos prédios a vista sobe pela órbita
 // (a inclinação efetiva cresce até a câmera sair de cima do telhado), sem pular de altura; o estado guarda a
@@ -54,7 +57,15 @@ export function caminhoVoo(w0, w1, d, rho = RHO_VOO) {
 }
 
 /** Constantes de tempo (s) da inércia e do zoom. */
-export const AMORTECE = Object.freeze({ pan: 0.32, giro: 0.22, zoom: 0.14, parado: 0.02 });
+export const AMORTECE = Object.freeze({ pan: 0.25, giro: 0.22, zoom: 0.14, parado: 0.02 });
+
+/**
+ * Soltura (TOQ1): velMaxPx é o teto da velocidade do deslize em px de tela por segundo, medidos no centro (o deslize
+ * de um arremesso chega a velMaxPx x tau, uns 550 px: pouco mais da metade da largura do Poco X7 em paisagem); paradaPx
+ * é a velocidade abaixo da qual a vista para (uns 1,4 s depois de um arremesso, contra 2,2 s antes); dtMax é o maior dt
+ * de um quadro (acima disso o quadro foi um soluço, a aba voltou do fundo).
+ */
+export const DESLIZE = Object.freeze({ velMaxPx: 2200, paradaPx: 6, giroMax: 240, inclinaMax: 120, dtMax: 0.25 });
 
 /**
  * @param {object} ctx  contexto do render (camera do three, sim, semClip)
@@ -71,6 +82,8 @@ export function criarCamera(ctx, inicial = {}) {
   const cam = ctx.camera;
   cam.fov = L.fov;
   const alvoV = new THREE.Vector3();
+  /** Metros do chão por px de tela no alvo (a vista de frente; a vertical vai com a inclinação). */
+  const metrosPorPx = () => (2 * e.dist * Math.tan((L.fov * RAD) / 2)) / Math.max(1, ctx.tela?.h || ctx.canvas?.clientHeight || 600);
   const posicionar = (a, inc) => {
     const gu = e.guinada * RAD;
     const ic = inc * RAD;
@@ -176,13 +189,29 @@ export function criarCamera(ctx, inicial = {}) {
       zoom.alvo = Math.min(L.distMax, Math.max(L.distMin, zoom.alvo * fator));
       zoom.ancora = ancora && Number.isFinite(ancora[0]) && Number.isFinite(ancora[2]) ? [ancora[0], ancora[2]] : null;
     },
-    /** Velocidades de soltura (arrasto e giro): a vista desliza e para. Um valor torto vale zero. */
+    /**
+     * Velocidades de soltura (arrasto e giro): a vista desliza e para. Um valor torto vale zero e o deslocamento tem o
+     * teto DESLIZE.velMaxPx (px de tela no centro por segundo): a soltura de um quadro lento nunca arremessa a vista.
+     */
     impulso({ vx = 0, vz = 0, vg = 0, vi = 0 } = {}) {
       const f = (v) => (Number.isFinite(v) ? v : 0);
-      vel.x = f(vx);
-      vel.z = f(vz);
-      vel.guinada = f(vg);
-      vel.inclinacao = f(vi);
+      let x = f(vx);
+      let z = f(vz);
+      const teto = DESLIZE.velMaxPx * metrosPorPx();
+      const c = Math.hypot(x, z);
+      if (c > teto) {
+        x = (x * teto) / c;
+        z = (z * teto) / c;
+      }
+      vel.x = x;
+      vel.z = z;
+      vel.guinada = Math.max(-DESLIZE.giroMax, Math.min(DESLIZE.giroMax, f(vg)));
+      vel.inclinacao = Math.max(-DESLIZE.inclinaMax, Math.min(DESLIZE.inclinaMax, f(vi)));
+    },
+    /** Metros do chão por px de tela no alvo e a velocidade do deslize (para a entrada, o registro e os testes). */
+    metrosPorPx,
+    get velocidade() {
+      return { vx: vel.x, vz: vel.z, vg: vel.guinada, vi: vel.inclinacao };
     },
     parar: pararInercia,
     /** Alvo no chão (y pelo terreno; sobre o mar, a superfície da água). */
@@ -192,7 +221,7 @@ export function criarCamera(ctx, inicial = {}) {
     /** Chão sob um ponto (terreno e, com a R1b, a cidade). */
     chao,
     atualizar(tMs = agora()) {
-      const dt = tAnt ? Math.min(0.1, Math.max(0, (tMs - tAnt) / 1000)) : 0;
+      const dt = tAnt ? Math.min(DESLIZE.dtMax, Math.max(0, (tMs - tAnt) / 1000)) : 0;
       tAnt = tMs;
       if (voo) {
         const k = Math.min(1, (tMs - voo.t0) / voo.ms);
@@ -209,20 +238,22 @@ export function criarCamera(ctx, inicial = {}) {
           encerrarVoo();
         }
       } else if (dt > 0) {
-        // inércia: velocidades que decaem; zoom que se aproxima do alvo com o ponto de âncora parado
-        e.x += vel.x * dt;
-        e.z += vel.z * dt;
-        e.guinada += vel.guinada * dt;
-        e.inclinacao += vel.inclinacao * dt;
+        // inércia pela conta exata: velocidades que decaem como e^(-t/tau); zoom que se aproxima do alvo com o ponto de
+        // âncora parado
         const kp = Math.exp(-dt / AMORTECE.pan);
         const kg = Math.exp(-dt / AMORTECE.giro);
+        e.x += vel.x * AMORTECE.pan * (1 - kp);
+        e.z += vel.z * AMORTECE.pan * (1 - kp);
+        e.guinada += vel.guinada * AMORTECE.giro * (1 - kg);
+        e.inclinacao += vel.inclinacao * AMORTECE.giro * (1 - kg);
         vel.x *= kp;
         vel.z *= kp;
         vel.guinada *= kg;
         vel.inclinacao *= kg;
-        if (Math.hypot(vel.x, vel.z) < 0.02 * Math.max(1, e.dist * 0.01)) vel.x = vel.z = 0;
-        if (Math.abs(vel.guinada) < 0.05) vel.guinada = 0;
-        if (Math.abs(vel.inclinacao) < 0.05) vel.inclinacao = 0;
+        // parada limpa: abaixo de 6 px/s no centro (e de 0,3 grau/s) a vista fica onde está
+        if (Math.hypot(vel.x, vel.z) < DESLIZE.paradaPx * metrosPorPx()) vel.x = vel.z = 0;
+        if (Math.abs(vel.guinada) < 0.3) vel.guinada = 0;
+        if (Math.abs(vel.inclinacao) < 0.3) vel.inclinacao = 0;
         if (Math.abs(zoom.alvo / e.dist - 1) > 1e-4) {
           const f = (zoom.alvo / e.dist) ** (1 - Math.exp(-dt / AMORTECE.zoom));
           if (zoom.ancora) {
@@ -235,7 +266,12 @@ export function criarCamera(ctx, inicial = {}) {
           zoom.ancora = null;
         }
       }
+      // a borda do mapa (e os limites da inclinação) para o deslize: sem velocidade guardada empurrando a parede
+      const antes = { x: e.x, z: e.z, i: e.inclinacao };
       limitar();
+      if (e.x !== antes.x) vel.x = 0;
+      if (e.z !== antes.z) vel.z = 0;
+      if (e.inclinacao !== antes.i) vel.inclinacao = 0;
       const a = api.alvo(alvoV);
       posicionar(a, e.inclinacao);
       // colisão: 2 m acima do chão e da cidade onde a câmera está; perto de prédio, a vista sobe pela órbita (em passos

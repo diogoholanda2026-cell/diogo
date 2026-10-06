@@ -14,11 +14,17 @@ import * as zona from './zona.js';
 import * as colocar from './colocar.js';
 import * as demolir from './demolir.js';
 import * as areas from './areas.js';
+import * as textosUx1 from '../textos/ux1.js';
+import { registrarTextos } from '../textos.js';
 import { VIAS } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
+import { MARCOS } from '../../data/marcos.js';
 import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
 import { SESSAO } from '../acoes.js';
+
+// os textos da UX1 entram por aqui enquanto o índice de textos não os lista (a mesma parcela pode registrar de novo)
+textosUx1.registrar(registrarTextos);
 
 /** Até quantas ações o Desfazer guarda por sessão (D32). */
 export const MAX_DESFAZER = 10;
@@ -40,7 +46,8 @@ export const BORDA_PX = 48;
 /**
  * Estado que os componentes leem (null sem ferramenta):
  * { tipo, id, maquina, previa, valido, motivo, codigo, encaixe: { tipo, valor, ponto, texto } | null, desfazer,
- *   item, resumo, info, substituto, dedo }
+ *   item, resumo, info, substituto, dedo, dica }
+ * dica (colocar, D98): { codigo, texto, curto, tom: 'er' | 'info', colide } ou null; o painel do fantasma mostra.
  */
 export const sessao = signal(null);
 
@@ -59,6 +66,8 @@ export const ferramentas = {
   desfazer: () => {},
   opcao: () => {},
   girar: () => {},
+  girarPara: () => {},
+  alinhar: () => {},
   comprar: () => {},
   escolherCategoria: () => {},
 };
@@ -184,7 +193,7 @@ export function itensDaCategoria(cat, { consultar = () => null, marco = 0, livre
     const lista = consultar('catalogo', cat);
     const itens = (Array.isArray(lista) ? lista : []).map((x) => ({
       id: x.tipo, acao: 'colocar', nome: x.nome ?? x.tipo, glifo: x.glifo ?? GLIFO_CATEGORIA[cat], custo: x.custo ?? 0,
-      marco: x.marco ?? 0, trancado: x.liberado === false || tranca(x.marco), aba: x.grupo ?? null, efeito: x.capacidade ?? null,
+      marco: x.marcoLibera ?? x.marco ?? 0, trancado: x.liberado === false || tranca(x.marcoLibera ?? x.marco), aba: x.grupo ?? null, efeito: x.capacidade ?? null,
       dados: { item: { ...x } },
     }));
     const abas = [...new Set(itens.map((i) => i.aba).filter(Boolean))].map((id) => ({ id, rotulo: id }));
@@ -206,6 +215,59 @@ export function estadoArcologia({ consultar = () => null, espelho = null } = {})
   const etapas = espelho?.arcologia?.etapas ?? [];
   const progresso = Number.isFinite(q?.progressoTotal) ? q.progressoTotal : etapas.length ? etapas.filter((e) => e.estado === ETAPA.PRONTA).length / etapas.length : 0;
   return { progresso: Math.max(0, Math.min(1, progresso)), pode: etapas.some((e) => e.estado === ETAPA.DISPONIVEL) };
+}
+
+// ------------------------------------------------------------------------------------------------ dica do fantasma
+
+/** Números e dinheiro da dica no jeito da interface (dólar, metros com uma casa só se preciso, min de jogo). */
+function parametrosDaDica(d, { t, fmt }) {
+  const q = { ...d.params };
+  const metros = (v) => fmt.numero(Math.round(v * 10) / 10, Math.round(v * 10) % 10 ? 1 : 0);
+  if ('custo' in q) q.custo = fmt.dinheiro(q.custo);
+  if ('faltam' in q) q.faltam = fmt.dinheiro(q.faltam);
+  if ('tiques' in q) q.tempo = fmt.minutosDeJogo(q.tiques);
+  for (const k of ['desnivel', 'max', 'afastar', 'm']) if (k in q) q[k] = metros(q[k]);
+  if (q.recurso) {
+    const nome = t(`ux1.recurso.${q.recurso}`);
+    q.recurso = nome.startsWith('??') ? q.recurso : nome;
+  }
+  if ('marco' in q) q.marco = String(q.marco);
+  return q;
+}
+
+/**
+ * A dica de uma prévia da ferramenta de colocar (D98): { codigo, chave, tom: 'er' | 'info', colide, texto (o motivo e o
+ * que fazer, para o painel), curto (o motivo curto do botão e da cota) } ou null. `ui` leva t e fmt.
+ */
+export function montarDica(p, ui) {
+  const d = colocar.dicaDoBloqueio(p);
+  if (!d) return null;
+  const params = parametrosDaDica(d, ui);
+  const curto = ui.t(d.chave.replace('.dica.', '.curto.'), params);
+  return { codigo: d.codigo, chave: d.chave, tom: d.tom, colide: d.colide, texto: ui.t(d.chave, params), curto: curto.startsWith('??') ? null : curto };
+}
+
+/**
+ * A dica de um traçado de via que não serve (D98): { codigo, texto, tom: 'er', colide: null } ou null. `m` é o motivo da
+ * sessão ({ codigo, dados, trecho }); o declive diz a porcentagem do trecho e o máximo do tipo de via.
+ */
+export function dicaDaVia(m, previa, tipoVia, ui) {
+  if (!m?.codigo || m.codigo === 'nada') return null;
+  const via = VIAS[tipoVia];
+  let chave = `ux1.dicaVia.${m.codigo}`;
+  let params = {};
+  if (m.codigo === 'declive') {
+    const seg = previa?.segmentos?.[m.trecho ?? 0] ?? previa?.segmentos?.find((x) => x.erros?.includes?.('declive'));
+    if (seg && Number.isFinite(seg.declive) && via?.declive) params = { p: Math.round(seg.declive * 100), max: Math.round(via.declive * 100) };
+    else chave = 'ux1.dicaVia.declive.sem';
+  } else if (m.codigo === 'creditos') params = { faltam: ui.fmt.dinheiro(m.dados?.faltam ?? 0) };
+  else if (m.codigo === 'marco') {
+    const n = via?.marco ?? 0;
+    params = { marco: String(n), nome: MARCOS[n]?.nome ?? '' };
+  }
+  let texto = ui.t(chave, params);
+  if (texto.startsWith('??')) texto = ui.t('ux1.dicaVia.outro');
+  return { codigo: m.codigo, chave, tom: 'er', colide: null, texto, curto: null };
 }
 
 // ------------------------------------------------------------------------------------------------ cola
@@ -235,6 +297,7 @@ export function registrar(ui) {
   let traco = null; // zona: { n, grupos: Map(zona antiga → Set de células), avisou }
   let camadaAntes; // colocar liga a camada do serviço (item.camada) e devolve a de antes ao sair
   let rolagemPropria = true; // desliga se o render rolar pela borda sozinho
+  let dica = null; // colocar: a dica do bloqueio (ou do aplainar) da prévia atual (D98)
   let camUlt = null;
   let tUlt = 0;
   let antesDoGesto = null; // a máquina antes do 'inicio' (volta a ela se o gesto virar câmera)
@@ -285,7 +348,7 @@ export function registrar(ui) {
 
   function motivo() {
     const e = primeiroErro(previa);
-    if (tipo === 'colocar' && previa && !previa.ok) return { codigo: previa.codigo ?? 'outro', texto: t(`x2.motivo.${previa.codigo ?? 'outro'}`) };
+    if (tipo === 'colocar' && previa && !previa.ok) return { codigo: previa.codigo ?? 'outro', texto: dica?.curto ?? t(`x2.motivo.${previa.codigo ?? 'outro'}`), dados: previa.dados ?? undefined };
     if (!e) return null;
     const dados = e.dados ?? {};
     const texto = e.codigo === 'creditos' ? t('x2.motivo.creditos', { n: ui.fmt.creditos(dados.faltam ?? 0) }) : t(`x2.motivo.${e.codigo}`);
@@ -315,6 +378,7 @@ export function registrar(ui) {
       info,
       substituto: !!previa?.substituto,
       dedo: !!maq.dedo,
+      dica: tipo === 'colocar' ? dica : tipo === 'via' && m ? dicaDaVia(m, previa, maq.tipo, ui) : null,
     };
   }
 
@@ -332,6 +396,8 @@ export function registrar(ui) {
     info = null;
     encaixe = null;
     assinaturaEnc = '';
+    dica = null;
+    colidindo = '';
     item = op.item ?? null;
     if (tipo === 'via') maq = via.criarVia({ tipo: op.tipoVia ?? 'rua', modo: op.modo ?? 'reta', continua: op.continua, encaixe: op.encaixe });
     else if (tipo === 'zona') maq = zona.criarZona({ zona: op.zona ?? 'resBaixa', modo: op.modo ?? 'preencher', tamanho: op.tamanho, apagar: op.apagar });
@@ -371,6 +437,8 @@ export function registrar(ui) {
     tipo = null;
     maq = null;
     previa = null;
+    dica = null;
+    colidindo = '';
     antesDoGesto = null;
     R?.entrada?.modo?.('camera');
     R?.ferramenta?.limpar?.();
@@ -633,24 +701,43 @@ export function registrar(ui) {
 
   // ---------------- colocar
 
+  /** A parte que colide fica em vermelho no mundo (o mesmo realce do demolir): a via ou o prédio da recusa. */
+  let colidindo = '';
+  function realcarColisao() {
+    const c = dica?.colide;
+    const chave = c ? `${c.com}:${c.ref}` : '';
+    if (chave === colidindo) return;
+    colidindo = chave;
+    R?.ferramenta?.demolir?.(c ? [{ tipo: c.com === 'via' ? 'aresta' : 'predio', ref: c.ref }] : []);
+  }
+
   function efeitoColocar(nome, x) {
     if (nome !== 'previa') return;
-    const args = { tipo: maq.tipo, x: x.x, z: x.z, rot: x.rot };
+    // aplainar: a interface mostra o custo na dica e quem aperta Construir aceita pagá-lo
+    const args = { tipo: maq.tipo, x: x.x, z: x.z, rot: x.rot, giro: x.giro, alinhar: x.alinhar, aplainar: true };
     const r = consultar('construir.previa', args);
     previa = r && Number.isFinite(r.x) ? { ...r } : colocar.previaColocarLocal(esp(), args, item);
     const cred = loja.barra.value?.creditos;
-    if (previa.ok && Number.isFinite(cred) && (previa.custo ?? 0) > cred) previa = { ...previa, ok: false, codigo: 'creditos', faltam: previa.custo - cred };
+    if (previa.ok && Number.isFinite(cred) && (previa.custo ?? 0) > cred) previa = { ...previa, ok: false, codigo: 'creditos', faltam: previa.custo - cred, dados: { faltam: previa.custo - cred } };
+    // a rotação efetiva (a da via, quando alinhada) volta para a máquina: sair do ímã da via mantém o ângulo do fantasma
+    if (previa.alinhado && Number.isFinite(previa.rot) && (Math.abs(previa.rot - maq.rot) > 1e-9 || Math.abs((previa.giro ?? maq.giro) - maq.giro) > 1e-9)) {
+      maq = { ...maq, rot: previa.rot, giro: Number.isFinite(previa.giro) ? previa.giro : maq.giro };
+    }
+    dica = montarDica(previa, ui);
     R?.ferramenta?.fantasma?.({ tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot, alcance: previa.alcance ?? item?.alcance ?? 0, ok: !!previa.ok, pegada: colocar.pegadaDe(maq.tipo, item) });
+    realcarColisao();
   }
 
   async function construirColocar() {
     if (!valido()) {
       vibrar(VIBRA.erro);
-      if (previa?.codigo) avisar(t(`codigo.${previa.codigo}`));
+      // o aviso diz o motivo e o que fazer (a dica do fantasma); sem ela, a frase do código
+      if (previa?.codigo) avisar(dica?.texto ?? t(`codigo.${previa.codigo}`));
       return;
     }
     const aberta = id;
-    const r = await comando('construir', { tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot });
+    // alinhar: o comando gruda de novo como a prévia; livre: a planta fica exatamente onde o fantasma está
+    const r = await comando('construir', { tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot, alinhar: !!previa.alinhado, aplainar: true, ...(Number.isFinite(previa.giro) ? { giro: previa.giro } : {}) });
     if (!r.ok) return vibrar(VIBRA.erro);
     vibrar(VIBRA.confirmar);
     if (id !== aberta || !maq) return;
@@ -777,7 +864,23 @@ export function registrar(ui) {
       if (tipo === 'via') passo({ tipo: 'opcao', ...op });
       else if (tipo === 'zona') passo({ tipo: 'opcao', ...op });
     },
-    girar: (sentido = 1) => passo({ tipo: 'girar', sentido }),
+    /** Gira o fantasma: o botão vira um quarto de volta; `passo` (radianos) dá outro, como os 15 graus de Q e E. */
+    girar: (sentido = 1, passoRad = null) => (tipo === 'colocar' ? passo({ tipo: 'girar', sentido, ...(passoRad > 0 ? { passo: passoRad } : {}) }) : undefined),
+    /** O puxador: aponta a frente do fantasma para a rotação absoluta `alvo` (radianos), com o ímã de 15 graus ou livre. */
+    girarPara(alvo, { livre = false } = {}) {
+      if (tipo !== 'colocar' || !maq || !Number.isFinite(alvo)) return;
+      const ima = (r) => (livre ? colocar.normalizarRot(r) : colocar.imantar(r));
+      // alinhado: o ímã vale para o ângulo em relação à via (0 é de frente para ela); livre: para o azimute
+      if (previa?.alinhado && Number.isFinite(previa.rotVia)) {
+        const giro = ima(alvo - previa.rotVia);
+        passo({ tipo: 'angulo', rot: colocar.normalizarRot(previa.rotVia + giro), giro });
+      } else passo({ tipo: 'angulo', rot: ima(alvo) });
+    },
+    /** Liga ou desliga o alinhar à via (sem valor, troca); desligando, o fantasma fica no ângulo que já tinha. */
+    alinhar(valor) {
+      if (tipo !== 'colocar' || !maq) return;
+      passo({ tipo: 'alinhar', ...(typeof valor === 'boolean' ? { valor } : {}), ...(Number.isFinite(previa?.rot) ? { rot: previa.rot } : {}) });
+    },
     comprar,
     escolherCategoria(cat) {
       if (cat === 'demolir') {
@@ -898,6 +1001,17 @@ export function registrar(ui) {
       passo(ev);
     });
   }
+  // giro com dois dedos sobre o fantasma (D98): quando a entrada do render oferecer o gesto (pedido ao TOQ1: R.entrada.
+  // aoGiroDeFerramenta(({ delta, fim })), com delta o ângulo acumulado do gesto em radianos), a planta gira com o ímã
+  if (R?.entrada?.aoGiroDeFerramenta) {
+    let base = null;
+    R.entrada.aoGiroDeFerramenta(({ delta, fim }) => {
+      if (tipo !== 'colocar' || !maq || !Number.isFinite(delta)) return;
+      if (base === null) base = maq.rot;
+      ferramentas.girarPara(base + delta);
+      if (fim) base = null;
+    });
+  }
   if (typeof addEventListener !== 'undefined') {
     const canvas = () => (typeof document !== 'undefined' ? document.getElementById('mundo') : null);
     const rel = (ev) => {
@@ -956,6 +1070,10 @@ export function registrar(ui) {
         passo({ tipo: 'girar', sentido: ev.key === ',' ? -1 : 1 });
         return;
       }
+      if ((ev.key === 'c' || ev.key === 'C') && tipo === 'colocar' && !ev.repeat) {
+        ferramentas.alinhar();
+        return;
+      }
       const k = ev.key.length === 1 ? ev.key.toUpperCase() : '';
       const cat = Object.keys(ATALHOS).find((c) => ATALHOS[c] === k);
       if (cat && !ev.repeat) {
@@ -970,10 +1088,22 @@ export function registrar(ui) {
       if (ev.key === 'Shift') ferramentas.semEncaixe(false);
     };
     const perdeu = () => ferramentas.semEncaixe(false);
+    // Q e E giram o fantasma de 15 em 15 graus com a ferramenta de colocar aberta; a câmera também gira com eles (render/
+    // camera/entrada.js), por isso este ouvinte vai na captura e tira a tecla do caminho dela (também no repeat do teclado)
+    const giroDeTecla = (ev) => {
+      if (tipo !== 'colocar' || !maq || alvoTexto(ev) || loja.tela.value || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const k = ev.key?.toLowerCase();
+      if (k !== 'q' && k !== 'e') return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      passo({ tipo: 'girar', sentido: k === 'q' ? -1 : 1, passo: colocar.PASSO_IMA });
+    };
+    addEventListener('keydown', giroDeTecla, true);
     addEventListener('keydown', tecla);
     addEventListener('keyup', soltaTecla);
     addEventListener('blur', perdeu);
     soltarEntrada.push(() => {
+      removeEventListener('keydown', giroDeTecla, true);
       removeEventListener('keydown', tecla);
       removeEventListener('keyup', soltaTecla);
       removeEventListener('blur', perdeu);
@@ -1029,6 +1159,9 @@ export function registrar(ui) {
     const p = vivo.mira && R.raio ? R.raio(vivo.mira[0], vivo.mira[1]) : null;
     if (p) passo({ tipo: 'move', ponto: [p[0], p[2]], tela: vivo.mira, dedo: vivo.dedo, t: agora() });
   });
+
+  // o puxador do giro e o painel do fantasma (D98) vêm sob demanda: só aparecem com a ferramenta de colocar aberta
+  import('./DicaColocar.jsx').then((m) => m.registrar?.(ui)).catch(() => {});
 
   return () => {
     for (const f of soltarEntrada) f();
