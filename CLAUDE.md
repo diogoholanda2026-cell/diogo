@@ -22,8 +22,8 @@ propriedades do dono; D100) e `docs/desenho/grupo.md` o governo do grupo (negoci
 - Joga sozinho, dá autonomia ("continue sem pedir permissão"), mas é sensível a custo: não repetir etapas já feitas,
   capturas só as necessárias.
 - Regras de economia fixadas por ele (valem no jogo novo com a mesma razão, em dólares reais pela D68, em `REGRAS_DONO`): produção em lotes
-  de 1 a 10; vendas no Depósito a 150% do preço base, até 100 por janela; empréstimo de 50 mil por ano, 10% ao ano,
-  dívida até 500 mil; renda de 5/8/11 créditos por morador por hora conforme o bem-estar.
+  de 1 a 10; vendas no Depósito a 150% do preço base, sem limite de vendas (D103); empréstimo Lombard de US$ 100 milhões por ano
+  (167 mil unidades), 3% ao ano, dívida até US$ 1 bilhão (D103); renda de 5/8/11 créditos por morador por hora conforme o bem-estar.
 - Estética proibida: SimCity BuildIt, maquete, cartum, verde-lima, formas "quadradas e robóticas", Torre em bolo.
   Arquitetura sempre com referência em megaprojetos reais.
 

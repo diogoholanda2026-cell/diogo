@@ -37,10 +37,10 @@ test('REGRAS_DONO: números exatos do dono, congelados', () => {
   assert.deepEqual(REGRAS_DONO.lote, { min: 1, max: 10, fatorTempo: 0.8 });
   assert.equal(REGRAS_DONO.deposito.venda, 1.5);
   assert.equal(REGRAS_DONO.deposito.precoBase, 'catalogo');
-  assert.equal(REGRAS_DONO.deposito.vendasPorJanela, 100);
+  assert.equal(REGRAS_DONO.deposito.vendasPorJanela, null);
   assert.equal(REGRAS_DONO.deposito.janelaTiques, 14400);
   assert.equal(REGRAS_DONO.deposito.janelaHoras * 3600, REGRAS_DONO.deposito.janelaTiques);
-  assert.deepEqual(REGRAS_DONO.emprestimo, { porAno: 50000, taxaAno: 0.1, dividaMax: 500000, passo: 1000, prazoAnos: 10, mora: 0.2 });
+  assert.deepEqual(REGRAS_DONO.emprestimo, { porAno: 167000, taxaAno: 0.03, dividaMax: 1667000, passo: 1000, prazoAnos: 10, mora: 0.2, lombard: { cobertura: 0.6 } });
   assert.deepEqual(REGRAS_DONO.renda.tarifas, [5, 8, 11]);
   assert.deepEqual(REGRAS_DONO.renda.limiares, [30.5, 60.5]);
   assert.equal(REGRAS_DONO.renda.tarifaPor, 'cidade');
@@ -51,7 +51,7 @@ test('REGRAS_DONO: números exatos do dono, congelados', () => {
     'use strict';
     REGRAS_DONO.emprestimo.porAno = 1;
   });
-  assert.equal(REGRAS_DONO.emprestimo.porAno, 50000);
+  assert.equal(REGRAS_DONO.emprestimo.porAno, 167000);
   assert.equal(CAIXA_INICIAL, 300000);
 });
 

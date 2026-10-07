@@ -12,6 +12,7 @@ import {
 } from '../../fonte/data/economia.js';
 import { dataDoTique, tiqueDaData, anoDeJogo, ANO_INICIAL } from '../../fonte/data/historia.js';
 import { ITENS } from '../../fonte/data/holding.js';
+import { RODADA } from '../../fonte/comum/relogio.js';
 import { usarRegras } from '../../fonte/sim/holding/base.js';
 import { porEstoque } from '../../fonte/sim/holding/producao.js';
 import { simS3a, predioHolding } from '../robo/cidade-faz-de-conta.mjs';
@@ -35,10 +36,10 @@ test('REGRAS_DONO: os números do dono, congelados', () => {
   assert.ok(congelado(REGRAS_DONO));
   assert.deepEqual(REGRAS_DONO.lote, { min: 1, max: 10, fatorTempo: 0.8 });
   assert.equal(REGRAS_DONO.deposito.venda, 1.5);
-  assert.equal(REGRAS_DONO.deposito.vendasPorJanela, 100);
+  assert.equal(REGRAS_DONO.deposito.vendasPorJanela, null);
   assert.equal(REGRAS_DONO.deposito.janelaTiques, 4 * 3600);
   assert.equal(REGRAS_DONO.deposito.precoBase, 'catalogo');
-  assert.deepEqual(REGRAS_DONO.emprestimo, { porAno: 50000, taxaAno: 0.1, dividaMax: 500000, passo: 1000, prazoAnos: 10, mora: 0.2 });
+  assert.deepEqual(REGRAS_DONO.emprestimo, { porAno: 167000, taxaAno: 0.03, dividaMax: 1667000, passo: 1000, prazoAnos: 10, mora: 0.2, lombard: { cobertura: 0.6 } });
   assert.deepEqual(REGRAS_DONO.renda.tarifas, [5, 8, 11]);
   assert.equal(REGRAS_DONO.renda.tarifaPor, 'cidade');
   assert.deepEqual(REGRAS_DONO.moeda, { simbolo: 'US$', fator: 600 });
@@ -60,82 +61,93 @@ test('tarifa pelo bem-estar arredondado (D11): 30,4 dá 5; 30,5 dá 8; 60,4 dá 
   assert.equal(sim.q.orcamento().receitas.moradores, 11000);
 });
 
-test('empréstimo: passo, limite anual, virada do ano e dívida até 500 mil', () => {
+test('empréstimo Lombard: passo, limite anual de 167 mil, virada do ano e dívida até 1.667 mil (D103)', () => {
   const sim = simS3a({ semente: 'emprestimo' });
   for (const v of [0, 999, 1500, -1000, 50000.5, '1000']) assert.equal(sim.cmd('emprestimo.tomar', { valor: v }).codigo, 'valor', String(v));
-  assert.equal(sim.cmd('emprestimo.tomar', { valor: 30000 }).ok, true);
-  assert.equal(sim.cmd('emprestimo.tomar', { valor: 21000 }).codigo, 'limiteAno');
-  assert.equal(sim.cmd('emprestimo.tomar', { valor: 20000 }).ok, true);
+  assert.equal(sim.cmd('emprestimo.tomar', { valor: 100000 }).ok, true);
+  assert.equal(sim.cmd('emprestimo.tomar', { valor: 68000 }).codigo, 'limiteAno');
+  assert.equal(sim.cmd('emprestimo.tomar', { valor: 67000 }).ok, true);
   assert.equal(sim.q.emprestimo().disponivelAno, 0);
   assert.equal(sim.cmd('emprestimo.tomar', { valor: 1000 }).codigo, 'limiteAno');
-  // o ano de jogo vira: mais 50 mil
+  // o ano de jogo vira: mais 167 mil (o crédito renova todo ano)
   pular(sim, ANO);
   assert.equal(sim.q.emprestimo().ano, ANO_INICIAL + 1);
-  assert.equal(sim.cmd('emprestimo.tomar', { valor: 50000 }).ok, true);
-  // até a dívida (principal + juros devidos) chegar a 500 mil
+  assert.equal(sim.cmd('emprestimo.tomar', { valor: 167000 }).ok, true);
+  // até a dívida (principal + juros devidos) chegar a 1.667 mil
   for (let ano = 2; ano < 12; ano++) {
     pular(sim, ano * ANO);
     const e = sim.q.emprestimo();
-    const pode = Math.min(50000, Math.floor((500000 - e.divida) / 1000) * 1000);
+    const pode = Math.min(167000, Math.floor((1667000 - e.divida) / 1000) * 1000);
     if (pode <= 0) {
       assert.equal(sim.cmd('emprestimo.tomar', { valor: 1000 }).codigo, 'limiteDivida');
       break;
     }
     assert.equal(e.disponivelAno, pode);
-    if (pode < 50000) assert.equal(sim.cmd('emprestimo.tomar', { valor: pode + 1000 }).codigo, 'limiteDivida');
+    if (pode < 167000) assert.equal(sim.cmd('emprestimo.tomar', { valor: pode + 1000 }).codigo, 'limiteDivida');
     assert.equal(sim.cmd('emprestimo.tomar', { valor: pode }).ok, true);
   }
   const e = sim.q.emprestimo();
-  assert.ok(e.divida <= 500000 + 1e-6, `dívida ${e.divida}`);
+  assert.ok(e.divida <= 1667000 + 1e-6, `dívida ${e.divida}`);
   assert.equal(sim.cmd('emprestimo.tomar', { valor: 1000 }).codigo, 'limiteDivida');
   assert.deepEqual(sim.validar(), []);
 });
 
-test('juros: 10% em um ano com erro abaixo de 0,1%; mora de 20% depois de 10 anos', () => {
+test('juros: 3% em um ano com erro abaixo de 0,1%; Lombard rola o contrato com cobertura e a mora de 20% vale sem ela', () => {
   const sim = simS3a({ semente: 'juros' });
   assert.equal(sim.cmd('emprestimo.tomar', { valor: 50000 }).ok, true);
   sim.rodar(ANO, { sincrono: true });
   const j = sim.q.emprestimo().jurosDevidos;
-  assert.ok(Math.abs(j - 5000) / 5000 < 0.001, `juros de 1 ano: ${j}`);
-  assert.ok(Math.abs(sim.q.emprestimo().jurosHora - 2500) < 1e-6, 'juros por hora de jogo: 5% do saldo (o ano tem 2 h)');
-  // contrato com mais de 10 anos rende a mora
+  assert.ok(Math.abs(j - 1500) / 1500 < 0.001, `juros de 1 ano: ${j}`);
+  assert.ok(Math.abs(sim.q.emprestimo().jurosHora - 750) < 1e-6, 'juros por hora de jogo: 1,5% do saldo (o ano tem 2 h)');
+  // Lombard: com ativos que cobrem a dívida, o contrato de 10 anos se renova e segue a 3%
+  const L = simS3a({ semente: 'lombard' });
+  L.cmd('emprestimo.tomar', { valor: 50000 });
+  pular(L, 10 * ANO);
+  L.rodar(RODADA + 2, { sincrono: true });
+  assert.equal(L.q.emprestimo().contratos[0].mora, false, 'rolou: sem mora');
+  assert.equal(L.q.emprestimo().lombard.cobertura, 0.6);
+  // sem cobertura (dívida acima de 60% dos ativos) o contrato vencido cai na mora de 20%
   const m = simS3a({ semente: 'mora' });
   m.cmd('emprestimo.tomar', { valor: 50000 });
+  m.json.economia.emprestimo.contratos[0].saldo = 5e9; // dívida enorme, ativos pequenos
+  m.json.economia.emprestimo.principal = 5e9;
   pular(m, 10 * ANO);
+  m.rodar(RODADA + 2, { sincrono: true });
   assert.equal(m.q.emprestimo().contratos[0].mora, true);
-  m.rodar(ANO, { sincrono: true });
-  const jm = m.q.emprestimo().jurosDevidos;
-  assert.ok(Math.abs(jm - 10000) / 10000 < 0.001, `mora de 1 ano: ${jm}`);
-  // pagar juros, parcela (juros + 10% do principal, mínimo 1.000) e quitar
-  assert.equal(m.cmd('emprestimo.pagarJuros').ok, true);
-  assert.ok(m.q.emprestimo().jurosDevidos < 1e-6);
-  const antes = m.q.emprestimo().divida;
-  assert.equal(m.cmd('emprestimo.pagarParcela').ok, true);
-  assert.equal(antes - m.q.emprestimo().divida, 5000);
-  assert.equal(m.cmd('emprestimo.quitar').ok, true);
-  assert.equal(m.q.emprestimo().divida, 0);
-  for (const c of ['emprestimo.pagarJuros', 'emprestimo.pagarParcela', 'emprestimo.quitar']) assert.equal(m.cmd(c).codigo, 'nada', c);
-  assert.deepEqual(m.validar(), []);
+  // pagar juros, parcela (juros + 10% do principal, mínimo 1.000) e quitar, num contrato comum
+  const q = simS3a({ semente: 'quitar' });
+  q.cmd('emprestimo.tomar', { valor: 50000 });
+  q.rodar(ANO, { sincrono: true });
+  assert.equal(q.cmd('emprestimo.pagarJuros').ok, true);
+  assert.ok(q.q.emprestimo().jurosDevidos < 1e-6);
+  const antes = q.q.emprestimo().divida;
+  assert.equal(q.cmd('emprestimo.pagarParcela').ok, true);
+  assert.equal(antes - q.q.emprestimo().divida, 5000);
+  assert.equal(q.cmd('emprestimo.quitar').ok, true);
+  assert.equal(q.q.emprestimo().divida, 0);
+  for (const c of ['emprestimo.pagarJuros', 'emprestimo.pagarParcela', 'emprestimo.quitar']) assert.equal(q.cmd(c).codigo, 'nada', c);
+  assert.deepEqual(q.validar(), []);
 });
 
-test('Depósito: 150% do preço de catálogo, 100 vendas por janela de 4 h e a virada', () => {
+test('Depósito: 150% do preço de catálogo, sem limite de vendas (D103)', () => {
   const sim = simS3a({ semente: 'deposito' });
   porEstoque(sim, 'brita', 150);
   porEstoque(sim, 'concreto', 20);
   const c0 = sim.holding.caixa();
   const r = sim.cmd('deposito.vender', { item: 'brita', n: 120 });
   assert.equal(r.ok, true);
-  assert.equal(r.dados.vendidas, 100, 'só cabem 100 na janela');
-  assert.equal(sim.holding.caixa() - c0, 100 * ITENS.brita.base * 1.5);
-  assert.equal(sim.q.deposito().janela.vendidas, 100);
+  assert.equal(r.dados.vendidas, 120, 'sem limite por janela');
+  assert.equal(sim.holding.caixa() - c0, 120 * ITENS.brita.base * 1.5);
+  assert.equal(sim.q.deposito().janela.vendidas, 120);
+  assert.equal(sim.q.deposito().janela.max, null);
   assert.equal(sim.q.deposito().itens.find((i) => i.item === 'concreto').precoVenda, 255);
-  assert.equal(sim.cmd('deposito.vender', { item: 'concreto', n: 1 }).codigo, 'limite');
+  assert.equal(sim.cmd('deposito.vender', { item: 'concreto', n: 20 }).dados.vendidas, 20);
   assert.equal(sim.cmd('deposito.vender', { item: 'brita', n: 0 }).codigo, 'valor');
   assert.equal(sim.cmd('deposito.vender', { item: 'ouro', n: 1 }).codigo, 'valor');
-  // a janela vira em floor(tique / 14.400)
+  // a janela de 14.400 tiques só zera o contador
   pular(sim, 14400);
   assert.equal(sim.q.deposito().janela.vendidas, 0);
-  assert.equal(sim.cmd('deposito.vender', { item: 'brita', n: 60 }).dados.vendidas, 50);
+  assert.equal(sim.cmd('deposito.vender', { item: 'brita', n: 60 }).dados.vendidas, 30);
   assert.equal(sim.cmd('deposito.vender', { item: 'brita', n: 1 }).codigo, 'nada');
 });
 
@@ -213,8 +225,8 @@ test('caixa nunca negativo e dívida igual à soma dos contratos (10 mil comando
 });
 
 test('moeda (D87): trocar o fator não muda nenhum número da simulação; nenhum arquivo da simulação lê o fator', () => {
-  assert.equal(emDolar(50000), 30000000, 'empréstimo de 50 mil = US$ 30 milhões');
-  assert.equal(emDolar(500000), 300000000);
+  assert.equal(emDolar(167000), 100200000, 'empréstimo de 167 mil por ano = US$ 100 milhões');
+  assert.equal(emDolar(1667000), 1000200000);
   assert.deepEqual(REGRAS_DONO.renda.tarifas.map((t) => emDolar(t)), [3000, 4800, 6600]);
   const jogar = (fator) => {
     const sim = simS3a({ semente: 'moeda', populacao: 1200, bemEstar: 62 });

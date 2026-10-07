@@ -87,6 +87,28 @@ function taxaDe(regras, c, tique) {
   return tique - c.ini >= r.prazoAnos * ANO ? r.mora : r.taxaAno;
 }
 
+/**
+ * Empréstimo Lombard (D103): crédito com a garantia dos ativos da Holding. Um contrato que chega ao fim do prazo se
+ * renova (a data de início volta ao tique de agora, a taxa segue a normal) enquanto a dívida couber em `cobertura` dos
+ * ativos (patrimônio mais dívida); sem cobertura, segue para a mora. Só olha os ativos quando há contrato vencido.
+ * Devolve quantos contratos rolou.
+ */
+function rolar(sim) {
+  const L = regrasDe(sim).emprestimo.lombard;
+  if (!L) return 0;
+  const prazo = regrasDe(sim).emprestimo.prazoAnos * ANO;
+  const venc = emp(sim).contratos.filter((c) => c.saldo > 0 && sim.tique - c.ini >= prazo);
+  if (!venc.length) return 0;
+  const d = divida(sim).divida;
+  const ativos = valuation(sim) + d;
+  if (!(d <= ativos * L.cobertura)) return 0;
+  for (const c of venc) {
+    c.ini = sim.tique;
+    c.fim = sim.tique + prazo;
+  }
+  return venc.length;
+}
+
 function podar(sim) {
   const E = emp(sim);
   const ano = anoDeJogo(sim.tique);
@@ -198,6 +220,7 @@ export function consultaEmprestimo(sim) {
     mora: r.mora,
     passo: r.passo,
     prazoAnos: r.prazoAnos,
+    lombard: r.lombard ?? null,
     jurosDevidos: d.juros,
     jurosHora: jurosHora(sim),
     parcela: parcelaDe(sim),
@@ -329,7 +352,8 @@ function tique(sim, k, fatias, T) {
   // 1. receitas contínuas: a Contribuição dos moradores
   const renda = rendaHora(sim) / HORA;
   if (renda > 0) sim.holding.receber(renda, 'moradores');
-  // juros correm em cada contrato (não saem do caixa: são dívida até o jogador pagar)
+  // juros correm em cada contrato (não saem do caixa: são dívida até o jogador pagar); o Lombard rola o que venceu
+  if (T % RODADA === 0) rolar(sim);
   for (const c of E.emprestimo.contratos) if (c.saldo > 0) c.juros += (c.saldo * taxaDe(regras, c, T)) / ANO;
   // 2. manutenção de vias, serviços e ligação, na fração possível
   const ch = E.custosHora;

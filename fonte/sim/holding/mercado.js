@@ -140,7 +140,7 @@ function restamNaJanela(sim) {
   const m = M(sim);
   const r = regrasDe(sim).deposito;
   const j = Math.floor(sim.tique / r.janelaTiques);
-  return r.vendasPorJanela - (j === m.janela ? m.vendidas : 0);
+  return r.vendasPorJanela == null ? Infinity : r.vendasPorJanela - (j === m.janela ? m.vendidas : 0);
 }
 
 /** Vende no Depósito (a 150% do preço base), até o que cabe na janela. Devolve as vendidas ou o código. */
@@ -149,7 +149,7 @@ function venderDeposito(sim, item, n) {
   const m = M(sim);
   const p = sim.json.producao;
   const r = regrasDe(sim).deposito;
-  const resta = r.vendasPorJanela - m.vendidas;
+  const resta = r.vendasPorJanela == null ? Infinity : r.vendasPorJanela - m.vendidas;
   if (resta <= 0) return 'limite';
   const tem = p.estoque[item] ?? 0;
   if (tem <= 0) return 'nada';
@@ -261,7 +261,7 @@ function consultaDeposito(sim) {
   const p = sim.json.producao;
   const j = Math.floor(sim.tique / r.janelaTiques);
   return {
-    janela: { fimTique: (j + 1) * r.janelaTiques, vendidas: j === m.janela ? m.vendidas : 0, max: r.vendasPorJanela },
+    janela: { fimTique: (j + 1) * r.janelaTiques, vendidas: j === m.janela ? m.vendidas : 0, max: r.vendasPorJanela ?? null },
     itens: itensProducao(sim).map(({ item }) => ({
       item,
       estoque: p.estoque[item] ?? 0,

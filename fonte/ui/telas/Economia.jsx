@@ -303,7 +303,7 @@ function Emprestimo({ emp, b }) {
           </p>
           <p class="eco-regra">
             <Glifo n="prazo" tam={18} />
-            {t('eco.regra.prazo', { anos: r.prazoAnos, mora: fmt.numero(r.mora * 100) })}
+            {r.lombard ? t('eco.regra.lombard', { anos: r.prazoAnos, pct: fmt.numero(r.lombard.cobertura * 100), mora: fmt.numero(r.mora * 100) }) : t('eco.regra.prazo', { anos: r.prazoAnos, mora: fmt.numero(r.mora * 100) })}
           </p>
           <p class="eco-regra">
             <Glifo n="mais" tam={18} />

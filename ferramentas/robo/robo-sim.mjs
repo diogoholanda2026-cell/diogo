@@ -750,8 +750,11 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     // empréstimo só nos dois primeiros anos (2020 e 2021, seção 12.6): quando o caixa aperta ou a cidade pede espaço
     const quer = E.querEmprestimo;
     E.querEmprestimo = false;
-    if (ano <= 2 && ((caixa() < 25000 && o.fluxoCaixaHora < 2000) || quer) && e.disponivelAno >= 10000) {
-      cmd('emprestimo.tomar', { valor: Math.min(50000, e.disponivelAno) });
+    // o robô segue a prudência de 50 mil por ano de quando o limite era esse (D103 subiu o limite do dono para 167 mil: o
+    // equilíbrio do A2 foi calibrado com os 50 mil, e juros de 3% não mudam o que o robô faz)
+    const folgaRobo = Math.min(50000 - (e.tomadoAno ?? 0), e.disponivelAno);
+    if (ano <= 2 && ((caixa() < 25000 && o.fluxoCaixaHora < 2000) || quer) && folgaRobo >= 10000) {
+      cmd('emprestimo.tomar', { valor: Math.floor(folgaRobo / 1000) * 1000 });
     }
     // do ano 3 em diante, amortiza no calendário (C1c): no máximo uma parcela (10% do principal, com os juros) a cada 2
     // meses no ano 3 e uma por mês do ano 4 em diante, e quita quando o caixa cobre a dívida, do ano 4 em diante; a

@@ -63,8 +63,8 @@ vigor desde 1º de janeiro de 2019) define
 No jogo, o país é fictício (Vera Cruz do Leste), mas a regra vem dessa realidade.
 
 **Como funciona (proposta, a calibrar com o robô do M3):**
-- Uma **linha intragrupo** na Held Capital, separada do empréstimo de 50 mil por ano a 10%, até 500 mil, que o dono
-  fixou (`REGRAS_DONO`), que **não muda**.
+- Uma **linha intragrupo** na Held Capital, separada do empréstimo Lombard do dono (US$ 100 milhões por ano a 3%, até US$ 1 bilhão, D103, em
+  `REGRAS_DONO`), que **não muda**.
 - **Condições de mercado:** o juro e o prazo são os que a Held Capital cobraria de um terceiro (princípio de mercado);
   taxa abaixo disso aciona um alerta do Conselho.
 - **Limite:** uma fração do capital da Held Capital por parte relacionada (os números do limite não são citados aqui

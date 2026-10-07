@@ -38,8 +38,9 @@ export const itensVisiveis = (itens) => (itens ?? []).filter((x) => x.liberado !
 /** Janela do Depósito: "37 de 100 vendas nesta janela" e quanto falta para renovar (mm:ss reais na velocidade). */
 export function janelaDeposito(dep, tique, mult) {
   const j = dep?.janela ?? {};
-  const max = j.max ?? REGRAS_DONO.deposito.vendasPorJanela;
-  return { vendidas: j.vendidas ?? 0, max, resta: Math.max(0, max - (j.vendidas ?? 0)), renova: fmt.contagem(Math.max(0, (j.fimTique ?? 0) - tique), mult) };
+  const max = j.max ?? REGRAS_DONO.deposito.vendasPorJanela; // null: sem limite (D103)
+  const semLimite = max == null;
+  return { vendidas: j.vendidas ?? 0, max, semLimite, resta: semLimite ? Infinity : Math.max(0, max - (j.vendidas ?? 0)), renova: fmt.contagem(Math.max(0, (j.fimTique ?? 0) - tique), mult) };
 }
 
 // ------------------------------------------------------------------------------------------ visão geral
@@ -228,8 +229,10 @@ function Mercado({ tique, mult }) {
     <div class="gest-colunas">
       <div class="gest-col">
         <Secao titulo={t('hold.deposito')}>
-          <Barra valor={j.vendidas / j.max} estado={j.resta ? 'ch' : 'al'} rotulo={t('hold.janela', { a: j.vendidas, b: j.max })} texto={t('hold.janela', { a: fmt.numero(j.vendidas), b: fmt.numero(j.max) })} />
-          <p class="eco-nota" data-dica="hora">{t('hold.renova', { t: j.renova })}</p>
+          {j.semLimite
+            ? <p class="eco-nota">{t('hold.semLimite', { n: fmt.numero(j.vendidas) })}</p>
+            : <Barra valor={j.vendidas / j.max} estado={j.resta ? 'ch' : 'al'} rotulo={t('hold.janela', { a: j.vendidas, b: j.max })} texto={t('hold.janela', { a: fmt.numero(j.vendidas), b: fmt.numero(j.max) })} />}
+          {!j.semLimite && <p class="eco-nota" data-dica="hora">{t('hold.renova', { t: j.renova })}</p>}
           <p class="eco-nota">{t('hold.regraDeposito')}</p>
         </Secao>
         <Secao titulo={t('hold.abastecer')}>

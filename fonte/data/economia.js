@@ -10,12 +10,16 @@ import { congelar } from '../comum/util.js';
 export const REGRAS_DONO = /* @__PURE__ */ congelar({
   // lote de n unidades leva t x max(1, 0,8 x n): 10 levam 8 vezes o tempo de 1
   lote: { min: 1, max: 10, fatorTempo: 0.8 },
-  // Depósito: 150% do preço base = preço de catálogo do item (o mesmo da venda à cidade a 100%, D25);
-  // até 100 vendas por janela de 4 h de jogo (14.400 tiques); janela = floor(tique / 14.400)
-  deposito: { venda: 1.5, precoBase: 'catalogo', vendasPorJanela: 100, janelaHoras: 4, janelaTiques: 14400 },
-  // empréstimo igual ao de hoje: 50 mil por ano de jogo, 10% ao ano, dívida até 500 mil, passo de 1.000,
-  // prazo de 10 anos e mora de 20% ao ano depois do prazo (em US$: 30 milhões por ano e dívida até 300 milhões)
-  emprestimo: { porAno: 50000, taxaAno: 0.1, dividaMax: 500000, passo: 1000, prazoAnos: 10, mora: 0.2 },
+  // Depósito: 150% do preço base = preço de catálogo do item (o mesmo da venda à cidade a 100%, D25). O limite de 100
+  // vendas por janela de 4 h saiu a pedido do dono (07/10/2026, D103): vendasPorJanela null = sem limite (a janela de
+  // 14.400 tiques segue só para o contador de vendas)
+  deposito: { venda: 1.5, precoBase: 'catalogo', vendasPorJanela: null, janelaHoras: 4, janelaTiques: 14400 },
+  // empréstimo Lombard (pedido do dono em 07/10/2026, D103): 3% ao ano, até 167 mil unidades por ano de jogo (US$ 100
+  // milhões) e dívida até 1.667 mil (US$ 1 bilhão em dez anos), passo de 1.000; crédito com garantia dos ativos da
+  // Holding: ao fim dos 10 anos o contrato se renova (rolagem) enquanto a dívida couber em `cobertura` dos ativos; sem
+  // cobertura, mora de 20% ao ano. O limite anual renova todo ano, então dá para tomar sempre (antes: 50 mil por ano,
+  // 10% ao ano e dívida até 500 mil)
+  emprestimo: { porAno: 167000, taxaAno: 0.03, dividaMax: 1667000, passo: 1000, prazoAnos: 10, mora: 0.2, lombard: { cobertura: 0.6 } },
   // contribuição: unidades por morador por hora de jogo (3.600 tiques) pelo bem-estar médio da cidade suavizado em
   // 1 mês e arredondado para o inteiro mais próximo antes da faixa (D11): 30,4 dá 5; 30,5 dá 8; 60,4 dá 8; 60,5 dá 11
   // (em US$: 3.000, 4.800 e 6.600 por morador por hora de jogo, D68)
