@@ -35,11 +35,14 @@ Mirror Lake grande, Dream Falls de 120 m, Halo Lake e mata densa (D97, aprovada,
 do vermelho, escolha livre e obras em paralelo (UX1); D99 toque no Poco X7 e app estável (TOQ1); D100 Modo Presença
 (interiores, helicóptero, F1, arenas, propriedades do dono; `docs/desenho/presenca.md`, M2 a M5); D101 governo do grupo
 (dirigir, negociar, banco intragrupo; `docs/desenho/grupo.md`, M3, M5 e M6); D102 animação das obras (OBR2) e fluidez.
-**PAUSA por limite de sessão (06/10/2026, 09:30 UTC; retomada às 18:30):** UX1 e TOQ1 caíram depois de uns 200 passos cada,
-com a maior parte feita (ver o ONDE PAROU no topo de `parcelas/UX1.txt` e `TOQ1.txt`); SEDE4 e MOV1 não começaram. WIP guardado
-em commit de guarda. Relançar com a mesma base `1775464`.
-**Workflow lançado em 06/10/2026:** etapa 1 = UX1 e TOQ1; etapa 2 = SEDE4 e MOV1. Depois: OBR2, R4c, S1c, S2b, S3b, X4,
-R6, X3b, U2b e a C2. Se parar no meio, grave o parcial e relance com ONDE PAROU.
+**Prévia 2d publicada em 07/10/2026** (fonte `791fed2`, montagem `0e333d6`): UX1 (giro livre, motivo do vermelho, obras em
+paralelo; D98) e TOQ1 (toque e app estável; D99) entregues e revisadas (`docs/entregas/onda4/`); custo em dólar na barra,
+bandeja e cotas. **Rodando (07/10, 00:55 UTC):** SEDE4 e MOV1, base `791fed2`. O limite de sessão derrubou duas vezes
+(06/10 às 09:30 e às 14:00 UTC); se cair de novo, gravar o parcial e relançar com ONDE PAROU no topo de
+`parcelas/SEDE4.txt` e `MOV1.txt`. Depois: OBR2, R4c, S1c, S2b, S3b, X4, R6, X3b, U2b e a C2 (recalibrar a Arcologia na C2).
+
+**Esperando o dono:** a medida do Teste de desempenho no PC (Prévia 2c ou 2d) e no Poco X7 (3 rodadas e um vídeo curto do
+arrasto com `?toque=1`, seção 6 de `docs/entregas/onda4/TOQ1.md`), e o olhar sobre a sede (VIS1) e o toque.
 
 Decisões até a D102 registradas.
 
