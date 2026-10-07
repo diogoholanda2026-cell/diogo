@@ -1773,6 +1773,15 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   impostores, 0 compilações depois de pronto, bancada aberta no 'pc' antes e depois; capturas A/B (aérea às 10h e às
   17h30, avenida, noite) em que pontes, quedas, lagos e mata se leem sem zoom.
 - **Depende de:** VIS1 (mesmos arquivos).
+- **Entregue em 07/10/2026** (SEDE4, revisada). 8 Canopy Bridges (tabuleiro a 66 m, dentro das duas faixas de LED), 8 trechos
+  do Halo Lake (645 a 695 m), Mirror Lake grande (150 a uns 330 m, 4 ilhas, 4 enseadas, 8 pontes baixas), 4 Dream Falls de 120 m,
+  Codex, Helix e Compass no eixo da avenida com pórtico, Hanging Gardens na face de dentro e a faixa de LED como dado do anel
+  (9 e 7 andares). Família arcologia 54,6 mil triângulos na vista aberta (teto 60 mil) e 180 a 274 mil de perto na ponte (teto
+  250 mil no LOD0 de setor; conferir). **Pontos para o dono:** as quedas ficaram a 67,5, 157,5, 247,5 e 337,5 graus (os 45, 135,
+  225 e 315 da ficha caem em eixo de avenida); as Supertrees caíram de 15 para 10 para dar lugar ao lago. **Fracos:** na aérea das
+  10h as quedas, o Halo Lake e as pontes são pequenos (leitura de longe fraca), o véu das quedas à noite está chapado e a
+  folhagem dos terraços tem poucas espécies: repasse visual pendente. Bancada da avenida e RX 550 por medir. Nota em
+  `docs/entregas/onda4/SEDE4.md`.
 
 #### S1c. Trânsito agregado com efeitos (onda 4; 2 sessões)
 - **Arquivos:** `sim/transito.js`, `sim/tarefas/transito.js`, `ferramentas/testes/transito.teste.mjs`.
@@ -1908,6 +1917,11 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   não. Determinístico e no save; desfazer até a obra começar.
 - **Entrega:** testes de validação (lote, água, cobertura dos serviços refeita, linhas de produção mantidas), vitrine
   da ferramenta, 0 compilações ao usar a ferramenta.
+- **Entregue em 07/10/2026** (MOV1, revisada). Comando `mover` (10% do custo mais demolir e aplainar, obra curta de 12 tiques,
+  produção, estoque, nome e cor mantidos, cobertura refeita, save, `mover.desfazer`, recusa em zona e na Arcologia), consulta
+  `mover.previa`, botão Mover na folha, ferramenta sobre a de colocar, giro de dois dedos sobre o fantasma
+  (`R.entrada.aoGiroDeFerramenta`) e a ferramenta aberta voltando depois da recarga pela perda do contexto. Contratos
+  publicados em `contratos/`. A obra curta usa a obra genérica até a OBR2. Nota em `docs/entregas/onda4/MOV1.md`.
 
 #### R4c. Moradia de alto padrão (onda 4, etapa 2; 2 sessões; D95)
 - **Arquivos:** `render/geracao/planoPredio.js` (tipologias residenciais), `data/predios.js` (tipologias, faixas de

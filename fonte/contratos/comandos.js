@@ -47,6 +47,12 @@ export const COMANDOS = congelar({
     codigos: ['creditos', 'marco', 'acesso', 'colisao', 'declive', 'agua', 'recurso', 'ladrilho', 'gleba'],
     exemplo: { tipo: 'clinica', x: 300, z: 120, rot: 0 },
   },
+  mover: {
+    dono: 'MOV1', args: '{ ref, x, z, rot, giro?, alinhar?, aplainar? }',
+    codigos: ['inexistente', 'valor', 'nada', 'arcologia', 'ocupado', 'creditos', 'marco', 'acesso', 'colisao', 'declive', 'agua', 'recurso', 'ladrilho', 'gleba'],
+    exemplo: { ref: 5, x: 320, z: 140, rot: 0 },
+  },
+  'mover.desfazer': { dono: 'MOV1', args: '{ ref }', codigos: ['inexistente', 'ocupado'], exemplo: { ref: 5 } },
   demolir: { dono: 'S2a', args: '{ refs: [ref] }', codigos: ['arcologia', 'inexistente', 'creditos'], exemplo: { refs: [5] } },
   'predio.cor': { dono: 'S2a', args: '{ ref, cor }', codigos: ['inexistente', 'valor'], exemplo: { ref: 5, cor: 3 } },
   'predio.nome': { dono: 'S2a', args: '{ ref, nome }', codigos: ['inexistente', 'valor'], exemplo: { ref: 5, nome: 'Pedreira Norte' } },

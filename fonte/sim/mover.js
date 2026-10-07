@@ -451,10 +451,9 @@ function limparJanelas(sim) {
 
 export function registrarMover(sim) {
   if (!sim.json.mover) sim.registrarJson('mover', { pend: {} });
-  const fora = { foraDoContrato: true };
-  sim.registrarComando('mover', mover, fora);
-  sim.registrarComando('mover.desfazer', desfazerMover, fora);
-  sim.registrarConsulta('mover.previa', previaMover, fora);
+  sim.registrarComando('mover', mover);
+  sim.registrarComando('mover.desfazer', desfazerMover);
+  sim.registrarConsulta('mover.previa', previaMover);
   sim.registrarSistema(RODADA, 11, limparJanelas, 1, { nome: 'mover', ordem: ORDEM.cidade + 50 });
   registrarPartePredio((s, i, out) => {
     out.mover = infoDeMover(s, i);

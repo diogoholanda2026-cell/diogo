@@ -40,6 +40,11 @@ export const CONSULTAS = congelar({
       "({ modo: 'reta' | 'curva' | 'continua' | 'grade' | 'melhorar' | 'demolir', tipo, pontos: [[x, z]], tangente? (continua), espacamento? (grade), arestas? (melhorar e demolir), tolerancia, encaixe, sessao }) → { ok, segmentos: [{ p: [8], tipo, cotas: [y0, y1], ponte, erros: [codigo], declive }], nosNovos, divisoes, novos: [[x, z]], dividir: [{ aresta, t, ponto }], pontos: [[x, z]] (os encaixados), encaixes: [{ indice, ponto, tipo, valor, portao?, passo? }], guias: [{ tipo, a, b }], demolir: { predios: [ref], custo }, comprimento, custo, manutencaoHora, declive, erros: [{ codigo, trecho, dados? }] (trecho -1: o plano inteiro; dados.faltam em 'creditos') }; melhorar e demolir trazem também arestas (um item por aresta pedida) e demolir traz devolve (custo = -devolve); até 1 ms",
   },
   'zona.previa': { dono: 'S1b', formato: '({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia }' },
+  'mover.previa': {
+    dono: 'MOV1',
+    formato:
+      '({ ref, x, z, rot, giro?, alinhar?, aplainar? }) → { ok, codigo?, dados?, x, z, rot, custo (10% de mover mais demolir e aplainar), alcance antes e depois, efeitos }; sem x e z devolve nada (o prédio já está ali)',
+  },
   'construir.previa': {
     dono: 'S2a e S3a',
     formato:

@@ -24,9 +24,9 @@ const K = {
   led: acab('#e6dfd2', { rugo: 0.3, metal: 0.3, luz: LUZ.led }),
   // as copas baixas de longe: verdes fundos e variados (nada de verde-lima)
   copa: [
-    acab('#2f4527', { rugo: 0.95, padrao: PADRAO.folha }),
-    acab('#3a5230', { rugo: 0.95, padrao: PADRAO.folha }),
-    acab('#294022', { rugo: 0.95, padrao: PADRAO.folha }),
+    acab('#36502c', { rugo: 0.95, padrao: PADRAO.folha }),
+    acab('#415b34', { rugo: 0.95, padrao: PADRAO.folha }),
+    acab('#2c4727', { rugo: 0.95, padrao: PADRAO.folha }),
   ],
   tronco: acab('#4a3f35', { rugo: 0.9 }),
   // ipê-amarelo (dourado queimado) e ipê-roxo (lilás fechado): a flor de agosto e setembro
@@ -34,16 +34,9 @@ const K = {
   ipeRoxo: acab('#85578a', { rugo: 0.9, padrao: PADRAO.folha }),
 };
 
-/** Copa baixa de longe: um octaedro mexido (8 triângulos) com a normal radial, para a árvore ler como mancha de folhagem. */
+/** Copa baixa de longe: um tufo redondo (icosaedro mexido, normais radiais) para a árvore ler como mancha de folhagem, não como pirâmide. */
 export function copaBaixa(m, cx, cy, cz, r, ry, k, semente) {
-  const base = m.vertices;
-  const f = (i) => 0.82 + 0.36 * hashF(semente, i, 11);
-  const V = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-  V.forEach((q, i) => {
-    const s = f(i);
-    m.v(cx + q[0] * r * s, cy + q[1] * ry * s * (q[1] < 0 ? 0.6 : 1), cz + q[2] * r * s, q[0], q[1] * 0.8 + 0.3, q[2], cx + q[0] * r, cz + q[2] * r, k);
-  });
-  for (const [a, b, c] of [[0, 2, 4], [4, 2, 1], [1, 2, 5], [5, 2, 0], [0, 4, 3], [4, 1, 3], [1, 5, 3], [5, 0, 3]]) m.tri(base + a, base + b, base + c);
+  tufo(m, cx, cy, cz, r, ry, k, semente);
 }
 
 /** Ipê em flor (acento de cor): o tronco fino e a copa em três tufos da cor da flor. */
@@ -137,8 +130,8 @@ export function ponte(g, p) {
 
   // as camadas de cima: o passeio de pedra no meio, o deck de madeira nas bordas e os canteiros com duas fileiras de árvores
   const camada = (s0, s1, v0, v1, y, k) => g.opaco.quad(P(s0, v0, y), P(s1, v0, y), P(s1, v1, y), P(s0, v1, y), [0, 1, 0], [P(s0, v0, 0)[0], P(s0, v0, 0)[2]], [P(s1, v0, 0)[0], P(s1, v0, 0)[2]], [P(s1, v1, 0)[0], P(s1, v1, 0)[2]], [P(s0, v1, 0)[0], P(s0, v1, 0)[2]], k);
-  camada(r0 - 0.4, r1 + 0.4, -3, 3, Y + 0.03, K.passeio);
-  for (const sd of [-1, 1]) camada(r0 - 0.4, r1 + 0.4, sd * 11, sd * (hw - 0.3), Y + 0.03, K.deck);
+  camada(sa, sb, -3, 3, Y + 0.03, K.passeio);
+  for (const sd of [-1, 1]) camada(sa, sb, sd * 11, sd * hw, Y + 0.03, K.deck);
   for (const [va, vb] of vaos) {
     for (const sd of [-1, 1]) {
       const s0 = va + 0.3;
@@ -180,7 +173,7 @@ export function ponte(g, p) {
         g.arvores.push({ x: q[0], y: q[1], z: q[2], especie: esp, altura: alt, giro: hashF(k, 6, 7) * 6.28 });
         if (k % 3 === 0 || esp !== 'palmeira') {
           const rr = esp === 'palmeira' ? 2.8 : alt * 0.5;
-          copaBaixa(g.opaco, q[0], q[1] + alt * 0.68, q[2], rr, rr * 0.8, K.copa[k % 3], k * 5 + Math.round(angulo));
+          copaBaixa(g.opaco, q[0], q[1] + alt * 0.64, q[2], rr * 1.1, rr * 0.7, K.copa[k % 3], k * 5 + Math.round(angulo));
         }
       }
     }
