@@ -35,7 +35,7 @@ export function ControlesToque({ ui, mudar }) {
       <Segmentado a={`toq1.${k}`} rotulo={rotulo} valor={p[k] ?? PADRAO_TOQUE[k]} aoTrocar={(v) => mudar({ [k]: v })} opcoes={SENSIBILIDADES.map((v) => ({ v, rotulo: fmt.pct(v) }))} />
     </Linha>
   );
-  const inercia = p.toqueInercia !== false;
+  const inercia = p.toqueInercia === true;
   const mexido = Object.keys(PADRAO_TOQUE).some((k) => (p[k] ?? PADRAO_TOQUE[k]) !== PADRAO_TOQUE[k]);
   return (
     <Secao titulo={t('toq1.titulo')}>

@@ -48,7 +48,7 @@ function montar({ T = terrenoPlano(), cam0 = CAM0, prefs = {}, L = W, A = H } = 
     return raioDoContexto(ctx, x, y);
   };
   const E = criarEntrada(ctx, cam);
-  E.opcoes(opcoesDoToque(prefs));
+  E.opcoes(opcoesDoToque({ toqueInercia: true, ...prefs }));
   const ev = (tipo, id, x, y, t, extra = {}) =>
     ouvintes.get(tipo)?.({ type: tipo, pointerId: id, clientX: x, clientY: y, timeStamp: t, pointerType: 'touch', button: 0, isPrimary: id === 1, preventDefault() {}, ...extra });
   // o que o jogo faz em cada quadro: a câmera (fazerQuadro) e depois os domínios, a entrada entre eles
@@ -199,8 +199,8 @@ test('arrasto: a sensibilidade escala o que o mundo anda por px do dedo (0,5 and
   assert.ok(Math.abs(anda(1.5) / base - 1.5) < 0.2, `1,5: ${anda(1.5) / base}`);
   assert.equal(opcoesDoToque({ toqueArrasto: 99 }).sensArrasto, 2, 'a sensibilidade tem teto');
   assert.equal(opcoesDoToque({ toqueGiro: 'x' }).sensGiro, 1, 'valor torto vale o padrão');
-  assert.deepEqual(opcoesDoToque({}), { sensArrasto: 1, sensPinca: 1, sensGiro: 1, inercia: true });
-  assert.equal(TOQUE_PADRAO.inercia, true);
+  assert.deepEqual(opcoesDoToque({}), { sensArrasto: 1, sensPinca: 1, sensGiro: 1, inercia: false });
+  assert.equal(TOQUE_PADRAO.inercia, false);
 });
 
 // ------------------------------------------------------------------------------------------------ soltura

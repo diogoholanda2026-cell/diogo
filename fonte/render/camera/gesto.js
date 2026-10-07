@@ -25,7 +25,7 @@ export const SOLTURA = Object.freeze({
 });
 
 /** Valores padrão do toque (padrão bom sem mexer em nada); as escolhas das Configurações ficam em ui/inicio/corpo/Toque.jsx. */
-export const TOQUE_PADRAO = Object.freeze({ arrasto: 1, pinca: 1, giro: 1, inercia: true });
+export const TOQUE_PADRAO = Object.freeze({ arrasto: 1, pinca: 1, giro: 1, inercia: false });
 
 const noIntervalo = (v, a, b, padrao) => (Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : padrao);
 
@@ -38,7 +38,7 @@ export function opcoesDoToque(prefs = {}) {
     sensArrasto: noIntervalo(prefs.toqueArrasto, 0.4, 2, TOQUE_PADRAO.arrasto),
     sensPinca: noIntervalo(prefs.toquePinca, 0.4, 2, TOQUE_PADRAO.pinca),
     sensGiro: noIntervalo(prefs.toqueGiro, 0.4, 2, TOQUE_PADRAO.giro),
-    inercia: prefs.toqueInercia !== false,
+    inercia: prefs.toqueInercia === true,
   };
 }
 

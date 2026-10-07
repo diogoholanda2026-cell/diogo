@@ -366,6 +366,7 @@ function montarEntrada({ modo = 'camera' } = {}) {
   // raio: 1 px da tela = 1 m no chão em volta do alvo
   const ctx = { canvas, tela: { w: 800, h: 600 }, camera: { fov: 40 }, raio: (x, y) => [est.x + x - 400, 0, est.z + y - 300] };
   const E = criarEntrada(ctx, camera);
+  E.opcoes({ inercia: true }); // o padrão do jogo é sem deslize (07/10/2026); estes testes cobrem o deslize
   E.modo(modo);
   const eventos = [];
   E.aoFerramenta((e) => eventos.push(e));

@@ -315,11 +315,13 @@ export function criarEntrada(ctx, camera) {
     n.dist = g.pinca === null ? e0.dist : e0.dist * (g.pinca / Math.max(1, dist)) ** st.opcoes.sensPinca;
     // sobre o fantasma da ferramenta o giro dos dedos é do fantasma, não da câmera
     const doFantasma = g.sobreFantasma && st.aoGiroFerramenta;
-    n.guinada = g.giro === null || doFantasma ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
+    // pedido do dono (07/10/2026): na pinça a vista só aproxima ou afasta, sem girar nem andar com o dedo
+    n.guinada = g.giro === null || doFantasma || g.pinca !== null ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
     camera.definir(n);
     atualizar(t);
     // o ponto do chão do meio dos dedos fica sob o meio (o raio sai da câmera já posta em dia)
-    const p = g.ancora ? chao(mx, my) : null;
+    const soZoom = g.pinca !== null;
+    const p = g.ancora ? chao(soZoom ? (g.p0[0].x + g.p0[1].x) / 2 : mx, soZoom ? (g.p0[0].y + g.p0[1].y) / 2 : my) : null;
     if (p) {
       camera.mover(g.ancora[0] - p[0], g.ancora[2] - p[2]);
       atualizar(t);
