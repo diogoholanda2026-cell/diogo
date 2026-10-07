@@ -1,7 +1,8 @@
 // Prédios (dona: S2a): o estado da cidade que os domínios da S2a dividem (colunas próprias na tabela de prédios, a
 // seção JSON 'cidade' e os índices derivados), o comando construir único (serviços da S2a e prédios da Holding da S3a,
 // pelo registro sim.colocaveis), demolir (D54), predio.cor e predio.nome, as consultas construir.previa, predio,
-// catalogo, avisosPredios e avisos, e as camadas Zonas e Nível.
+// catalogo, avisosPredios e avisos, e as camadas Zonas e Nível. Mover e girar o colocável pronto (MOV1, D94) mora em
+// mover.js e entra por registrarMover, no fim do registrar; conferirLugar e lugarDoColocavel são os mesmos do construir.
 //
 // Determinismo dos derivados: tudo o que não vai no save (acesso de cada prédio à via, cobertura, componentes das
 // redes, candidatos de nascimento) é função pura do estado salvo e é refeito antes de ser lido sempre que algo mudou
@@ -30,6 +31,7 @@ import { custoDemolirPredio } from './vias/demolir.js';
 import { daHolding, ladrilhoDe } from './mundo/ladrilhos.js';
 import { aguaEm } from './mundo/terreno.js';
 import { recursoNoPoligono } from './mundo/recursos.js';
+import { registrarMover } from './mover.js';
 
 // ------------------------------------------------------------------------------------------------ estado comum
 
@@ -211,7 +213,8 @@ export function prepararCidade(sim) {
   return j;
 }
 
-function sujarVia(t, i) {
+/** Marca o acesso do prédio i para ser refeito na próxima leitura (o prédio mudou de lugar ou a via dele mudou). */
+export function sujarVia(t, i) {
   if (i >= t.viaSuja.length) return void (t.viaTudo = true);
   if (!t.viaSuja[i]) {
     t.viaSuja[i] = 1;
@@ -619,6 +622,16 @@ function acessoDaPlanta(sim, x, z, rot, w, d, { semRodovia = false, soFrente = f
   return melhor;
 }
 
+/**
+ * Acesso de um lugar de colocável (o de lugarDoColocavel) à via, na conta do prédio construído: { e, s } com a aresta e
+ * o arco a partir do nó a (o mesmo que acessoDe devolve depois da obra), ou e = -1 sem via a 24 m.
+ */
+export function acessoDoLugar(sim, L) {
+  const r = acessoDaPlanta(sim, L.x, L.z, L.rot, L.w, L.d, { semRodovia: true });
+  if (r.e < 0) return { e: -1, s: 0 };
+  return { e: r.e, s: arcoDoT(sim.tabelas.arestas.arco.subarray(17 * r.e, 17 * r.e + 17), r.t) };
+}
+
 /** Amostras dentro da planta (cantos, bordas e uma grade a cada ~8 m): pares x, z e o peso de cada uma (m²). */
 function amostrasDaPlanta(L, passo = 8) {
   const out = [];
@@ -677,13 +690,14 @@ function penetracao(c1, c2) {
  *   acesso    { max, alinhar }               colisao  { com: 'via' | 'predio', ref, afastar, nome? }
  *   declive   { desnivel, max, livre }       recurso  { recurso, media, minimo }
  * `aplainar` (planta sobre declive entre o livre e o máximo, e só com `{ aplainar: true }`): { desnivel, livre, max, volume,
- * custo, tiques }.
+ * custo, tiques }. Mover um prédio pronto (MOV1, D94) usa a mesma regra com duas opções: `ignorar` (o idx do próprio prédio,
+ * que não bate em si mesmo nem na planta de onde sai) e `semMarco` (ele já foi liberado quando foi construído).
  */
-export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = false } = {}) {
+export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = false, ignorar = -1, semMarco = false } = {}) {
   const P = sim.tabelas.predios;
   const A = sim.tabelas.arestas;
   const T = sim.espelho.terreno;
-  if (!colocavelLiberado(sim, tipo, def)) return { codigo: 'marco', dados: { marco: marcoDoColocavel(tipo, def) } };
+  if (!semMarco && !colocavelLiberado(sim, tipo, def)) return { codigo: 'marco', dados: { marco: marcoDoColocavel(tipo, def) } };
   const { pts, pesos } = amostrasDaPlanta(L);
   const alturas = new Float64Array(pts.length / 2);
   let hmin = Infinity;
@@ -751,7 +765,7 @@ export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = fa
     caixa[3] = Math.max(caixa[3], L.contorno[k + 1]);
   }
   for (const i of prediosNaCaixa(sim, caixa[0], caixa[1], caixa[2], caixa[3])) {
-    if (!sobrepoe(P, i, L)) continue;
+    if (i === ignorar || !sobrepoe(P, i, L)) continue;
     if (P.tipo[i] === TIPO_PREDIO.ZONA) demolir.push(i);
     else {
       const c2 = cantosRetangulo(P.x[i], P.z[i], P.rot[i], P.w[i], P.d[i]);
@@ -840,7 +854,7 @@ export const produtorDeRede = (tipo, def) => !!CATEGORIAS_SERVICO[(def ?? SERVIC
 export const viaComRede = (sim, e) => e >= 0 && sim.tabelas.arestas.viva[e] === 1 && !!VIAS[VIAS_ORDEM[sim.tabelas.arestas.tipo[e]]]?.redes;
 
 /** D54: os prédios de zona que saem para o colocável custam os materiais do nível deles, como na via. */
-function custoDosDemolidos(sim, lista) {
+export function custoDosDemolidos(sim, lista) {
   let s = 0;
   for (const i of lista ?? []) s += custoDemolirPredio(sim, i);
   return s;
@@ -1237,5 +1251,6 @@ export function registrar(sim) {
   sim.registrarConsulta('avisos', consultaAvisos);
   sim.camadas.registrar('zonas', camadaZonas);
   sim.camadas.registrar('nivel', camadaNivel);
+  registrarMover(sim);
 }
 

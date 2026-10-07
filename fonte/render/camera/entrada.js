@@ -29,6 +29,14 @@
 // ainda guardados os limpa; um toque nos 12 px de baixo é do gesto do sistema e não começa nada.
 // Evento da ferramenta: { fase: 'inicio' | 'move' | 'fim', x, y, ponto, dedos, tipo: 'toque' | 'mouse' | 'caneta',
 // dedoX, dedoY, cancelado? } (x, y é a mira em px CSS; ponto o chão sob ela, R.raio).
+// Segurar e arrastar (MOV1, D94): um ouvinte do toque longo que abre uma ferramenta (modo 'ferramenta') leva o dedo que
+// ainda segura junto: o gesto vira o da ferramenta (fase 'inicio' no dedo) e o arrasto move o fantasma, sem a câmera.
+// Quem registra o ouvinte com prioridade maior fala primeiro e, devolvendo true, fica com o toque (o menu de contexto, que
+// ouve o mesmo toque longo, não abre por cima).
+// Giro de dois dedos sobre o fantasma (D98, MOV1): com opcoes({ giroFerramenta: { x, z, raio } }) (o lugar da planta no chão)
+// e um ouvinte de aoGiroDeFerramenta, dois dedos que começam sobre ela e giram não giram a câmera: o ouvinte recebe
+// { delta, fim } com o ângulo acumulado dos dedos NO CHÃO, em radianos, na convenção da rotação do prédio (a frente é
+// (sen rot, cos rot)); a pinça e o arrasto do par seguem mexendo na câmera.
 // ?toque=1: registro por quadro do gesto em window.__toque (toque-log.js).
 import { GESTOS, SOLTURA, Rastro, limiarPinca, limiarGiro, ehPinca, ehGiro, pontoDaPinca, pontoDoGiro, limitarVetor, tetoDoQuadro, aplicarTeto, metrosPorPxEm, opcoesDoToque } from './gesto.js';
 import { criarLogToque, mostrarPainel } from './toque-log.js';
@@ -46,7 +54,7 @@ const RAD = Math.PI / 180;
 export function criarEntrada(ctx, camera) {
   const canvas = ctx.canvas;
   const dedos = new Map();
-  const st = { modo: 'camera', aoFerramenta: null, aoToque: [], opcoes: { deslocY: 56, bordaPx: 48, bordaMouse: false, area: null, ...opcoesDoToque({}) } };
+  const st = { modo: 'camera', aoFerramenta: null, aoGiroFerramenta: null, aoToque: [], opcoes: { deslocY: 56, bordaPx: 48, bordaMouse: false, area: null, giroFerramenta: null, ...opcoesDoToque({}) } };
   const teclas = new Set();
   let gesto = null;
   let pairar = null; // mouse parado sobre o canvas: { x, y, novo }
@@ -83,6 +91,12 @@ export function criarEntrada(ctx, camera) {
   };
 
   // ---------------------------------------------------------------------------------------------- ferramenta
+
+  /** Avisa os ouvintes do toque (os de maior prioridade primeiro); devolve true se um deles ficou com o toque. */
+  const avisarToque = (ev) => {
+    for (const l of st.aoToque) if (l.fn(ev) === true) return true;
+    return false;
+  };
 
   /** A mira: acima do dedo no toque (deslocY), no cursor no mouse e na caneta; nunca fora da tela. */
   const mira = (p, tipo) => ({ x: p.x, y: Math.max(0, p.y - (tipo === 'toque' ? st.opcoes.deslocY : 0)) });
@@ -214,12 +228,43 @@ export function criarEntrada(ctx, camera) {
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
     rastroCam.length = 0;
+    const ancora = chao(mx, my);
     gesto = {
-      tipo: 'dois', modo: null, t0: t, tMove: null, e0: camera.estado(), ancora: chao(mx, my), sujo: false,
+      tipo: 'dois', modo: null, t0: t, tMove: null, e0: camera.estado(), ancora, sujo: false,
       p0: [{ x: a.x, y: a.y }, { x: b.x, y: b.y }], d0: Math.hypot(a.x - b.x, a.y - b.y), ang0: Math.atan2(b.y - a.y, b.x - a.x),
-      pinca: null, giro: null,
+      pinca: null, giro: null, sobreFantasma: sobreOFantasma(ancora), azRef: null, delta: 0,
     };
     log?.referencia(gesto.ancora);
+  }
+
+  /** O meio dos dedos (ponto do chão) está sobre a planta que a ferramenta anunciou, e há quem ouça o giro? */
+  function sobreOFantasma(p) {
+    const f = st.opcoes.giroFerramenta;
+    if (st.modo !== 'ferramenta' || !st.aoGiroFerramenta || !f || !p) return false;
+    return Math.hypot(p[0] - f.x, p[2] - f.z) <= f.raio;
+  }
+
+  /** Azimute (na convenção da rotação do prédio) do vetor do dedo a para o b, no chão; sem chão, pela tela e pela guinada. */
+  function azimuteDosDedos(a, b) {
+    const pa = chao(a.x, a.y);
+    const pb = chao(b.x, b.y);
+    if (pa && pb) return Math.atan2(pb[0] - pa[0], pb[2] - pa[2]);
+    return Math.PI / 2 - Math.atan2(b.y - a.y, b.x - a.x) - camera.estado().guinada * RAD;
+  }
+
+  /** O giro dos dois dedos que o fantasma recebe (o ângulo acumulado desde que passou o limiar). */
+  function girarFantasma(g, a, b) {
+    const az = azimuteDosDedos(a, b);
+    g.azRef ??= az;
+    g.delta = normalizar(az - g.azRef);
+    st.aoGiroFerramenta?.({ delta: g.delta, fim: false });
+  }
+
+  /** O gesto de giro do fantasma acabou (um dedo saiu, o foco se perdeu, a ferramenta fechou): o último ângulo vale. */
+  function fecharGiroFantasma(g) {
+    if (g?.tipo !== 'dois' || g.azRef === null) return;
+    g.azRef = null;
+    st.aoGiroFerramenta?.({ delta: g.delta, fim: true });
   }
 
   /** Decide o modo de dois dedos pelo movimento de cada um desde o começo. */
@@ -268,7 +313,9 @@ export function criarEntrada(ctx, camera) {
     if (g.giro === null && ehGiro(dAng, g.d0, viaja)) g.giro = g.ang0 + pontoDoGiro(dAng, g.d0, viaja) * RAD;
     const n = { ...camera.estado() };
     n.dist = g.pinca === null ? e0.dist : e0.dist * (g.pinca / Math.max(1, dist)) ** st.opcoes.sensPinca;
-    n.guinada = g.giro === null ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
+    // sobre o fantasma da ferramenta o giro dos dedos é do fantasma, não da câmera
+    const doFantasma = g.sobreFantasma && st.aoGiroFerramenta;
+    n.guinada = g.giro === null || doFantasma ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
     camera.definir(n);
     atualizar(t);
     // o ponto do chão do meio dos dedos fica sob o meio (o raio sai da câmera já posta em dia)
@@ -277,6 +324,7 @@ export function criarEntrada(ctx, camera) {
       camera.mover(g.ancora[0] - p[0], g.ancora[2] - p[2]);
       atualizar(t);
     }
+    if (doFantasma && g.giro !== null) girarFantasma(g, a, b);
   }
 
   // ---------------------------------------------------------------------------------------------- eventos
@@ -287,6 +335,7 @@ export function criarEntrada(ctx, camera) {
       const d = dedos.get(gesto.id);
       if (d) ferramenta('fim', d, 1, d.tipo, { cancelado: true });
     }
+    fecharGiroFantasma(gesto);
     dedos.clear();
     gesto = null;
     pairar = null;
@@ -408,7 +457,7 @@ export function criarEntrada(ctx, camera) {
       if (st.modo === 'ferramenta') {
         ferramenta('inicio', d, 1, d.tipo);
         ferramenta('fim', d, 1, d.tipo);
-      } else for (const fn of st.aoToque) fn({ x: p.x, y: p.y, longo: false, botao: d.botao });
+      } else avisarToque({ x: p.x, y: p.y, longo: false, botao: d.botao });
       return;
     }
     if (g.tipo === 'ferramenta') {
@@ -420,7 +469,7 @@ export function criarEntrada(ctx, camera) {
     }
     if ((g.tipo === 'arrastar' || g.tipo === 'girar') && d.id === g.id) {
       if (!cancelado && !dedos.size) {
-        if (!g.moveu && t - g.t0 <= GESTOS.longoMs) for (const fn of st.aoToque) fn({ x: p.x, y: p.y, longo: false, botao: d.botao });
+        if (!g.moveu && t - g.t0 <= GESTOS.longoMs) avisarToque({ x: p.x, y: p.y, longo: false, botao: d.botao });
         else if (g.moveu && g.tipo === 'arrastar') {
           // a velocidade mede-se com a câmera ainda na pose do último quadro (os raios saem dela); depois o que o
           // dedo andou e ainda não foi aplicado entra, para a vista soltar na posição final do dedo
@@ -432,6 +481,7 @@ export function criarEntrada(ctx, camera) {
       return;
     }
     if (g.tipo === 'dois') {
+      fecharGiroFantasma(g);
       if (dedos.size >= 2) {
         // saiu um de três dedos: o gesto recomeça com o par que ficou (as medidas eram do par velho: a vista pulava)
         comecarDois(t);
@@ -523,6 +573,18 @@ export function criarEntrada(ctx, camera) {
     return !!camera.movendo;
   };
 
+  /**
+   * O toque longo (450 ms parado): os ouvintes decidem. Se algum abriu uma ferramenta com o dedo ainda em cima (segurar e
+   * arrastar), o dedo segue na ferramenta: o gesto vira o dela e o arrasto leva o fantasma. Senão, o gesto acaba aqui.
+   */
+  function toqueLongo(d, t) {
+    avisarToque({ x: d.x, y: d.y, longo: true, botao: d.botao });
+    if (st.modo === 'ferramenta' && dedos.size === 1 && dedos.has(d.id)) {
+      gesto = { tipo: 'ferramenta', id: d.id, t0: t, dispositivo: d.tipo };
+      ferramenta('inicio', d, 1, d.tipo);
+    } else gesto = { tipo: 'nada' };
+  }
+
   let tAnt = 0;
   /** A cada quadro: o gesto da câmera (um raio), o árbitro no tempo (decidir em 80 ms, toque longo), a borda, o cursor parado e as teclas. */
   function quadro(tMs) {
@@ -537,16 +599,11 @@ export function criarEntrada(ctx, camera) {
     }
     if (gesto?.tipo === 'espera') {
       const d = dedos.get(gesto.id);
-      if (d && st.modo !== 'ferramenta' && tMs - gesto.t0 >= GESTOS.longoMs) {
-        for (const fn of st.aoToque) fn({ x: d.x, y: d.y, longo: true, botao: d.botao });
-        gesto = { tipo: 'nada' };
-      } else if (d && tMs - gesto.t0 >= GESTOS.decidirMs && st.modo === 'ferramenta') decidirUm(d, tMs);
+      if (d && st.modo !== 'ferramenta' && tMs - gesto.t0 >= GESTOS.longoMs) toqueLongo(d, tMs);
+      else if (d && tMs - gesto.t0 >= GESTOS.decidirMs && st.modo === 'ferramenta') decidirUm(d, tMs);
     } else if (gesto?.tipo === 'arrastar' && !gesto.moveu && st.modo !== 'ferramenta') {
       const d = dedos.get(gesto.id);
-      if (d && d.tipo !== 'mouse' && tMs - gesto.t0 >= GESTOS.longoMs) {
-        for (const fn of st.aoToque) fn({ x: d.x, y: d.y, longo: true, botao: d.botao });
-        gesto = { tipo: 'nada' };
-      }
+      if (d && d.tipo !== 'mouse' && tMs - gesto.t0 >= GESTOS.longoMs) toqueLongo(d, tMs);
     }
     if (dt > 0 && rolarBorda(dt, tMs) && gesto?.tipo === 'ferramenta') {
       const d = dedos.get(gesto.id);
@@ -625,20 +682,32 @@ export function criarEntrada(ctx, camera) {
         if (d) ferramenta('fim', d, 1, d.tipo, { cancelado: true });
         gesto = { tipo: 'nada' };
       }
+      if (gesto?.tipo === 'dois') fecharGiroFantasma(gesto);
       st.modo = novo;
     },
     aoFerramenta(fn) {
       st.aoFerramenta = fn;
     },
-    aoToque(fn) {
-      st.aoToque.push(fn);
+    /** O giro de dois dedos sobre o fantasma da ferramenta: fn({ delta, fim }); devolve a função que desliga. */
+    aoGiroDeFerramenta(fn) {
+      st.aoGiroFerramenta = fn;
       return () => {
-        st.aoToque = st.aoToque.filter((f) => f !== fn);
+        if (st.aoGiroFerramenta === fn) st.aoGiroFerramenta = null;
+      };
+    },
+    /** `prioridade` maior fala primeiro; um ouvinte que devolve true fica com o toque e os seguintes não o recebem. */
+    aoToque(fn, { prioridade = 0 } = {}) {
+      const l = { fn, prioridade };
+      st.aoToque.push(l);
+      st.aoToque.sort((a, b) => b.prioridade - a.prioridade);
+      return () => {
+        st.aoToque = st.aoToque.filter((x) => x !== l);
       };
     },
     /**
      * { deslocY (0 a 72 px), bordaPx, bordaMouse (rolar pela borda da janela no PC), area: { x, y, w, h } | null,
-     *   sensArrasto, sensPinca, sensGiro (0,4 a 2), inercia (bool) }.
+     *   sensArrasto, sensPinca, sensGiro (0,4 a 2), inercia (bool), giroFerramenta: { x, z, raio } (m, a planta do fantasma
+     *   no chão) | null }.
      */
     opcoes(o = {}) {
       if (Number.isFinite(o.deslocY)) o = { ...o, deslocY: Math.max(0, Math.min(72, o.deslocY)) };

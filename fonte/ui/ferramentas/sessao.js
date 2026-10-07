@@ -5,21 +5,28 @@
 // sessão (até 10 ações), o teclado do PC, a vibração, a rolagem pela borda (só se o render não rolar sozinho) e o
 // catálogo da bandeja.
 //
-// Contrato com as outras parcelas de interface: loja.ferramenta.value = { tipo: 'via' | 'zona' | 'colocar' | 'demolir'
-// | 'areas', ...opções } abre a ferramenta (colocar pede { item: { tipo, nome, custo, ... } }; zona aceita { zona }; via
-// aceita { tipoVia, modo }); null fecha. Os componentes leem o sinal `sessao` e chamam `ferramentas.*`.
+// Contrato com as outras parcelas de interface: loja.ferramenta.value = { tipo: 'via' | 'zona' | 'colocar' | 'mover' |
+// 'demolir' | 'areas', ...opções } abre a ferramenta (colocar pede { item: { tipo, nome, custo, ... } }; mover pede { ref }
+// do prédio pronto, MOV1; zona aceita { zona }; via aceita { tipoVia, modo }); null fecha. Os componentes leem o sinal
+// `sessao` e chamam `ferramentas.*`. Mover é o colocar com a prévia, o item e o comando do mover (ui/ferramentas/mover.js):
+// `sessao.tipo` segue 'colocar' (a barra, o painel do fantasma e o puxador são os mesmos) e `maquina.mover` diz a ref.
+// estadoParaRetomar() e retomar(estado) levam a ferramenta aberta pela recarga que a perda do contexto WebGL faz (TOQ1).
 import { signal, batch, effect } from '@preact/signals';
 import * as via from './via.js';
 import * as zona from './zona.js';
 import * as colocar from './colocar.js';
 import * as demolir from './demolir.js';
 import * as areas from './areas.js';
+import * as mover from './mover.js';
+import * as textosMov1 from '../textos/mov1.js';
 import { VIAS } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { MARCOS } from '../../data/marcos.js';
 import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
 import { SESSAO } from '../acoes.js';
+import { registrarTextos } from '../textos.js';
+import { registrarGlifos } from '../glifos/glifos.js';
 
 /** Até quantas ações o Desfazer guarda por sessão (D32). */
 export const MAX_DESFAZER = 10;
@@ -234,8 +241,7 @@ function parametrosDaDica(d, { t, fmt }) {
  * A dica de uma prévia da ferramenta de colocar (D98): { codigo, chave, tom: 'er' | 'info', colide, texto (o motivo e o
  * que fazer, para o painel), curto (o motivo curto do botão e da cota) } ou null. `ui` leva t e fmt.
  */
-export function montarDica(p, ui) {
-  const d = colocar.dicaDoBloqueio(p);
+export function montarDica(p, ui, d = colocar.dicaDoBloqueio(p)) {
   if (!d) return null;
   const params = parametrosDaDica(d, ui);
   const curto = ui.t(d.chave.replace('.dica.', '.curto.'), params);
@@ -269,9 +275,20 @@ export function dicaDaVia(m, previa, tipoVia, ui) {
 
 const agora = () => (typeof performance !== 'undefined' ? performance.now() : 0);
 
+/**
+ * A ferramenta aberta, para a recarga que a perda do contexto WebGL faz (TOQ1, MOV1): estadoParaRetomar() devolve o que
+ * basta para abrir a mesma ferramenta de novo (JSON puro: o tipo, as opções e o giro) ou null sem ferramenta; retomar(estado)
+ * a abre (false se o estado não serve ou já há ferramenta). app/controle.js leva isso na chave heldopolis.retomada.
+ */
+const retomada = { estado: () => null, retomar: () => false };
+export const estadoParaRetomar = () => retomada.estado();
+export const retomar = (estado) => retomada.retomar(estado);
+
 /** Liga a sessão à interface (ui/index.jsx chama na montagem). */
 export function registrar(ui) {
   const { R, loja, t } = ui;
+  textosMov1.registrar(registrarTextos);
+  registrarGlifos(mover.GLIFO_MOVER);
   const consultar = (...a) => ui.consultar(...a);
   const comando = (...a) => ui.comando(...a);
   const esp = () => ui.obterSim()?.espelho ?? null;
@@ -335,7 +352,7 @@ export function registrar(ui) {
       if (maq.modo === 'melhorar') return !!previa?.ok;
       return !!(previa?.segmentos?.length && !previa.erros?.length && argsUlt);
     }
-    if (tipo === 'colocar') return !!previa?.ok;
+    if (tipo === 'colocar') return !!previa?.ok && !previa.parado;
     if (tipo === 'demolir') return maq.marcados.length > 0;
     if (tipo === 'areas') return info?.estado === 'compravel';
     return true;
@@ -379,8 +396,25 @@ export function registrar(ui) {
 
   // ---------------------------------------------------------------- abrir e fechar
 
-  function abrir(novoTipo, op = {}, { deFora = false } = {}) {
+  function abrir(pedido, op = {}, { deFora = false } = {}) {
+    // mover é o colocar com a prévia, o item e o comando do mover (MOV1): a sessão fica 'colocar'
+    const ehMover = pedido === 'mover';
+    const novoTipo = ehMover ? 'colocar' : pedido;
     if (!['via', 'zona', 'colocar', 'demolir', 'areas'].includes(novoTipo)) return false;
+    let alvo = null;
+    if (ehMover) {
+      const p = consultar('predio', op.ref);
+      const pode = mover.podeAbrir(p);
+      if (!pode.ok) {
+        avisar(t(pode.chave), 'atencao');
+        if (deFora && loja.ferramenta.value) {
+          externo = null;
+          loja.ferramenta.value = null;
+        }
+        return false;
+      }
+      alvo = { p, item: mover.itemDoMover(p, t) };
+    }
     if (tipo) fechar({ manterLoja: true });
     tipo = novoTipo;
     id++;
@@ -393,10 +427,10 @@ export function registrar(ui) {
     assinaturaEnc = '';
     dica = null;
     colidindo = '';
-    item = op.item ?? null;
+    item = alvo?.item ?? op.item ?? null;
     if (tipo === 'via') maq = via.criarVia({ tipo: op.tipoVia ?? 'rua', modo: op.modo ?? 'reta', continua: op.continua, encaixe: op.encaixe });
     else if (tipo === 'zona') maq = zona.criarZona({ zona: op.zona ?? 'resBaixa', modo: op.modo ?? 'preencher', tamanho: op.tamanho, apagar: op.apagar });
-    else if (tipo === 'colocar') maq = colocar.criarColocar({ tipo: item?.tipo ?? op.tipoColocavel, item });
+    else if (tipo === 'colocar') maq = alvo ? mover.criarMover(alvo.p, item, { rot: op.rot, giro: op.giro, alinhar: op.alinhar }) : colocar.criarColocar({ tipo: item?.tipo ?? op.tipoColocavel, item });
     else if (tipo === 'demolir') maq = demolir.criarDemolir();
     else maq = areas.criarAreas();
     R?.entrada?.modo?.('ferramenta');
@@ -414,13 +448,15 @@ export function registrar(ui) {
       categoria.value = null;
       loja.selecao.value = null;
       if (!deFora) {
-        externo = { tipo, ...op };
+        externo = { ...op, tipo: pedido };
         loja.ferramenta.value = externo;
       }
     });
     R?.selecionado?.(null);
     if (tipo === 'areas') atualizarAreas();
-    publicar();
+    // mover: o fantasma já está no prédio (a prévia parada: o lugar de agora, com o custo de mover à vista)
+    if (alvo) passo({ tipo: 'angulo', rot: maq.rot, giro: maq.giro });
+    else publicar();
     return true;
   }
 
@@ -436,6 +472,7 @@ export function registrar(ui) {
     colidindo = '';
     antesDoGesto = null;
     R?.entrada?.modo?.('camera');
+    R?.entrada?.opcoes?.({ giroFerramenta: null });
     R?.ferramenta?.limpar?.();
     if (era === 'zona') R?.ferramenta?.zona?.mostrar?.(false);
     if (era === 'areas') R?.ferramenta?.ladrilhos?.(false);
@@ -708,19 +745,60 @@ export function registrar(ui) {
 
   function efeitoColocar(nome, x) {
     if (nome !== 'previa') return;
+    const mudando = !!maq.mover;
     // aplainar: a interface mostra o custo na dica e quem aperta Construir aceita pagá-lo
     const args = { tipo: maq.tipo, x: x.x, z: x.z, rot: x.rot, giro: x.giro, alinhar: x.alinhar, aplainar: true };
-    const r = consultar('construir.previa', args);
-    previa = r && Number.isFinite(r.x) ? { ...r } : colocar.previaColocarLocal(esp(), args, item);
+    if (mudando) {
+      // mover: a prévia é a de q.mover.previa; o prédio parado no lugar dele é a prévia parada, sem erro (MOV1)
+      const a = mover.argsDaPrevia(maq, x);
+      const r = consultar('mover.previa', a);
+      previa = mover.ajustarPrevia(r && Number.isFinite(r.x) ? { ...r } : mover.previaMoverLocal(esp(), a, maq, item), item);
+    } else {
+      const r = consultar('construir.previa', args);
+      previa = r && Number.isFinite(r.x) ? { ...r } : colocar.previaColocarLocal(esp(), args, item);
+    }
     const cred = loja.barra.value?.creditos;
-    if (previa.ok && Number.isFinite(cred) && (previa.custo ?? 0) > cred) previa = { ...previa, ok: false, codigo: 'creditos', faltam: previa.custo - cred, dados: { faltam: previa.custo - cred } };
+    if (previa.ok && !previa.parado && Number.isFinite(cred) && (previa.custo ?? 0) > cred) previa = { ...previa, ok: false, codigo: 'creditos', faltam: previa.custo - cred, dados: { faltam: previa.custo - cred } };
     // a rotação efetiva (a da via, quando alinhada) volta para a máquina: sair do ímã da via mantém o ângulo do fantasma
     if (previa.alinhado && Number.isFinite(previa.rot) && (Math.abs(previa.rot - maq.rot) > 1e-9 || Math.abs((previa.giro ?? maq.giro) - maq.giro) > 1e-9)) {
       maq = { ...maq, rot: previa.rot, giro: Number.isFinite(previa.giro) ? previa.giro : maq.giro };
     }
-    dica = montarDica(previa, ui);
-    R?.ferramenta?.fantasma?.({ tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot, alcance: previa.alcance ?? item?.alcance ?? 0, ok: !!previa.ok, pegada: colocar.pegadaDe(maq.tipo, item) });
+    dica = montarDica(previa, ui, (mudando ? mover.dicaDeMover(previa) : null) ?? colocar.dicaDoBloqueio(previa));
+    const pegada = colocar.pegadaDe(maq.tipo, item);
+    R?.ferramenta?.fantasma?.({ tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot, alcance: previa.alcance ?? item?.alcance ?? 0, ok: !!previa.ok, pegada });
+    // dois dedos sobre a planta giram o fantasma (a entrada do render pergunta pelo lugar dela no chão, D98)
+    if (Number.isFinite(previa.x) && Number.isFinite(previa.z)) R?.entrada?.opcoes?.({ giroFerramenta: { x: previa.x, z: previa.z, raio: Math.hypot(pegada[0], pegada[1]) / 2 + 12 } });
     realcarColisao();
+  }
+
+  async function moverPronto() {
+    const aberta = id;
+    const ref = maq.mover.ref;
+    const nome = item?.nomeReal ?? item?.nome ?? '';
+    const r = await comando('mover', mover.argsDoComando(maq, previa));
+    if (!r.ok) return vibrar(VIBRA.erro);
+    vibrar(VIBRA.confirmar);
+    if (id !== aberta || !maq) return;
+    // o Desfazer vale até a obra começar; um mover que derrubou prédios de zona não tem o que desfazer
+    if (r.dados?.desfazer) empilhar(pilha, { tipo: 'mover', desfazer: () => desfazerMover(ref) });
+    avisar(t('mov1.movido', { nome, tempo: ui.fmt.minutosDeJogo(r.dados?.tiques ?? 0) }), 'info');
+    // a ferramenta fica aberta como a de colocar, com o fantasma onde o prédio está agora (em obra)
+    recolocarNoPredio();
+  }
+
+  /** O Desfazer do mover: até a obra começar o prédio volta e o dinheiro também; depois, o aviso diz por que não. */
+  async function desfazerMover(ref) {
+    const r = await comando('mover.desfazer', { ref }, { silencioso: true });
+    if (!r.ok) avisar(t(r.codigo === 'ocupado' ? 'mov1.desfazer.tarde' : `codigo.${r.codigo}`), 'atencao');
+    return r;
+  }
+
+  /** Mover: o fantasma volta para o prédio, onde ele está agora (depois de mover, de desfazer ou de mexer no mundo). */
+  function recolocarNoPredio() {
+    const p = maq?.mover ? consultar('predio', maq.mover.ref) : null;
+    if (!p) return;
+    maq = { ...maq, mover: { ...maq.mover, de: { x: p.x, z: p.z, rot: p.rot } }, x: p.x, z: p.z, rot: colocar.normalizarRot(p.rot), giro: 0, alinhar: false };
+    passo({ tipo: 'angulo', rot: maq.rot, giro: 0 });
   }
 
   async function construirColocar() {
@@ -730,6 +808,7 @@ export function registrar(ui) {
       if (previa?.codigo) avisar(dica?.texto ?? t(`codigo.${previa.codigo}`));
       return;
     }
+    if (maq.mover) return moverPronto();
     const aberta = id;
     // a prévia já é o lugar final (grudado na via ou livre): o comando põe a planta exatamente onde o fantasma está. Grudar de
     // novo pelo centro dela escolheria, num cruzamento, outra via ou o outro lado e daria um lugar diferente do que o jogador viu
@@ -834,6 +913,10 @@ export function registrar(ui) {
     if (r && r.ok === false) vibrar(VIBRA.erro);
     else vibrar(VIBRA.confirmar);
     // a prévia volta a olhar o mundo desfeito
+    if (maq?.mover && !(r && r.ok === false)) {
+      avisar(t('mov1.desfeito', { nome: item?.nomeReal ?? '' }), 'info');
+      recolocarNoPredio();
+    }
     if (tipo === 'via') previaVia(null);
     if (tipo === 'demolir') resumo = demolir.resumoDemolir(esp(), maq);
     publicar();
@@ -1001,12 +1084,34 @@ export function registrar(ui) {
   // aoGiroDeFerramenta(({ delta, fim })), com delta o ângulo acumulado do gesto em radianos), a planta gira com o ímã
   if (R?.entrada?.aoGiroDeFerramenta) {
     let base = null;
-    R.entrada.aoGiroDeFerramenta(({ delta, fim }) => {
-      if (tipo !== 'colocar' || !maq || !Number.isFinite(delta)) return;
-      if (base === null) base = maq.rot;
-      ferramentas.girarPara(base + delta);
-      if (fim) base = null;
-    });
+    soltarEntrada.push(
+      R.entrada.aoGiroDeFerramenta(({ delta, fim }) => {
+        if (tipo !== 'colocar' || !maq || !Number.isFinite(delta)) return;
+        if (base === null) base = maq.rot;
+        ferramentas.girarPara(base + delta);
+        if (fim) base = null;
+      }) ?? (() => {}),
+    );
+  }
+  // segurar e arrastar (MOV1, D94): o toque longo no prédio JÁ selecionado abre o mover com o dedo ainda em cima, e o
+  // arrasto leva o fantasma (a entrada passa o gesto para a ferramenta); o menu de contexto não abre por cima. Em prédio
+  // que não está selecionado, o toque longo segue abrindo o menu, como antes.
+  if (R?.entrada?.aoToque) {
+    soltarEntrada.push(
+      R.entrada.aoToque(
+        ({ x, y, longo }) => {
+          if (!longo || tipo || loja.tela.value) return false;
+          const ehPredio = (o) => !!o && ['predio', 'colocavel', 'marcador'].includes(o.tipo) && Number.isInteger(o.ref);
+          const sel = loja.selecao.peek();
+          if (!ehPredio(sel)) return false;
+          const alvo = R.selecionar?.(x, y);
+          if (!ehPredio(alvo) || alvo.ref !== sel.ref) return false;
+          if (!mover.podeAbrir(consultar('predio', sel.ref)).ok) return false;
+          return abrir('mover', { ref: sel.ref }) === true;
+        },
+        { prioridade: 10 },
+      ) ?? (() => {}),
+    );
   }
   if (typeof addEventListener !== 'undefined') {
     const canvas = () => (typeof document !== 'undefined' ? document.getElementById('mundo') : null);
@@ -1156,13 +1261,50 @@ export function registrar(ui) {
     if (p) passo({ tipo: 'move', ponto: [p[0], p[2]], tela: vivo.mira, dedo: vivo.dedo, t: agora() });
   });
 
+  // a ferramenta aberta volta depois da recarga pela perda do contexto (TOQ1): o que basta para abrir a mesma de novo
+  retomada.estado = () => {
+    if (!tipo || !maq) return null;
+    const giro = { rot: Number.isFinite(maq.rot) ? maq.rot : 0, giro: Number.isFinite(maq.giro) ? maq.giro : 0, alinhar: maq.alinhar !== false };
+    if (tipo === 'via') return { tipo: 'via', tipoVia: maq.tipo, modo: maq.modo, continua: !!maq.continua, encaixe: maq.encaixe !== false };
+    if (tipo === 'zona') return { tipo: 'zona', zona: maq.zona, modo: maq.modo, tamanho: maq.tamanho, apagar: !!maq.apagar };
+    if (tipo === 'colocar') return maq.mover ? { tipo: 'mover', ref: maq.mover.ref, ...giro } : { tipo: 'colocar', item: item?.tipo ?? maq.tipo, ...giro };
+    return { tipo };
+  };
+  retomada.retomar = (e) => {
+    if (!e || typeof e !== 'object' || tipo) return false;
+    if (e.tipo === 'via') {
+      if (!VIAS[e.tipoVia]) return false;
+      return abrir('via', { tipoVia: e.tipoVia, modo: via.MODOS_VIA.includes(e.modo) ? e.modo : 'reta', continua: e.continua, encaixe: e.encaixe });
+    }
+    if (e.tipo === 'zona') {
+      if (!ZONAS[e.zona]) return false;
+      return abrir('zona', { zona: e.zona, modo: zona.MODOS_ZONA.includes(e.modo) ? e.modo : 'preencher', tamanho: e.tamanho in zona.TAMANHOS_PINCEL ? e.tamanho : undefined, apagar: !!e.apagar });
+    }
+    if (e.tipo === 'demolir' || e.tipo === 'areas') return abrir(e.tipo);
+    const angulos = { rot: Number.isFinite(e.rot) ? e.rot : 0, giro: Number.isFinite(e.giro) ? e.giro : 0, alinhar: e.alinhar !== false };
+    if (e.tipo === 'mover') return Number.isInteger(e.ref) ? abrir('mover', { ref: e.ref, ...angulos }) : false;
+    if (e.tipo === 'colocar') {
+      const achado = ['servicos', 'lazer', 'empresas'].flatMap((c) => (Array.isArray(consultar('catalogo', c)) ? consultar('catalogo', c) : [])).find((x) => x.tipo === e.item);
+      if (!achado || achado.liberado === false) return false;
+      if (!abrir('colocar', { item: achado })) return false;
+      maq = { ...maq, rot: colocar.normalizarRot(angulos.rot), giro: colocar.normalizarRot(angulos.giro), alinhar: angulos.alinhar };
+      publicar();
+      return true;
+    }
+    return false;
+  };
+
   // o puxador do giro e o painel do fantasma (D98) vêm sob demanda: só aparecem com a ferramenta de colocar aberta
   import('./DicaColocar.jsx').then((m) => m.registrar?.(ui)).catch(() => {});
+  // o painel "o que muda" do mover (MOV1) vem junto, só aparece na sessão de mover
+  import('./PainelMover.jsx').then((m) => m.registrar?.(ui)).catch(() => {});
 
   return () => {
     for (const f of soltarEntrada) f();
     soltarEfeito();
     if (tipo) fechar();
+    retomada.estado = () => null;
+    retomada.retomar = () => false;
   };
 }
 

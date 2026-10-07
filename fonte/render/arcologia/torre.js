@@ -17,7 +17,7 @@
 // marquises e as luzes, com cor, rugosidade, metal, luz e padrão por vértice), 'cascata' (as Dream Falls, a névoa e a
 // espuma) e 'jato' (as fontes). O par sai em 2 chamadas no LOD0, 2 no LOD1 e 1 na sombra.
 import * as THREE from 'three';
-import { TORRE_LAMINA, PAR, torresDoPar } from '../../data/arcologia-plano.js';
+import { TORRE_LAMINA, PAR, torresDoPar, andaresDaFaixaLed } from '../../data/arcologia-plano.js';
 import { direcaoDoSol } from '../depuracao.js';
 import { GANCHOS_COMUNS } from '../materiais/biblioteca.js';
 
@@ -52,9 +52,10 @@ export const LUZ = Object.freeze({
  * Andares da faixa de LED de um anel (D93, pedido do dono de 04/10/2026): um terço dos andares, no terço do meio da
  * altura, contínua em volta toda. Ímpar, para a faixa centrada no meio da altura cair inteira entre duas lajes (a moldura
  * das marquises): 9 dos 25 andares do Horizon Ring (de 51,2 a 108,8 m) e 7 dos 19 do Meridian Ring (de 37,9 a 82,1 m).
- * As torres ovais levam a do Horizon Ring (a mesma faixa de altura).
+ * As torres ovais levam a do Horizon Ring (a mesma faixa de altura). A conta mora no plano (data/arcologia-plano.js, o
+ * dado `led` de cada anel); o render lê o dado e usa isto só quando uma peça vem sem ele.
  */
-export const andaresLed = (andares) => 2 * Math.round((andares / 3 - 1) / 2) + 1;
+export const andaresLed = andaresDaFaixaLed;
 
 /**
  * Acabamento do material opaco: [r, g, b, pacote] com rugosidade e metal em 4 bits, a classe de luz e o padrão.
@@ -68,11 +69,13 @@ export function acab(hex, { rugo = 0.8, metal = 0, luz = 0, padrao = 0 } = {}) {
 
 /**
  * Tipos de fachada do material vidro (o shader desenha cada um): os das torres, anel (o vidro curvo dos anéis, com a
- * marquise de cada andar e a faixa de LED), oval (a Helix e a Compass, do mesmo jeito), codex (o vidro escuro
- * facetado) e escada (os tubos das escadas rolantes).
+ * marquise de cada andar e a faixa de LED), anelDentro (o mesmo, na face de dentro, com a planta pendente sob a marquise),
+ * oval (a Helix e a Compass, do mesmo jeito), codex (o vidro escuro facetado) e escada (os tubos das escadas rolantes).
  */
 export const VIDRO = Object.freeze({
   cortina: 0, costura: 1, vento: 2, saguao: 3, lanterna: 4, parapeito: 5, anel: 6, oval: 7, codex: 8, escada: 9, torreLod1: 10,
+  // a face de dentro dos anéis (Hanging Gardens, D97): o mesmo vidro curvo com a planta pendente sob cada marquise
+  anelDentro: 11,
 });
 
 /** Dado do vértice de vidro: [tipo, semente, face com aletas (0 ou 1), marca (1: a lanterna de uma coroa)]. */
@@ -515,7 +518,7 @@ const ICO = (() => {
 })();
 
 /** Tufo de copa: icosaedro achatado e mexido, com normais radiais (sombreado macio de folhagem). */
-function tufo(m, cx, cy, cz, r, ry, k, semente) {
+export function tufo(m, cx, cy, cz, r, ry, k, semente) {
   const base = m.vertices;
   ICO.v.forEach((p, i) => {
     const j = 0.8 + 0.36 * hashF(semente, i);
@@ -1764,8 +1767,10 @@ void gLed( float u, float y, float meio, float pe, float n ) {
 // o rodapé escuro, com a oclusão no pé. À noite, os escritórios (Meridian, ovais) e a faculdade e a escola (Horizon,
 // com os dormitórios de descanso) acesos pela agenda, em salas, com o forro aceso perto do teto (as linhas quentes da
 // Apple Park à noite); o apagado fica escuro de verdade. No LOD1 (e nos setores sem a geometria) a marquise sai daqui:
-// a testa branca fina, o topo deitado (com a luz de uma face horizontal) visto do alto e o forro visto de baixo
-void gVidroAnel( float u, float y, float sem, float pe, float meio, float setorLed, float painel ) {
+// a testa branca fina, o topo deitado (com a luz de uma face horizontal) visto do alto e o forro visto de baixo.
+// Na face de dentro (dentro = 1, os Hanging Gardens da D97) cada marquise leva a planta pendente: uma cortina irregular
+// de folhagem escura, de 1 a 2,5 m, com flores lilás aqui e ali, que de longe vira o verde médio de uma faixa por andar
+void gVidroAnel( float u, float y, float sem, float pe, float meio, float setorLed, float painel, float dentro ) {
   float nLed = floor( setorLed / 32.0 + 0.001 );
   float setor = setorLed - 32.0 * nLed;
   if ( abs( y - meio ) < 0.5 * nLed * pe ) {
@@ -1871,9 +1876,28 @@ void gVidroAnel( float u, float y, float sem, float pe, float meio, float setorL
     fAlb = mix( fAlb, branco * mix( 1.0, 0.18, uNoite ), m );
     fEmi = mix( fEmi, vec3( 1.0, 0.86, 0.66 ) * uNoite * ( 0.006 + 0.05 * acesa * forro ), m );
   }
+  if ( dentro > 0.5 && fl > 0.5 ) {
+    // planta pendente: d é a distância (m) abaixo da laje de cima; a cortina tem comprimento e franja irregulares
+    float d = ( 1.0 - fv ) * pe - 0.3;
+    float comp = 0.9 + 1.7 * gRuidoF( vec2( u / 5.5 + fl * 1.9 + sem * 7.0, fl * 0.7 ) );
+    float franja = 0.35 * gRuidoF( vec2( u / 0.8, fl * 3.1 ) );
+    float cob = step( 0.0, d ) * ( 1.0 - smoothstep( comp - 0.3 + franja, comp + franja, d ) );
+    float cert = 1.0 - smoothstep( 0.12, 0.5, fwy / pe );
+    cob = mix( 0.4, cob, cert );
+    vec3 folha = mix( vec3( 0.016, 0.04, 0.012 ), vec3( 0.06, 0.12, 0.034 ), gRuidoF( vec2( u / 1.3, y / 0.6 ) ) );
+    folha = mix( folha, vec3( 0.1, 0.036, 0.085 ), step( 0.94, gH1( floor( vec2( u / 0.45, y / 0.45 ) ) + sem * 5.0 ) ) * cert );
+    fAlb = mix( fAlb, folha, cob );
+    fTint = mix( fTint, folha * 2.4, cob );
+    fMet = mix( fMet, 0.0, cob );
+    fRug = mix( fRug, 0.92, cob );
+    fEmi *= 1.0 - cob;
+  }
 }
 void gFachada() {
   float tipo = floor( vC.x + 0.5 );
+  // a face de dentro dos anéis é o mesmo vidro do anel, com a planta pendente
+  float dentro = step( 10.5, tipo );
+  tipo = mix( tipo, 6.0, dentro );
   float sem = vC.y;
   float u = vUvM.x;
   float y = vUvM.y;
@@ -1945,7 +1969,7 @@ void gFachada() {
   } else if ( tipo < 7.5 ) {
     // anéis (painéis de 3,2 m) e torres ovais (1,5 m); a semente volta exata ao meio do passo (semAnel)
     float semA = ( floor( fract( vC.y ) * ${SEM_ANEL}.0 ) + 0.5 ) / ${SEM_ANEL}.0;
-    gVidroAnel( u, y, semA, vC.z, floor( vC.y ), vC.w, tipo > 6.5 ? 1.5 : 3.2 );
+    gVidroAnel( u, y, semA, vC.z, floor( vC.y ), vC.w, tipo > 6.5 ? 1.5 : 3.2, dentro );
   } else if ( tipo < 8.5 ) {
     // Codex (o Black Diamond): vidro quase preto, espelho do céu nas facetas, andares de 4,5 m com o caixilho fino; à
     // noite, poucas salas de leitura acesas em luz quente
@@ -2126,7 +2150,7 @@ function ligarComum(shader, extras) {
  * que muda entre as variantes são uniformes (uLinhas, uCorte, uNoite): um programa só por material, compilado na carga.
  */
 export const CHAVES = Object.freeze({
-  vidro: 'arcologia-vidro-5', opaco: 'arcologia-opaco-5', cascata: 'arcologia-cascata-2', jato: 'arcologia-jato-2',
+  vidro: 'arcologia-vidro-6', opaco: 'arcologia-opaco-5', cascata: 'arcologia-cascata-3', jato: 'arcologia-jato-2',
 });
 
 /**
@@ -2211,16 +2235,21 @@ void gCascata() {
     float esp = smoothstep( 0.46 - 0.2 * ar, 0.78, fio );
     wAlb = mix( vec3( 0.3, 0.42, 0.42 ), vec3( 0.88, 0.9, 0.9 ), max( esp, 0.2 + ar * 0.65 ) );
     wAlfa = clamp( ( 0.42 + 0.55 * fio + 0.25 * ar ) * mix( 0.5, 1.0, smoothstep( 0.25, 0.6, cordas ) ), 0.0, 0.96 );
-    // à noite, acesa por baixo (os refletores no espelho d'água): a espuma brilha, a água clara quase apaga
-    wEmi = mix( vec3( 0.6, 0.78, 1.0 ), vec3( 1.0, 0.96, 0.9 ), esp ) * uNoite * ( 0.02 + 0.16 * esp ) * ( 0.4 + 0.6 * ar );
+    // a borda macia da cortina (vC.z = 1 + a posição de 0 a 1 na largura; 0 nas quedas do pódio, que não a têm)
+    float lat = vC.z - 1.0;
+    wAlfa = vC.z > 0.5 ? clamp( wAlfa * 1.3, 0.0, 0.97 ) * smoothstep( 0.0, 0.1, lat ) * ( 1.0 - smoothstep( 0.9, 1.0, lat ) ) : wAlfa;
+    // à noite, acesa por baixo (os refletores no espelho d'água): a espuma brilha, a água clara quase apaga; nas quedas de
+    // 120 m a luz sobe e some com a altura (a cortina acende do pé até uns 70 m)
+    float luzPe = 1.0 - 0.8 * smoothstep( 8.0, 110.0, p.y ) * step( 0.5, vC.z );
+    wEmi = mix( vec3( 0.6, 0.78, 1.0 ), vec3( 1.0, 0.96, 0.9 ), esp ) * uNoite * ( 0.02 + 0.16 * esp ) * ( 0.4 + 0.6 * ar ) * luzPe * mix( 1.0, 2.6, step( 0.5, vC.z ) );
   } else if ( modo < 1.5 ) {
     // névoa onde a água bate: sobe, espalha e some com a altura
     float n = gRuidoF( vec2( p.x * 0.3 + t * 0.25, p.y * 0.22 - t * 0.55 + fase * 9.0 ) ) * 0.6 + gRuidoF( vec2( p.x * 0.8 - t * 0.4, p.y * 0.5 - t * 1.0 ) ) * 0.4;
     float alt = 1.0 - smoothstep( 1.0, 16.0, p.y );
     wAlb = vec3( 0.86, 0.88, 0.89 );
-    wAlfa = smoothstep( 0.35, 0.85, n ) * alt * 0.5;
+    wAlfa = smoothstep( 0.3, 0.8, n ) * alt * 0.7;
     wRug = 1.0;
-    wEmi = vec3( 0.75, 0.88, 1.0 ) * uNoite * 0.05 * wAlfa;
+    wEmi = vec3( 0.75, 0.88, 1.0 ) * uNoite * 0.11 * wAlfa;
   } else if ( modo < 2.5 ) {
     // espuma no lago, em volta de onde a lâmina bate (uv: ao longo da queda, distância a ela)
     float n = gRuidoF( p * 0.8 + vec2( t * 0.35, -t * 0.6 ) ) * 0.6 + gRuidoF( p * 2.2 - vec2( t * 0.8, t * 0.25 ) ) * 0.4;
@@ -2228,7 +2257,7 @@ void gCascata() {
     wAlb = vec3( 0.84, 0.86, 0.86 );
     wAlfa = smoothstep( 0.3, 0.7, n ) * perto * 0.92;
     wRug = 0.5;
-    wEmi = vec3( 0.7, 0.86, 1.0 ) * uNoite * 0.05 * wAlfa;
+    wEmi = vec3( 0.7, 0.86, 1.0 ) * uNoite * 0.1 * wAlfa;
   } else {
     // faixa: a película que corre no alto do pódio até a borda (v cresce para a borda), lisa e rápida
     float fl = gRuidoF( vec2( p.x * 0.9, ( p.y - t * 2.2 ) * 1.6 ) ) * 0.6 + gRuidoF( vec2( p.x * 2.6 + 4.0, ( p.y - t * 3.1 ) * 3.0 ) ) * 0.4;
@@ -2523,8 +2552,8 @@ export function estadoDoCeu(ctx, alvo = {}) {
  */
 export const DIST_LOD0 = Object.freeze({ leve: 380, media: 650, alta: 950, ultra: 1300, pc: 950 });
 
-/** Distância além da qual os efeitos de água (cachoeira, fontes) somem: menores que um pixel. */
-export const DIST_EFEITOS = 2600;
+/** Distância além da qual os efeitos de água (cachoeira, fontes) somem: menores que um pixel (as quedas de 120 m da D97 passam de 2 km). */
+export const DIST_EFEITOS = 4800;
 
 const malhaThree = (ctx, m, mat, familia = 'arcologia', nome = '') => {
   const o = new THREE.Mesh(geometriaDe(m), mat);

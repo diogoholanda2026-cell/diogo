@@ -48,11 +48,13 @@ export function azimuteDe(c, p, minimo = 1.5) {
 
 /**
  * Estado novo. rot: a rotação absoluta efetiva (a da prévia); giro: o ângulo em relação à via (0 = de frente para ela);
- * alinhar: gruda na via mais perto até 60 m (o padrão).
- * @param {{ tipo: string, item?: object }} op  item: a linha do catálogo ({ tipo, nome, custo, manutencaoHora, alcance, pegada })
+ * alinhar: gruda na via mais perto até 60 m (o padrão). Mover um prédio pronto (MOV1, ui/ferramentas/mover.js) abre a mesma
+ * máquina com `mover: { ref, de }`, no lugar e na rotação dele (x, z, rot) e sem alinhar.
+ * @param {{ tipo: string, item?: object, mover?: object, rot?: number, giro?: number, alinhar?: boolean, x?: number, z?: number }} op
+ *   item: a linha do catálogo ({ tipo, nome, custo, manutencaoHora, alcance, pegada })
  */
-export function criarColocar({ tipo, item = null } = {}) {
-  return { tipo, item, rot: 0, giro: 0, alinhar: true, x: null, z: null, dedo: false, mira: null, efeitos: [] };
+export function criarColocar({ tipo, item = null, mover = null, rot = 0, giro = 0, alinhar = true, x = null, z = null } = {}) {
+  return { tipo, item, mover, rot: normalizarRot(rot), giro: normalizarRot(giro), alinhar, x, z, dedo: false, mira: null, efeitos: [] };
 }
 
 const previaDe = (e, x, z, o = e) => ({ efeito: 'previa', x, z, rot: o.rot, giro: o.giro, alinhar: o.alinhar });

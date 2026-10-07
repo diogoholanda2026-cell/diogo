@@ -1,12 +1,15 @@
-// Cena 'planos' (SEDE3, D88 a D90): a sede v3, Park of Future Dreams, construída inteira no platô em disco do sul da
-// área inicial, de frente para o mar, em escala real: a Blade Tower e a Legacy Tower no pódio, o Mirror Lake cavado no
-// relevo com as Dream Falls e as fontes, os dois anéis, as torres do bosque, o parque com as Supertrees, a paisagem, o
-// anel viário, as 8 avenidas e os portões. ?vista= mostra a sede de um ponto fixo:
+// Cena 'planos' (SEDE3 e SEDE4, D88 a D90 e D97): a sede v4, Park of Future Dreams, construída inteira no platô em disco do
+// sul da área inicial, de frente para o mar, em escala real: a Blade Tower e a Legacy Tower no pódio, o Mirror Lake grande
+// cavado no relevo com as ilhas, as Dream Falls de 120 m e as fontes, os dois anéis com os Hanging Gardens e o Halo Lake,
+// as 8 Canopy Bridges, as torres do bosque no eixo das avenidas, o parque com as Supertrees, a paisagem, o anel viário, as
+// 8 avenidas e os portões. ?vista= mostra a sede de um ponto fixo:
 //   aerea    o disco inteiro às 17h30, do sul-sudoeste, sobre o mar
 //   avenida  da avenida do portão oeste, do alto, olhando o centro pelo pórtico do Horizon Ring
 //   mar      da praia da restinga, ao entardecer, com a lagoa na frente
 //   noite    do parque, às 21h: a faixa de LED dos anéis, as Dream Falls e as fontes acesas
-//   parque   o bosque grande de Supertrees de perto, às 17h, com a praça e o espelho d'água
+//   parque   o lago e a mata de perto, às 17h, do cais da praça do pódio (SEDE4)
+//   canopy   uma Canopy Bridge de baixo, da avenida de 225 graus (SEDE4)
+//   quedas   as Dream Falls de 247,5 graus de frente (SEDE4)
 // ?olhar=x,y,z,ax,ay,az,fov[,hora] põe a câmera num ponto qualquer (conferir de perto: a ponte, uma coroa, um pórtico).
 // ?etapas= mostra o jogo (X1b) em vez da sede construída: 'todas' (as 5 etapas do M1a prontas: o par, o lago, os portões
 //   e o resto da sede em fantasma) ou '<etapa>:<progresso>' (a obra: as anteriores prontas, esta em obra), com as vias
@@ -31,6 +34,12 @@ const em = (r, graus, y) => {
   const [x, z] = pontoDoArco(CX, CZ, r, graus);
   return [Math.round(x), y, Math.round(z)];
 };
+/** O mesmo, deslocado `lado` metros para o lado do eixo (o sentido em que o ângulo cresce): sai do meio da avenida. */
+const emLado = (r, graus, lado, y) => {
+  const [x, z] = pontoDoArco(CX, CZ, r, graus);
+  const a = (graus * Math.PI) / 180;
+  return [Math.round(x - Math.sin(a) * lado), y, Math.round(z + Math.cos(a) * lado)];
+};
 
 /**
  * Vistas fixas da sede v3: hora, de onde a câmera olha, para onde (mundo, metros) e o campo de visão vertical. chao: a
@@ -47,9 +56,19 @@ export const VISTAS_SEDE = Object.freeze({
   mar: { hora: 18, de: [-700, 10, 1028], alvo: [CX, 120, CZ], fov: 48, chao: true },
   // do parque, de frente para a Dream Fall de 60 graus: o pódio, as fontes no lago, as torres e as faixas de LED
   noite: { hora: 21, de: em(250, 60, 26), alvo: [CX, 80, CZ], fov: 62, chao: true },
-  // VIS1a: o bosque grande de Supertrees de perto, da beira da praça do pódio (a malha da copa, o tronco vivo, a praça
-  // de pedra portuguesa, o espelho d'água e o Meridian Ring atrás)
-  parque: { hora: 17, de: em(170, 0, 14), alvo: [460, 22, 306], fov: 55, chao: true },
+  // SEDE4: o parque com o lago e a mata de perto, do cais da praça do pódio: a água, a ilha de mata, o bosque de Supertrees
+  // na margem, a mata densa até o Meridian Ring com os terraços dos Hanging Gardens e a enseada de uma queda ao fundo
+  parque: { hora: 17, de: em(158, 8, 15), alvo: em(380, 28, 30), fov: 58, chao: true },
+  // SEDE4: uma Canopy Bridge de baixo, da avenida de 225 graus sobre o cais do Halo Lake (a pista, o espelho d'água dos dois
+  // lados e a mata): o tabuleiro e o arco passam sobre a pista até o Meridian Ring, que fecha o fundo
+  canopy: { hora: 16.5, de: emLado(688, 225, 8, 7), alvo: emLado(470, 225, 0, 64), fov: 70, chao: true },
+  // SEDE4: a mesma ponte vista de lado e de cima, da mata: o tabuleiro com as duas fileiras de árvores, o vidro, a luz e o arco
+  canopyTopo: { hora: 16.5, de: emLado(540, 225, 62, 86), alvo: emLado(600, 225, 0, 66), fov: 56, chao: true },
+  // SEDE4: a noite com as quedas acesas, da margem do lago ao lado do bosque de Supertrees (o show de luz) olhando a enseada de
+  // 247,5 graus: a cortina de 120 m acesa de baixo, a faixa de LED do Meridian Ring e o lago escuro
+  noiteQuedas: { hora: 21, de: em(350, 283, 18), alvo: em(408, 247.5, 62), fov: 62, chao: true },
+  // SEDE4: as Dream Falls de 247,5 graus de frente, do cais da praça: a cortina de 120 m, a enseada e a névoa
+  quedas: { hora: 16, de: em(160, 247.5, 14), alvo: em(405, 247.5, 62), fov: 52, chao: true },
   // X1b: a obra do par de dentro do parque (ainda por fazer), do alto: o pódio, o lago, as duas torres subindo com a
   // frente de obra de concreto, as gruas e o fantasma acima do corte
   obra: { hora: 16.5, de: em(390, 128, 190), alvo: [CX, 150, CZ], fov: 50 },

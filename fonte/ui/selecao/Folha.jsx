@@ -23,6 +23,7 @@ import { Ancora, Popover } from '../comp/Popover.jsx';
 import { ferramentas } from '../ferramentas/sessao.js';
 import { zona as dadosZona } from '../../data/zonas.js';
 import { CORES_PREDIO } from '../../data/estilos.js';
+import { BotaoMover } from '../ferramentas/BotaoMover.jsx';
 import { folhaAberta, manterFolha, aparencia, subtitulo, avisoPrincipal, registrarAcaoAviso, acaoDeAviso, nomeTipoVia, glifoDaVia, faseDaObra } from './Cartao.jsx';
 
 export const PILHA_MAX = 5;
@@ -253,6 +254,7 @@ function Rodape({ ui, fam, sel, p }) {
   return (
     <>
       <Cores ui={ui} p={p} />
+      <BotaoMover p={p} aoAbrir={() => abrirFerramenta({ tipo: 'mover', ref: p.ref })} />
       <Botao a="folha.demolir" rotulo={t('folha.demolir')} class="bt-perigo" onClick={() => abrirFerramenta({ tipo: 'demolir' })}>
         <Glifo n="demolir" tam={18} />
         {t('folha.demolir')}

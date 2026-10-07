@@ -16,7 +16,8 @@ import { t } from '../ui/textos.js';
 import { avisar } from '../ui/loja.js';
 import { opcoesDoToque } from '../render/camera/gesto.js';
 import { criarLaco } from './laco.js';
-import { ligarContexto, armazenamentoSessao, lerRetomada, limparRetomada } from './estavel.js';
+import { ligarContexto, armazenamentoSessao, lerRetomada, limparRetomada, CHAVE_RETOMADA } from './estavel.js';
+import { estadoParaRetomar, retomar as retomarFerramenta } from '../ui/ferramentas/sessao.js';
 import * as armazem from './armazem.js';
 import * as diario from './diario.js';
 import * as salvamento from './salvamento.js';
@@ -32,6 +33,42 @@ export const SEMENTE_PADRAO = 'heldopolis-1';
 
 /** As preferências do toque (TOQ1, D99) que a entrada do render recebe. */
 export const PREFS_TOQUE = Object.freeze(['toqueArrasto', 'toquePinca', 'toqueGiro', 'toqueInercia']);
+
+/**
+ * O armazém da retomada (TOQ1, estavel.js) com a ferramenta aberta (MOV1): quem grava a retomada guarda a câmera e a
+ * velocidade do tempo; este embrulho acrescenta ao mesmo registro (a chave heldopolis.retomada) o campo `ferramenta`, o
+ * estado da sessão da interface (via em desenho, zona, item a colocar, mover), sem mexer em estavel.js.
+ * @param {{ getItem, setItem, removeItem }} base
+ * @param {() => object | null} ferramenta  o estado da ferramenta aberta (sessao.estadoParaRetomar)
+ */
+export function armazemComFerramenta(base, ferramenta = estadoParaRetomar) {
+  return {
+    getItem: (k) => base.getItem(k),
+    removeItem: (k) => base.removeItem(k),
+    setItem(k, v) {
+      let valor = v;
+      if (k === CHAVE_RETOMADA) {
+        try {
+          const f = ferramenta();
+          if (f) valor = JSON.stringify({ ...JSON.parse(v), ferramenta: f });
+        } catch (e) {
+          // sem o estado da ferramenta: grava só o que veio
+        }
+      }
+      base.setItem(k, valor);
+    },
+  };
+}
+
+/** A ferramenta que a retomada guardou (um objeto com `tipo`), ou null; a validade da retomada é de lerRetomada. */
+export function ferramentaDaRetomada(storage) {
+  try {
+    const f = JSON.parse(storage.getItem(CHAVE_RETOMADA) ?? 'null')?.ferramenta;
+    return f && typeof f === 'object' && typeof f.tipo === 'string' ? f : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 /** Aviso de tela cheia da perda do contexto gráfico: DOM puro, sem depender da interface (que pode estar num estado qualquer). */
 function avisoDoContexto(fase) {
@@ -292,16 +329,18 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
   // do tempo; a página nova as retoma quando a partida abre (só no jogo de verdade: as cenas e a sintética ficam fora, e
   // o ?menu=0 também: sem menu nem save, a recarga abriria uma partida nova e perderia a de agora)
   if (!nomeCena && tipo === 'partida' && !app.simUIFalsa && qs.get('menu') !== '0') {
+    const armazem = armazenamentoSessao();
     app.contexto = ligarContexto({
       canvas,
+      storage: armazemComFerramenta(armazem),
       // com a aba no fundo o laço já pausou o tempo: a velocidade que vale é a de antes dele
       estado: () => ({ camera: R.camera.estado(), velocidade: (sim.velocidade ?? 0) || (laco.velocidadeAntesDoFundo ?? 0) }),
       pausar: pausarTempo,
       avisar: avisoDoContexto,
     });
-    const armazem = armazenamentoSessao();
     const ret = lerRetomada(armazem);
     if (ret) {
+      const ferramenta = ferramentaDaRetomada(armazem);
       let solta = () => {};
       const aplicar = () => {
         solta();
@@ -309,6 +348,7 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
         try {
           if (ret.camera) R.camera.definir(ret.camera);
           if (ret.velocidade > 0) mudarVelocidade(ret.velocidade);
+          if (ferramenta) retomarFerramenta(ferramenta);
           avisar({ texto: t('toq1.retomou'), gravidade: 'info', glifo: 'ajustes' });
         } catch (e) {
           console.warn('retomada: não consegui aplicar', e);

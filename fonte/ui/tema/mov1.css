@@ -1,0 +1,86 @@
+/* MOV1 (mover e girar construções prontas, D94): o painel "o que muda" no canto de cima da esquerda, onde mora a folha
+   (a ferramenta a recolhe). Só opacity e transform animam. Sem toque (o dedo arrasta o fantasma por cima dele). Arquivo
+   próprio: entra depois dos outros pela ordem do montar. */
+.mov1-painel {
+  position: relative;
+  width: min(340px, calc(100vw - var(--mE) - var(--mD)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  padding: var(--e3);
+  border-radius: var(--r3);
+  background: var(--s1);
+  box-shadow: var(--luz), var(--sombra2, var(--sombra1));
+  color: var(--t1);
+  pointer-events: none;
+  animation: mov1-entra var(--d3, 240ms) var(--curva, ease-out);
+  transition: opacity var(--d2, 160ms) linear;
+}
+.mov1-painel.arrastando {
+  opacity: 0.72;
+}
+.mov1-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin: 0;
+  font-size: var(--t15, 15px);
+  font-weight: 650;
+  line-height: 1.2;
+}
+.mov1-titulo .glifo {
+  color: var(--ch);
+}
+.mov1-parado {
+  margin: 0;
+  font-size: var(--t13, 13px);
+  line-height: 1.35;
+  color: var(--t2);
+}
+.mov1-linhas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mov1-linha {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e2);
+  font-size: var(--t13, 13px);
+  line-height: 1.35;
+  color: var(--t2);
+}
+.mov1-linha.tx-ok,
+.mov1-linha.tx-al,
+.mov1-linha.tx-er {
+  font-weight: 600;
+}
+.mov1-linha .glifo {
+  flex: none;
+  margin-top: 1px;
+}
+.mov1-ponto {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 6px 5px 0;
+  border-radius: 50%;
+  background: var(--t3);
+}
+.mov1-texto {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@keyframes mov1-entra {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

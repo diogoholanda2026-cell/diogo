@@ -1,61 +1,13 @@
-// Mirror Lake (lago.e1, D89): o anel de água de 15 m em volta do pódio das torres, entre a parede do pódio e o anel de
-// floresta, com a borda de granito e o leito escuro. As Dream Falls e as fontes são peças do partes.js; aqui ficam o
-// espelho, a borda, a cava no relevo e o material da água (escura, com o reflexo do céu e a ondulação fina no shader).
+// Mirror Lake (lago.e1, D89 e D97): a cava do lago grande no relevo e o material da água (escura, com o reflexo do céu e a
+// ondulação fina no shader). A água, as pontes, as bacias e as Dream Falls são peças do lagos.js.
 //
 // A cava entra no chão pelo aplainar (sim.formas, D5): a X1b registra cavaDoPlano() quando lago.e1 começa. As cenas
-// cavam o relevo da própria simulação de prova com cavarTerreno(), do mesmo jeito que o aplainar faria.
+// cavam o relevo da própria simulação de prova com cavarTerreno(), do mesmo jeito que o aplainar faria. O contorno do lago
+// leva as ilhas como furos ligados por frestas (uma forma tem um contorno só): fora do contorno o chão sobe em rampa de
+// 16 m depois de 8 m planos, e é daí que saem as ilhas e as margens.
 import * as THREE from 'three';
-import { acab, PADRAO, orientar, UNIFORMES } from './torre.js';
-import { faixaEntre } from './partes.js';
+import { orientar, UNIFORMES } from './torre.js';
 import { pontoNoPoligono, distPoligono } from '../../comum/vetor.js';
-
-const K = {
-  granito: acab('#77716a', { rugo: 0.6, padrao: PADRAO.pedra }),
-  pedraClara: acab('#bdb3a1', { rugo: 0.72, padrao: PADRAO.pedra }),
-  fundo: acab('#2f3a36', { rugo: 0.9 }),
-};
-
-/** Círculo (pares, sentido positivo) de raio r em n pontos, centrado em (cx, cz). */
-function circulo(cx, cz, r, n) {
-  const P = [];
-  for (let i = 0; i < n; i++) {
-    const t = (i / n) * Math.PI * 2;
-    P.push(cx + r * Math.cos(t), cz + r * Math.sin(t));
-  }
-  return P;
-}
-
-/**
- * O Mirror Lake: o espelho d'água em anel (da parede do pódio até a borda de fora), o leito, o muro de granito da
- * borda de fora e a pedra de coroamento até o chão da floresta.
- * @param {{ r0: number, r1: number, cx: number, cz: number, nivel: number, fundo: number }} peca
- * @param {{ opaco: import('./torre.js').Malha, agua: import('./torre.js').Malha, cota: number, lod?: 0 | 1 }} d
- * @returns {{ caixa: number[], nivel: number }}
- */
-export function montarLagoAnel(peca, { opaco, agua, cota, lod = 1 }) {
-  const { cx, cz, r0, r1 } = peca;
-  const nivel = cota + peca.nivel;
-  const fundo = cota + peca.fundo;
-  const topo = cota + 0.25;
-  const n = lod === 0 ? 144 : 120;
-  const dentro = circulo(cx, cz, r0 - 0.2, n);
-  const fora = circulo(cx, cz, r1 + 0.3, n);
-  // espelho d'água e o leito
-  faixaEntre(agua, dentro, fora, nivel, [0, 0, 0, 0], true);
-  faixaEntre(opaco, circulo(cx, cz, r0 - 0.2, n), circulo(cx, cz, r1, n), fundo, K.fundo, true);
-  // o muro da borda de fora, virado para a água, e o coroamento de pedra clara até o chão da floresta
-  const borda = circulo(cx, cz, r1, n);
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const ax = borda[2 * i], az = borda[2 * i + 1], bx = borda[2 * j], bz = borda[2 * j + 1];
-    const l = Math.hypot(bx - ax, bz - az);
-    const nm = [(cx - (ax + bx) / 2), 0, (cz - (az + bz) / 2)];
-    const nl = Math.hypot(nm[0], nm[2]) || 1;
-    opaco.quad([ax, fundo, az], [bx, fundo, bz], [bx, topo, bz], [ax, topo, az], [nm[0] / nl, 0, nm[2] / nl], [0, fundo], [l, fundo], [l, topo], [0, topo], K.granito);
-  }
-  faixaEntre(opaco, borda, circulo(cx, cz, r1 + 1.6, n), topo, K.pedraClara, true);
-  return { caixa: [cx - r1, fundo, cz - r1, cx + r1, topo, cz + r1], nivel };
-}
 
 /**
  * Cava o relevo da simulação de prova como o aplainar faria (D5): dentro do contorno e numa faixa plana de 8 m além
@@ -106,7 +58,7 @@ export function cavarPlanoNaCena(ctx, plano, cota, estado) {
     descavar(T, estado.guarda);
     if (estado.ret) ctx.sim.mudancas.marcarRet('terreno', ...estado.ret);
   }
-  const res = plano.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
+  const res = plano.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'lago');
   estado.ret = cavarTerreno(T, res, cota, estado.guarda);
   ctx.sim.mudancas.marcarRet('terreno', ...estado.ret);
 }
@@ -123,8 +75,8 @@ const U_AGUA = { uTempoAgua: { value: 0 } };
 
 /** Material da água do lago: escura, reflexo do céu (Fresnel) e ondulação fina pelo mundo. */
 export function materialAgua(ganchos) {
-  // corpo verde-azulado de água limpa e funda (o espelho d'água de pedra escura), e o céu pelo Fresnel
-  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.016, 0.04, 0.042), roughness: 0.05, metalness: 0, envMapIntensity: 1.0 });
+  // corpo verde-azulado de água limpa e funda (turquesa fechado, da cor do mar da baía mas mais escura), e o céu pelo Fresnel
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.018, 0.075, 0.085), roughness: 0.05, metalness: 0, envMapIntensity: 1.0 });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U_AGUA, { uNoite: UNIFORMES.uNoite });
     shader.fragmentShader = shader.fragmentShader
@@ -144,7 +96,7 @@ export function materialAgua(ganchos) {
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'arcologia-agua-2';
+  mat.customProgramCacheKey = () => 'arcologia-agua-3';
   mat.name = 'arcologia:agua';
   return ganchos.aplicar(mat, ['sombra', 'neblina']);
 }

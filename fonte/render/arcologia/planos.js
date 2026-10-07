@@ -21,14 +21,14 @@ import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
 import {
   PLANOS, PLANO_ESCOLHIDO, PLANO_PADRAO, PARTES_ORDEM, GLEBA_ENVELOPE, TORRE_LAMINA, ANEL_VIARIO, AVENIDAS, mataDaSede,
-  TRECHOS_HORIZON, TORRE_IRMA,
+  TRECHOS_HORIZON, TORRE_IRMA, MIRROR, HALO, raioDaMargem, pontoDoArco, PRACA,
 } from '../../data/arcologia-plano.js';
 import {
   criarPar, atualizarArcologia, estadoDoCeu, materiais, descartarMateriais, geometriaDe, Malha, acab, PADRAO, tampa,
-  caixa, malhasPar, criarJatos, criarAquecimento, DIST_EFEITOS, UNIFORMES, orientar, hashF, MEIO_VAO_CORTE,
+  caixa, malhasPar, criarJatos, criarAquecimento, DIST_EFEITOS, UNIFORMES, orientar, hashF, MEIO_VAO_CORTE, SETORES,
 } from './torre.js';
-import { montarParte, setorDoAnel, SETOR_OVAL, SETOR_PARQUE, difGraus } from './partes.js';
-import { montarLagoAnel, materialAgua, quadroAgua } from './lago.js';
+import { montarParte, setorDoAnel, SETOR_OVAL, SETOR_PARQUE, difGraus, arvoreDaMata } from './partes.js';
+import { materialAgua, quadroAgua } from './lago.js';
 import { materialFantasma, malhaFantasma, criarFantasma } from './fantasma.js';
 import { estadoObra, criarObra, alturaVidro } from './obra.js';
 
@@ -71,12 +71,24 @@ export function cotaEm(T, x, z) {
 /** Centro do plano (o do pódio). A cota da gleba se mede ali: o centro do pódio fica fora da cava do lago. */
 export const centroDoPlano = (P) => P.centro;
 
-/** O reservatório (o Mirror Lake) de um plano. */
+/** O anel d'água do pódio (a bacia do Mirror Lake, com as fontes) de um plano. */
 export const reservatorioDe = (P) => P.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
 
-/** Um ponto na água do lago em anel (no meio do anel, ao sul do pódio: a leste fica a fresta do contorno). */
+/** O Mirror Lake grande (a cava) de um plano. */
+export const lagoDe = (P) => P.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'lago');
+
+/** Um ponto na água do anel do pódio (no meio do anel, ao sul do pódio). */
 export function pontoNaAgua(res) {
   return [res.cx, res.cz + (res.r0 + res.r1) / 2];
+}
+
+/**
+ * Um ponto no Mirror Lake grande, fora das avenidas, das ilhas e das enseadas (a 67,5 graus, a 240 m do centro): lá o chão
+ * cavado fica a 2,6 m do nível da gleba, e é por ele que o domínio sabe se a cava já foi feita. (Nas avenidas, no jogo, o
+ * aplainar da via deixa o aterro.)
+ */
+export function pontoNoLago(lago) {
+  return pontoDoArco(lago.cx, lago.cz, 240, 67.5);
 }
 
 // ================================================================================================ paisagem
@@ -134,12 +146,35 @@ function sobAneis(plano) {
   return [...raios].map(([r, f]) => [r - f / 2 - 10, r + f / 2 + 10]);
 }
 
+/** Faixas de raio onde a avenida de ângulo a passa pelo pórtico de uma torre do bosque (sem palmeiras sob o teto de 18 m). */
+function sobTorres(plano, a) {
+  const [cx, cz] = plano.centro;
+  return plano.partes
+    .flatMap((q) => q.pecas)
+    .filter((p) => (p.tipo === 'codex' || p.tipo === 'oval') && p.passagem)
+    .filter((p) => Math.abs(((Math.atan2(p.z - cz, p.x - cx) / RAD - a + 540) % 360) - 180) < 1)
+    .map((p) => {
+      const r = Math.hypot(p.x - cx, p.z - cz);
+      return [r - 34, r + 34];
+    });
+}
+
+/** O intervalo [a, b] sem os cortes (lista de [c0, c1] ordenada ou não): os pedaços que sobram. */
+export function recortar([a, b], cortes) {
+  let sobra = [[a, b]];
+  for (const [c0, c1] of cortes) {
+    sobra = sobra.flatMap(([x0, x1]) => (c1 <= x0 || c0 >= x1 ? [[x0, x1]] : [[x0, Math.min(x1, c0)], [Math.max(x0, c1), x1]].filter(([u, w]) => w - u > 0.5)));
+  }
+  return sobra;
+}
+
 /**
  * Avenida de 24 m (calçada 3, pista 7, canteiro 4 com palmeiras-imperiais, pista 7, calçada 3): em arco (o anel viário,
  * de `de` a `ate`, com o canteiro parando 16 m antes das avenidas radiais) ou radial (de r0 a r1, com o canteiro
- * parando 16 m antes do anel viário e as palmeiras fora dos pórticos dos anéis, `semPalmas`).
+ * parando 16 m antes do anel viário e as palmeiras fora dos pórticos dos anéis e das torres, `semPalmas`; `semVia` são os
+ * trechos de raio que a ponte baixa do lago veste).
  */
-function avenida(m, arvores, cx, cz, y, v, semPalmas = []) {
+function avenida(m, arvores, cx, cz, y, v, semPalmas = [], semVia = []) {
   const w = v.largura ?? 24;
   const calc = 3;
   const cant = 4;
@@ -165,15 +200,19 @@ function avenida(m, arvores, cx, cz, y, v, semPalmas = []) {
   const { a, r0, r1 } = v;
   const ra = Math.min(r0, r1);
   const rb = Math.max(r0, r1);
-  faixaRadial(m, cx, cz, a, ra, rb, w, 0, y + 0.1, KP.calcada);
-  faixaRadial(m, cx, cz, a, ra, rb, pista, -off, y + 0.13, KP.asfalto);
-  faixaRadial(m, cx, cz, a, ra, rb, pista, off, y + 0.13, KP.asfalto);
-  const c0 = ra;
+  // a avenida sobre o lago e a ponte baixa (a ponte tem a própria pista): só os pedaços fora do lago
+  const trechos = recortar([ra, rb], semVia);
+  for (const [t0, t1] of trechos) {
+    faixaRadial(m, cx, cz, a, t0, t1, w, 0, y + 0.1, KP.calcada);
+    faixaRadial(m, cx, cz, a, t0, t1, pista, -off, y + 0.13, KP.asfalto);
+    faixaRadial(m, cx, cz, a, t0, t1, pista, off, y + 0.13, KP.asfalto);
+    const c1 = Math.min(t1, ANEL_VIARIO.raio - 16);
+    if (c1 - t0 >= 2) faixaRadial(m, cx, cz, a, t0, c1, cant, 0, y + 0.16, KP.canteiro);
+  }
   const c1 = Math.min(rb, ANEL_VIARIO.raio - 16);
-  if (c1 - c0 < 2) return;
-  faixaRadial(m, cx, cz, a, c0, c1, cant, 0, y + 0.16, KP.canteiro);
-  for (let s = c0 + 7; s < c1 - 3; s += 14) {
+  for (let s = ra + 7; s < c1 - 3; s += 14) {
     if (semPalmas.some(([q0, q1]) => s > q0 && s < q1)) continue;
+    if (!trechos.some(([t0, t1]) => s > t0 + 1 && s < t1 - 1)) continue;
     palma(cx + Math.cos(a * RAD) * s, cz + Math.sin(a * RAD) * s, 2);
   }
 }
@@ -202,20 +241,40 @@ function bosque(arvores, cx, cz, r0, r1, densidade, y) {
       const x = cx + rr * Math.cos(t * RAD);
       const z = cz + rr * Math.sin(t * RAD);
       if ((mataDaSede(x, z) ?? 0) < 0.6) continue;
-      const h = hashF(i, Math.round(r), 5);
-      const especie = h < 0.6 ? 'mata2' : h < 0.75 ? 'mata1' : h < 0.9 ? 'oiti' : 'mata3';
-      arvores?.push({ x, y: y + 0.1, z, especie, mata: true });
+      arvores?.push({ x, y: y + 0.1, z, ...arvoreDaMata(hashF(i, Math.round(r), 5), hashF(i, 3, Math.round(r))), mata: true });
     }
   }
 }
 
 /**
- * Paisagem da sede v3: a praça de pedra clara do pódio (onde as avenidas acabam), os caminhos em anel do modelo (480 e
+ * As vias internas do plano (só nas cenas; no jogo são do grafo): o anel viário e as avenidas, com o canteiro e as palmeiras
+ * fora dos pórticos dos anéis e das torres; com o lago pronto (`lago`), as avenidas saem do desenho no trecho em que a
+ * ponte baixa de pedra do Mirror Lake as veste.
+ */
+function viasDoPlano(plano, { cota, opaco, arvores, lago }) {
+  const [cx, cz] = plano.centro;
+  const aneis = sobAneis(plano);
+  for (const v of plano.vias) {
+    if (v.anel) {
+      avenida(opaco, arvores, cx, cz, cota, v);
+      continue;
+    }
+    const ra = Math.hypot(v.pontos[0] - cx, v.pontos[1] - cz);
+    const rb = Math.hypot(v.pontos[2] - cx, v.pontos[3] - cz);
+    const a = Math.atan2(v.pontos[1] - cz, v.pontos[0] - cx) / RAD;
+    const ang = (a + 360) % 360;
+    const semVia = lago ? [[MIRROR.r0 - 0.5, raioDaMargem(ang) + 8]] : [];
+    avenida(opaco, arvores, cx, cz, cota, { ...v, a, r0: ra, r1: rb }, [...aneis, ...sobTorres(plano, ang)], semVia);
+  }
+}
+
+/**
+ * Paisagem da sede: a praça de pedra clara do pódio (onde as avenidas acabam), os caminhos em anel do modelo (480 e
  * 688 m), o chão e as árvores dos bosques (entre os anéis e atrás do Horizon Ring), os portões nas 8 avenidas e, com
  * `vias`, o anel viário e as avenidas (só nas cenas: no jogo as vias internas são do grafo, ligadas pela X1b). Tudo na
  * cota da gleba (o platô é plano). As árvores vão para a lista (a vegetação desenha).
  */
-export function montarPaisagem(plano, { cota, opaco, arvores = null, vias = true }) {
+export function montarPaisagem(plano, { cota, opaco, arvores = null, vias = true, lago = false }) {
   const P = plano.paisagem;
   const [cx, cz] = plano.centro;
   const y = cota;
@@ -235,39 +294,21 @@ export function montarPaisagem(plano, { cota, opaco, arvores = null, vias = true
   }
   for (const g of plano.portoes) portao(opaco, g.x, g.z, g.angulo, y);
   if (!vias) return;
-  const semPalmas = sobAneis(plano);
-  for (const v of plano.vias) {
-    if (v.anel) avenida(opaco, arvores, cx, cz, y, v);
-    else {
-      const ra = Math.hypot(v.pontos[0] - cx, v.pontos[1] - cz);
-      const rb = Math.hypot(v.pontos[2] - cx, v.pontos[3] - cz);
-      const a = Math.atan2(v.pontos[1] - cz, v.pontos[0] - cx) / RAD;
-      avenida(opaco, arvores, cx, cz, y, { ...v, a, r0: ra, r1: rb }, semPalmas);
-    }
-  }
+  viasDoPlano(plano, { cota: y, opaco, arvores, lago });
 }
 
 /**
  * O que a lago.e1 entrega da paisagem (X1b): a praça de pedra do pódio, onde as avenidas internas acabam, e os portões
  * nas 8 avenidas; com `vias`, as vias internas do plano (nas cenas, que não têm o grafo do jogo).
  */
-export function montarPortoes(plano, { cota, opaco, arvores = null, vias = false }) {
+export function montarPortoes(plano, { cota, opaco, arvores = null, vias = false, lago = false }) {
   const P = plano.paisagem;
   const [cx, cz] = plano.centro;
   coroa(opaco, cx, cz, P.praca.r0, P.praca.r1, cota + 0.2, KP.pisoClaro, 128);
   coroa(opaco, cx, cz, P.praca.r1 - 2, P.praca.r1, cota + 0.22, KP.pedra, 128);
   for (const g of plano.portoes) portao(opaco, g.x, g.z, g.angulo, cota);
   if (!vias) return;
-  const semPalmas = sobAneis(plano);
-  for (const v of plano.vias) {
-    if (v.anel) avenida(opaco, arvores, cx, cz, cota, v);
-    else {
-      const ra = Math.hypot(v.pontos[0] - cx, v.pontos[1] - cz);
-      const rb = Math.hypot(v.pontos[2] - cx, v.pontos[3] - cz);
-      const a = Math.atan2(v.pontos[1] - cz, v.pontos[0] - cx) / RAD;
-      avenida(opaco, arvores, cx, cz, cota, { ...v, a, r0: ra, r1: rb }, semPalmas);
-    }
-  }
+  viasDoPlano(plano, { cota, opaco, arvores, lago });
 }
 
 // ================================================================================================ o plano em malhas
@@ -309,6 +350,17 @@ export function distAoSetor(alvo, px, py, pz) {
   return Math.hypot(px - qx, pz - qz, dy);
 }
 
+/** Os trechos do Horizon Ring como grupos de peças: o anel, o pedaço do Halo Lake e a ponte de cada trecho (campo `trecho`). */
+export function gruposDoHorizon(pecas) {
+  const por = new Map();
+  for (const p of pecas) {
+    const id = p.trecho ?? p.id;
+    if (!por.has(id)) por.set(id, []);
+    por.get(id).push(p);
+  }
+  return [...por].map(([id, ps]) => ({ id, pecas: ps }));
+}
+
 /**
  * Malhas de um plano (sem o par de torres, que é do torre.js): as partes prontas em material de verdade (a casca no
  * comum, as marquises do LOD0 por setor), as outras no fantasma, o lago e, se pedida, a paisagem.
@@ -340,33 +392,35 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
   const [cx, cz] = plano.centro;
   const cota = chao(cx, cz);
   const res = reservatorioDe(plano);
+  const lagoP = lagoDe(plano);
+  // o anel d'água do pódio é uma bacia à altura do chão; o lago grande, cavado
   const nivelAgua = cota + res.nivel;
-  // a água do parque (os espelhos d'água) vai na malha do lago: o mesmo material, nenhuma chamada a mais
-  const base = { chao, nivelAgua, mata, agua };
+  const nivelLago = cota + lagoP.nivel;
+  // a água do parque e das pontes vai na malha do lago: o mesmo material, nenhuma chamada a mais
+  const base = { chao, nivelAgua, nivelBacia: nivelAgua, nivelLago, mata, agua };
   const juntar = (parteId, r) => r.caixas.forEach((c, k) => caixas.push({ parte: parteId, idx: PARTES_ORDEM.indexOf(parteId), trecho: r.trechos[k], caixa: c }));
   for (const parte of plano.partes) {
     if (so && !so.has(parte.id)) continue;
-    // o par de torres é do torre.js e o reservatório do lago.js; o resto da parte (o pódio, as quedas) sai aqui
-    const pecas = parte.pecas.filter((p) => p.tipo !== 'torre' && p.tipo !== 'reservatorio');
+    // o par de torres é do torre.js; o resto da parte (o pódio, a água, as quedas) sai aqui
+    const pecas = parte.pecas.filter((p) => p.tipo !== 'torre');
     if (parte.id === 'lago') {
-      const real = pronta('lago') && lagoReal;
-      if (real) {
-        const r = montarLagoAnel(res, { opaco: comum.opaco, agua, cota });
-        caixas.push({ parte: 'lago', idx: PARTES_ORDEM.indexOf('lago'), trecho: null, caixa: r.caixa });
-        juntar('lago', montarParte({ id: 'lago', pecas }, { ...base, ...comum, efeitos, jatos, arvores, lod: 1 }));
-      } else {
-        // o espelho prometido: o anel de água em holograma, logo acima do chão (na obra, o leito de terra no lugar)
-        if (!lagoObra) tampa(fant.opaco, orientar(res.contorno), cota + 0.4, [0, 0, 0, 0], true);
-        juntar('lago', montarParte({ id: 'lago', pecas }, { ...base, ...fant, fantasma: true }));
-      }
+      // pronto o lago, a bacia do pódio, as quedas do pódio e as fontes são de verdade; o lago grande e as Dream Falls só
+      // depois que o chão foi cavado (o aplainar do jogo ou a cena); o resto é o espelho prometido em holograma (na obra,
+      // o leito de terra no lugar dele)
+      const real = pronta('lago');
+      const dependeDaCava = (q) => q.tipo === 'lago' || q.tipo === 'queda';
+      const reais = real ? pecas.filter((q) => lagoReal || !dependeDaCava(q)) : [];
+      const fantasmas = pecas.filter((q) => !reais.includes(q) && !(lagoObra && (q.tipo === 'lago' || q.tipo === 'reservatorio')));
+      if (reais.length) juntar('lago', montarParte({ id: 'lago', pecas: reais }, { ...base, ...comum, efeitos, jatos, arvores, lod: 1 }));
+      if (fantasmas.length) juntar('lago', montarParte({ id: 'lago', pecas: fantasmas }, { ...base, ...fant, fantasma: true }));
       continue;
     }
     if (parte.id === 'torre' && podio && !pronta('torre')) {
       juntar('torre', montarParte({ id: 'torre', pecas }, { ...base, vidro: podio.vidro, opaco: podio.opaco, efeitos, jatos, arvores, lod: 1 }));
       continue;
     }
-    // o Horizon Ring fica pronto trecho a trecho (D89); as outras partes inteiras
-    const grupos = parte.id === 'horizon' ? pecas.map((p) => ({ id: p.id, pecas: [p] })) : [{ id: parte.id, pecas }];
+    // o Horizon Ring fica pronto trecho a trecho (D89), cada um com a ponte e o pedaço do Halo Lake dele; as outras partes inteiras
+    const grupos = parte.id === 'horizon' ? gruposDoHorizon(pecas) : [{ id: parte.id, pecas }];
     for (const g of grupos) {
       const sub = { id: parte.id, pecas: g.pecas };
       if (!pronta(g.id)) {
@@ -378,9 +432,10 @@ export function malhasDoPlano(id, { chao, prontas = 'todas', lagoReal = true, pa
       montarParte(sub, { ...base, vidro: sombra.vidro, opaco: sombra.opaco, sombra: true });
     }
   }
-  if (paisagem === 'portoes') montarPortoes(plano, { cota, opaco: comum.opaco, arvores, vias });
-  else if (paisagem) montarPaisagem(plano, { cota, opaco: comum.opaco, arvores, vias });
-  return { comum, setores, agua, efeitos, jatos, arvores, fantasma: fant, sombra, caixas, nivelAgua, cota, podio };
+  const lagoDesenhado = pronta('lago') && lagoReal;
+  if (paisagem === 'portoes') montarPortoes(plano, { cota, opaco: comum.opaco, arvores, vias, lago: lagoDesenhado });
+  else if (paisagem) montarPaisagem(plano, { cota, opaco: comum.opaco, arvores, vias, lago: lagoDesenhado });
+  return { comum, setores, agua, efeitos, jatos, arvores, fantasma: fant, sombra, caixas, nivelAgua, nivelLago, cota, podio };
 }
 
 /** Caixa de seleção do par no espaço do par: as duas torres (a Blade em x = -32, a Legacy em +32), do pódio ao mastro. */
@@ -412,6 +467,7 @@ export const DIST_PARTES_LOD0 = Object.freeze({ leve: 300, media: 500, alta: 800
 
 /** Liga (1) ou desliga (0) a geometria das marquises do setor s no uniforme do vidro. */
 function lodSetor(s, v) {
+  if (!(s >= 0 && s < SETORES)) return;
   const q = UNIFORMES.uLodSetor.value[s >> 2];
   if (q) q.setComponent(s & 3, v);
 }
@@ -481,12 +537,12 @@ function criarDominio(ctx) {
     const est = modo === 'jogo' ? estadoObra(etapas) : null;
     const emObra = !!est?.torre && !torrePronta;
     const lagoObra = !!est?.lago;
-    const res = reservatorioDe(P);
-    // o reservatório só aparece de verdade quando o chão já foi cavado (o aplainar do jogo ou a cena)
+    const lagoP = lagoDe(P);
+    // o Mirror Lake grande só aparece de verdade quando o chão já foi cavado (o aplainar do jogo ou a cena)
     const [ccx, ccz] = centroDoPlano(P);
     const cota = chao(ccx, ccz);
-    const [ax, az] = pontoNaAgua(res);
-    const cavado = chao(ax, az) < cota + res.nivel - 0.5;
+    const [ax, az] = pontoNoLago(lagoP);
+    const cavado = chao(ax, az) < cota + lagoP.nivel - 0.5;
     const chaveProntas = prontas === 'todas' ? 'todas' : [...prontas].sort().join(',');
     const nova = `${modo}|${plano}|${chaveProntas}|${cavado}|${ctx.perfil?.id}|${T?.altura?.length ?? 0}|${emObra}|${lagoObra}|${!!vitrine?.vias}`;
     if (nova === chave && !sujo) return;
