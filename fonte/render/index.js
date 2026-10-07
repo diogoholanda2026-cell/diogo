@@ -344,9 +344,20 @@ export async function criarRender(canvas, opcoes = {}) {
       /** (F0) toque curto ou longo no mundo: fn({ x, y, longo }). A UI seleciona com R.selecionar(x, y). */
       aoToque: (fn) => entradaApi.aoToque?.(fn),
     },
-    selecionar(x, y) {
-      const r = depuracao.raioDaTela(cam, quadro.w, quadro.h, x, y);
-      return selecionarPorRaio({ ...r, xTela: x, yTela: y }, ctx);
+    selecionar(x, y, tolPx = 22) {
+      const um = (px, py) => selecionarPorRaio({ ...depuracao.raioDaTela(cam, quadro.w, quadro.h, px, py), xTela: px, yTela: py }, ctx);
+      const direto = um(x, y);
+      if (direto || !(tolPx > 0)) return direto;
+      // o dedo não acerta uma pista fina nem um prédio pequeno de longe: tenta em anéis em volta (07/10/2026, Poco X7)
+      for (const k of [0.5, 1]) {
+        const r = tolPx * k;
+        for (let i = 0; i < 8; i++) {
+          const a = (i * Math.PI) / 4;
+          const achou = um(x + Math.cos(a) * r, y + Math.sin(a) * r);
+          if (achou) return achou;
+        }
+      }
+      return null;
     },
     // "na frente" decidido no espaço da câmera (R1a): com a profundidade invertida, o z da tela não serve; frente e
     // prof deixam quem desenha uma linha cortar o trecho atrás da câmera (o traçado sugerido rente ao chão)

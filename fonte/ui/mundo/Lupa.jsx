@@ -13,6 +13,8 @@ import { alturaEm } from '../../comum/altura.js';
 import { sessao, vivo } from '../ferramentas/sessao.js';
 import { meioDoPlano, retangulosHud } from './Cotas.jsx';
 
+/** Desligada: o dono pediu para tirar a lupa que aparece ao arrastar com um dedo. */
+export const LUPA_LIGADA = false;
 export const LUPA = Object.freeze({ tam: 128, zoom: 3, afasta: 100, sobe: 92, margem: 8, topo: 56, folgaX: 56, folgaY: 14, cache: 200 });
 let ladoAnterior = 0;
 
@@ -112,7 +114,8 @@ function cotaNaTela(s, R, T) {
 function desenhar(cv, ui) {
   const s = sessao.value;
   const R = ui.R;
-  const ativa = !!(s && vivo.apoiado && vivo.toque && vivo.mira && R?.raio && s.tipo !== 'areas');
+  // a lupa saiu (pedido do dono, 07/10/2026): no celular ela cobria o que ele arrastava
+  const ativa = LUPA_LIGADA && !!(s && vivo.apoiado && vivo.toque && vivo.mira && R?.raio && s.tipo !== 'areas');
   if (!ativa) {
     ladoAnterior = 0; // cada toque novo começa do lado oposto ao do dedo
     cacheLupa.esp = null; // e junta os candidatos de novo (a cidade pode ter mudado entre os toques)

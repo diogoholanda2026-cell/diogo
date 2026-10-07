@@ -28,7 +28,7 @@ const carga = {
     c.classList.remove('sai');
     c.classList.add('erro');
     const f = $('carga-fase');
-    if (f) f.textContent = t('carga.erro');
+    if (f) f.textContent = `${t('carga.erro')} (${String(e?.message ?? e).slice(0, 160)})`;
     console.error(e);
   },
   sair() {

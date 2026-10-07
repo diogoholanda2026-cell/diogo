@@ -52,11 +52,13 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fo
 window.__HELD_MONTAGEM__ = __MONTAGEM__;
 /*WORKERS*/
 /* Falha de carga: a tela diz o que houve em vez de ficar parada. */
-addEventListener('error', function (e) {
+function falhaDeCarga(msg) {
   var c = document.getElementById('carga'); if (!c || c.classList.contains('sai')) return;
   c.classList.add('erro');
-  document.getElementById('carga-fase').textContent = 'Não foi possível abrir o jogo. Recarregue a página.';
-});
+  document.getElementById('carga-fase').textContent = 'Não foi possível abrir o jogo. Recarregue a página. (' + String(msg || 'erro desconhecido').slice(0, 160) + ')';
+}
+addEventListener('error', function (e) { falhaDeCarga((e && e.message) || (e && e.target && e.target.src) || ''); }, true);
+addEventListener('unhandledrejection', function (e) { falhaDeCarga(e && e.reason && (e.reason.message || e.reason)); });
 /* Service worker (D38): só em http(s) e fora das páginas de teste. */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !/[?&](teste|cena|bancada)=/.test(location.search)) {
   addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
