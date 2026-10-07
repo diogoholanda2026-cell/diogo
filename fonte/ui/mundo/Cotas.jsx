@@ -57,7 +57,7 @@ export function textoCota(s) {
     }
     return s.motivo;
   }
-  return t('x2.cota', { m: fmt.numero(p.comprimento), custo: fmt.creditos(p.custo) });
+  return t('x2.cota', { m: fmt.numero(p.comprimento), custo: fmt.dinheiro(p.custo) });
 }
 
 /**
@@ -82,7 +82,7 @@ export function montarMarcas(s) {
     const sel = s.info;
     for (const c of s.resumo?.compraveis ?? []) {
       const escolhido = sel && sel.i === c.i && sel.j === c.j;
-      l.push({ chave: `a${c.i}-${c.j}`, classe: `cota cota-area${escolhido ? ' sel' : ''}`, p: centroLadrilho(c.i, c.j), texto: fmt.creditos(c.preco), area: true, sel: !!escolhido });
+      l.push({ chave: `a${c.i}-${c.j}`, classe: `cota cota-area${escolhido ? ' sel' : ''}`, p: centroLadrilho(c.i, c.j), texto: fmt.dinheiro(c.preco), area: true, sel: !!escolhido });
     }
   }
   return l;

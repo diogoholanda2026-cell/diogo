@@ -14,17 +14,12 @@ import * as zona from './zona.js';
 import * as colocar from './colocar.js';
 import * as demolir from './demolir.js';
 import * as areas from './areas.js';
-import * as textosUx1 from '../textos/ux1.js';
-import { registrarTextos } from '../textos.js';
 import { VIAS } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { MARCOS } from '../../data/marcos.js';
 import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
 import { SESSAO } from '../acoes.js';
-
-// os textos da UX1 entram por aqui enquanto o índice de textos não os lista (a mesma parcela pode registrar de novo)
-textosUx1.registrar(registrarTextos);
 
 /** Até quantas ações o Desfazer guarda por sessão (D32). */
 export const MAX_DESFAZER = 10;
@@ -351,7 +346,7 @@ export function registrar(ui) {
     if (tipo === 'colocar' && previa && !previa.ok) return { codigo: previa.codigo ?? 'outro', texto: dica?.curto ?? t(`x2.motivo.${previa.codigo ?? 'outro'}`), dados: previa.dados ?? undefined };
     if (!e) return null;
     const dados = e.dados ?? {};
-    const texto = e.codigo === 'creditos' ? t('x2.motivo.creditos', { n: ui.fmt.creditos(dados.faltam ?? 0) }) : t(`x2.motivo.${e.codigo}`);
+    const texto = e.codigo === 'creditos' ? t('x2.motivo.creditos', { n: ui.fmt.dinheiro(dados.faltam ?? 0) }) : t(`x2.motivo.${e.codigo}`);
     return { codigo: e.codigo, texto: texto.startsWith('??') ? t('x2.motivo.outro') : texto, dados, trecho: e.trecho };
   }
 
@@ -736,8 +731,9 @@ export function registrar(ui) {
       return;
     }
     const aberta = id;
-    // alinhar: o comando gruda de novo como a prévia; livre: a planta fica exatamente onde o fantasma está
-    const r = await comando('construir', { tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot, alinhar: !!previa.alinhado, aplainar: true, ...(Number.isFinite(previa.giro) ? { giro: previa.giro } : {}) });
+    // a prévia já é o lugar final (grudado na via ou livre): o comando põe a planta exatamente onde o fantasma está. Grudar de
+    // novo pelo centro dela escolheria, num cruzamento, outra via ou o outro lado e daria um lugar diferente do que o jogador viu
+    const r = await comando('construir', { tipo: maq.tipo, x: previa.x, z: previa.z, rot: previa.rot, alinhar: false, aplainar: true });
     if (!r.ok) return vibrar(VIBRA.erro);
     vibrar(VIBRA.confirmar);
     if (id !== aberta || !maq) return;

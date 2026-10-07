@@ -15,7 +15,7 @@ import { criarEntrada } from '../../fonte/render/camera/entrada.js';
 import { criarCamera, DESLIZE, AMORTECE } from '../../fonte/render/camera/camera.js';
 import { raioDoContexto, projetarNaTela } from '../../fonte/render/camera/raio.js';
 import {
-  GESTOS, SOLTURA, Rastro, limiarPinca, limiarGiro, ehPinca, ehGiro, opcoesDoToque, limitarVetor, tetoDoQuadro, aplicarTeto, metrosPorPxEm, TOQUE_PADRAO,
+  GESTOS, SOLTURA, Rastro, limiarPinca, limiarGiro, ehPinca, ehGiro, pontoDaPinca, pontoDoGiro, opcoesDoToque, limitarVetor, tetoDoQuadro, aplicarTeto, metrosPorPxEm, TOQUE_PADRAO,
 } from '../../fonte/render/camera/gesto.js';
 import { criarLogToque } from '../../fonte/render/camera/toque-log.js';
 import { Resolucao, MOVIMENTO } from '../../fonte/render/motor/resolucao.js';
@@ -343,6 +343,39 @@ test('limiares: dois dedos que andam juntos não viram pinça nem giro (a regra 
   assert.ok(limiarGiro(400) >= GESTOS.giroGraus && limiarGiro(400) < 10);
 });
 
+test('limiares: a pinça e o giro perdem só o limiar, em quadros de 16 ms ou de 200 ms (o limiar passa no meio de um quadro lento)', () => {
+  const pinca = (dtQuadro) => {
+    const M = montar();
+    const e0 = M.cam.estado();
+    M.ev('pointerdown', 1, 393, 230, 1000);
+    M.ev('pointerdown', 2, 593, 230, 1010);
+    let proximo = 1010 + dtQuadro;
+    for (let s = 16; s <= 640; s += 16) {
+      const k = Math.min(1, s / 600);
+      M.ev('pointermove', 1, 393 - 100 * k, 230, 1010 + s);
+      M.ev('pointermove', 2, 593 + 100 * k, 230, 1010 + s);
+      if (1010 + s >= proximo) {
+        M.quadro(1010 + s);
+        proximo += dtQuadro;
+      }
+    }
+    M.quadro(1010 + 640 + dtQuadro);
+    return M.cam.estado().dist / e0.dist;
+  };
+  const rapido = pinca(16);
+  const lento = pinca(208);
+  // de 200 para 400 px: o limiar da pinça é 20 px (10% do vão), então a vista fica com (200 + 20) / 400
+  assert.ok(Math.abs(rapido - 0.55) < 0.02, `quadros de 16 ms: ${rapido.toFixed(3)}`);
+  assert.ok(Math.abs(lento - rapido) < 0.02, `quadros de 208 ms: ${lento.toFixed(3)} contra ${rapido.toFixed(3)}`);
+  // o ponto do limiar: a mudança do vão cortada no limiar (ou na mudança de agora, se for menor), com o sinal
+  assert.equal(pontoDaPinca(130, 200, 0), limiarPinca(200));
+  assert.equal(pontoDaPinca(-90, 300, 0), -limiarPinca(300));
+  assert.equal(pontoDaPinca(15, 200, 0), 15, 'nunca passa da mudança de agora');
+  assert.equal(pontoDaPinca(120, 200, 150), GESTOS.dominio * 150, 'com a mão andando junto o limiar é o dos 30% do que o meio andou');
+  assert.equal(pontoDoGiro(30, 200, 0), limiarGiro(200));
+  assert.equal(pontoDoGiro(-25, 260, 0), -limiarGiro(260));
+});
+
 test('limiares: um arrasto de dois dedos com tremor, no jogo, não aproxima nem gira a vista', () => {
   const M = montar();
   const rnd = semente(7);
@@ -662,6 +695,26 @@ test('estável: a perda do contexto pausa o tempo e a volta recarrega pelo conti
   assert.equal(ouvintes.size, 0);
 });
 
+test('estável: perder o contexto com o tempo já pausado pelo fundo leva a velocidade de antes do fundo, não zero', async () => {
+  const { ligarContexto, lerRetomada } = await import('../../fonte/app/estavel.js');
+  const caso = (pausarDevolve, estadoVelocidade) => {
+    const ouvintes = new Map();
+    const canvas = { addEventListener: (n, f) => ouvintes.set(n, f), removeEventListener: (n) => ouvintes.delete(n) };
+    const s = armazem();
+    ligarContexto({
+      canvas, storage: s, agora: () => 1000, href: () => 'https://x/p/', recarregar() {}, agendar: () => 1, cancelar() {},
+      estado: () => ({ camera: null, velocidade: estadoVelocidade }), pausar: () => pausarDevolve,
+    });
+    ouvintes.get('webglcontextlost')();
+    ouvintes.get('webglcontextrestored')();
+    return lerRetomada(s, 1000).velocidade;
+  };
+  assert.equal(caso(0, 2), 2, 'o laço já pausou no fundo (pausar devolve 0): vale a velocidade de antes do fundo que o estado traz');
+  assert.equal(caso(0, 0), 0, 'sem velocidade nenhuma: abre pausado');
+  assert.equal(caso(4, 0), 4, 'a perda pausou o tempo agora: vale a de antes de pausar');
+  assert.equal(caso(1, 2), 2, 'o jogador já retomou outra velocidade: vale a de agora');
+});
+
 test('estável: o laço pausa a simulação no fundo, retoma a velocidade ao voltar e recomeça o relógio do quadro', async () => {
   const { criarLaco } = await import('../../fonte/app/laco.js');
   const ouv = new Map();
@@ -689,11 +742,13 @@ test('estável: o laço pausa a simulação no fundo, retoma a velocidade ao vol
     ouv.get('visibilitychange')();
     assert.equal(vel, 2, 'e voltou na velocidade de antes');
     assert.deepEqual(fundo, [true, false]);
+    assert.equal(L.velocidadeAntesDoFundo, null, 'com a aba à vista não há velocidade de antes do fundo');
     L.quadro(600000); // dez minutos depois: o primeiro quadro não leva o tempo do fundo
     assert.equal(dts.at(-1), 16.7, 'o relógio do quadro recomeçou');
     // fundo duas vezes seguidas não perde a velocidade de antes
     doc.visibilityState = 'hidden';
     ouv.get('visibilitychange')();
+    assert.equal(L.velocidadeAntesDoFundo, 2, 'no fundo o laço guarda a velocidade (a recarga da perda do contexto a leva)');
     ouv.get('visibilitychange')();
     doc.visibilityState = 'visible';
     ouv.get('visibilitychange')();
@@ -763,4 +818,15 @@ test('instalação: o manifesto abre em tela cheia na horizontal, o service work
   assert.match(h, /#mundo\{[^}]*touch-action:none/, 'o canvas não deixa o navegador roubar o gesto');
   assert.match(h, /overscroll-behavior:none/, 'puxar para recarregar fica desligado');
   assert.match(h, /name="mobile-web-app-capable"/);
+});
+
+test('estável: o salvamento grava o diário e o save ao ir para o fundo e o diário em pagehide e freeze (conferido no navegador em 06/10)', () => {
+  const src = readFileSync(new URL('../../fonte/app/salvamento.js', import.meta.url), 'utf8');
+  assert.match(src, /app\.aoSegundoPlano\(\(oculto\) => \{\s*if \(oculto\) \{\s*gravarJa\(\);[\s\S]*S\.salvar\('auto'/, 'o fundo grava o diário e o save automático');
+  assert.match(src, /addEventListener\('pagehide', gravarJa\)/);
+  assert.match(src, /addEventListener\('freeze', gravarJa\)/);
+  // e quem avisa o fundo é o laço (visibilitychange), que pausa o tempo antes de avisar
+  const laco = readFileSync(new URL('../../fonte/app/laco.js', import.meta.url), 'utf8');
+  assert.match(laco, /addEventListener\('visibilitychange', visibilidade\)/);
+  assert.match(laco, /if \(oculto && pausar && antesDoFundo === null\) antesDoFundo = pausar\(\);\s*try \{\s*aoSegundoPlano\?\.\(oculto\)/);
 });

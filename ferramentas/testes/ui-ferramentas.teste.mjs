@@ -501,6 +501,14 @@ test('colocar (D98): gira a qualquer ângulo, com o ímã de 15 graus, os quarto
   assert.ok(perto(colocar.azimuteDe([0, 0], [10, 0]), Math.PI / 2));
   assert.ok(perto(colocar.azimuteDe([5, 5], [5, -5]), Math.PI));
   assert.equal(colocar.azimuteDe([0, 0], [0.2, 0.2]), null, 'o dedo em cima do centro não gira à toa');
+  // o puxador: no toque aparece sempre; com o mouse só alinhado à via (solto, a alça corre junto com o cursor e não se alcança)
+  const alin = { x: 1, z: 2, alinhado: true };
+  const solta = { x: 1, z: 2, alinhado: false };
+  assert.equal(colocar.puxadorVisivel(alin, true), true);
+  assert.equal(colocar.puxadorVisivel(solta, true), false);
+  assert.equal(colocar.puxadorVisivel(solta, false), true);
+  assert.equal(colocar.puxadorVisivel(null, false), false);
+  assert.equal(colocar.puxadorVisivel({ x: NaN, z: 0, alinhado: true }, false), false);
 });
 
 test('colocar (D98): o substituto gira a planta de verdade ao lado de uma via diagonal e mede o acesso', () => {
@@ -645,10 +653,15 @@ test('sessão (D98): o painel recebe a dica, a colisão fica em vermelho no mund
     assert.equal(colocar.graus(previas.at(-1).giro), 15, '22 graus em relação à via viram 15');
     // sem colisão a marca do mundo sai
     assert.deepEqual(R.log.filter(([k]) => k === 'demolir').at(-1)[1], []);
-    // construir manda alinhar como a prévia dizia, e livre põe exatamente onde o fantasma está
+    // construir põe a planta exatamente onde o fantasma está (x, z e rot da prévia, sem grudar de novo na via, que num
+    // cruzamento escolheria outra via ou o outro lado), tanto alinhada quanto livre
+    const final = { ...sessao.sessao.value.previa };
     await sessao.ferramentas.construir();
     assert.equal(cmds.at(-1)[0], 'construir');
-    assert.equal(cmds.at(-1)[1].alinhar, true);
+    assert.equal(cmds.at(-1)[1].alinhar, false);
+    assert.ok(perto(cmds.at(-1)[1].rot, final.rot, 1e-9), 'a rotação do comando é a que a prévia mostrou (a da via mais o giro)');
+    assert.ok(perto(cmds.at(-1)[1].x, final.x, 1e-9) && perto(cmds.at(-1)[1].z, final.z, 1e-9));
+    assert.equal(cmds.at(-1)[1].aplainar, true);
     sessao.ferramentas.alinhar(false);
     devolve = (a) => ({ ok: true, x: a.x, z: a.z, rot: a.rot, alinhado: false, pegada: [40, 48], custo: 1000 });
     sessao.ferramentas.girarPara(0.5, { livre: true });
@@ -1262,7 +1275,7 @@ test('textos da X2: toda chave usada existe, motivos e encaixes cobertos, nada p
     assert.ok(!/(?<![\p{L}\p{N}_])dias?(?![\p{L}\p{N}_])/iu.test(v), `"dia": ${v}`);
     assert.ok(!/aluguel|\/dia/i.test(v), v);
   }
-  assert.equal(t('x2.via.total', { m: fmt.numero(124), custo: fmt.creditos(3720) }), '124 m · 3.720 créditos');
+  assert.equal(t('x2.via.total', { m: fmt.numero(124), custo: fmt.dinheiro(3720) }), `124 m · ${fmt.dinheiro(3720)}`);
 });
 
 test('glifos da X2: todo glifo usado existe no registro (ou é registrado pela barra)', () => {

@@ -8,11 +8,13 @@ import * as s2 from './textos/s2.js';
 import * as s3 from './textos/s3.js';
 import * as u1 from './textos/u1.js';
 import * as u2 from './textos/u2.js';
+import * as ux1 from './textos/ux1.js';
+import * as toq1 from './textos/toq1.js';
 import * as x1 from './textos/x1.js';
 import * as x2 from './textos/x2.js';
 import * as x3 from './textos/x3.js';
 
-const MODULOS = [f0, r1, s1, s2, s3, u1, u2, x1, x2, x3];
+const MODULOS = [f0, r1, s1, s2, s3, u1, u2, ux1, toq1, x1, x2, x3];
 
 const textos = new Map();
 const donos = new Map();

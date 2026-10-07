@@ -181,3 +181,20 @@ export function ehGiro(dGraus, d0, viaja) {
   const g = Math.abs(dGraus);
   return g > limiarGiro(d0) && Math.max(20, d0 / 2) * g * RAD > GESTOS.dominio * viaja;
 }
+
+/**
+ * Onde o limiar da pinça foi cruzado no caminho dos dedos (a mudança do vão, com o sinal de dVao), para a referência do
+ * zoom: com quadros lentos o quadro vê a mudança já bem além do limiar, e a vista não deve perder o caminho até ali.
+ * É o limiar (o maior entre o fixo e os 30% do que o meio andou), no máximo a mudança de agora.
+ */
+export function pontoDaPinca(dVao, d0, viaja) {
+  const lim = Math.max(limiarPinca(d0), GESTOS.dominio * viaja);
+  return Math.sign(dVao) * Math.min(Math.abs(dVao), lim);
+}
+
+/** O mesmo para o giro: o ângulo (graus, com o sinal de dGraus) em que o limiar foi cruzado. */
+export function pontoDoGiro(dGraus, d0, viaja) {
+  const raio = Math.max(20, d0 / 2);
+  const lim = Math.max(limiarGiro(d0), (GESTOS.dominio * viaja) / raio / RAD);
+  return Math.sign(dGraus) * Math.min(Math.abs(dGraus), lim);
+}

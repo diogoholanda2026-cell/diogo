@@ -1,6 +1,6 @@
 // Barra da ferramenta ativa (desenho da UI 8.5, o painel de opções da ferramenta do CS2): toma a barra de baixo
 // inteira enquanto uma ferramenta está aberta. Polegar esquerdo: Cancelar e Desfazer (com quantas ações a sessão
-// guarda). Meio: as opções da ferramenta em cima e, embaixo, o total ("124 m · 3.720 créditos · manutenção 12/h") ou
+// guarda). Meio: as opções da ferramenta em cima e, embaixo, o total ("124 m · US$ 2,2 mi · manutenção 12/h") ou
 // o motivo quando não dá. Polegar direito: a ação principal, 108 x 52 (Construir, Melhorar, Pronto, Demolir com dois
 // toques quando há prédio da Holding, Comprar). Inválido fica fraco, continua tocável e diz o motivo no rótulo.
 import { computed } from '@preact/signals';
@@ -25,7 +25,7 @@ const GLIFO_MODO = Object.freeze({ reta: 'reta', curva: 'curva', grade: 'grade',
 const ORDEM_TAMANHO = Object.keys(TAMANHOS_PINCEL);
 /** P, M, G e volta ao P. */
 export const proximoTamanho = (tam) => ORDEM_TAMANHO[(ORDEM_TAMANHO.indexOf(tam) + 1) % ORDEM_TAMANHO.length];
-const porHora = (v) => `${fmt.numero(Math.round(v ?? 0))}${t('unid.porHora')}`;
+const porHora = (v) => fmt.dinheiroPorHora(v ?? 0);
 const mouse = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
 // ------------------------------------------------------------------------------------------------ textos (puros)
@@ -38,14 +38,14 @@ export function linhaVia(s) {
     if (!m.selecao.length) return { texto: t('x2.via.dica.melhorar'), estado: null };
     if (!p?.ok) return { texto: s.motivo ?? t('x2.via.melhorarNada'), estado: 'er' };
     const n = p.arestas.filter((a) => a.ok).length;
-    const texto = t(n === 1 ? 'x2.via.melhorar1' : 'x2.via.melhorar', { n, m: fmt.numero(p.comprimento), custo: fmt.creditos(p.custo) });
+    const texto = t(n === 1 ? 'x2.via.melhorar1' : 'x2.via.melhorar', { n, m: fmt.numero(p.comprimento), custo: fmt.dinheiro(p.custo) });
     // "estimado" só quando a conta é da interface (a prévia da simulação não é estimativa)
     return { texto: p.estimado ? `${texto} · ${t('x2.estimado')}` : texto, estado: s.motivo ? 'er' : null };
   }
   if (p?.segmentos?.length && (m.fase === 'previa' || m.fase === 'arrastando' || m.fase === 'mirandoB' || (m.fase === 'aFixo' && m.b))) {
     const base = m.modo === 'grade'
-      ? t('x2.via.grade', { n: p.segmentos.length, m: fmt.numero(p.comprimento), custo: fmt.creditos(p.custo) })
-      : t('x2.via.total', { m: fmt.numero(p.comprimento), custo: fmt.creditos(p.custo) });
+      ? t('x2.via.grade', { n: p.segmentos.length, m: fmt.numero(p.comprimento), custo: fmt.dinheiro(p.custo) })
+      : t('x2.via.total', { m: fmt.numero(p.comprimento), custo: fmt.dinheiro(p.custo) });
     const partes = [base, t('x2.manutencao', { v: porHora(p.manutencaoHora) })];
     const dem = p.demolir?.predios?.length ?? 0;
     if (dem) partes.push(t(dem === 1 ? 'x2.via.demolirPredio1' : 'x2.via.demolirPredios', { n: dem }));
@@ -170,7 +170,7 @@ function linhaColocar(s) {
   const p = s.previa;
   if (!p) return { texto: t('x2.colocar.dica'), estado: null };
   if (!p.ok) return { texto: s.motivo ?? t('x2.motivo.outro'), estado: 'er' };
-  const partes = [t('x2.colocar.custo', { custo: fmt.creditos(p.custo ?? s.item?.custo ?? 0) })];
+  const partes = [t('x2.colocar.custo', { custo: fmt.dinheiro(p.custo ?? s.item?.custo ?? 0) })];
   if (p.manutencaoHora || s.item?.manutencaoHora) partes.push(t('x2.manutencao', { v: porHora(p.manutencaoHora ?? s.item?.manutencaoHora) }));
   if (p.alcance) partes.push(t('x2.colocar.alcance', { m: fmt.numero(p.alcance) }));
   if (s.substituto) partes.push(t('x2.estimado'));
@@ -185,7 +185,7 @@ function linhasDemolir(s) {
   if (r.holding) cima.push(t('x2.demolir.holding'));
   const baixo = [];
   if (r.predios) baixo.push(t('x2.demolir.perde', { mor: fmt.numero(r.moradores), emp: fmt.numero(r.empregos) }));
-  if (r.arestas) baixo.push(t(r.arestas === 1 ? 'x2.demolir.via1' : 'x2.demolir.vias', { n: r.arestas, m: fmt.numero(r.metros) }), t('x2.demolir.volta', { v: fmt.creditos(r.voltaVias) }));
+  if (r.arestas) baixo.push(t(r.arestas === 1 ? 'x2.demolir.via1' : 'x2.demolir.vias', { n: r.arestas, m: fmt.numero(r.metros) }), t('x2.demolir.volta', { v: fmt.dinheiro(r.voltaVias) }));
   return [cima.join(' · '), baixo.join(' · ')];
 }
 
@@ -195,7 +195,7 @@ function linhasAreas(s) {
   const titulo = t('x2.areas.titulo', { i: i.i, j: i.j });
   if (i.estado === 'holding') return [titulo, t('x2.areas.holding')];
   if (i.estado === 'trancado') return [titulo, t('x2.areas.trancada')];
-  const partes = [t('x2.areas.preco', { preco: fmt.creditos(i.preco) })];
+  const partes = [t('x2.areas.preco', { preco: fmt.dinheiro(i.preco) })];
   if (i.desconto > 0) partes.push(t('x2.areas.desconto', { pct: fmt.pct(i.desconto) }));
   return [titulo, partes.join(' · ')];
 }

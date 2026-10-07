@@ -31,13 +31,13 @@ export function precoDoCartao(c, creditos) {
   if (c.acao === 'zona') return { texto: c.dados?.apagar ? '' : t('x2.bandeja.gratis'), falta: 0 };
   const custo = c.custo ?? 0;
   const falta = Math.max(0, custo - (creditos ?? 0));
-  return { texto: fmt.creditosBarra(custo), falta };
+  return { texto: fmt.dinheiro(custo), falta };
 }
 
 /** Rótulo acessível do cartão: nome, e o marco ou quanto falta. */
 function rotuloDoCartao(c, nome, preco) {
   if (c.trancado) return `${nome}. ${t('x2.trancado', { n: c.marco })}`;
-  if (preco.falta) return `${nome}. ${t('x2.bandeja.faltam', { n: fmt.creditos(preco.falta) })}`;
+  if (preco.falta) return `${nome}. ${t('x2.bandeja.faltam', { n: fmt.dinheiro(preco.falta) })}`;
   return nome;
 }
 
@@ -105,9 +105,9 @@ function Detalhe({ c, fechar }) {
     linhas.push([t('x2.bandeja.detalhe.manutencao'), t('x2.bandeja.porKm', { v: `${fmt.numero(v.manutKmH ?? 0)}${t('unid.porHora')}` })]);
   } else if (c.acao === 'colocar') {
     const x = c.dados.item;
-    linhas.push([t('x2.bandeja.detalhe.custo'), fmt.creditos(x.custo ?? 0)]);
+    linhas.push([t('x2.bandeja.detalhe.custo'), fmt.dinheiro(x.custo ?? 0)]);
     const { falta } = precoDoCartao(c, caixa.value);
-    if (falta) linhas.push([t('x2.bandeja.detalhe.faltam'), fmt.creditos(falta)]);
+    if (falta) linhas.push([t('x2.bandeja.detalhe.faltam'), fmt.dinheiro(falta)]);
     if (x.manutencaoHora) linhas.push([t('x2.bandeja.detalhe.manutencao'), `${fmt.numero(x.manutencaoHora)}${t('unid.porHora')}`]);
     if (x.alcance) linhas.push([t('x2.bandeja.detalhe.alcance'), `${fmt.numero(x.alcance)} m`]);
   } else if (c.acao === 'zona' && ZONAS[c.id]) {

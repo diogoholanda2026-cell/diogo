@@ -496,6 +496,8 @@ function normalizar(sim) {
 function validar(sim) {
   const erros = [];
   const j = J(sim);
+  // as equipes de obra: um inteiro de 1 a quantas etapas há (zero ou lixo travaria toda obra com a recusa 'ocupado')
+  if (!(Number.isInteger(j.equipes) && j.equipes >= 1 && j.equipes <= ETAPAS.length)) erros.push(`equipes de obra ${j.equipes}`);
   for (const def of ETAPAS) {
     const e = j.etapas[def.id];
     if (!e) {

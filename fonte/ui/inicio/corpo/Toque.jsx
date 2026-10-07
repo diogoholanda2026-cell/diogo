@@ -2,14 +2,11 @@
 // em qualquer tela de toque): sensibilidade do arrasto, da pinça e do giro e a inércia da câmera. As escolhas moram em
 // prefs (toqueArrasto, toquePinca, toqueGiro, toqueInercia); o app as leva à entrada (R.entrada.opcoes) ao gravar. O
 // padrão (100% em tudo, deslize ligado) é o bom sem mexer em nada. Os textos vêm de textos/toq1.js e se registram aqui.
-import { t, registrarTextos } from '../../textos.js';
-import { registrar as registrarTextosToque } from '../../textos/toq1.js';
+import { t } from '../../textos.js';
 import * as fmt from '../../formato.js';
 import { Segmentado } from '../../comp/Segmentado.jsx';
 import { Botao } from '../../comp/Botao.jsx';
 import { Secao } from '../../comp/Tela.jsx';
-
-registrarTextosToque(registrarTextos);
 
 /** As escolhas de sensibilidade (a entrada limita a 40% e 200%). */
 export const SENSIBILIDADES = Object.freeze([0.6, 0.8, 1, 1.25, 1.5]);

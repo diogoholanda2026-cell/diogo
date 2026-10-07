@@ -108,7 +108,7 @@ export function registrar(registrarCenaVitrine) {
       await esperarSeletor(esperar, '.ux1-painel');
       await esperar(60);
     },
-    conferir: juntar(textoTem('.ux1-dica', /Terreno inclinado demais: 11,4 m de desnível, e dá para aplainar até 9,6 m/, 'dica do declive'), textoTem('[data-a="ferr.principal"]', /Íngreme demais/, 'motivo no botão'), existe('.ux1-puxador', 'puxador de giro'), existe('[data-a="colocar.alinhar"]', 'Alinhar à via'), painelCabe),
+    conferir: juntar(textoTem('.ux1-dica', /Terreno inclinado demais: 11,4 m de desnível e só dá para aplainar até 9,6 m/, 'dica do declive'), textoTem('[data-a="ferr.principal"]', /Íngreme demais/, 'motivo no botão'), existe('.ux1-puxador', 'puxador de giro'), existe('[data-a="colocar.alinhar"]', 'Alinhar à via'), painelCabe),
   });
   // aplainar: planta sobre declive de até o máximo, com o custo em dólar e a obra a mais
   registrarCenaVitrine('ux1-dica-aplainar', {

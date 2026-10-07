@@ -16,10 +16,9 @@ const r1 = (v) => Math.round(v * 10) / 10;
 
 /**
  * @param {{ projetar: (p: number[]) => ({ x: number, y: number, visivel?: boolean } | null),
- *           estado: () => { x: number, z: number, dist: number, guinada: number },
- *           agora?: () => number, max?: number }} op
+ *           estado: () => { x: number, z: number, dist: number, guinada: number }, max?: number }} op
  */
-export function criarLogToque({ projetar, estado, agora = () => (typeof performance !== 'undefined' ? performance.now() : 0), max = 6000 }) {
+export function criarLogToque({ projetar, estado, max = 6000 }) {
   const quadros = [];
   const eventos = [];
   const c = { raios: 0, raioMs: 0, atualizar: 0, atualizarMs: 0, moves: 0, coalescidos: 0 };
@@ -127,8 +126,6 @@ export function criarLogToque({ projetar, estado, agora = () => (typeof performa
         solta: ultimaSolta,
       };
     },
-    /** O tempo de agora (para quem registra eventos fora do quadro). */
-    agora,
   };
   return api;
 }

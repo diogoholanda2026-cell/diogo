@@ -1846,6 +1846,24 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** testes (giro livre, cada código de vermelho com sua dica, aplainar, duas etapas da Arcologia em
   paralelo, o robô A2 verde), vitrine da ferramenta e capturas da dica.
 - **Depois dela:** a MOV1 reaproveita a ferramenta.
+- **Entregue em 07/10/2026** (UX1, revisada; retomada depois do limite de sessão). Giro livre com ímã de 15 graus, Q e E,
+  puxador e botões de 15 graus, "Alinhar à via" (tecla C); a pegada gira de verdade na colisão, no declive e no acesso.
+  Dica do motivo para cada código de vermelho, com o que fazer, e a parte que colide em vermelho no mundo. Aplainar até
+  8 m ou 20% do maior lado, a 0,35 por m³ e obra mais longa. O catálogo mostra o que o marco liberou (e qual marco falta);
+  o guia e os objetivos só destacam. A Arcologia ganhou o campo `depende` e `EQUIPES_OBRA = 2` (lago e torre.e1 andam
+  juntos, a torre sobe em cadeia, o resto pede o lago). O revisor corrigiu o construir pelo fantasma (7 de 5.661 prévias
+  verdes davam outro lugar), o puxador inalcançável com o mouse livre e o save de equipes. Contratos novos
+  (`q.construir.previa` com `dados`, `alinhado`, `rotVia`, `giro`, `aplainar`, `custoAplainar`; comando `construir` com
+  `giro`, `alinhar`, `aplainar`; `q.catalogo` com `marcoLibera` e `acesso`; `q.arcologia` com `equipes`, `depende`,
+  `emParalelo`, recusa `ocupado`; aviso `semAcesso`; `json.arcologia.equipes`). **A2:** o teste mede o patrimônio como a
+  média de 7 amostras de 3 h a 6 h (no instante das 6 h, 2 de 6 sementes invertem, porque o acesso por todos os lados
+  destravou a Pedreira e a Olaria do robô sem Arcologia); razão da Contribuição 1,124 e dos moradores 1,213. Os créditos
+  das etapas da Arcologia não foram recalibrados: **recalibrar na C2**. `EQUIPES_OBRA` e o custo do aplainar ficam
+  para calibrar com o dono no PC. Nota em `docs/entregas/onda4/UX1.md`.
+  **Integrador:** a barra de ferramentas, a bandeja, as cotas e os motivos do vermelho passaram a mostrar o custo em dólar
+  (`fmt.dinheiro`, D87; antes saíam em "créditos", a unidade de desenho) e a manutenção em US$/h; as dicas do colocar
+  (`u2.dica.colocar`) ganharam Q, E, C, o puxador e "via a até 24 m"; os textos da UX1 e da TOQ1 entram pelo índice fixo
+  de `ui/textos.js`.
 
 #### TOQ1. Toque no Poco X7 e app estável (onda 4, etapa 1; 2 sessões; D99)
 - **Arquivos:** `render/camera/{entrada,camera}.js` (o árbitro de gestos e a inércia), `render/motor/resolucao.js` (o
@@ -1857,6 +1875,17 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** instrumentação do gesto (log de eventos, quadros e salto), medida no Chromium com toque e CPU limitada
   (4 e 6 vezes), o resultado do Teste de desempenho do dono no celular (pedido a ele depois da prévia), sessão de 30
   minutos sem recarga, e as notas do que mudou.
+- **Entregue em 07/10/2026** (TOQ1, revisada). Arrasto com um raio por quadro e teto de deslocamento, soltura medida no
+  tempo do aparelho com teto e parada limpa, limiares novos (o arrasto de dois dedos que virava zoom de 21% a 40% das
+  vezes caiu a 0%; a pinça de verdade segue em 43% a 45%), Configurações do toque na aba Controles (só em tela de
+  toque: sensibilidade do arrasto, da pinça e do giro e o deslize), resolução em movimento a 72% e laço a no máximo 60
+  qps na Média e na Leve. Estabilidade: a perda do contexto WebGL recarrega pelo "continuar" levando a câmera e a
+  velocidade (guarda de 2 recargas em 60 s), a simulação pausa no fundo e o diário e o save gravam em `pagehide`;
+  32,5 min a 4x sem recarga e com a memória em platô. O revisor corrigiu a velocidade perdida quando o contexto cai com a
+  aba no fundo e a recarga em `?menu=0`. **Falta o dono:** o Teste de desempenho da Média (3 rodadas) e um vídeo curto
+  com `?toque=1` (seção 6 da nota). Pendências: a ferramenta aberta não volta depois da recarga (entra na MOV1), o
+  giro de dois dedos sobre o fantasma (`R.entrada.aoGiroDeFerramenta`, entra na MOV1), o deslize para frente parece mais
+  curto que o lateral (perspectiva). Nota em `docs/entregas/onda4/TOQ1.md`.
 
 #### OBR2. Animação das obras (onda 4; 2 sessões; D102)
 - **Arquivos:** `render/mundo/{obras,anexos}.js`, `render/arcologia/obra.js`, `render/vida/` só nos operários e nas
@@ -1865,7 +1894,8 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   módulos, acabamento), gruas e escavadeiras que trabalham de verdade, operários, poeira e faíscas, e o fim da obra com
   um fecho visível. Cada tipo de construção tem a sua sequência.
 - **Entrega:** capturas da sequência por tipo (casa, prédio, serviço, Blade Tower), 0 compilações depois de pronto, no
-  orçamento de chamadas da obra (D66).
+  orçamento de chamadas da obra (D66). Inclui aquecer o `MeshBasicMaterial` que a primeira obra de qualquer tipo compila
+  hoje depois de pronto (achado da UX1).
 
 #### MOV1. Mover e girar construções prontas (onda 4, etapa 2; 2 sessões; D94)
 - **Depois da UX1:** reaproveita a ferramenta de colocar (giro livre, motivo do vermelho, aplainar).

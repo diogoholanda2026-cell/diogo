@@ -30,7 +30,7 @@
 // Evento da ferramenta: { fase: 'inicio' | 'move' | 'fim', x, y, ponto, dedos, tipo: 'toque' | 'mouse' | 'caneta',
 // dedoX, dedoY, cancelado? } (x, y é a mira em px CSS; ponto o chão sob ela, R.raio).
 // ?toque=1: registro por quadro do gesto em window.__toque (toque-log.js).
-import { GESTOS, SOLTURA, Rastro, limiarPinca, limiarGiro, ehPinca, ehGiro, limitarVetor, tetoDoQuadro, aplicarTeto, metrosPorPxEm, opcoesDoToque } from './gesto.js';
+import { GESTOS, SOLTURA, Rastro, limiarPinca, limiarGiro, ehPinca, ehGiro, pontoDaPinca, pontoDoGiro, limitarVetor, tetoDoQuadro, aplicarTeto, metrosPorPxEm, opcoesDoToque } from './gesto.js';
 import { criarLogToque, mostrarPainel } from './toque-log.js';
 import { projetarNaTela } from './raio.js';
 
@@ -214,10 +214,8 @@ export function criarEntrada(ctx, camera) {
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
     rastroCam.length = 0;
-    const rastroC = new Rastro();
-    rastroC.push(t, mx, my);
     gesto = {
-      tipo: 'dois', modo: null, t0: t, tMove: null, e0: camera.estado(), ancora: chao(mx, my), sujo: false, rastroC,
+      tipo: 'dois', modo: null, t0: t, tMove: null, e0: camera.estado(), ancora: chao(mx, my), sujo: false,
       p0: [{ x: a.x, y: a.y }, { x: b.x, y: b.y }], d0: Math.hypot(a.x - b.x, a.y - b.y), ang0: Math.atan2(b.y - a.y, b.x - a.x),
       pinca: null, giro: null,
     };
@@ -260,11 +258,14 @@ export function criarEntrada(ctx, camera) {
     }
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     const ang = Math.atan2(b.y - a.y, b.x - a.x);
-    // a pinça e o giro entram só depois do limiar (e se não forem só um dedo atrasado), a partir do ponto em que entraram
-    // (sem salto)
+    // a pinça e o giro entram só depois do limiar (e se não forem só um dedo atrasado). A referência é o ponto do limiar no
+    // caminho dos dedos, não o ponto em que o quadro o viu: com quadros lentos (5 qps) o limiar passa no meio de um quadro
+    // e a vista perderia todo o caminho até ali (o zoom saía 30% menor); assim perde só o limiar, e o que a vista anda
+    // no quadro de entrada é o que os dedos andaram nele (sem salto)
     const viaja = Math.hypot(mx - (g.p0[0].x + g.p0[1].x) / 2, my - (g.p0[0].y + g.p0[1].y) / 2);
-    if (g.pinca === null && ehPinca(dist - g.d0, g.d0, viaja)) g.pinca = dist;
-    if (g.giro === null && ehGiro(normalizar(ang - g.ang0) / RAD, g.d0, viaja)) g.giro = ang;
+    if (g.pinca === null && ehPinca(dist - g.d0, g.d0, viaja)) g.pinca = g.d0 + pontoDaPinca(dist - g.d0, g.d0, viaja);
+    const dAng = normalizar(ang - g.ang0) / RAD;
+    if (g.giro === null && ehGiro(dAng, g.d0, viaja)) g.giro = g.ang0 + pontoDoGiro(dAng, g.d0, viaja) * RAD;
     const n = { ...camera.estado() };
     n.dist = g.pinca === null ? e0.dist : e0.dist * (g.pinca / Math.max(1, dist)) ** st.opcoes.sensPinca;
     n.guinada = g.giro === null ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
@@ -382,11 +383,7 @@ export function criarEntrada(ctx, camera) {
       marcarCam(t);
       return;
     }
-    if (gesto.tipo === 'dois' && dedos.size >= 2) {
-      const [a, b] = [...dedos.values()];
-      gesto.rastroC.push(t, (a.x + b.x) / 2, (a.y + b.y) / 2);
-      gesto.sujo = true;
-    }
+    if (gesto.tipo === 'dois' && dedos.size >= 2) gesto.sujo = true;
   }
 
   function fim(ev) {
@@ -448,11 +445,8 @@ export function criarEntrada(ctx, camera) {
         const sens = r.tipo === 'toque' ? st.opcoes.sensArrasto : 1;
         gesto = { tipo: 'arrastar', id: r.id, t0: t, ancora: chao(r.x, r.y), fx: r.x, fy: r.y, vx: r.x, vy: r.y, ux: r.x, uy: r.y, sens, moveu: true, sujo: false, mpp: 0 };
         log?.referencia(gesto.ancora);
-      } else if (!dedos.size) {
-        const u = g.rastroC.a[g.rastroC.a.length - 1];
-        if (!cancelado && g.modo === 'livre' && u) soltarComRastro(g.rastroC, u.x, u.y, t);
-        gesto = null;
       }
+      // o par nunca termina de uma vez: o primeiro dedo a sair deixa o arrastar de um dedo só (acima), que solta o último
       return;
     }
     if (!dedos.size) gesto = null;
@@ -570,8 +564,8 @@ export function criarEntrada(ctx, camera) {
       const g = gesto?.tipo;
       const fase = g && g !== 'nada' ? g : camera.movendo ? 'deslize' : 'parado';
       const d = g === 'arrastar' || g === 'ferramenta' || g === 'espera' ? dedos.get(gesto.id) : null;
-      const c = g === 'dois' ? gesto.rastroC.a[gesto.rastroC.a.length - 1] : null;
-      log.quadro(tMs, { fase, dedo: d ? [d.x, d.y] : c ? [c.x, c.y] : null, pr: ctx.pr ?? null });
+      const par = g === 'dois' && dedos.size >= 2 ? [...dedos.values()] : null;
+      log.quadro(tMs, { fase, dedo: d ? [d.x, d.y] : par ? [(par[0].x + par[1].x) / 2, (par[0].y + par[1].y) / 2] : null, pr: ctx.pr ?? null });
     }
   }
 

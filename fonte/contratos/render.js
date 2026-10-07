@@ -65,7 +65,7 @@ export const API_RENDER = congelar({
   'camera.definir': '(EstadoCamera)',
   'entrada.modo': "('camera' | 'ferramenta')",
   'entrada.aoFerramenta': "(fn({ fase: 'inicio' | 'move' | 'fim', x, y, ponto, dedos }))",
-  'entrada.opcoes': '({ deslocY: 56, bordaPx: 48 })',
+  'entrada.opcoes': '({ deslocY: 56, bordaPx: 48, sensArrasto: 1, sensPinca: 1, sensGiro: 1, inercia: true })',
   selecionar: '(xTela, yTela) → Selecao | null',
   projetar: '([x, y, z]) → { x, y, visivel, dist, frente, prof } (frente: além do plano próximo, mesmo fora da tela; prof: distância no eixo da câmera, negativa atrás)',
   raio: '(xTela, yTela) → [x, y, z] | null (sobre alturaEm)',

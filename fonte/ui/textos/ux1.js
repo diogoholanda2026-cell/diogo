@@ -1,6 +1,6 @@
 // Textos da UX1 (colocar com giro livre, motivo do vermelho, escolha livre e obras em paralelo, D98; dona: UX1): a dica de
 // cada bloqueio do fantasma (o motivo e o que fazer), os motivos curtos do botão e da cota, o giro e o alinhar à via, o
-// que o catálogo diz do que está trancado e o que o Livro da Arcologia diz das obras em paralelo. Português do Brasil,
+// que o Livro da Arcologia diz das obras em paralelo. Português do Brasil,
 // frases curtas, sem travessão; dinheiro sempre por ui/formato.js (D87) e tempo em "min de jogo" (D42).
 
 export function registrar(registrarTextos) {
@@ -18,7 +18,7 @@ export function registrar(registrarTextos) {
     'ux1.dica.colisao.via': 'Colide com a via: afaste {afastar} m',
     'ux1.dica.colisao.predio': 'Colide com outro prédio: afaste {afastar} m',
     'ux1.dica.colisao.predioNome': 'Colide com {nome}: afaste {afastar} m',
-    'ux1.dica.declive': 'Terreno inclinado demais: {desnivel} m de desnível, e dá para aplainar até {max} m. Procure um lugar mais plano',
+    'ux1.dica.declive': 'Terreno inclinado demais: {desnivel} m de desnível e só dá para aplainar até {max} m. Procure um lugar mais plano',
     'ux1.dica.recurso': 'Pouca {recurso} aqui: ligue a camada Recursos e escolha outro lugar',
     'ux1.dica.creditos': 'Faltam {faltam} no caixa',
     'ux1.dica.outro': 'Não dá para construir aqui',
@@ -75,18 +75,12 @@ export function registrar(registrarTextos) {
     'ux1.giro.mais': 'Girar 15° para a direita',
     'ux1.giro.puxador': 'Puxador de giro: arraste para girar de 15 em 15 graus',
     'ux1.giro.dicaPc': 'Q e E giram 15 graus; segure Shift no puxador para girar sem ímã',
-    'ux1.giro.quarto': 'Girar 90°',
-
-    // catálogo: o que está trancado diz qual marco falta
-    'ux1.catalogo.trancado': 'Libera no marco {n}, {nome}',
-    'ux1.catalogo.livre': 'Escolha livre: construa o que o marco já liberou, na ordem que quiser',
 
     // Livro da Arcologia: obras em paralelo
     'ux1.livro.equipes': 'Equipes de obra',
     'ux1.livro.equipes.valor': '{n} de {de} ocupadas',
     'ux1.livro.equipes.sub': 'O que não depende de outra obra anda junto; créditos, materiais e equipes limitam',
     'ux1.livro.recusa.ocupado': 'Equipes ocupadas: termine uma obra para começar esta',
-    'ux1.livro.depende': 'Depende de {etapa}',
     'ux1.livro.paralelo': 'Em obra junto com {etapa}',
     'ux1.livro.livre': 'Pode começar já: não depende de outra obra',
   });

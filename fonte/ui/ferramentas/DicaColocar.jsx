@@ -10,7 +10,7 @@ import { Glifo } from '../glifos/Glifo.jsx';
 import { t } from '../textos.js';
 import { alturaEm } from '../../comum/altura.js';
 import { sessao, ferramentas } from './sessao.js';
-import { graus, azimuteDe, PASSO_IMA } from './colocar.js';
+import { graus, azimuteDe, puxadorVisivel, PASSO_IMA } from './colocar.js';
 
 const mouse = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 const noColocar = (s) => (s && s.tipo === 'colocar' ? s : null);
@@ -84,7 +84,7 @@ export function Puxador({ ui }) {
         const el = no.current;
         if (!el) return;
         const p = noColocar(sessao.peek())?.previa;
-        if (!p || !Number.isFinite(p.x) || !ui.R?.projetar) {
+        if (!puxadorVisivel(p, mouse()) || !ui.R?.projetar) {
           el.style.visibility = 'hidden';
           return;
         }

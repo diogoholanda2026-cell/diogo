@@ -12,8 +12,7 @@ import { criarRender, carregarCena } from '../render/index.js';
 import { criarUI } from '../ui/index.jsx';
 import { comando } from '../ui/acoes.js';
 import { lerPrefs, gravarPrefs, aplicarPrefs } from '../ui/prefs.js';
-import { t, registrarTextos } from '../ui/textos.js';
-import { registrar as registrarTextosToque } from '../ui/textos/toq1.js';
+import { t } from '../ui/textos.js';
 import { avisar } from '../ui/loja.js';
 import { opcoesDoToque } from '../render/camera/gesto.js';
 import { criarLaco } from './laco.js';
@@ -141,7 +140,6 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
   });
   if (prefs.sempreDia) R.sempreDia(true);
   marcarVidro(R);
-  registrarTextosToque(registrarTextos);
   R.entrada?.opcoes?.(opcoesDoToque(prefs));
 
   const eventos = new Map();
@@ -291,11 +289,13 @@ export async function criarControle({ canvas, raizUI, qs, carga }) {
   laco.iniciar();
 
   // estabilidade (TOQ1, D99): a perda do contexto WebGL recarrega pelo ?menu=continuar levando a câmera e a velocidade
-  // do tempo; a página nova as retoma quando a partida abre (só no jogo de verdade: as cenas e a sintética ficam fora)
-  if (!nomeCena && tipo === 'partida' && !app.simUIFalsa) {
+  // do tempo; a página nova as retoma quando a partida abre (só no jogo de verdade: as cenas e a sintética ficam fora, e
+  // o ?menu=0 também: sem menu nem save, a recarga abriria uma partida nova e perderia a de agora)
+  if (!nomeCena && tipo === 'partida' && !app.simUIFalsa && qs.get('menu') !== '0') {
     app.contexto = ligarContexto({
       canvas,
-      estado: () => ({ camera: R.camera.estado(), velocidade: sim.velocidade ?? 0 }),
+      // com a aba no fundo o laço já pausou o tempo: a velocidade que vale é a de antes dele
+      estado: () => ({ camera: R.camera.estado(), velocidade: (sim.velocidade ?? 0) || (laco.velocidadeAntesDoFundo ?? 0) }),
       pausar: pausarTempo,
       avisar: avisoDoContexto,
     });

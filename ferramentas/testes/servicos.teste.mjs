@@ -479,8 +479,8 @@ test('colocar (D98): cada código de vermelho traz o seu dado (marco, gleba, ág
   assert.equal(sim.q.construir.previa({ tipo: 'praca', x: 1300, z: -1280, alinhar: false }).dados.max, 24);
   assert.equal(dispensaAcesso(sim.colocaveis.obter('terreiro')), true);
   assert.equal(dispensaAcesso(sim.colocaveis.obter('praca')), false);
-  assert.equal(dispensaAcesso(sim.colocaveis.obter('captacao')), true, 'o que só vale na margem da água dispensa a via');
-  assert.equal(dispensaAcesso(sim.colocaveis.obter('pedreira')), true, 'o que só vale sobre o recurso dispensa a via');
+  assert.equal(dispensaAcesso(sim.colocaveis.obter('captacao')), false, 'a captação na margem da água continua pedindo a via');
+  assert.equal(dispensaAcesso(sim.colocaveis.obter('pedreira')), false, 'a pedreira sobre o recurso continua pedindo a via (a avenida vem antes)');
   // recurso: a pedreira numa planície sem rocha diz o recurso e quanto tem
   const rec = sim.q.construir.previa({ tipo: 'pedreira', x: 1200, z: -330 });
   assert.equal(rec.codigo, 'recurso');

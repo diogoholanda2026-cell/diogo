@@ -129,6 +129,10 @@ export function criarLaco({ obterSim, R, ui, aoQuadro = [], aoSegundoPlano = nul
     get velocidadeEfetiva() {
       return medida.efetiva;
     },
+    /** A velocidade do tempo de antes de a aba ir para o fundo (null com a aba à vista): a recarga da perda do contexto a leva. */
+    get velocidadeAntesDoFundo() {
+      return antesDoFundo;
+    },
     /** Um quadro na mão (testes e capturas com o laço parado). */
     quadro,
   };

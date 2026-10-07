@@ -270,7 +270,7 @@ export function registrar(registrarCenaVitrine) {
       ferramentas.evento(evento(R, 'fim', [meio[0] + 40, meio[1] - 50], 3200));
       await esperar(60);
     },
-    conferir: juntar(existe('.alca-meio', 'alça do meio'), textoTem('.cota', /\d+ m · /, 'cota'), textoTem('.bf-linha', /créditos/, 'total'), barraCabe),
+    conferir: juntar(existe('.alca-meio', 'alça do meio'), textoTem('.cota', /\d+ m · /, 'cota'), textoTem('.bf-linha', /US\$/, 'total'), barraCabe),
   });
   // prévia inválida: a rua sai das áreas da Holding (o motivo no botão, na cota e na linha)
   registrarCenaVitrine('x2-via-invalida', {
@@ -376,6 +376,6 @@ export function registrar(registrarCenaVitrine) {
       ferramentas.evento(evento(R, 'fim', [1280, 256], 0));
       await esperar(60);
     },
-    conferir: juntar(existe('.cota-area.sel', 'área escolhida'), textoTem('.bf-linha', /créditos/, 'preço')),
+    conferir: juntar(existe('.cota-area.sel', 'área escolhida'), textoTem('.bf-linha', /US\$/, 'preço')),
   });
 }

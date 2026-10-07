@@ -122,6 +122,13 @@ export function previaColocarLocal(esp, { tipo, x, z, rot = 0, giro = null, alin
   return { ...base, ok: true, x: ar.ponto[0] + nx * off, z: ar.ponto[1] + nz * off, rot: normalizarRot(rotVia + rel), alinhado: true, rotVia: normalizarRot(rotVia), giro: rel, via: ar.ref };
 }
 
+/**
+ * O puxador de giro aparece? Com o mouse e a planta solta do cursor (sem alinhar, ou sem via a 60 m) o fantasma anda
+ * colado ao cursor e a alça com ele, sempre à mesma distância: nunca se alcança. Então com o mouse só aparece alinhada à via
+ * (a planta fica parada na calçada enquanto o cursor chega nela); no toque aparece sempre, e o mouse livre gira com Q e E.
+ */
+export const puxadorVisivel = (previa, comMouse) => !!previa && Number.isFinite(previa.x) && Number.isFinite(previa.z) && !(comMouse && !previa.alinhado);
+
 // ------------------------------------------------------------------------------------------------ dica do bloqueio
 
 /**

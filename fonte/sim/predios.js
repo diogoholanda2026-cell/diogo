@@ -517,10 +517,11 @@ export function marcoDoColocavel(tipo, def) {
 }
 
 /**
- * true se o tipo dispensa a via: o que só vale num lugar certo (a margem da água, o recurso natural) ou diz
- * `acesso: 'livre'` no catálogo pode nascer longe de uma via, e o aviso de sem acesso diz que falta ligar a rua.
+ * true se o tipo dispensa a via: só quem diz `acesso: 'livre'` no catálogo pode nascer longe de uma via, e o aviso de
+ * sem acesso diz que falta ligar a rua. Quem tira do recurso ou da margem (pedreira, captação) continua pedindo a via,
+ * como antes: o acesso do material é parte do jogo (a avenida antes da Pedreira, no guia do Ato 1).
  */
-export const dispensaAcesso = (def) => def?.acesso === 'livre' || !!def?.margem || !!def?.recurso;
+export const dispensaAcesso = (def) => def?.acesso === 'livre';
 
 /** Via mais perto de (x, z) que dá acesso a um colocável (qualquer uma, menos a rodovia), até 60 m da borda. */
 function viaParaColocar(sim, x, z) {

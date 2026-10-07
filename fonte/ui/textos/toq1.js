@@ -16,7 +16,6 @@ export function registrar(registrarTextos) {
     'toq1.padrao': 'Voltar ao padrão',
     'toq1.padraoBt': 'Padrão',
     'toq1.padraoExp': 'Tudo em 100%, com o deslize ligado.',
-    'toq1.voltou': 'O toque voltou ao padrão.',
     'toq1.contexto.perdeu': 'Reconectando os gráficos...',
     'toq1.contexto.voltou': 'Gráficos de volta. Retomando a partida...',
     'toq1.retomou': 'Voltei ao ponto em que você estava.',

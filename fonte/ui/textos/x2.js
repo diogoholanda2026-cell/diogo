@@ -76,10 +76,10 @@ export function registrar(registrarTextos) {
     'x2.via.dica.previa': 'Arraste as alças para ajustar',
     'x2.via.dica.grade': 'Arraste o fundo para abrir as quadras',
     'x2.via.dica.melhorar': 'Toque nas vias que quer melhorar',
-    'x2.via.total': '{m} m · {custo} créditos',
-    'x2.via.grade': '{n} ruas · {m} m · {custo} créditos',
-    'x2.via.melhorar': '{n} trechos · {m} m · {custo} créditos',
-    'x2.via.melhorar1': '1 trecho · {m} m · {custo} créditos',
+    'x2.via.total': '{m} m · {custo}',
+    'x2.via.grade': '{n} ruas · {m} m · {custo}',
+    'x2.via.melhorar': '{n} trechos · {m} m · {custo}',
+    'x2.via.melhorar1': '1 trecho · {m} m · {custo}',
     'x2.via.melhorarNada': 'Nenhum trecho aceita este tipo',
     'x2.via.demolirPredios': 'demole {n} prédios',
     'x2.via.demolirPredio1': 'demole 1 prédio',
@@ -147,7 +147,7 @@ export function registrar(registrarTextos) {
     'x2.zona.efeito': 'bem-estar da cidade {v}',
 
     // colocar (desenho da UI 9.4)
-    'x2.colocar.custo': '{custo} créditos',
+    'x2.colocar.custo': '{custo}',
     'x2.colocar.alcance': 'alcance {m} m',
     'x2.colocar.dica': 'Arraste para escolher o lugar',
 
@@ -158,7 +158,7 @@ export function registrar(registrarTextos) {
     'x2.demolir.perde': 'perde {mor} moradores e {emp} empregos',
     'x2.demolir.vias': '{n} trechos de via, {m} m',
     'x2.demolir.via1': '1 trecho de via, {m} m',
-    'x2.demolir.volta': 'volta cerca de {v} créditos',
+    'x2.demolir.volta': 'volta cerca de {v}',
     'x2.demolir.holding': 'Inclui prédio da Holding',
 
     // Áreas (D3, D55)
@@ -166,7 +166,7 @@ export function registrar(registrarTextos) {
     'x2.areas.titulo': 'Área {i}, {j}',
     'x2.areas.holding': 'Já é da Holding',
     'x2.areas.trancada': 'Precisa encostar numa área da Holding',
-    'x2.areas.preco': '{preco} créditos',
+    'x2.areas.preco': '{preco}',
     'x2.areas.desconto': 'desconto de {pct} pela Influência',
     'x2.areas.comprada': 'Área comprada.',
 

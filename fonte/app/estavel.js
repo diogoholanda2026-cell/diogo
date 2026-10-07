@@ -109,14 +109,17 @@ export function ligarContexto({
     } catch (er) {
       // sem estado: recarrega sem a retomada
     }
-    guardarRetomada(storage, { ...e, velocidade: antes ?? e.velocidade }, agora());
+    // a velocidade de agora, se o jogador ou o laço já a retomou; senão a de antes de a perda pausar o tempo
+    guardarRetomada(storage, { ...e, velocidade: e.velocidade > 0 ? e.velocidade : antes ?? 0 }, agora());
     recarregar(enderecoDaRetomada(href()));
   };
   const aoPerder = () => {
     if (perdido) return;
     perdido = true;
     try {
-      antes = pausar?.() ?? null;
+      // o tempo já pausado (a aba foi para o fundo antes) devolve 0: não é a velocidade de antes, é a falta dela
+      const v = pausar?.() ?? 0;
+      antes = v > 0 ? v : null;
     } catch (e) {
       // sem simulação
     }

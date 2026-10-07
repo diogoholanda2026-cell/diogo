@@ -346,14 +346,19 @@ test('A2: o robô que pula a Arcologia termina mais pobre (cidade da S2a, 6 h de
       sim.cmd = (n, a) => (n === 'arcologia.iniciar' ? { ok: false, codigo: 'trancado' } : cmd(n, a));
     }
     const est = criarEstrategia(sim, {});
+    // patrimônio: o valuation (caixa, dívida, prédios, estoque e, pela D49, o valor da obra da Arcologia), medido a cada
+    // meia hora das 3 h às 6 h e tirado a média (D98: um quadro só, o das 6 h, oscila com uma venda ou compra tardia do robô
+    // e deixava uma semente em que as duas cidades se alternam na frente; a média das últimas 3 h não)
+    const amostras = [];
     for (let t = 0; t < 6 * 3600; t++) {
       if (t % 20 === 0) est.passo();
       sim.rodar(1, { sincrono: true });
+      if (t % 1800 === 1799 && t >= 3 * 3600 - 1) amostras.push(sim.q.holding().valuation);
     }
     assert.deepEqual(sim.erros, []);
-    // patrimônio: o valuation (caixa, dívida, prédios, estoque e, pela D49, o valor da obra da Arcologia)
+    assert.equal(amostras.length, 7);
     return {
-      riqueza: sim.q.holding().valuation,
+      riqueza: amostras.reduce((a, b) => a + b, 0) / amostras.length,
       contribuicao: sim.json.economia.livro.totais.receitas.moradores ?? 0,
       populacao: sim.agregados.populacao,
       marco: sim.progresso.marco().n,
@@ -445,6 +450,12 @@ test('paralelo (D98): as equipes de obra limitam as etapas ao mesmo tempo, com a
   assert.equal(etapa(sim, 'torre.e1').recusa, null, 'a equipe voltou');
   ok(sim.cmd('arcologia.iniciar', { etapa: 'torre.e1' }));
   assert.deepEqual(sim.validar(), []);
+  // equipes sem sentido (zero, fração, mais que etapas) o validador acusa: zero travaria toda obra com o 'ocupado'
+  for (const lixo of [0, 1.5, -1, 99, 'a']) {
+    sim.json.arcologia.equipes = lixo;
+    assert.ok(sim.validar().some((e) => e.nome === 'arcologia' && e.erro.includes('equipes')), `equipes ${lixo} acusado`);
+  }
+  sim.json.arcologia.equipes = 1;
   // um save de antes das equipes carrega com o padrão
   delete sim.json.arcologia.equipes;
   const C = criarSimulacao({ semente: 'arco-equipes' });
