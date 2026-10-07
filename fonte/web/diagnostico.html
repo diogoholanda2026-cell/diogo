@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnóstico · Heldópolis</title>
+<style>body{margin:0;padding:16px;background:#10141a;color:#e8ecf2;font:15px/1.5 system-ui,sans-serif}h1{font-size:20px;margin:0 0 12px}
+pre{white-space:pre-wrap;word-break:break-word;background:#1a212b;border-radius:8px;padding:12px;font-size:13px}
+button,a.b{display:inline-block;margin:8px 8px 0 0;padding:12px 18px;border:0;border-radius:10px;background:#d9a441;color:#1b1406;font:600 15px system-ui;text-decoration:none}</style></head>
+<body><h1>Diagnóstico de abertura</h1>
+<p>Se o jogo não abre, toque em <b>Limpar e abrir o jogo</b>. Se continuar sem abrir, tire uma foto desta tela e mande.</p>
+<button id="limpar">Limpar e abrir o jogo</button><a class="b" href="index.html">Abrir sem limpar</a>
+<pre id="r">lendo...</pre>
+<script>
+(async function () {
+  var L = [];
+  function p(k, v) { L.push(k + ': ' + v); }
+  p('endereço', location.href);
+  p('aparelho', navigator.userAgent);
+  p('tela', screen.width + 'x' + screen.height + ' · janela ' + innerWidth + 'x' + innerHeight + ' · escala ' + devicePixelRatio);
+  p('memória (GB)', navigator.deviceMemory || '?'); p('núcleos', navigator.hardwareConcurrency || '?');
+  try {
+    var gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) p('WebGL2', 'NÃO DISPONÍVEL');
+    else {
+      var d = gl.getExtension('WEBGL_debug_renderer_info');
+      p('WebGL2', 'ok · ' + (d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)));
+      p('textura máxima', gl.getParameter(gl.MAX_TEXTURE_SIZE));
+      p('cor flutuante', !!gl.getExtension('EXT_color_buffer_float'));
+      p('ASTC / ETC2', !!gl.getExtension('WEBGL_compressed_texture_astc') + ' / ' + !!gl.getExtension('WEBGL_compressed_texture_etc'));
+    }
+  } catch (e) { p('WebGL2', 'erro ' + e.message); }
+  try { p('último erro do jogo', localStorage.getItem('heldopolis.ultimoErro') || 'nenhum'); p('recargas', localStorage.getItem('heldopolis.recargas') || '0'); } catch (e) { p('armazenamento', 'bloqueado'); }
+  try { var rs = await navigator.serviceWorker.getRegistrations(); p('service workers', rs.length); var ks = await caches.keys(); p('caches', ks.join(', ') || 'nenhum'); } catch (e) { p('cache', 'indisponível'); }
+  document.getElementById('r').textContent = L.join('\n');
+  document.getElementById('limpar').onclick = async function () {
+    try { (await navigator.serviceWorker.getRegistrations()).forEach(function (r) { r.unregister(); }); } catch (e) {}
+    try { (await caches.keys()).forEach(function (k) { caches.delete(k); }); } catch (e) {}
+    try { ['heldopolis.retomada', 'heldopolis.recargas', 'heldopolis.ultimoErro'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
+    location.href = 'index.html?limpo=' + Date.now();
+  };
+})();
+</script></body></html>

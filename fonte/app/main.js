@@ -28,7 +28,10 @@ const carga = {
     c.classList.remove('sai');
     c.classList.add('erro');
     const f = $('carga-fase');
-    if (f) f.textContent = `${t('carga.erro')} (${String(e?.message ?? e).slice(0, 160)})`;
+    if (f) f.innerHTML = `${t('carga.erro')} <a href="diagnostico.html" style="color:#d9a441">Toque aqui para diagnosticar e limpar</a><br><small style="opacity:.7;word-break:break-word"></small>`;
+    const peq = f?.querySelector('small');
+    if (peq) peq.textContent = String(e?.message ?? e).slice(0, 160);
+    try { localStorage.setItem('heldopolis.ultimoErro', String(e?.stack ?? e).slice(0, 300)); } catch (_) { /* sem armazenamento */ }
     console.error(e);
   },
   sair() {

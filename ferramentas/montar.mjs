@@ -379,6 +379,8 @@ export async function montar(opcoes = {}) {
   // índice das cenas (prévias): links para ?cena= e a página de teste
   const indiceCenas = existsSync(join(raiz, 'fonte/web/cenas.html'));
   if (indiceCenas) copyFileSync(join(raiz, 'fonte/web/cenas.html'), join(pasta, 'cenas.html'));
+  // página de diagnóstico: fora da lista do service worker (sempre da rede), para abrir mesmo com o jogo quebrado
+  if (existsSync(join(raiz, 'fonte/web/diagnostico.html'))) copyFileSync(join(raiz, 'fonte/web/diagnostico.html'), join(pasta, 'diagnostico.html'));
   const man = JSON.parse(readFileSync(join(raiz, 'fonte/web/manifest.webmanifest'), 'utf8'));
   Object.assign(man, MANIFESTO[tipoApp]);
   writeFileSync(join(pasta, 'manifest.webmanifest'), JSON.stringify(man, null, 2) + '\n');

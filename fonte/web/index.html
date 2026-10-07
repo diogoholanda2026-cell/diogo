@@ -55,7 +55,9 @@ window.__HELD_MONTAGEM__ = __MONTAGEM__;
 function falhaDeCarga(msg) {
   var c = document.getElementById('carga'); if (!c || c.classList.contains('sai')) return;
   c.classList.add('erro');
-  document.getElementById('carga-fase').textContent = 'Não foi possível abrir o jogo. Recarregue a página. (' + String(msg || 'erro desconhecido').slice(0, 160) + ')';
+  try { localStorage.setItem('heldopolis.ultimoErro', String(msg || 'erro desconhecido').slice(0, 300)); } catch (_) {}
+  document.getElementById('carga-fase').innerHTML = 'Não foi possível abrir o jogo. <a href="diagnostico.html" style="color:#d9a441">Toque aqui para diagnosticar e limpar</a>';
+  var d = document.createElement('p'); d.style.cssText = 'font-size:11px;opacity:.7;max-width:80vw;word-break:break-word'; d.textContent = String(msg || 'erro desconhecido').slice(0, 160); document.getElementById('carga-fase').appendChild(d);
 }
 addEventListener('error', function (e) { falhaDeCarga((e && e.message) || (e && e.target && e.target.src) || ''); }, true);
 addEventListener('unhandledrejection', function (e) { falhaDeCarga(e && e.reason && (e.reason.message || e.reason)); });
