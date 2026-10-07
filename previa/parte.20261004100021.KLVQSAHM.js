@@ -1,1 +1,0 @@
-import{a as r}from"./parte.20261004100021.OBO436XV.js";var a=Object.freeze({x:60,z:150,dist:3e3,guinada:18,inclinacao:35});function n(e){e("aberta",{sim:"sintetica",hora:10,camera:a,async montar(t){return{resultado:()=>r(t)}}})}export{a,n as b};
