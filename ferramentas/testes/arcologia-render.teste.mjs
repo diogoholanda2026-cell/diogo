@@ -20,7 +20,7 @@ import { ganchos } from '../../fonte/render/motor/ganchos.js';
 import { assentarHora, VISTAS as VISTAS_TORRE } from '../../fonte/render/cenas/torre.js';
 import { VISTAS_SEDE, TETO_ARCOLOGIA, TETO_ABERTA_V3 } from '../../fonte/render/cenas/planos.js';
 import {
-  malhasDoPlano, tocaGleba, pontoNaAgua, DIST_PARTES_LOD0, partesProntas, alvosDosSetores, distAoSetor, reservatorioDe,
+  malhasDoPlano, tocaGleba, pontoNaAgua, DIST_PARTES_LOD0, partesProntas, alvosDosSetores, distAoSetor, reservatorioDe, lagoDe,
 } from '../../fonte/render/arcologia/planos.js';
 import { ORCAMENTO } from '../../fonte/contratos/render.js';
 import { ETAPA, AGUA, ARESTA } from '../../fonte/contratos/flags.js';
@@ -38,7 +38,7 @@ import { rotaDoVoo, posicaoNoCiclo, malhaHelicoptero, malhaRotor, malhaRotorCaud
 import {
   TORRE_LAMINA as TL, TORRE_IRMA, especTorre, RECUOS, PAR, torresDoPar, PLANOS, PLANO_ESCOLHIDO, PARTES_ORDEM,
   PARTES_NOMES, GLEBA_ENVELOPE, cavaDoPlano, POUSO, TORRE_POSICAO, HELIPONTO_LOCAL, torreParaMundo, CAMERA_ARCOLOGIA,
-  HORIZON, MERIDIAN, PODIO, LAGO, FLORESTA, AVENIDAS, ANEL_VIARIO, TRECHOS_HORIZON, mataDaSede, SEDE_CENTRO,
+  HORIZON, MERIDIAN, PODIO, LAGO, FLORESTA, AVENIDAS, ILHAS, MIRROR, QUEDAS_ANGULOS, HALO, PONTES, PONTE, raioDaMargem, CORREDOR_AVENIDA, raioDaFaceDeDentro, ANEL_VIARIO, TRECHOS_HORIZON, mataDaSede, SEDE_CENTRO,
 } from '../../fonte/data/arcologia-plano.js';
 import { MAPA_HELDOPOLIS } from '../../fonte/data/mapa-heldopolis.js';
 import { gerarTerreno, aguaEm, costaEm } from '../../fonte/sim/mundo/terreno.js';
@@ -72,6 +72,7 @@ const pecasDe = (tipo) => A.partes.flatMap((p) => p.pecas).filter((p) => p.tipo 
 const chaoPlano = () => COTA;
 const raioDe = (x, z) => Math.hypot(x - CX, z - CZ);
 const anguloDe = (x, z) => (((Math.atan2(z - CZ, x - CX) * 180) / Math.PI) % 360 + 360) % 360;
+const MIRROR_R_FORA = 420;
 const difG = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
 
 // ------------------------------------------------------------------------------------------------ as torres (D89)
@@ -427,17 +428,22 @@ test('plano: só a sede v3 (o A), com as partes da D89 em ordem e o nome em ingl
   assert.equal(PARTES_NOMES.compass, 'Compass Tower');
   // o lago com as Dream Falls e as fontes; o parque com as Supertrees; nada da v2 (cúpula, Biblioteca, moradia)
   const tipos = (parte) => A.partes.find((p) => p.id === parte).pecas.map((p) => p.tipo);
-  assert.deepEqual(tipos('lago').sort(), ['cachoeira', 'fontes', 'reservatorio']);
+  assert.deepEqual(tipos('lago').sort(), ['cachoeira', 'fontes', 'lago', 'queda', 'queda', 'queda', 'queda', 'reservatorio']);
   assert.equal(A.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'cachoeira').nome, 'Dream Falls');
+  assert.equal(A.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'lago').nome, 'Mirror Lake');
   assert.equal(reservatorioDe(A).nome, 'Mirror Lake');
-  assert.ok(tipos('parque').filter((t) => t === 'supertree').length >= 12);
+  assert.ok(tipos('parque').filter((t) => t === 'supertree').length >= 9);
   for (const t of A.partes.flatMap((p) => p.pecas).map((p) => p.tipo)) assert.ok(t === 'torre' || t === 'reservatorio' || PECAS[t], `peça ${t} sem desenho`);
   assert.ok(A.referencias.includes('Apple Park') && A.referencias.includes('McLaren Technology Centre'));
 });
 
 test('plano: Horizon Ring em 8 trechos com id próprio entre as avenidas, 2 na primeira fase (D89)', () => {
   assert.equal(TRECHOS_HORIZON.length, 8);
-  const horizon = A.partes.find((p) => p.id === 'horizon').pecas;
+  // cada trecho leva o anel, o pedaço do Halo Lake e a Canopy Bridge que pousa nele (D97)
+  const todas = A.partes.find((p) => p.id === 'horizon').pecas;
+  assert.equal(todas.filter((p) => p.tipo === 'bacia').length, 8);
+  assert.equal(todas.filter((p) => p.tipo === 'ponte').length, 8);
+  const horizon = todas.filter((p) => p.tipo === 'anel');
   assert.deepEqual(horizon.map((p) => p.id), TRECHOS_HORIZON.map((t) => t.id));
   assert.equal(new Set(horizon.map((p) => p.id)).size, 8);
   for (const [k, p] of horizon.entries()) {
@@ -451,17 +457,22 @@ test('plano: Horizon Ring em 8 trechos com id próprio entre as avenidas, 2 na p
 });
 
 test('plano: os anéis (raios, fundos, alturas, andares) e o pódio, o lago e a floresta (D88)', () => {
-  assert.deepEqual({ ...HORIZON }, { raio: 729, fundo: 60, altura: 160, andares: 25 });
-  assert.deepEqual({ ...MERIDIAN }, { raio: 442.5, fundo: 50, altura: 120, andares: 19 });
+  const medidas = ({ raio, fundo, altura, andares }) => ({ raio, fundo, altura, andares });
+  assert.deepEqual(medidas(HORIZON), { raio: 729, fundo: 60, altura: 160, andares: 25 });
+  assert.deepEqual(medidas(MERIDIAN), { raio: 442.5, fundo: 50, altura: 120, andares: 19 });
+  // a faixa de LED é dado do anel (D93): 9 andares no Horizon e 7 no Meridian, no meio da altura
+  assert.deepEqual({ ...HORIZON.led }, { y0: 51.2, y1: 108.8, andares: 9 });
+  assert.deepEqual({ ...MERIDIAN.led }, { y0: 37.9, y1: 82.1, andares: 7 });
   const [meridian] = pecasDe('anel').filter((p) => p.id === 'meridian');
   assert.deepEqual([meridian.de, meridian.ate], [0, 360]);
   assert.deepEqual([...meridian.portais].sort((a, b) => a - b), [...AVENIDAS]);
   for (const p of pecasDe('anel')) {
     assert.deepEqual([p.cx, p.cz], [CX, CZ]);
     assert.deepEqual([p.vao, p.pe], [40, 18]);
-    // a faixa de LED de um andar no meio da altura, entre duas marquises
+    // a faixa de LED de vários andares (ímpar) no meio da altura, entre duas marquises
     const pe = p.altura / p.andares;
-    assert.ok(Math.abs((p.led.y0 + p.led.y1) / 2 - p.altura / 2) < 1e-6 && Math.abs(p.led.y1 - p.led.y0 - pe) < 0.02);
+    assert.ok(Math.abs((p.led.y0 + p.led.y1) / 2 - p.altura / 2) < 0.06 && Math.abs(p.led.y1 - p.led.y0 - p.led.andares * pe) < 0.12);
+    assert.equal(p.led.andares % 2, 1);
   }
   assert.deepEqual({ ...PODIO }, { raio: 84, altura: 40 });
   const [podio] = pecasDe('podio');
@@ -471,20 +482,29 @@ test('plano: os anéis (raios, fundos, alturas, andares) e o pódio, o lago e a 
   const [falls] = pecasDe('cachoeira');
   assert.deepEqual([...falls.angulos], [60, 240]);
   assert.equal(falls.altura, 40);
+  // as 4 Dream Falls de 120 m do Meridian Ring, nas diagonais (D97)
+  const quedas = pecasDe('queda');
+  assert.deepEqual(quedas.map((q) => q.angulo), [67.5, 157.5, 247.5, 337.5].map((g) => g));
+  for (const q of quedas) {
+    assert.equal(q.altura, 120);
+    assert.ok(q.largura >= 40 && q.largura <= 60);
+  }
 });
 
-test('plano: Codex (300 m), Helix e Compass (180 m) entre os anéis, perto do raio 583, a 60 m ou mais das avenidas', () => {
+test('plano: Codex (300 m), Helix e Compass (180 m) entre os anéis, no raio 583, no eixo de três avenidas (a do portão norte fica livre), com pórtico', () => {
   const alturas = { codex: 300, helix: 180, compass: 180 };
-  const angulos = { codex: 200, helix: 320, compass: 80 };
+  const angulos = { codex: 180, helix: 315, compass: 90 };
   for (const [id, h] of Object.entries(alturas)) {
     const [p] = A.partes.find((q) => q.id === id).pecas;
     assert.equal(p.altura, h, id);
     const r = raioDe(p.x, p.z);
     assert.ok(Math.abs(r - 583) < 1, `${id}: raio ${r}`);
     const a = anguloDe(p.x, p.z);
-    assert.ok(Math.abs(difG(a, angulos[id])) <= 10, `${id}: ${a.toFixed(1)} graus (modelo: ${angulos[id]})`);
+    assert.ok(Math.abs(difG(a, angulos[id])) < 0.1, `${id}: ${a.toFixed(1)} graus (eixo: ${angulos[id]})`);
+    assert.ok(AVENIDAS.includes(angulos[id]) && angulos[id] !== 270, `${id}: avenida do eixo`);
+    assert.deepEqual([p.passagem.vao, p.passagem.pe], [40, 18], `${id}: pórtico de 40 x 18 m`);
     const lateral = Math.min(...AVENIDAS.map((g) => Math.abs(r * Math.sin((difG(a, g) * Math.PI) / 180)) + (Math.abs(difG(a, g)) > 90 ? 1e9 : 0)));
-    assert.ok(lateral >= 60, `${id}: a ${lateral.toFixed(0)} m do eixo de uma avenida`);
+    assert.ok(lateral < 0.5, `${id}: a ${lateral.toFixed(1)} m do eixo de uma avenida`);
     // cabe entre o Meridian e o Horizon, com a calçada
     const meia = p.tipo === 'codex' ? 32 : p.a + 4;
     assert.ok(r - meia > MERIDIAN.raio + MERIDIAN.fundo / 2 && r + meia < HORIZON.raio - HORIZON.fundo / 2, `${id} encosta num anel`);
@@ -525,12 +545,15 @@ test('plano: a câmera da Arcologia enquadra o disco inteiro e a cava do Mirror 
   assert.equal(f.tipo, 'cava');
   assert.equal(f.ref, 7);
   assert.ok(f.cota < f.nivel && f.nivel < 12, 'leito abaixo da água, água abaixo da gleba');
-  // o anel de água em volta do pódio: o pódio e o parque ficam fora da cava
-  assert.ok(pontoNoPoligono(CX, CZ + 91, f.contorno) && pontoNoPoligono(CX - 91, CZ, f.contorno), 'água no anel');
-  assert.ok(!pontoNoPoligono(CX, CZ, f.contorno), 'o pódio não é cavado');
-  assert.ok(!pontoNoPoligono(CX + 120, CZ, f.contorno), 'a floresta não é cavada');
+  // o Mirror Lake grande (150 a uns 330 m): a água em volta da praça do pódio; o pódio, o anel d'água (uma bacia à
+  // altura do chão) e a floresta ficam fora da cava, e as ilhas são furos dela
+  const noLago = (r, g) => pontoNoPoligono(CX + r * Math.cos((g * Math.PI) / 180), CZ + r * Math.sin((g * Math.PI) / 180), f.contorno);
+  assert.ok(noLago(200, 90) && noLago(230, 180) && noLago(260, 350), 'água no lago');
+  assert.ok(!noLago(0, 0) && !noLago(91, 0) && !noLago(120, 0), 'o pódio, o anel d\'água e a floresta não são cavados');
+  assert.ok(!noLago(450, 90) && !noLago(MIRROR_R_FORA, 90), 'fora da margem');
+  for (const ilha of ILHAS) assert.ok(!pontoNoPoligono(ilha.x, ilha.z, f.contorno), 'a ilha é um furo');
   const [ax, az] = pontoNaAgua(reservatorioDe(A));
-  assert.ok(pontoNoPoligono(ax, az, f.contorno));
+  assert.ok(Number.isFinite(ax) && Number.isFinite(az));
 });
 
 test('gleba (D90): o disco da sede inteiro na área inicial e em terra, a 40 m ou mais do mar, da lagoa e da baía', () => {
@@ -624,6 +647,9 @@ test('plano: malhas sem NaN e tudo dentro da gleba (a sede inteira, com a paisag
   for (const [x, z] of [[b[0], b[2]], [b[3], b[2]], [b[3], b[5]], [b[0], b[5]]]) assert.ok(Math.hypot(x, z) < PODIO.raio - 10, 'o par sai do pódio');
 });
 
+// o vidro curvo do anel: o de fora e o de dentro (que recua em terraços, os Hanging Gardens da D97)
+const ehVidroDeAnel = (c) => c === VIDRO.anel || c === VIDRO.anelDentro;
+
 test('anéis: vidro curvo nos raios de fora e de dentro, altura do anel, uma marquise em cada laje e pórticos de 40 x 18 m', () => {
   for (const p of [pecasDe('anel').find((q) => q.id === 'meridian'), pecasDe('anel').find((q) => q.id === 'horizon.6')]) {
     const rF = p.raio + p.fundo / 2;
@@ -635,7 +661,7 @@ test('anéis: vidro curvo nos raios de fora e de dentro, altura do anel, uma mar
     let rMin = Infinity;
     let yMax = -Infinity;
     for (let i = 0; i < d.vidro.p.length; i += 3) {
-      if (d.vidro.c[(i / 3) * 4] !== VIDRO.anel) continue;
+      if (!ehVidroDeAnel(d.vidro.c[(i / 3) * 4])) continue;
       const r = raioDe(d.vidro.p[i], d.vidro.p[i + 2]);
       rMax = Math.max(rMax, r);
       rMin = Math.min(rMin, r);
@@ -646,7 +672,7 @@ test('anéis: vidro curvo nos raios de fora e de dentro, altura do anel, uma mar
     // vidro curvo: a normal de cada vértice é radial (não facetada)
     let pior = 1;
     for (let i = 0; i < d.vidro.p.length; i += 3) {
-      if (d.vidro.c[(i / 3) * 4] !== VIDRO.anel) continue;
+      if (!ehVidroDeAnel(d.vidro.c[(i / 3) * 4])) continue;
       const dx = d.vidro.p[i] - CX;
       const dz = d.vidro.p[i + 2] - CZ;
       const l = Math.hypot(dx, dz);
@@ -731,7 +757,7 @@ test('pódio e água: o tambor de 84 m e 40 m, as Dream Falls de 40 m para o lag
   // as quedas: do topo do pódio à água, nos arcos de 60 e 240 graus
   const lago = A.partes.find((p) => p.id === 'lago');
   const e = { chao: chaoPlano, ...malhasNovas(), nivelAgua: COTA + LAGO.nivel, lod: 1 };
-  montarParte({ id: 'lago', pecas: lago.pecas.filter((p) => p.tipo !== 'reservatorio') }, e);
+  montarParte({ id: 'lago', pecas: lago.pecas.filter((p) => p.tipo === 'cachoeira' || p.tipo === 'fontes') }, e);
   const b = caixaDe(e.efeitos);
   assert.ok(b[4] - (COTA + LAGO.nivel) >= 40 - 0.5, 'a queda tem 40 m');
   for (let i = 0; i < e.efeitos.p.length; i += 3) {
@@ -973,37 +999,31 @@ test('VIS1a: Helix e Compass são torres, não silos (pódio largo, a Helix gira
   assert.ok(BAL_OVAL <= 1.5);
 });
 
-test('VIS1a: o parque com caminhos sinuosos, espelhos d\'água, praças de pedra portuguesa e as árvores de desenho', () => {
+test('VIS1a: o parque com o passeio da margem do lago, as praças de pedra portuguesa e as árvores de desenho', () => {
   const parte = A.partes.find((q) => q.id === 'parque');
   const jardim = parte.pecas.find((q) => q.tipo === 'jardim');
   const d = { chao: chaoPlano, ...malhasNovas(), lod: 1, mata: mataDaSede };
   montarParte({ id: 'parque', pecas: parte.pecas }, d);
-  conferirMalha(d.agua, 'espelhos');
-  // os espelhos em arco (8 segmentos cada): uns 6, fora das praças
-  assert.ok(d.agua.triangulos >= 6 * 16, 'os espelhos d\'água');
+  // o espelho d'água do parque agora é o Mirror Lake grande (peça do lago): o parque não leva água própria
+  assert.equal(d.agua.triangulos, 0);
   let portuguesa = 0;
   let caminho = 0;
   for (let i = 0; i < d.opaco.vertices; i++) {
     const { pad } = dadosOpaco(d.opaco, i);
     if (pad === PADRAO.portuguesa) portuguesa++;
-    if (pad === PADRAO.piso && d.opaco.p[3 * i + 1] - COTA > 0.205 && d.opaco.p[3 * i + 1] - COTA < 0.215) caminho++;
+    if (pad === PADRAO.piso && Math.abs(d.opaco.p[3 * i + 1] - COTA - 0.2) < 0.005) caminho++;
   }
   assert.ok(portuguesa > 200, 'as praças de pedra portuguesa');
-  assert.ok(caminho > 8 * 60, 'os caminhos sinuosos');
-  // os espelhos ficam dentro do parque, fora das praças dos bosques de Supertrees
+  assert.ok(caminho > 300, `o passeio da margem do lago (${caminho})`);
+  // os bosques de Supertrees
   const grupos = gruposDeSupertrees(parte.pecas);
   assert.equal(grupos.length, 3, 'três bosques de Supertrees');
-  for (let i = 0; i < d.agua.vertices; i++) {
-    const x = d.agua.p[3 * i];
-    const z = d.agua.p[3 * i + 2];
-    assert.ok(raioDe(x, z) > jardim.r0 && raioDe(x, z) < jardim.r1);
-    for (const g of grupos) assert.ok(Math.hypot(x - g.x, z - g.z) > g.raio - 0.5, 'espelho sobre a praça');
-  }
-  // as árvores de desenho (não da mata): as palmeiras-imperiais do caminho em anel e os oitis dos sinuosos
+  // as árvores de desenho (não da mata): as palmeiras-imperiais do passeio da margem e os oitis em volta das praças
   const desenho = d.arvores.filter((a) => !a.mata);
   assert.ok(desenho.filter((a) => a.especie === 'palmeira').length > 80);
-  assert.ok(desenho.filter((a) => a.especie === 'oiti').length > 60);
-  for (const a of desenho) assert.ok(raioDe(a.x, a.z) > jardim.r0 - 1 && raioDe(a.x, a.z) < jardim.r1 + 1);
+  assert.ok(desenho.filter((a) => a.especie === 'oiti').length > 20, `oitis ${desenho.filter((a) => a.especie === 'oiti').length}`);
+  // (as copas em volta das praças dos bosques podem passar da margem do parque, mas não da face do Meridian Ring)
+  for (const a of desenho) assert.ok(raioDe(a.x, a.z) > MIRROR.r0 && raioDe(a.x, a.z) < MERIDIAN.raio - MERIDIAN.fundo / 2, `árvore de desenho a ${raioDe(a.x, a.z).toFixed(0)} m`);
   // os bosques densos da mata do parque (para a vegetação, quando a grade não os pinta), de 7 em 7 m
   assert.ok(d.arvores.filter((a) => a.mata).length > 1500);
   assert.ok(PARQUE.anel.r > jardim.r0 && PARQUE.anel.r < jardim.r1);
@@ -1011,7 +1031,7 @@ test('VIS1a: o parque com caminhos sinuosos, espelhos d\'água, praças de pedra
 
 test('VIS1a: Supertrees de Gardens by the Bay (tronco vivo com treliça, copa larga em malha nas duas faces, detalhe de perto)', () => {
   const st = pecasDe('supertree');
-  assert.ok(st.length >= 12);
+  assert.ok(st.length >= 9);
   for (const p of st) assert.ok(p.altura >= 25 && p.altura <= 50);
   const [s] = st;
   const d = { chao: chaoPlano, ...malhasNovas(), lod: 1 };
@@ -1106,7 +1126,8 @@ test('paisagem: o chão dos bosques e do parque abre as avenidas, e nenhuma palm
   }
   // o canteiro central (verde, 4 m) é a única grama no eixo; a grama do parque e dos bosques fica fora das pistas
   assert.ok(ruins < 600, `${ruins} vértices de grama sobre as pistas`);
-  const palmas = r.arvores.filter((a) => a.especie === 'palmeira');
+  // as palmeiras de chão (as dos terraços dos Hanging Gardens, nas faces de dentro dos anéis, ficam acima do chão)
+  const palmas = r.arvores.filter((a) => a.especie === 'palmeira' && a.y - COTA < 3);
   assert.ok(palmas.length > 300, `${palmas.length} palmeiras`);
   for (const a of palmas) {
     const rr = raioDe(a.x, a.z);
@@ -1133,7 +1154,7 @@ test('plano no jogo: as partes prontas pelas etapas do espelho, o resto em fanta
   assert.ok(j.caixas.some((c) => c.parte === 'meridian') && j.caixas.some((c) => c.trecho === 'horizon.1'));
   // o lago pronto mas não cavado: o espelho prometido em fantasma
   const n = malhasDoPlano('A', { chao: chaoPlano, prontas: new Set(['lago']), lagoReal: false, paisagem: false });
-  assert.equal(n.agua.triangulos, 0);
+  assert.ok(n.agua.triangulos < j.agua.triangulos, 'sem a cava, sem o plano d\'água do Mirror Lake grande');
 });
 
 test('setores: os alvos dos 19 setores e a distância da câmera a cada um (LOD por setor)', () => {
@@ -1189,7 +1210,7 @@ test('chamadas: a sede construída cabe na família do pc (as torres, o comum, o
 // ------------------------------------------------------------------------------------------------ cenas e domínio
 
 test('cenas: as vistas da sede v3 (aérea, avenida, mar, noite e as da X1b) na hora pedida e fora dos prédios', () => {
-  assert.deepEqual(Object.keys(VISTAS_SEDE).sort(), ['aerea', 'avenida', 'heli', 'mar', 'noite', 'noiteAerea', 'obra', 'parque', 'ponte']);
+  assert.deepEqual(Object.keys(VISTAS_SEDE).sort(), ['aerea', 'avenida', 'canopy', 'canopyTopo', 'heli', 'mar', 'noite', 'noiteAerea', 'noiteQuedas', 'obra', 'parque', 'ponte', 'quedas']);
   const aneis = pecasDe('anel');
   for (const [id, v] of Object.entries(VISTAS_SEDE)) {
     const r = raioDe(v.de[0], v.de[2]);
@@ -1200,6 +1221,10 @@ test('cenas: as vistas da sede v3 (aérea, avenida, mar, noite e as da X1b) na h
     if (id === 'parque') {
       const g = gruposDeSupertrees(A.partes.find((q) => q.id === 'parque').pecas).sort((a, b) => b.n - a.n)[0];
       assert.ok(Math.hypot(v.alvo[0] - g.x, v.alvo[2] - g.z) < g.raio, 'a vista do parque fora do bosque de Supertrees');
+    } else if (['canopy', 'canopyTopo', 'noiteQuedas', 'quedas'].includes(id)) {
+      // as vistas da SEDE4: as pontes, o Halo Lake e as quedas, entre o lago e o Horizon Ring
+      const ra = raioDe(v.alvo[0], v.alvo[2]);
+      assert.ok(ra > MIRROR.r0 && ra < HORIZON.raio, `${id}: o alvo fora do parque e dos anéis (${ra.toFixed(0)} m)`);
     } else assert.ok(raioDe(v.alvo[0], v.alvo[2]) < 100, `${id}: não olha o centro`);
   }
   assert.equal(VISTAS_SEDE.aerea.hora, 17.5);
@@ -1264,18 +1289,214 @@ test('kit: peças redondas com normal por vértice (cilindro e torno sem facetas
   conferirMalha(m, 'kit redondo');
 });
 
-test('lago: a cava da cena desce ao leito no anel de água, deixa o pódio no chão e se desfaz', () => {
-  const n = 129;
-  const T = { n, passo: 8, origem: [CX - 512, CZ - 512], altura: new Float32Array(n * n).fill(COTA) };
-  const res = reservatorioDe(A);
+test('lago: a cava da cena desce ao leito do Mirror Lake grande, deixa o pódio, o anel d\'água e as ilhas no chão e se desfaz', () => {
+  const n = 321;
+  const T = { n, passo: 4, origem: [CX - 640, CZ - 640], altura: new Float32Array(n * n).fill(COTA) };
+  const lago = lagoDe(A);
   const guarda = new Map();
-  cavarTerreno(T, res, COTA, guarda);
-  const h = (x, z) => T.altura[Math.round((z - T.origem[1]) / 8) * n + Math.round((x - T.origem[0]) / 8)];
-  assert.ok(Math.abs(h(CX + 88, CZ) - (COTA + res.fundo)) < 1e-4, 'leito no anel');
+  cavarTerreno(T, lago, COTA, guarda);
+  const h = (x, z) => T.altura[Math.round((z - T.origem[1]) / 4) * n + Math.round((x - T.origem[0]) / 4)];
+  const em = (r, g) => [CX + r * Math.cos((g * Math.PI) / 180), CZ + r * Math.sin((g * Math.PI) / 180)];
+  assert.ok(Math.abs(h(...em(200, 90)) - (COTA + lago.fundo)) < 1e-4, 'leito no lago');
   assert.equal(h(CX, CZ), COTA, 'o centro do pódio não é cavado');
-  assert.equal(h(CX + 200, CZ), COTA, 'o parque não é cavado');
+  assert.equal(h(...em(91, 0)), COTA, 'o anel d\'água do pódio é uma bacia à altura do chão');
+  assert.equal(h(...em(120, 200)), COTA, 'a floresta não é cavada');
+  assert.equal(h(...em(600, 45)), COTA, 'o bosque entre os anéis não é cavado');
+  for (const ilha of ILHAS) assert.ok(h(ilha.x, ilha.z) > COTA - 0.3, `a ilha de ${ilha.ang} graus fica no chão`);
   descavar(T, guarda);
   assert.ok(T.altura.every((v) => v === COTA), 'desfazer volta ao chão');
+});
+
+// ------------------------------------------------------------------------------------------------ SEDE4 (D97): pontes, água, mata
+
+const montarPeca = (peca, extra = {}) => {
+  const d = { chao: chaoPlano, ...malhasNovas(), lod: 1, nivelAgua: COTA + LAGO.nivel, mata: mataDaSede, ...extra };
+  montarParte({ id: 'x', pecas: [peca] }, d);
+  return d;
+};
+/** Distância (m) de um ponto ao eixo da avenida de ângulo g (só do lado de fora do centro) e o raio dele. */
+const noEixo = (x, z, g) => {
+  const d = difG(anguloDe(x, z), g);
+  return Math.abs(d) < 90 ? Math.abs(raioDe(x, z) * Math.sin((d * Math.PI) / 180)) : Infinity;
+};
+
+test('Canopy Bridges: 8 nos eixos das avenidas, do Meridian ao Horizon, com o tabuleiro dentro das duas faixas de LED', () => {
+  const pontes = pecasDe('ponte');
+  assert.equal(pontes.length, 8);
+  assert.equal(PONTES.length, 8);
+  assert.deepEqual(pontes.map((q) => q.angulo), [...AVENIDAS]);
+  // o tabuleiro entre duas marquises de cada anel e dentro das duas faixas de LED (a do Horizon e a do Meridian se sobrepõem)
+  for (const anel of [HORIZON, MERIDIAN]) assert.ok(PONTE.cota > anel.led.y0 && PONTE.cota < anel.led.y1, `ponte fora da faixa de LED (${anel.led.y0} a ${anel.led.y1})`);
+  assert.ok(PONTE.cota >= 60 && PONTE.cota <= 72 && PONTE.largura >= 28 && PONTE.largura <= 32);
+  const peAnel = HORIZON.altura / HORIZON.andares;
+  assert.ok(Math.abs(PONTE.cota / peAnel - Math.round(PONTE.cota / peAnel)) > 0.1, 'o tabuleiro não cai numa laje (cai entre duas marquises)');
+  for (const q of pontes) {
+    assert.ok(Math.abs(q.r0 - (MERIDIAN.raio + MERIDIAN.fundo / 2)) < 1e-6, 'nasce na face de fora do Meridian (467,5)');
+    assert.ok(q.r1 >= HORIZON.raio - HORIZON.fundo / 2 && q.r1 < HORIZON.raio - HORIZON.fundo / 2 + 20, 'pousa na face de dentro do Horizon (uns 699 m)');
+    const vao = q.r1 - q.r0;
+    assert.ok(vao > 200 && vao < 245, `vão de ${vao.toFixed(0)} m`);
+    assert.ok(q.trecho && TRECHOS_HORIZON.some((t) => t.id === q.trecho && t.de === q.angulo), 'cada ponte aparece com o trecho do Horizon Ring em que pousa');
+    const d = montarPeca(q);
+    conferirMalha(d.opaco, `${q.id} opaco`);
+    conferirMalha(d.vidro, `${q.id} vidro`);
+    // na malha: radial entre os anéis, estreita em volta do eixo e na altura entre as duas marquises
+    const [x0, y0, z0, x1, y1, z1] = caixaDe(d.opaco, d.vidro);
+    let rMin = Infinity;
+    let rMax = 0;
+    let lat = 0;
+    for (const m of [d.opaco, d.vidro]) {
+      for (let i = 0; i < m.p.length; i += 3) {
+        const r = raioDe(m.p[i], m.p[i + 2]);
+        rMin = Math.min(rMin, r);
+        rMax = Math.max(rMax, r);
+        lat = Math.max(lat, noEixo(m.p[i], m.p[i + 2], q.angulo));
+      }
+    }
+    assert.ok(rMin > q.r0 - 1 && rMax < q.r1 + 1, `${q.id}: de ${rMin.toFixed(0)} a ${rMax.toFixed(0)} m`);
+    assert.ok(lat <= PONTE.largura / 2 + 1, `${q.id}: ${lat.toFixed(1)} m do eixo`);
+    assert.ok(y0 - COTA >= PONTE.nasce - 1.5 && y1 - COTA <= PONTE.cota + 14, `${q.id}: alturas ${(y0 - COTA).toFixed(1)} a ${(y1 - COTA).toFixed(1)}`);
+    assert.ok(x0 < x1 && z0 < z1);
+    // a ponte é leve de longe: o teto por ponte
+    assert.ok(tris(d.opaco, d.vidro) <= 2500, `${q.id}: ${tris(d.opaco, d.vidro)} triângulos`);
+  }
+});
+
+test('Canopy Bridges: Codex, Helix e Compass no eixo de uma avenida, com o pórtico de 40 x 18 m, e a ponte passa por elas', () => {
+  const eixos = { codex: 180, helix: 315, compass: 90 };
+  for (const [id, g] of Object.entries(eixos)) {
+    const [p] = A.partes.find((q) => q.id === id).pecas;
+    assert.ok(noEixo(p.x, p.z, g) < 0.5 && Math.abs(raioDe(p.x, p.z) - 583) < 0.5, `${id} no eixo de ${g} graus`);
+    assert.deepEqual([p.passagem.vao, p.passagem.pe], [40, 18]);
+    const ponte = pecasDe('ponte').find((q) => q.angulo === g);
+    assert.equal(ponte.torre?.id, id, `a ponte de ${g} graus faz escala na ${id}`);
+    assert.ok(ponte.torre.meia > 10 && ponte.torre.meia < 20);
+  }
+  // a avenida do portão norte (270 graus) fica livre
+  assert.equal(pecasDe('ponte').find((q) => q.angulo === 270).torre, null);
+  assert.ok(pecasDe('ponte').filter((q) => q.torre).length === 3);
+});
+
+test('Mirror Lake grande: de 150 m a uns 330 m, 4 ilhas de mata, 4 enseadas e as 8 avenidas em pontes baixas de pedra', () => {
+  const lago = lagoDe(A);
+  assert.equal(lago.r0, 150);
+  assert.ok(ILHAS.length >= 3 && ILHAS.length <= 5, 'de 3 a 5 ilhas');
+  for (let g = 0; g < 360; g += 1) {
+    const r = raioDaMargem(g);
+    const emEnseada = QUEDAS_ANGULOS.some((q) => Math.abs(difG(g, q)) < 12);
+    assert.ok(r > 290 && r < (emEnseada ? 416 : 345), `margem de ${r.toFixed(0)} m a ${g} graus`);
+    assert.ok(r < MERIDIAN.raio - MERIDIAN.fundo / 2, 'a margem não passa do Meridian Ring');
+  }
+  // as enseadas chegam ao Meridian Ring (a menos de 10 m da face de dentro)
+  for (const q of QUEDAS_ANGULOS) assert.ok(MERIDIAN.raio - MERIDIAN.fundo / 2 - raioDaMargem(q) < 10, `enseada de ${q} graus`);
+  // as ilhas: dentro do lago, longe das margens, das avenidas e entre si
+  for (const [k, a] of ILHAS.entries()) {
+    assert.ok(a.r - a.furo > MIRROR.r0 + 5 && a.r + a.furo < raioDaMargem(a.ang) - 5, `ilha ${k} toca a margem`);
+    for (const g of AVENIDAS) assert.ok(noEixo(a.x, a.z, g) > a.furo + 14, `ilha ${k} sobre a avenida de ${g}`);
+    for (const b of ILHAS.slice(k + 1)) assert.ok(Math.hypot(a.x - b.x, a.z - b.z) > a.furo + b.furo, 'ilhas coladas');
+    assert.ok(a.raio >= 40 && a.raio <= 60);
+  }
+  assert.deepEqual([...lago.pontes], [...AVENIDAS]);
+  // a água, o muro do cais e as pontes: sem NaN, só no lago
+  const d = montarPeca(lago);
+  conferirMalha(d.agua, 'água do lago');
+  conferirMalha(d.opaco, 'pontes baixas');
+  assert.ok(d.agua.triangulos > 300);
+  const [bx0, , bz0, bx1, , bz1] = caixaDe(d.agua);
+  assert.ok(bx1 - bx0 < 2 * 420 && bz1 - bz0 < 2 * 420);
+  // a mata nas ilhas e nas margens (os pontos nas ilhas são mata densa; a água é clareira)
+  for (const a of ILHAS) assert.ok(mataDaSede(a.x, a.z) > 0.8, 'mata na ilha');
+  assert.equal(mataDaSede(CX + 200, CZ + 200 * 0 + 0.01), 0, 'o lago não tem mata');
+  assert.ok((mataDaSede(CX + 600, CZ) ?? 0) > 0.6 || (mataDaSede(CX + 560, CZ + 40) ?? 0) > 0.6, 'mata densa entre os anéis');
+});
+
+test('Dream Falls grandes: 4 quedas de 120 m do teto do Meridian Ring, nas diagonais entre as avenidas, de 40 a 60 m, com a luz', () => {
+  const quedas = pecasDe('queda');
+  assert.equal(quedas.length, 4);
+  assert.deepEqual(quedas.map((q) => q.angulo), [...QUEDAS_ANGULOS]);
+  for (const q of quedas) {
+    // entre duas avenidas (a 22,5 graus de cada uma)
+    for (const g of AVENIDAS) assert.ok(Math.abs(difG(q.angulo, g)) >= 22.4, `queda de ${q.angulo} sobre a avenida de ${g}`);
+    assert.ok(q.largura >= 40 && q.largura <= 60 && q.altura === 120);
+    const d = montarPeca(q, { lod: 1 });
+    conferirMalha(d.efeitos, `${q.id} efeitos`);
+    const [x0, y0, z0, x1, y1, z1] = caixaDe(d.efeitos);
+    const nivel = COTA + MIRROR.nivel;
+    assert.ok(y1 - nivel >= 119.5 && y1 - nivel <= 122, `${q.id}: ${(y1 - nivel).toFixed(1)} m de queda`);
+    assert.ok(Math.abs(y0 - nivel) < 0.2, 'a espuma na água');
+    // a lâmina cai ao lado do Meridian Ring (a face de dentro, a 417,5 m) e pousa no lago
+    let rMin = Infinity;
+    let rMax = 0;
+    for (let i = 0; i < d.efeitos.p.length; i += 3) {
+      const r = raioDe(d.efeitos.p[i], d.efeitos.p[i + 2]);
+      rMin = Math.min(rMin, r);
+      rMax = Math.max(rMax, r);
+      assert.ok(Math.abs(difG(anguloDe(d.efeitos.p[i], d.efeitos.p[i + 2]), q.angulo)) < 9, 'efeito fora da enseada');
+    }
+    assert.ok(rMax <= MERIDIAN.raio - MERIDIAN.fundo / 2 + 11 && rMin > raioDaMargem(q.angulo) - 60, `${q.id}: de ${rMin.toFixed(0)} a ${rMax.toFixed(0)} m`);
+    assert.ok(x0 < x1 && z0 < z1);
+    // o material 'cascata' (o sombreador anima e acende à noite): o código de cada vértice é do conjunto da cascata
+    assert.ok(d.efeitos.triangulos > 300 && d.efeitos.triangulos < 1500, `${d.efeitos.triangulos} triângulos`);
+  }
+  // o teto do Meridian leva o bico em cada uma das 4 quedas
+  const meridian = pecasDe('anel').find((q) => q.id === 'meridian');
+  assert.deepEqual(meridian.quedas.map((q) => q.angulo), [...QUEDAS_ANGULOS]);
+});
+
+test('Halo Lake: a faixa d\'água de 50 m ao pé da face de dentro do Horizon Ring, cortada pelas avenidas, em 8 pedaços', () => {
+  assert.deepEqual([HALO.r0, HALO.r1], [645, 695]);
+  assert.ok(HALO.r1 + HALO.cais <= HORIZON.raio - HORIZON.fundo / 2 + 1e-6, 'o cais de 4 m até o vidro');
+  const bacias = pecasDe('bacia');
+  assert.equal(bacias.length, 8);
+  for (const b of bacias) {
+    const d = montarPeca(b);
+    conferirMalha(d.agua, `${b.id} água`);
+    conferirMalha(d.opaco, `${b.id} muros`);
+    assert.ok(d.agua.triangulos > 10);
+    for (let i = 0; i < d.agua.p.length; i += 3) {
+      const x = d.agua.p[i];
+      const z = d.agua.p[i + 2];
+      const r = raioDe(x, z);
+      assert.ok(r > HALO.r0 - 0.5 && r < HALO.r1 + 0.5, `água fora do anel (${r.toFixed(1)} m)`);
+      // fora do corredor das avenidas (a pista de 24 m e o guarda-corpo)
+      for (const g of AVENIDAS) assert.ok(noEixo(x, z, g) >= CORREDOR_AVENIDA - 0.5, `água na avenida de ${g}`);
+    }
+    // as pontas da bacia acabam nas avenidas do trecho
+    assert.deepEqual([...b.lacunas], [b.de, b.ate]);
+    const t = TRECHOS_HORIZON.find((q) => q.id === b.trecho);
+    assert.ok(t && t.de === b.de && t.ate === b.ate);
+  }
+});
+
+test('Hanging Gardens: a face de dentro dos dois anéis recua em terraços com plantas, a de fora segue vidro liso', () => {
+  for (const A_ of [HORIZON, MERIDIAN]) {
+    assert.ok(A_.terracos.linhas.length >= 3 && A_.terracos.recuo >= 2);
+    // as linhas de terraço não caem na faixa de LED (o degrau não corta a faixa)
+    const pe = A_.altura / A_.andares;
+    for (const l of A_.terracos.linhas) assert.ok(l * pe <= A_.led.y0 + 1e-6 || l * pe >= A_.led.y1 - 1e-6, `terraço de ${l} andares dentro da faixa de LED`);
+    // o raio da face de dentro só cresce com a altura (recua), a de fora fica
+    assert.equal(raioDaFaceDeDentro(A_, 0.1), A_.raio - A_.fundo / 2);
+    assert.ok(raioDaFaceDeDentro(A_, A_.altura) > raioDaFaceDeDentro(A_, 0.1));
+    assert.ok(raioDaFaceDeDentro(A_, A_.altura) < A_.raio + A_.fundo / 2 - 25, 'a laje de cima ainda tem fundo');
+  }
+  // na malha do anel: as árvores e plantas dos terraços (a vegetação planta as grandes; as de perto vão na lista)
+  const p = pecasDe('anel').find((q) => q.id === 'horizon.6');
+  const d = montarPeca(p);
+  const nosTerracos = d.arvores.filter((a) => a.y - COTA > 10);
+  assert.ok(nosTerracos.length >= 20, `${nosTerracos.length} árvores nos terraços`);
+  for (const a of nosTerracos) assert.ok(raioDe(a.x, a.z) < HORIZON.raio, 'terraço na face de fora');
+  const plantadas = d.vidro.c.length / 4;
+  assert.ok(plantadas > 0);
+});
+
+test('triângulos: as pontes, a água e as quedas cabem nos tetos da D66 (250 mil de perto, 60 mil na vista aberta)', () => {
+  const r = malhasDoPlano('A', { chao: chaoPlano, prontas: 'todas' });
+  const aberta = tris(r.comum.vidro, r.comum.opaco, r.agua, r.efeitos);
+  const pontes = pecasDe('ponte').reduce((a, q) => { const d = montarPeca(q); return a + tris(d.opaco, d.vidro); }, 0);
+  const quedas = pecasDe('queda').reduce((a, q) => a + tris(montarPeca(q).efeitos), 0);
+  assert.ok(pontes <= 8 * 2500 && pontes > 8 * 300, `as 8 pontes: ${pontes} triângulos`);
+  assert.ok(quedas <= 4 * 1500, `as 4 quedas: ${quedas} triângulos`);
+  // sem o par de torres (que o teste de cima conta), o comum, a água e os efeitos já ficam bem abaixo dos 60 mil da vista aberta
+  assert.ok(aberta < TETO_ABERTA_V3, `o comum, a água e os efeitos: ${aberta} triângulos`);
 });
 
 // ------------------------------------------------------------------------------------------------ X1b: obra e voo

@@ -1312,7 +1312,7 @@ function jardim(g, p, mata, pecas = []) {
       const t = (2 * Math.PI * (i + 0.3 * hashF(i, Math.round(px), 4))) / n;
       const x = px + Math.cos(t) * (pr + 6);
       const z = pz + Math.sin(t) * (pr + 6);
-      if (dentroDe(livres, x, z) || raioDaMargem((Math.atan2(z - cz, x - cx) / RAD + 360) % 360) > Math.hypot(x - cx, z - cz) - 12) continue;
+      if (Math.hypot(x - cx, z - cz) > r1 + 3 || dentroDe(livres, x, z) || raioDaMargem((Math.atan2(z - cz, x - cx) / RAD + 360) % 360) > Math.hypot(x - cx, z - cz) - 12) continue;
       const h = hashF(i, Math.round(pz), 13);
       g.arvores.push({ x, y: y + 0.2, z, especie: h < 0.5 ? 'oiti' : h < 0.8 ? 'mata2' : 'mata1', giro: h * 6.28 });
     }

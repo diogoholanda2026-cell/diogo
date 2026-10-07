@@ -662,8 +662,8 @@ export function mataDaSede(x, z) {
   });
   if (naAvenida && r > PRACA.r1 - 2) return 0;
   const ruido = 0.5 + 0.25 * sen(dx / 61 + 1.3 * cos(dz / 83)) + 0.25 * cos(dz / 47 - 0.7 * sen(dx / 71));
-  // quanto da mata cai nos claros do ruído: a mata é fechada, com densidade de 0,68 a 0,94 (nunca o gramado limpo)
-  const densa = 0.68 + 0.26 * ruido;
+  // a mata é fechada, com densidade de 0,8 a 0,94 (nunca o gramado limpo: abaixo de 0,8 o chão da VIS1c pintaria pasto ralo)
+  const densa = 0.8 + 0.14 * ruido;
   if (r >= FLORESTA.r0 && r <= FLORESTA.r1) return 0.92;
   if (r < MIRROR.r0) return 0;
   // o lago, as ilhas e a margem

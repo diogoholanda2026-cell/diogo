@@ -9,7 +9,7 @@ import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar
 import { componentes, noPerto } from '../../fonte/sim/vias/grafo.js';
 import { ETAPA, ARESTA } from '../../fonte/contratos/flags.js';
 import { ETAPAS, ETAPAS_M2, EQUIPES_OBRA, etapaDe, dependenciasAbertas, alturaBlade, alturaLegacy, avancoLegacy, ALTURA_PONTE } from '../../fonte/data/arcologia.js';
-import { PLANOS, PLANO_ESCOLHIDO, GLEBA_ENVELOPE, LAGO, SEDE_CENTRO, TORRE_LAMINA, TORRE_IRMA, cavaDoPlano } from '../../fonte/data/arcologia-plano.js';
+import { PLANOS, PLANO_ESCOLHIDO, GLEBA_ENVELOPE, LAGO, SEDE_CENTRO, TORRE_LAMINA, TORRE_IRMA, cavaDoPlano, pontoDoArco } from '../../fonte/data/arcologia-plano.js';
 import { REF_CAVA } from '../../fonte/sim/arcologia.js';
 import { contribuicaoHora } from '../../fonte/sim/economia.js';
 import { REGRAS_DONO } from '../../fonte/data/economia.js';
@@ -191,8 +191,9 @@ test('efeitos da D49: vias e água, licença, sede operacional, moradores de lux
 
 test('a cava do Mirror Lake é forma do aplainar desde o começo da lago.e1', () => {
   const sim = criarSimulacao({ semente: 'arco-cava' });
-  const res = plano.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'reservatorio');
-  const [ax, az] = [res.cx, res.cz + (res.r0 + res.r1) / 2];
+  // SEDE4: o ponto de prova é do Mirror Lake grande (a 240 m do pódio, a 67,5 graus, longe das ilhas e das avenidas)
+  const lagoGrande = plano.partes.find((p) => p.id === 'lago').pecas.find((p) => p.tipo === 'lago');
+  const [ax, az] = pontoDoArco(lagoGrande.cx, lagoGrande.cz, 240, 67.5);
   const antes = sim.alturaEm(ax, az);
   assert.ok(Math.abs(antes - GLEBA_ENVELOPE.cota) < 0.5, `o platô plano antes (${antes})`);
   assert.equal(sim.formas.lista().filter((f) => f.tipo === 'cava').length, 0);

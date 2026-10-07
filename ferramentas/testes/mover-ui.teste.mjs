@@ -329,7 +329,7 @@ test('o painel "o que muda": as linhas de uma prévia, em ordem, com o tom de ca
 test('textos: todas as chaves da MOV1 existem, sem travessão nem "dia", sem repetir chave de outra parcela', async () => {
   const { verificarConteudo } = await import('../guarda-texto.mjs');
   const chaves = [...ler('fonte/ui/textos/mov1.js').matchAll(/'((?:mov1|codigo)\.[\w.]+)':/g)].map((m) => m[1]);
-  assert.ok(chaves.length > 40, `${chaves.length} chaves`);
+  assert.ok(chaves.length > 30, `${chaves.length} chaves`);
   for (const k of chaves) {
     assert.ok(temTexto(k), k);
     assert.deepEqual(verificarConteudo(t(k), ['travessao', 'aluguel', 'porDia', 'dia'], { js: false }), [], `${k}: ${t(k)}`);

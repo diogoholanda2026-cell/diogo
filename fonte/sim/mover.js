@@ -272,6 +272,9 @@ function lugarDe(sim, def, args, i) {
   return lugarDoColocavel(sim, def, { x, z, rot: num(args.rot) ? args.rot : P.rot[i], giro: num(args.giro) ? args.giro : null, alinhar }, true);
 }
 
+/** Um argumento de lugar que veio e não é número finito (ausente vale: fica o de agora). */
+const valorRuim = (v) => v !== undefined && !(typeof v === 'number' && Number.isFinite(v));
+
 const refDoArg = (a) => (Number.isInteger(a?.ref) ? a.ref : Number.isInteger(a?.id) ? a.id : -1);
 
 /** O lugar é o de agora (nem andou nem girou)? */
@@ -288,6 +291,7 @@ export function previaMover(sim, args = {}) {
   const ref = refDoArg(args);
   const i = ref >= 0 ? P.idxVivo(ref) : -1;
   if (i < 0) return { ok: false, codigo: 'inexistente', ref, custo: 0, efeitos: [] };
+  if (valorRuim(args.x) || valorRuim(args.z) || valorRuim(args.rot) || valorRuim(args.giro)) return { ok: false, codigo: 'valor', ref, custo: 0, efeitos: [] };
   const k = tipoDoPredio(sim, i);
   const imp = impedimentoDeMover(sim, i);
   const def = k.def;
@@ -326,8 +330,7 @@ export function mover(sim, args = {}) {
   const P = sim.tabelas.predios;
   const ref = refDoArg(args);
   const i = ref >= 0 ? P.idxVivo(ref) : -1;
-  const ruim = (v) => v !== undefined && !(typeof v === 'number' && Number.isFinite(v));
-  if (ruim(args.x) || ruim(args.z) || ruim(args.rot) || ruim(args.giro)) return { ok: false, codigo: 'valor' };
+  if (valorRuim(args.x) || valorRuim(args.z) || valorRuim(args.rot) || valorRuim(args.giro)) return { ok: false, codigo: 'valor' };
   if (i < 0) return { ok: false, codigo: ref >= 0 ? 'inexistente' : 'valor' };
   const imp = impedimentoDeMover(sim, i);
   if (imp) return { ok: false, codigo: imp.codigo, dados: imp.dados };

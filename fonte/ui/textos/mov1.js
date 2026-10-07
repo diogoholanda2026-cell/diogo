@@ -8,25 +8,20 @@ export function registrar(registrarTextos) {
     // botão da folha e dicas
     'mov1.mover': 'Mover',
     'mov1.mover.dica': 'Muda de lugar ou de direção por {custo}, com uma obra curta',
-    'mov1.mover.dicaToque': 'Segure o prédio selecionado e arraste para movê-lo',
     'mov1.mover.emObra': 'Em obra: espere terminar para mover',
-    'mov1.mover.fecharAntes': 'Feche a ferramenta aberta antes de mover',
 
     // o que impede de mover (dados.fixo da recusa): a dica de cada um
-    'mov1.fixo.zona': 'Prédio de zona não muda de lugar: a zona se refaz sozinha. Demola e zoneie onde quiser',
+    'mov1.fixo.zona': 'Prédio de zona não muda de lugar: a zona se refaz sozinha. Dá para demolir e zonear onde quiser',
     'mov1.fixo.arcologia': 'A Arcologia fica onde está',
     'mov1.fixo.obra': 'Em obra: espere terminar para mover de novo',
     'codigo.fixo': 'Esta construção não muda de lugar.',
 
     // barra da ferramenta
     'mov1.barra.nome': 'Mover {nome}',
-    'mov1.ferramenta': 'Mover',
 
     // dica do fantasma (o motivo e o que fazer, no mesmo formato da ux1) e o motivo curto do botão e da cota
     'mov1.dica.nada': 'Arraste o prédio para o novo lugar, ou gire para mudar a direção dele',
     'mov1.curto.nada': 'Escolha o novo lugar',
-    'mov1.dica.obra': 'Em obra: espere terminar para mover de novo',
-    'mov1.curto.obra': 'Em obra',
     'mov1.dica.fixo.zona': 'Prédio de zona não muda de lugar: a zona se refaz sozinha',
     'mov1.curto.fixo.zona': 'Prédio de zona',
     'mov1.dica.fixo.arcologia': 'A Arcologia fica onde está',
@@ -41,7 +36,7 @@ export function registrar(registrarTextos) {
     'mov1.linha.custo': 'Mover custa {custo}, {pct} do valor',
     'mov1.linha.demolir1': 'Derruba 1 prédio de zona no lugar novo: {custo}',
     'mov1.linha.demolirN': 'Derruba {n} prédios de zona no lugar novo: {custo}',
-    'mov1.linha.obra': 'Fica fora de serviço por {tempo} de jogo',
+    'mov1.linha.obra': 'Fica fora de serviço por {tempo}',
     'mov1.linha.cobertura': 'Atende {antes} moradores hoje e {depois} depois ({categoria})',
     'mov1.linha.deixam': '{n} moradores deixam de ser atendidos',
     'mov1.linha.passam': '{n} moradores passam a ser atendidos',
@@ -53,10 +48,10 @@ export function registrar(registrarTextos) {
     'mov1.linha.rede': 'A via nova leva canos e cabos: liga na rede',
     'mov1.linha.armazem': 'Fica a {depois} m do armazém (hoje a {antes} m): produtividade {efeito}',
     'mov1.linha.armazemIgual': 'Fica a {depois} m do armazém (hoje a {antes} m)',
-    'mov1.linha.desfazer': 'Dá para desfazer até a obra começar, em {tempo} de jogo',
+    'mov1.linha.desfazer': 'Dá para desfazer até a obra começar, em {tempo}',
 
     // depois de mover
-    'mov1.movido': '{nome} em obra por {tempo} de jogo',
+    'mov1.movido': '{nome} em obra por {tempo}',
     'mov1.desfeito': '{nome} voltou para onde estava',
     'mov1.desfazer.tarde': 'A obra já começou: não dá mais para desfazer',
   });

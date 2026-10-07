@@ -481,3 +481,19 @@ test('o livro guarda o mover e o desfazer com os mesmos argumentos (a reproduç�
   assert.deepEqual(novos[1][3], { ref });
   assert.deepEqual(sim.erros, []);
 });
+
+test('argumento que não é número finito: "valor" na prévia e no comando, sem tocar no prédio', () => {
+  const sim = mundo('mov-valor');
+  const ref = pronto(sim, 'clinica', 1100, -330);
+  const P = sim.tabelas.predios;
+  const i = idxDaRef(ref);
+  const x0 = P.x[i];
+  const caixa = sim.holding.caixa();
+  for (const ruim of [NaN, Infinity, 'a', null]) {
+    assert.equal(sim.q.mover.previa({ ref, x: ruim, z: -330 }).codigo, 'valor');
+    assert.equal(sim.cmd('mover', { ref, x: ruim, z: -330 }).codigo, 'valor');
+    assert.equal(sim.q.mover.previa({ ref, x: 1400, z: -330, rot: ruim }).codigo, 'valor');
+  }
+  assert.equal(P.x[i], x0);
+  assert.equal(sim.holding.caixa(), caixa);
+});

@@ -101,6 +101,11 @@ function lago(g, p) {
   const dentro = circulo(cx, cz, r0, N);
   const fora = Array.from({ length: N }, (_, i) => noArco(cx, cz, raioDaMargem((360 * i) / N) + 3, (360 * i) / N)).flat();
   if (g.sombra) return;
+  // caixas de seleção: oito quadrados sobre o Mirror Lake
+  for (let q = 0; q < 8; q++) {
+    const [x, z] = noArco(cx, cz, 240, 22.5 + 45 * q);
+    g.caixa([x, yc + p.fundo, z], 100, 4);
+  }
   if (g.fantasma) {
     faixaEntre(g.opaco, dentro, fora, yc + 0.4, [0, 0, 0, 0], true);
     return;
@@ -115,11 +120,6 @@ function lago(g, p) {
     faixaArco(g.opaco, cx, cz, r0 - 0.9, r0, a0, a1, yc + 0.27, K.pedraClara, true);
   }
   for (const ang of p.pontes ?? []) ponteBaixa(g, cx, cz, yc, ang, r0 - 0.5, raioDaMargem(ang) + 8, nivel, p.fundo);
-  // caixas de seleção: oito quadrados sobre o anel d'água
-  for (let q = 0; q < 8; q++) {
-    const [x, z] = noArco(cx, cz, 240, 22.5 + 45 * q);
-    g.caixa([x, yc + p.fundo, z], 100, 4);
-  }
 }
 
 // ------------------------------------------------------------------------------------------------ bacias
@@ -137,6 +137,11 @@ function bacia(g, p) {
   const anel = p.forma === 'anel';
   if (g.sombra) return;
   if (anel) {
+    // caixas de seleção: oito quadrados sobre o anel d'água do pódio
+    for (let q = 0; q < 8; q++) {
+      const [x, z] = noArco(cx, cz, (r0 + r1) / 2, 22.5 + 45 * q);
+      g.caixa([x, nivel, z], 12, 4, 12);
+    }
     const N = 120;
     const A = circulo(cx, cz, r0, N);
     const B = circulo(cx, cz, r1, N);
@@ -159,6 +164,11 @@ function bacia(g, p) {
   const n = Math.max(2, Math.round((p.ate - p.de) / 3));
   const ang = (r, i) => p.de + meia(r) + ((p.ate - p.de - 2 * meia(r)) * i) / n;
   const arco = (r) => Array.from({ length: n + 1 }, (_, i) => noArco(cx, cz, r, ang(r, i))).flat();
+  // caixa de seleção do pedaço: sobre a água, no meio dele
+  {
+    const [mx, mz] = noArco(cx, cz, (r0 + r1) / 2, (p.de + p.ate) / 2);
+    g.caixa([mx, nivel, mz], 30, 4, 30);
+  }
   if (g.fantasma) {
     faixaAberta(g.opaco, arco(r0), arco(r1), yc + 0.4, [0, 0, 0, 0], true);
     return;
