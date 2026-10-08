@@ -1,6 +1,12 @@
 // Mover e girar construções prontas (MOV1, D94; dona: MOV1). Os colocáveis (serviços, prédios da Holding, praças e marcos
 // do complexo) mudam de lugar ou de direção por uns 10% do custo, com uma obra curta, como o mover do Planet Coaster e do
-// Cities: Skylines II; os prédios de zona não (a zona se refaz sozinha) e a Arcologia fica fixa.
+// Cities: Skylines II; a Arcologia fica fixa. Os prédios de ZONA também se movem (MOV2, D105, pedido do dono de 08/10/2026,
+// que revoga a exclusão da D94), prontos ou em obra: dentro da mesma zona, em outra do mesmo tipo ou em chão livre ao longo de
+// uma via, de frente para ela e girados à vontade. As células do lugar antigo voltam a poder crescer um prédio novo e as do
+// lugar novo passam a ser dele (blocos.js). O custo é a mesma fração sobre o valor do prédio (os materiais do nível, a mesma
+// base da demolição, D54); em obra a base é o que já foi gasto e a obra segue do mesmo ponto de progresso (ini e fim se
+// deslocam juntos, só o aplainar alonga). Pronto, o prédio de zona entra na obra de reforma (OBRA e OBRA_NIVEL): segue com os
+// moradores, o nível e os empregos e não dispara o evento de subir de nível ao acabar (json.mover.zona).
 //
 // O prédio é a MESMA linha da tabela: ref, nome, cor, nível, semente, produção em andamento, estoque e trabalhadores são
 // os de antes, porque tudo isso mora em tabelas e seções indexadas pela ref ou é derivado da posição. O que muda é o
@@ -24,7 +30,9 @@ import { ehCodigo } from '../contratos/codigos.js';
 import { SERVICOS, SERVICOS_ORDEM } from '../data/servicos.js';
 import { PREDIOS_HOLDING } from '../data/holding.js';
 import { prediosNaCaixa } from './vias/validar.js';
-import { removerPredio, revalidarRetangulo } from './zonas/blocos.js';
+import { removerPredio, revalidarRetangulo, soltarCelulas, ocuparCelulas, celulasParaPredio, celulasDoPredio } from './zonas/blocos.js';
+import { custoDemolirPredio } from './vias/demolir.js';
+import { ZONAS_ORDEM } from '../data/zonas.js';
 import { garantirCobertura, buscar } from './servicos.js';
 import { armazemPerto } from './holding/producao.js';
 import {
@@ -42,6 +50,9 @@ export const MOVER = Object.freeze({ fracao: 0.1, obraFracao: 0.4, obraMin: 12, 
 /** O código de recusa de zona e Arcologia: 'fixo' (ficha da MOV1); sem ele em contratos/codigos.js ainda, o 'arcologia' que já existe. */
 export const CODIGO_FIXO = ehCodigo('fixo') ? 'fixo' : 'arcologia';
 
+/** A obra de um prédio de zona novo (CRESCIMENTO.obraBase e obraPorAndar, em crescimento.js; cópia para não fechar o ciclo de imports). */
+const OBRA_ZONA = Object.freeze({ base: 45, porAndar: 10 });
+
 /** Tolerância para "ficou no mesmo lugar": 25 cm e meio grau. */
 const MESMO = Object.freeze({ metros: 0.25, rad: Math.PI / 360 });
 const DOIS_PI = 2 * Math.PI;
@@ -52,11 +63,14 @@ const AC = { e: -1, s: 0 };
 
 // ------------------------------------------------------------------------------------------------ regras
 
-/** O que impede mover o prédio i: null (pode) ou { codigo, dados } com o motivo ('zona', 'arcologia' ou 'obra'). */
+/**
+ * O que impede mover o prédio i: null (pode) ou { codigo, dados } com o motivo ('arcologia' ou 'obra'). O prédio de zona
+ * pode, pronto ou em obra (MOV2, D105); o colocável em obra espera acabar.
+ */
 export function impedimentoDeMover(sim, i) {
   const P = sim.tabelas.predios;
   const k = tipoDoPredio(sim, i);
-  if (k.tipo === 'zona') return { codigo: CODIGO_FIXO, dados: { fixo: 'zona' } };
+  if (k.tipo === 'zona') return k.def?.demolivel === false ? { codigo: CODIGO_FIXO, dados: { fixo: 'arcologia' } } : null;
   if (!k.def || k.def.arcologia || k.def.demolivel === false) return { codigo: CODIGO_FIXO, dados: { fixo: 'arcologia' } };
   if (P.flags[i] & PREDIO.OBRA) return { codigo: 'ocupado', dados: { fixo: 'obra' } };
   return null;
@@ -68,13 +82,75 @@ export const custoDeMover = (def) => Math.round(MOVER.fracao * (def?.custo ?? 0)
 /** Tiques da obra curta de mover (sem o aplainar). */
 export const tiquesDaObra = (def) => Math.max(MOVER.obraMin, Math.round(MOVER.obraFracao * (def?.obraTiques ?? 60)));
 
+// ------------------------------------------------------------------------------------------------ prédio de zona (MOV2)
+
+/** O prédio de zona i está na obra de nascimento (a que se mantém ao mover), e não na reforma de nível? */
+const nascendo = (P, i) => !!(P.flags[i] & PREDIO.OBRA) && !(P.flags[i] & PREDIO.OBRA_NIVEL);
+
+/** Progresso (0 a 1) da obra do prédio i no tique de agora. */
+export function progressoDaObra(sim, i) {
+  const P = sim.tabelas.predios;
+  const total = P.obraFim[i] - P.obraIni[i];
+  return total > 0 ? Math.min(1, Math.max(0, (sim.tique - P.obraIni[i]) / total)) : 1;
+}
+
+/**
+ * A base do custo de mover um prédio de zona: o valor dele (os materiais do nível a 100% do preço base, a mesma conta da
+ * demolição, D54) e, na obra de nascimento, só a fração já gasta (o progresso; parada por falta de material, nada foi gasto).
+ */
+export function baseDoCustoDeZona(sim, i) {
+  const P = sim.tabelas.predios;
+  const valor = custoDemolirPredio(sim, i);
+  if (!nascendo(P, i)) return valor;
+  return P.flags[i] & PREDIO.SEM_MATERIAL ? 0 : Math.round(valor * progressoDaObra(sim, i));
+}
+
+/** Custo de mover o prédio i (a fração da MOV1): do catálogo no colocável, da base de cima na zona. */
+export const custoDeMoverPredio = (sim, i, k) => (k.tipo === 'zona' ? Math.round(MOVER.fracao * baseDoCustoDeZona(sim, i)) : custoDeMover(k.def));
+
+/** Tiques da obra de mover o prédio i, sem o aplainar: a curta (pronto e colocável) ou o que falta da obra de nascimento. */
+export function tiquesDoMover(sim, i, k) {
+  const P = sim.tabelas.predios;
+  if (k.tipo !== 'zona') return tiquesDaObra(k.def);
+  if (nascendo(P, i)) return P.flags[i] & PREDIO.SEM_MATERIAL ? 0 : Math.max(0, P.obraFim[i] - sim.tique);
+  const andares = k.nv ? (k.nv.andares[0] + k.nv.andares[1]) / 2 : 1;
+  return tiquesDaObra({ obraTiques: OBRA_ZONA.base + OBRA_ZONA.porAndar * andares });
+}
+
+/** O colocável de mentira que a conferência de lugar usa: o prédio de zona tem a planta em células no catálogo; a de verdade (metros) é a da tabela. */
+const defDoLugar = (sim, i, k) => (k.tipo === 'zona' ? { ...k.def, planta: [sim.tabelas.predios.w[i], sim.tabelas.predios.d[i]] } : k.def);
+
+/** Opções do conferirLugar de cada tipo: a zona só tem acesso pela frente. */
+const opcoesDoLugar = (k, i, aplainar) => ({ aplainar, ignorar: i, semMarco: true, soFrente: k.tipo === 'zona' });
+
+/** A seção json.mover guarda os prédios de zona em reforma de mover (para o fim da obra não contar nível). */
+const zonasEmMover = (sim) => (J(sim).zona ??= {});
+
+/**
+ * O que o lugar L pede a mais para um prédio de zona (já conferido o geral): outro prédio de zona na planta é colisão (mover
+ * não derruba o vizinho), zona de outro tipo pintada embaixo também; senão, as células que ele ocupa no lugar novo.
+ * @returns {{ codigo: string, dados: object } | { celulas: number[], liberam: number }}
+ */
+function conferirZona(sim, i, L, c) {
+  const P = sim.tabelas.predios;
+  if (c.demolir?.length) {
+    const b = c.demolir[0];
+    return { codigo: 'colisao', dados: { com: 'predio', ref: P.ref(b), afastar: 1, nome: tipoDoPredio(sim, b).def?.nome ?? null } };
+  }
+  const z = celulasParaPredio(sim, { x: L.x, z: L.z, rot: L.rot, w: L.w, d: L.d }, P.zona[i], i);
+  if (z.outraZona) return { codigo: 'colisao', dados: { com: 'zona', zona: ZONAS_ORDEM[z.outraZona] ?? null } };
+  return { celulas: z.ocupar, liberam: celulasDoPredio(sim, i).length };
+}
+
 /** O que a folha precisa de um prédio: { pode, custo, codigo?, motivo?, desfazer?: { ate, restam } }. */
 export function infoDeMover(sim, i) {
   const P = sim.tabelas.predios;
   const k = tipoDoPredio(sim, i);
   const imp = impedimentoDeMover(sim, i);
   if (imp) return { pode: false, custo: 0, codigo: imp.codigo, motivo: imp.dados.fixo };
-  const out = { pode: true, custo: custoDeMover(k.def) };
+  const out = { pode: true, custo: custoDeMoverPredio(sim, i, k) };
+  if (k.tipo === 'zona') out.zona = true;
+  if (P.flags[i] & PREDIO.OBRA) out.emObra = true;
   const rec = J(sim)?.pend[String(P.ref(i))];
   if (rec && sim.tique < rec.ate) out.desfazer = { ate: rec.ate, restam: rec.ate - sim.tique };
   return out;
@@ -242,7 +318,7 @@ function viaDe(sim, e) {
  */
 export function oQueMuda(sim, i, k, L) {
   const P = sim.tabelas.predios;
-  const novo = acessoDoLugar(sim, L);
+  const novo = acessoDoLugar(sim, L, { soFrente: k.tipo === 'zona' });
   const antesE = acessoDe(sim, i, AC).e;
   const muda = { via: { antes: viaDe(sim, antesE), depois: viaDe(sim, novo.e) } };
   if (k.tipo === 'servico' && SERVICOS[k.id]?.raio) muda.cobertura = efeitoNaCobertura(sim, i, k.id, L, novo);
@@ -295,19 +371,29 @@ export function previaMover(sim, args = {}) {
   const k = tipoDoPredio(sim, i);
   const imp = impedimentoDeMover(sim, i);
   const def = k.def;
+  const zona = k.tipo === 'zona';
   const de = { x: P.x[i], z: P.z[i], rot: P.rot[i] };
+  const custoBase = custoDeMoverPredio(sim, i, k);
   const base = {
-    ref, tipo: k.id, de, valor: def?.custo ?? 0, custo: custoDeMover(def), custoMover: custoDeMover(def), manutencaoHora: 0, alcance: def?.raio ?? def?.alcance ?? 0,
-    pegada: plantaDe(def), efeitos: [], mobilizacao: MOVER.mobilizacao, tiques: tiquesDaObra(def),
+    ref, tipo: k.id, de, valor: zona ? baseDoCustoDeZona(sim, i) : def?.custo ?? 0, custo: custoBase, custoMover: custoBase, manutencaoHora: 0,
+    alcance: def?.raio ?? def?.alcance ?? 0, pegada: zona ? [P.w[i], P.d[i]] : plantaDe(def), efeitos: [], mobilizacao: MOVER.mobilizacao, tiques: tiquesDoMover(sim, i, k),
+    ...(zona ? { zona: { emObra: nascendo(P, i), progresso: nascendo(P, i) ? progressoDaObra(sim, i) : 1, celulas: null } } : {}),
   };
   if (imp) return { ok: false, codigo: imp.codigo, dados: imp.dados, ...base, x: de.x, z: de.z, rot: de.rot };
-  const L = lugarDe(sim, def, args, i);
+  const L = lugarDe(sim, defDoLugar(sim, i, k), args, i);
   if (L.codigo) return { ok: false, codigo: L.codigo, ...base, x: args.x, z: args.z, rot: args.rot ?? de.rot };
   // o prédio já está ali: nada a conferir nem a cobrar (e um prédio antigo, de antes das regras de agora, não fica vermelho no lugar dele)
   if (ficouNoMesmo(P, i, L)) return { ok: false, codigo: 'nada', ...base, x: de.x, z: de.z, rot: de.rot, alinhado: L.alinhado, giro: L.giro ?? null, custo: 0 };
-  const c = conferirLugar(sim, k.id, def, L, { aplainar: args.aplainar === true, ignorar: i, semMarco: true });
+  let c = conferirLugar(sim, k.id, defDoLugar(sim, i, k), L, opcoesDoLugar(k, i, args.aplainar === true));
   L.e = c.e ?? L.e;
-  const dem = custoDosDemolidos(sim, c.demolir);
+  let celulas = null;
+  if (zona && !c.codigo) {
+    const zc = conferirZona(sim, i, L, c);
+    if (zc.codigo) c = { ...c, codigo: zc.codigo, dados: zc.dados, demolir: [] };
+    else celulas = { liberam: zc.liberam, ocupam: zc.celulas.length };
+    c = { ...c, demolir: [] };
+  }
+  const dem = zona ? 0 : custoDosDemolidos(sim, c.demolir);
   const apl = c.aplainar?.custo ?? 0;
   const out = {
     ...base, custo: base.custoMover + dem + apl, custoDemolir: dem, custoAplainar: apl, aplainar: c.aplainar ?? null,
@@ -315,6 +401,7 @@ export function previaMover(sim, args = {}) {
     via: L.e >= 0 && A.viva[L.e] ? refDe(L.e, A.ger[L.e]) : null, demolir: (c.demolir ?? []).map((b) => P.ref(b)), desfazer: !(c.demolir?.length),
     semRede: produtorDeRede(k.id, def) && !viaComRede(sim, L.e),
   };
+  if (zona) out.zona = { ...base.zona, celulas };
   if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null, ...out };
   const caixa = sim.holding.caixa();
   if (caixa < out.custo) return { ok: false, codigo: 'creditos', dados: { faltam: out.custo - caixa }, ...out, muda: oQueMuda(sim, i, k, L) };
@@ -336,12 +423,18 @@ export function mover(sim, args = {}) {
   if (imp) return { ok: false, codigo: imp.codigo, dados: imp.dados };
   const k = tipoDoPredio(sim, i);
   const def = k.def;
-  const L = lugarDe(sim, def, args, i);
+  const zona = k.tipo === 'zona';
+  const L = lugarDe(sim, defDoLugar(sim, i, k), args, i);
   if (L.codigo) return { ok: false, codigo: L.codigo };
   if (ficouNoMesmo(P, i, L)) return { ok: false, codigo: 'nada' };
-  const c = conferirLugar(sim, k.id, def, L, { aplainar: args.aplainar === true, ignorar: i, semMarco: true });
+  const c = conferirLugar(sim, k.id, defDoLugar(sim, i, k), L, opcoesDoLugar(k, i, args.aplainar === true));
   if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null };
-  const custo = custoDeMover(def) + custoDosDemolidos(sim, c.demolir) + (c.aplainar?.custo ?? 0);
+  if (zona) {
+    const zc = conferirZona(sim, i, L, c);
+    if (zc.codigo) return { ok: false, codigo: zc.codigo, dados: zc.dados };
+    c.demolir = [];
+  }
+  const custo = custoDeMoverPredio(sim, i, k) + custoDosDemolidos(sim, c.demolir) + (c.aplainar?.custo ?? 0);
   if (sim.holding.caixa() < custo) return { ok: false, codigo: 'creditos', dados: { faltam: custo - sim.holding.caixa() } };
   if (custo > 0 && !sim.holding.pagar(custo, 'mover')) return { ok: false, codigo: 'creditos' };
 
@@ -353,19 +446,40 @@ export function mover(sim, args = {}) {
     removerPredio(sim, b);
   }
   const T = sim.tique;
-  const ini = T + MOVER.mobilizacao;
-  const fim = ini + tiquesDaObra(def) + (c.aplainar?.tiques ?? 0);
+  const extra = c.aplainar?.tiques ?? 0;
+  let ini = T + MOVER.mobilizacao;
+  let fim = ini + tiquesDoMover(sim, i, k) + extra;
+  // as células de zona do lugar antigo voltam a valer; o prédio sai delas antes de a planta mudar
+  const celulasAntes = zona ? soltarCelulas(sim, i) : [];
   P.x[i] = L.x;
   P.z[i] = L.z;
   P.y[i] = c.cota;
   P.rot[i] = L.rot;
   P.w[i] = Math.round(L.w);
   P.d[i] = Math.round(L.d);
-  P.flags[i] = (P.flags[i] | PREDIO.OBRA) & ~(PREDIO.OBRA_NIVEL | PREDIO.SEM_MATERIAL);
+  if (zona) {
+    // zona em obra: o progresso e o já pago ficam (ini e fim se deslocam juntos; só o aplainar alonga); pronta: reforma
+    if (nascendo(P, i) || de.flags & PREDIO.OBRA) {
+      ini = P.obraIni[i];
+      fim = P.obraFim[i];
+      if (!(P.flags[i] & PREDIO.SEM_MATERIAL) && extra > 0) {
+        const total = Math.max(1, fim - ini);
+        const alvo = total + extra;
+        ini = T - Math.round(progressoDaObra(sim, i) * alvo);
+        fim = ini + alvo;
+      }
+    } else {
+      P.flags[i] |= PREDIO.OBRA | PREDIO.OBRA_NIVEL;
+      zonasEmMover(sim)[String(ref)] = 1;
+    }
+  } else {
+    P.flags[i] = (P.flags[i] | PREDIO.OBRA) & ~(PREDIO.OBRA_NIVEL | PREDIO.SEM_MATERIAL);
+    P.efic[i] = 0;
+  }
   P.obraIni[i] = ini;
   P.obraFim[i] = fim;
-  P.efic[i] = 0;
   P.marcar(i);
+  if (zona) ocuparCelulas(sim, i, celulasParaPredio(sim, { x: L.x, z: L.z, rot: L.rot, w: P.w[i], d: P.d[i] }, P.zona[i], i).ocupar);
   // a plataforma segue o prédio: a de antes sai (o chão volta ao natural ali) e a nova entra na cota do lugar novo
   sim.formas.removerRef('plataforma', ref);
   sim.formas.registrar({ tipo: 'plataforma', ref, contorno: L.contorno, cota: P.y[i] });
@@ -379,12 +493,17 @@ export function mover(sim, args = {}) {
   t.redesSujas = true;
   t.eficVersao = (t.eficVersao ?? 0) + 1;
   const desfazer = demolidos.length === 0;
-  if (desfazer) J(sim).pend[String(ref)] = { de, forma: velha ? { contorno: Array.from(velha.contorno), cota: velha.cota } : null, custo, ate: ini };
-  else delete J(sim).pend[String(ref)];
+  const prontoAntes = zona && !(de.flags & PREDIO.OBRA);
+  if (desfazer) {
+    J(sim).pend[String(ref)] = {
+      de, forma: velha ? { contorno: Array.from(velha.contorno), cota: velha.cota } : null, custo, ate: T + MOVER.mobilizacao,
+      ...(zona ? { zona: true, pronto: prontoAntes, celulas: celulasAntes } : {}),
+    };
+  } else delete J(sim).pend[String(ref)];
   if (typeof def.aoMover === 'function') def.aoMover(sim, i, ref);
   if (demolidos.length) sim.emitir('demolido', { tipo: 'predio', refs: demolidos });
   sim.emitir('construido', { tipo: k.id, refs: [ref], movido: true });
-  return { ok: true, id: ref, dados: { ref, de: { x: de.x, z: de.z, rot: de.rot }, custo, tiques: fim - T, desfazer, ate: ini, demolidos, aplainar: c.aplainar ?? null } };
+  return { ok: true, id: ref, dados: { ref, de: { x: de.x, z: de.z, rot: de.rot }, custo, tiques: fim - T, desfazer, ate: T + MOVER.mobilizacao, demolidos, aplainar: c.aplainar ?? null } };
 }
 
 /**
@@ -410,9 +529,11 @@ export function desfazerMover(sim, args = {}) {
   const k = tipoDoPredio(sim, i);
   const de = rec.de;
   const L = { x: de.x, z: de.z, rot: de.rot, w: de.w, d: de.d, e: -1, alinhado: false, alinhar: false, contorno: cantosRetangulo(de.x, de.z, de.rot, de.w, de.d) };
-  const c = conferirLugar(sim, k.id, k.def, L, { aplainar: true, ignorar: i, semMarco: true });
+  const zona = k.tipo === 'zona';
+  const c = conferirLugar(sim, k.id, zona ? { ...k.def, planta: [de.w, de.d] } : k.def, L, opcoesDoLugar(k, i, true));
   if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null };
   if (c.demolir.length) return { ok: false, codigo: 'colisao' };
+  if (zona) soltarCelulas(sim, i);
   const nx = P.x[i];
   const nz = P.z[i];
   const npad = Math.max(P.w[i], P.d[i]) / 2 + 8;
@@ -422,10 +543,22 @@ export function desfazerMover(sim, args = {}) {
   P.rot[i] = de.rot;
   P.w[i] = de.w;
   P.d[i] = de.d;
-  P.flags[i] = de.flags;
-  P.obraIni[i] = de.obraIni;
-  P.obraFim[i] = de.obraFim;
-  P.efic[i] = de.efic;
+  if (zona) {
+    // zona: pronta, só sai da reforma; em obra, segue a de agora (o material pode ter sido comprado nesse meio tempo)
+    if (rec.pronto) P.flags[i] &= ~(PREDIO.OBRA | PREDIO.OBRA_NIVEL | PREDIO.SEM_MATERIAL);
+    else if (P.flags[i] & PREDIO.OBRA && !(P.flags[i] & PREDIO.SEM_MATERIAL) && !(de.flags & PREDIO.SEM_MATERIAL)) {
+      P.obraIni[i] = de.obraIni;
+      P.obraFim[i] = de.obraFim;
+    }
+    delete zonasEmMover(sim)[String(ref)];
+    // as mesmas células de antes; se alguma deixou de existir, o que a planta de antes cobre
+    if (!ocuparCelulas(sim, i, rec.celulas ?? [])) ocuparCelulas(sim, i, celulasParaPredio(sim, { x: de.x, z: de.z, rot: de.rot, w: de.w, d: de.d }, P.zona[i], i).ocupar);
+  } else {
+    P.flags[i] = de.flags;
+    P.obraIni[i] = de.obraIni;
+    P.obraFim[i] = de.obraFim;
+    P.efic[i] = de.efic;
+  }
   P.marcar(i);
   sim.formas.removerRef('plataforma', ref);
   if (rec.forma) sim.formas.registrar({ tipo: 'plataforma', ref, contorno: rec.forma.contorno, cota: rec.forma.cota });
@@ -450,7 +583,7 @@ function limparJanelas(sim) {
 }
 
 export function registrarMover(sim) {
-  if (!sim.json.mover) sim.registrarJson('mover', { pend: {} });
+  if (!sim.json.mover) sim.registrarJson('mover', { pend: {}, zona: {} });
   sim.registrarComando('mover', mover);
   sim.registrarComando('mover.desfazer', desfazerMover);
   sim.registrarConsulta('mover.previa', previaMover);

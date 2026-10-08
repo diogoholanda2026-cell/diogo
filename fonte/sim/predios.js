@@ -626,8 +626,8 @@ function acessoDaPlanta(sim, x, z, rot, w, d, { semRodovia = false, soFrente = f
  * Acesso de um lugar de colocável (o de lugarDoColocavel) à via, na conta do prédio construído: { e, s } com a aresta e
  * o arco a partir do nó a (o mesmo que acessoDe devolve depois da obra), ou e = -1 sem via a 24 m.
  */
-export function acessoDoLugar(sim, L) {
-  const r = acessoDaPlanta(sim, L.x, L.z, L.rot, L.w, L.d, { semRodovia: true });
+export function acessoDoLugar(sim, L, { soFrente = false } = {}) {
+  const r = acessoDaPlanta(sim, L.x, L.z, L.rot, L.w, L.d, { semRodovia: true, soFrente });
   if (r.e < 0) return { e: -1, s: 0 };
   return { e: r.e, s: arcoDoT(sim.tabelas.arestas.arco.subarray(17 * r.e, 17 * r.e + 17), r.t) };
 }
@@ -691,9 +691,10 @@ function penetracao(c1, c2) {
  *   declive   { desnivel, max, livre }       recurso  { recurso, media, minimo }
  * `aplainar` (planta sobre declive entre o livre e o máximo, e só com `{ aplainar: true }`): { desnivel, livre, max, volume,
  * custo, tiques }. Mover um prédio pronto (MOV1, D94) usa a mesma regra com duas opções: `ignorar` (o idx do próprio prédio,
- * que não bate em si mesmo nem na planta de onde sai) e `semMarco` (ele já foi liberado quando foi construído).
+ * que não bate em si mesmo nem na planta de onde sai) e `semMarco` (ele já foi liberado quando foi construído); o prédio de zona
+ * (MOV2, D105) acrescenta `soFrente`: o acesso só vale pela frente, como o do prédio de zona construído.
  */
-export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = false, ignorar = -1, semMarco = false } = {}) {
+export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = false, ignorar = -1, semMarco = false, soFrente = false } = {}) {
   const P = sim.tabelas.predios;
   const A = sim.tabelas.arestas;
   const T = sim.espelho.terreno;
@@ -718,7 +719,7 @@ export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = fa
     if (h > hmax) hmax = h;
   }
   // acesso à via: pelas sondas da planta (a mesma conta do prédio construído); quem só vale num lugar certo dispensa
-  const ac = acessoDaPlanta(sim, L.x, L.z, L.rot, L.w, L.d, { semRodovia: true });
+  const ac = acessoDaPlanta(sim, L.x, L.z, L.rot, L.w, L.d, { semRodovia: true, soFrente });
   const e = ac.e;
   if (e < 0 && !dispensaAcesso(def)) return { codigo: 'acesso', dados: { max: L.alinhar ? COLOCAR.imaVia : COLOCAR.acesso, alinhar: L.alinhar }, e };
   // declive: até o livre a plataforma resolve; até o máximo é aplainar com custo (só para quem aceita pagar, como a

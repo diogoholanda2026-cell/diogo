@@ -13,6 +13,7 @@
 import { tDoArco, ponto, direcao } from '../../comum/bezier.js';
 import { alturaEm } from '../../comum/altura.js';
 import { sen, cos, hipot, clamp } from '../../comum/util.js';
+import { pontoNoRetangulo } from '../../comum/vetor.js';
 import { angDaCelula, CELULA_M, LINHAS_BLOCO } from '../../contratos/espelho.js';
 import { CELULA, AGUA, ARESTA, PREDIO } from '../../contratos/flags.js';
 import { REGRAS_CELULAS, REGRAS_VIAS } from '../../data/vias.js';
@@ -457,6 +458,64 @@ export function removerPredio(sim, i) {
   P.liberar(i);
   if (formas.length) sim.formas.removerRef('plataforma', ref);
   return { ref, dados, formas };
+}
+
+// ------------------------------------------------------------------------------------------------ mover prédio de zona (MOV2, D105)
+
+/** Solta as células do prédio i (o lugar antigo de um mover): voltam a ser livres ou inválidas e a zona pintada fica. Devolve os idx. */
+export function soltarCelulas(sim, i) {
+  const C = sim.tabelas.celulas;
+  const lista = celulasDoPredio(sim, i);
+  for (const c of lista) {
+    C.predio[c] = -1;
+    C.estado[c] = C.motivo[c] ? CELULA.INVALIDA : CELULA.LIVRE;
+    C.marcar(c);
+  }
+  return lista;
+}
+
+/**
+ * Células que um prédio de zona (zona `zona`, índice de data/zonas.js) ocuparia na planta { x, z, rot, w, d }: as vivas com
+ * o centro dentro dela, sem dono (ou do prédio `ignorar`), sem bit geométrico (água, declive, via, curva: a revalidação
+ * demoliria o prédio) e pintadas com a mesma zona ou sem zona. `outraZona` é a primeira zona diferente que a planta cobre
+ * (0 = nenhuma): o prédio não pode ficar sobre zona de outro tipo.
+ * @returns {{ ocupar: number[], outraZona: number }}
+ */
+export function celulasParaPredio(sim, planta, zona, ignorar = -1) {
+  const C = sim.tabelas.celulas;
+  const r = hipot(planta.w, planta.d) / 2 + 2;
+  const ocupar = [];
+  let outraZona = 0;
+  for (const c of celulasNaCaixa(sim, planta.x - r, planta.z - r, planta.x + r, planta.z + r)) {
+    if (!pontoNoRetangulo(C.x[c], C.z[c], planta.x, planta.z, planta.rot, planta.w, planta.d, 0)) continue;
+    if (C.predio[c] >= 0 && C.predio[c] !== ignorar) continue;
+    if (C.zona[c] && C.zona[c] !== zona) {
+      if (!outraZona) outraZona = C.zona[c];
+      continue;
+    }
+    if (motivoGeo(sim, c) & GEO) continue;
+    ocupar.push(c);
+  }
+  return { ocupar, outraZona };
+}
+
+/** O prédio i passa a ocupar as células (as de celulasParaPredio ou as guardadas para desfazer): só as vivas e livres. Devolve quantas. */
+export function ocuparCelulas(sim, i, lista) {
+  const C = sim.tabelas.celulas;
+  let n = 0;
+  for (const c of lista) {
+    if (c >= C.n || !C.viva[c] || C.predio[c] >= 0) continue;
+    C.predio[c] = i;
+    C.motivo[c] = 0;
+    C.estado[c] = CELULA.OCUPADA;
+    C.marcar(c);
+    n++;
+  }
+  if (n && sim.tabelas.predios.flags[i] & PREDIO.SEM_ACESSO) {
+    sim.tabelas.predios.flags[i] &= ~PREDIO.SEM_ACESSO;
+    sim.tabelas.predios.marcar(i);
+  }
+  return n;
 }
 
 /** Recria um prédio guardado por removerPredio (ref nova) com a plataforma. Devolve o idx ou -1. */

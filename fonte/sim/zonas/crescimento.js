@@ -394,7 +394,10 @@ export function terminarObra(sim, i) {
     } else {
       P.empregos[i] = Math.round(ocupacaoDe(sim, i).ocupadas);
     }
-    if (nivel) sim.emitir('predioNivel', { ref, nivel: P.nivel[i] });
+    // a obra de um prédio de zona movido (MOV2) usa a reforma, mas o nível não mudou: sem o evento
+    const movida = !!sim.json.mover?.zona?.[ref];
+    if (movida) delete sim.json.mover.zona[ref];
+    if (nivel && !movida) sim.emitir('predioNivel', { ref, nivel: P.nivel[i] });
   } else {
     const t = trans(sim);
     t.servSujo = true;
