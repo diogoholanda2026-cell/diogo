@@ -105,6 +105,11 @@ export const CONSULTAS = congelar({
   cidade: { dono: 'S2a', formato: 'seção 16.4 do desenho da simulação' },
   catalogo: { dono: 'S2a e S3a', formato: '(categoria) → [{ tipo, nome, custo, manutencaoHora, marco, liberado }]' },
   ladrilhos: { dono: 'S1a', formato: '() → { estado: Uint8Array(256), preco: Float64Array(256), licencas }' },
+  'area.compra': {
+    dono: 'S1a',
+    formato:
+      "({ id }) → { ok, codigo, id, nome, ladrilhos: [{ i, j }] (os que faltam, em ordem de adjacência), preco (soma sequencial, D3), criterios: [{ id: 'vizinho' | 'licenca' | 'creditos', ok, chave, dados }], pode } (D107)",
+  },
   sugestoes: {
     dono: 'S1a',
     formato:

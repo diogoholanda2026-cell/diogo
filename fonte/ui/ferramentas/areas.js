@@ -3,6 +3,9 @@
 // comando. A ferramenta abre pelo Progresso, pelo modal do marco e pelo toque longo no terreno (U1b), pondo
 // loja.ferramenta = { tipo: 'areas' }; não tem botão na barra de construção (D24).
 import { LADRILHO } from '../../contratos/flags.js';
+import { pontoNoPoligono } from '../../comum/vetor.js';
+import { t } from '../textos.js';
+import * as fmt from '../formato.js';
 
 /** Lado do ladrilho (m) e a grade (D3). */
 export const LADO_LADRILHO = 512;
@@ -85,23 +88,89 @@ export function fugirDoHud(x, y, w, h, hud, folga = 4) {
   return null;
 }
 
-/** Estado novo. */
-export function criarAreas() {
-  return { sel: null, mira: null, efeitos: [] };
+/**
+ * Área nomeada comprável sob o toque (D107): a primeira que ainda tem ladrilho a comprar e que contém o ponto
+ * (dentro: true) ou tem o ladrilho tocado entre os que faltam (dentro: false). `areas`: [{ id, contorno (pares x, z),
+ * faltam: [{ i, j }] }]; null se nenhuma.
+ */
+export function areaDoToque(areas, ponto, l) {
+  for (const a of areas ?? []) {
+    if (!a.faltam?.length) continue;
+    if (a.contorno && pontoNoPoligono(ponto[0], ponto[1], a.contorno)) return { id: a.id, dentro: true };
+    if (l && a.faltam.some((c) => c.i === l[0] && c.j === l[1])) return { id: a.id, dentro: false };
+  }
+  return null;
 }
 
 /**
- * Um passo. Eventos: fim ({ ponto }) escolhe o ladrilho; { tipo: 'cancelar' }; { tipo: 'comprado' }.
- * Efeitos: 'escolheu', 'sair'.
+ * Situação da compra da área para a barra, a partir de q.area.compra: { id, nome, faltam, preco, criterios: [{ id, ok,
+ * chave, dados }], pode, falha (id do primeiro critério que não passa), falta (créditos que faltam), ladrilhos, modo }.
+ * null sem nada a comprar.
  */
-export function passoAreas(e, ev, { origem = [-4096, -4096] } = {}) {
-  if (ev.tipo === 'cancelar') return e.sel ? { ...e, sel: null, efeitos: ['escolheu'] } : { ...e, efeitos: ['sair'] };
-  if (ev.tipo === 'comprado') return { ...e, efeitos: ['escolheu'] };
-  if (!ev.ponto) return { ...e, efeitos: [] };
+export function infoArea(compra, modo = 'area') {
+  if (!compra?.ok || !compra.ladrilhos?.length) return null;
+  const falha = compra.criterios.find((c) => !c.ok) ?? null;
+  const cred = compra.criterios.find((c) => c.id === 'creditos');
+  return {
+    id: compra.id,
+    nome: compra.nome,
+    faltam: compra.ladrilhos.length,
+    preco: compra.preco,
+    criterios: compra.criterios,
+    pode: !!compra.pode,
+    falha: falha?.id ?? null,
+    falta: cred && !cred.ok ? Math.max(0, Math.ceil(compra.preco - (cred.dados?.caixa ?? 0))) : 0,
+    ladrilhos: compra.ladrilhos,
+    modo,
+  };
+}
+
+/** Motivo curto do que falta para comprar a área inteira (D107), ou '' quando tudo passa. */
+export function faltaDaArea(a) {
+  if (!a || a.pode) return '';
+  if (a.falha === 'creditos') return t('area.falta.creditos', { falta: fmt.dinheiro(a.falta) });
+  return t(`area.falta.${a.falha}`);
+}
+
+/** Linhas da compra da área inteira: [titulo, resumo, falta]. */
+export function linhasArea(s) {
+  const a = s.areaInfo;
+  const faltam = t(a.faltam === 1 ? 'area.faltam1' : 'area.faltam', { n: a.faltam });
+  return [a.nome, `${faltam} · ${t('area.preco', { preco: fmt.dinheiro(a.preco) })}`, faltaDaArea(a)];
+}
+
+/** Rótulo do botão principal das Áreas: "Comprar Várzea do Held" no modo área, "Comprar" no ladrilho. */
+export function rotuloArea(s) {
+  return s.areaInfo && s.maquina.modo === 'area' ? t('area.comprar', { nome: s.areaInfo.nome }) : t('x2.comprar');
+}
+
+/** Estado novo. */
+export function criarAreas() {
+  return { sel: null, area: null, modo: 'ladrilho', mira: null, efeitos: [] };
+}
+
+/**
+ * Um passo. Eventos: fim ({ ponto }) escolhe o ladrilho (e a área comprável sob o ponto); { tipo: 'modo', modo:
+ * 'ladrilho' | 'area' } troca o que o botão compra; { tipo: 'cancelar' }; { tipo: 'comprado' }.
+ * Toque dentro do contorno da área escolhe a área inteira (modo 'area'); toque num ladrilho que falta da área, fora do
+ * contorno, escolhe o ladrilho e oferece a área também (modo 'ladrilho'). Efeitos: 'escolheu', 'sair'.
+ */
+export function passoAreas(e, ev, { origem = [-4096, -4096], areas = [] } = {}) {
+  const base = { area: null, modo: 'ladrilho', ...e };
+  if (ev.tipo === 'cancelar') return base.sel || base.area ? { ...base, sel: null, area: null, modo: 'ladrilho', efeitos: ['escolheu'] } : { ...base, efeitos: ['sair'] };
+  if (ev.tipo === 'comprado') return { ...base, efeitos: ['escolheu'] };
+  if (ev.tipo === 'modo') {
+    if (ev.modo !== 'area' && ev.modo !== 'ladrilho') return { ...base, efeitos: [] };
+    if (ev.modo === 'area' && !base.area) return { ...base, efeitos: [] };
+    return { ...base, modo: ev.modo, efeitos: ['escolheu'] };
+  }
+  if (!ev.ponto) return { ...base, efeitos: [] };
   const mira = { ponto: [ev.ponto[0], ev.ponto[1]], tela: ev.tela ?? null, dedo: ev.dedo ?? null };
-  if (ev.tipo !== 'fim') return { ...e, mira, efeitos: [] };
+  if (ev.tipo !== 'fim') return { ...base, mira, efeitos: [] };
   const l = ladrilhoDoPonto(ev.ponto[0], ev.ponto[1], origem);
-  if (!l) return { ...e, mira, efeitos: [] };
-  const mesmo = e.sel && e.sel[0] === l[0] && e.sel[1] === l[1];
-  return { ...e, mira, sel: mesmo ? null : l, efeitos: ['escolheu'] };
+  const a = areaDoToque(areas, ev.ponto, l);
+  if (!l && !a) return { ...base, mira, efeitos: [] };
+  const mesmo = base.sel && l && base.sel[0] === l[0] && base.sel[1] === l[1] && (base.area ?? null) === (a?.id ?? null);
+  if (mesmo) return { ...base, mira, sel: null, area: null, modo: 'ladrilho', efeitos: ['escolheu'] };
+  return { ...base, mira, sel: l, area: a?.id ?? null, modo: a?.dentro ? 'area' : 'ladrilho', efeitos: ['escolheu'] };
 }

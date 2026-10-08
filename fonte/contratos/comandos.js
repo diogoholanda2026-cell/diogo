@@ -62,6 +62,9 @@ export const COMANDOS = congelar({
   'ladrilho.comprar': {
     dono: 'S1a', args: '{ i, j }', codigos: ['licenca', 'creditos', 'vizinho', 'comprado'], exemplo: { i: 10, j: 7 },
   },
+  'area.comprar': {
+    dono: 'S1a', args: '{ id } (área nomeada comprável, D107; todos os ladrilhos que faltam, uma licença)', codigos: ['inexistente', 'comprado', 'vizinho', 'licenca', 'creditos'], exemplo: { id: 'varzea' },
+  },
   'linha.ordem': {
     dono: 'S3a', args: '{ predio, linha, item, n: 1..10, auto }',
     codigos: ['lote', 'estoque', 'trancado', 'ocupado', 'pessoal', 'inexistente'],

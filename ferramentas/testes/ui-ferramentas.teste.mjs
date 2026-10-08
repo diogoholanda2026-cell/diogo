@@ -11,6 +11,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { criarSimulacao } from '../../fonte/sim/estado.js';
 import * as via from '../../fonte/ui/ferramentas/via.js';
 import * as zona from '../../fonte/ui/ferramentas/zona.js';
 import * as colocar from '../../fonte/ui/ferramentas/colocar.js';
@@ -1087,6 +1088,50 @@ test('sessão: o gesto que vira câmera (fim cancelado) não fixa ponto, não pi
     R.enviar('inicio', 1400, -300, { tipo: 'toque' });
     R.enviar('fim', 1400, -300, { tipo: 'toque', cancelado: true });
     assert.equal(sessao.sessao.value.info, null);
+    sessao.ferramentas.fechar();
+  } finally {
+    soltar();
+  }
+});
+
+test('sessão: Áreas compra a Várzea inteira pelo toque dentro do contorno (D107), ladrilho avulso continua', async () => {
+  const sim = criarSimulacao({ semente: 'sessao-varzea' });
+  const { R, soltar } = montarSessao(sim);
+  try {
+    sessao.ferramentas.abrir('areas');
+    // toque dentro do contorno da Várzea (x -1500, z 0)
+    R.enviar('inicio', -1500, 0, { tipo: 'toque' });
+    R.enviar('fim', -1500, 0, { tipo: 'toque' });
+    let s = sessao.sessao.value;
+    assert.equal(s.maquina.modo, 'area');
+    assert.equal(s.areaInfo.id, 'varzea');
+    assert.ok(s.areaInfo.contorno.length > 8);
+    assert.equal(s.valido, false, 'sem licença nem créditos para o total');
+    assert.equal(s.areaInfo.falha, 'licenca');
+    assert.match(areas.rotuloArea(s), /Comprar Várzea do Held/);
+    const antes = sim.q.ladrilhos().comprados;
+    await sessao.ferramentas.construir();
+    assert.equal(sim.q.ladrilhos().comprados, antes, 'recusado, nada muda');
+    // com licença e créditos: compra
+    sim.json.ladrilhos.licencas = 1;
+    sim.holding.receber(10000000, 'teste');
+    R.enviar('inicio', -1500, 0, { tipo: 'toque' });
+    R.enviar('fim', -1500, 0, { tipo: 'toque' });
+    R.enviar('inicio', -1500, 0, { tipo: 'toque' });
+    R.enviar('fim', -1500, 0, { tipo: 'toque' });
+    s = sessao.sessao.value;
+    assert.equal(s.valido, true);
+    const n = s.areaInfo.faltam;
+    await sessao.ferramentas.construir();
+    assert.equal(sim.q.ladrilhos().comprados, antes + n);
+    assert.equal(sim.q.area.compra({ id: 'varzea' }).ladrilhos.length, 0);
+    assert.equal(sessao.sessao.value.areaInfo, null);
+    // fora da Várzea: ladrilho único, sem área
+    sessao.ferramentas.fechar();
+    sessao.ferramentas.abrir('areas');
+    R.enviar('inicio', 1400, -300, { tipo: 'toque' });
+    R.enviar('fim', 1400, -300, { tipo: 'toque' });
+    assert.equal(sessao.sessao.value.areaInfo, null);
     sessao.ferramentas.fechar();
   } finally {
     soltar();

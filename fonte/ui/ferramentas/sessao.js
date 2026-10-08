@@ -22,6 +22,7 @@ import * as textosMov1 from '../textos/mov1.js';
 import { VIAS } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { MARCOS } from '../../data/marcos.js';
+import { AREAS_COMPRAVEIS } from '../../data/areas-compraveis.js';
 import { alturaEm } from '../../comum/altura.js';
 import { ETAPA } from '../../contratos/flags.js';
 import { SESSAO } from '../acoes.js';
@@ -48,7 +49,7 @@ export const BORDA_PX = 48;
 /**
  * Estado que os componentes leem (null sem ferramenta):
  * { tipo, id, maquina, previa, valido, motivo, codigo, encaixe: { tipo, valor, ponto, texto } | null, desfazer,
- *   item, resumo, info, substituto, dedo, dica }
+ *   item, resumo, info, areaInfo (Áreas, D107: infoArea + contorno), substituto, dedo, dica }
  * dica (colocar, D98): { codigo, texto, curto, tom: 'er' | 'info', colide } ou null; o painel do fantasma mostra.
  */
 export const sessao = signal(null);
@@ -308,6 +309,7 @@ export function registrar(ui) {
   let item = null;
   let resumo = null;
   let info = null;
+  let infoAr = null; // compra da área inteira (D107): infoArea + contorno, ou null
   let semEncaixe = false;
   let assinaturaEnc = '';
   let encaixe = null;
@@ -360,7 +362,7 @@ export function registrar(ui) {
     }
     if (tipo === 'colocar') return !!previa?.ok && !previa.parado;
     if (tipo === 'demolir') return maq.marcados.length > 0;
-    if (tipo === 'areas') return info?.estado === 'compravel';
+    if (tipo === 'areas') return maq?.modo === 'area' && infoAr ? infoAr.pode : info?.estado === 'compravel';
     return true;
   }
 
@@ -394,6 +396,7 @@ export function registrar(ui) {
       item,
       resumo,
       info,
+      areaInfo: infoAr,
       substituto: !!previa?.substituto,
       dedo: !!maq.dedo,
       dica: tipo === 'colocar' ? dica : tipo === 'via' && m ? dicaDaVia(m, previa, maq.tipo, ui) : null,
@@ -429,6 +432,7 @@ export function registrar(ui) {
     argsUlt = null;
     resumo = null;
     info = null;
+    infoAr = null;
     encaixe = null;
     assinaturaEnc = '';
     dica = null;
@@ -508,7 +512,7 @@ export function registrar(ui) {
     else if (tipo === 'zona') maq = zona.passoZona(maq, ev);
     else if (tipo === 'colocar') maq = colocar.passoColocar(maq, ev);
     else if (tipo === 'demolir') maq = demolir.passoDemolir(maq, ev);
-    else if (tipo === 'areas') maq = areas.passoAreas(maq, ev, { origem: esp()?.mapa?.origem ?? [-4096, -4096] });
+    else if (tipo === 'areas') maq = areas.passoAreas(maq, ev, { origem: esp()?.mapa?.origem ?? [-4096, -4096], areas: areasCompraveis() });
     const efeitos = maq.efeitos;
     for (const x of efeitos) {
       const nome = via.nomeEfeito(x);
@@ -885,11 +889,29 @@ export function registrar(ui) {
     const q = consultar('ladrilhos');
     return q?.estado ? q : esp()?.ladrilhos ?? null;
   }
+  /** Áreas compráveis com o que falta (D107): [{ id, contorno, faltam }]; vazio sem a consulta ou sem o contorno. */
+  function areasCompraveis() {
+    const lista = [];
+    for (const a of esp()?.areas ?? []) {
+      if (!AREAS_COMPRAVEIS.includes(a.id)) continue;
+      const c = consultar('area.compra', { id: a.id });
+      if (c?.ok && c.ladrilhos?.length) lista.push({ id: a.id, contorno: a.contorno, faltam: c.ladrilhos });
+    }
+    return lista;
+  }
   function atualizarAreas() {
     const tab = tabelaLadrilhos();
     const desc = consultar('holding')?.efeitos?.descontoLadrilho ?? 0;
     info = maq?.sel ? areas.infoLadrilho(tab, maq.sel[0], maq.sel[1], desc) : null;
     resumo = { compraveis: areas.compraveis(tab), desconto: desc };
+    infoAr = null;
+    if (maq?.area) {
+      const c = areas.infoArea(consultar('area.compra', { id: maq.area }), maq.modo);
+      const a = esp()?.areas?.find((x) => x.id === maq.area);
+      infoAr = c && a ? { ...c, contorno: a.contorno } : null;
+      // a área já foi toda comprada: volta ao ladrilho
+      if (!infoAr && maq.area) maq = { ...maq, area: null, modo: 'ladrilho' };
+    }
   }
   function efeitoAreas(nome) {
     if (nome === 'escolheu') atualizarAreas();
@@ -897,6 +919,17 @@ export function registrar(ui) {
   async function comprar() {
     if (tipo !== 'areas' || !maq?.sel) return;
     if (!valido()) return vibrar(VIBRA.erro);
+    if (maq.modo === 'area' && infoAr) {
+      const r = await comando('area.comprar', { id: infoAr.id });
+      if (!r.ok) return vibrar(VIBRA.erro);
+      vibrar(VIBRA.confirmar);
+      const n = r.dados?.n ?? infoAr.faltam;
+      avisar(t(n === 1 ? 'area.comprada1' : 'area.comprada', { nome: infoAr.nome, n }), 'info');
+      passo({ tipo: 'comprado' });
+      atualizarAreas();
+      publicar();
+      return;
+    }
     const [i, j] = maq.sel;
     const r = await comando('ladrilho.comprar', { i, j });
     if (!r.ok) return vibrar(VIBRA.erro);
@@ -948,6 +981,7 @@ export function registrar(ui) {
       if (!maq) return;
       if (tipo === 'via') passo({ tipo: 'opcao', ...op });
       else if (tipo === 'zona') passo({ tipo: 'opcao', ...op });
+      else if (tipo === 'areas') passo({ tipo: 'modo', ...op });
     },
     /** Gira o fantasma: o botão vira um quarto de volta; `passo` (radianos) dá outro, como os 15 graus de Q e E. */
     girar: (sentido = 1, passoRad = null) => (tipo === 'colocar' ? passo({ tipo: 'girar', sentido, ...(passoRad > 0 ? { passo: passoRad } : {}) }) : undefined),

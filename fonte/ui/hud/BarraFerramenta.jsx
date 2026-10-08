@@ -19,6 +19,7 @@ import { MODOS_VIA } from '../ferramentas/via.js';
 import { COTAS_VIADUTO } from '../../comum/viaduto.js';
 import { MODOS_ZONA, TAMANHOS_PINCEL, zonasDaParte } from '../ferramentas/zona.js';
 import { pedeDoisToques } from '../ferramentas/demolir.js';
+import { faltaDaArea, linhasArea, rotuloArea } from '../ferramentas/areas.js';
 import { Bandeja, COR_FAMILIA } from './Bandeja.jsx';
 
 const demanda = computed(() => barra.value?.demanda ?? { R: 0, C: 0, I: 0, E: 0 });
@@ -78,7 +79,7 @@ export function linhaVia(s) {
 export function rotuloPrincipal(s) {
   if (s.tipo === 'zona') return t('x2.pronto');
   if (s.tipo === 'demolir') return t('x2.demolir');
-  if (s.tipo === 'areas') return t('x2.comprar');
+  if (s.tipo === 'areas') return rotuloArea(s);
   const base = s.tipo === 'via' && s.maquina.modo === 'melhorar' ? t('x2.melhorar') : t('x2.construir');
   const pronto = s.tipo === 'via' ? !!s.previa?.segmentos?.length || s.maquina.modo === 'melhorar' : s.tipo === 'colocar' ? !!s.previa : true;
   return !s.valido && pronto && s.motivo ? s.motivo : base;
@@ -218,6 +219,10 @@ function linhasDemolir(s) {
 
 function linhasAreas(s) {
   const i = s.info;
+  if (s.areaInfo && s.maquina.modo === 'area') {
+    const [titulo, resumo, falta] = linhasArea(s);
+    return [titulo, falta || resumo];
+  }
   if (!i) return [t('x2.areas.dica'), ''];
   const titulo = t('x2.areas.titulo', { i: i.i, j: i.j });
   if (i.estado === 'holding') return [titulo, t('x2.areas.holding')];
@@ -261,15 +266,36 @@ function BarraFerramenta({ ui }) {
     linha = linhaColocar(s);
   } else {
     const [cima, baixo] = s.tipo === 'demolir' ? linhasDemolir(s) : linhasAreas(s);
+    const a = s.tipo === 'areas' ? s.areaInfo : null;
     opcoes = (
       <div class="bf-opcoes">
         <span class="bf-nome">
           <Glifo n={s.tipo === 'demolir' ? 'demolir' : 'mapa'} tam={18} />
           <b>{cima}</b>
         </span>
+        {a ? (
+          <Segmentado
+            a="ferr.areaModo"
+            rotulo={t('area.modo')}
+            valor={s.maquina.modo}
+            aoTrocar={(v) => ferramentas.opcao({ modo: v })}
+            opcoes={[{ v: 'ladrilho', rotulo: t('area.modo.ladrilho') }, { v: 'area', rotulo: t('area.modo.area') }]}
+            class="bf-seg"
+          />
+        ) : null}
+        {a && s.maquina.modo === 'area' ? (
+          <ul class="bf-criterios" aria-label={t('area.modo.area')}>
+            {a.criterios.map((c) => (
+              <li key={c.id} class={c.ok ? 'ok' : 'nao'}>
+                <span class="bf-crit-marca" aria-label={t(c.ok ? 'area.criterio.ok' : 'area.criterio.nao')}>{c.ok ? '\u2713' : '\u2717'}</span>
+                {t(c.chave)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     );
-    linha = { texto: baixo, estado: null };
+    linha = a && s.maquina.modo === 'area' ? { texto: faltaDaArea(a) || linhasArea(s)[1], estado: a.pode ? null : 'er' } : { texto: baixo, estado: null };
   }
   const bandejaVias = s.tipo === 'via' && categoria.value === 'vias';
   return (

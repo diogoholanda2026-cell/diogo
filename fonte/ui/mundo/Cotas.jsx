@@ -124,6 +124,19 @@ function Cotas({ ui }) {
           }
         }
         if (!R?.projetar) return;
+        // contorno da área escolhida nas Áreas (D107): o polígono segue a câmera, sobre o relevo
+        const poli = el.querySelector('.area-contorno polygon');
+        if (poli) {
+          const c = sessao.value?.areaInfo?.contorno;
+          const pts = [];
+          let tudo = !!c;
+          for (let k = 0; tudo && k < c.length; k += 2) {
+            const q = R.projetar([c[k], (T?.altura ? alturaEm(T, c[k], c[k + 1]) : 0) + 1, c[k + 1]]);
+            if (!q || !Number.isFinite(q.x) || q.frente === false) tudo = false;
+            else pts.push(`${q.x.toFixed(1)},${q.y.toFixed(1)}`);
+          }
+          poli.setAttribute('points', tudo ? pts.join(' ') : '');
+        }
         const hud = retangulosHud();
         const precos = [];
         for (const n of el.querySelectorAll('.marca')) {
@@ -169,6 +182,11 @@ function Cotas({ ui }) {
     <div ref={raiz} class="mundo-marcas" aria-hidden="true">
       <i class="mira-fio" />
       <i class="mira" />
+      {s?.tipo === 'areas' && s.areaInfo?.contorno ? (
+        <svg class="area-contorno" aria-hidden="true">
+          <polygon points="" />
+        </svg>
+      ) : null}
       {marcas.map((m, i) => (
         <div key={m.chave} class={`marca ${m.classe}`} data-i={i}>
           {m.texto ? <span class="num">{m.texto}</span> : null}
