@@ -411,3 +411,9 @@
   font-weight: 600;
   color: var(--ch);
 }
+.fl-envio-campo {
+  flex: 0 0 96px;
+  min-width: 80px;
+  height: 44px;
+  text-align: right;
+}

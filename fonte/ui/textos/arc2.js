@@ -14,6 +14,8 @@ export function registrar(registrarTextos) {
     'arc2.item.completo': 'Enviado {pedido} de {precisa}',
     'arc2.item.quantidade': 'Quantidade de {item}',
     'arc2.enviar': 'Enviar',
+    'arc2.maximo': 'Usar o máximo: {n}',
+    'arc2.maximo.curto': 'Máx',
     'arc2.enviar.n': 'Enviar {n}',
     'arc2.enviarTudo': 'Enviar tudo que couber',
     'arc2.enviado': '{n} de {item} a caminho.',
