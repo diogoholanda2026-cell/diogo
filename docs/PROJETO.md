@@ -1669,6 +1669,8 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   voo de câmera por etapa; teste "o robô que pula a Arcologia termina mais pobre".
 - **Testa sem as outras:** entregas instantâneas do substituto; cena `torre`; vitrine com a simulação falsa.
   **Depende de:** X1a; integra quando S3a e U1b publicarem.
+- **D109 (08/10/2026):** envio dos materiais por etapa, `auto` (padrão) ou `manual` (`arcologia.enviar`, `arcologia.enviarTudo`,
+  `arcologia.envio`); arquivos novos `ui/telas/EnvioMateriais.jsx`, `ui/textos/arc2.js` e `ferramentas/testes/arcologia-envio.teste.mjs`.
 - **Entregue em 03/10/2026** (X1b, revisada; onda 3, etapa 3). O Ato 1 da Arcologia joga de ponta a ponta: lago.e1
   (Mirror Lake, cava no aplainar, 24 vias ARCOLOGIA com os portões nas 8 avenidas, reservatório para 6 mil moradores) e
   torre.e1 a e4 sobre a Blade Tower e a Legacy Tower (licença, +15% de produtividade e 6 caminhões, 1.200 vagas, 400
