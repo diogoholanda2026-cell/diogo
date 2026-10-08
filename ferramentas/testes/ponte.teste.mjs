@@ -281,3 +281,57 @@ test('save ida e volta e determinismo com ponte e viaduto', () => {
   via(a, LAGO, { construir: false });
   assert.equal(a.hash(), h);
 });
+
+// ------------------------------------------------------------------------------------------------ interface e render
+
+test('ferramenta de via: a cota e a ponte automática vão na prévia; textos dos motivos existem', async () => {
+  const via = await import('../../fonte/ui/ferramentas/via.js');
+  const { t, temTexto } = await import('../../fonte/ui/textos.js');
+  let m = via.criarVia({ tipo: 'rua' });
+  assert.equal(m.cota, 0);
+  assert.equal(m.ponte, true);
+  m = via.passoVia(m, { tipo: 'opcao', cota: 12 });
+  assert.equal(m.cota, 12);
+  m = via.passoVia(m, { tipo: 'opcao', cota: 7 });
+  assert.equal(m.cota, 12, 'cota fora dos degraus é ignorada');
+  m = via.passoVia(m, { tipo: 'opcao', ponte: false });
+  assert.equal(m.ponte, false);
+  const args = via.argsPrevia({ ...m, a: [0, 0], b: [100, 0], meio: null }, { sessao: 1 });
+  assert.equal(args.cota, 12);
+  assert.equal(args.ponte, false);
+  const grade = via.argsPrevia({ ...m, modo: 'grade', a: [0, 0], b: [100, 0], fundo: null }, { sessao: 1 });
+  assert.equal(grade.cota, undefined, 'a grade fica no chão');
+  for (const k of ['pont2.cota', 'pont2.cota.0', 'pont2.cota.6', 'pont2.cota.12', 'pont2.cota.18', 'pont2.ponte', 'pont2.motivo.altura', 'pont2.motivo.pilar',
+    'pont2.motivo.rampa', 'pont2.motivo.greide', 'pont2.dica.altura', 'pont2.dica.pilar', 'pont2.dica.rampa', 'pont2.dica.greide', 'pont2.linha.ponte', 'pont2.linha.viaduto']) {
+    assert.ok(temTexto(k), k);
+    assert.ok(!t(k).includes('—') && !t(k).includes('–'), `${k} sem travessão`);
+  }
+});
+
+test('ponte automática desligada: a água barra a via', () => {
+  const sim = novaSim('vias-regras');
+  const p = via(sim, RIO, { ponte: false, construir: false }).p;
+  assert.ok(!p.ok && codigos(p).includes('agua'), JSON.stringify(p.erros));
+});
+
+test('render: a estrutura do tabuleiro (viga, guarda-corpo, pilares) sai pura, determinística e dentro do orçamento', async () => {
+  const { geometriaDaEstrutura } = await import('../../fonte/render/vias/viaduto.js');
+  const pecas = [
+    { p: Float64Array.from([0, 0, 40, 0, 80, 0, 120, 0]), cotas: [8, 8], meia: 8, e: 1 },
+    { p: Float64Array.from([120, 0, 160, 0, 200, 0, 240, 0]), cotas: [8, 2], meia: 8, e: 2 },
+  ];
+  const op = { chao: () => 0, bloqueia: null };
+  const g = geometriaDaEstrutura(pecas, op);
+  assert.ok(g.triangulos > 100 && g.triangulos < 3000, `${g.triangulos} triângulos`);
+  assert.equal(g.pos.length, g.nor.length);
+  assert.ok(g.idx.every((i) => i < g.pos.length / 3));
+  for (const v of g.pos) assert.ok(Number.isFinite(v));
+  const h = geometriaDaEstrutura(pecas, op);
+  assert.deepEqual(h.pos, g.pos, 'determinística');
+  // o pilar do nó entre as duas peças não se repete
+  const sem = geometriaDaEstrutura([pecas[0]], op).triangulos + geometriaDaEstrutura([pecas[1]], op).triangulos;
+  assert.ok(g.triangulos < sem, 'o pilar do nó comum entra uma vez só');
+  // a pista nunca fica abaixo de 1,5 m do chão sem pilar: peça rasteira só tem viga e guarda-corpo
+  const baixa = geometriaDaEstrutura([{ p: pecas[0].p, cotas: [1, 1], meia: 8, e: 3 }], op);
+  assert.ok(baixa.triangulos < g.triangulos);
+});

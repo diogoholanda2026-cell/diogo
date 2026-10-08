@@ -80,6 +80,7 @@ function lerArgs(args) {
     arestas: Array.isArray(args.arestas) ? args.arestas.filter((r) => Number.isInteger(r)) : [],
     mao: args.mao === -1 ? -1 : 1,
     cota: lerCota(args.cota), // null: fora dos degraus do viaduto
+    ponte: args.ponte !== false, // ponte automática sobre a água (D53); desligada, a água recusa com 'agua'
   };
 }
 
@@ -633,7 +634,7 @@ function validar(sim, plano, ti) {
     const agua = trechosSobreAgua(sim, a, meia);
     pc.ponte = pc.elevada;
     if (agua.length) {
-      const r = sim.travessia.consultar({ tipo: VIAS_ORDEM[ti], p: Array.from(pc.p), trechos: agua, comprimento: pc.comp, cotas: [V[pc.va].y, V[pc.vb].y] });
+      const r = plano.ponteAuto === false ? null : sim.travessia.consultar({ tipo: VIAS_ORDEM[ti], p: Array.from(pc.p), trechos: agua, comprimento: pc.comp, cotas: [V[pc.va].y, V[pc.vb].y] });
       if (r) {
         pc.ponte = true;
         if (r.codigo) pc.erros.add(r.codigo);
@@ -863,7 +864,7 @@ export function planejar(sim, argsBrutos) {
     return { saida: s, interno: null };
   }
   // cota do viaduto (D106): a grade de quadras é sempre no chão
-  const plano = { vertices: [], porNo: new Map(), tracos: [], pecas: [], demolir: [], sessao: args.sessao, modo: args.modo, ti, cota: args.modo === 'grade' ? 0 : args.cota };
+  const plano = { vertices: [], porNo: new Map(), tracos: [], pecas: [], demolir: [], sessao: args.sessao, modo: args.modo, ti, cota: args.modo === 'grade' ? 0 : args.cota, ponteAuto: args.ponte };
   const ult = pts.length - 1;
   const novoTraco = (p, va, vb, linha) => {
     const tr = { id: plano.tracos.length, p: ajustarPontas(Float64Array.from(p), plano.vertices[va], plano.vertices[vb]), va, vb, linha, erros: new Set() };
@@ -1009,7 +1010,7 @@ function saidaDoPlano(sim, plano, args, enc) {
     for (const c of publicos) erros.push(c.dados ? { codigo: c.codigo, trecho: k, dados: c.dados } : { codigo: c.codigo, trecho: k });
     return {
       p: Array.from(pc.p), tipo: args.tipo, cotas: [V[pc.va].y, V[pc.vb].y], ponte: pc.ponte, erros: publicos.map((c) => c.codigo),
-      declive: pc.declive, obra: pc.ponte ? (pc.sobreAgua ? 'ponte' : 'viaduto') : null, altura: pc.ponte ? Math.round(pc.altura * 10) / 10 : 0,
+      declive: pc.declive, comprimento: Math.round(pc.comp * 10) / 10, obra: pc.ponte ? (pc.sobreAgua ? 'ponte' : 'viaduto') : null, altura: pc.ponte ? Math.round(pc.altura * 10) / 10 : 0, cota: pc.ponte ? plano.cota ?? 0 : 0,
     };
   });
   let custoDemolir = 0;

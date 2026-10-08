@@ -16,6 +16,7 @@ import { VIAS } from '../../data/vias.js';
 import { ZONAS } from '../../data/zonas.js';
 import { sessao, categoria, ferramentas } from '../ferramentas/sessao.js';
 import { MODOS_VIA } from '../ferramentas/via.js';
+import { COTAS_VIADUTO } from '../../comum/viaduto.js';
 import { MODOS_ZONA, TAMANHOS_PINCEL, zonasDaParte } from '../ferramentas/zona.js';
 import { pedeDoisToques } from '../ferramentas/demolir.js';
 import { Bandeja, COR_FAMILIA } from './Bandeja.jsx';
@@ -29,6 +30,17 @@ const porHora = (v) => fmt.dinheiroPorHora(v ?? 0);
 const mouse = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
 // ------------------------------------------------------------------------------------------------ textos (puros)
+
+/** Ponte e viaduto da prévia (D106): "Ponte 120 m" e "Viaduto a 6 m do chão" quando há tabuleiro; null sem. */
+export function obraDaPrevia(p) {
+  const segs = (p?.segmentos ?? []).filter((x) => x.obra);
+  if (!segs.length) return null;
+  const metros = (obra) => segs.filter((x) => x.obra === obra).reduce((a, x) => a + (x.comprimento ?? 0), 0);
+  const viaduto = segs.some((x) => x.obra === 'viaduto');
+  const ponte = segs.some((x) => x.obra === 'ponte');
+  if (viaduto) return t('pont2.linha.viaduto', { h: Math.max(...segs.filter((x) => x.obra === 'viaduto').map((x) => x.cota ?? 0)) });
+  return ponte ? t('pont2.linha.ponte', { m: fmt.numero(Math.round(metros('ponte'))) }) : null;
+}
 
 /** Linha de baixo da via: total da prévia, motivo ou a dica da fase. { texto, estado: 'er' | null } */
 export function linhaVia(s) {
@@ -47,6 +59,8 @@ export function linhaVia(s) {
       ? t('x2.via.grade', { n: p.segmentos.length, m: fmt.numero(p.comprimento), custo: fmt.dinheiro(p.custo) })
       : t('x2.via.total', { m: fmt.numero(p.comprimento), custo: fmt.dinheiro(p.custo) });
     const partes = [base, t('x2.manutencao', { v: porHora(p.manutencaoHora) })];
+    const obra = obraDaPrevia(p);
+    if (obra) partes.unshift(obra);
     const dem = p.demolir?.predios?.length ?? 0;
     if (dem) partes.push(t(dem === 1 ? 'x2.via.demolirPredio1' : 'x2.via.demolirPredios', { n: dem }));
     if (s.substituto) partes.push(t('x2.estimado'));
@@ -92,6 +106,19 @@ function OpcoesVia({ s }) {
       />
       {m.modo === 'reta' || m.modo === 'curva' ? (
         <Chip a="ferr.continua" glifo="continua" texto={t('x2.continua')} ativo={m.continua} estado={m.continua ? 'ac' : null} class={m.continua ? 'ligado' : ''} onClick={() => ferramentas.opcao({ continua: !m.continua })} />
+      ) : null}
+      {m.modo === 'reta' || m.modo === 'curva' ? (
+        <Segmentado
+          a="ferr.cota"
+          rotulo={t('pont2.cota')}
+          valor={m.cota ?? 0}
+          aoTrocar={(v) => ferramentas.opcao({ cota: v })}
+          opcoes={COTAS_VIADUTO.map((v) => ({ v, rotulo: t(`pont2.cota.${v}`) }))}
+          class="bf-seg bf-cota"
+        />
+      ) : null}
+      {m.modo === 'reta' || m.modo === 'curva' ? (
+        <Chip a="ferr.ponte" glifo="ponte" texto={t('pont2.ponte')} ativo={m.ponte !== false} estado={m.ponte !== false ? 'ac' : null} class={m.ponte !== false ? 'ligado' : ''} onClick={() => ferramentas.opcao({ ponte: m.ponte === false })} />
       ) : null}
       {m.modo !== 'melhorar' ? (
         <Chip a="ferr.encaixe" glifo="encaixe" texto={t('x2.encaixe')} ativo={m.encaixe} estado={m.encaixe ? 'ac' : null} class={m.encaixe ? 'ligado' : ''} onClick={() => ferramentas.opcao({ encaixe: !m.encaixe })} />

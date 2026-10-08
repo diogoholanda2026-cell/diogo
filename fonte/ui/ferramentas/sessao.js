@@ -257,6 +257,12 @@ export function dicaDaVia(m, previa, tipoVia, ui) {
   const via = VIAS[tipoVia];
   let chave = `ux1.dicaVia.${m.codigo}`;
   let params = {};
+  // ponte e viaduto (D106): o motivo vem em dados.motivo (altura livre, pilar, rampa curta, rampa íngreme)
+  if (m.dados?.motivo && ui.t(`pont2.dica.${m.dados.motivo}`) && !ui.t(`pont2.dica.${m.dados.motivo}`).startsWith('??')) {
+    const seg = previa?.segmentos?.[m.trecho ?? 0];
+    const p = seg && Number.isFinite(seg.declive) ? { p: Math.round(seg.declive * 100) } : {};
+    return { codigo: m.codigo, chave: `pont2.dica.${m.dados.motivo}`, tom: 'er', colide: null, texto: ui.t(`pont2.dica.${m.dados.motivo}`, p), curto: null };
+  }
   if (m.codigo === 'declive') {
     const seg = previa?.segmentos?.[m.trecho ?? 0] ?? previa?.segmentos?.find((x) => x.erros?.includes?.('declive'));
     if (seg && Number.isFinite(seg.declive) && via?.declive) params = { p: Math.round(seg.declive * 100), max: Math.round(via.declive * 100) };
@@ -363,7 +369,7 @@ export function registrar(ui) {
     if (tipo === 'colocar' && previa && !previa.ok) return { codigo: previa.codigo ?? 'outro', texto: dica?.curto ?? t(`x2.motivo.${previa.codigo ?? 'outro'}`), dados: previa.dados ?? undefined };
     if (!e) return null;
     const dados = e.dados ?? {};
-    const texto = e.codigo === 'creditos' ? t('x2.motivo.creditos', { n: ui.fmt.dinheiro(dados.faltam ?? 0) }) : t(`x2.motivo.${e.codigo}`);
+    const texto = e.codigo === 'creditos' ? t('x2.motivo.creditos', { n: ui.fmt.dinheiro(dados.faltam ?? 0) }) : dados.motivo ? t(`pont2.motivo.${dados.motivo}`) : t(`x2.motivo.${e.codigo}`);
     return { codigo: e.codigo, texto: texto.startsWith('??') ? t('x2.motivo.outro') : texto, dados, trecho: e.trecho };
   }
 
@@ -428,7 +434,7 @@ export function registrar(ui) {
     dica = null;
     colidindo = '';
     item = alvo?.item ?? op.item ?? null;
-    if (tipo === 'via') maq = via.criarVia({ tipo: op.tipoVia ?? 'rua', modo: op.modo ?? 'reta', continua: op.continua, encaixe: op.encaixe });
+    if (tipo === 'via') maq = via.criarVia({ tipo: op.tipoVia ?? 'rua', modo: op.modo ?? 'reta', continua: op.continua, encaixe: op.encaixe, cota: op.cota, ponte: op.ponte });
     else if (tipo === 'zona') maq = zona.criarZona({ zona: op.zona ?? 'resBaixa', modo: op.modo ?? 'preencher', tamanho: op.tamanho, apagar: op.apagar });
     else if (tipo === 'colocar') maq = alvo ? mover.criarMover(alvo.p, item, { rot: op.rot, giro: op.giro, alinhar: op.alinhar }) : colocar.criarColocar({ tipo: item?.tipo ?? op.tipoColocavel, item });
     else if (tipo === 'demolir') maq = demolir.criarDemolir();
@@ -1265,7 +1271,7 @@ export function registrar(ui) {
   retomada.estado = () => {
     if (!tipo || !maq) return null;
     const giro = { rot: Number.isFinite(maq.rot) ? maq.rot : 0, giro: Number.isFinite(maq.giro) ? maq.giro : 0, alinhar: maq.alinhar !== false };
-    if (tipo === 'via') return { tipo: 'via', tipoVia: maq.tipo, modo: maq.modo, continua: !!maq.continua, encaixe: maq.encaixe !== false };
+    if (tipo === 'via') return { tipo: 'via', tipoVia: maq.tipo, modo: maq.modo, continua: !!maq.continua, encaixe: maq.encaixe !== false, ...(maq.cota ? { cota: maq.cota } : {}), ...(maq.ponte === false ? { ponte: false } : {}) };
     if (tipo === 'zona') return { tipo: 'zona', zona: maq.zona, modo: maq.modo, tamanho: maq.tamanho, apagar: !!maq.apagar };
     if (tipo === 'colocar') return maq.mover ? { tipo: 'mover', ref: maq.mover.ref, ...giro } : { tipo: 'colocar', item: item?.tipo ?? maq.tipo, ...giro };
     return { tipo };
@@ -1274,7 +1280,7 @@ export function registrar(ui) {
     if (!e || typeof e !== 'object' || tipo) return false;
     if (e.tipo === 'via') {
       if (!VIAS[e.tipoVia]) return false;
-      return abrir('via', { tipoVia: e.tipoVia, modo: via.MODOS_VIA.includes(e.modo) ? e.modo : 'reta', continua: e.continua, encaixe: e.encaixe });
+      return abrir('via', { tipoVia: e.tipoVia, modo: via.MODOS_VIA.includes(e.modo) ? e.modo : 'reta', continua: e.continua, encaixe: e.encaixe, cota: e.cota, ponte: e.ponte });
     }
     if (e.tipo === 'zona') {
       if (!ZONAS[e.zona]) return false;

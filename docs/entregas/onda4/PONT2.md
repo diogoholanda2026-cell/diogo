@@ -1,0 +1,6 @@
+# PONT2: pontes e viadutos que o jogador cria (D53, D106; entrega também a X4)
+Arquivos: fonte/comum/viaduto.js (novo: regras e pilares), fonte/sim/vias/{ponte,ferramenta,demolir}.js, fonte/render/vias/viaduto.js (novo) ligado por fonte/render/mundo/vias.js, fonte/ui/ferramentas/{via,sessao}.js, fonte/ui/hud/BarraFerramenta.jsx, fonte/ui/textos/pont2.js (+ índice textos.js), ferramentas/testes/{ponte,vias}.teste.mjs.
+Regras: ponte automática sobre água (tabuleiro na cota das margens com arco de 2,5% do vão, travessia de até 200 m ou 'vao', custo e manutenção 3x e 2x); viaduto por degraus de altura livre 0, +6, +12, +18 m (a pista fica 1,2 m acima, rampas de 6%, limite 8%); cruzamento em desnível sem ligar (altura livre de 5 m); pilares a cada 32 m que desviam das vias no chão; flag ARESTA.PONTE nas peças de tabuleiro; demolir derruba a estrutura inteira; desfazer, save e hash seguem.
+Motivos novos: viajam como 'colisao' (altura, pilar) e 'declive' (rampa, greide) com dados.motivo.
+Testes: ponte.teste.mjs (14), vias, contratos, save, ui-ferramentas verdes; montar sem aviso.
+Pendências para o integrador: códigos 'altura' e 'pilar' em contratos/codigos.js (hoje dados.motivo); flag própria de viaduto e de nó ligável (hoje só PONTE; nó marcado pelo jogador no meio do viaduto não existe); preview fantasma sem pilares; ferrovia ainda não existe no jogo.

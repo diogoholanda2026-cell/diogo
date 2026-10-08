@@ -255,7 +255,7 @@ export function criarViaduto(ctx, rede) {
     const lista = [];
     for (const ar of rede.arestas.values()) if (ar.ponte) lista.push({ p: ar.p, cotas: ar.cotas, meia: perfilVia(ar.tipo).meia, e: ar.e });
     lista.sort((a, b) => a.e - b.e);
-    const sig = lista.map((l) => `${l.e}:${l.cotas[0].toFixed(2)},${l.cotas[1].toFixed(2)}:${l.p[2].toFixed(1)}`).join('|');
+    const sig = lista.map((l) => `${l.e}:${l.cotas[0].toFixed(2)},${l.cotas[1].toFixed(2)}:${Array.from(l.p, (v) => v.toFixed(1)).join(',')}:${l.meia}`).join('|');
     if (sig === assinatura) return;
     assinatura = sig;
     pecas = lista.length;
@@ -265,6 +265,7 @@ export function criarViaduto(ctx, rede) {
       return;
     }
     const chao = (x, z) => ctx.sim.alturaEm?.(x, z) ?? 0;
+    geo.dispose(); // solta os buffers antigos da GPU antes de trocar os atributos
     const g = geometriaDaEstrutura(lista, { chao: T ? (x, z) => chaoDe(T, x, z) : chao, bloqueia: viaNoChaoDaRede(rede) });
     geo.setAttribute('position', new THREE.BufferAttribute(g.pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(g.nor, 3));

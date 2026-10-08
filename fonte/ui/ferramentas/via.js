@@ -18,6 +18,7 @@ import { reta, deQuadratica, tabelaArco, ponto as pontoBz, direcao, maisPerto, c
 import { alturaEm } from '../../comum/altura.js';
 import { ARESTA, AGUA, LADRILHO } from '../../contratos/flags.js';
 import { refDe } from '../../contratos/espelho.js';
+import { COTAS_VIADUTO } from '../../comum/viaduto.js';
 
 /** Números da ferramenta (px de tela, ms, metros). */
 export const VIA = Object.freeze({
@@ -128,13 +129,15 @@ export function ruasDaGrade(a, b, c, tipo) {
  * Estado novo da ferramenta.
  * @param {{ tipo?: string, modo?: string, continua?: boolean, encaixe?: boolean }} op
  */
-export function criarVia({ tipo = 'rua', modo = 'reta', continua = false, encaixe = true } = {}) {
+export function criarVia({ tipo = 'rua', modo = 'reta', continua = false, encaixe = true, cota = 0, ponte = true } = {}) {
   return {
     fase: 'ocioso',
     tipo: TIPOS_VIA.includes(tipo) ? tipo : 'rua',
     modo: MODOS_VIA.includes(modo) ? modo : 'reta',
     continua: !!continua,
     encaixe: encaixe !== false,
+    cota: COTAS_VIADUTO.includes(cota) ? cota : 0, // altura livre do viaduto (D106): 0, 6, 12 ou 18 m
+    ponte: ponte !== false, // ponte automática sobre a água (D53)
     a: null,
     b: null,
     meio: null, // alça do meio (ponto da curva em t = 0,5); null: reta
@@ -209,7 +212,7 @@ function limpo(e, efeitos = []) {
  *   { tipo: 'cancelar' }                               Cancelar ou Esc
  *   { tipo: 'construido', fim: [x, z], tangente }      a via foi construída (a cola manda depois do comando)
  *   { tipo: 'ajustar', a?, b? }                        pontos encaixados pela simulação (depois de soltar)
- *   { tipo: 'opcao', tipoVia?, modo?, continua?, encaixe? }
+ *   { tipo: 'opcao', tipoVia?, modo?, continua?, encaixe?, cota?, ponte? }
  *   { tipo: 'aresta', ref, somar }                     Melhorar: aresta escolhida pela cola
  * Efeitos (e.efeitos): 'previa' (pedir a prévia), 'limpar', 'sair', 'escolher' (Melhorar: { ponto, somar }).
  * @param {object} e estado
@@ -360,6 +363,8 @@ function opcao(e, ev) {
   if (ev.tipoVia && TIPOS_VIA.includes(ev.tipoVia)) n.tipo = ev.tipoVia;
   if (typeof ev.continua === 'boolean') n.continua = ev.continua;
   if (typeof ev.encaixe === 'boolean') n.encaixe = ev.encaixe;
+  if (COTAS_VIADUTO.includes(ev.cota)) n.cota = ev.cota;
+  if (typeof ev.ponte === 'boolean') n.ponte = ev.ponte;
   if (ev.modo && MODOS_VIA.includes(ev.modo) && ev.modo !== e.modo) {
     const traco = (m) => m === 'reta' || m === 'curva';
     // entre Reta e Curva o traçado fica; Grade e Melhorar começam de novo
@@ -389,7 +394,8 @@ export const nomeEfeito = (x) => (typeof x === 'string' ? x : x?.efeito);
  */
 export function argsPrevia(e, { tolerancia = 12, sessao = 0, semEncaixe = false } = {}) {
   if (!e.a || !e.b || e.modo === 'melhorar') return null;
-  const base = { tipo: e.tipo, tolerancia, encaixe: e.encaixe && !semEncaixe, sessao };
+  // cota e ponte automática (D106): a grade de quadras é sempre no chão
+  const base = { tipo: e.tipo, tolerancia, encaixe: e.encaixe && !semEncaixe, sessao, ...(e.modo === 'grade' ? {} : { cota: e.cota ?? 0, ponte: e.ponte !== false }) };
   if (e.modo === 'grade') return { ...base, modo: 'grade', pontos: [copia(e.a), copia(e.b), cantoDaGrade(e.a, e.b, e.fundo, e.tipo)], espacamento: espacamentoGrade(e.tipo) };
   if (e.meio) return { ...base, modo: 'curva', pontos: [copia(e.a), controleDaAlca(e.a, e.b, e.meio), copia(e.b)] };
   if (e.continua && e.tangente) return { ...base, modo: 'continua', pontos: [copia(e.a), controleTangente(e.a, e.tangente, e.b), copia(e.b)], tangente: copia(e.tangente) };

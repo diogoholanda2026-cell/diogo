@@ -1813,7 +1813,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   Vidraria, o Manejo florestal e a Serraria.
 - **Depende de:** M1a.
 
-#### X4. Ponte simples (onda 4; 1 sessão)
+#### X4. Ponte simples (onda 4; 1 sessão) [ENTREGUE pela PONT2, D106: ponte automática e viaduto; ver docs/entregas/onda4/PONT2.md]
 - **Arquivos:** `sim/vias/ponte.js`, `render/geracao/ponte.js`, `ferramentas/testes/ponte.teste.mjs`.
 - **Entrega:** a D53 de ponta a ponta: `sim.travessia.registrar` aceita o trecho sobre água (reto ou em curva suave, até
   200 m, tabuleiro na cota das pontas, custo 3 vezes, flag `PONTE`, recusa `vao`); tabuleiro e pilares instanciados no

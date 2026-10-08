@@ -13,8 +13,11 @@ import * as toq1 from './textos/toq1.js';
 import * as x1 from './textos/x1.js';
 import * as x2 from './textos/x2.js';
 import * as x3 from './textos/x3.js';
+import * as pont2 from './textos/pont2.js';
+import * as mov1 from './textos/mov1.js';
+import * as mov2 from './textos/mov2.js';
 
-const MODULOS = [f0, r1, s1, s2, s3, u1, u2, ux1, toq1, x1, x2, x3];
+const MODULOS = [f0, r1, s1, s2, s3, u1, u2, ux1, toq1, x1, x2, x3, pont2, mov1, mov2];
 
 const textos = new Map();
 const donos = new Map();
