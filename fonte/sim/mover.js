@@ -26,7 +26,6 @@ import { RODADA } from '../comum/relogio.js';
 import { refDe } from '../contratos/espelho.js';
 import { PREDIO, TIPO_PREDIO } from '../contratos/flags.js';
 import { ORDEM } from '../contratos/interno.js';
-import { ehCodigo } from '../contratos/codigos.js';
 import { SERVICOS, SERVICOS_ORDEM } from '../data/servicos.js';
 import { PREDIOS_HOLDING } from '../data/holding.js';
 import { prediosNaCaixa } from './vias/validar.js';
@@ -46,9 +45,6 @@ import {
  * o Desfazer vale.
  */
 export const MOVER = Object.freeze({ fracao: 0.1, obraFracao: 0.4, obraMin: 12, mobilizacao: 12 });
-
-/** O código de recusa de zona e Arcologia: 'fixo' (ficha da MOV1); sem ele em contratos/codigos.js ainda, o 'arcologia' que já existe. */
-export const CODIGO_FIXO = ehCodigo('fixo') ? 'fixo' : 'arcologia';
 
 /** A obra de um prédio de zona novo (CRESCIMENTO.obraBase e obraPorAndar, em crescimento.js; cópia para não fechar o ciclo de imports). */
 const OBRA_ZONA = Object.freeze({ base: 45, porAndar: 10 });
@@ -70,8 +66,8 @@ const AC = { e: -1, s: 0 };
 export function impedimentoDeMover(sim, i) {
   const P = sim.tabelas.predios;
   const k = tipoDoPredio(sim, i);
-  if (k.tipo === 'zona') return k.def?.demolivel === false ? { codigo: CODIGO_FIXO, dados: { fixo: 'arcologia' } } : null;
-  if (!k.def || k.def.arcologia || k.def.demolivel === false) return { codigo: CODIGO_FIXO, dados: { fixo: 'arcologia' } };
+  if (k.tipo === 'zona') return k.def?.demolivel === false ? { codigo: 'fixo', dados: { fixo: 'arcologia' } } : null;
+  if (!k.def || k.def.arcologia || k.def.demolivel === false) return { codigo: 'fixo', dados: { fixo: 'arcologia' } };
   if (P.flags[i] & PREDIO.OBRA) return { codigo: 'ocupado', dados: { fixo: 'obra' } };
   return null;
 }
@@ -115,6 +111,18 @@ export function tiquesDoMover(sim, i, k) {
   if (nascendo(P, i)) return P.flags[i] & PREDIO.SEM_MATERIAL ? 0 : Math.max(0, P.obraFim[i] - sim.tique);
   const andares = k.nv ? (k.nv.andares[0] + k.nv.andares[1]) / 2 : 1;
   return tiquesDaObra({ obraTiques: OBRA_ZONA.base + OBRA_ZONA.porAndar * andares });
+}
+
+/**
+ * Alonga a obra em curso (ini, fim) em `extra` tiques (o aplainar do lugar novo) sem mexer no progresso de agora: o que falta
+ * cresce exatamente `extra` (a prévia soma o aplainar ao que faltava) e ini recua p/(1-p) do que falta, porque
+ * progresso = (T - ini) / (fim - ini). Devolve [ini, fim].
+ */
+export function alongarObra(T, ini, fim, extra) {
+  const total = fim - ini;
+  const p = total > 0 ? Math.min(0.99, Math.max(0, (T - ini) / total)) : 0;
+  const resto = Math.max(0, fim - T) + extra;
+  return [T - Math.round((p / (1 - p)) * resto), T + resto];
 }
 
 /** O colocável de mentira que a conferência de lugar usa: o prédio de zona tem a planta em células no catálogo; a de verdade (metros) é a da tabela. */
@@ -448,6 +456,7 @@ export function mover(sim, args = {}) {
     removerPredio(sim, b);
   }
   const T = sim.tique;
+  const marcadaAntes = zona && !!zonasEmMover(sim)[String(ref)];
   const extra = c.aplainar?.tiques ?? 0;
   let ini = T + MOVER.mobilizacao;
   let fim = ini + tiquesDoMover(sim, i, k) + extra;
@@ -465,10 +474,7 @@ export function mover(sim, args = {}) {
       ini = P.obraIni[i];
       fim = P.obraFim[i];
       if (!(P.flags[i] & PREDIO.SEM_MATERIAL) && extra > 0) {
-        const total = Math.max(1, fim - ini);
-        const alvo = total + extra;
-        ini = T - Math.round(progressoDaObra(sim, i) * alvo);
-        fim = ini + alvo;
+        [ini, fim] = alongarObra(T, ini, fim, extra);
       }
     } else {
       P.flags[i] |= PREDIO.OBRA | PREDIO.OBRA_NIVEL;
@@ -499,7 +505,7 @@ export function mover(sim, args = {}) {
   if (desfazer) {
     J(sim).pend[String(ref)] = {
       de, forma: velha ? { contorno: Array.from(velha.contorno), cota: velha.cota } : null, custo, ate: T + MOVER.mobilizacao,
-      ...(zona ? { zona: true, pronto: prontoAntes, celulas: celulasAntes } : {}),
+      ...(zona ? { zona: true, pronto: prontoAntes, marcada: marcadaAntes, celulas: celulasAntes } : {}),
     };
   } else delete J(sim).pend[String(ref)];
   if (typeof def.aoMover === 'function') def.aoMover(sim, i, ref);
@@ -552,9 +558,12 @@ export function desfazerMover(sim, args = {}) {
       P.obraIni[i] = de.obraIni;
       P.obraFim[i] = de.obraFim;
     }
-    delete zonasEmMover(sim)[String(ref)];
+    // a marca de reforma de mover volta ao que era (um segundo mover sobre a reforma do primeiro não a perde)
+    if (!rec.marcada) delete zonasEmMover(sim)[String(ref)];
     // as mesmas células de antes; se alguma deixou de existir, o que a planta de antes cobre
-    if (!ocuparCelulas(sim, i, rec.celulas ?? [])) ocuparCelulas(sim, i, celulasParaPredio(sim, { x: de.x, z: de.z, rot: de.rot, w: de.w, d: de.d }, P.zona[i], i).ocupar);
+    // (também quando só parte delas serve: completa com as livres da planta, para a pegada não voltar incompleta)
+    const guardadas = rec.celulas ?? [];
+    if (ocuparCelulas(sim, i, guardadas) < guardadas.length) ocuparCelulas(sim, i, celulasParaPredio(sim, { x: de.x, z: de.z, rot: de.rot, w: de.w, d: de.d }, P.zona[i], i).ocupar);
   } else {
     P.flags[i] = de.flags;
     P.obraIni[i] = de.obraIni;

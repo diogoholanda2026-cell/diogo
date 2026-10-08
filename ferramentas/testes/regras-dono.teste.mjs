@@ -275,6 +275,19 @@ test('calendário (D67): o tique 0 é jan. 2020; mês de 600 e ano de 7.200 tiqu
   assert.deepEqual([sim.q.orcamento().serie[13].ano, sim.q.orcamento().serie[13].mes], [2021, 2]);
 });
 
+test('fundo de teste: a consulta não cria nem muda o estado (save antigo sem o fundo lê o fundo cheio)', () => {
+  const sim = simS3a({ semente: 'fundo-puro' });
+  delete sim.json.economia.fundoTeste;
+  const h = sim.hash();
+  const f = sim.q.emprestimo().fundo;
+  assert.deepEqual([f.saldo, f.sacado], [41667000, 0]);
+  assert.equal(sim.json.economia.fundoTeste, undefined, 'a consulta não grava o fundo');
+  assert.equal(sim.hash(), h);
+  assert.equal(sim.cmd('fundo.sacar', { valor: 41667000 - 1 }).ok, true, 'o saque cria o fundo e aceita valor fora do passo');
+  assert.equal(sim.cmd('fundo.sacar', { valor: 1 }).ok, true, 'o saldo restante exato');
+  assert.equal(sim.q.emprestimo().fundo.saldo, 0);
+});
+
 test('fundo de teste (D104): US$ 25 bi, saque a qualquer hora e valor, fora da renda', () => {
   const sim = simS3a({ semente: 'fundo' });
   const f0 = sim.q.emprestimo().fundo;

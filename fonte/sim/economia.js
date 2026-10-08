@@ -144,6 +144,9 @@ function fundoDe(sim) {
   return (E.fundoTeste ??= { saldo: FUNDO_TESTE.total, sacado: 0 });
 }
 
+/** O fundo de teste como está, sem criar nada (as consultas não mudam o estado; save antigo lê o fundo cheio). */
+const lerFundo = (sim) => sim.json.economia.fundoTeste ?? { saldo: FUNDO_TESTE.total, sacado: 0 };
+
 /** Saca do fundo de teste (D104): qualquer valor inteiro de 1 até o saldo, a qualquer hora. */
 function sacarFundo(sim, { valor } = {}) {
   if (!FUNDO_TESTE.ativo) return { ok: false, codigo: 'inativo' };
@@ -240,7 +243,7 @@ export function consultaEmprestimo(sim) {
     passo: r.passo,
     prazoAnos: r.prazoAnos,
     lombard: r.lombard ?? null,
-    fundo: FUNDO_TESTE.ativo ? { ativo: true, ...(({ saldo, sacado }) => ({ saldo, sacado }))(fundoDe(sim)), total: FUNDO_TESTE.total, passo: FUNDO_TESTE.passo } : { ativo: false },
+    fundo: FUNDO_TESTE.ativo ? { ativo: true, saldo: lerFundo(sim).saldo, sacado: lerFundo(sim).sacado, total: FUNDO_TESTE.total, passo: FUNDO_TESTE.passo } : { ativo: false },
     jurosDevidos: d.juros,
     jurosHora: jurosHora(sim),
     parcela: parcelaDe(sim),

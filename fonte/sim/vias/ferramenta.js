@@ -28,7 +28,7 @@ import { addNo, addAresta, dividir as dividirAresta, cortes, meiaDa, arestasDoNo
 import { encaixarTraco, ancorar, espacamentoDe } from './encaixe.js';
 import {
   tipoVia, eixoDeCurva, distEixo, pistaNoT, amostrarCurva, trechosSobreAgua, foraDosLadrilhos, entraNaGleba, raioMinimo,
-  greide, quebrasDoGreide, saidaDoNo, viasSobrepostas, prediosNaPista, predioDaCidade, arestaIntocavel, noLigavel,
+  greide, quebrasDoGreide, saidaDoNo, viasSobrepostas, prediosNaPista, predioDaCidade, noLigavel,
   COS_ANGULO_MIN, CHAO_ABAIXO_DA_PISTA, decliveDa, eixoDa, cruzamentosDeEixos,
 } from './validar.js';
 import {
@@ -247,7 +247,9 @@ function cruzarTraco(sim, plano, tr) {
         tr.passagens.push({ s: sa, e, u, x: q[0], z: q[1], yOutra: cl.yOutra, sen, meia: tipoVia(A.tipo[e]).largura / 2 });
         continue;
       }
-      if (arestaIntocavel(sim, e)) {
+      // 'normal' num tabuleiro do jogador é o pé da rampa (elevação abaixo de ELEVACAO_PONTE): cruza como via comum;
+      // rodovia e Arcologia seguem intocáveis, e acima do limiar o cruzamento já virou passagem ou 'altura'
+      if (A.flags[e] & (ARESTA.RODOVIA | ARESTA.ARCOLOGIA)) {
         tr.erros.add('colisao');
         continue;
       }

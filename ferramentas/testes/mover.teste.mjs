@@ -19,8 +19,9 @@ import { indiceZona } from '../../fonte/data/zonas.js';
 import { SERVICOS } from '../../fonte/data/servicos.js';
 import { PREDIOS_HOLDING } from '../../fonte/data/holding.js';
 import { terminarObra, nascerNaFrente } from '../../fonte/sim/zonas/crescimento.js';
-import { removerPredio } from '../../fonte/sim/zonas/blocos.js';
-import { MOVER, CODIGO_FIXO, custoDeMover, tiquesDaObra } from '../../fonte/sim/mover.js';
+import { removerPredio, celulasParaPredio } from '../../fonte/sim/zonas/blocos.js';
+import { glebaDe } from '../../fonte/sim/vias/validar.js';
+import { MOVER, custoDeMover, tiquesDaObra, alongarObra } from '../../fonte/sim/mover.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 
 const plano = (pontos, tipo = 'rua') => ({ plano: { modo: 'reta', tipo, pontos, sessao: 1, encaixe: false } });
@@ -211,14 +212,14 @@ test('a validação é a do construir: colisão com prédio e com via, ladrilho,
 
 test('a Arcologia (e o que diz que não se demole) fica fixa, com o código "fixo" e a dica', () => {
   const sim = mundo('mov-fixo');
-  assert.ok(LISTA_CODIGOS.includes(CODIGO_FIXO), `o código ${CODIGO_FIXO} é do contrato`);
+  assert.ok(LISTA_CODIGOS.includes('fixo'), `o código fixo é do contrato`);
   const praca = pronto(sim, 'praca', 1300, -330);
   sim.colocaveis.obter('praca').arcologia = true;
   const caixa0 = sim.holding.caixa();
   const pa = sim.q.mover.previa({ ref: praca, x: 1360, z: -330 });
-  assert.deepEqual([pa.ok, pa.codigo, pa.dados.fixo], [false, CODIGO_FIXO, 'arcologia']);
+  assert.deepEqual([pa.ok, pa.codigo, pa.dados.fixo], [false, 'fixo', 'arcologia']);
   assert.equal(sim.cmd('mover', { ref: praca, x: 1360, z: -330, rot: 0, alinhar: false }).dados.fixo, 'arcologia');
-  assert.deepEqual(sim.q.predio(praca).mover, { pode: false, custo: 0, codigo: CODIGO_FIXO, motivo: 'arcologia' });
+  assert.deepEqual(sim.q.predio(praca).mover, { pode: false, custo: 0, codigo: 'fixo', motivo: 'arcologia' });
   assert.equal(sim.cmd('mover.desfazer', { ref: praca }).codigo, 'nada');
   assert.equal(sim.holding.caixa(), caixa0, 'e nada foi cobrado');
   assert.deepEqual(sim.erros.filter((e) => /mover/.test(e.onde)), []);
@@ -467,6 +468,74 @@ test('zona: o Desfazer devolve o prédio, as células e o dinheiro até a obra c
   assert.ok(celulasDe(sim, j).length >= 1);
   assert.deepEqual(sim.validar(), []);
   assert.deepEqual(sim.erros, []);
+});
+
+test('zona em obra com aplainar: o progresso fica e o que falta cresce exatamente o aplainar', () => {
+  for (const [ini, fim, T, extra] of [[100, 200, 150, 30], [100, 200, 100, 30], [100, 200, 190, 7], [0, 90, 45, 1]]) {
+    const prog = (T - ini) / (fim - ini);
+    const [i2, f2] = alongarObra(T, ini, fim, extra);
+    assert.equal(f2 - T, fim - T + extra, `falta ${fim - T} + ${extra}`);
+    assert.ok(Math.abs((T - i2) / (f2 - i2) - prog) < 0.02, `progresso ${prog} -> ${(T - i2) / (f2 - i2)}`);
+  }
+  // sem aplainar a obra não muda
+  assert.deepEqual(alongarObra(150, 100, 200, 0), [100, 200]);
+});
+
+test('zona: o Desfazer completa a pegada quando só parte das células guardadas serve', () => {
+  const { sim, casas } = mundoComCasas('mov2-parcial', 1);
+  const i = casas[0];
+  const P = sim.tabelas.predios;
+  terminarObra(sim, i);
+  const ref = P.ref(i);
+  const velhas = celulasDe(sim, i);
+  assert.ok(velhas.length >= 2);
+  const geo = celulasParaPredio(sim, { x: P.x[i], z: P.z[i], rot: P.rot[i], w: P.w[i], d: P.d[i] }, P.zona[i], i).ocupar;
+  const esperadas = [...new Set([velhas[0], ...geo])].sort((a, b) => a - b);
+  assert.ok(esperadas.length > 1);
+  const pv = sim.q.mover.previa({ ref, x: 1150, z: -230, alinhar: true });
+  assert.ok(pv.ok, pv.codigo);
+  assert.ok(sim.cmd('mover', { ref, x: pv.x, z: pv.z, rot: pv.rot, alinhar: false }).ok);
+  sim.json.mover.pend[String(ref)].celulas = [velhas[0], 1e9]; // a outra deixou de existir
+  assert.ok(sim.cmd('mover.desfazer', { ref }).ok);
+  assert.deepEqual(celulasDe(sim, i), esperadas, 'a guardada mais as livres da planta de antes');
+  assert.deepEqual(sim.validar(), []);
+});
+
+test('zona: o Desfazer do segundo mover sobre a reforma do primeiro mantém a marca de reforma', () => {
+  const { sim, casas } = mundoComCasas('mov2-marca', 1);
+  const i = casas[0];
+  const P = sim.tabelas.predios;
+  terminarObra(sim, i);
+  const ref = P.ref(i);
+  assert.ok(sim.cmd('mover', { ref, x: 1150, z: -230, rot: 0, alinhar: true }).ok);
+  sim.rodar(MOVER.mobilizacao + 2, { sincrono: true });
+  assert.ok(P.flags[i] & PREDIO.OBRA_NIVEL);
+  assert.deepEqual(sim.json.mover.zona, { [String(ref)]: 1 });
+  assert.ok(sim.cmd('mover', { ref, x: 1100, z: -230, rot: 0, alinhar: true }).ok);
+  assert.ok(sim.cmd('mover.desfazer', { ref }).ok);
+  assert.deepEqual(sim.json.mover.zona, { [String(ref)]: 1 }, 'a reforma do primeiro mover segue marcada');
+});
+
+test('zona: nunca se move para dentro da gleba da Arcologia', () => {
+  const { sim, casas } = mundoComCasas('mov2-gleba', 1);
+  const i = casas[0];
+  const P = sim.tabelas.predios;
+  terminarObra(sim, i);
+  const ref = P.ref(i);
+  const g = glebaDe(sim);
+  const lista = Array.from(g);
+  const par = typeof lista[0] === 'number' ? lista : lista.flat();
+  let gx = 0;
+  let gz = 0;
+  for (let k = 0; k < par.length; k += 2) { gx += par[k]; gz += par[k + 1]; }
+  gx /= par.length / 2;
+  gz /= par.length / 2;
+  const pv = sim.q.mover.previa({ ref, x: gx, z: gz, rot: 0, alinhar: false });
+  assert.equal(pv.ok, false);
+  assert.ok(['gleba', 'acesso'].includes(pv.codigo), pv.codigo);
+  const x0 = P.x[i];
+  assert.equal(sim.cmd('mover', { ref, x: gx, z: gz, rot: 0, alinhar: false }).ok, false);
+  assert.equal(P.x[i], x0);
 });
 
 test('zona: save no meio da mudança (pronta e em obra) e determinismo', () => {

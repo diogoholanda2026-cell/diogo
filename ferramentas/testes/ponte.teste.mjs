@@ -255,6 +255,35 @@ test('a rodovia do mapa continua intocável', () => {
   assert.ok(!r.ok);
 });
 
+test('a ponte da rodovia do mapa não se demole (nem pela ponte, nem pela estrutura)', () => {
+  const sim = novaSim('vias-regras');
+  const A = sim.tabelas.arestas;
+  const pontes = arestasVivas(sim).filter((e) => A.flags[e] & ARESTA.PONTE && A.flags[e] & ARESTA.RODOVIA);
+  assert.ok(pontes.length >= 1, 'a vila inicial traz a ponte sobre o rio');
+  const n0 = arestasVivas(sim).length;
+  for (const e of pontes) {
+    const r = sim.cmd('via.demolir', { arestas: [(A.ger[e] << 20) | e], sessao: 1 });
+    assert.deepEqual([r.ok, r.codigo], [false, 'rodovia']);
+  }
+  assert.equal(arestasVivas(sim).length, n0, 'nada foi demolido');
+});
+
+test('uma via no chão cruza o pé da rampa (elevação abaixo do limiar) como via comum; a rodovia segue intocável', () => {
+  const sim = novaSim('vias-regras');
+  assert.ok(via(sim, [[-700, -500], [-700, 300]], { cota: 6 }).r?.ok);
+  const tab = comFlag(sim, ARESTA.PONTE);
+  // a 12 m do começo da rampa a pista está a menos de ELEVACAO_PONTE do chão: cruzamento normal, divide a rampa
+  const { p, r } = via(sim, [[-740, -488], [-660, -488]]);
+  assert.ok(p.ok, JSON.stringify(p.erros));
+  assert.equal(p.divisoes, 1);
+  assert.ok(r?.ok);
+  assert.deepEqual(sim.validar(), []);
+  assert.deepEqual(conferirEspelho(sim.espelho, { alturaEm: (x, z) => sim.alturaEm(x, z) }), []);
+  assert.ok(comFlag(sim, ARESTA.PONTE).length > tab.length, 'a rampa dividida segue tabuleiro');
+  // mais acima na rampa (elevação maior que o limiar) a regra é a da passagem: sem altura livre, recusa
+  assert.ok(!via(sim, [[-740, -478], [-660, -478]], { construir: false }).p.ok);
+});
+
 test('save ida e volta e determinismo com ponte e viaduto', () => {
   const jogar = (sim) => {
     assert.ok(via(sim, ESTRADA).r?.ok);
