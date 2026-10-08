@@ -8,6 +8,7 @@ import { registrarEtapaMomento } from './Momento.jsx';
 import { t, temTexto } from '../textos.js';
 import * as fmt from '../formato.js';
 import { comando } from '../acoes.js';
+import { avisar } from '../loja.js';
 import { MARCOS } from '../../data/marcos.js';
 import { ITENS } from '../../data/holding.js';
 import { ECONOMIA } from '../../data/economia.js';
@@ -122,13 +123,25 @@ export function alvoDaParte(id, trecho = null) {
 export const iniciarEtapa = (id) => comando('arcologia.iniciar', { etapa: id });
 
 /** Troca o modo de envio dos materiais da etapa (D109): 'auto' ou 'manual'. */
-export const trocarEnvio = (id, modo) => comando('arcologia.envio', { etapa: id, modo });
+export const trocarEnvio = async (id, modo) => {
+  const r = await comando('arcologia.envio', { etapa: id, modo });
+  if (r.ok) avisar(t(`arc2.envio.trocado.${modo}`), 'info');
+  return r;
+};
 
 /** Manda n unidades de um item que falta da etapa (D109). */
-export const enviarMaterial = (id, item, n) => comando('arcologia.enviar', { etapa: id, item, n });
+export const enviarMaterial = async (id, item, n) => {
+  const r = await comando('arcologia.enviar', { etapa: id, item, n });
+  if (r.ok) avisar(t('arc2.enviado', { n, item: temTexto(`s3.item.${item}`) ? t(`s3.item.${item}`) : item }), 'info');
+  return r;
+};
 
 /** Manda de uma vez o que couber de todos os itens que faltam (D109). */
-export const enviarTudo = (id) => comando('arcologia.enviarTudo', { etapa: id });
+export const enviarTudo = async (id) => {
+  const r = await comando('arcologia.enviarTudo', { etapa: id });
+  if (r.ok) avisar(t('arc2.enviadoTudo'), 'info');
+  return r;
+};
 
 /** Importa o que falta para a etapa, item a item (descontado o que já vem importado). */
 export async function importarFalta(e, dep = null) {

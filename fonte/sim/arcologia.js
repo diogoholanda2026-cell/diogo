@@ -187,8 +187,8 @@ function mandar(sim, def, e, item, q) {
 const cabeDe = (sim, def, e, item) => Math.floor(Math.min(faltaDe(def, e, item), estoque(sim, item), 1000));
 
 /** Pede ao armazém o que falta da etapa e cabe no estoque; no modo manual não pede nada (D109). */
-function pedirMateriais(sim, def, e, forcar = false) {
-  if (e.envio === 'manual' && !forcar) return;
+function pedirMateriais(sim, def, e) {
+  if (e.envio === 'manual') return;
   for (const item of Object.keys(def.materiais)) {
     const q = cabeDe(sim, def, e, item);
     if (q >= 1) mandar(sim, def, e, item, q);

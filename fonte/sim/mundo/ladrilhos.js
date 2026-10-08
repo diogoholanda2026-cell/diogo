@@ -145,8 +145,12 @@ export function contornoTocaQuadrado(contorno, x0, z0, x1, z1) {
   return false;
 }
 
+const TOCADOS = new WeakMap(); // contorno -> { mapa, lista } (a geometria não muda com a posse)
+
 /** Ladrilhos [{ i, j }] que o contorno toca (ordem j, i). */
 export function ladrilhosDoContorno(contorno, mapa = MAPA_HELDOPOLIS) {
+  const guardado = TOCADOS.get(contorno);
+  if (guardado?.mapa === mapa) return guardado.lista;
   const n = mapa.ladrilhos;
   const L = mapa.ladrilho;
   const [ox, oz] = mapa.origem;
@@ -156,6 +160,7 @@ export function ladrilhosDoContorno(contorno, mapa = MAPA_HELDOPOLIS) {
       if (contornoTocaQuadrado(contorno, ox + i * L, oz + j * L, ox + (i + 1) * L, oz + (j + 1) * L)) out.push({ i, j });
     }
   }
+  TOCADOS.set(contorno, { mapa, lista: out });
   return out;
 }
 
@@ -192,8 +197,11 @@ export function situacaoArea(sim, id) {
     posse[c.j * n + c.i] = 1;
     ordem.push({ i: c.i, j: c.j, valor: Math.round(PRECO_BASE * (1 + SUBIDA_POR_COMPRA * (J.comprados + ordem.length)) * (1 - desc)) });
   }
-  const total = livre ? 0 : ordem.reduce((a, c) => a + c.valor, 0);
+  // os que ainda não se alcançam entram no preço como se fossem comprados depois (o total mostrado é o da área toda)
   const alcanca = faltam.length > 0 && resto.length === 0;
+  const todos = [...ordem];
+  for (const c of resto) todos.push({ i: c.i, j: c.j, valor: Math.round(PRECO_BASE * (1 + SUBIDA_POR_COMPRA * (J.comprados + todos.length)) * (1 - desc)) });
+  const total = livre ? 0 : todos.reduce((a, c) => a + c.valor, 0);
   const temLicenca = livre || J.licencas >= 1;
   const caixa = sim.holding.caixa();
   const temCreditos = livre || caixa >= total;
@@ -203,14 +211,13 @@ export function situacaoArea(sim, id) {
     { id: 'creditos', ok: temCreditos, chave: 'area.criterio.creditos', dados: { preco: total, caixa: Math.floor(caixa) } },
   ];
   const codigo = faltam.length === 0 ? 'comprado' : (criterios.find((c) => !c.ok)?.id ?? null);
-  return { ok: true, codigo, id, nome: area.nome, ladrilhos: ordem.length ? ordem : faltam.map((c) => ({ ...c, valor: 0 })), preco: total, criterios, pode: codigo === null };
+  return { ok: true, codigo, id, nome: area.nome, ladrilhos: todos, preco: total, criterios, pode: codigo === null };
 }
 
 /** Comando area.comprar { id }: todos os ladrilhos que faltam, uma licença, um pagamento; tudo ou nada. */
 function comprarArea(sim, { id } = {}) {
   const s = situacaoArea(sim, id);
-  if (!s.ok) return { ok: false, codigo: s.codigo };
-  if (!s.pode) return { ok: false, codigo: s.codigo };
+  if (!s.ok || !s.pode) return { ok: false, codigo: s.codigo };
   const livre = sim.json.partida?.modo === 'livre';
   if (!livre && !sim.holding.pagar(s.preco, 'ladrilho')) return { ok: false, codigo: 'creditos' };
   const L = sim.espelho.ladrilhos;
