@@ -308,19 +308,27 @@ export function criarEntrada(ctx, camera) {
     // e a vista perderia todo o caminho até ali (o zoom saía 30% menor); assim perde só o limiar, e o que a vista anda
     // no quadro de entrada é o que os dedos andaram nele (sem salto)
     const viaja = Math.hypot(mx - (g.p0[0].x + g.p0[1].x) / 2, my - (g.p0[0].y + g.p0[1].y) / 2);
-    if (g.pinca === null && ehPinca(dist - g.d0, g.d0, viaja)) g.pinca = g.d0 + pontoDaPinca(dist - g.d0, g.d0, viaja);
     const dAng = normalizar(ang - g.ang0) / RAD;
-    if (g.giro === null && ehGiro(dAng, g.d0, viaja)) g.giro = g.ang0 + pontoDoGiro(dAng, g.d0, viaja) * RAD;
+    // pedido do dono (08/10/2026): giro de dois dedos tem de funcionar. Os dois gestos são exclusivos e o primeiro a passar do
+    // limiar trava o modo (se passam no mesmo quadro, vale o que mais pesa: o arco do giro contra a mudança do vão); assim
+    // a pinça não gira nem anda, e o giro não aproxima, mas um nunca engole o outro
+    if (g.pinca === null && g.giro === null) {
+      const p = ehPinca(dist - g.d0, g.d0, viaja);
+      const r = ehGiro(dAng, g.d0, viaja);
+      const arco = Math.max(20, g.d0 / 2) * Math.abs(dAng) * RAD;
+      if (p && (!r || Math.abs(dist - g.d0) >= arco)) g.pinca = g.d0 + pontoDaPinca(dist - g.d0, g.d0, viaja);
+      else if (r) g.giro = g.ang0 + pontoDoGiro(dAng, g.d0, viaja) * RAD;
+    }
     const n = { ...camera.estado() };
     n.dist = g.pinca === null ? e0.dist : e0.dist * (g.pinca / Math.max(1, dist)) ** st.opcoes.sensPinca;
     // sobre o fantasma da ferramenta o giro dos dedos é do fantasma, não da câmera
     const doFantasma = g.sobreFantasma && st.aoGiroFerramenta;
     // pedido do dono (07/10/2026): na pinça a vista só aproxima ou afasta, sem girar nem andar com o dedo
-    n.guinada = g.giro === null || doFantasma || g.pinca !== null ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
+    n.guinada = g.giro === null || doFantasma ? e0.guinada : e0.guinada - (normalizar(ang - g.giro) / RAD) * st.opcoes.sensGiro;
     camera.definir(n);
     atualizar(t);
     // o ponto do chão do meio dos dedos fica sob o meio (o raio sai da câmera já posta em dia)
-    const soZoom = g.pinca !== null;
+    const soZoom = g.pinca !== null || g.giro !== null;
     const p = g.ancora ? chao(soZoom ? (g.p0[0].x + g.p0[1].x) / 2 : mx, soZoom ? (g.p0[0].y + g.p0[1].y) / 2 : my) : null;
     if (p) {
       camera.mover(g.ancora[0] - p[0], g.ancora[2] - p[2]);

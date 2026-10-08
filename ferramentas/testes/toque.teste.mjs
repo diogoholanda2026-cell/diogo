@@ -394,6 +394,25 @@ test('limiares: um arrasto de dois dedos com tremor, no jogo, não aproxima nem 
   assert.ok(Math.abs(e.x - base.x) + Math.abs(e.z - base.z) > 50, 'mas a vista andou com os dedos');
 });
 
+test('giro: dois dedos que giram 40 graus (com o vão variando um pouco) giram a câmera sem aproximar', () => {
+  const M = montar();
+  const base = M.cam.estado();
+  const cx = 500, cy = 250, r = 100;
+  const pos = (graus, vao) => { const a = (graus * Math.PI) / 180; return [cx - Math.cos(a) * vao, cy - Math.sin(a) * vao, cx + Math.cos(a) * vao, cy + Math.sin(a) * vao]; };
+  let q = pos(0, r);
+  M.ev('pointerdown', 1, q[0], q[1], 1000);
+  M.ev('pointerdown', 2, q[2], q[3], 1010);
+  for (let k = 1; k <= 20; k++) {
+    q = pos(2 * k, r * (1 + 0.004 * k));
+    M.ev('pointermove', 1, q[0], q[1], 1010 + 16 * k);
+    M.ev('pointermove', 2, q[2], q[3], 1010 + 16 * k);
+    M.quadro(1011 + 16 * k);
+  }
+  const e = M.cam.estado();
+  assert.ok(Math.abs(e.guinada - base.guinada) > 20, `a câmera girou ${e.guinada - base.guinada} graus`);
+  assert.ok(Math.abs(e.dist / base.dist - 1) < 0.005, `zoom sem querer: ${e.dist}`);
+});
+
 // ------------------------------------------------------------------------------------------------ estável
 
 test('estável: o dedo fantasma (pointerup perdido) não vira pinça: um toque primário limpa os dedos velhos', () => {
