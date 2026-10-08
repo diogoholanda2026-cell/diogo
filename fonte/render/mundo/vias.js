@@ -26,6 +26,7 @@ import { refDe, idxDaRef, gerDaRef } from '../../contratos/espelho.js';
 import { pedeTudo } from '../ponte.js';
 import { PRIORIDADE } from '../camera/selecao.js';
 import { porPerfil } from '../motor/perfis.js';
+import { criarViaduto } from '../vias/viaduto.js';
 
 /**
  * Parâmetros por perfil: alcance da malha (m do setor), faixa de troca com o chão pintado, cache de setores, envios
@@ -513,6 +514,8 @@ function criarVias(ctx) {
   ctx.quadro?.aquecer?.add?.(aquecerVia);
   let chao = ligarChao(ctx);
 
+  // pilares, viga e guarda-corpo das pontes e viadutos (PONT2, D106): uma malha só
+  const viaduto = criarViaduto(ctx, rede);
   const setores = new Map();
   const recebidos = [];
   /** A aresta realçada (idx, -1 nenhuma) e a última seleção do evento 'selecao' ({ tipo, ref } ou null). */
@@ -802,9 +805,11 @@ function criarVias(ctx) {
     rede,
     grade,
     aplicar,
+    viaduto,
     quadro(tMs, c) {
       uniformes(c);
       passo();
+      viaduto.quadro(tMs);
     },
     selecionar,
     pronto: prontoAgora,
@@ -855,6 +860,7 @@ function criarVias(ctx) {
     descartar() {
       for (const f of paraDesligar) f?.();
       ctx.quadro?.aquecer?.delete?.(aquecerVia);
+      viaduto.descartar();
       aquecerVia.geometry.dispose();
       for (const st of setores.values()) soltarMalha(st);
       tabela.dispose();
