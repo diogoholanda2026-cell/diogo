@@ -9,7 +9,8 @@ import { congelar } from '../comum/util.js';
 
 export const REGRAS_DONO = /* @__PURE__ */ congelar({
   // lote de n unidades leva t x max(1, 0,8 x n): 10 levam 8 vezes o tempo de 1
-  lote: { min: 1, max: 10, fatorTempo: 0.8 },
+  // D110 (08/10/2026): digita-se de 1 a 1000 (antes 1 a 10); a UI sugere 10 (padrao); lote de n leva t x max(1, 0,8 x n)
+  lote: { min: 1, max: 1000, padrao: 10, fatorTempo: 0.8 },
   // Depósito: 150% do preço base = preço de catálogo do item (o mesmo da venda à cidade a 100%, D25). O limite de 100
   // vendas por janela de 4 h saiu a pedido do dono (07/10/2026, D103): vendasPorJanela null = sem limite (a janela de
   // 14.400 tiques segue só para o contador de vendas)
@@ -71,7 +72,7 @@ export function faixaDaTarifa(b) {
 export const tempoDoLote = (t, n) => tempoPelasRegras(REGRAS_DONO, t, n);
 export const tempoPelasRegras = (regras, t, n) => t * Math.max(1, regras.lote.fatorTempo * n);
 
-/** true se n é um lote da regra do dono (inteiro de 1 a 10). */
+/** true se n é um lote da regra do dono (inteiro de 1 a 1000, D110). */
 export const loteValido = (n) => lotePelasRegras(REGRAS_DONO, n);
 export const lotePelasRegras = (regras, n) => Number.isInteger(n) && n >= regras.lote.min && n <= regras.lote.max;
 

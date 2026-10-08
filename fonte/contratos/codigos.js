@@ -29,7 +29,7 @@ export const CODIGOS = congelar({
   licenca: 'sem licença de ladrilho',
   vizinho: 'ladrilho sem vizinho comprado',
   comprado: 'ladrilho já é da Holding',
-  lote: 'lote fora de 1 a 10 (regra do dono)',
+  lote: 'lote fora de 1 a 1000 (regra do dono, D110) ou maior que o armazém',
   trancado: 'item ou linha trancada',
   pessoal: 'sem trabalhadores para a linha',
   limite: 'limite da janela do Depósito atingido',

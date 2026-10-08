@@ -417,3 +417,26 @@
   height: 44px;
   text-align: right;
 }
+
+/* campo do lote de produção (D110): digitável de 1 a 1000, atalhos e − / + de 1 em 1, alvos de 44 px (D99) */
+.lote-campo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.lote-campo-n {
+  flex: 0 0 76px;
+  min-width: 64px;
+  height: 44px;
+  text-align: center;
+}
+.lote-campo-rapidos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.lote-campo-bt {
+  min-width: 44px;
+  min-height: 44px;
+}

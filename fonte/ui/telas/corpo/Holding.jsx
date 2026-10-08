@@ -2,7 +2,7 @@
 //   Visão geral: valor da Holding em destaque, caixa, dívida e lucro por hora; o caixa dos últimos 12 meses; Influência
 //     e Legado em dois medidores de 0 a 100 com o efeito escrito (nunca num gráfico de dois eixos); quem é o jogador.
 //   Produção: tabela por item (estoque, produz/h, consome/h e a demanda da cidade por hora, D48), as linhas de cada
-//     prédio com o lote de 1 a 10, Auto e a sugestão (D57), a frota e o armazém (D47).
+//     prédio com o lote de 1 a 1000 digitado, Auto e a sugestão (D57), a frota e o armazém (D47).
 //   Mercado: o Depósito (venda a 150% do preço base, "37 de 100 vendas nesta janela · renova em mm:ss"), importação a
 //     160%, vender à cidade e "Abastecer a cidade por importação" (D48).
 //   Imóveis: os prédios da Holding, com um toque para ver no mapa.
@@ -17,6 +17,7 @@ import { Indicador } from '../../comp/Indicador.jsx';
 import { Grafico } from '../../comp/Grafico.jsx';
 import { Tabela } from '../../comp/Tabela.jsx';
 import { Quantidade } from '../../comp/Quantidade.jsx';
+import { LoteCampo, LOTE_PADRAO } from '../../comp/LoteCampo.jsx';
 import { Interruptor } from '../../comp/Interruptor.jsx';
 import { Botao } from '../../comp/Botao.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
@@ -86,7 +87,7 @@ function Geral({ b }) {
 // ------------------------------------------------------------------------------------------ produção
 
 function LinhaCompacta({ predio, l, i, tique, mult }) {
-  const [lote, setLote] = useState(l.n > 0 ? l.n : REGRAS_DONO.lote.max);
+  const [lote, setLote] = useState(l.n > 0 ? l.n : LOTE_PADRAO);
   // a ordem mudada em outro lugar (a folha do prédio, o Auto) vale aqui também
   useEffect(() => {
     if (l.n > 0) setLote(l.n);
@@ -99,7 +100,7 @@ function LinhaCompacta({ predio, l, i, tique, mult }) {
       <span class="hold-linha-item">{item ? nomeItem(item) : t('hold.semItem')}</span>
       {item ? (
         <>
-          <Quantidade a="hold.lote" valor={lote} rotulo={t('folha.linha.lote')} min={REGRAS_DONO.lote.min} max={REGRAS_DONO.lote.max} aoMudar={(v) => { setLote(v); ordem({ n: v }); }} />
+          <LoteCampo a="hold.lote" k={`${predio}-${i}`} valor={lote} rotulo={t('folha.linha.lote')} aoMudar={(v) => { setLote(v); ordem({ n: v }); }} />
           <Interruptor a="hold.auto" k={`${predio}-${i}`} rotulo={t('folha.linha.auto')} ligado={l.ativa ? !!l.auto : false} aoTrocar={(v) => ordem({ auto: v })} />
         </>
       ) : null}

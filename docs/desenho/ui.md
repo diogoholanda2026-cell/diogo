@@ -127,7 +127,7 @@ construção têm largura pelo rótulo (mínimo de 52 px).
 - **Simulação.** Não há desenho da simulação ainda. A seção 15 propõe o contrato que a interface precisa (resumo,
   eventos, consultas, ações com motivo) e desenha tudo para funcionar com a simulação na thread principal **ou** num
   worker (consultas assíncronas desde o primeiro dia).
-- **Regras do dono**, mostradas na interface exatamente como são: lotes de produção de 1 a 10; venda no Depósito a 150%
+- **Regras do dono**, mostradas na interface exatamente como são: lotes de produção de 1 a 1000 (D110); venda no Depósito a 150%
   do preço base, até 100 por janela; empréstimo de 50 mil por ano a 10% ao ano, dívida até 500 mil; renda de 5, 8 ou 11
   créditos por morador por hora pelo bem-estar (faixas de hoje: até 30%, 31 a 60%, 61 a 100%).
 - **Textos** em português do Brasil, frases curtas, sem travessão (o teste da vitrine procura "—" e "–" no DOM).
@@ -547,7 +547,7 @@ Substitui a barra de baixo inteira enquanto a ferramenta está ativa (o "painel 
 | Comercial e escritório | trabalhadores e vagas, clientes ou produtividade, lucro por hora, mercadoria, nível, avisos |
 | Industrial | trabalhadores, produção por hora, insumos, destino da carga, poluição, avisos |
 | Serviço | capacidade e uso, alcance (liga a camada certa), manutenção por hora, eficiência, veículos (M2), extensões (M2) |
-| Empresa da Holding | divisão, diretor, produção com **lote de 1 a 10** e Auto, estoque, lucro por hora, trabalhadores, cadeia "insumo → produto" com quem produz cada insumo, cor da marca |
+| Empresa da Holding | divisão, diretor, produção com **lote de 1 a 1000** e Auto, estoque, lucro por hora, trabalhadores, cadeia "insumo → produto" com quem produz cada insumo, cor da marca |
 | Arcologia | estrutura, etapa atual de N, requisitos (marco, créditos, materiais da Holding com origem), progresso, próxima etapa, "Iniciar etapa", cor |
 | Via | tipo, comprimento, fluxo e velocidade (se houver), condição (M3), Substituir e Melhorias (M2) |
 | Lote vazio ou terreno | zona, valor do terreno, dono (Holding, rival, cidade), recursos |
@@ -638,7 +638,7 @@ com número tem "de onde vem" no toque longo.
 |---|---|
 | Visão geral | valuation em 28/700 com a variação do mês e o gráfico de 12 meses; caixa, dívida, lucro por hora; **Influência** e **Legado** como dois medidores separados de 0 a 100 (nunca num gráfico de dois eixos) |
 | Divisões | cartões por divisão: diretor (monograma), receita, custo e lucro por hora, funcionários, reputação, projetos; trancadas com o marco |
-| Produção | tabela por produto: produz/h, consome/h, estoque, saldo (como o painel de produção do CS2 e o monitor do HC); a linha da cadeia "areia → vidro → painel de fachada → Torre"; ordens por empresa com **lote de 1 a 10** e Auto |
+| Produção | tabela por produto: produz/h, consome/h, estoque, saldo (como o painel de produção do CS2 e o monitor do HC); a linha da cadeia "areia → vidro → painel de fachada → Torre"; ordens por empresa com **lote de 1 a 1000** e Auto |
 | Mercado | o **Depósito**: comprar e vender por item; venda a **150% do preço base**; "37 de 100 vendas nesta janela · renova em 14 min" |
 | Imóveis | prédios da Holding com lucro por hora e ocupação; Localizar |
 | Rivais (M2) | holdings rivais, bairros de interesse, relação de −100 a 100 |
@@ -766,7 +766,7 @@ para o dono mandar o print).
 | Interruptor | trilho de 44 x 26 com o estado escrito ao lado ("Auto: ligado") |
 | Segmentado | 36 px visuais (alvo de 44), segmento ligado em `--s3` com traço `--ac` |
 | Deslizante | trilho de 4 px, polegar de 24 px (alvo de 44), passos marcados; valor em 15/650 ao lado |
-| Quantidade | [−] N [+] de 44 x 44; para os lotes de produção, limitado de 1 a 10 |
+| Quantidade | [−] N [+] de 44 x 44; para os lotes de produção, limitado de 1 a 10; o lote digita até 1000 (campo próprio, D110) |
 | Barra de progresso | 4 px, preenchimento `--ac`, `--ok` ou `--al`; tempo restante em 12/600 à direita |
 | Chip | 28 px, glifo de 16 e texto 12/600 |
 | Linha | 48 px (36 no PC): glifo ou chip de 32, título 15/600, subtítulo 13/500, valor 15/650 tabular ou ação |
@@ -1282,7 +1282,7 @@ celulasQuadra(x, z) -> [celulas]
 
 ```
 velocidade(v) · via.construir(tracado) · via.desfazer() · zona.pintar(celulas, zona) · construir(tipo, x, z, giro) ·
-demolir(ids) · etapa.iniciar(estrutura) · empresa.produzir(id, produto, lote 1 a 10, auto) · mercado.comprar(item, n) ·
+demolir(ids) · etapa.iniciar(estrutura) · empresa.produzir(id, produto, lote 1 a 1000, auto) · mercado.comprar(item, n) ·
 mercado.vender(item, n) · emprestar(v) · pagarJuros() · pagarParcela() · quitar() · decidir(evento, opcao) ·
 cor(id, cor) · renomear(id, nome) · salvar(espaco) · carregar(espaco) · exportar() · importar(arquivo)
 ```

@@ -1,5 +1,5 @@
-// Seção da folha do prédio da Holding (desenho da UI 8.7; D13, D47, D57 e a regra do dono dos lotes de 1 a 10):
-//   Produção: cada linha com o item (os que o prédio faz), o lote de 1 a 10 (começa em 10 com Auto, D57), Auto, o
+// Seção da folha do prédio da Holding (desenho da UI 8.7; D13, D47, D57 e a regra do dono dos lotes, D110):
+//   Produção: cada linha com o item (os que o prédio faz), o lote de 1 a 1000 digitado (começa em 10 com Auto, D57), Auto, o
 //     progresso com a contagem em mm:ss reais, por que parou, a sugestão de lote só quando ajuda (um toque aplica), a
 //     cadeia "insumo para produto" com quem produz cada insumo (um toque leva a folha até ele, com Voltar) e a compra
 //     de tempo (D13: 1, 5, 10, 30 e 60 min de jogo, com o preço em dólar).
@@ -14,14 +14,14 @@ import { consultar } from '../../consultas.js';
 import { Botao } from '../../comp/Botao.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
 import { Barra } from '../../comp/Barra.jsx';
-import { Quantidade } from '../../comp/Quantidade.jsx';
+import { LoteCampo, LOTE_PADRAO } from '../../comp/LoteCampo.jsx';
 import { Interruptor } from '../../comp/Interruptor.jsx';
 import { Segmentado } from '../../comp/Segmentado.jsx';
 import { Chip } from '../../comp/Chip.jsx';
 import { Bloco, Par, Avisos, Obra, navegar } from '../Folha.jsx';
 import { Trabalho } from './comercial.jsx';
 import { ITENS, PREDIOS_HOLDING } from '../../../data/holding.js';
-import { COMPRA_TEMPO, REGRAS_DONO } from '../../../data/economia.js';
+import { COMPRA_TEMPO } from '../../../data/economia.js';
 import { COLOCAVEIS } from '../../../data/colocaveis.js';
 
 /** Nome do item ('Concreto'); item desconhecido, o próprio id. */
@@ -65,7 +65,7 @@ function Cadeia({ ui, item }) {
 }
 
 function Linha({ ui, p, l, i, mult, tique }) {
-  const [lote, setLote] = useState(l.n > 0 ? l.n : REGRAS_DONO.lote.max);
+  const [lote, setLote] = useState(l.n > 0 ? l.n : LOTE_PADRAO);
   // a ordem mudada em outro lugar (a tela Holding, o Auto) vale aqui também
   useEffect(() => {
     if (l.n > 0) setLote(l.n);
@@ -89,7 +89,7 @@ function Linha({ ui, p, l, i, mult, tique }) {
       ) : null}
       <div class="fl-linha-lote">
         <span class="fl-par-rot">{t('folha.linha.lote')}</span>
-        <Quantidade a="folha.lote" valor={lote} rotulo={t('folha.linha.lote')} min={REGRAS_DONO.lote.min} max={REGRAS_DONO.lote.max} aoMudar={(v) => { setLote(v); ordem({ n: v }); }} />
+        <LoteCampo a="folha.lote" k={i} valor={lote} rotulo={t('folha.linha.lote')} aoMudar={(v) => { setLote(v); ordem({ n: v }); }} />
         <Interruptor a="folha.auto" k={i} rotulo={t('folha.linha.auto')} ligado={l.ativa ? !!l.auto : false} aoTrocar={(v) => ordem({ auto: v })} />
       </div>
       {l.rodando ? (

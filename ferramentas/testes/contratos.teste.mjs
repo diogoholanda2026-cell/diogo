@@ -34,7 +34,7 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 // ------------------------------------------------------------------------------------------------ regras do dono
 
 test('REGRAS_DONO: números exatos do dono, congelados', () => {
-  assert.deepEqual(REGRAS_DONO.lote, { min: 1, max: 10, fatorTempo: 0.8 });
+  assert.deepEqual(REGRAS_DONO.lote, { min: 1, max: 1000, padrao: 10, fatorTempo: 0.8 });
   assert.equal(REGRAS_DONO.deposito.venda, 1.5);
   assert.equal(REGRAS_DONO.deposito.precoBase, 'catalogo');
   assert.equal(REGRAS_DONO.deposito.vendasPorJanela, null);

@@ -61,7 +61,7 @@ export function registrar(registrarTextos) {
     'codigo.licenca': 'Sem licença para esta área.',
     'codigo.vizinho': 'A área precisa encostar numa área da Holding.',
     'codigo.comprado': 'Esta área já é da Holding.',
-    'codigo.lote': 'O lote vai de 1 a 10.',
+    'codigo.lote': 'O lote vai de 1 a 1000 e precisa caber no armazém.',
     'codigo.trancado': 'Ainda trancado.',
     'codigo.pessoal': 'Faltam trabalhadores para esta linha.',
     'codigo.limite': 'O Depósito chegou a 100 vendas nesta janela.',

@@ -14,7 +14,7 @@ partida para o robô ajustar, não valores fechados.
 
 1. **O jogo em uma frase:** você é a Holding Held, concessionária de Heldópolis. Planeja a cidade como no Cities:
    Skylines II (vias livres, zonas com demanda, serviços pela rede, trânsito), produz os materiais como no Highrise
-   City (cadeias com lotes de 1 a 10 e caminhões) e ergue a **Arcologia de Held**, o megaprojeto de assinatura, por
+   City (cadeias com lotes (digitáveis até 1000, D110) e caminhões) e ergue a **Arcologia de Held**, o megaprojeto de assinatura, por
    etapas que consomem esses materiais.
 2. **Tempo à CS2, com as regras do dono intactas.** Pausa, 1x, 2x e 4x. Um tique = 1 s de jogo. A "hora" das regras
    do dono é a **hora de jogo = 1 h real em 1x** (igual a hoje); o ano continua com 2 h de jogo, o mês com 10 min, e
@@ -86,7 +86,7 @@ de 5, 8 ou 11 por hora). Como empresa, ela produz, vende, se endivida e disputa 
 | Pilar | De onde vem | O que o jogador sente |
 |---|---|---|
 | **Cidade de verdade** | CS2 (referência máxima) | traçar avenidas no relevo, ver bairros nascerem pela demanda, resolver trânsito, água e energia pela rede |
-| **Produção com consequência** | Highrise City | cadeias que abastecem o crescimento da cidade e a obra; lotes de 1 a 10; caminhões que se veem; vender no Depósito |
+| **Produção com consequência** | Highrise City | cadeias que abastecem o crescimento da cidade e a obra; lotes (até 1000, D110); caminhões que se veem; vender no Depósito |
 | **A obra-marco** | megaprojetos reais (arquitetura.md) | a Arcologia de Held subindo por etapas, da terraplenagem do lago à coroa acesa da Torre Lâmina |
 | **Decisões de dono** | Frostpunk 2, Anno 117, VISAO.md | conselheiros, dilemas com ganho e custo, Influência x Legado, rivais (M3) |
 
@@ -110,7 +110,7 @@ de alto luxo, arquitetura.md seção 4) é a primeira parte grande e fecha o M1.
 ### 2.1 A cada minuto (o gesto)
 - Traçar ou emendar vias; pintar zonas; pôr um serviço onde a camada mostra falta.
 - Tocar num ícone de aviso sobre um prédio, ler a causa e agir (sem água, sem trabalhadores, trânsito).
-- Ajustar a produção: escolher o lote (1 a 10) e o automático de uma linha; vender excedente no Depósito.
+- Ajustar a produção: escolher o lote (1 a 1000, D110) e o automático de uma linha; vender excedente no Depósito.
 - Mudar a velocidade: pausar para planejar, 4x para ver crescer.
 
 ### 2.2 A cada hora de jogo (a decisão)
@@ -726,7 +726,7 @@ Uma unidade é uma carga de caminhão (por exemplo 10 t de brita ou 8 m³ de con
 - Colocados à mão, de frente para uma via, dentro de ladrilho comprado; extração só sobre o recurso (a produção cai
   com o recurso que resta na planta).
 - Cada prédio tem **linhas** (1 no nível 1, 2 no nível 2, 3 no nível 3; subir de nível custa créditos e materiais).
-- Cada linha roda **uma ordem de lote n (1 a 10)**: consome os insumos de n unidades do estoque na partida, leva
+- Cada linha roda **uma ordem de lote n (1 a 1000, D110)**: consome os insumos de n unidades do estoque na partida, leva
   `t x max(1, 0,8 x n) / produtividade` e entrega n unidades no estoque ao terminar (regra do dono, igual a hoje). Com
   **automático**, repete o mesmo lote enquanto houver insumo e espaço.
 - Produtividade = ocupação das vagas (trabalhadores do mercado da cidade, seção 7.3): abaixo de 50% a linha para.

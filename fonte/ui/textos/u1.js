@@ -9,6 +9,8 @@ export function registrar(registrarTextos) {
     // primitivas
     'comp.menos': 'Menos',
     'comp.mais': 'Mais',
+    'comp.lote.campo': 'Quantidade do lote (1 a {max})',
+    'comp.lote.rapido': 'Lote de {n}',
     'comp.minimo': 'Mínimo: {n}',
     'comp.maximo': 'Máximo: {n}',
     'comp.toqueDeNovo': 'Toque de novo para confirmar',
@@ -291,7 +293,7 @@ export function registrar(registrarTextos) {
     'menu.g.marco': 'Marco:',
     'menu.g.marco.def': 'degrau da cidade pelo XP (moradores, bem-estar, obras). Cada marco traz prêmio, áreas e o que pode ser construído.',
     'menu.g.lote': 'Lote:',
-    'menu.g.lote.def': 'cada linha da Holding produz de 1 a 10 unidades por ordem. Lote de 10 leva 8 vezes o tempo de 1.',
+    'menu.g.lote.def': 'cada linha da Holding produz de 1 a 1000 unidades por ordem (digite o número). Lote de n leva 0,8 vezes n o tempo de 1; o sugerido é 10.',
     'menu.g.deposito': 'Depósito:',
     'menu.g.deposito.def': 'vende o estoque a 150% do preço base, até 100 vendas a cada 4 h de jogo.',
     'menu.g.medidores': 'Influência e Legado:',

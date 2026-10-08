@@ -20,7 +20,7 @@ deste documento). A visão de longo prazo continua aqui.
   - Comércio, lazer e empresas da Holding em terrenos que valorizam.
   - Aeroporto com aviões e jatinhos, porto com iates, cargueiro e cruzeiro, helicópteros entre helipontos e carros
     esportivos.
-- **Economia fixada pelo dono:** lotes de 1 a 10, vendas no Depósito, empréstimo e renda de 5, 8 ou 11 créditos por
+- **Economia fixada pelo dono:** lotes (1 a 1000 digitados, D110), vendas no Depósito, empréstimo e renda de 5, 8 ou 11 créditos por
   morador. Por cima dela vêm valuation, lucro das empresas e renda do comércio.
 - **Plataforma:**
   - Hoje: navegador (three.js r186), instalável como app (PWA) no celular e no PC, com qualidades Leve, Média, Alta e

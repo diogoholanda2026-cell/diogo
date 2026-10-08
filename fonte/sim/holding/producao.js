@@ -1,4 +1,4 @@
-// Produção da Holding (dona: S3a): prédios da Holding, linhas com lote de 1 a 10 começando em 10 com Auto (D57),
+// Produção da Holding (dona: S3a): prédios da Holding, linhas com lote de 1 a 1000 (D110) começando em 10 com Auto (D57),
 // estoque global com a capacidade dos armazéns, produtividade pela ocupação das vagas e pela distância ao armazém
 // (D47), salários, subida de nível e compra de tempo nas linhas (D13).
 //
@@ -245,6 +245,11 @@ function iniciar(sim, e, l) {
     l.parada = 'creditos';
     return false;
   }
+  // um lote maior que o armazém inteiro nunca caberia: não parte (nem gasta insumo)
+  if (p.cap > 0 && l.n > p.cap) {
+    l.parada = 'armazem';
+    return false;
+  }
   for (const [k, q] of Object.entries(item.req)) {
     if ((p.estoque[k] ?? 0) < q * l.n) {
       l.parada = 'estoque';
@@ -349,6 +354,7 @@ function ordem(sim, { predio, linha, item, n, auto } = {}) {
   const { e, l, codigo } = linhaDe(sim, predio, linha);
   if (codigo) return codigo;
   if (!lotePelasRegras(regrasDe(sim), n)) return 'lote';
+  if (J(sim).cap > 0 && n > J(sim).cap) return 'lote'; // maior que o armazém: nunca caberia (a frase explica)
   const def = PREDIOS_HOLDING[e.tipo];
   if (typeof item !== 'string' || !def.produz.includes(item) || !sim.progresso.liberado(`item.${item}`)) return 'trancado';
   const comAuto = auto === true;

@@ -48,7 +48,7 @@ implementado ainda.
 Você é a **Holding Held**, concessionária que ganhou o direito de planejar Heldópolis, uma cidade nova no litoral
 brasileiro. Você traça avenidas no relevo, pinta zonas e vê bairros nascerem pela demanda, leva água, esgoto, energia e
 serviços pela rede viária, e resolve o trânsito, como no **Cities: Skylines II**. Ao mesmo tempo você produz os
-materiais da cidade em cadeias com lotes de 1 a 10, estoque e caminhões, como no **Highrise City**: do marco 3 em
+materiais da cidade em cadeias com lotes de 1 a 10 (digitável até 1000, D110), estoque e caminhões, como no **Highrise City**: do marco 3 em
 diante a cidade densa só sobe com material da Holding. Com esse caixa e esses materiais você ergue a **Arcologia de
 Held**, o megaprojeto de assinatura, num plano diretor que o dono escolhe entre três, tirados de distritos reais. No M1
 a **Torre Lâmina**, retangular e de alto luxo, sobe em 4 etapas até o heliponto a 330 m, e cada etapa devolve algo que
@@ -59,7 +59,7 @@ a cidade usa.
 | Pilar | Referência | O que o dono sente |
 |---|---|---|
 | **Cidade de verdade** | CS2 (referência máxima) | escala real, relevo, vias livres em curva, bairros que crescem sozinhos, redes e trânsito que pesam no jogo |
-| **Produção com consequência** | Highrise City | a cidade de nível 3 a 5 depende da Holding; lotes de 1 a 10; caminhões que se veem; Depósito |
+| **Produção com consequência** | Highrise City | a cidade de nível 3 a 5 depende da Holding; lotes de 1 a 10 (digitável até 1000, D110); caminhões que se veem; Depósito |
 | **Megaprojetos reais em tudo** | One Vanderbilt, 111 West 57th, Jewel Changi, Marina Bay, Rede Sarah, CEUs, CopenHill, Aterro do Flamengo | a Torre, os serviços e as fábricas com arquitetura de verdade; a Arcologia subindo por etapas |
 | **Decisões de dono** | Frostpunk 2, Anno 117 | Conselho com dilemas, Influência e Legado com efeito escrito, memória das escolhas |
 | **Bonito no celular** | CS2, Anno 1800, Manor Lords | luz física, neblina de altura, noite de metrópole, vida de luxo, 30 qps no Poco X7 |
@@ -253,6 +253,7 @@ padrão já adotado não trava nada, salvo o plano diretor (D59), que é a decis
 | D107 | Compra da Várzea do Held por área, além do ladrilho a ladrilho | pedido do dono (08/10/2026): "comprar as Várzeas ao clicar na região dela, ao atender os critérios". Comando `area.comprar { id }` e consulta `area.compra { id }` (genéricos por id; liberada só a `varzea`, lista em `fonte/data/areas-compraveis.js`; Vila e gleba são da área inicial). Compra **todos os ladrilhos que o contorno toca e ainda não são da Holding**, em ordem de adjacência, de uma vez, tudo ou nada. **Critérios:** (a) a área toca um ladrilho já da Holding (vizinho, direto ou pela cadeia dos ladrilhos da própria área); (b) **uma** licença de ladrilho para a área toda (no Modo livre não pede); (c) créditos para o total = soma ladrilho a ladrilho como se comprados em sequência (D3: 40.000 x (1 + 0,15 x comprados), desconto da Influência, cada um arredondado), com a subida de 15% a cada ladrilho. Cada ladrilho entra em `historico` e `comprados` como compra normal e emite o evento `ladrilho`. Recusas: `vizinho`, `licenca`, `creditos`, `comprado` (nada a comprar), `inexistente` (id fora da lista). Interface: na ferramenta Áreas, tocar dentro do contorno escolhe a área inteira (contorno realçado, ladrilhos que faltam, preço total, critérios com ✓/✗ e o que falta); tocar num ladrilho que falta da área, fora do contorno, oferece "Só este ladrilho" ou "A área toda" | pedido do dono (08/10/2026) |
 | D108 | Vias do jogador ligam à Rodovia (BR) | pedido do dono (08/10/2026): "conectar as estradas que construo, com a Rodovia que já inicia o jogo". **Revoga a intocabilidade da rodovia fora da ponte** (a D52 e a D53 seguem: a energia da rodovia chega só pelo nó de entrada, por via com calçada). O jogador pode (1) ligar uma via em T no meio de uma aresta da rodovia, (2) cruzá-la em X e (3) ligar a qualquer nó dela. A aresta se divide num nó novo e as duas metades mantêm o tipo `rodovia`, a flag `RODOVIA` e a cota (interpolada). Valem as regras de ângulo, trecho mínimo (1,5 m), greide e declive das outras ligações (a via nova encontra a cota da rodovia no ponto; sem rampa que sirva, a prévia recusa com `declive`). **Seguem intocáveis:** a ponte da rodovia (não divide, não cruza no nível, nós das pontas fechados) e, a menos de 25 m das pontas dela, a rodovia (recusa por `colisao`); a ponte do jogador e a Arcologia. **Demolir e melhorar a rodovia seguem recusados** (`rodovia`); demolir a via ligada deixa a rodovia em duas arestas com o nó de grau 2 (sem fusão) | pedido do dono (08/10/2026) |
 | D109 | Envio dos materiais da Arcologia, automático ou manual por etapa | pedido do dono (08/10/2026): "eu poder escolher mandar de forma manual ou automática os itens necessários para cada etapa de construção da Arcologia". Cada etapa tem `envio`: `auto` (padrão, como era: a Holding pede ao armazém tudo o que falta e cabe no estoque, teto de 1000 por pedido, D47) ou `manual` (nada sai sozinho). Comandos `arcologia.enviar { etapa, item, n }` (inteiro de 1 até o que falta do item e o estoque; códigos `valor`, `inexistente`, `nada`, `estoque`, `trancado`), `arcologia.enviarTudo { etapa }` (o que couber de todos os itens) e `arcologia.envio { etapa, modo }` (troca a qualquer hora; voltar ao auto pede o que falta na hora). Vale para etapa disponível ou em obra; a obra só anda com o que chegou. Save antigo carrega como `auto` (migração silenciosa). Consulta `arcologia` traz `envio` e, por item, `precisa`, `pedido`, `entregue`, `falta`, `estoque`. UI: seletor Automático ou Manual, e no manual a lista com Quantidade (1 a 10) e Enviar, mais Enviar tudo que couber (Livro e folha da parte; textos em `ui/textos/arc2.js`). Não mexe em preços nem nas `REGRAS_DONO` | pedido do dono (08/10/2026) |
+| D110 | Lote de produção digitado de 1 a 1000 | pedido do dono (08/10/2026): "1000 de concreto de uma vez". **Revisa a regra dos lotes de 1 a 10** (a D57 e as decisões antigas ficam no histórico; o fator de tempo não muda). `REGRAS_DONO.lote = { min: 1, max: 1000, padrao: 10, fatorTempo: 0.8 }`: o lote de n leva t x max(1, 0,8 x n) e consome n vezes os insumos. `linha.ordem` recusa com `lote` o n fora de 1..1000, não inteiro, ou maior que a capacidade do armazém (quando há armazém; a frase diz que o lote precisa caber); a linha com Auto cujo lote passou a não caber (armazém demolido) para com `armazem` sem gastar insumo. O padrão que a UI sugere segue 10 (`REGRAS_DONO.lote.padrao`; a linha nova começa em 10, D57). UI: campo numérico digitável (só dígitos, prende em 1..1000 ao sair, seleciona ao focar), atalhos 1, 10, 100 e 1000 e −/+ de 1 em 1, alvos de 44 px (D99). O robô A2 segue com lotes de até 10 (calibração) | pedido do dono (08/10/2026) |
 
 ### 2.2 Estrutura de dados da simulação
 
@@ -836,7 +837,7 @@ cada arquivo depois da F0. **Uma parcela "b" ou "c" herda os arquivos da parcela
   pela via com racionamento; energia externa pelo nó de entrada (D52).
 - Economia com as regras do dono, caixa nunca negativo (D41), orçamento e empréstimo.
 - Holding: Escritório de Obra (com o primeiro armazém), Pedreira, Areal, Olaria e Concreteira (cimento importado até o
-  M1b); lotes de 1 a 10 começando em 10 com Auto; estoque, reserva, abastecimento da cidade (D48), Depósito,
+  M1b); lotes de 1 a 10 (digitável até 1000, D110) começando em 10 com Auto; estoque, reserva, abastecimento da cidade (D48), Depósito,
   importação, frota (D47), compra de tempo nas linhas.
 - Arcologia no plano escolhido: `lago.e1` e `torre.e1..e4` com efeitos (D49), fantasma com as silhuetas LOD1, obra por
   fases com grua de 360 m, helicóptero da Holding.
@@ -1239,7 +1240,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   regras escritas, caixa, "não pago"); vitrine nos 4 tamanhos.
 - **Testa sem as outras:** `sim-falsa.js` e `render-falso.js`. **Depende de:** F0.
 - **Entregue em 27/09/2026** (U1a, revisada). Publicou 19 primitivas em `ui/comp` (Interruptor, Segmentado,
-  Deslizante, Quantidade de 1 a 10, DoisToques, Barra, Chip, Linha, Tabela, Abas, Popover e Ancora, Dica, Folha, Tela
+  Deslizante, Quantidade de 1 a 10 e o campo de lote até 1000 (D110), DoisToques, Barra, Chip, Linha, Tabela, Abas, Popover e Ancora, Dica, Folha, Tela
   e Secao, Modal, Aviso, Vazio, Grafico em SVG, Indicador) e `botaoDoPasso` (o toque no limite avisa por
   `loja.avisar`); 148 glifos de traço 1,75 (`glifoBemEstar`, `registrarGlifos`); a barra de cima em
   `registrarHud('cima')`, que aperta em 4 níveis no PC; o cartão em `registrarHud('folha')` (residencial, serviço
@@ -1452,7 +1453,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** receitas e despesas por hora de jogo com **o caixa nunca negativo** e a ordem de pagamento (D41);
   empréstimo idêntico ao de hoje; mercado da cidade (D48), Depósito (150%, 100 por janela de 4 h), importação a 160%;
   Escritório de Obra e os 4 prédios de produção do M1a com custo (Escritório de Obra 15 mil, Pedreira 12 mil, Areal 8
-  mil, Olaria 15 mil, Concreteira 30 mil; calibrar); linhas com lote de 1 a 10 começando em 10 com Auto e sugestão de
+  mil, Olaria 15 mil, Concreteira 30 mil; calibrar); linhas com lote de 1 a 10 (até 1000 digitado, D110) começando em 10 com Auto e sugestão de
   lote (D57); produtividade pela ocupação e pela distância ao armazém; frota (D47); compra de tempo nas linhas (D13);
   XP e marcos (D51) com o requisito do marco 7; licenças; Influência e Legado com efeito (D55); Ato 1 com 3 decisões
   (`vila.agua` no marco 0 e mais duas); 3 objetivos abertos e "Onde você parou" (D58); série mensal; caixa inicial de

@@ -1,5 +1,5 @@
 // Regras do dono (A2; dona: S3a): tarifa arredondada, limite anual e dívida do empréstimo, 10% em um ano, mora depois
-// de 10 anos, Depósito a 150% com 100 vendas por janela e a virada, lote de 1 a 10 (10 levam 8 vezes 1), caixa nunca
+// de 10 anos, Depósito a 150% com 100 vendas por janela e a virada, lote de 1 a 1000 (D110; 10 levam 8 vezes 1), caixa nunca
 // negativo com 10 mil comandos aleatórios, dívida igual à soma dos contratos, o fator da moeda que só a interface usa
 // (D87) e o calendário (D67). Roda só com os domínios da S3a: não depende de nenhuma outra parcela.
 import { test } from 'node:test';
@@ -34,7 +34,7 @@ const pular = (sim, tique) => sim.definirNucleo({ ...sim.estadoNucleo(), tique }
 test('REGRAS_DONO: os números do dono, congelados', () => {
   const congelado = (o) => Object.isFrozen(o) && Object.values(o).every((v) => typeof v !== 'object' || v === null || congelado(v));
   assert.ok(congelado(REGRAS_DONO));
-  assert.deepEqual(REGRAS_DONO.lote, { min: 1, max: 10, fatorTempo: 0.8 });
+  assert.deepEqual(REGRAS_DONO.lote, { min: 1, max: 1000, padrao: 10, fatorTempo: 0.8 });
   assert.equal(REGRAS_DONO.deposito.venda, 1.5);
   assert.equal(REGRAS_DONO.deposito.vendasPorJanela, null);
   assert.equal(REGRAS_DONO.deposito.janelaTiques, 4 * 3600);
@@ -151,15 +151,15 @@ test('Depósito: 150% do preço de catálogo, sem limite de vendas (D103)', () =
   assert.equal(sim.cmd('deposito.vender', { item: 'brita', n: 1 }).codigo, 'nada');
 });
 
-test('lote: 0 e 11 recusados; o de 10 leva 8 vezes o de 1', () => {
+test('lote: 0 e 1001 recusados; o de 10 leva 8 vezes o de 1', () => {
   assert.equal(tempoDoLote(30, 10), 8 * tempoDoLote(30, 1));
-  assert.deepEqual([0, 11, 1.5, -1, '10'].map((n) => loteValido(n)), [false, false, false, false, false]);
-  assert.deepEqual([1, 5, 10].map((n) => loteValido(n)), [true, true, true]);
+  assert.deepEqual([0, 1001, 1.5, -1, '10'].map((n) => loteValido(n)), [false, false, false, false, false]);
+  assert.deepEqual([1, 5, 10, 1000].map((n) => loteValido(n)), [true, true, true, true]);
   const sim = simS3a({ semente: 'lote', populacao: 2000, bemEstar: 50 });
   predioHolding(sim, 'escritorioObra', 0, 0);
   const ped = predioHolding(sim, 'pedreira', 200, 0);
   assert.equal(sim.cmd('linha.ordem', { predio: ped, linha: 0, item: 'brita', n: 0, auto: false }).codigo, 'lote');
-  assert.equal(sim.cmd('linha.ordem', { predio: ped, linha: 0, item: 'brita', n: 11, auto: false }).codigo, 'lote');
+  assert.equal(sim.cmd('linha.ordem', { predio: ped, linha: 0, item: 'brita', n: 1001, auto: false }).codigo, 'lote');
   // medida em tiques: lote de 1 e lote de 10, na produtividade 1
   const medir = (n) => {
     const s = simS3a({ semente: `lote${n}`, populacao: 2000, bemEstar: 50 });

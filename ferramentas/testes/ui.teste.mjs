@@ -361,7 +361,7 @@ test('Economia: limites do empréstimo pela regra do dono (passo, ano, dívida c
 
 // ------------------------------------------------------------------------------------------------ primitivas
 
-test('gráfico: escala com o zero e passos redondos; tabela ordena números e texto; quantidade presa de 1 a 10', async () => {
+test('gráfico: escala com o zero e passos redondos; tabela ordena números e texto; quantidade presa de 1 a 10 (o lote digita até 1000, lote-1000)', async () => {
   const { grafico, tabela, quantidade } = await ui();
   assert.equal(grafico.passoRedondo(180000, 3), 100000);
   assert.equal(grafico.passoRedondo(9, 3), 5);
