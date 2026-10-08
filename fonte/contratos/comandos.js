@@ -90,6 +90,18 @@ export const COMANDOS = congelar({
     dono: 'X1b', args: '{ etapa } (nada: a etapa já está pronta; valor: etapa que não existe)',
     codigos: ['marco', 'creditos', 'emObra', 'trancado', 'nada', 'valor'], exemplo: { etapa: 'lago.e1' },
   },
+  'arcologia.enviar': {
+    dono: 'X1b', args: '{ etapa, item, n } (D109: manda n unidades, 1 até o que falta do item e o estoque do armazém; etapa em obra ou disponível)',
+    codigos: ['valor', 'inexistente', 'nada', 'estoque', 'trancado'], exemplo: { etapa: 'lago.e1', item: 'brita', n: 10 },
+  },
+  'arcologia.enviarTudo': {
+    dono: 'X1b', args: '{ etapa } (D109: manda o que couber de todos os itens que faltam)',
+    codigos: ['valor', 'inexistente', 'nada', 'estoque', 'trancado'], exemplo: { etapa: 'lago.e1' },
+  },
+  'arcologia.envio': {
+    dono: 'X1b', args: "{ etapa, modo: 'auto' | 'manual' } (D109: a qualquer hora; auto pede o que falta)", codigos: ['valor', 'inexistente'],
+    exemplo: { etapa: 'lago.e1', modo: 'manual' },
+  },
   acelerar: {
     dono: 'S3a', args: '{ alvo: { predio, linha }, minutos: 1 | 5 | 10 | 30 | 60 } (etapas só se o dono pedir, D13)',
     codigos: ['creditos', 'nada', 'valor', 'inexistente'], exemplo: { alvo: { predio: 9, linha: 0 }, minutos: 5 },

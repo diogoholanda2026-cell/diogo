@@ -9,6 +9,7 @@ import { folhaAberta } from '../Cartao.jsx';
 import { Barra } from '../../comp/Barra.jsx';
 import { Botao } from '../../comp/Botao.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
+import { EnvioMateriais } from '../../telas/EnvioMateriais.jsx';
 import { PARTES_ORDEM } from '../../../data/arcologia-plano.js';
 import { nomeParte, nomeTrecho, nomeEtapa, fraseEfeito, fraseRecusa, iniciarEtapa } from '../../telas/LivroArcologia.jsx';
 
@@ -49,6 +50,7 @@ export function SecaoArcologia({ ui, sel }) {
           {(e.materiais ?? []).map((m) => (
             <Par k={m.item} rotulo={temTexto(`s3.item.${m.item}`) ? t(`s3.item.${m.item}`) : m.item} valor={t('x1.material', { entregue: fmt.numero(m.entregue ?? 0), pede: fmt.numero(m.pede) })} estado={(m.entregue ?? 0) >= m.pede ? 'ok' : e.estado === 2 ? 'al' : null} />
           ))}
+          <EnvioMateriais e={e} />
           {(e.efeitos ?? []).map((ef) => fraseEfeito(ef)).filter(Boolean).map((x) => (
             <p class="fl-nota">{x}</p>
           ))}

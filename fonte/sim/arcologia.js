@@ -9,7 +9,7 @@
 // lago.e1 registra a cava do Mirror Lake no aplainar ao começar e, pronta, liga as vias internas no grafo com a flag
 // ARCOLOGIA (os 8 portões) e o reservatório na rede de água. O marco 7 pede a torre.e4 pronta.
 //
-// Publica: comando arcologia.iniciar, consulta arcologia, espelho.arcologia, evento etapa e sim.arcologia (vagas,
+// Publica: comandos arcologia.iniciar, enviar, enviarTudo e envio (modo auto ou manual dos materiais, D109), consulta arcologia, espelho.arcologia, evento etapa e sim.arcologia (vagas,
 // moradores de luxo, a Contribuição deles, que a economia soma na dos moradores, e o valor da obra, que entra na
 // valuation). Estado na seção 'arcologia' (save e hash).
 import { ETAPA, ARESTA } from '../contratos/flags.js';
@@ -41,7 +41,7 @@ const CHEGADA = 'arcologia';
 const J = (sim) => sim.json.arcologia;
 
 /** Estado vazio de uma etapa. */
-const etapaVazia = () => ({ estado: ETAPA.TRANCADA, ini: -1, fim: -1, trabalho: 0, pago: 0, entregue: {}, pedido: {}, parada: null });
+const etapaVazia = () => ({ estado: ETAPA.TRANCADA, ini: -1, fim: -1, trabalho: 0, pago: 0, entregue: {}, pedido: {}, parada: null, envio: 'auto' });
 
 /** Seção 'arcologia' de uma partida nova. */
 export function arcologiaVazia() {
@@ -164,22 +164,34 @@ function atualizarDisponiveis(sim) {
 
 // ------------------------------------------------------------------------------------------------ materiais
 
-/** Pede ao armazém o que falta da etapa e cabe no estoque (o teto da frota vale aqui, D47). */
-function pedirMateriais(sim, def, e) {
-  for (const [item, n] of Object.entries(def.materiais)) {
-    const falta = n - (e.pedido[item] ?? 0);
-    if (falta <= 0) continue;
-    const pode = Math.min(falta, estoque(sim, item), 1000);
-    if (!(pode >= 1)) continue;
-    const q = Math.floor(pode);
-    const nomeado = typeof sim.holding.registrarChegada === 'function';
-    // sem a S3a, o substituto entrega na hora e chama a função; com ela, o nome do tratador sobrevive ao save
-    const r = sim.holding.entregar({
-      item, n: q, origem: 'armazem', destino: def.id,
-      aoChegar: nomeado ? CHEGADA : (x) => chegou(sim, x),
-    });
-    if (r === -1) continue;
-    e.pedido[item] = (e.pedido[item] ?? 0) + q;
+/** Modos de envio dos materiais (D109): 'auto' pede sozinho o que falta; 'manual' espera o jogador mandar. */
+export const MODOS_ENVIO = Object.freeze(['auto', 'manual']);
+
+/** Quanto ainda não foi pedido ao armazém de um item da etapa. */
+const faltaDe = (def, e, item) => Math.max(0, (def.materiais[item] ?? 0) - (e.pedido[item] ?? 0));
+
+/** Manda q unidades de um item do armazém para a etapa (o teto da frota vale aqui, D47); false se a frota recusou. */
+function mandar(sim, def, e, item, q) {
+  const nomeado = typeof sim.holding.registrarChegada === 'function';
+  // sem a S3a, o substituto entrega na hora e chama a função; com ela, o nome do tratador sobrevive ao save
+  const r = sim.holding.entregar({
+    item, n: q, origem: 'armazem', destino: def.id,
+    aoChegar: nomeado ? CHEGADA : (x) => chegou(sim, x),
+  });
+  if (r === -1) return false;
+  e.pedido[item] = (e.pedido[item] ?? 0) + q;
+  return true;
+}
+
+/** O que cabe mandar agora de um item: o que falta, limitado ao estoque e ao teto de 1000 por pedido (inteiro). */
+const cabeDe = (sim, def, e, item) => Math.floor(Math.min(faltaDe(def, e, item), estoque(sim, item), 1000));
+
+/** Pede ao armazém o que falta da etapa e cabe no estoque; no modo manual não pede nada (D109). */
+function pedirMateriais(sim, def, e, forcar = false) {
+  if (e.envio === 'manual' && !forcar) return;
+  for (const item of Object.keys(def.materiais)) {
+    const q = cabeDe(sim, def, e, item);
+    if (q >= 1) mandar(sim, def, e, item, q);
   }
 }
 
@@ -375,6 +387,62 @@ function iniciar(sim, { etapa } = {}) {
   return { ok: true, dados: { custo: def.creditos, fim: e.ini + duracaoDe(def) } };
 }
 
+/** A etapa recebe materiais? null se sim, senão o código: valor, inexistente, nada (pronta) ou trancado. */
+function recusaEnvio(sim, etapa) {
+  if (typeof etapa !== 'string') return { codigo: 'valor' };
+  const def = etapaDe(etapa);
+  if (!def) return { codigo: 'inexistente' };
+  const e = J(sim).etapas[etapa];
+  if (e.estado === ETAPA.PRONTA) return { codigo: 'nada' };
+  if (e.estado !== ETAPA.EM_OBRA && e.estado !== ETAPA.DISPONIVEL) return { codigo: 'trancado' };
+  return { def, e };
+}
+
+/** arcologia.enviar { etapa, item, n }: manda n unidades de um item que falta, do armazém para a etapa (D109). */
+function enviar(sim, { etapa, item, n } = {}) {
+  if (!Number.isInteger(n) || n < 1) return 'valor';
+  const r = recusaEnvio(sim, etapa);
+  if (!r.def) return r.codigo;
+  const { def, e } = r;
+  if (typeof item !== 'string' || !(item in def.materiais)) return 'inexistente';
+  const falta = faltaDe(def, e, item);
+  if (falta < 1) return 'nada';
+  if (n > falta || n > 1000) return 'valor';
+  if (n > estoque(sim, item)) return 'estoque';
+  if (!mandar(sim, def, e, item, n)) return 'estoque';
+  return { ok: true, dados: { item, n, falta: falta - n } };
+}
+
+/** arcologia.enviarTudo { etapa }: manda de uma vez o que couber de todos os itens que faltam. */
+function enviarTudo(sim, { etapa } = {}) {
+  const r = recusaEnvio(sim, etapa);
+  if (!r.def) return r.codigo;
+  const { def, e } = r;
+  const faltam = Object.keys(def.materiais).filter((item) => faltaDe(def, e, item) >= 1);
+  if (!faltam.length) return 'nada';
+  const enviado = {};
+  for (const item of faltam) {
+    const q = cabeDe(sim, def, e, item);
+    if (q >= 1 && mandar(sim, def, e, item, q)) enviado[item] = q;
+  }
+  if (!Object.keys(enviado).length) return 'estoque';
+  return { ok: true, dados: { enviado } };
+}
+
+/** arcologia.envio { etapa, modo }: troca o modo a qualquer hora; ao voltar para o automático, pede o que falta (D109). */
+function trocarEnvio(sim, { etapa, modo } = {}) {
+  if (typeof etapa !== 'string' || !MODOS_ENVIO.includes(modo)) return 'valor';
+  const def = etapaDe(etapa);
+  if (!def) return 'inexistente';
+  const e = J(sim).etapas[etapa];
+  if (e.envio !== modo) {
+    e.envio = modo;
+    if (modo === 'auto' && e.estado === ETAPA.EM_OBRA) pedirMateriais(sim, def, e);
+    sim.mudancas.marcar('arcologia');
+  }
+  return { ok: true, dados: { modo } };
+}
+
 // ------------------------------------------------------------------------------------------------ consulta
 
 const data = (t) => (t >= 0 ? { tique: t, ...dataDoTique(t) } : null);
@@ -404,9 +472,12 @@ function etapaVista(sim, def) {
     emParalelo: ETAPAS_ORDEM.filter((id) => id !== def.id && J(sim).etapas[id].estado === ETAPA.EM_OBRA),
     recusa: e.estado === ETAPA.EM_OBRA || e.estado === ETAPA.PRONTA ? null : recusa(sim, def, e),
     creditos: def.creditos,
+    envio: e.envio,
     materiais: Object.entries(def.materiais).map(([item, pede]) => ({
       item, pede, entregue: e.entregue[item] ?? 0, aCaminho: Math.max(0, (e.pedido[item] ?? 0) - (e.entregue[item] ?? 0)),
       estoque: Number.isFinite(estoque(sim, item)) ? estoque(sim, item) : 0,
+      // D109: precisa, pedido (já mandado, a caminho ou chegado), entregue (chegou), falta (ainda por mandar)
+      precisa: pede, pedido: e.pedido[item] ?? 0, falta: faltaDe(def, e, item),
     })),
     minutos: def.minutos,
     fases: def.fases,
@@ -506,6 +577,8 @@ function validar(sim) {
     }
     if (![0, 1, 2, 3].includes(e.estado)) erros.push(`etapa ${def.id}: estado ${e.estado}`);
     for (const [item, n] of Object.entries(e.entregue)) if (!(n >= 0 && n <= (def.materiais[item] ?? 0))) erros.push(`etapa ${def.id}: ${item} entregue ${n}`);
+    if (!MODOS_ENVIO.includes(e.envio)) erros.push(`etapa ${def.id}: envio ${e.envio}`);
+    for (const [item, n] of Object.entries(e.pedido)) if (!(n >= 0 && n <= (def.materiais[item] ?? 0))) erros.push(`etapa ${def.id}: ${item} pedido ${n}`);
     if (e.estado >= ETAPA.EM_OBRA) for (const dep of abertas(sim, def)) erros.push(`etapa ${def.id} em obra sem ${dep} pronta`);
   }
   return erros;
@@ -514,6 +587,9 @@ function validar(sim) {
 export function registrar(sim) {
   sim.registrarJson('arcologia', arcologiaVazia());
   sim.registrarComando('arcologia.iniciar', iniciar);
+  sim.registrarComando('arcologia.enviar', enviar);
+  sim.registrarComando('arcologia.enviarTudo', enviarTudo);
+  sim.registrarComando('arcologia.envio', trocarEnvio);
   sim.registrarConsulta('arcologia', consulta);
   sim.registrarSistema(1, 0, sistema, 1, { nome: 'arcologia', ordem: ORDEM.arcologia });
   sim.holding.registrarChegada?.(CHEGADA, (x) => chegou(sim, x));

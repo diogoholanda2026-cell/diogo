@@ -18,6 +18,7 @@ import { Linha } from '../../comp/Linha.jsx';
 import { Aviso } from '../../comp/Aviso.jsx';
 import { Vazio } from '../../comp/Vazio.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
+import { EnvioMateriais } from '../EnvioMateriais.jsx';
 import { tomarAba } from '../../hud/Menu.jsx';
 import {
   nomeParte, nomeEtapa, nomeTrecho, fraseEfeito, glifoEfeito, fraseRecusa, fraseParalelo, faltaImportar, custoImportar, alvoDaParte,
@@ -100,6 +101,7 @@ function Etapa({ ui, e, n, de, parte, etapas, caixa, dep }) {
         </div>
       ) : null}
       {e.estado === 1 || e.estado === 2 ? <Materiais e={e} /> : null}
+      <EnvioMateriais e={e} />
       <Entrega e={e} />
       <div class="eco-acoes">
         {e.estado === 1 ? (

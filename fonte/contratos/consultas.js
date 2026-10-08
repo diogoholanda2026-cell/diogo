@@ -87,7 +87,7 @@ export const CONSULTAS = congelar({
   arcologia: {
     dono: 'X1b',
     formato:
-      '() → { plano, nome, partes: [{ id, nome, etapas: [{ id, parte, nome, estado, marco, requisito, recusa, creditos, materiais: [{ item, pede, entregue, aCaminho, estoque }], minutos, fases, fase, progresso, materiaisFrac, parada, efeitos, xp, ini, fim, previsao }], futuras: [{ id, nome, prazo, creditos, materiais }] }], progressoTotal, valor (créditos pagos e materiais entregues: entra no valuation, D49), alturas: { blade, legacy, ponte } | null, efeitos: { vagas: [4], moradoresLuxo, contribuicaoLuxoHora, vias, portoes, agua }, inaugurada }',
+      '() → { plano, nome, partes: [{ id, nome, etapas: [{ id, parte, nome, estado, marco, requisito, recusa, creditos, envio (auto ou manual, D109), materiais: [{ item, pede, entregue, aCaminho, estoque, precisa, pedido, falta }], minutos, fases, fase, progresso, materiaisFrac, parada, efeitos, xp, ini, fim, previsao }], futuras: [{ id, nome, prazo, creditos, materiais }] }], progressoTotal, valor (créditos pagos e materiais entregues: entra no valuation, D49), alturas: { blade, legacy, ponte } | null, efeitos: { vagas: [4], moradoresLuxo, contribuicaoLuxoHora, vias, portoes, agua }, inaugurada }',
   },
   holding: {
     dono: 'S3a',

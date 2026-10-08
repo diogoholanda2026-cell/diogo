@@ -308,7 +308,7 @@ export function criarSimFalsa({ cenario = 'meio', semente = 7 } = {}) {
     'zona.pintar': () => ok(), 'via.construir': () => ok({}), 'via.desfazer': () => nao('nada'), 'via.melhorar': () => ok(), 'via.demolir': () => ok(),
     construir: () => { if (E.creditos < 25000) return nao('creditos'); E.creditos -= 25000; muda(); return ok({ id: refDe(0) }); },
     demolir: () => ok(), 'predio.nivel': () => nao('marco'), 'ladrilho.comprar': () => nao('licenca'), importar: () => ok(),
-    'arcologia.iniciar': () => nao('emObra'), acelerar: ({ minutos }) => { const preco = { 1: 100, 5: 500, 10: 1000, 30: 2500, 60: 5000 }[minutos]; if (!preco) return nao('valor'); if (E.creditos < preco) return nao('creditos'); E.creditos -= preco; muda(); return ok(); },
+    'arcologia.iniciar': () => nao('emObra'), 'arcologia.enviar': () => ok(), 'arcologia.enviarTudo': () => ok(), 'arcologia.envio': () => ok(), acelerar: ({ minutos }) => { const preco = { 1: 100, 5: 500, 10: 1000, 30: 2500, 60: 5000 }[minutos]; if (!preco) return nao('valor'); if (E.creditos < preco) return nao('creditos'); E.creditos -= preco; muda(); return ok(); },
   };
 
   return {

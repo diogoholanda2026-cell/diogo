@@ -121,6 +121,15 @@ export function alvoDaParte(id, trecho = null) {
 /** Começa a etapa (o comando da X1b); a recusa vira aviso pela ação. */
 export const iniciarEtapa = (id) => comando('arcologia.iniciar', { etapa: id });
 
+/** Troca o modo de envio dos materiais da etapa (D109): 'auto' ou 'manual'. */
+export const trocarEnvio = (id, modo) => comando('arcologia.envio', { etapa: id, modo });
+
+/** Manda n unidades de um item que falta da etapa (D109). */
+export const enviarMaterial = (id, item, n) => comando('arcologia.enviar', { etapa: id, item, n });
+
+/** Manda de uma vez o que couber de todos os itens que faltam (D109). */
+export const enviarTudo = (id) => comando('arcologia.enviarTudo', { etapa: id });
+
 /** Importa o que falta para a etapa, item a item (descontado o que já vem importado). */
 export async function importarFalta(e, dep = null) {
   for (const x of faltaImportar(e, importando(dep))) {
