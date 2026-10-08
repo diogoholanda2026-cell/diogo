@@ -32,6 +32,8 @@ export const CODIGOS = congelar({
   trancado: 'item ou linha trancada',
   pessoal: 'sem trabalhadores para a linha',
   limite: 'limite da janela do Depósito atingido',
+  limiteFundo: 'saldo do fundo de teste (D104)',
+  inativo: 'recurso temporário desligado',
   limiteAno: 'limite anual do empréstimo (50 mil por ano)',
   limiteDivida: 'dívida acima do máximo (500 mil)',
   emObra: 'etapa já em obra',

@@ -90,7 +90,7 @@ export function lancar(sim, tipo, categoria, valor) {
   girar(L, sim.tique);
   const b = L.minuto % NB;
   const cat = String(categoria ?? 'outras');
-  if (cat === 'emprestimo' || cat === 'pagamentoEmprestimo' || cat === 'jurosPagos') {
+  if (cat === 'emprestimo' || cat === 'pagamentoEmprestimo' || cat === 'jurosPagos' || cat === 'fundoTeste') {
     somar(L.totais.financiamento, cat, valor);
     return;
   }

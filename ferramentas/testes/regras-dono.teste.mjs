@@ -274,3 +274,23 @@ test('calendário (D67): o tique 0 é jan. 2020; mês de 600 e ano de 7.200 tiqu
   assert.equal(sim.q.orcamento().serie.length, 14);
   assert.deepEqual([sim.q.orcamento().serie[13].ano, sim.q.orcamento().serie[13].mes], [2021, 2]);
 });
+
+test('fundo de teste (D104): US$ 25 bi, saque a qualquer hora e valor, fora da renda', () => {
+  const sim = simS3a({ semente: 'fundo' });
+  const f0 = sim.q.emprestimo().fundo;
+  assert.equal(f0.ativo, true);
+  assert.equal(f0.saldo, 41667000);
+  assert.equal(emDolar(f0.saldo) >= 25e9 && emDolar(f0.saldo) < 25.001e9, true, 'em US$: 25 bilhões');
+  const c0 = sim.holding.caixa();
+  for (const v of [0, -5, 1.5, '1000']) assert.equal(sim.cmd('fundo.sacar', { valor: v }).codigo, 'valor', String(v));
+  assert.equal(sim.cmd('fundo.sacar', { valor: 1234567 }).ok, true, 'qualquer valor inteiro');
+  assert.equal(sim.holding.caixa() - c0, 1234567);
+  assert.equal(sim.q.emprestimo().fundo.saldo, 41667000 - 1234567);
+  assert.equal(sim.q.orcamento().receitas.outras ?? 0, 0, 'saque do fundo não é renda');
+  assert.equal(sim.cmd('fundo.sacar', { valor: 41667000 }).codigo, 'limiteFundo');
+  const resto = sim.q.emprestimo().fundo.saldo;
+  assert.equal(sim.cmd('fundo.sacar', { valor: resto }).ok, true);
+  assert.equal(sim.q.emprestimo().fundo.saldo, 0);
+  assert.equal(sim.cmd('fundo.sacar', { valor: 1 }).codigo, 'limiteFundo');
+  assert.deepEqual(sim.validar(), []);
+});

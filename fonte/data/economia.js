@@ -81,6 +81,13 @@ export const lotePelasRegras = (regras, n) => Number.isInteger(n) && n >= regras
  */
 export const emDolar = (unidades) => unidades * REGRAS_DONO.moeda.fator;
 
+/**
+ * Fundo de teste (pedido do dono em 08/10/2026, D104): US$ 25 bilhões (41.667 mil unidades) de onde ele saca a qualquer
+ * hora, o valor que quiser, para pagar as construções e testar o jogo mais rápido. Temporário: o dono pede quando tirar
+ * (ativo: false desliga o comando e a tela; nada mais depende dele). Entra no livro como financiamento, não como renda.
+ */
+export const FUNDO_TESTE = /* @__PURE__ */ congelar({ ativo: true, total: 41667000, passo: 1000 });
+
 /** Caixa inicial da partida (calibrar). Em US$: 180 milhões, a primeira tranche da obra (historia.md, seção 3). */
 export const CAIXA_INICIAL = 300000;
 

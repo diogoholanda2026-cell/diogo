@@ -77,6 +77,9 @@ export const COMANDOS = congelar({
   'emprestimo.tomar': {
     dono: 'S3a', args: '{ valor } (múltiplo de 1.000)', codigos: ['valor', 'limiteAno', 'limiteDivida'], exemplo: { valor: 50000 },
   },
+  'fundo.sacar': {
+    dono: 'S3a', args: '{ valor } (inteiro de 1 até o saldo do fundo de teste, D104)', codigos: ['valor', 'limiteFundo', 'inativo'], exemplo: { valor: 1000000 },
+  },
   'emprestimo.pagarJuros': { dono: 'S3a', args: '{}', codigos: ['nada', 'creditos'], exemplo: {} },
   'emprestimo.pagarParcela': { dono: 'S3a', args: '{}', codigos: ['nada', 'creditos'], exemplo: {} },
   'emprestimo.quitar': { dono: 'S3a', args: '{}', codigos: ['nada', 'creditos'], exemplo: {} },

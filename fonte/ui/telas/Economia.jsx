@@ -238,6 +238,37 @@ function Orcamento({ orc, b }) {
   );
 }
 
+/** Fundo de teste (D104): saca qualquer valor, a qualquer hora, para pagar as construções. Temporário. */
+function FundoTeste({ fundo }) {
+  const [valor, setValor] = useState(Math.min(fundo.saldo, 1000 * fundo.passo));
+  const [retorno, setRetorno] = useState(null);
+  const max = Math.max(0, Math.floor(fundo.saldo / fundo.passo) * fundo.passo);
+  const v = Math.min(Math.max(valor, Math.min(fundo.passo, max)), max);
+  const sacar = async (n) => {
+    const res = await comando('fundo.sacar', { valor: n }, { silencioso: true });
+    setRetorno(res.ok ? { ok: true, texto: t('eco.fundo.sacou', { n: fmt.dinheiro(n) }) } : { ok: false, texto: frase(res) });
+  };
+  return (
+    <Secao titulo={t('eco.fundo')} class="eco-secao">
+      <p class="eco-nota">{t('eco.fundo.saldo', { saldo: fmt.dinheiro(fundo.saldo), total: fmt.dinheiro(fundo.total) })}</p>
+      {max > 0 ? (
+        <div class="eco-tomar">
+          <Deslizante valor={v} aoMudar={setValor} min={Math.min(fundo.passo, max)} max={max} passo={fundo.passo} rotulo={t('eco.fundo.valor')} formato={fmt.dinheiro} botoes a="eco.fundo.valor" />
+          <Botao a="eco.fundo.sacar" rotulo={t('eco.fundo.sacarN', { n: fmt.dinheiro(v) })} principal class="bt-pri" onClick={() => sacar(v)}>
+            {t('eco.fundo.sacarN', { n: fmt.dinheiro(v) })}
+          </Botao>
+          <Botao a="eco.fundo.tudo" rotulo={t('eco.fundo.tudo')} class="bt-sec" onClick={() => sacar(fundo.saldo)}>
+            {t('eco.fundo.tudo')}
+          </Botao>
+        </div>
+      ) : (
+        <p class="eco-nota">{t('eco.fundo.vazio')}</p>
+      )}
+      {retorno && <p class={`eco-retorno ${retorno.ok ? 'tx-ok' : 'tx-al'}`} role="status">{retorno.texto}</p>}
+    </Secao>
+  );
+}
+
 function Emprestimo({ emp, b }) {
   const r = REGRAS_DONO.emprestimo;
   const lim = limitesEmprestimo(emp, r);
@@ -338,6 +369,7 @@ function Emprestimo({ emp, b }) {
           )}
           {linhaRetorno('tomar')}
         </Secao>
+        {emp.fundo?.ativo && <FundoTeste fundo={emp.fundo} />}
         <Secao titulo={t('eco.contratos')} class="eco-secao">
           {contratos.length ? (
             <>

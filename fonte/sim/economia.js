@@ -13,7 +13,7 @@
 // Este arquivo também instala os serviços do contrato interno (2.10) que são da S3a: sim.holding (caixa, pagar,
 // receber, comprarParaObra, entregar, efeito) e sim.progresso (de progresso.js), logo no começo, para as parcelas que
 // registram depois (X1b) já falarem com os de verdade.
-import { ECONOMIA, CAIXA_INICIAL, tarifaPelasRegras } from '../data/economia.js';
+import { ECONOMIA, FUNDO_TESTE, CAIXA_INICIAL, tarifaPelasRegras } from '../data/economia.js';
 import { dataDoTique, anoDeJogo, anoDoCalendario } from '../data/historia.js';
 import { HORA, ANO, MES, RODADA } from '../comum/relogio.js';
 import { ORDEM } from '../contratos/interno.js';
@@ -138,6 +138,25 @@ function abaterJuros(sim, v) {
   }
 }
 
+/** Saldo do fundo de teste (D104); o save antigo ganha o fundo cheio na primeira leitura. */
+function fundoDe(sim) {
+  const E = sim.json.economia;
+  return (E.fundoTeste ??= { saldo: FUNDO_TESTE.total, sacado: 0 });
+}
+
+/** Saca do fundo de teste (D104): qualquer valor inteiro de 1 até o saldo, a qualquer hora. */
+function sacarFundo(sim, { valor } = {}) {
+  if (!FUNDO_TESTE.ativo) return { ok: false, codigo: 'inativo' };
+  const F = fundoDe(sim);
+  if (!Number.isInteger(valor) || valor < 1) return { ok: false, codigo: 'valor' };
+  if (valor > F.saldo) return { ok: false, codigo: 'limiteFundo' };
+  F.saldo -= valor;
+  F.sacado += valor;
+  sim.holding.receber(valor, 'fundoTeste');
+  sim.emitir('financas', { tipo: 'fundo' });
+  return { ok: true, dados: { valor, saldo: F.saldo } };
+}
+
 function tomar(sim, { valor } = {}) {
   const r = regrasDe(sim).emprestimo;
   const v = valor;
@@ -221,6 +240,7 @@ export function consultaEmprestimo(sim) {
     passo: r.passo,
     prazoAnos: r.prazoAnos,
     lombard: r.lombard ?? null,
+    fundo: FUNDO_TESTE.ativo ? { ativo: true, saldo: fundoDe(sim).saldo, sacado: fundoDe(sim).sacado, total: FUNDO_TESTE.total, passo: FUNDO_TESTE.passo } : { ativo: false },
     jurosDevidos: d.juros,
     jurosHora: jurosHora(sim),
     parcela: parcelaDe(sim),
@@ -450,6 +470,7 @@ const OBRAS = Object.freeze(['vias', 'servicos', 'ligacao']);
 export function economiaVazia() {
   return {
     emprestimo: { seq: 0, principal: 0, contratos: [] },
+    fundoTeste: { saldo: FUNDO_TESTE.total, sacado: 0 },
     livro: caixaVazio(),
     custosHora: { servicos: 0, vias: 0, ligacao: 0 },
     eficiencia: 1,
@@ -515,6 +536,7 @@ export function registrar(sim) {
 
   sim.registrarComando('holding.identidade', (s, args) => definirIdentidade(s, args));
   sim.registrarComando('emprestimo.tomar', tomar);
+  sim.registrarComando('fundo.sacar', sacarFundo);
   sim.registrarComando('emprestimo.pagarJuros', pagarJuros);
   sim.registrarComando('emprestimo.pagarParcela', pagarParcela);
   sim.registrarComando('emprestimo.quitar', quitar);
