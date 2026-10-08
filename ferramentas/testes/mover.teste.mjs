@@ -208,41 +208,302 @@ test('a validação é a do construir: colisão com prédio e com via, ladrilho,
   assert.deepEqual(sim.erros, []);
 });
 
-test('prédio de zona e a Arcologia não se movem: o código "fixo" (ou o "arcologia" até o contrato listá-lo) com a dica', () => {
+test('a Arcologia (e o que diz que não se demole) fica fixa, com o código "fixo" e a dica', () => {
   const sim = mundo('mov-fixo');
-  const zr = indiceZona('resBaixa');
-  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1000, z: -300, x2: 1100, z2: -200 }, zona: zr }).ok);
-  const C = sim.tabelas.celulas;
-  const P = sim.tabelas.predios;
-  const rng = sim.rng('teste');
-  let casa = -1;
-  for (let c = 0; c < C.n && casa < 0; c++) {
-    if (!C.viva[c] || C.zona[c] !== zr || C.linha[c] !== 0 || C.estado[c] !== CELULA.LIVRE) continue;
-    casa = nascerNaFrente(sim, c, zr, rng);
-  }
-  assert.ok(casa >= 0, 'nasceu uma casa');
-  terminarObra(sim, casa);
-  const ref = P.ref(casa);
-  const caixa0 = sim.holding.caixa();
-  const antes = [P.x[casa], P.z[casa], P.rot[casa]];
   assert.ok(LISTA_CODIGOS.includes(CODIGO_FIXO), `o código ${CODIGO_FIXO} é do contrato`);
-  const pv = sim.q.mover.previa({ ref, x: 1300, z: -330 });
-  assert.equal(pv.ok, false);
-  assert.equal(pv.codigo, CODIGO_FIXO);
-  assert.equal(pv.dados.fixo, 'zona');
-  const r = sim.cmd('mover', { ref, x: 1300, z: -330, rot: 0, alinhar: false });
-  assert.deepEqual([r.ok, r.codigo, r.dados.fixo], [false, CODIGO_FIXO, 'zona']);
-  assert.deepEqual([P.x[casa], P.z[casa], P.rot[casa]], antes, 'a casa não saiu do lugar');
-  assert.equal(sim.holding.caixa(), caixa0, 'e nada foi cobrado');
-  assert.deepEqual(sim.q.predio(ref).mover, { pode: false, custo: 0, codigo: CODIGO_FIXO, motivo: 'zona' });
-  assert.equal(sim.cmd('mover.desfazer', { ref }).codigo, 'nada');
-  // a Arcologia (um colocável que diz que é dela ou que não se demole) fica fixa pela mesma regra
   const praca = pronto(sim, 'praca', 1300, -330);
   sim.colocaveis.obter('praca').arcologia = true;
+  const caixa0 = sim.holding.caixa();
   const pa = sim.q.mover.previa({ ref: praca, x: 1360, z: -330 });
   assert.deepEqual([pa.ok, pa.codigo, pa.dados.fixo], [false, CODIGO_FIXO, 'arcologia']);
   assert.equal(sim.cmd('mover', { ref: praca, x: 1360, z: -330, rot: 0, alinhar: false }).dados.fixo, 'arcologia');
+  assert.deepEqual(sim.q.predio(praca).mover, { pode: false, custo: 0, codigo: CODIGO_FIXO, motivo: 'arcologia' });
+  assert.equal(sim.cmd('mover.desfazer', { ref: praca }).codigo, 'nada');
+  assert.equal(sim.holding.caixa(), caixa0, 'e nada foi cobrado');
   assert.deepEqual(sim.erros.filter((e) => /mover/.test(e.onde)), []);
+});
+
+// ------------------------------------------------------------------------------------------------ prédio de zona (MOV2, D105)
+
+const ZR = indiceZona('resBaixa');
+
+/** O mundo com a zona residencial pintada entre as duas ruas e `n` casas nascidas (em obra). */
+function mundoComCasas(semente, n = 3) {
+  const sim = mundo(semente);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1000, z: -300, x2: 1200, z2: -200 }, zona: ZR }).ok);
+  const C = sim.tabelas.celulas;
+  const rng = sim.rng('teste');
+  const casas = [];
+  for (let c = 0; c < C.n && casas.length < n; c++) {
+    if (!C.viva[c] || C.zona[c] !== ZR || C.linha[c] !== 0 || C.estado[c] !== CELULA.LIVRE) continue;
+    const k = nascerNaFrente(sim, c, ZR, rng);
+    if (k >= 0) casas.push(k);
+  }
+  assert.equal(casas.length, n, 'nasceram as casas');
+  return { sim, casas };
+}
+
+const celulasDe = (sim, i) => {
+  const C = sim.tabelas.celulas;
+  const out = [];
+  for (let c = 0; c < C.n; c++) if (C.viva[c] && C.predio[c] === i) out.push(c);
+  return out;
+};
+
+test('mover prédio de zona pronto: células liberadas e ocupadas, 10% do valor, moradores e nível mantidos, sem evento de nível', () => {
+  const { sim, casas } = mundoComCasas('mov2-pronto');
+  const P = sim.tabelas.predios;
+  const C = sim.tabelas.celulas;
+  const i = casas[0];
+  terminarObra(sim, i);
+  sim.rodar(10, { sincrono: true });
+  const ref = P.ref(i);
+  const antes = { nivel: P.nivel[i], semente: P.semente[i], cor: P.cor[i], estilo: P.estilo[i], mor: P.moradores[i], emp: P.empregos[i], modelo: P.modelo[i], w: P.w[i], d: P.d[i] };
+  const velhas = celulasDe(sim, i);
+  assert.ok(velhas.length >= 2);
+  const info = sim.q.predio(ref).mover;
+  assert.equal(info.pode, true);
+  assert.equal(info.custo, Math.round(MOVER.fracao * sim.q.predio(ref).custoDemolir), 'a base é o valor do prédio (D54)');
+  assert.ok(info.custo > 0);
+  // o lugar novo: ao longo da rua do sul, giro livre (nada de 90 graus)
+  const pv = sim.q.mover.previa({ ref, x: 1150, z: -230, rot: 0.3, alinhar: true, giro: 0.3 });
+  assert.ok(pv.ok, `${pv.codigo} ${JSON.stringify(pv.dados)}`);
+  assert.equal(pv.custo, info.custo);
+  assert.equal(pv.zona.emObra, false);
+  assert.equal(pv.zona.celulas.liberam, velhas.length);
+  assert.ok(pv.zona.celulas.ocupam >= 1);
+  const niveis = [];
+  sim.on('predioNivel', (e) => niveis.push(e));
+  const caixa0 = sim.holding.caixa();
+  const r = sim.cmd('mover', { ref, x: pv.x, z: pv.z, rot: pv.rot, alinhar: false });
+  assert.ok(r.ok, `${r.codigo} ${JSON.stringify(r.dados)}`);
+  assert.ok(Math.abs(caixa0 - sim.holding.caixa() - info.custo) < 1e-6, 'pagou os 10%');
+  assert.deepEqual([P.x[i], P.z[i]], [pv.x, pv.z]);
+  assert.ok(Math.abs(P.rot[i] - pv.rot) < 1e-6);
+  // o lugar antigo voltou a ser zona livre; o novo é do prédio
+  for (const c of velhas) {
+    if (C.predio[c] === i) continue;
+    assert.equal(C.predio[c], -1);
+    assert.ok([CELULA.LIVRE, CELULA.INVALIDA].includes(C.estado[c]));
+    assert.equal(C.zona[c], ZR, 'a zona pintada fica');
+  }
+  const novas = celulasDe(sim, i);
+  assert.equal(novas.length, pv.zona.celulas.ocupam);
+  for (const c of novas) assert.equal(C.estado[c], CELULA.OCUPADA);
+  // o prédio segue com tudo o que é dele, em reforma (segue funcionando)
+  assert.ok(P.flags[i] & PREDIO.OBRA && P.flags[i] & PREDIO.OBRA_NIVEL);
+  assert.deepEqual({ nivel: P.nivel[i], semente: P.semente[i], cor: P.cor[i], estilo: P.estilo[i], mor: P.moradores[i], emp: P.empregos[i], modelo: P.modelo[i], w: P.w[i], d: P.d[i] }, antes);
+  assert.equal(P.ref(i), ref, 'a mesma ref');
+  assert.deepEqual(sim.json.mover.zona, { [String(ref)]: 1 });
+  // o acesso à via, a cobertura e as redes são refeitos no lugar novo (a casa liga na rua do sul)
+  assert.equal(sim.q.predio(ref).via?.ref, pv.via, 'liga à via do lugar novo');
+  assert.notEqual(pv.muda.via.antes?.ref, pv.muda.via.depois?.ref, 'a prévia diz que a via mudou');
+  assert.equal(sim.cmd('mover', { ref, x: 1100, z: -230, rot: 0, alinhar: false }).ok, true, 'zona pronta em reforma ainda se move (o Desfazer vale até a obra)');
+  assert.deepEqual(sim.validar(), []);
+  // a obra acaba: sem evento de nível, mesmos moradores
+  sim.rodar(r.dados.tiques + 80, { sincrono: true });
+  assert.equal(P.flags[i] & (PREDIO.OBRA | PREDIO.OBRA_NIVEL), 0);
+  assert.ok(P.moradores[i] >= antes.mor, 'os moradores seguem (a ocupação normal pode até encher mais)');
+  assert.equal(P.nivel[i], antes.nivel);
+  assert.deepEqual(niveis, []);
+  assert.deepEqual(sim.json.mover.zona, {});
+  assert.deepEqual(sim.validar(), []);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('o lugar antigo da casa movida volta a crescer um prédio novo, e o novo fica ocupado', () => {
+  const { sim, casas } = mundoComCasas('mov2-cresce', 1);
+  const P = sim.tabelas.predios;
+  const C = sim.tabelas.celulas;
+  const i = casas[0];
+  terminarObra(sim, i);
+  const ref = P.ref(i);
+  const velha = celulasDe(sim, i).find((c) => C.linha[c] === 0);
+  const pv = sim.q.mover.previa({ ref, x: 1180, z: -230, alinhar: true });
+  assert.ok(pv.ok, pv.codigo);
+  assert.ok(sim.cmd('mover', { ref, x: pv.x, z: pv.z, rot: pv.rot, alinhar: false }).ok);
+  assert.equal(C.estado[velha], CELULA.LIVRE, 'a célula de frente do lugar antigo está livre');
+  const k = nascerNaFrente(sim, velha, ZR, sim.rng('depois'));
+  assert.ok(k >= 0 && k !== i, 'nasce um prédio novo no lugar antigo');
+  assert.notEqual(P.ref(k), ref);
+  // e o lugar novo não aceita outro
+  const nova = celulasDe(sim, i).find((c) => C.linha[c] === 0);
+  if (nova !== undefined) assert.equal(nascerNaFrente(sim, nova, ZR, sim.rng('depois2')), -1);
+  assert.deepEqual(sim.validar(), []);
+});
+
+test('mover prédio de zona em obra: o progresso e o já pago ficam, o custo é a fração do que foi gasto', () => {
+  const { sim, casas } = mundoComCasas('mov2-obra', 2);
+  const P = sim.tabelas.predios;
+  const i = casas[0];
+  const ref = P.ref(i);
+  sim.rodar(20, { sincrono: true });
+  assert.ok(P.flags[i] & PREDIO.OBRA && !(P.flags[i] & PREDIO.OBRA_NIVEL), 'em obra de nascimento');
+  assert.equal(sim.q.predio(ref).estado, 'obra');
+  const ini = P.obraIni[i];
+  const fim = P.obraFim[i];
+  const prog = (sim.tique - ini) / (fim - ini);
+  assert.ok(prog > 0 && prog < 1, `no meio da obra (${prog})`);
+  const valor = sim.q.predio(ref).custoDemolir;
+  const info = sim.q.predio(ref).mover;
+  assert.equal(info.pode, true);
+  assert.equal(info.emObra, true);
+  assert.equal(info.custo, Math.round(MOVER.fracao * Math.round(valor * prog)), 'a fração do já gasto');
+  const pv = sim.q.mover.previa({ ref, x: 1150, z: -230, alinhar: true });
+  assert.ok(pv.ok, `${pv.codigo} ${JSON.stringify(pv.dados)}`);
+  assert.equal(pv.zona.emObra, true);
+  assert.equal(pv.custo, info.custo + pv.custoAplainar);
+  const caixa0 = sim.holding.caixa();
+  const mat0 = JSON.stringify(sim.json.cidade);
+  const r = sim.cmd('mover', { ref, x: pv.x, z: pv.z, rot: pv.rot, alinhar: false });
+  assert.ok(r.ok, `${r.codigo} ${JSON.stringify(r.dados)}`);
+  assert.ok(Math.abs(caixa0 - sim.holding.caixa() - pv.custo) < 1e-6);
+  assert.deepEqual([P.x[i], P.z[i]], [pv.x, pv.z]);
+  if (!pv.aplainar) {
+    assert.equal(P.obraIni[i], ini, 'a obra segue do mesmo ponto: início');
+    assert.equal(P.obraFim[i], fim, 'e o mesmo fim');
+  } else {
+    assert.ok(Math.abs((sim.tique - P.obraIni[i]) / (P.obraFim[i] - P.obraIni[i]) - prog) < 0.05, 'o aplainar só alonga');
+  }
+  assert.ok(P.flags[i] & PREDIO.OBRA && !(P.flags[i] & PREDIO.OBRA_NIVEL), 'continua em obra de nascimento');
+  assert.equal(P.moradores[i], 0);
+  assert.equal(Object.keys(sim.json.mover.zona).length, 0, 'obra de nascimento não leva a marca de reforma');
+  assert.ok(celulasDe(sim, i).length >= 1);
+  assert.deepEqual(sim.validar(), []);
+  sim.rodar(fim - sim.tique + 60, { sincrono: true });
+  assert.equal(P.flags[i] & PREDIO.OBRA, 0, 'a obra acabou no prazo');
+  assert.ok(P.moradores[i] > 0, 'chegaram os moradores');
+  assert.equal(JSON.stringify(sim.json.cidade).length > 0, true);
+  assert.ok(mat0.length > 0);
+  assert.deepEqual(sim.validar(), []);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('destino inválido não muda nada: sem via, sobre outra casa, sobre zona de outro tipo, fora dos ladrilhos', () => {
+  const { sim, casas } = mundoComCasas('mov2-invalido', 2);
+  const P = sim.tabelas.predios;
+  const C = sim.tabelas.celulas;
+  const i = casas[0];
+  const outra = casas[1];
+  terminarObra(sim, i);
+  terminarObra(sim, outra);
+  const ref = P.ref(i);
+  const foto = () => JSON.stringify({ x: [...P.x.subarray(0, P.n)], z: [...P.z.subarray(0, P.n)], rot: [...P.rot.subarray(0, P.n)], flags: [...P.flags.subarray(0, P.n)], cel: [...C.predio.subarray(0, C.n)], caixa: sim.holding.caixa(), hash: sim.q.hash() });
+  const f0 = foto();
+  // sem via por perto
+  assert.equal(sim.q.mover.previa({ ref, x: 1200, z: -1280, rot: 0 }).codigo, 'acesso');
+  assert.equal(sim.cmd('mover', { ref, x: 1200, z: -1280, rot: 0, alinhar: false }).codigo, 'acesso');
+  // sobre a outra casa: colisão (mover não derruba vizinho)
+  const bate = sim.q.mover.previa({ ref, x: P.x[outra] + 2, z: P.z[outra], rot: P.rot[outra], alinhar: false });
+  assert.equal(bate.ok, false);
+  assert.equal(bate.codigo, 'colisao');
+  assert.equal(bate.dados.com, 'predio');
+  assert.equal(bate.dados.ref, P.ref(outra));
+  assert.equal(sim.cmd('mover', { ref, x: P.x[outra] + 2, z: P.z[outra], rot: P.rot[outra], alinhar: false }).codigo, 'colisao');
+  // fora dos ladrilhos
+  assert.equal(sim.q.mover.previa({ ref, x: 3000, z: 3000, rot: 0, alinhar: false }).codigo, 'ladrilho');
+  // zona de outro tipo pintada no destino
+  const zc = indiceZona('comBaixa');
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1300, z: -300, x2: 1400, z2: -200 }, zona: zc }).ok);
+  const sobre = sim.q.mover.previa({ ref, x: 1350, z: -230, alinhar: true });
+  assert.equal(sobre.ok, false);
+  assert.equal(sobre.codigo, 'colisao');
+  assert.equal(sobre.dados.com, 'zona');
+  assert.equal(sim.cmd('mover', { ref, x: 1350, z: -230, rot: 0, alinhar: true }).codigo, 'colisao');
+  // créditos
+  assert.equal(foto().length, f0.length);
+  const saldo = sim.holding.caixa();
+  assert.deepEqual(sim.json.mover.pend, {});
+  assert.equal(sim.holding.caixa(), saldo);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('zona: o Desfazer devolve o prédio, as células e o dinheiro até a obra começar', () => {
+  const { sim, casas } = mundoComCasas('mov2-desfazer', 2);
+  const P = sim.tabelas.predios;
+  const C = sim.tabelas.celulas;
+  const i = casas[0];
+  terminarObra(sim, i);
+  const ref = P.ref(i);
+  const OBRAS = PREDIO.OBRA | PREDIO.OBRA_NIVEL | PREDIO.SEM_MATERIAL;
+  const de = { x: P.x[i], z: P.z[i], rot: P.rot[i], flags: P.flags[i] & OBRAS };
+  const velhas = celulasDe(sim, i);
+  const caixa0 = sim.holding.caixa();
+  const hash0 = sim.q.hash();
+  const pv = sim.q.mover.previa({ ref, x: 1150, z: -230, alinhar: true });
+  assert.ok(pv.ok, pv.codigo);
+  assert.ok(sim.cmd('mover', { ref, x: pv.x, z: pv.z, rot: pv.rot, alinhar: false }).ok);
+  assert.ok(sim.q.predio(ref).mover.desfazer);
+  sim.rodar(3, { sincrono: true });
+  const caixa1 = sim.holding.caixa();
+  const d = sim.cmd('mover.desfazer', { ref });
+  assert.ok(d.ok, d.codigo);
+  assert.deepEqual([P.x[i], P.z[i], P.rot[i], P.flags[i] & OBRAS], [de.x, de.z, de.rot, de.flags]);
+  assert.deepEqual(celulasDe(sim, i), velhas, 'as mesmas células de volta');
+  for (const c of velhas) assert.equal(C.estado[c], CELULA.OCUPADA);
+  assert.ok(Math.abs(sim.holding.caixa() - caixa1 - sim.q.predio(ref).mover.custo) < 1e-6, 'o dinheiro todo');
+  assert.ok(caixa0 > 0);
+  assert.deepEqual(sim.json.mover.zona, {});
+  assert.deepEqual(sim.json.mover.pend, {});
+  assert.notEqual(sim.q.hash(), hash0, 'o tempo andou');
+  assert.deepEqual(sim.validar(), []);
+  // depois que a obra começa, não dá mais
+  assert.ok(sim.cmd('mover', { ref, x: pv.x, z: pv.z, rot: pv.rot, alinhar: false }).ok);
+  sim.rodar(MOVER.mobilizacao, { sincrono: true });
+  assert.equal(sim.cmd('mover.desfazer', { ref }).codigo, 'ocupado');
+  // em obra de nascimento o Desfazer também vale, e a obra segue
+  const j = casas[1];
+  const refJ = P.ref(j);
+  const de2 = { x: P.x[j], z: P.z[j] };
+  const ini = P.obraIni[j];
+  const pv2 = sim.q.mover.previa({ ref: refJ, x: 1100, z: -230, alinhar: true });
+  assert.ok(pv2.ok, `${pv2.codigo} ${JSON.stringify(pv2.dados)}`);
+  assert.ok(sim.cmd('mover', { ref: refJ, x: pv2.x, z: pv2.z, rot: pv2.rot, alinhar: false }).ok);
+  assert.ok(sim.cmd('mover.desfazer', { ref: refJ }).ok);
+  assert.deepEqual([P.x[j], P.z[j]], [de2.x, de2.z]);
+  assert.equal(P.obraIni[j], ini);
+  assert.ok(P.flags[j] & PREDIO.OBRA);
+  assert.ok(celulasDe(sim, j).length >= 1);
+  assert.deepEqual(sim.validar(), []);
+  assert.deepEqual(sim.erros, []);
+});
+
+test('zona: save no meio da mudança (pronta e em obra) e determinismo', () => {
+  const montar = () => {
+    const { sim, casas } = mundoComCasas('mov2-save', 2);
+    terminarObra(sim, casas[0]);
+    const P = sim.tabelas.predios;
+    return { sim, pronta: P.ref(casas[0]), nascendo: P.ref(casas[1]) };
+  };
+  const A = montar();
+  const B = montar();
+  assert.equal(A.sim.q.hash(), B.sim.q.hash());
+  for (const { sim, pronta, nascendo } of [A, B]) {
+    mover(sim, pronta, 1150, -230, { alinhar: true });
+    mover(sim, nascendo, 1100, -230, { alinhar: true });
+    sim.rodar(5, { sincrono: true });
+  }
+  assert.equal(A.sim.q.hash(), B.sim.q.hash(), 'o mesmo mover dá o mesmo estado');
+  const C = criarSimulacao({ semente: 'mov2-save', modo: 'livre' });
+  aplicarSave(C, migrar(lerSave(montarSave(A.sim))));
+  assert.deepEqual(C.json.mover, A.sim.json.mover, 'a janela do Desfazer e a marca de reforma vão no save');
+  assert.equal(C.q.hash(), A.sim.q.hash());
+  assert.ok(C.cmd('mover.desfazer', { ref: A.pronta }).ok, 'desfazer depois de carregar');
+  assert.ok(A.sim.cmd('mover.desfazer', { ref: A.pronta }).ok);
+  assert.equal(C.q.hash(), A.sim.q.hash());
+  // já em obra: o fim da obra e o resto do tempo dão o mesmo hash de quem não parou
+  mover(A.sim, A.pronta, 1150, -230, { alinhar: true });
+  A.sim.rodar(MOVER.mobilizacao + 5, { sincrono: true });
+  const D = criarSimulacao({ semente: 'mov2-save', modo: 'livre' });
+  aplicarSave(D, migrar(lerSave(montarSave(A.sim))));
+  assert.equal(D.q.hash(), A.sim.q.hash());
+  A.sim.rodar(400, { sincrono: true });
+  D.rodar(400, { sincrono: true });
+  assert.equal(D.q.hash(), A.sim.q.hash());
+  assert.equal(D.q.predio(A.pronta).estado, 'ok');
+  assert.deepEqual(D.json.mover.zona, {});
+  assert.deepEqual(D.validar(), []);
+  assert.deepEqual([...A.sim.erros, ...D.erros], []);
 });
 
 test('a cobertura dos serviços é refeita no lugar novo, e o que a prévia diz que muda é o que muda', () => {

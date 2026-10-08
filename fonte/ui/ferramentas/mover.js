@@ -5,6 +5,14 @@
 // `mover`. A cola (sessao.js) abre a sessão como 'colocar' com `maquina.mover = { ref, de }`; a barra, o painel do fantasma e
 // o puxador são os de lá, e o painel "o que muda" (PainelMover.jsx) lê as linhas de linhasDoQueMuda.
 import * as colocar from './colocar.js';
+import { registrar as registrarTextosMov2 } from '../textos/mov2.js';
+import { registrarTextos } from '../textos.js';
+
+// os textos da zona (MOV2) entram com a ferramenta: a dica e o painel podem rodar antes de a folha ou o painel carregarem
+registrarTextosMov2(registrarTextos);
+
+/** Registra os textos da MOV2 (zona) num índice de textos (a folha e o painel chamam; é idempotente). */
+export const registrarTextosDeZona = (registrar) => registrarTextosMov2(registrar);
 
 /** Glifo de mover (quatro setas), registrado pela sessão no traço do registro. */
 export const GLIFO_MOVER = Object.freeze({
@@ -16,13 +24,12 @@ const camadaDoServico = (cat) => (cat === 'agua' || cat === 'energia' || cat ===
 
 /**
  * Pode abrir a ferramenta para o prédio p (o q.predio)? { ok: true } ou { ok: false, chave, codigo }. A chave é o texto da
- * dica ('mov1.fixo.zona', 'mov1.fixo.arcologia', 'mov1.fixo.obra' ou o 'codigo.inexistente' de um prédio que não existe mais).
+ * dica ('mov1.fixo.arcologia', 'mov1.fixo.obra' ou o 'codigo.inexistente' de um prédio que não existe mais).
  * Sem a consulta (a vitrine), vale o que o tipo diz.
  */
 export function podeAbrir(p) {
   if (!p || !Number.isFinite(p.x)) return { ok: false, chave: 'codigo.inexistente', codigo: 'inexistente' };
-  if (p.mover) return p.mover.pode ? { ok: true } : { ok: false, chave: `mov1.fixo.${p.mover.motivo ?? 'zona'}`, codigo: p.mover.codigo ?? 'fixo' };
-  if (p.tipo === 'zona' || p.zonaId) return { ok: false, chave: 'mov1.fixo.zona', codigo: 'fixo' };
+  if (p.mover) return p.mover.pode ? { ok: true } : { ok: false, chave: `mov1.fixo.${p.mover.motivo ?? 'arcologia'}`, codigo: p.mover.codigo ?? 'fixo' };
   return { ok: true };
 }
 
@@ -33,6 +40,7 @@ export function podeAbrir(p) {
  */
 export function itemDoMover(p, t) {
   const nome = p.nome ?? p.id;
+  // o prédio de zona tem a planta em metros na tabela (p.w e p.d), como o colocável
   return {
     tipo: p.id, nome: t('mov1.barra.nome', { nome }), nomeReal: nome, custo: p.mover?.custo ?? 0, manutencaoHora: 0, alcance: p.servico?.alcance ?? 0,
     pegada: [p.w, p.d], glifo: 'mover', camada: p.servico ? camadaDoServico(p.servico.categoria) : null, mover: true,
@@ -91,10 +99,18 @@ export function linhasDoQueMuda(previa, { t, fmt }) {
   const add = (id, texto, tom = null) => out.push({ id, texto, tom });
   if (previa.ok || previa.codigo === 'creditos') {
     const pct = previa.valor > 0 ? fmt.pct((previa.custoMover ?? 0) / previa.valor) : fmt.pct(0.1);
-    add('custo', t('mov1.linha.custo', { custo: fmt.dinheiro(previa.custoMover ?? previa.custo ?? 0), pct }));
+    const zona = previa.zona;
+    const custoMover = fmt.dinheiro(previa.custoMover ?? previa.custo ?? 0);
+    // zona em obra: a base é o que a obra já gastou; sem gasto, mover é de graça
+    if (zona?.emObra) add('custo', previa.valor > 0 ? t('mov2.linha.custoObra', { custo: custoMover, pct }) : t('mov2.linha.custoZeroObra'));
+    else add('custo', t('mov1.linha.custo', { custo: custoMover, pct }));
     const n = previa.demolir?.length ?? 0;
     if (n) add('demolir', t(n === 1 ? 'mov1.linha.demolir1' : 'mov1.linha.demolirN', { n, custo: fmt.dinheiro(previa.custoDemolir ?? 0) }), 'al');
-    if (Number.isFinite(previa.tiques)) add('obra', t('mov1.linha.obra', { tempo: fmt.minutosDeJogo(previa.tiques + (previa.mobilizacao ?? 0)) }));
+    if (zona?.emObra) add('obra', t('mov2.linha.zonaObra', { pct: fmt.pct(zona.progresso ?? 0) }), 'ok');
+    else if (zona && Number.isFinite(previa.tiques)) add('obra', t('mov2.linha.zonaPronto', { tempo: fmt.minutosDeJogo(previa.tiques + (previa.mobilizacao ?? 0)) }), 'ok');
+    else if (Number.isFinite(previa.tiques)) add('obra', t('mov1.linha.obra', { tempo: fmt.minutosDeJogo(previa.tiques + (previa.mobilizacao ?? 0)) }));
+    const cel = zona?.celulas;
+    if (cel) add('celulas', cel.ocupam > 0 ? t('mov2.linha.zonaCelulas', { liberam: fmt.numero(cel.liberam), ocupam: fmt.numero(cel.ocupam) }) : t('mov2.linha.zonaLivre', { liberam: fmt.numero(cel.liberam) }));
   }
   const m = previa.muda;
   if (m) {
@@ -141,6 +157,8 @@ export function dicaDeMover(p) {
   if (!p) return null;
   if (p.parado || p.codigo === 'nada') return { codigo: 'nada', chave: 'mov1.dica.nada', params: {}, tom: 'info', colide: null };
   if (p.ok) return null;
+  // zona de outro tipo pintada no lugar novo (MOV2): o mover diz, o colocar não conhece
+  if (p.codigo === 'colisao' && p.dados?.com === 'zona') return { codigo: 'colisao', chave: 'mov2.dica.zonaOutra', params: {}, tom: 'er', colide: null };
   if (p.codigo === 'ocupado' || p.codigo === 'fixo' || p.dados?.fixo) {
     const f = p.dados?.fixo ?? 'obra';
     return { codigo: p.codigo, chave: `mov1.dica.fixo.${f}`, params: {}, tom: 'er', colide: null };

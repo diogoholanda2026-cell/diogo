@@ -36,6 +36,11 @@ import {
   fotoAresta, caixaDasArestas, reformarNos, prediosNasCelulas,
 } from './demolir.js';
 import { nomearTraco, nomeDaAresta } from './nomes.js';
+import {
+  infoDoTraco, classificarCruzamento, comprimentoParaCota, alvoDaAgua, elevacaoPlanejada, viaNoChao, validarPilares,
+  codigoPublico, estruturaDaPonte,
+} from './ponte.js';
+import { lerCota, comprimentoRampa, TRAVESSIA_MAX, ELEVACAO_PONTE, DESNIVEL_MINIMO, GREIDE_MAX_ELEVADO, MULT_CUSTO_PONTE, MULT_MANUTENCAO_PONTE } from '../../comum/viaduto.js';
 import { recolherCelulas, refazerBlocos, removerPredio, celulasNaCaixa, celulasDaAresta } from '../zonas/blocos.js';
 
 const MODOS = Object.freeze(['reta', 'curva', 'continua', 'grade', 'melhorar', 'demolir']);
@@ -74,6 +79,7 @@ function lerArgs(args) {
     espacamento: args.espacamento,
     arestas: Array.isArray(args.arestas) ? args.arestas.filter((r) => Number.isInteger(r)) : [],
     mao: args.mao === -1 ? -1 : 1,
+    cota: lerCota(args.cota), // null: fora dos degraus do viaduto
   };
 }
 
@@ -211,6 +217,10 @@ function cruzarTraco(sim, plano, tr) {
   const lim = REGRAS_VIAS.noNoCruzamento;
   const eixo = eixoDeCurva(tr.p);
   const comp = eixo.comp;
+  // viaduto (D106): elevação planejada do traço, e os cruzamentos em que uma via passa por cima da outra sem se ligar
+  tr.info = infoDoTraco(sim, plano, tr, comp);
+  tr.passagens = [];
+  tr.avisos = [];
   for (const e of ids) {
     if (!A.viva[e]) continue;
     const eo = eixoDa(sim, e);
@@ -230,6 +240,12 @@ function cruzarTraco(sim, plano, tr) {
       const [t, u] = refinarCruzamento(tr.p, A.p, 8 * e, tDoArco(eixo.tab, sa), tDoArco(eo.tab, sb));
       ponto(tr.p, t, q);
       if (hipot(q[0] - va.x, q[1] - va.z) < 1.5 || hipot(q[0] - vb.x, q[1] - vb.z) < 1.5) continue;
+      const cl = classificarCruzamento(sim, tr.info, sa, e, u, q);
+      if (cl.tipo !== 'normal') {
+        // passa por cima ou por baixo sem ligar; a altura livre da peça pronta decide se serve ('altura')
+        tr.passagens.push({ s: sa, e, u, x: q[0], z: q[1], yOutra: cl.yOutra, sen, meia: tipoVia(A.tipo[e]).largura / 2 });
+        continue;
+      }
       if (arestaIntocavel(sim, e)) {
         tr.erros.add('colisao');
         continue;
@@ -313,6 +329,21 @@ function pecasDoTraco(sim, plano, tr, ti) {
   const s = Float64Array.from(S);
   const alvo = new Float64Array(S.length);
   for (let i = 0; i < S.length; i++) alvo[i] = sim.alturaEm(X[i], Z[i]) + CHAO_ABAIXO_DA_PISTA;
+  // ponte e viaduto (D53, D106): sobre a água o tabuleiro vai na cota das margens com um leve arco; com cota escolhida,
+  // o alvo sobe pelas rampas até o alto. `terra` é o chão com a folga da pista, para medir a elevação depois.
+  const terra = Float64Array.from(alvo);
+  const info = tr.info ?? infoDoTraco(sim, plano, tr, S[S.length - 1]);
+  const { agua, trechos: aguas } = alvoDaAgua(sim, X, Z, s, alvo, tipo.largura / 2);
+  const emRampa = new Uint8Array(S.length);
+  if (info.cota > 0) {
+    for (let i = 0; i < S.length; i++) {
+      const el = elevacaoPlanejada(info, S[i]);
+      alvo[i] += el;
+      if (el > 0) emRampa[i] = 1;
+    }
+    const preciso = comprimentoParaCota(info);
+    if (preciso !== null && S[S.length - 1] < preciso * 0.98) tr.erros.add('rampa');
+  }
   // arco reduzido: a pista fica plana nos patamares dos cruzamentos (raio do nó + 8 m, mais com via em ângulo agudo)
   const zonas = [];
   const dir = [0, 0];
@@ -328,11 +359,59 @@ function pecasDoTraco(sim, plano, tr, ti) {
   }
   const sr = reduzir(s, zonas);
   const gr = greide(s, alvo, fixas, tipo.declive, REGRAS_VIAS.greideJanela, sr);
-  if (!gr.ok || gr.pior > REGRAS_VIAS.corteMax) tr.erros.add('declive');
+  // o corte e o aterro só contam onde a pista segue o chão (no tabuleiro ela anda no alto)
+  let piorNoChao = 0;
+  for (let i = 0; i < S.length; i++) if (!agua[i] && !emRampa[i]) piorNoChao = Math.max(piorNoChao, Math.abs(gr.y[i] - alvo[i]));
+  if (!gr.ok || piorNoChao > REGRAS_VIAS.corteMax) tr.erros.add('declive');
+  // elevação: a pista do viaduto menos o greide que a mesma via teria no chão (o aterro de uma via comum não é tabuleiro)
+  const elev = new Float64Array(S.length);
+  const chaoBase = info.cota > 0 ? greide(s, terra, new Map(), tipo.declive, REGRAS_VIAS.greideJanela, sr).y : null;
+  let temTabuleiro = false;
+  for (let i = 0; i < S.length; i++) {
+    elev[i] = agua[i] ? Infinity : chaoBase ? gr.y[i] - chaoBase[i] : 0;
+    if (elev[i] >= ELEVACAO_PONTE) temTabuleiro = true;
+  }
+  if (aguas.length) temTabuleiro = true;
   for (const [idx, vi] of deVertice) if (!V[vi].fixo && !Number.isFinite(V[vi].y)) V[vi].y = gr.y[idx];
   // quebras: vértices sempre; mais os nós de greide
   const todas = new Map(fixas);
   for (const idx of deVertice.keys()) if (!todas.has(idx)) todas.set(idx, gr.y[idx]);
+  if (temTabuleiro) {
+    // quebras obrigatórias para o tabuleiro ter peças exatas: as margens, o pé e o topo das rampas e o fim dos
+    // patamares dos cruzamentos (a peça do tabuleiro é linear de ponta a ponta, como o render e o trânsito leem)
+    const marcar = (i) => {
+      if (i <= 0 || i >= S.length - 1 || todas.has(i)) return;
+      // peça de menos de 8 m seria 'curto': não marca a menos de 8,5 m de outra quebra
+      for (const k of todas.keys()) if (Math.abs(S[k] - S[i]) < REGRAS_VIAS.compMinTrecho + 0.5) return;
+      todas.set(i, gr.y[i]);
+    };
+    const perto = (alvoS) => {
+      let m = 0;
+      for (let i = 1; i < S.length; i++) if (Math.abs(S[i] - alvoS) < Math.abs(S[m] - alvoS)) m = i;
+      return m;
+    };
+    for (const a of aguas) {
+      marcar(a.margemA);
+      marcar(a.margemB);
+    }
+    for (let i = 1; i < S.length - 1; i++) {
+      if ((emRampa[i] !== emRampa[i - 1] || emRampa[i] !== emRampa[i + 1]) && elev[i] < Infinity) marcar(i);
+    }
+    if (info.cota > 0) {
+      const Lr = comprimentoRampa(info.cota);
+      if (!info.iniAlto) marcar(perto(Lr));
+      if (!info.fimAlto) marcar(perto(S[S.length - 1] - Lr));
+    }
+    for (const [a, b] of zonas) {
+      if (b <= a) continue;
+      let ia = 0;
+      for (let i = 0; i < S.length; i++) if (S[i] <= a) ia = i;
+      let ib = S.length - 1;
+      for (let i = S.length - 1; i >= 0; i--) if (S[i] >= b) ib = i;
+      marcar(ia);
+      marcar(ib);
+    }
+  }
   const quebras = quebrasDoGreide(s, gr.y, todas, REGRAS_VIAS.greideTolerancia, REGRAS_VIAS.greideTrechoMin, sr);
   const pecas = [];
   for (let k = 0; k + 1 < quebras.length; k++) {
@@ -348,7 +427,34 @@ function pecasDoTraco(sim, plano, tr, ti) {
     const vj = deVertice.has(j) ? deVertice.get(j) : novoNoDeGreide(plano, X[j], Z[j], gr.y[j]);
     deVertice.set(j, vj);
     const p = ajustarPontas(pedaco(arco.p, ta, tb), V[vi], V[vj]);
-    pecas.push({ p, va: vi, vb: vj, traco: tr.id, s0: S[i], comp: S[j] - S[i], rampa: sr[j] - sr[i], erros: new Set() });
+    // tabuleiro: alguma amostra da peça a ELEVACAO_PONTE ou mais do chão, ou sobre a água
+    let alta = 0;
+    let sobreAgua = false;
+    for (let k = i; k <= j; k++) {
+      if (agua[k]) sobreAgua = true;
+      else alta = Math.max(alta, elev[k]);
+    }
+    const pc = {
+      p, va: vi, vb: vj, traco: tr.id, s0: S[i], comp: S[j] - S[i], rampa: sr[j] - sr[i], erros: new Set(),
+      sobreAgua, elevada: sobreAgua || alta >= ELEVACAO_PONTE, altura: sobreAgua ? 0 : Math.max(0, alta), passagens: [],
+    };
+    pecas.push(pc);
+  }
+  // a passagem vale para a peça que a contém (confere a altura livre) e para as vizinhas até 40 m (a sobreposição das
+  // pistas é esperada ali)
+  for (const ps of tr.passagens ?? []) {
+    for (const pc of pecas) {
+      if (ps.s >= pc.s0 - 40 && ps.s <= pc.s0 + pc.comp + 40) pc.passagens.push({ ...ps, dentro: ps.s >= pc.s0 - 1e-6 && ps.s <= pc.s0 + pc.comp + 1e-6 });
+    }
+  }
+  // travessia sobre a água de ponta a ponta (a D53 fala do vão do traço, não de cada peça)
+  for (const a of aguas) {
+    if (S[a.i1] - S[a.i0] > TRAVESSIA_MAX + 1e-6) tr.avisos.push({ s: S[a.i0], s1: S[a.i1], codigo: 'vao' });
+  }
+  for (const av of tr.avisos ?? []) {
+    const s1 = av.s1 ?? av.s;
+    const alvos = pecas.filter((x) => s1 >= x.s0 - 1e-6 && av.s <= x.s0 + x.comp + 1e-6);
+    for (const pc of alvos.length ? alvos : pecas.slice(0, 1)) pc.erros.add(av.codigo);
   }
   return pecas;
 }
@@ -512,16 +618,20 @@ function validar(sim, plano, ti) {
   }
   // cada peça
   const demolir = new Set();
+  const bloqueiaPilar = viaNoChao(sim);
   plano.pecas.forEach((pc) => {
     const a = amostrarCurva(pc.p);
     pc.amostras = a;
     if (pc.comp < REGRAS_VIAS.compMinTrecho - 1e-6) pc.erros.add('curto');
     const g = Math.abs(V[pc.vb].y - V[pc.va].y) / Math.max(1, pc.rampa);
     pc.declive = g;
-    if (g > tipo.declive + 1e-6) pc.erros.add('declive');
-    // água: ponte se houver travessia registrada (X4, M1b)
+    // tabuleiro (ponte ou viaduto): rampa de até 8% (D106); no chão, o declive do tipo
+    if (pc.elevada) {
+      if (g > Math.min(tipo.declive, GREIDE_MAX_ELEVADO) + 1e-6) pc.erros.add('greide');
+    } else if (g > tipo.declive + 1e-6) pc.erros.add('declive');
+    // água: ponte se houver travessia registrada (X4, D53)
     const agua = trechosSobreAgua(sim, a, meia);
-    pc.ponte = false;
+    pc.ponte = pc.elevada;
     if (agua.length) {
       const r = sim.travessia.consultar({ tipo: VIAS_ORDEM[ti], p: Array.from(pc.p), trechos: agua, comprimento: pc.comp, cotas: [V[pc.va].y, V[pc.vb].y] });
       if (r) {
@@ -548,17 +658,32 @@ function validar(sim, plano, ti) {
         }
       }
     }
+    // passagens: onde a pista passa por cima (ou por baixo) de outra via sem se ligar, a sobreposição é esperada e a
+    // altura livre real da peça pronta é conferida (a estimada do cruzamento usava o perfil planejado)
+    for (const ps of pc.passagens ?? []) {
+      const r = (meia + ps.meia) / Math.max(ps.sen, 0.3) + 4;
+      const l = excl.get(ps.e);
+      if (l) l.push([ps.x, ps.z, r]);
+      else excl.set(ps.e, [[ps.x, ps.z, r]]);
+      if (!ps.dentro) continue;
+      const f = pc.comp > 0 ? Math.min(1, Math.max(0, (ps.s - pc.s0) / pc.comp)) : 0;
+      const y = V[pc.va].y + (V[pc.vb].y - V[pc.va].y) * f;
+      if (Math.abs(y - ps.yOutra) < DESNIVEL_MINIMO - 0.05) pc.erros.add('altura');
+    }
     if (viasSobrepostas(sim, a, meia, excl).length) pc.erros.add('colisao');
-    // prédios na pista: os da cidade saem (custo), os outros barram
+    // prédios na pista: os da cidade saem (custo), os outros barram; o tabuleiro no alto não derruba nada, recusa
     for (const i of prediosNaPista(sim, a, meia)) {
-      if (predioDaCidade(sim, i)) demolir.add(i);
+      if (pc.elevada) pc.erros.add('colisao');
+      else if (predioDaCidade(sim, i)) demolir.add(i);
       else pc.erros.add('colisao');
     }
+    // pilar em chão válido: fora da pista de via no chão, de prédio e de água funda demais
+    if (pc.elevada) for (const c of validarPilares(sim, pc, V[pc.va].y, V[pc.vb].y, bloqueiaPilar)) pc.erros.add(c);
     // prédios da cidade cujas células ficam a menos de meia largura + 4 m da pista nova
     const eixo = eixoDeCurva(pc.p);
     const r = meia + 4;
     const cx = eixo.caixa;
-    if (C.motivo) {
+    if (C.motivo && !pc.elevada) {
       for (const c of celulasNaCaixa(sim, cx[0] - r, cx[1] - r, cx[2] + r, cx[3] + r)) {
         const i = C.predio[c];
         if (i < 0 || demolir.has(i)) continue;
@@ -725,6 +850,7 @@ export function planejar(sim, argsBrutos) {
   if (!args) return { saida: vazia([{ codigo: 'valor', trecho: -1 }]), interno: null };
   if (args.modo === 'melhorar') return planejarMelhoria(sim, args);
   if (args.modo === 'demolir') return planejarDemolicao(sim, args);
+  if (args.cota === null) return { saida: vazia([{ codigo: 'valor', trecho: -1 }]), interno: null };
   if (!args.pontos.length) return { saida: vazia([{ codigo: 'valor', trecho: -1 }]), interno: null };
   const ti = VIAS_ORDEM.indexOf(args.tipo);
   const tipo = VIAS[args.tipo];
@@ -736,7 +862,8 @@ export function planejar(sim, argsBrutos) {
     s.pontos = pts;
     return { saida: s, interno: null };
   }
-  const plano = { vertices: [], porNo: new Map(), tracos: [], pecas: [], demolir: [], sessao: args.sessao, modo: args.modo, ti };
+  // cota do viaduto (D106): a grade de quadras é sempre no chão
+  const plano = { vertices: [], porNo: new Map(), tracos: [], pecas: [], demolir: [], sessao: args.sessao, modo: args.modo, ti, cota: args.modo === 'grade' ? 0 : args.cota };
   const ult = pts.length - 1;
   const novoTraco = (p, va, vb, linha) => {
     const tr = { id: plano.tracos.length, p: ajustarPontas(Float64Array.from(p), plano.vertices[va], plano.vertices[vb]), va, vb, linha, erros: new Set() };
@@ -870,13 +997,20 @@ function saidaDoPlano(sim, plano, args, enc) {
   const erros = [];
   let comprimento = 0;
   let custoVia = 0;
+  let manutencao = 0;
   let declive = 0;
   const segmentos = plano.pecas.map((pc, k) => {
     comprimento += pc.comp;
-    custoVia += pc.comp * (tipo.custoM ?? 0) * (1 + 2 * pc.declive);
+    // ponte e viaduto custam MULT_CUSTO_PONTE vezes a via comum por metro (D53, D106)
+    custoVia += pc.comp * (tipo.custoM ?? 0) * (1 + 2 * pc.declive) * (pc.ponte ? MULT_CUSTO_PONTE : 1);
+    manutencao += (pc.comp / 1000) * (tipo.manutKmH ?? 0) * (pc.ponte ? MULT_MANUTENCAO_PONTE : 1);
     declive = Math.max(declive, pc.declive);
-    for (const c of pc.erros) erros.push({ codigo: c, trecho: k });
-    return { p: Array.from(pc.p), tipo: args.tipo, cotas: [V[pc.va].y, V[pc.vb].y], ponte: pc.ponte, erros: [...pc.erros], declive: pc.declive };
+    const publicos = [...pc.erros].map(codigoPublico);
+    for (const c of publicos) erros.push(c.dados ? { codigo: c.codigo, trecho: k, dados: c.dados } : { codigo: c.codigo, trecho: k });
+    return {
+      p: Array.from(pc.p), tipo: args.tipo, cotas: [V[pc.va].y, V[pc.vb].y], ponte: pc.ponte, erros: publicos.map((c) => c.codigo),
+      declive: pc.declive, obra: pc.ponte ? (pc.sobreAgua ? 'ponte' : 'viaduto') : null, altura: pc.ponte ? Math.round(pc.altura * 10) / 10 : 0,
+    };
   });
   let custoDemolir = 0;
   for (const i of plano.demolir) custoDemolir += custoDemolirPredio(sim, i);
@@ -909,7 +1043,7 @@ function saidaDoPlano(sim, plano, args, enc) {
     demolir: { predios: plano.demolir.map((i) => refDe(i, P.ger[i])), custo: Math.round(custoDemolir) },
     comprimento: Math.round(comprimento * 10) / 10,
     custo,
-    manutencaoHora: Math.round((comprimento / 1000) * (tipo.manutKmH ?? 0) * 10) / 10,
+    manutencaoHora: Math.round(manutencao * 10) / 10,
     declive: Math.round(declive * 1000) / 1000,
     erros,
   };
@@ -1049,7 +1183,7 @@ export function aplicar(sim, plano) {
   const porTraco = new Map();
   const mao = VIAS[VIAS_ORDEM[plano.ti]].mao === 'unica' ? MAO.AB : MAO.DUPLA;
   for (const pc of plano.pecas) {
-    const e = addAresta(G, V[pc.va].no, V[pc.vb].no, plano.ti, [pc.p[2], pc.p[3]], [pc.p[4], pc.p[5]], { mao });
+    const e = addAresta(G, V[pc.va].no, V[pc.vb].no, plano.ti, [pc.p[2], pc.p[3]], [pc.p[4], pc.p[5]], { mao, flags: pc.ponte ? ARESTA.PONTE : 0 });
     if (e < 0) continue;
     criadas.push(e);
     pc.e = e;
@@ -1230,20 +1364,26 @@ function planejarDemolicao(sim, args) {
   let comprimento = 0;
   const segmentos = [];
   const itens = [];
+  const vistas = new Set();
   for (const ref of args.arestas) {
     const e = A.idxVivo(ref);
     let c = null;
     if (e < 0) c = 'inexistente';
     else if (A.flags[e] & ARESTA.ARCOLOGIA) c = 'arcologia';
-    else if (A.flags[e] & (ARESTA.RODOVIA | ARESTA.PONTE)) c = 'rodovia';
+    else if (A.flags[e] & ARESTA.RODOVIA) c = 'rodovia';
     itens.push({ ref, ok: !c, erros: c ? [c] : [] });
     if (c) {
       erros.push({ codigo: c, trecho: itens.length - 1 });
       continue;
     }
-    devolve += devolucaoAresta(sim, e, args.sessao);
-    comprimento += A.arco[17 * e + 16];
-    segmentos.push({ p: Array.from(A.p.subarray(8 * e, 8 * e + 8)), tipo: VIAS_ORDEM[A.tipo[e]], cotas: [A.y[2 * e], A.y[2 * e + 1]], ponte: !!(A.flags[e] & ARESTA.PONTE), erros: [], declive: decliveDa(sim, e) });
+    // ponte ou viaduto do jogador cai inteiro: as peças encadeadas entram na conta (D106)
+    for (const x of estruturaDaPonte(sim, e)) {
+      if (vistas.has(x)) continue;
+      vistas.add(x);
+      devolve += devolucaoAresta(sim, x, args.sessao);
+      comprimento += A.arco[17 * x + 16];
+      segmentos.push({ p: Array.from(A.p.subarray(8 * x, 8 * x + 8)), tipo: VIAS_ORDEM[A.tipo[x]], cotas: [A.y[2 * x], A.y[2 * x + 1]], ponte: !!(A.flags[x] & ARESTA.PONTE), erros: [], declive: decliveDa(sim, x) });
+    }
   }
   if (!args.arestas.length) erros.push({ codigo: 'valor', trecho: -1 });
   return {

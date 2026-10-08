@@ -1,4 +1,4 @@
-// Textos da MOV1 (mover e girar construções prontas, D94; dona: MOV1): o botão Mover da folha, o que impede de mover, a
+// Textos da MOV1 (mover e girar construções prontas, D94; dona: MOV1; o prédio de zona também se move desde a MOV2, D105, textos em mov2.js): o botão Mover da folha, o que impede de mover, a
 // barra e a dica do fantasma, o painel "o que muda" (alcance antes e depois, a via a que se liga, o que deixa de cobrir) e o
 // aviso de depois de mover. Português do Brasil, frases curtas, sem travessão; dinheiro sempre por ui/formato.js (D87) e
 // tempo em "min de jogo" (D42). O texto do código de recusa 'fixo' também mora aqui até o integrador listá-lo no contrato.
@@ -11,7 +11,6 @@ export function registrar(registrarTextos) {
     'mov1.mover.emObra': 'Em obra: espere terminar para mover',
 
     // o que impede de mover (dados.fixo da recusa): a dica de cada um
-    'mov1.fixo.zona': 'Prédio de zona não muda de lugar: a zona se refaz sozinha. Dá para demolir e zonear onde quiser',
     'mov1.fixo.arcologia': 'A Arcologia fica onde está',
     'mov1.fixo.obra': 'Em obra: espere terminar para mover de novo',
     'codigo.fixo': 'Esta construção não muda de lugar.',
@@ -22,8 +21,6 @@ export function registrar(registrarTextos) {
     // dica do fantasma (o motivo e o que fazer, no mesmo formato da ux1) e o motivo curto do botão e da cota
     'mov1.dica.nada': 'Arraste o prédio para o novo lugar, ou gire para mudar a direção dele',
     'mov1.curto.nada': 'Escolha o novo lugar',
-    'mov1.dica.fixo.zona': 'Prédio de zona não muda de lugar: a zona se refaz sozinha',
-    'mov1.curto.fixo.zona': 'Prédio de zona',
     'mov1.dica.fixo.arcologia': 'A Arcologia fica onde está',
     'mov1.curto.fixo.arcologia': 'Arcologia fixa',
     'mov1.dica.fixo.obra': 'Em obra: espere terminar para mover de novo',

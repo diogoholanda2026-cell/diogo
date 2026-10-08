@@ -1,7 +1,7 @@
 // Testes da interface e do toque da MOV1 (D94), sem navegador:
 //   - a ferramenta de mover é a de colocar: a sessão abre como 'colocar' com a ref do prédio, o fantasma já fica nele (a
 //     prévia parada, sem erro e com o custo de mover à vista), arrastar dá a prévia de q.mover.previa, Construir manda o
-//     comando `mover` e o Desfazer da sessão manda `mover.desfazer`; zona e Arcologia não abrem, com a dica;
+//     comando `mover` e o Desfazer da sessão manda `mover.desfazer`; a Arcologia não abre, com a dica; a zona, pronta ou em obra, abre (MOV2);
 //   - o painel "o que muda" (linhas puras) e os textos da parcela;
 //   - a ferramenta aberta volta depois da recarga pela perda do contexto (estadoParaRetomar e retomar, e o armazém da
 //     retomada de app/controle.js com o campo `ferramenta`);
@@ -226,38 +226,77 @@ test('sessão: o Desfazer depois que a obra começou diz por quê; um mover que 
   }
 });
 
-test('sessão: zona e Arcologia não abrem a ferramenta; a dica diz o motivo', () => {
+test('sessão: a Arcologia não abre a ferramenta; a zona abre, pronta e em obra (MOV2), e a dica diz o motivo', async () => {
   const sim = mundo('mov-ui-fixo');
   const zr = indiceZona('resBaixa');
-  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1000, z: -300, x2: 1100, z2: -200 }, zona: zr }).ok);
+  assert.ok(sim.cmd('zona.pintar', { pincel: { modo: 'retangulo', x: 1000, z: -300, x2: 1200, z2: -200 }, zona: zr }).ok);
   const C = sim.tabelas.celulas;
+  const P = sim.tabelas.predios;
   const rng = sim.rng('teste');
-  let casa = -1;
-  for (let c = 0; c < C.n && casa < 0; c++) {
+  const casas = [];
+  for (let c = 0; c < C.n && casas.length < 2; c++) {
     if (!C.viva[c] || C.zona[c] !== zr || C.linha[c] !== 0 || C.estado[c] !== CELULA.LIVRE) continue;
-    casa = nascerNaFrente(sim, c, zr, rng);
+    const k = nascerNaFrente(sim, c, zr, rng);
+    if (k >= 0) casas.push(k);
   }
-  terminarObra(sim, casa);
-  const ref = sim.tabelas.predios.ref(casa);
-  const { soltar } = montarSessao(sim);
+  terminarObra(sim, casas[0]);
+  const ref = P.ref(casas[0]);
+  const refObra = P.ref(casas[1]);
+  const { R, soltar } = montarSessao(sim);
   try {
-    assert.equal(sessao.ferramentas.abrir('mover', { ref }), false);
-    assert.equal(sessao.sessao.value, null);
-    assert.equal(loja.avisos.value.at(-1).texto, t('mov1.fixo.zona'));
-    assert.equal(moverUI.podeAbrir(sim.q.predio(ref)).chave, 'mov1.fixo.zona');
-    // pela loja (a folha e o menu abrem assim): o pedido que falha é limpo
-    loja.ferramenta.value = { tipo: 'mover', ref };
-    assert.equal(sessao.sessao.value, null);
-    assert.equal(loja.ferramenta.value, null, 'o pedido recusado não fica na loja');
+    // pronta: abre, com o item na planta em metros do prédio e o custo de 10% do valor
+    assert.equal(moverUI.podeAbrir(sim.q.predio(ref)).ok, true);
+    assert.equal(sessao.ferramentas.abrir('mover', { ref, alinhar: true, giro: 0 }), true);
+    let s = sessao.sessao.value;
+    assert.equal(s.tipo, 'colocar');
+    assert.deepEqual(s.item.pegada, [P.w[casas[0]], P.d[casas[0]]]);
+    assert.equal(s.item.custo, sim.q.predio(ref).mover.custo);
+    // arrasta para a rua do sul, de frente para ela: a prévia traz as células e o painel diz "libera ... ocupa ..."
+    R.enviar('inicio', 1150, -230);
+    R.enviar('fim', 1150, -230);
+    s = sessao.sessao.value;
+    assert.equal(s.previa.ok, true, `${s.previa.codigo} ${JSON.stringify(s.previa.dados)}`);
+    assert.ok(s.previa.zona?.celulas?.ocupam >= 1);
+    const linhas = moverUI.linhasDoQueMuda(s.previa, { t, fmt });
+    assert.ok(linhas.some((l) => l.id === 'celulas' && /Libera \d+ lotes de zona/.test(l.texto)), JSON.stringify(linhas));
+    assert.ok(linhas.some((l) => l.id === 'obra' && /segue em uso/.test(l.texto)));
+    const caixa0 = sim.holding.caixa();
+    await sessao.ferramentas.construir();
+    assert.ok(caixa0 - sim.holding.caixa() >= s.item.custo - 1e-6);
+    assert.ok(perto(P.x[casas[0]], s.previa.x, 1e-3), 'a casa foi para onde o fantasma estava');
+    assert.equal(sessao.sessao.value.desfazer, 1);
+    await sessao.ferramentas.desfazer();
+    assert.equal(sessao.sessao.value.desfazer, 0);
+    sessao.ferramentas.fechar();
+    // em obra: abre também, e as linhas dizem que a obra segue do mesmo ponto
+    sim.rodar(15, { sincrono: true });
+    assert.equal(sim.q.predio(refObra).estado, 'obra');
+    assert.equal(sim.q.predio(refObra).mover.pode, true);
+    assert.equal(sessao.ferramentas.abrir('mover', { ref: refObra, alinhar: true, giro: 0 }), true);
+    R.enviar('inicio', 1100, -230);
+    R.enviar('fim', 1100, -230);
+    s = sessao.sessao.value;
+    assert.equal(s.previa.ok, true, `${s.previa.codigo} ${JSON.stringify(s.previa.dados)}`);
+    const lo = moverUI.linhasDoQueMuda(s.previa, { t, fmt });
+    assert.ok(lo.some((l) => l.id === 'obra' && /A obra segue de onde está: \d+% pronta/.test(l.texto)), JSON.stringify(lo.map((l) => l.texto)));
+    assert.ok(lo.some((l) => l.id === 'custo' && /do que a obra já gastou|não custa nada/.test(l.texto)));
+    sessao.ferramentas.fechar();
+    // zona de outro tipo no destino: a dica é do mover
+    const dica = moverUI.dicaDeMover({ ok: false, codigo: 'colisao', dados: { com: 'zona', zona: 'comBaixa' } });
+    assert.equal(dica.chave, 'mov2.dica.zonaOutra');
+    assert.ok(temTexto('mov2.dica.zonaOutra') && temTexto('mov2.curto.zonaOutra'));
     // a Arcologia (fixa pelo catálogo)
     const praca = pronto(sim, 'praca', 1300, -330);
     sim.colocaveis.obter('praca').arcologia = true;
     assert.equal(moverUI.podeAbrir(sim.q.predio(praca)).chave, 'mov1.fixo.arcologia');
     assert.equal(sessao.ferramentas.abrir('mover', { ref: praca }), false);
     assert.equal(loja.avisos.value.at(-1).texto, t('mov1.fixo.arcologia'));
-    // o prédio em obra aparece apagado na folha e não abre
+    loja.ferramenta.value = { tipo: 'mover', ref: praca };
+    assert.equal(sessao.sessao.value, null);
+    assert.equal(loja.ferramenta.value, null, 'o pedido recusado não fica na loja');
     sim.colocaveis.obter('praca').arcologia = false;
     assert.equal(moverUI.podeAbrir(null).ok, false);
+    assert.deepEqual(sim.erros, []);
   } finally {
     soltar();
   }
@@ -266,7 +305,8 @@ test('sessão: zona e Arcologia não abrem a ferramenta; a dica diz o motivo', (
 test('sessão: o botão Mover da folha só aparece para colocável (em obra, apagado)', async () => {
   const { mostraMover } = await importarBotao();
   assert.equal(mostraMover(null), false);
-  assert.equal(mostraMover({ mover: { pode: false, codigo: 'fixo', motivo: 'zona' } }), false, 'zona: sem botão');
+  assert.equal(mostraMover({ mover: { pode: true, custo: 27, zona: true } }), true, 'zona pronta: com botão (MOV2)');
+  assert.equal(mostraMover({ mover: { pode: true, custo: 0, zona: true, emObra: true } }), true, 'zona em obra: com botão e pode');
   assert.equal(mostraMover({ mover: { pode: false, codigo: 'fixo', motivo: 'arcologia' } }), false, 'Arcologia: sem botão');
   assert.equal(mostraMover({ mover: { pode: false, codigo: 'ocupado', motivo: 'obra' } }), true, 'em obra: apagado, com o porquê');
   assert.equal(mostraMover({ mover: { pode: true, custo: 1000 } }), true);
@@ -343,7 +383,7 @@ test('textos: todas as chaves da MOV1 existem, sem travessão nem "dia", sem rep
   // o glifo de mover existe no registro
   assert.ok(glifo('mover')?.tracos.length >= 5);
   // a dica de cada impedimento
-  for (const f of ['zona', 'arcologia', 'obra']) {
+  for (const f of ['arcologia', 'obra']) {
     assert.ok(temTexto(`mov1.fixo.${f}`) && temTexto(`mov1.dica.fixo.${f}`) && temTexto(`mov1.curto.fixo.${f}`), f);
   }
   // o css e o painel estão no pacote

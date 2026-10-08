@@ -256,7 +256,7 @@ test('cruzamento divide as duas vias; perto do nó passa pelo nó; ângulo míni
   assert.deepEqual(conferirEspelho(sim.espelho, { alturaEm: (x, z) => sim.alturaEm(x, z) }), []);
 });
 
-test('declive por tipo (greide seguindo o chão), água sem travessia, gleba com portão e ladrilho', () => {
+test('declive por tipo (greide seguindo o chão), água com ponte, gleba com portão e ladrilho', () => {
   const sim = novaSim('vias-regras', 'livre');
   // subindo o pé do morro: a rua (12%) passa, a avenida grande (8%) não
   const subida = [[-760, -520], [-760, -700]];
@@ -267,12 +267,9 @@ test('declive por tipo (greide seguindo o chão), água sem travessia, gleba com
   assert.ok(p.declive > 0.05, 'a rua sobe de verdade');
   // morro acima do que o tipo aguenta
   assert.ok(codigos(via(sim, 'rua', [[-720, -520], [-720, -720]], { construir: false, encaixe: false }).p).includes('declive'));
-  // água: recusada sem travessia; com a travessia registrada (X4, M1b) vira ponte
+  // água: com a travessia registrada pela ponte (X4, D53, PONT2) vira ponte; o resto está em ponte.teste.mjs
   const agua = [[-700, 700], [-700, 950]];
-  assert.ok(codigos(via(sim, 'rua', agua, { construir: false }).p).includes('agua'));
-  const outra = novaSim('vias-regras-ponte', 'livre');
-  outra.travessia.registrar(() => ({ codigo: null }));
-  const pp = via(outra, 'rua', agua, { construir: false }).p;
+  const pp = via(sim, 'rua', agua, { construir: false }).p;
   assert.ok(!codigos(pp).includes('agua') && pp.segmentos.some((s) => s.ponte), JSON.stringify(pp.erros));
   // gleba: não entra, mas chega ao portão
   assert.ok(codigos(via(sim, 'rua', [[0, 100], [0, 400]], { construir: false }).p).includes('gleba'));

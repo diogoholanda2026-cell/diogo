@@ -15,6 +15,8 @@ import { ITENS } from '../../data/holding.js';
 import { formaDaAresta } from '../mundo/aplainar.js';
 import { recolherCelulas, refazerBlocos, restaurarPredio, celulasDaAresta } from '../zonas/blocos.js';
 import { decliveDa, tipoVia, amostrarCurva, prediosNaPista } from './validar.js';
+import { estruturaDaPonte } from './ponte.js';
+import { MULT_CUSTO_PONTE, MULT_MANUTENCAO_PONTE } from '../../comum/viaduto.js';
 
 // ------------------------------------------------------------------------------------------------ custos
 
@@ -50,14 +52,14 @@ export function custoAresta(sim, e) {
   const A = sim.tabelas.arestas;
   const tipo = tipoVia(A.tipo[e]);
   if (!tipo?.custoM) return 0;
-  return A.arco[17 * e + 16] * tipo.custoM * (1 + 2 * decliveDa(sim, e));
+  return A.arco[17 * e + 16] * tipo.custoM * (1 + 2 * decliveDa(sim, e)) * (A.flags[e] & ARESTA.PONTE ? MULT_CUSTO_PONTE : 1);
 }
 
 /** Manutenção da via por hora de jogo. */
 export function manutencaoAresta(sim, e) {
   const A = sim.tabelas.arestas;
   const tipo = tipoVia(A.tipo[e]);
-  return ((A.arco[17 * e + 16] / 1000) * (tipo?.manutKmH ?? 0));
+  return (A.arco[17 * e + 16] / 1000) * (tipo?.manutKmH ?? 0) * (A.flags[e] & ARESTA.PONTE ? MULT_MANUTENCAO_PONTE : 1);
 }
 
 // ------------------------------------------------------------------------------------------------ sessão
@@ -278,8 +280,9 @@ function demolirVias(sim, { arestas, sessao } = {}) {
     const e = A.idxVivo(ref);
     if (e < 0) return { ok: false, codigo: 'inexistente' };
     if (A.flags[e] & ARESTA.ARCOLOGIA) return { ok: false, codigo: 'arcologia' };
-    if (A.flags[e] & (ARESTA.RODOVIA | ARESTA.PONTE)) return { ok: false, codigo: 'rodovia' };
-    if (!lista.includes(e)) lista.push(e);
+    if (A.flags[e] & ARESTA.RODOVIA) return { ok: false, codigo: 'rodovia' };
+    // ponte ou viaduto do jogador cai inteiro, das rampas aos vãos (D106)
+    for (const x of estruturaDaPonte(sim, e)) if (!lista.includes(x)) lista.push(x);
   }
   lista.sort((a, b) => a - b);
   let devolvido = 0;

@@ -4,10 +4,12 @@
 // atendidos antes e depois), a via a que se liga, a rede e o armazém. O motivo do vermelho e o giro ficam no painel do
 // fantasma (DicaColocar.jsx); aqui só o que muda. Sem toque no mouse (pointer-events: none): o dedo arrasta por cima.
 import { sessao } from './sessao.js';
-import { t } from '../textos.js';
+import { t, registrarTextos } from '../textos.js';
 import * as fmt from '../formato.js';
 import { Glifo } from '../glifos/Glifo.jsx';
-import { linhasDoQueMuda } from './mover.js';
+import { linhasDoQueMuda, registrarTextosDeZona } from './mover.js';
+
+registrarTextosDeZona(registrarTextos);
 
 const GLIFO = { ok: 'check', al: 'alerta', er: 'alerta' };
 

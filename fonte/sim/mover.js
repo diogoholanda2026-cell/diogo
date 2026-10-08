@@ -338,14 +338,16 @@ export function oQueMuda(sim, i, k, L) {
 // ------------------------------------------------------------------------------------------------ prévia e comando
 
 /** Os argumentos de lugar do `construir`, aplicados ao prédio i (a rotação de agora se vier sem). */
-function lugarDe(sim, def, args, i) {
+function lugarDe(sim, def, args, i, zona = false) {
   const P = sim.tabelas.predios;
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   const x = num(args.x) ? args.x : P.x[i];
   const z = num(args.z) ? args.z : P.z[i];
   // sem x e z (só girar) a planta fica onde está; com eles, o alinhar à via é o padrão, como no construir
   const alinhar = typeof args.alinhar === 'boolean' ? args.alinhar : num(args.x) && num(args.z);
-  return lugarDoColocavel(sim, def, { x, z, rot: num(args.rot) ? args.rot : P.rot[i], giro: num(args.giro) ? args.giro : null, alinhar }, true);
+  // prédio de zona alinhado sem giro dito: de frente para a via (o colocável arredonda o que tinha ao quarto de volta)
+  const giro = num(args.giro) ? args.giro : zona && alinhar && num(args.x) && num(args.z) ? 0 : null;
+  return lugarDoColocavel(sim, def, { x, z, rot: num(args.rot) ? args.rot : P.rot[i], giro, alinhar }, true);
 }
 
 /** Um argumento de lugar que veio e não é número finito (ausente vale: fica o de agora). */
@@ -380,7 +382,7 @@ export function previaMover(sim, args = {}) {
     ...(zona ? { zona: { emObra: nascendo(P, i), progresso: nascendo(P, i) ? progressoDaObra(sim, i) : 1, celulas: null } } : {}),
   };
   if (imp) return { ok: false, codigo: imp.codigo, dados: imp.dados, ...base, x: de.x, z: de.z, rot: de.rot };
-  const L = lugarDe(sim, defDoLugar(sim, i, k), args, i);
+  const L = lugarDe(sim, defDoLugar(sim, i, k), args, i, k.tipo === 'zona');
   if (L.codigo) return { ok: false, codigo: L.codigo, ...base, x: args.x, z: args.z, rot: args.rot ?? de.rot };
   // o prédio já está ali: nada a conferir nem a cobrar (e um prédio antigo, de antes das regras de agora, não fica vermelho no lugar dele)
   if (ficouNoMesmo(P, i, L)) return { ok: false, codigo: 'nada', ...base, x: de.x, z: de.z, rot: de.rot, alinhado: L.alinhado, giro: L.giro ?? null, custo: 0 };
@@ -424,7 +426,7 @@ export function mover(sim, args = {}) {
   const k = tipoDoPredio(sim, i);
   const def = k.def;
   const zona = k.tipo === 'zona';
-  const L = lugarDe(sim, defDoLugar(sim, i, k), args, i);
+  const L = lugarDe(sim, defDoLugar(sim, i, k), args, i, k.tipo === 'zona');
   if (L.codigo) return { ok: false, codigo: L.codigo };
   if (ficouNoMesmo(P, i, L)) return { ok: false, codigo: 'nada' };
   const c = conferirLugar(sim, k.id, defDoLugar(sim, i, k), L, opcoesDoLugar(k, i, args.aplainar === true));
@@ -580,6 +582,9 @@ export function desfazerMover(sim, args = {}) {
 function limparJanelas(sim) {
   const j = J(sim);
   for (const ref of Object.keys(j.pend)) if (sim.tique >= j.pend[ref].ate) delete j.pend[ref];
+  // a reforma de mover de um prédio de zona que foi demolido no meio não deixa marca para trás
+  const P = sim.tabelas.predios;
+  if (j.zona) for (const ref of Object.keys(j.zona)) if (!(P.idxVivo(Number(ref)) >= 0)) delete j.zona[ref];
 }
 
 export function registrarMover(sim) {
