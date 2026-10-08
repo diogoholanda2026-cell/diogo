@@ -8,8 +8,9 @@
 import { maisPerto, direcao, ponto, arcoDoT, tDoArco } from '../../comum/bezier.js';
 import { atan2, cos, sen, hipot, clamp } from '../../comum/util.js';
 import { refDe, CELULA_M } from '../../contratos/espelho.js';
+import { ARESTA } from '../../contratos/flags.js';
 import { REGRAS_VIAS, GRADE_EIXOS } from '../../data/vias.js';
-import { tipoVia, eixoDa, distEixo, arestaIntocavel, noLigavel, portaoPerto, saidaDoNo, MEIA_MAX } from './validar.js';
+import { tipoVia, eixoDa, distEixo, arestaIntocavel, rodoviaLigavelEm, noLigavel, portaoPerto, saidaDoNo, MEIA_MAX } from './validar.js';
 
 const RAD = Math.PI / 180;
 const MP = { t: 0, d: 0, x: 0, z: 0 };
@@ -43,7 +44,8 @@ export function passoNaAresta(sim, e, t, meiaNova) {
 
 /**
  * Âncora de um ponto: nó existente (ou portão) a menos de `tolNo`, senão ponto sobre uma aresta a menos de meia largura
- * mais `tol` do eixo. Arestas da rodovia, de ponte e da Arcologia não recebem vias; nós delas só os que noLigavel deixa.
+ * mais `tol` do eixo. Arestas de ponte (a da rodovia inclusive) e da Arcologia não recebem vias; a rodovia recebe fora
+ * de 25 m da ponte (D108); nós só os que noLigavel deixa.
  * Com `meiaNova`, o ponto sobre a aresta anda para o passo das células dela (passoNaAresta).
  * @returns {{ x, z, ancora: { tipo: 'no', no } | { tipo: 'portao', id } | { tipo: 'aresta', e, t } | null, encaixe: object | null }}
  */
@@ -74,6 +76,7 @@ export function ancorar(sim, x, z, { tol = REGRAS_VIAS.tolerancia, tolNo = tol, 
     const meia = tipoVia(A.tipo[e]).largura / 2;
     maisPerto(A.p, x, z, 8 * e, MP);
     if (MP.d > meia + tol) continue;
+    if (A.flags[e] & ARESTA.RODOVIA && !rodoviaLigavelEm(sim, e, arcoDoT(A.arco.subarray(17 * e, 17 * e + 17), MP.t))) continue;
     const d = MP.d - meia;
     if (d < md) {
       md = d;

@@ -28,7 +28,7 @@ import { addNo, addAresta, dividir as dividirAresta, cortes, meiaDa, arestasDoNo
 import { encaixarTraco, ancorar, espacamentoDe } from './encaixe.js';
 import {
   tipoVia, eixoDeCurva, distEixo, pistaNoT, amostrarCurva, trechosSobreAgua, foraDosLadrilhos, entraNaGleba, raioMinimo,
-  greide, quebrasDoGreide, saidaDoNo, viasSobrepostas, prediosNaPista, predioDaCidade, noLigavel,
+  greide, quebrasDoGreide, saidaDoNo, viasSobrepostas, prediosNaPista, predioDaCidade, noLigavel, rodoviaLigavelEm,
   COS_ANGULO_MIN, CHAO_ABAIXO_DA_PISTA, decliveDa, eixoDa, cruzamentosDeEixos,
 } from './validar.js';
 import {
@@ -248,14 +248,15 @@ function cruzarTraco(sim, plano, tr) {
         continue;
       }
       // 'normal' num tabuleiro do jogador é o pé da rampa (elevação abaixo de ELEVACAO_PONTE): cruza como via comum;
-      // rodovia e Arcologia seguem intocáveis, e acima do limiar o cruzamento já virou passagem ou 'altura'
-      if (A.flags[e] & (ARESTA.RODOVIA | ARESTA.ARCOLOGIA)) {
-        tr.erros.add('colisao');
-        continue;
-      }
+      // a rodovia cruza fora da ponte e a 25 m ou mais dela (D108); a Arcologia segue intocável, e acima do limiar o
+      // cruzamento já virou passagem ou 'altura'
       const tab = A.arco.subarray(17 * e, 17 * e + 17);
       const su = arcoDoT(tab, u);
       const ce = tab[16];
+      if (A.flags[e] & ARESTA.ARCOLOGIA || (A.flags[e] & ARESTA.RODOVIA && !rodoviaLigavelEm(sim, e, su))) {
+        tr.erros.add('colisao');
+        continue;
+      }
       if (su < lim || ce - su < lim) {
         const n = su < lim ? A.a[e] : A.b[e];
         if (!noLigavel(sim, n)) {

@@ -665,15 +665,56 @@ export function prediosNaPista(sim, a, meia, folga = REGRAS_VIAS.folgaPredio) {
 /** true se o prédio i é da cidade (de zona); serviços e prédios da Holding não saem com a via ('colisao'). */
 export const predioDaCidade = (sim, i) => sim.tabelas.predios.tipo[i] === TIPO_PREDIO.ZONA;
 
-/** true se a aresta não pode ser cruzada nem dividida pelo jogador (rodovia, ponte, Arcologia). */
+/** Distância mínima, em metros ao longo da rodovia, entre uma ligação e as pontas da ponte da rodovia (D108). */
+export const FOLGA_PONTE_RODOVIA = 25;
+
+/**
+ * true se a aresta não pode ser cruzada nem dividida pelo jogador: ponte (a da rodovia inclusive) e Arcologia. A rodovia
+ * fora da ponte é ligável desde a D108; as pontas da ponte, só a mais de FOLGA_PONTE_RODOVIA (rodoviaLigavelEm).
+ */
 export function arestaIntocavel(sim, e) {
   const f = sim.tabelas.arestas.flags[e];
-  return !!(f & (ARESTA.RODOVIA | ARESTA.PONTE | ARESTA.ARCOLOGIA));
+  return !!(f & (ARESTA.PONTE | ARESTA.ARCOLOGIA));
 }
 
 /**
- * true se o jogador pode ligar uma via nova ao nó n: nó comum, ou nó da rodovia que já é ponta (o nó de entrada) ou
- * que já tem uma via comum ligada (a junção da Vila). Nó da Arcologia só pelo portão.
+ * true se, andando pela rodovia a partir do nó n (já a `d` metros do ponto), alguma aresta de ponte da rodovia começa a
+ * menos de FOLGA_PONTE_RODOVIA do ponto.
+ */
+function pontaDePonteAte(sim, n, d, vindoDe) {
+  const A = sim.tabelas.arestas;
+  const N = sim.tabelas.nos;
+  for (let k = 0; k < 6; k++) {
+    const e = N.lig[6 * n + k];
+    if (e < 0 || e === vindoDe || !A.viva[e]) continue;
+    const f = A.flags[e];
+    if (!(f & ARESTA.RODOVIA)) continue;
+    if (f & ARESTA.PONTE) return true;
+    const d2 = d + A.arco[17 * e + 16];
+    if (d2 >= FOLGA_PONTE_RODOVIA) continue;
+    if (pontaDePonteAte(sim, A.a[e] === n ? A.b[e] : A.a[e], d2, e)) return true;
+  }
+  return false;
+}
+
+/**
+ * true se o jogador pode ligar ou cruzar a aresta e no ponto a `s` metros do começo dela (D108): não é ponte nem
+ * Arcologia e, sendo rodovia, fica a FOLGA_PONTE_RODOVIA ou mais das pontas da ponte da rodovia.
+ */
+export function rodoviaLigavelEm(sim, e, s) {
+  const A = sim.tabelas.arestas;
+  if (arestaIntocavel(sim, e)) return false;
+  if (!(A.flags[e] & ARESTA.RODOVIA)) return true;
+  const comp = A.arco[17 * e + 16];
+  if (s < FOLGA_PONTE_RODOVIA && pontaDePonteAte(sim, A.a[e], s, e)) return false;
+  if (comp - s < FOLGA_PONTE_RODOVIA && pontaDePonteAte(sim, A.b[e], comp - s, e)) return false;
+  return true;
+}
+
+/**
+ * true se o jogador pode ligar uma via nova ao nó n: nó comum ou da rodovia (D108), menos os da ponte da rodovia e a
+ * menos de FOLGA_PONTE_RODOVIA dela. Nó de ponte do jogador ou da Arcologia só se for ponta ou já tiver via comum
+ * (a Arcologia só pelo portão).
  */
 export function noLigavel(sim, n) {
   const A = sim.tabelas.arestas;
@@ -683,6 +724,9 @@ export function noLigavel(sim, n) {
   for (let k = 0; k < 6; k++) {
     const e = N.lig[6 * n + k];
     if (e < 0 || !A.viva[e]) continue;
+    const f = A.flags[e];
+    if (f & ARESTA.RODOVIA && f & ARESTA.PONTE) return false;
+    if (f & ARESTA.RODOVIA && pontaDePonteAte(sim, n, 0, -1)) return false;
     if (arestaIntocavel(sim, e)) intocavel++;
     else comum++;
   }
