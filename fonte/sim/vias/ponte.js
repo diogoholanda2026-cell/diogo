@@ -152,14 +152,6 @@ export function classificarCruzamento(sim, info, s, e, u, q) {
   return { tipo: 'altura', yMeu, yOutra };
 }
 
-/** Altura livre real da passagem (pista de cima menos pista de baixo menos o tabuleiro) numa peça pronta. */
-export function alturaLivreDaPassagem(pc, ya, yb, passagem, yOutra) {
-  const f = pc.comp > 0 ? Math.min(1, Math.max(0, (passagem.s - pc.s0) / pc.comp)) : 0;
-  const y = ya + (yb - ya) * f;
-  const d = y - yOutra;
-  return Math.abs(d);
-}
-
 // ------------------------------------------------------------------------------------------------ pilares
 
 /** Função "tem via no chão aqui?" para o espaçamento dos pilares: pista de via que não é tabuleiro, com folga de 2 m. */
