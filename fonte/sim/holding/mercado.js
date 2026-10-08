@@ -273,6 +273,7 @@ function consultaDeposito(sim) {
       auto: m.autoDeposito[item] ?? null,
     })),
     importarAuto: m.importarAuto,
+    entregaTiques: condicoesImportacao(sim).entregaTiques, // prazo da importação (D110: a UI mostra)
     importacoes: m.importacoes.map((x) => ({ ...x })),
   };
 }

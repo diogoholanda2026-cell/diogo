@@ -101,6 +101,20 @@ test('save: a linha de lote 1000 em andamento volta igual e o hash segue igual',
   assert.equal(nova.q.hash(), sim.q.hash());
 });
 
+test('importar: 1 a 1000 à vista pelo preço de 160% e o prazo na consulta; 1001, 0 e 1.5 recusados', () => {
+  const { sim } = cidade('loteImporta');
+  sim.holding.receber(1e7, 'teste');
+  const antes = sim.holding.caixa();
+  for (const n of [0, 1001, 1.5]) assert.equal(sim.cmd('importar', { item: 'brita', n }).codigo, 'valor', `n=${n}`);
+  const r = sim.cmd('importar', { item: 'brita', n: 1000 });
+  assert.equal(r.ok, true);
+  assert.equal(r.dados.custo, 1000 * ITENS.brita.base * 1.6);
+  assert.equal(antes - sim.holding.caixa(), r.dados.custo);
+  const dep = sim.q.deposito();
+  assert.equal(dep.entregaTiques, 40);
+  assert.equal(dep.itens.find((i) => i.item === 'brita').precoImportacao, ITENS.brita.base * 1.6);
+});
+
 test('interface: o campo do lote prende em 1..1000 e só aceita dígitos; o padrão sugerido é 10', async () => {
   const { build } = await import('esbuild');
   const r = await build({
@@ -109,6 +123,16 @@ test('interface: o campo do lote prende em 1..1000 e só aceita dígitos; o padr
     nodePaths: [resolve(RAIZ, 'node_modules')],
   });
   const { limitarLote, digitarLote, LOTE_PADRAO, LOTES_RAPIDOS } = await import(`data:text/javascript;base64,${Buffer.from(r.outputFiles[0].text).toString('base64')}`);
+  const r2 = await build({
+    stdin: { contents: `export * from ${JSON.stringify(resolve(RAIZ, 'fonte/ui/comp/ImportarItem.jsx'))};`, resolveDir: RAIZ, loader: 'js' },
+    bundle: true, write: false, format: 'esm', platform: 'node', jsx: 'automatic', jsxImportSource: 'preact', loader: { '.jsx': 'jsx' },
+    nodePaths: [resolve(RAIZ, 'node_modules')],
+  });
+  const { custoDaImportacao, prazoSegundos } = await import(`data:text/javascript;base64,${Buffer.from(r2.outputFiles[0].text).toString('base64')}`);
+  assert.equal(custoDaImportacao(1000, 32), 32000);
+  assert.equal(custoDaImportacao(5000, 32), 32000, 'prende em 1000');
+  assert.equal(custoDaImportacao(10, NaN), 0);
+  assert.equal(prazoSegundos(40), 40);
   assert.deepEqual([0, -5, 1, 7.9, 1000, 1001, 99999, NaN, '', 'abc', '250'].map((n) => limitarLote(n)), [1, 1, 1, 7, 1000, 1000, 1000, 1, 1, 1, 250]);
   assert.deepEqual(['', 'a1b0', '0007', '12345', '-3', '1.5', '１２'].map((s) => digitarLote(s)), ['', '10', '7', '1000', '3', '15', '']);
   assert.equal(LOTE_PADRAO, 10);

@@ -16,7 +16,6 @@ import { Tela, Secao } from '../../comp/Tela.jsx';
 import { Indicador } from '../../comp/Indicador.jsx';
 import { Grafico } from '../../comp/Grafico.jsx';
 import { Tabela } from '../../comp/Tabela.jsx';
-import { Quantidade } from '../../comp/Quantidade.jsx';
 import { LoteCampo, LOTE_PADRAO } from '../../comp/LoteCampo.jsx';
 import { Interruptor } from '../../comp/Interruptor.jsx';
 import { Botao } from '../../comp/Botao.jsx';
@@ -183,8 +182,8 @@ function Producao({ tique, mult }) {
 /** Quantos o toque vende: o pedido, preso ao estoque e ao que resta na janela (ao menos 1, para a recusa explicar). */
 export const vendaPossivel = (n, estoque, resta) => Math.max(1, Math.min(n, Math.floor(estoque ?? 0), resta ?? 0));
 
-function ItemMercado({ x, resta, setRetorno }) {
-  // a quantidade vale para importar (até 100 por toque, sem depender do estoque nem da janela); a venda usa o que dá
+function ItemMercado({ x, resta, setRetorno, entrega }) {
+  // a quantidade vale para importar (de 1 a 1000, D110, sem depender do estoque nem da janela); a venda usa o que dá
   const [n, setN] = useState(10);
   const v = vendaPossivel(n, x.estoque, resta);
   const agir = async (nome, args, ok) => {
@@ -202,13 +201,14 @@ function ItemMercado({ x, resta, setRetorno }) {
         {Number.isFinite(x.precoImportacao) ? <span>{t('hold.importa', { v: fmt.dinheiro(x.precoImportacao) })}</span> : null}
       </div>
       <div class="merc-acoes">
-        <Quantidade a="merc.n" valor={n} rotulo={t('hold.quantidade')} min={1} max={100} aoMudar={setN} />
+        <LoteCampo a="merc.n" valor={n} rotulo={t('hold.quantidade')} aoMudar={setN} />
         <Botao a="merc.vender" k={x.item} rotulo={t('hold.vender', { n: v })} class="bt-ch" aria-disabled={!(x.estoque > 0) || !resta ? 'true' : undefined} onClick={() => agir('deposito.vender', { item: x.item, n: v }, t('hold.vendido', { n: v, item: nomeItem(x.item).toLowerCase(), v: fmt.dinheiro(v * (x.precoVenda ?? 0)) }))}>
           {t('hold.vender', { n: v })}
         </Botao>
         <Botao a="merc.importar" k={x.item} rotulo={t('hold.importar', { n })} class="bt-sec" onClick={() => agir('importar', { item: x.item, n }, t('hold.importado', { n, item: nomeItem(x.item).toLowerCase() }))}>
           {t('hold.importar', { n })}
         </Botao>
+        {Number.isFinite(x.precoImportacao) ? <span class="linha-sub num">{t('x1.importar.custo', { v: fmt.dinheiro(n * x.precoImportacao), s: fmt.numero(Math.round(entrega ?? 0)) })}</span> : null}
       </div>
       <Interruptor a="merc.cidade" k={x.item} rotulo={t('hold.vendeCidade')} ligado={x.vendeCidade !== false} aoTrocar={(s) => comando('estoque.vendeCidade', { item: x.item, sim: s })} />
     </div>
@@ -249,7 +249,7 @@ function Mercado({ tique, mult }) {
       </div>
       <div class="gest-col">
         <Secao titulo={t('hold.itens')}>
-          {itens.length ? itens.map((x) => <ItemMercado key={x.item} x={x} resta={j.resta} setRetorno={setRetorno} />) : <Vazio glifo="deposito" texto={t('hold.semItens')} />}
+          {itens.length ? itens.map((x) => <ItemMercado key={x.item} x={x} resta={j.resta} setRetorno={setRetorno} entrega={dep.entregaTiques} />) : <Vazio glifo="deposito" texto={t('hold.semItens')} />}
         </Secao>
       </div>
     </div>

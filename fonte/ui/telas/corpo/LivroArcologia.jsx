@@ -19,6 +19,9 @@ import { Aviso } from '../../comp/Aviso.jsx';
 import { Vazio } from '../../comp/Vazio.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
 import { EnvioMateriais } from '../EnvioMateriais.jsx';
+import { ImportarItem } from '../../comp/ImportarItem.jsx';
+import { comando } from '../../acoes.js';
+import { nomeItem } from '../../selecao/secoes/empresa.jsx';
 import { tomarAba } from '../../hud/Menu.jsx';
 import {
   nomeParte, nomeEtapa, nomeTrecho, fraseEfeito, glifoEfeito, fraseRecusa, fraseParalelo, faltaImportar, custoImportar, alvoDaParte,
@@ -123,6 +126,17 @@ function Etapa({ ui, e, n, de, parte, etapas, caixa, dep }) {
           </Botao>
         ) : null}
       </div>
+      {falta.map((x) => (
+        <ImportarItem
+          key={`${e.id}:${x.item}`}
+          item={x.item}
+          nome={nomeItem(x.item)}
+          falta={x.n}
+          preco={dep?.itens?.find((i) => i.item === x.item)?.precoImportacao}
+          prazoTiques={dep?.entregaTiques}
+          aoImportar={(n) => comando('importar', { item: x.item, n })}
+        />
+      ))}
     </Secao>
   );
 }
