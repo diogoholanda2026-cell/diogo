@@ -5,6 +5,12 @@ import { t } from '../../textos.js';
 import * as fmt from '../../formato.js';
 import { Bloco, Par } from '../Folha.jsx';
 import { Barra } from '../../comp/Barra.jsx';
+import { Botao } from '../../comp/Botao.jsx';
+import { comando } from '../../acoes.js';
+import { consultar } from '../../consultas.js';
+import { avisar } from '../../loja.js';
+import { infoArea, faltaDaArea } from '../../ferramentas/areas.js';
+import { AREAS_COMPRAVEIS } from '../../../data/areas-compraveis.js';
 
 const RECURSOS = ['rocha', 'areia', 'argila', 'calcario', 'fertil', 'subterranea'];
 
@@ -41,13 +47,45 @@ export function lerTerreno(espelho, ponto) {
     const lado = (mapa.tam ?? 8192) / L.n;
     const i = Math.floor((x - origem[0]) / lado);
     const j = Math.floor((z - origem[1]) / lado);
-    if (i >= 0 && j >= 0 && i < L.n && j < L.n) ladrilho = { estado: L.estado[j * L.n + i], preco: L.preco?.[j * L.n + i] ?? 0 };
+    if (i >= 0 && j >= 0 && i < L.n && j < L.n) ladrilho = { i, j, estado: L.estado[j * L.n + i], preco: L.preco?.[j * L.n + i] ?? 0 };
   }
   const gv = espelho?.grades?.valor;
   const valor = gv ? naGrade(gv, gv.dados, x, z, origem) : null;
   const R = espelho?.recursos;
   const recursos = R ? RECURSOS.map((id) => ({ id, v: (naGrade(R, R[id], x, z, origem) ?? 0) / 255 })).filter((r) => r.v > 0.02) : [];
   return { area, ladrilho, valor, cota: Number.isFinite(y) ? y : null, recursos };
+}
+
+/** Comprar o terreno e a área (D107), direto na folha do terreno: o ladrilho sob o ponto e, se a área é comprável, ela inteira. */
+function Compra({ d }) {
+  const est = d.ladrilho?.estado;
+  const area = d.area && AREAS_COMPRAVEIS.includes(d.area.id) ? infoArea(consultar('area.compra', { id: d.area.id }), 'area') : null;
+  const comprar = async (nome, args, ok) => {
+    const r = await comando(nome, args);
+    if (r.ok) avisar(ok, 'info');
+  };
+  if (est !== 1 && !area) return null;
+  return (
+    <Bloco titulo={t('folha.terreno.comprar')}>
+      {est === 1 ? (
+        <Botao a="folha.terreno.comprarLadrilho" rotulo={t('folha.terreno.comprarLadrilho', { preco: fmt.dinheiro(d.ladrilho.preco) })} class="bt-ch" onClick={() => comprar('ladrilho.comprar', { i: d.ladrilho.i, j: d.ladrilho.j }, t('x2.areas.comprada'))}>
+          {t('folha.terreno.comprarLadrilho', { preco: fmt.dinheiro(d.ladrilho.preco) })}
+        </Botao>
+      ) : null}
+      {area ? (
+        <>
+          <Botao a="folha.terreno.comprarArea" rotulo={t('area.comprar', { nome: area.nome })} class="bt-ch" desligado={!area.pode} dica={faltaDaArea(area) || undefined} onClick={() => area.pode && comprar('area.comprar', { id: area.id }, t('area.comprada', { nome: area.nome, n: area.faltam }))}>
+            {t('area.comprar', { nome: area.nome })}
+          </Botao>
+          <p class="fl-nota">{`${t(area.faltam === 1 ? 'area.faltam1' : 'area.faltam', { n: area.faltam })} · ${t('area.preco', { preco: fmt.dinheiro(area.preco) })}`}</p>
+          {area.criterios.map((c) => (
+            <Par k={c.id} rotulo={t(c.chave)} valor={t(c.ok ? 'area.criterio.ok' : 'area.criterio.nao')} estado={c.ok ? 'ch' : null} />
+          ))}
+          {!area.pode ? <p class="fl-nota">{faltaDaArea(area)}</p> : null}
+        </>
+      ) : null}
+    </Bloco>
+  );
 }
 
 export function SecaoTerreno({ ui, sel }) {
@@ -63,6 +101,7 @@ export function SecaoTerreno({ ui, sel }) {
         {Number.isFinite(d.valor) ? <Par k="valor" rotulo={t('folha.terreno.valor')} valor={t('folha.terreno.valorDe', { v: fmt.numero(d.valor) })} /> : null}
         {Number.isFinite(d.cota) ? <Par k="cota" rotulo={t('folha.terreno.cota')} valor={t('cartao.via.m', { m: fmt.numero(d.cota, 1) })} /> : null}
       </Bloco>
+      <Compra d={d} />
       {d.recursos.length ? (
         <Bloco titulo={t('folha.terreno.recursos')}>
           {d.recursos.map((r) => (

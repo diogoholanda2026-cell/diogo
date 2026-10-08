@@ -650,7 +650,7 @@ test('folha: família pela seleção e pelo prédio; terreno pelo espelho (área
   };
   const d = terreno.lerTerreno(esp, [10, 3.5, 10]);
   assert.equal(d.area?.nome, 'Vila de Santa Cida');
-  assert.deepEqual(d.ladrilho, { estado: 2, preco: 40000 });
+  assert.deepEqual(d.ladrilho, { i: 8, j: 8, estado: 2, preco: 40000 });
   assert.equal(d.valor, 420);
   assert.deepEqual(d.recursos.map((r) => r.id), ['rocha']);
   assert.equal(terreno.lerTerreno(esp, [600, 0, 10]).ladrilho.estado, 1);

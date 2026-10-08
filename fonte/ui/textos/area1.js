@@ -2,6 +2,8 @@
 // Brasil, sem travessão; registrar(registrarTextos) vem de ui/textos.js.
 export function registrar(registrarTextos) {
   registrarTextos('area1', {
+    'folha.terreno.comprar': 'Comprar terreno',
+    'folha.terreno.comprarLadrilho': 'Comprar este terreno por {preco}',
     'area.titulo': '{nome}',
     'area.faltam1': 'falta 1 ladrilho',
     'area.faltam': 'faltam {n} ladrilhos',
