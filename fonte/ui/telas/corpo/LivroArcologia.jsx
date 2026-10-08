@@ -126,7 +126,8 @@ function Etapa({ ui, e, n, de, parte, etapas, caixa, dep }) {
           </Botao>
         ) : null}
       </div>
-      {falta.map((x) => (
+      {/* importar qualquer quantidade (1 a 1000) de qualquer material da etapa, mesmo o que o estoque já cobre */}
+      {(e.estado === 1 || e.estado === 2 ? (e.materiais ?? []) : []).map((m) => ({ item: m.item, n: falta.find((f) => f.item === m.item)?.n ?? 0 })).map((x) => (
         <ImportarItem
           key={`${e.id}:${x.item}`}
           item={x.item}

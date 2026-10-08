@@ -16,7 +16,7 @@ export const prazoSegundos = (tiques) => Math.max(0, Math.round(Number.isFinite(
 
 export function ImportarItem({ item, nome, falta = 0, preco, prazoTiques, aoImportar, a = 'importar' }) {
   const maxFalta = limitarLote(Math.ceil(falta) || 1);
-  const [n, setN] = useState(maxFalta);
+  const [n, setN] = useState(falta > 0 ? maxFalta : 10);
   const q = limitarLote(n);
   const custo = custoDaImportacao(q, preco);
   return (
