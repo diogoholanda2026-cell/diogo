@@ -19,6 +19,7 @@ import { indiceZona } from '../../fonte/data/zonas.js';
 import { SERVICOS } from '../../fonte/data/servicos.js';
 import { PREDIOS_HOLDING } from '../../fonte/data/holding.js';
 import { terminarObra, nascerNaFrente } from '../../fonte/sim/zonas/crescimento.js';
+import { removerPredio } from '../../fonte/sim/zonas/blocos.js';
 import { MOVER, CODIGO_FIXO, custoDeMover, tiquesDaObra } from '../../fonte/sim/mover.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 
@@ -757,4 +758,18 @@ test('argumento que não é número finito: "valor" na prévia e no comando, sem
   }
   assert.equal(P.x[i], x0);
   assert.equal(sim.holding.caixa(), caixa);
+});
+
+test('zona: demolir o prédio no meio da reforma de mover não deixa marca na seção mover', () => {
+  const { sim, casas } = mundoComCasas('mov2-demolido');
+  const P = sim.tabelas.predios;
+  const i = casas[0];
+  terminarObra(sim, i);
+  sim.rodar(10, { sincrono: true });
+  const ref = P.ref(i);
+  assert.ok(sim.cmd('mover', { ref, x: 1150, z: -230, rot: 0, alinhar: true }).ok);
+  assert.deepEqual(Object.keys(sim.json.mover.zona), [String(ref)]);
+  removerPredio(sim, i);
+  sim.rodar(5, { sincrono: true });
+  assert.deepEqual(sim.json.mover.zona, {});
 });

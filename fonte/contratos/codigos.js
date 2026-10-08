@@ -15,6 +15,7 @@ export const CODIGOS = congelar({
   ladrilho: 'fora dos ladrilhos da Holding',
   gleba: 'dentro da gleba da Arcologia',
   colisao: 'bate em prédio, via ou colocável que não será demolido',
+  fixo: 'construção que não pode ser movida (Arcologia e indemolíveis)',
   marco: 'ainda não liberado pelo marco',
   nada: 'nada a fazer',
   ocupado: 'já ocupado ou em uso',
