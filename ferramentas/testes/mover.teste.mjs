@@ -390,7 +390,7 @@ test('destino inválido não muda nada: sem via, sobre outra casa, sobre zona de
   terminarObra(sim, i);
   terminarObra(sim, outra);
   const ref = P.ref(i);
-  const foto = () => JSON.stringify({ x: [...P.x.subarray(0, P.n)], z: [...P.z.subarray(0, P.n)], rot: [...P.rot.subarray(0, P.n)], flags: [...P.flags.subarray(0, P.n)], cel: [...C.predio.subarray(0, C.n)], caixa: sim.holding.caixa(), hash: sim.q.hash() });
+  const foto = () => JSON.stringify({ x: [...P.x.subarray(0, P.n)], z: [...P.z.subarray(0, P.n)], rot: [...P.rot.subarray(0, P.n)], flags: [...P.flags.subarray(0, P.n)], cel: [...C.predio.subarray(0, C.n)], caixa: sim.holding.caixa() });
   const f0 = foto();
   // sem via por perto
   assert.equal(sim.q.mover.previa({ ref, x: 1200, z: -1280, rot: 0 }).codigo, 'acesso');
@@ -413,7 +413,8 @@ test('destino inválido não muda nada: sem via, sobre outra casa, sobre zona de
   assert.equal(sobre.dados.com, 'zona');
   assert.equal(sim.cmd('mover', { ref, x: 1350, z: -230, rot: 0, alinhar: true }).codigo, 'colisao');
   // créditos
-  assert.equal(foto().length, f0.length);
+  // o hash muda com o livro de comandos (toda recusa fica gravada), então não entra na foto
+  assert.equal(foto(), f0);
   const saldo = sim.holding.caixa();
   assert.deepEqual(sim.json.mover.pend, {});
   assert.equal(sim.holding.caixa(), saldo);
