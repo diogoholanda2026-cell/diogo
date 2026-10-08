@@ -123,7 +123,27 @@ function Liga({ ui, k, padrao = false, rotulo, exp }) {
 
 // ------------------------------------------------------------------------------------------------ vídeo
 
+/** Tela cheia (Poco X7 e PC): a API do navegador, só por gesto do jogador; o app instalado já abre em tela cheia pelo manifesto. */
+const telaCheiaPossivel = () => typeof document !== 'undefined' && !!(document.documentElement?.requestFullscreen || document.documentElement?.webkitRequestFullscreen);
+const emTelaCheia = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function alternarTelaCheia() {
+  try {
+    if (emTelaCheia()) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    const el = document.documentElement;
+    const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
+    // em paisagem fixa, como o manifesto
+    r?.then?.(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
+  } catch (e) { /* sem tela cheia neste navegador */ }
+}
+
 function Video({ ui, noInicio }) {
+  const [cheia, setCheia] = useState(emTelaCheia);
+  useEffect(() => {
+    const f = () => setCheia(emTelaCheia());
+    document.addEventListener('fullscreenchange', f);
+    document.addEventListener('webkitfullscreenchange', f);
+    return () => { document.removeEventListener('fullscreenchange', f); document.removeEventListener('webkitfullscreenchange', f); };
+  }, []);
   const p = ui.loja.prefs.value ?? {};
   const R = ui.R;
   const perfil = R?.perfil?.() ?? {};
@@ -159,6 +179,11 @@ function Video({ ui, noInicio }) {
           </Botao>
         </div>
       ) : null}
+      <Linha rotulo={t('u2.cfg.telaCheia')} exp={t(telaCheiaPossivel() ? 'u2.cfg.telaCheiaExp' : 'u2.cfg.telaCheiaSem')} k="telaCheia">
+        <Botao a="cfg.telaCheia" rotulo={t(cheia ? 'u2.cfg.telaCheiaSair' : 'u2.cfg.telaCheiaEntrar')} class="bt-sec" desligado={!telaCheiaPossivel()} onClick={alternarTelaCheia}>
+          <span>{t(cheia ? 'u2.cfg.telaCheiaSair' : 'u2.cfg.telaCheiaEntrar')}</span>
+        </Botao>
+      </Linha>
       <Linha rotulo={t('u2.cfg.dinamica')} exp={`${t('u2.cfg.dinamicaExp')} ${agora}${semAjuste}`} k="resolucaoDinamica">
         <Chave k="resolucaoDinamica" rotulo={t('u2.cfg.dinamica')} ligado={dinamica} desligado={!podeResolucao} dica={podeResolucao ? undefined : t('u2.cfg.resPendente')} aoTrocar={(v) => mudarPrefs(ui, { resolucaoDinamica: v })} />
       </Linha>
