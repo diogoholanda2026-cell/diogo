@@ -1915,6 +1915,10 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** capturas da sequência por tipo (casa, prédio, serviço, Blade Tower), 0 compilações depois de pronto, no
   orçamento de chamadas da obra (D66). Inclui aquecer o `MeshBasicMaterial` que a primeira obra de qualquer tipo compila
   hoje depois de pronto (achado da UX1).
+- **Entregue em 11/10/2026** (OBR2). Sequência por classe (casa, prédio baixo, torre, serviço, campo, reforma), estacas com
+  perfuratriz, núcleo com fôrma trepante, gruas e escavadeiras em ciclo, caminhões, operários, faíscas e poeira instanciados,
+  fecho de 16 tiques; sonda que aquece o programa da sombra do colocável (0 compilações depois de pronto na bancada). Cena
+  `obra` no Média: 76 chamadas e 172,6 mil triângulos (antes 79 e 166,9 mil). Nota em `docs/entregas/onda4/OBR2.md`.
 
 #### MOV1. Mover e girar construções prontas (onda 4, etapa 2; 2 sessões; D94)
 - **Depois da UX1:** reaproveita a ferramenta de colocar (giro livre, motivo do vermelho, aplainar).
