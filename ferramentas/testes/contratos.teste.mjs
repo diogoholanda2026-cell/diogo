@@ -269,11 +269,11 @@ test('espelho: convenções e invariantes (que pegam erro)', () => {
   for (const [t, cols] of Object.entries(esperadas)) for (const c of cols) assert.ok(COLUNAS[t][c], `${t}.${c}`);
 });
 
-test('cidade sintética pelas APIs: 12 mil prédios de todas as zonas e níveis, invariantes do espelho', () => {
+test('cidade sintética pelas APIs: 9 mil prédios de todas as zonas e níveis, invariantes do espelho', () => {
   const t0 = performance.now();
   const { sim, resumo } = gerarCidadeSintetica({ cronometro: () => performance.now() });
   const ms = performance.now() - t0;
-  // a cidade cheia: cerca de 12 mil prédios, as quadras dos bairros sem sobra
+  // a cidade cheia: cerca de 9 mil prédios (D95: o lote grande do alto padrão, antes 12 mil), as quadras dos bairros sem sobra
   assert.ok(Math.abs(resumo.predios - SINTETICA.predios) <= 0.1 * SINTETICA.predios, `${resumo.predios} prédios`);
   assert.ok(resumo.celulas.quadrasPorOcupar === 0, `${resumo.celulas.quadrasPorOcupar} quadras por ocupar`);
   assert.equal(Object.keys(resumo.porZona).length, 7, JSON.stringify(resumo.porZona));

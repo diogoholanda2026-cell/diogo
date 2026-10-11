@@ -239,9 +239,9 @@ test('tipologias brasileiras: autoconstrução, telhado de quatro águas, galpã
   assert.ok(pop.cilindro >= 8, `casa popular: caixa d'água em ${pop.cilindro ?? 0} de 60`);
   assert.ok(pop.coluna >= 5, `casa popular: esperas em ${pop.coluna ?? 0} de 60`);
   assert.ok((pop['meiaAgua:fibro'] ?? 0) >= 8, `casa popular: fibrocimento em ${pop['meiaAgua:fibro'] ?? 0} de 60`);
-  // bairro contemporâneo (estilo 1): telha cerâmica em quatro águas numa parte das casas
-  const med = formas('casa', 2, 1);
-  assert.ok(med.quatroAguas >= 6, `casa de padrão médio: quatro águas em ${med.quatroAguas ?? 0} de 60`);
+  // mansão clássica (D95, R4c): telhado de quatro águas em ardósia ou zinco na maior parte, num bairro de orla (estilo 3)
+  const man = formas('mansaoLote', 5, 3);
+  assert.ok(man.quatroAguas >= 30, `mansão: quatro águas em ${man.quatroAguas ?? 0} de 60`);
   // galpão: duas águas com lanternim (dois telhados de duas águas) numa parte
   const gal = formas('galpao', 1, 0);
   assert.ok(gal.duasAguas >= 15 && (gal.shed ?? 0) + (gal.arco ?? 0) >= 8, `galpão: ${JSON.stringify(gal)}`);

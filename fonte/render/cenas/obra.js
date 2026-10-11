@@ -2,7 +2,8 @@
 // faz andar em 4x): canteiro, fundação, estrutura e fechamento num prédio alto (grua de torre, esqueleto e tela), as
 // mesmas fases em prédios baixos (grua móvel e andaime) e a reforma de subir de nível. ?vista= troca a câmera: padrao
 // (as obras a ~280 m), alto (o prédio alto em obra de perto), baixo (o andaime de uma casa) e lote (um lote pronto de
-// perto: piso, muro, árvores e carros); ?hora= a hora do céu. O resultado traz as fases escolhidas e as peças.
+// perto: piso, muro, árvores e carros), predio (um prédio baixo de perto); ?p= põe o progresso da obra em foco (alto, baixo
+// ou predio) para ver cada passo da sequência (OBR2: cava, estacas, núcleo, lajes, fachada, fecho); ?hora= a hora do céu. O resultado traz as fases escolhidas e as peças.
 import { PREDIO, TIPO_PREDIO } from '../../contratos/flags.js';
 import { progressoObra, faseObra } from '../../contratos/espelho.js';
 
@@ -99,10 +100,16 @@ export function registrar(registrarCena) {
       if (!pred?.planoObra) falhas.push('o domínio predios é o substituto da F0');
       const alturaDe = (i) => pred?.planoObra?.(i)?.alturaTopo ?? 0;
       const obras = P ? escolherObras(P, alturaDe) : [];
+      const pQ = parseFloat(qs.get('p'));
+      // ?fecho=<tiques>: a obra em foco acaba (a bandeira sai da simulação) e o tempo anda tantos tiques: o fecho de OBR2
+      const fechoQ = parseFloat(qs.get('fecho'));
+      const foco = vista === 'alto' ? obras.find((o) => o.H >= 30) : vista === 'baixo' ? obras.find((o) => o.H <= 6) : vista === 'predio' ? obras.find((o) => o.H > 6 && o.H <= 14 && !o.nivel) : null;
+      if (foco && Number.isFinite(pQ)) foco.p = Math.max(0, Math.min(1, pQ));
       if (obras.length < 5) falhas.push(`só ${obras.length} obras perto do centro`);
       // o tempo da cena e as obras no espelho (as bandeiras e o início e o fim; o diário leva ao render); as obras que
       // a cidade sintética já tinha saem (a cena mostra só as dela)
-      const T = OBRA.tique;
+      // ?dt= soma tiques ao tempo parado da cena (o ciclo das máquinas e dos caminhões muda; o progresso das obras não)
+      const T = OBRA.tique + (Number(qs.get('dt')) || 0);
       esp.tempo.tique = T;
       esp.tempo.frac = 0;
       for (let i = 0; P && i < P.n; i++) {
@@ -132,7 +139,9 @@ export function registrar(registrarCena) {
         const dist = Math.max(150, alto.H * 3.4);
         cam = { ...alvo(alto), guinada: guinadaAberta(P, alturaDe, alto.i, dist * Math.cos(0.1), OBRA.guinada), dist, inclinacao: 6 };
       }
-      if (vista === 'baixo' && casa) cam = { ...alvo(casa), guinada: OBRA.guinada, dist: 32, inclinacao: 24 };
+      if (vista === 'baixo' && casa) cam = { ...alvo(casa), guinada: guinadaAberta(P, alturaDe, casa.i, 40, OBRA.guinada), dist: 36, inclinacao: 30 };
+      const predio = obras.find((o) => o.H > 6 && o.H <= 14 && !o.nivel);
+      if (vista === 'predio' && predio) cam = { ...alvo(predio), guinada: guinadaAberta(P, alturaDe, predio.i, 60, OBRA.guinada), dist: 60, inclinacao: 36 };
       let lote = null;
       if (vista === 'lote' && P) {
         // um lote pronto com árvore e carro perto do centro
@@ -149,6 +158,11 @@ export function registrar(registrarCena) {
           cam = { x: P.x[lote] + fx * 3, z: P.z[lote] + fz * 3, guinada: (-P.rot[lote] * 180) / Math.PI + 22, dist: 36, inclinacao: 24 };
         }
       }
+      // ?d= (distância), ?inc= (inclinação) e ?g= (guinada) afinam a câmera da vista
+      for (const [k, q] of [['dist', 'd'], ['inclinacao', 'inc'], ['guinada', 'g']]) {
+        const v = parseFloat(qs.get(q));
+        if (Number.isFinite(v)) cam[k] = v;
+      }
       ctx.cameraApi.definir(cam);
       let medidas = null;
       try {
@@ -158,8 +172,19 @@ export function registrar(registrarCena) {
       }
       ctx.dominio('obras')?.refazer?.();
       let tAnt = null;
+      let nq = 0;
       return {
         quadro(tMs) {
+          nq++;
+          const alvoFecho = foco?.i;
+          if (Number.isFinite(fechoQ) && alvoFecho !== undefined) {
+            if (nq === 2) {
+              // a simulação limpa a bandeira: o domínio das obras guarda as peças e começa o fecho neste tique
+              P.flags[alvoFecho] &= ~(PREDIO.OBRA | PREDIO.OBRA_NIVEL);
+              ctx.sim.mudancas.marcarIdx?.('predios', alvoFecho);
+            }
+            if (nq === 4) esp.tempo.tique += Math.floor(fechoQ);
+          }
           if (!anda) return;
           if (tAnt !== null) {
             const t = esp.tempo.tique + esp.tempo.frac + (4 * Math.min(200, tMs - tAnt)) / 1000;

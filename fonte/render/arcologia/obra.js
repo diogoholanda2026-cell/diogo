@@ -3,7 +3,9 @@
 //              (aberto nas avenidas) e o canteiro (contêineres e montes de brita e areia)
 //   torre.e1-4 o par sobe pelo corte por lado (torre.cortePorLado: a Blade na frente, a Legacy um passo atrás, a Dream
 //              Bridge só quando as duas passam de 330 m) e duas gruas de torre, uma em cada torre, acompanham a altura
-//              (a da Blade até uns 540 m, acima do mastro de 520 m), com a lança girando devagar e a luz de obstáculo
+//              (a da Blade até uns 540 m, acima do mastro de 520 m), com a lança girando devagar e a luz de obstáculo; o
+//              carrinho leva o balde de concreto do pega ao assenta (cabo que alonga e encurta), dois operários andam
+//              na laje de cima de cada torre e, quando uma etapa acaba, a bandeirola sobe no topo e um brilho pisca (OBR2)
 // As alturas saem das etapas do espelho (data/arcologia.js, as mesmas que a simulação usa para o Mural). Tudo nos
 // materiais fixos da Arcologia (torre.js): nada compila quando a obra começa. O mastro da grua é uma malha só até o
 // topo, mostrada por trechos (drawRange): subir não refaz geometria.
@@ -14,6 +16,7 @@ import { PAR, PODIO, LAGO, PRACA, AVENIDAS, TORRE_LAMINA, TORRE_IRMA, torresDoPa
 import { Malha, acab, LUZ, PADRAO, bloco, barra, cilindro, parede, geometriaDe } from './torre.js';
 
 const RAD = Math.PI / 180;
+const pos = new THREE.Vector3();
 
 /** Acabamentos da obra: a grua branca (Liebherr), o contrapeso de concreto, a cabine, o tapume e a terra. */
 const KO = {
@@ -34,7 +37,32 @@ const KO = {
   nucleo: acab('#8f8b84', { rugo: 0.9, padrao: PADRAO.pedra }),
   forma: acab('#c9a227', { rugo: 0.6, metal: 0.3 }),
   tela: acab('#3d5560', { rugo: 0.95 }),
+  calca: acab('#1b2438', { rugo: 0.9 }),
+  colete: acab('#d2540a', { rugo: 0.8 }),
+  capacete: acab('#ecebe6', { rugo: 0.5 }),
+  mastro: acab('#c9c9c6', { rugo: 0.4, metal: 0.6 }),
+  bandeira: acab('#0b2a6b', { rugo: 0.7 }),
+  faixa2: acab('#f1efe8', { rugo: 0.7 }),
+  brilho: acab('#ffe9b0', { rugo: 0.3, metal: 0.8 }),
 };
+
+/** O fecho de uma etapa (s de relógio): a bandeirola no topo das torres e o brilho. */
+export const FECHO = Object.freeze({ segundos: 24 });
+const suave = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+/** Ciclo do carrinho (50 s): pega perto do mastro, assenta na frente da obra e volta; cabo e carga seguem. */
+export function cicloCarrinho(t, saida = {}) {
+  const u = t / 50 - Math.floor(t / 50);
+  const sA = suave(0.2, 0.46, u) - suave(0.56, 0.86, u);
+  const d1 = suave(0, 0.1, u) - suave(0.16, 0.26, u);
+  const d2 = suave(0.44, 0.52, u) - suave(0.54, 0.6, u);
+  saida.x = 16 + 26 * sA;
+  saida.cabo = 14 + 10 * d1 + 6 * d2;
+  saida.carga = u > 0.15 && u < 0.55;
+  return saida;
+}
 
 /** Grua de torre: seção do mastro, trecho, lança, contralança e quanto o topo passa da obra. */
 export const GRUA = Object.freeze({ lado: 2.2, trecho: 6, lanca: 62, contra: 22, folga: 26, topoBlade: 545, topoLegacy: 480, afastamento: 9 });
@@ -157,12 +185,54 @@ export function malhaCabeca() {
   return m;
 }
 
-/** O carrinho com o cabo e o gancho (um balde de concreto pendurado), na lança, a 20 m abaixo dela. */
+/** O carrinho na lança (o cabo e a carga são malhas à parte: o ciclo alonga o cabo e leva a carga). */
 export function malhaCarrinho() {
   const m = new Malha('opaco');
   bloco(m, -0.8, 1.6, -1.1, 0.8, 2.4, 1.1, KO.gruaEscura);
-  barra(m, [0, 1.6, 0], [0, -18, 0], 0.04, 3, KO.gruaEscura);
-  cilindro(m, 0, 0, -21, -18, 0.6, 0.9, 8, KO.conteiner, { base: true });
+  return m;
+}
+
+/** O cabo: altura 1 para baixo, escalada em y pelo ciclo. */
+export function malhaCabo() {
+  const m = new Malha('opaco');
+  barra(m, [0, 0, 0], [0, -1, 0], 0.05, 3, KO.gruaEscura);
+  return m;
+}
+
+/** O gancho com o balde de concreto, com o topo na origem. */
+export function malhaCarga() {
+  const m = new Malha('opaco');
+  bloco(m, -0.45, -1.0, -0.45, 0.45, 0, 0.45, KO.gruaEscura);
+  cilindro(m, 0, 0, -3.6, -1.0, 0.6, 1.0, 8, KO.conteiner, { base: true });
+  return m;
+}
+
+/** Um operário de 1,75 m (calça, colete laranja e capacete branco), de pé na origem. */
+export function malhaOperario() {
+  const m = new Malha('opaco');
+  bloco(m, -0.16, 0, -0.25, 0.16, 0.85, 0.25, KO.calca);
+  bloco(m, -0.17, 0.85, -0.27, 0.17, 1.5, 0.27, KO.colete);
+  bloco(m, -0.15, 1.5, -0.2, 0.15, 1.75, 0.2, KO.capacete);
+  return m;
+}
+
+/** A bandeirola do fecho: mastro de 14 m e a bandeira de 8 por 4,5 m (azul da construtora com a faixa branca). */
+export function malhaBandeira() {
+  const m = new Malha('opaco');
+  bloco(m, -0.15, 0, -0.15, 0.15, 14, 0.15, KO.mastro);
+  bloco(m, 0.15, 9.5, -0.05, 8.15, 14, 0.05, KO.bandeira);
+  bloco(m, 0.15, 11.4, -0.06, 8.15, 12.1, 0.06, KO.faixa2);
+  return m;
+}
+
+/** O brilho do fecho: oito pontos dourados em volta do topo (a escala pulsa e se apaga no relógio). */
+export function malhaBrilho() {
+  const m = new Malha('opaco');
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    const r = 6 + (k % 2) * 4;
+    bloco(m, Math.cos(a) * r - 0.5, 14 + (k % 3) * 2, Math.sin(a) * r - 0.5, Math.cos(a) * r + 0.5, 15 + (k % 3) * 2, Math.sin(a) * r + 0.5, KO.brilho);
+  }
   return m;
 }
 
@@ -300,6 +370,8 @@ export function criarObra(ctx, material) {
   const grupo = new THREE.Group();
   grupo.name = 'arcologia:obra';
   let gruas = null;
+  let fechoT0 = null; // relógio (ms) em que uma etapa acabou
+  let gAnt = -2;
   let lago = null;
   let torre = null;
   let base = null; // { x, z, y, rot }
@@ -314,6 +386,11 @@ export function criarObra(ctx, material) {
     const cabeca = geometriaDe(malhaCabeca());
     const carrinho = geometriaDe(malhaCarrinho());
     const frente = geometriaDe(malhaFrente());
+    const caboGeo = geometriaDe(malhaCabo());
+    const cargaGeo = geometriaDe(malhaCarga());
+    const opGeo = geometriaDe(malhaOperario());
+    const bandGeo = geometriaDe(malhaBandeira());
+    const brilhoGeo = geometriaDe(malhaBrilho());
     gruas = [TORRE_LAMINA, TORRE_IRMA].map((spec, k) => {
       const mm = malhaMastro(k === 0 ? GRUA.topoBlade + GRUA.trecho : GRUA.topoLegacy + GRUA.trecho);
       const mastro = mesh(mm.malha, `obra:grua${k}:mastro`);
@@ -324,15 +401,40 @@ export function criarObra(ctx, material) {
       car.name = `obra:grua${k}:carrinho`;
       ctx.medidas?.familia(car, 'arcologia');
       c.add(car);
+      const cabo = new THREE.Mesh(caboGeo, material);
+      cabo.name = `obra:grua${k}:cabo`;
+      ctx.medidas?.familia(cabo, 'arcologia');
+      const carga = new THREE.Mesh(cargaGeo, material);
+      carga.name = `obra:grua${k}:carga`;
+      ctx.medidas?.familia(carga, 'arcologia');
+      car.add(cabo, carga);
       const g = new THREE.Group();
       g.add(mastro, c);
       grupo.add(g);
+      // dois operários na laje de cima, a bandeirola e o brilho do fecho (soltos no grupo: ficam no topo, no mundo)
+      const ops = [0, 1].map((q) => {
+        const o = new THREE.Mesh(opGeo, material);
+        o.name = `obra:operario${k}:${q}`;
+        o.visible = false;
+        ctx.medidas?.familia(o, 'arcologia');
+        grupo.add(o);
+        return o;
+      });
+      const band = new THREE.Mesh(bandGeo, material);
+      band.name = `obra:bandeira${k}`;
+      band.visible = false;
+      ctx.medidas?.familia(band, 'arcologia');
+      const brilho = new THREE.Mesh(brilhoGeo, material);
+      brilho.name = `obra:brilho${k}`;
+      brilho.visible = false;
+      ctx.medidas?.familia(brilho, 'arcologia');
+      grupo.add(band, brilho);
       const esq = new THREE.Mesh(frente, material);
       esq.name = `obra:frente${k}`;
       ctx.medidas?.familia(esq, 'arcologia');
       esq.visible = false;
       grupo.add(esq);
-      return { g, mastro, cabeca: c, carrinho: car, esq, porTrecho: mm.porTrecho, topo: k === 0 ? GRUA.topoBlade : GRUA.topoLegacy, lado: k === 0 ? -1 : 1, altura: -1, spec };
+      return { g, mastro, cabeca: c, carrinho: car, cabo, carga, ops, band, brilho, ciclo: {}, esq, porTrecho: mm.porTrecho, topo: k === 0 ? GRUA.topoBlade : GRUA.topoLegacy, lado: k === 0 ? -1 : 1, altura: -1, spec };
     });
   }
 
@@ -365,6 +467,11 @@ export function criarObra(ctx, material) {
     },
     /** Mostra e sobe a obra pelo estado (estadoObra) e anima as lanças. */
     quadro(tMs, est) {
+      // uma etapa que acabou (o avanço do par subiu): o fecho de 24 s no topo das torres
+      if (est && Number.isFinite(est.g)) {
+        if (gAnt > -2 && est.g > gAnt) fechoT0 = tMs;
+        gAnt = est.g;
+      }
       if (lago) lago.visible = !!est?.lago;
       if (torre) torre.visible = !!est?.torre;
       if (!gruas) return;
@@ -387,7 +494,25 @@ export function criarObra(ctx, material) {
           gr.esq.rotation.set(0, t.rot, 0);
           gr.esq.scale.set(1, e / ALTURA_FRENTE, Math.max(0.2, (zMax + 25) / 50));
         }
-        if (!vis) continue;
+        // o fecho de uma etapa (também o da última, com as gruas já recolhidas)
+        // o fecho de uma etapa: a bandeirola sobe (18 m em 3 s) no topo, ondula, e o brilho pisca até o fim
+        const fe = fechoT0 === null ? -1 : (tMs - fechoT0) / 1000;
+        const vFe = fe >= 0 && fe < FECHO.segundos;
+        gr.band.visible = vFe;
+        gr.brilho.visible = vFe;
+        if (vFe) {
+          const topoY = base.y + (vis ? Math.max(h, PODIO.altura) : gr.spec.altura);
+          gr.band.position.set(gr.torre.x, topoY, gr.torre.z);
+          gr.band.scale.y = suave(0, 3, fe);
+          gr.band.rotation.y = gr.torre.rot + 0.12 * Math.sin(fe * 1.7);
+          gr.brilho.position.set(gr.torre.x, topoY, gr.torre.z);
+          const pulso = 0.5 + 0.5 * Math.sin(fe * 7);
+          gr.brilho.scale.setScalar((1 - fe / FECHO.segundos) * (0.6 + 0.6 * pulso));
+        }
+        if (!vis) {
+          for (const o of gr.ops) o.visible = false;
+          continue;
+        }
         // o topo da grua passa a obra por uma folga, até o máximo (a da Blade acima do mastro de 520 m)
         const alvo = Math.min(gr.topo, Math.max(GRUA.folga + 12, h + GRUA.folga));
         const n = Math.ceil(alvo / GRUA.trecho);
@@ -399,14 +524,30 @@ export function criarObra(ctx, material) {
         // a lança gira devagar e o carrinho anda nela (fase própria de cada grua)
         const t = tMs / 1000 + (gr.lado < 0 ? 0 : 37);
         gr.cabeca.rotation.y = gr.lado * 0.6 + 0.9 * Math.sin(t * 0.045) + (gr.lado < 0 ? Math.PI : 0) + base.rot;
-        gr.carrinho.position.x = 18 + 28 * (0.5 + 0.5 * Math.sin(t * 0.11));
+        const ci = cicloCarrinho(t, gr.ciclo);
+        gr.carrinho.position.x = ci.x;
+        gr.cabo.scale.y = ci.cabo;
+        gr.carga.position.y = 1.6 - ci.cabo;
+        gr.carga.visible = ci.carga;
+        // os operários andam na laje de cima da frente de obra (a trilha na planta local, a cota no topo da laje)
+        for (let q = 0; q < gr.ops.length; q++) {
+          const o = gr.ops[q];
+          o.visible = frente;
+          if (!frente) continue;
+          const t2 = tMs / 1000 + q * 23 + (gr.lado < 0 ? 0 : 11);
+          const andar = Math.sin(t2 * 0.07);
+          const lz = Math.max(2, (plantaNaAltura(gr.spec, Math.max(PODIO.altura, h - e)) * 0.5 + 12) * (0.5 + 0.5 * Math.sin(t2 * 0.05 + q)));
+          pos.set(andar * 13, ALTURA_FRENTE, lz).applyMatrix4(gr.esq.matrixWorld);
+          o.position.copy(pos);
+          o.rotation.y = gr.torre.rot + (Math.cos(t2 * 0.07) > 0 ? 0 : Math.PI);
+        }
       }
     },
     /** Triângulos das gruas na altura de agora (o teste e o resultado das cenas leem). */
     get triangulos() {
       if (!gruas) return 0;
       let n = 0;
-      for (const gr of gruas) if (gr.g.visible) n += (gr.altura * gr.porTrecho) / 3 + gr.cabeca.geometry.index.count / 3 + gr.carrinho.geometry.index.count / 3;
+      for (const gr of gruas) if (gr.g.visible) n += (gr.altura * gr.porTrecho) / 3 + gr.cabeca.geometry.index.count / 3 + gr.carrinho.geometry.index.count / 3 + gr.cabo.geometry.index.count / 3 + (gr.carga.visible ? gr.carga.geometry.index.count / 3 : 0);
       return n;
     },
     descartar() {

@@ -174,7 +174,7 @@ test('coluna predios.bemEstar (a tarifa por prédio da S3a lê) e o efeito previ
 test('XP de bem-estar (D51): 20 mil moradores a 65 por 1 h de jogo dão de 600 a 1.200', () => {
   const sim = criarSimulacao({ semente: SINTETICA.semente });
   if (!sim.json.progresso || sim.json.progresso.bemMes === undefined) return; // sem a S3a: pendência dela
-  gerarCidadeSintetica({ sim, predios: 1300 });
+  gerarCidadeSintetica({ sim, predios: 1000 });
   const P = sim.tabelas.predios;
   // a cidade fica parada em 65: bem-estar e moradores fixos nos prédios residenciais (sem nascer, sem sair)
   const fixos = [];

@@ -156,18 +156,18 @@ function casaDeMaquinas(c, x, z, w, d, y, { agua = true } = {}) {
 }
 
 /** Muro (ou mureta com grade) na frente do lote, com os portões. */
-function muro(c, { h = 1.6, portoes = [], mat = null, mureta = false } = {}) {
+function muro(c, { h = 1.6, portoes = [], mat = null, mureta = false, grade = '#2e3032', base = 0.7 } = {}) {
   const { W, D, r } = c;
   const z = D / 2 - 0.12;
   const mm = mat ?? c.m(F.LISO, c.pecas[0]?.mat?.c1 ?? c.cor('rebocoCor'));
   const cap = c.m(F.CONCRETO, '#bdb8ae');
   const lista = portoes.map(([x, w]) => [x - w / 2, x + w / 2]).sort((a, b) => a[0] - b[0]);
   let x = -W / 2 + 0.05;
-  const hm = mureta ? 0.7 : h;
+  const hm = mureta ? base : h;
   const seg = (a, b) => {
     if (b - a < 0.3) return;
     c.add({ forma: 'caixa', x: (a + b) / 2, z, w: b - a, d: 0.16, y0: 0, h: hm, chao: true, mat: mm, topo: cap, lote: true });
-    if (mureta) c.add({ forma: 'placa', x: (a + b) / 2, z, w: b - a, d: 0.04, y0: hm, h: h - hm, mat: c.m(F.BRISE_V, '#2e3032', '#3a3c3e', { a: 3, v: 0.5 }), lote: true });
+    if (mureta) c.add({ forma: 'placa', x: (a + b) / 2, z, w: b - a, d: 0.04, y0: hm, h: h - hm, mat: c.m(F.BRISE_V, grade, '#3a3c3e', { a: 3, v: 0.5 }), lote: true });
   };
   for (const [a, b] of lista) {
     seg(x, a);
@@ -284,9 +284,10 @@ function esperas(c, x0, z0, x1, z1, y) {
  * janelas) e a de padrão médio (telha cerâmica em quatro ou duas águas, ou laje com platibanda escondendo o telhado,
  * varanda com pilares, aquecedor solar, garagem coberta).
  */
-function casa(c) {
+function casa(c, { vila = false } = {}) {
   const { W, D, r } = c;
-  const popular = c.nivel <= 2 && r.chance(c.est.popular ?? 0.35);
+  // na Vila de Santa Cida (D95) a casa de autoconstrução é a regra, nos três primeiros níveis
+  const popular = vila ? c.nivel <= 3 && r.chance(0.88) : c.nivel <= 2 && r.chance(c.est.popular ?? 0.35);
   const recuo = popular ? clamp(r.entre(0.6, 3.2), 0.6, Math.max(0.6, D * 0.25)) : clamp(r.entre(...c.par.recuo), 1.5, Math.max(1.5, D * 0.28));
   const quintal = D >= 20 ? r.entre(3, 6.5) : r.entre(1.2, 2.5);
   const bd = clamp(D - recuo - quintal, 6, 13.5);
@@ -473,15 +474,197 @@ function casaAltoPadrao(c) {
   const cima = c.m(F.JANELA, madeira, '#2f3133', { v: 3.2, vr: 6, a: pe });
   c.add({ forma: 'caixa', x: sx, z: bz, w: bw, d: bdd, y0: pe + 0.2, h: pe, mat: cima, lado: c.m(F.MADEIRA, madeira), topo: laje(c), lod1: true });
   c.add({ forma: 'caixa', x: sx, z: bz + 0.8, w: Math.min(bw + 1.2, W - 0.4 - 2 * Math.abs(sx)), d: bdd + 1.6, y0: 2 * pe + 0.2, h: 0.28, mat: c.m(F.LISO, '#dedbd3'), topo: laje(c), base: c.m(F.LISO, '#e0ddd6'), sobra: true });
-  // piscina e deck na frente, muro baixo de pedra
+  // gramado com sebe, piscina e deck na frente, muro baixo de pedra
   const zf = az + ad / 2;
   const pw = Math.min(W - 4, r.entre(6, 10));
+  jardim(c, zf, D / 2 - 0.3, { caminho: W * 0.3 });
   if (recuo >= 5) {
     pisoLote(c, zf + 0.5, D / 2 - 0.4, c.m(F.MADEIRA, '#8e6c4c', null, { v: 1 }), -pw / 2 - 1, pw / 2 + 1);
     c.add({ forma: 'piso', x: 0, z: zf + (D / 2 - zf) / 2, w: pw, d: Math.min(recuo - 2, 4), y0: 0.06, h: 0, mat: c.m(F.AGUA, '#2a5a5e'), lote: true });
   }
   muro(c, { h: 1.1, portoes: [[W * 0.3, 3], [-W * 0.2, 1.2]], mat: c.m(F.PEDRA, c.cor('pedra')) });
   return baixo;
+}
+
+
+// ------------------------------------------------------------------------------------------------ alto padrão (R4c, D95)
+
+/** Tipologias de casa (carro na garagem da frente, vagas de casa). */
+const ehCasaTip = (t) => t.startsWith('casa') || t === 'mansao' || t === 'vila';
+/** Tipologias de alto padrão: palmeiras no jardim da frente e a frota de SUV e sedã (Jardim Europa, Barra, Balneário). */
+const LUXO_TIP = new Set(['casaAltoPadrao', 'casaPedraVidro', 'mansao', 'edificioPedraVidro', 'varandaGourmet', 'torreVarandas', 'torreLuxo', 'torreVidro']);
+
+/**
+ * Jardim do alto padrão: gramado (verde seco) no lote inteiro, caminho de pedra clara e sebe baixa junto ao muro, de
+ * z0 (a casa) a z1 (o muro). O caminho (x) interrompe a sebe.
+ */
+function jardim(c, z0, z1, { x0 = -c.W / 2 + 0.2, x1 = c.W / 2 - 0.2, caminho = null, sebe = true } = {}) {
+  const { r } = c;
+  const d = z1 - z0;
+  if (d < 1.5 || x1 - x0 < 2) return;
+  // o gramado cobre o lote inteiro (os fundos e as laterais também), por baixo da casa, do deck e do caminho
+  const zf = -c.D / 2 + 0.3;
+  c.add({ forma: 'piso', x: (x0 + x1) / 2, z: (zf + z1) / 2, w: x1 - x0, d: z1 - zf, y0: 0.03, h: 0, mat: c.m(F.VERDE, c.cor('gramado')), lote: true });
+  if (caminho !== null) c.add({ forma: 'piso', x: caminho, z: (z0 + z1) / 2, w: 2.4, d, y0: 0.05, h: 0, mat: c.m(F.PISO, c.cor('travertino')), lote: true });
+  if (sebe && d >= 3.2) {
+    const zs = z1 - 0.9;
+    const cor = c.cor('sebe');
+    const seg = (a, b) => {
+      if (b - a < 1.2) return;
+      c.add({ forma: 'caixa', x: (a + b) / 2, z: zs, w: b - a, d: 0.8, y0: 0, h: r.entre(0.9, 1.25), chao: true, mat: c.m(F.VERDE, cor), topo: c.m(F.VERDE, cor), lote: true });
+    };
+    if (caminho === null) seg(x0 + 0.4, x1 - 0.4);
+    else {
+      seg(x0 + 0.4, caminho - 1.7);
+      seg(caminho + 1.7, x1 - 0.4);
+    }
+  }
+}
+
+/** Guarita do portão (portaria de rua do alto padrão): cabine de vidro e pedra ao lado do portão. */
+function guarita(c, x) {
+  const { W, D } = c;
+  c.add({ forma: 'caixa', x, z: D / 2 - 2.0, w: 2.4, d: 2.4, y0: 0, h: 2.7, chao: true, mat: c.m(F.CORTINA, c.cor('travertino'), '#3a3c3e', { v: 1.6, a: 2.7 }), lado: c.m(F.PEDRA, c.cor('travertino')), topo: laje(c), lote: true });
+  return clamp(x, -W / 2 + 1.5, W / 2 - 1.5);
+}
+
+/** Heliponto sobre quatro apoios, com o aro e o H pintados (sobra: fora da caixa do LOD1). */
+function heliponto(c, x, z, yBase, dh) {
+  const yp = yBase + 1.2;
+  c.add({ forma: 'cilindro', x, z, w: dh, d: dh, y0: yp, h: 0.5, mat: c.m(F.METAL, '#6f7477'), topo: c.m(F.CONCRETO, '#5a5e60'), base: metal(c), lod1: true });
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) c.add({ forma: 'coluna', x: x + sx * dh * 0.28, z: z + sz * dh * 0.28, w: 0.5, d: 0.5, y0: yBase, h: 1.2, mat: metal(c) });
+  const tinta = c.m(F.LETREIRO, '#d9d4c6');
+  c.add({ forma: 'cilindro', lados: 14, x, z, w: dh * 0.7, d: dh * 0.7, y0: yp + 0.5, h: 0.03, mat: tinta, topo: tinta, sobra: true });
+  c.add({ forma: 'cilindro', lados: 14, x, z, w: dh * 0.6, d: dh * 0.6, y0: yp + 0.53, h: 0.03, mat: c.m(F.CONCRETO, '#5a5e60'), topo: c.m(F.CONCRETO, '#5a5e60'), sobra: true });
+  const hb = dh * 0.28;
+  for (const sx of [-1, 1]) c.add({ forma: 'caixa', x: x + sx * hb * 0.5, z, w: 0.3, d: hb * 2, y0: yp + 0.56, h: 0.03, mat: tinta, topo: tinta, sobra: true });
+  c.add({ forma: 'caixa', x, z, w: hb, d: 0.3, y0: yp + 0.56, h: 0.03, mat: tinta, topo: tinta, sobra: true });
+  return yp + 0.5;
+}
+
+/**
+ * Casa de alto padrão contemporânea em lote grande (nível 3; no nível 4 e 5 a mansão contemporânea, grande): pavilhão
+ * térreo envidraçado com o volume de cima em ripado de ipê em balanço, um volume de pedra clara que prende a casa ao
+ * chão, laje fina que avança, piscina com deck, gramado e sebe, muro de pedra. Referência: casas modernistas e
+ * contemporâneas do Jardim Europa e do Jardim Paulistano (São Paulo; Isay Weinfeld, Marcio Kogan, Königsberger Vannucchi).
+ */
+function casaPedraVidro(c, { grande = false } = {}) {
+  const { W, D, r } = c;
+  const pe = c.par.pe;
+  const recuo = clamp(r.entre(...c.par.recuo), 5, D * 0.36);
+  const aw = Math.min(W - 4, grande ? r.entre(17, 24) : r.entre(13, 18));
+  const ad = clamp(D - recuo - r.entre(5, 8), 8, grande ? 14 : 12);
+  const az = D / 2 - recuo - ad / 2;
+  const h1 = pe + 0.3;
+  const trav = c.parede(['travertino', 'rebocoClaro']);
+  const ripado = c.cor('ripado');
+  const lado = r.chance(0.5) ? 1 : -1;
+  const pedra = c.m(F.PEDRA, trav);
+  const vidro = c.m(F.CORTINA, trav, '#3a3c3e', { v: 2.4, a: pe });
+  const baixo = c.add({ forma: 'caixa', x: 0, z: az, w: aw, d: ad, y0: 0, h: h1, chao: true, mat: vidro, lado: pedra, topo: laje(c), lod1: true, principal: true });
+  // volume de pedra que atravessa os dois andares, saliente 30 cm do pavilhão
+  const kw = r.entre(3.4, 4.4);
+  const kx = lado * (aw / 2 - kw / 2 + 0.3);
+  c.add({ forma: 'caixa', x: kx, z: az - 0.2, w: kw, d: ad + 1.0, y0: 0, h: 2 * pe + 0.6, chao: true, mat: pedra, topo: laje(c), lod1: true });
+  // volume de cima: ripado de madeira sobre vidro, em balanço sobre a frente
+  const bw = Math.min(aw - kw - 0.6, aw * r.entre(0.5, 0.68));
+  const bd = ad * r.entre(0.8, 0.95);
+  const bx = -lado * (aw / 2 - bw / 2 - r.entre(0.2, 0.9));
+  const bz = az + r.entre(0.9, 2.0);
+  const cima = c.m(F.BRISE_V, ripado, '#2f3133', { v: r.entre(2.4, 3.2), vr: r.int(0, 3), a: pe });
+  c.add({ forma: 'caixa', x: bx, z: bz, w: bw, d: bd, y0: h1, h: pe + 0.3, mat: cima, lado: c.m(F.MADEIRA, ripado), topo: laje(c), lod1: true });
+  c.add({ forma: 'varanda', x: bx + bw * 0.08, z: bz + bd / 2 + 0.55, w: bw * 0.62, d: 1.5, y0: h1 + 0.02, esp: 0.2, gc: 1.1, mat: c.m(F.CONCRETO, '#d8d3c8'), guarda: c.m(F.VIDRO, '#9fb0b4'), sobra: true });
+  c.add({ forma: 'caixa', x: bx, z: bz + 0.7, w: Math.min(bw + 1.2, W - 0.4 - 2 * Math.abs(bx)), d: bd + 1.4, y0: h1 + pe + 0.3, h: 0.26, mat: c.m(F.LISO, '#dedbd3'), topo: laje(c), base: c.m(F.LISO, '#e0ddd6'), sobra: true });
+  let gx = -lado * W * 0.3;
+  if (grande) {
+    // bloco de garagem e serviço de pedra, baixo, do outro lado
+    const gw = Math.min((W - 3 - aw) / 2, 7);
+    if (gw >= 3.5) {
+      gx = -lado * (aw / 2 + gw / 2 - 0.1);
+      c.add({ forma: 'caixa', x: -lado * (aw / 2 + gw / 2 - 0.1), z: az - 0.4, w: gw, d: ad * 0.8, y0: 0, h: h1 - 0.2, chao: true, mat: c.m(F.PEDRA, trav), topo: laje(c), lod1: true });
+      c.add({ forma: 'placa', umLado: true, x: -lado * (aw / 2 + gw / 2 - 0.1), z: az - 0.4 + ad * 0.4 + 0.03, w: gw - 1.2, d: 0, y0: 0.05, h: 2.5, mat: c.m(F.GARAGEM, ripado), sobra: true });
+    }
+  }
+  // porta de entrada em madeira, no volume de pedra
+  c.add({ forma: 'placa', umLado: true, x: kx - lado * 0.4, z: az - 0.2 + (ad + 1.0) / 2 + 0.03, w: 1.2, d: 0, y0: 0.05, h: 2.6, mat: c.m(F.PORTA, ripado, '#cfd1cf'), sobra: true });
+  const zf = az + ad / 2 + 0.5;
+  jardim(c, zf, D / 2 - 0.3, { caminho: kx });
+  const pw = Math.min(W - 6, r.entre(6, 10));
+  if (recuo >= 6.5) {
+    const px = -lado * Math.max(0, (W - pw) / 2 - 2.5) * r.entre(0.3, 1);
+    pisoLote(c, zf + 0.6, D / 2 - 1.6, c.m(F.MADEIRA, '#8e6c4c', null, { v: 1 }), px - pw / 2 - 1, px + pw / 2 + 1);
+    c.add({ forma: 'piso', x: px, z: zf + 0.6 + (D / 2 - 1.6 - zf - 0.6) / 2, w: pw, d: Math.min(recuo - 4, 4.5), y0: 0.06, h: 0, mat: c.m(F.AGUA, '#2a5a5e'), lote: true });
+  }
+  muro(c, { h: 2.0, portoes: [[kx, 1.2], [gx, 3.4]], mureta: r.chance(0.5), grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, trav) });
+  return baixo;
+}
+
+/**
+ * Mansão (níveis 4 e 5): a clássica de pórtico, avant-corps central com frontão, telhado de quatro águas em ardósia ou
+ * zinco, alas baixas de garagem e de serviço, muro alto com guarita, piscina e palmeiras (Vila Nova Conceição, Cidade
+ * Jardim e as mansões neoclássicas do Jardim América), ou a contemporânea (a casa de pedra e vidro, em escala maior).
+ */
+function mansao(c) {
+  const { W, D, r } = c;
+  const classica = c.est.id === 'modernista' || c.est.id === 'contemporaneo' ? r.chance(0.25) : r.chance(0.8);
+  if (!classica) return casaPedraVidro(c, { grande: true });
+  const pe = c.par.pe;
+  const recuo = clamp(r.entre(...c.par.recuo), 8, D * 0.36);
+  const bw = Math.min(W - 6, r.entre(15, 21));
+  const bd = clamp(D - recuo - r.entre(6, 10), 9, 14);
+  const bz = D / 2 - recuo - bd / 2;
+  const hP = 2 * pe + 0.4;
+  const corP = c.parede(['rebocoClaro', 'travertino']);
+  const trim = '#e4e0d6';
+  const telha = r.chance(0.5) ? c.m(F.TELHA_METAL, c.cor('zinco')) : c.m(F.TELHA, c.cor('ardosia'));
+  const parede = c.m(F.JANELA, corP, trim, { v: r.entre(3.2, 3.8), vr: r.int(0, 3), a: pe });
+  const zFrente = bz + bd / 2;
+  // corpo principal e as alas (garagem e serviço), de um andar
+  c.add({ forma: 'caixa', x: 0, z: bz, w: bw, d: bd, y0: 0, h: hP, chao: true, mat: parede, topo: laje(c), sem: 16, lod1: true, principal: true });
+  const T = telhado(c, 0, bz, bw, bd, hP, parede, { tipo: 'quatro', tg: 0.44, beiral: 0.6, mat: telha });
+  let alturaTopo = T.y0 + T.h;
+  const aw = Math.min(7.5, (W - 2 - bw) / 2);
+  const alas = aw >= 3.4 ? (c.nivel >= 5 ? [-1, 1] : [r.chance(0.5) ? 1 : -1]) : [];
+  for (const s of alas) {
+    const ad = bd * r.entre(0.7, 0.85);
+    const hA = pe + 0.5;
+    const az = bz - bd / 2 + ad / 2 + r.entre(0, 0.8);
+    c.add({ forma: 'caixa', x: s * (bw / 2 + aw / 2), z: az, w: aw, d: ad, y0: 0, h: hA, chao: true, mat: c.m(F.JANELA, corP, trim, { v: 3.4, vr: r.int(0, 3), a: pe }), topo: laje(c), sem: s > 0 ? 18 : 17, lod1: true });
+    telhado(c, s * (bw / 2 + aw / 2), az, aw, ad, hA, parede, { tipo: 'quatro', tg: 0.4, beiral: 0.5, mat: telha });
+    if (r.chance(0.7)) c.add({ forma: 'placa', umLado: true, x: s * (bw / 2 + aw / 2), z: az + ad / 2 + 0.55, w: aw - 1.4, d: 0, y0: 0.05, h: 2.4, mat: c.m(F.GARAGEM, c.cor('caixilho')), sobra: true });
+  }
+  // avant-corps central com frontão e o pórtico de quatro colunas sobre a entrada
+  const cw = Math.min(8, bw * 0.36);
+  const saliencia = 1.6;
+  const cd = bd + saliencia - 0.3;
+  c.add({ forma: 'caixa', x: 0, z: bz + (saliencia - 0.3) / 2, w: cw, d: cd, y0: 0, h: hP + 0.6, chao: true, mat: c.m(F.JANELA, corP, trim, { v: cw / 2, vr: r.int(0, 3), a: pe }), lado: parede, topo: laje(c), sem: 16, lod1: true });
+  const F2 = telhado(c, 0, bz + (saliencia - 0.3) / 2, cw, cd, hP + 0.6, parede, { tipo: 'duas', aoLongo: false, tg: 0.4, beiral: 0.5, mat: telha });
+  alturaTopo = Math.max(alturaTopo, F2.y0 + F2.h);
+  const pz = zFrente + saliencia;
+  const pd = 2.4;
+  c.add({ forma: 'varanda', x: 0, z: pz + pd / 2 - 0.2, w: cw + 0.8, d: pd, y0: pe + 0.55, esp: 0.3, gc: 0.95, mat: c.m(F.CONCRETO, '#d6d0c4'), guarda: c.m(F.LISO, trim), sobra: true });
+  // chaminés de alvenaria saindo do telhado
+  for (let k = r.int(1, 2); k > 0; k--) c.add({ forma: 'caixa', x: r.entre(-0.38, 0.38) * bw, z: bz - bd * r.entre(0.1, 0.25), w: 1.0, d: 1.0, y0: hP, h: T.h + 1.3, mat: c.m(F.LISO, corP), topo: concreto(c), sobra: true });
+  for (const sx of [-1, -1 / 3, 1 / 3, 1]) c.add({ forma: 'coluna', redonda: true, x: sx * (cw / 2 + 0.1), z: pz + pd - 0.4, w: 0.5, d: 0.5, y0: 0, h: pe + 0.7, mat: c.m(F.LISO, '#ddd8cc'), sobra: true });
+  c.add({ forma: 'placa', umLado: true, x: 0, z: pz + 0.03, w: 1.5, d: 0, y0: 0.05, h: 2.6, mat: c.m(F.PORTA, c.cor('ripado'), '#cfd1cf'), sobra: true });
+  // jardim, caminho, piscina com deck, muro alto de pedra com guarita
+  jardim(c, pz + pd, D / 2 - 0.3, { caminho: 0 });
+  if (W >= 30 && recuo >= 11) {
+    const s = r.chance(0.5) ? 1 : -1;
+    const pw = 7;
+    const px = s * (W / 2 - 7);
+    const z0 = zFrente + 3.5;
+    const pdd = Math.min(recuo - 8, 6);
+    if (Math.abs(px) - pw / 2 > cw / 2 + 3) {
+      pisoLote(c, z0, z0 + pdd + 2, c.m(F.MADEIRA, '#8e6c4c', null, { v: 1 }), px - pw / 2 - 1, px + pw / 2 + 1);
+      c.add({ forma: 'piso', x: px, z: z0 + 1 + pdd / 2, w: pw, d: pdd, y0: 0.06, h: 0, mat: c.m(F.AGUA, '#2a5a5e'), lote: true });
+    }
+  }
+  const xg = W / 2 - 3.2;
+  guarita(c, xg - 2.4);
+  muro(c, { h: 2.4, portoes: [[0, 5], [xg, 1.2]], mureta: r.chance(0.6), grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor(r.chance(0.5) ? 'travertino' : 'granito')) });
+  pisoLote(c, pz + pd, D / 2 - 0.2, c.m(F.PISO, c.cor('travertino')), -2.2, 2.2);
+  return alturaTopo;
 }
 
 // ------------------------------------------------------------------------------------------------ residencial média e alta
@@ -548,47 +731,63 @@ function pilotis(c) {
 
 /**
  * Prédio de varandas: pódio de garagem (ventilado por cobogó), corpo com o núcleo recuado e as varandas no envelope,
- * cobertura recuada no alto. gourmet: varandas fundas com guarda-corpo de vidro.
+ * cobertura recuada no alto. gourmet: varandas fundas com guarda-corpo de vidro e, pela D95, o padrão alto da
+ * residencial média (R4c): pódio de pedra clara com a portaria sob uma marquise, pano de vidro, uma empena de pedra no
+ * canto, jardim com sebe e palmeiras, muro baixo de pedra com grade e guarita. pedra: o edifício baixo (níveis 1 e 2),
+ * com a empena sempre presente. Referência: os edifícios da Vila Nova Conceição, do Itaim e do Jardim Paulista (São
+ * Paulo; Rocco, Aflalo e Gasperini, Perkins&Will).
  */
-function varandas(c, { gourmet = false } = {}) {
+function varandas(c, { gourmet = false, pedra = false } = {}) {
   const { W, D, r } = c;
+  const luxo = gourmet; // D95: a varanda gourmet é o padrão da residencial média (pedra clara, vidro, jardim, portaria)
   const recuo = r.entre(...c.par.recuo);
   const pe = c.par.pe;
   const G = c.andares >= 10 ? 2 : 1;
-  const tr = TERREO.PORTARIA;
-  const hPod = TERREO_ALTURA[tr] + (G - 1) * 3.0;
+  const tr = luxo && c.andares >= 10 ? TERREO.PORTARIA_ALTA : TERREO.PORTARIA;
+  const hPod = luxo ? TERREO_ALTURA[tr] : TERREO_ALTURA[tr] + (G - 1) * 3.0;
   const podD = clamp(D - recuo - 2, 10, 36);
   const podZ = D / 2 - recuo - podD / 2;
-  const podMat = c.m(F.PAINEL, c.parede(['concreto', 'rebocoClaro']), c.cor('caixilho'), { tr, v: 3.6, a: 3.0 });
-  c.add({ forma: 'caixa', x: 0, z: podZ, w: W - 2 * FOLGA, d: podD, y0: 0, h: hPod + 1.1, chao: true, mat: podMat, lado: c.m(F.COBOGO, podMat.c1), topo: c.m(F.LAJE, '#8d8a82'), parapeito: 1.1, lod1: true });
+  const trav = luxo ? c.parede(['travertino', 'rebocoClaro']) : null;
+  const podMat = luxo
+    ? c.m(F.PAINEL, c.parede(['travertino']), c.cor('caixilho'), { tr, v: 4.2, a: 3.2 })
+    : c.m(F.PAINEL, c.parede(['concreto', 'rebocoClaro']), c.cor('caixilho'), { tr, v: 3.6, a: 3.0 });
+  c.add({ forma: 'caixa', x: 0, z: podZ, w: W - 2 * FOLGA, d: podD, y0: 0, h: hPod + 1.1, chao: true, mat: podMat, lado: luxo ? c.m(F.PEDRA, podMat.c1) : c.m(F.COBOGO, podMat.c1), topo: c.m(F.LAJE, '#8d8a82'), parapeito: 1.1, lod1: true });
   const lat = r.entre(2.5, 4);
   const env = envelope(c, { recuo: recuo + r.entre(1, 3), lat, fundo: r.entre(3, 5), dMax: r.entre(16, 22) });
-  const nCima = Math.max(3, c.andares - G);
+  const nCima = Math.max(3, c.andares - (luxo ? 1 : G));
   const prof = gourmet ? r.entre(2.2, 2.7) : r.entre(1.3, 1.8);
   const par = r.entre(1.0, 1.4);
   const cob = nCima >= 8 && r.chance(0.6);
   const nCorpo = cob ? nCima - 1 : nCima;
   const hCorpo = nCorpo * pe;
-  const corP = c.parede(gourmet ? ['rebocoClaro', 'pastilha'] : null);
-  const vr = gourmet || r.chance(0.5) ? 0 : 1; // 0 vidro, 1 guarda-corpo cheio
+  const corP = luxo ? trav : c.parede(gourmet ? ['rebocoClaro', 'pastilha'] : null);
+  const vr = pedra ? 1 : gourmet || r.chance(0.5) ? 0 : 1; // 0 vidro, 1 guarda-corpo cheio (o edifício de pedra: peitoril claro)
+  // empena de pedra clara no canto da frente (a "fachada de pedra e vidro"): as varandas ocupam o resto
+  const slabW = luxo && env.w >= 12 && (pedra || r.chance(0.65)) ? r.entre(2.6, 3.6) : 0;
+  const slabLado = r.chance(0.5) ? 1 : -1;
   const matEnv = c.m(F.VARANDA, corP, '#d8d3c8', { v: r.entre(3.2, 4.2), vr, a: pe });
-  const matNucleo = c.m(F.JANELA, corP, c.cor('caixilho'), { v: matEnv.v, vr: 7, a: pe });
-  const matLado = c.m(gourmet ? F.PASTILHA : F.JANELA, corP, c.cor('caixilho'), { v: 3.2, vr: 4, a: pe });
+  const matNucleo = luxo ? c.m(F.CORTINA, corP, c.cor('caixilho'), { v: matEnv.v, a: pe }) : c.m(F.JANELA, corP, c.cor('caixilho'), { v: matEnv.v, vr: 7, a: pe });
+  const matLado = c.m(gourmet && !luxo ? F.PASTILHA : F.JANELA, corP, c.cor('caixilho'), { v: 3.2, vr: 4, a: pe });
   const y0 = hPod;
   // envelope do LOD1 (a fachada de varandas desenhada) e, no LOD0, o núcleo recuado com as varandas de verdade
   c.add({ forma: 'caixa', x: 0, z: env.z, w: env.w, d: env.d, y0, h: hCorpo + par, mat: matEnv, lado: matLado, fundo: matLado, topo: laje(c), parapeito: par, lod1: true, principal: true, soLod1: true });
   c.add({ forma: 'caixa', x: 0, z: env.z - prof / 2, w: env.w, d: env.d - prof, y0, h: hCorpo + par, mat: matNucleo, lado: matLado, fundo: matLado, topo: laje(c), parapeito: par });
-  const bays = Math.max(1, Math.round(env.w / matEnv.v));
+  const faixaW = env.w - slabW;
+  const faixaX0 = -env.w / 2 + (slabLado < 0 ? slabW : 0);
+  const bays = Math.max(1, Math.round(faixaW / matEnv.v));
   const grupos = gourmet ? [[0, bays]] : bays >= 4 && r.chance(0.6) ? [[0, 2], [bays - 2, bays]] : [[0, bays]];
   const guarda = vr === 0 ? c.m(F.VIDRO, '#9fb0b4') : c.m(F.LISO, corP);
   const lajeV = c.m(F.CONCRETO, '#d8d3c8');
   const zv = env.z + env.d / 2 - prof / 2;
   for (let a = 0; a < nCorpo; a++) {
     for (const [b0, b1] of grupos) {
-      const xa = -env.w / 2 + (env.w * b0) / bays + 0.1;
-      const xb = -env.w / 2 + (env.w * b1) / bays - 0.1;
+      const xa = faixaX0 + (faixaW * b0) / bays + 0.1;
+      const xb = faixaX0 + (faixaW * b1) / bays - 0.1;
       c.add({ forma: 'varanda', x: (xa + xb) / 2, z: zv, w: xb - xa, d: prof, y0: y0 + a * pe, esp: 0.18, gc: gourmet ? 1.15 : 1.05, mat: lajeV, guarda, semPontas: grupos.length === 1 && gourmet });
     }
+  }
+  if (slabW > 0) {
+    c.add({ forma: 'caixa', x: slabLado * (env.w / 2 - slabW / 2 + 0.05), z: env.z, w: slabW, d: env.d + 0.1, y0, h: hCorpo + par + 1.6, mat: c.m(F.PEDRA, corP), topo: laje(c), lod1: true });
   }
   let topo = y0 + hCorpo + par;
   if (cob) {
@@ -603,6 +802,18 @@ function varandas(c, { gourmet = false } = {}) {
   // lazer na laje do pódio (atrás da torre): deck e verde
   const livreFundo = env.z - env.d / 2 - (podZ - podD / 2);
   if (livreFundo > 4) c.add({ forma: 'piso', x: 0, z: podZ - podD / 2 + livreFundo / 2, w: W - 3, d: livreFundo - 1.5, y0: hPod + 0.05, h: 0, mat: c.m(F.VERDE, c.cor('verde')) });
+  if (luxo) {
+    // portaria: marquise de concreto sobre dois pilares na entrada, jardim com sebe e caminho, muro baixo de pedra com grade e guarita
+    const zP = podZ + podD / 2;
+    const xE = r.entre(0, 0.18) * W;
+    const yM = TERREO_ALTURA[tr] - 0.9;
+    c.add({ forma: 'caixa', x: xE, z: zP + 1.3, w: 6.4, d: 2.6, y0: yM, h: 0.3, mat: c.m(F.CONCRETO, '#cfc9bd'), topo: laje(c), base: c.m(F.LISO, '#d6d0c4'), sobra: true });
+    for (const s of [-1, 1]) c.add({ forma: 'coluna', redonda: true, x: xE + s * 2.8, z: zP + 2.3, w: 0.4, d: 0.4, y0: 0, h: yM, mat: c.m(F.LISO, '#ddd8cc'), sobra: true });
+    jardim(c, zP + 0.1, D / 2 - 0.3, { caminho: xE });
+    guarita(c, W / 2 - 2.6);
+    muro(c, { h: 1.9, portoes: [[xE, 2.6], [-W / 2 + 3.4, 3.6]], mureta: true, grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor('granito')) });
+    return;
+  }
   muro(c, { h: 2.0, portoes: [[r.entre(-0.25, 0.25) * W, 1.4], [W / 2 - 2.8, 3.6]], mureta: true });
   pisoLote(c, podZ + podD / 2, D / 2 - 0.2, c.m(F.PISO, c.cor('piso')));
 }
@@ -691,32 +902,43 @@ function torrePodio(c) {
   pisoLote(c, pod.z + pod.d / 2, D / 2 - 0.2, c.m(F.PISO, c.cor('piso')));
 }
 
-function torreVarandas(c) {
+/**
+ * Torre de varandas (D95: o padrão da residencial alta): pódio de pedra clara com a portaria alta e o lazer na laje,
+ * corpo de vidro com varandas de guarda-corpo de vidro e coroamento recuado. Referência: as torres da Barra da Tijuca
+ * (Rio; Península, Cidade Jardim) e de Balneário Camboriú (SC; a Avenida Atlântica e a Quarta Avenida). luxo (níveis 3
+ * e 4): a varanda corrida em todo o pano de frente, uma piscina na cobertura e, em parte, o heliponto no topo.
+ */
+function torreVarandas(c, { luxo = false } = {}) {
   const { W, D, r } = c;
   const recuo = r.entre(...c.par.recuo);
   const pe = c.par.pe;
-  const pod = podio(c, { andares: r.int(2, 4), recuo });
+  const pedraPod = c.m(F.PAINEL, c.parede(['travertino']), c.cor('caixilho'), { tr: TERREO.PORTARIA_ALTA, v: 4.2, a: 3.2 });
+  const pod = podio(c, { andares: r.int(2, 3), tr: TERREO.PORTARIA_ALTA, recuo, mat: pedraPod, lado: c.m(F.PEDRA, pedraPod.c1) });
   const tw = clamp(W - r.entre(8, 12), 16, 26);
   const td = clamp(D - recuo - r.entre(12, 16), 14, 22);
   const tz = pod.z - pod.d / 2 + td / 2 + r.entre(3, 6);
   const nCima = Math.max(12, c.andares - 3);
   const par = r.entre(1.2, 1.6);
-  const corP = c.parede(['rebocoClaro', 'pastilha']);
-  const prof = r.entre(1.4, 2.0);
-  const vr = r.chance(0.6) ? 0 : 1;
-  const matEnv = c.m(F.VARANDA, corP, '#d7d2c7', { v: r.entre(3.4, 4.4), vr, a: pe });
-  const matLado = c.m(F.PASTILHA, c.cor('pastilha'), c.cor('caixilho'), { v: 3.2, vr: 4, a: pe });
+  const corP = c.parede(['travertino', 'rebocoClaro']);
+  const prof = luxo ? r.entre(1.9, 2.4) : r.entre(1.4, 2.0);
+  const matEnv = c.m(F.VARANDA, corP, '#d7d2c7', { v: r.entre(3.4, 4.4), vr: 0, a: pe });
+  const matLado = c.m(luxo ? F.JANELA : F.PASTILHA, luxo ? corP : c.cor('pastilha'), c.cor('caixilho'), { v: 3.2, vr: 4, a: pe });
   const coroa = r.int(1, 2);
   const nCorpo = nCima - coroa;
   const hCorpo = nCorpo * pe;
   c.add({ forma: 'caixa', x: 0, z: tz, w: tw, d: td, y0: pod.h, h: hCorpo + par, mat: matEnv, lado: matLado, fundo: matEnv, topo: laje(c), parapeito: par, lod1: true, principal: true, soLod1: true });
-  c.add({ forma: 'caixa', x: 0, z: tz - prof / 2, w: tw, d: td - prof, y0: pod.h, h: hCorpo + par, mat: c.m(F.JANELA, corP, c.cor('caixilho'), { v: matEnv.v, vr: 7, a: pe }), lado: matLado, fundo: matEnv, topo: laje(c), parapeito: par });
-  // varandas em duas colunas nas pontas da frente (leve: sem guarda-corpo das pontas); no fundo, desenhadas
+  c.add({ forma: 'caixa', x: 0, z: tz - prof / 2, w: tw, d: td - prof, y0: pod.h, h: hCorpo + par, mat: luxo ? c.m(F.CORTINA, corP, c.cor('caixilho'), { v: matEnv.v, a: pe }) : c.m(F.JANELA, corP, c.cor('caixilho'), { v: matEnv.v, vr: 7, a: pe }), lado: matLado, fundo: matEnv, topo: laje(c), parapeito: par });
+  // varandas de vidro: em duas colunas nas pontas da frente (leve: sem guarda-corpo das pontas), ou, na torre de luxo,
+  // uma varanda corrida por andar em todo o pano
   const bays = Math.max(2, Math.round(tw / matEnv.v));
   const bw = (tw / bays) * (bays >= 5 ? 2 : 1);
-  const guarda = vr === 0 ? c.m(F.VIDRO, '#9fb0b4') : c.m(F.LISO, corP);
+  const guarda = c.m(F.VIDRO, '#9fb0b4');
   const lajeV = c.m(F.CONCRETO, '#d7d2c7');
   for (let a = 0; a < nCorpo; a++) {
+    if (luxo) {
+      c.add({ forma: 'varanda', x: 0, z: tz + td / 2 - prof / 2, w: tw - 0.2, d: prof, y0: pod.h + a * pe, esp: 0.18, gc: 1.1, mat: lajeV, guarda, semPontas: true });
+      continue;
+    }
     for (const lx of [-tw / 2 + bw / 2 + 0.1, tw / 2 - bw / 2 - 0.1]) {
       c.add({ forma: 'varanda', x: lx, z: tz + td / 2 - prof / 2, w: bw - 0.2, d: prof, y0: pod.h + a * pe, esp: 0.18, gc: 1.05, mat: lajeV, guarda, semPontas: true });
     }
@@ -726,10 +948,18 @@ function torreVarandas(c) {
   const cd = td * r.entre(0.6, 0.8);
   const yC = pod.h + hCorpo;
   c.add({ forma: 'caixa', x: 0, z: tz, w: cw, d: cd, y0: yC, h: coroa * pe + par + 2.5, mat: c.m(F.CORTINA, corP, c.cor('caixilho'), { v: 2.8, a: pe }), topo: laje(c), parapeito: par + 2.5, lod1: true });
+  if (luxo) {
+    // piscina na laje da cobertura, na faixa livre à frente do coroamento; heliponto sobre o coroamento em parte das torres
+    const faixa = (td - cd) / 2 - prof;
+    if (faixa > 2.2) c.add({ forma: 'piso', x: 0, z: tz + cd / 2 + (faixa + prof) / 2 - 0.2, w: tw * 0.6, d: faixa - 0.8, y0: yC + 0.06, h: 0, mat: c.m(F.AGUA, '#2a5a5e') });
+    if (c.nivel >= 4 && r.chance(0.6)) heliponto(c, 0, tz, yC + coroa * pe + par + 2.5, Math.min(cw, cd, 14));
+  }
   lazerNoPodio(c, pod, tz, td);
   equipar(c, -tw / 2 + 1, tz - td / 2 + prof, tw / 2 - 1, tz + td / 2 - prof, yC, { max: 3 });
-  muro(c, { h: 2.2, portoes: [[0, 1.6], [W / 2 - 3, 4]], mureta: true });
-  pisoLote(c, pod.z + pod.d / 2, D / 2 - 0.2, c.m(F.PISO, c.cor('piso')));
+  const xE = r.entre(-0.1, 0.1) * W;
+  guarita(c, W / 2 - 2.6);
+  jardim(c, pod.z + pod.d / 2 + 0.1, D / 2 - 0.3, { caminho: xE });
+  muro(c, { h: 2.0, portoes: [[xE, 2.6], [-W / 2 + 3.4, 3.8]], mureta: true, grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor('granito')) });
 }
 
 function torreVidro(c) {
@@ -753,14 +983,13 @@ function torreVidro(c) {
   const cd = td * 0.72;
   const yC = pod.h + hCorpo + 0.8;
   c.add({ forma, x: 0, z: tz, w: cw, d: cd, y0: yC, h: coroa * pe + 1.2, mat: c.m(F.CORTINA, pele.c1, corVidro, { v: 2.6, a: pe, vd: pele.vd }), topo: laje(c), parapeito: 1.2, lod1: true, chanfro: Math.min(cw, cd) * 0.16 });
-  const yH = yC + coroa * pe + 1.2;
-  const dh = Math.min(cw, cd, 17);
-  c.add({ forma: 'cilindro', x: 0, z: tz, w: dh, d: dh, y0: yH + 1.2, h: 0.5, mat: c.m(F.METAL, '#6f7477'), topo: c.m(F.CONCRETO, '#5a5e60'), base: metal(c), lod1: true });
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) c.add({ forma: 'coluna', x: sx * dh * 0.28, z: tz + sz * dh * 0.28, w: 0.5, d: 0.5, y0: yH, h: 1.2, mat: metal(c) });
+  heliponto(c, 0, tz, yC + coroa * pe + 1.2, Math.min(cw, cd, 17));
   lazerNoPodio(c, pod, tz, td);
   equipar(c, -tw / 2 + 1.2, tz - td / 2 + 1.2, tw / 2 - 1.2, tz + td / 2 - 1.2, yC, { max: 2 });
-  muro(c, { h: 2.2, portoes: [[0, 2], [W / 2 - 3.2, 4.2]], mureta: true });
-  pisoLote(c, pod.z + pod.d / 2, D / 2 - 0.2, c.m(F.PEDRA, c.cor('pedra')));
+  // jardim, guarita e muro baixo de granito com grade (D95)
+  jardim(c, pod.z + pod.d / 2 + 0.1, D / 2 - 0.3, { caminho: 0 });
+  guarita(c, W / 2 - 2.6);
+  muro(c, { h: 2.0, portoes: [[0, 2.6], [-W / 2 + 3.4, 4.2]], mureta: true, grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor('granito')) });
 }
 
 // ------------------------------------------------------------------------------------------------ comércio
@@ -1135,9 +1364,9 @@ function galpao(c, { silos = false, limpa = false } = {}) {
 // ------------------------------------------------------------------------------------------------ plano
 
 const GERADORES = {
-  casa, sobradoGeminado, casaAltoPadrao,
-  pilotis, varandas: (c) => varandas(c), varandaGourmet: (c) => varandas(c, { gourmet: true }),
-  torrePodio, torreVarandas, torreVidro,
+  casa: (c) => casa(c), vila: (c) => casa(c, { vila: true }), sobradoGeminado, casaAltoPadrao, casaPedraVidro: (c) => casaPedraVidro(c), mansao,
+  pilotis, varandas: (c) => varandas(c), varandaGourmet: (c) => varandas(c, { gourmet: true }), edificioPedraVidro: (c) => varandas(c, { gourmet: true, pedra: true }),
+  torrePodio, torreVarandas: (c) => torreVarandas(c), torreLuxo: (c) => torreVarandas(c, { luxo: true }), torreVidro,
   lojaToldo, galeriaVitrine, usoMisto, centroPelePerfurada,
   laminaBrises, peleVidro, torreControleSolar,
   galpaoShed: (c) => galpao(c), galpaoSilos: (c) => galpao(c, { silos: true }), fabricaLimpa: (c) => galpao(c, { limpa: true }),
@@ -1234,7 +1463,8 @@ function vestirLote(c, caixa) {
   const arvores = [];
   const carros = [];
   const res = c.fam === 'res';
-  const alto = c.nivel >= 4 || c.fam === 'esc';
+  const luxo = LUXO_TIP.has(c.tip);
+  const alto = c.nivel >= 4 || c.fam === 'esc' || luxo;
   const z0 = caixa[2];
   const z1 = caixa[5];
   const xMin = -W / 2 + 1.4;
@@ -1242,9 +1472,9 @@ function vestirLote(c, caixa) {
   // quintal: uma árvore a cada ~9 m de frente, mais nas casas
   const fundo = z0 - -D / 2;
   if (fundo >= 2.6 && W >= 6) {
-    const n = Math.max(1, Math.round(W / 9));
+    const n = Math.max(1, Math.round(W / (luxo && res ? 6 : 9)));
     for (let k = 0; k < n; k++) {
-      if (!r.chance(res ? 0.62 : 0.45)) continue;
+      if (!r.chance(luxo && res ? 0.85 : res ? 0.62 : 0.45)) continue;
       const x = xMin + (xMax - xMin) * ((k + r.entre(0.25, 0.75)) / n);
       const z = -D / 2 + Math.min(fundo / 2, r.entre(1.3, 2.6));
       if (!bate(c, x, z, 0.6, 0.6)) arvores.push([x, z, ARVORE_LOTE.COPA, r.entre(0.62, 0.95)]);
@@ -1263,18 +1493,25 @@ function vestirLote(c, caixa) {
   }
   if (!c.abandonado) {
     const cor = () => parseInt(CORES_CARRO[r.int(0, CORES_CARRO.length - 1)].slice(1), 16);
-    const modelo = () => (c.fam === 'ind' ? (r.chance(0.6) ? 3 : 0) : r.escolher([4, 3, 3, 1]));
+    // a cidade rica anda de SUV e de sedã (D95); a Vila e o resto, de hatch e picape
+    const modelo = () => (c.fam === 'ind' ? (r.chance(0.6) ? 3 : 0) : luxo && c.fam === 'res' ? r.escolher([1, 3, 6, 0.4]) : r.escolher([4, 3, 3, 1]));
     // vagas de frente (o carro de frente para o prédio, 2,6 m por vaga) no recuo de 5,2 m ou mais
-    if (frente >= 5.2) {
+    if (luxo && c.fam === 'res') {
+      // jardim da frente: no máximo um carro na entrada de veículos da mansão
+      if (c.tip === 'mansao' && frente >= 5.2 && r.chance(0.6)) {
+        const z = z1 + Math.min(frente * 0.5, 5);
+        if (!bate(c, 0, z, 1.0, 2.3)) carros.push([0, z, Math.PI + r.entre(-0.05, 0.05), modelo(), cor()]);
+      }
+    } else if (frente >= 5.2) {
       const vagas = Math.floor((xMax - xMin + 1.4) / 2.6);
-      const ocupa = c.fam === 'res' && c.tip.startsWith('casa') ? 0.35 : c.fam === 'com' ? 0.6 : 0.45;
+      const ocupa = c.fam === 'res' && ehCasaTip(c.tip) ? 0.35 : c.fam === 'com' ? 0.6 : 0.45;
       for (let k = 0; k < vagas; k++) {
         if (!r.chance(ocupa)) continue;
         const x = xMin - 0.1 + 1.3 + k * 2.6;
         const z = z1 + Math.min(frente - 0.9, 2.6) - (frente >= 6 ? 0.3 : 0);
         if (!bate(c, x, z, 1.0, 2.3)) carros.push([x, z, Math.PI + r.entre(-0.05, 0.05), modelo(), cor()]);
       }
-    } else if (frente >= 2.4 && W >= 8 && c.tip.startsWith('casa') && r.chance(0.4)) {
+    } else if (frente >= 2.4 && W >= 8 && ehCasaTip(c.tip) && r.chance(0.4)) {
       // casa: o carro na garagem da frente, de lado no recuo raso
       const x = r.chance(0.5) ? xMin + 1.2 : xMax - 1.2;
       const z = z1 + frente / 2;

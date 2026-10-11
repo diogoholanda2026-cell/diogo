@@ -93,8 +93,9 @@ test('obra: peças de cada obra (prédio alto com grua de torre e tela, baixo co
   const alto = planoPredio({ w: 40, d: 40, modelo: 'predioLargo', nivel: 5, semente: 11 });
   assert.ok(alto.alturaTopo > O.ALTO);
   const a = O.pecasDaObra({ ...base, w: 40, d: 40, plano: alto, nivel: false });
-  assert.equal(a.gruas.length, 1);
-  assert.equal(a.gruas[0][4], 0, 'grua de torre');
+  const modelos = (r) => r.gruas.map((g) => g[4]).sort();
+  assert.deepEqual(modelos(a), [O.MODELO.TORRE, O.MODELO.ESCAVADEIRA, O.MODELO.PERFURATRIZ], 'torre: grua, escavadeira e perfuratriz');
+  const gTorre = a.gruas.find((g) => g[4] === O.MODELO.TORRE);
   assert.ok(a.cascas.every((c) => c[7] === O.CASCA.TELA), 'tela de proteção');
   const pil = a.caixas.filter((c) => c[7] === O.PECA.PILAR);
   const lajes = a.caixas.filter((c) => c[7] === O.PECA.LAJE);
@@ -110,8 +111,7 @@ test('obra: peças de cada obra (prédio alto com grua de torre e tela, baixo co
   }
   assert.ok(baixo, 'um prédio baixo de 6 a 14 m');
   const b = O.pecasDaObra({ ...base, w: 24, d: 32, plano: baixo, nivel: false });
-  assert.equal(b.gruas.length, 1);
-  assert.equal(b.gruas[0][4], 1, 'grua móvel');
+  assert.deepEqual(modelos(b), [O.MODELO.MOVEL, O.MODELO.ESCAVADEIRA, O.MODELO.PERFURATRIZ], 'prédio baixo: grua móvel, escavadeira e perfuratriz');
   assert.ok(b.cascas.every((c) => c[7] === O.CASCA.ANDAIME), 'andaime');
   // reforma de nível: sem esqueleto nem canteiro, tapume só na frente
   const r = O.pecasDaObra({ ...base, w: 40, d: 40, plano: alto, nivel: true });
@@ -138,13 +138,18 @@ test('obra: peças de cada obra (prédio alto com grua de torre e tela, baixo co
   assert.equal(bl.n, tap.length);
   assert.ok(Math.abs(bl.m[12] - tap[0][0]) < 1e-3 && Math.abs(bl.m[5] - tap[0][5]) < 1e-6 && bl.m[15] === 1);
   assert.deepEqual(Array.from(bl.o.subarray(0, 2)), [7, O.PECA.TAPUME]);
-  const blg = O.blocoDe(a.gruas, () => true, 7, true);
+  const blg = O.blocoDe([gTorre], () => true, 7, true);
   assert.equal(blg.o[1], 0, 'modelo da grua de torre no aObra.y');
-  assert.ok(Math.abs(blg.o[3] - a.gruas[0][6]) < 1e-4, 'lança no aObra.w');
+  assert.ok(Math.abs(blg.o[3] - gTorre[6]) < 1e-4, 'lança no aObra.w');
+  assert.ok(Math.abs(blg.x[1] - gTorre[7]) < 1e-5 && Math.abs(blg.x[2] - gTorre[8]) < 1e-5 && blg.x[3] === gTorre[9], 'o giro de pegar e de largar e os raios no aAux');
+  // o fecho soma o deslocamento ao tipo e leva o tique em que a obra acabou
+  const fe = O.blocoDe(a.caixas, O.fechoVale, 7, false, { t0: 1234 });
+  assert.ok(fe.n > 4 && fe.o[1] >= O.FECHO.deslocamento && fe.x[0] === 1234, 'bloco do fecho');
+  assert.ok(Array.from({ length: fe.n }, (_, k) => fe.o[4 * k + 1] - O.FECHO.deslocamento).every((t) => [O.PECA.TAPUME, O.PECA.CONTEINER, O.PECA.PILHA, O.PECA.BETONEIRA, O.PECA.BANDEIRA, O.PECA.FAISCA].includes(t)));
   // as geometrias unitárias
   assert.equal(O.geometriaCaixa().tris, 12);
   assert.equal(O.geometriaCasca().tris, 8);
-  assert.ok(O.geometriaGrua().tris < 260);
+  assert.ok(O.geometriaGrua().tris < 620);
 });
 
 test('obra: os shaders das obras montam sobre o three, com e sem a sombra, sem mediump', async () => {

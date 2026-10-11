@@ -40,6 +40,16 @@ export const PALETAS = congelar({
   metal: ['#8e9396', '#6f7477', '#a3a6a4'],
   piso: ['#8a857c', '#77736c', '#9a948a'],
   verde: ['#4c5a3a', '#56603f', '#465236'],
+  // moradia de alto padrão (D95): travertino e pedra clara de revestimento (Jardim Europa, Vila Nova Conceição), granito
+  // escuro de soco e de muro, ripado de ipê e cumaru, zinco e ardósia dos telhados das mansões, sebe e gramado de
+  // paisagismo (verdes secos, nunca o lima)
+  travertino: ['#dccdac', '#d5c5a1', '#e0d4ba', '#cfbf9b', '#d8c9a9'],
+  granito: ['#66645f', '#57565a', '#706c64', '#4f4e4d'],
+  ripado: ['#6a4c37', '#775640', '#5e4433', '#80614a'],
+  zinco: ['#5b5f62', '#6a6e70', '#52565a', '#74777a'],
+  ardosia: ['#4a4d50', '#55585a', '#414446'],
+  sebe: ['#3f4d33', '#46563a', '#394630', '#4c5a3a'],
+  gramado: ['#56653e', '#5d6c43', '#4f5e39', '#61703f'],
 });
 
 /**
@@ -62,12 +72,17 @@ export const ESTILOS_BAIRRO = congelar([
 export const TIPOLOGIAS = congelar({
   casa: { pe: 2.9, recuo: [2.5, 5], telha: 0.62 },
   sobradoGeminado: { pe: 2.9, recuo: [2, 4], telha: 0.5 },
+  vila: { pe: 2.9, recuo: [0.6, 3.2], telha: 0.6 },
   casaAltoPadrao: { pe: 3.2, recuo: [4, 7], telha: 0.05 },
+  casaPedraVidro: { pe: 3.3, recuo: [6, 10] },
+  mansao: { pe: 3.5, recuo: [9, 14], telha: 0.9 },
+  edificioPedraVidro: { pe: 3.2, terreo: [4.2, 5], recuo: [5, 8] },
   pilotis: { pe: 2.9, terreo: [3.6, 4.4], recuo: [3, 6] },
   varandas: { pe: 2.9, terreo: [3.2, 4], recuo: [3, 5] },
   varandaGourmet: { pe: 3.0, terreo: [4, 5], recuo: [4, 6] },
   torrePodio: { pe: 2.9, terreo: [4, 5], recuo: [4, 6] },
   torreVarandas: { pe: 2.9, terreo: [4.5, 5.5], recuo: [4, 6] },
+  torreLuxo: { pe: 3.1, terreo: [5, 6.5], recuo: [5, 8] },
   torreVidro: { pe: 3.2, terreo: [5.5, 7], recuo: [5, 8] },
   lojaToldo: { pe: 3.0, terreo: [4.2, 4.8], recuo: [0, 0] },
   galeriaVitrine: { pe: 3.8, terreo: [4.5, 5.2], recuo: [0, 2] },

@@ -19,10 +19,18 @@ const ESTUDO = {
 // consumo por pessoa (morador ou emprego) por hora de jogo (calibrar)
 const CONSUMO = { res: [0.006, 1.2], com: [0.004, 2], esc: [0.004, 2.5], ind: [0.01, 4] };
 
+// D95 (R4c): Heldópolis é uma cidade super rica, então a moradia das zonas do jogador começa na classe média alta.
+// Referências reais (uma prancha por tipologia em docs/entregas/onda4/R4c.md): casaAltoPadrao e casaPedraVidro no
+// Jardim Europa e no Jardim Paulistano (São Paulo, casas modernistas e contemporâneas em lote grande), mansao na Vila
+// Nova Conceição e no Cidade Jardim, edificioPedraVidro e varandaGourmet na Vila Nova Conceição e no Itaim, torreVarandas
+// e torreLuxo na Barra da Tijuca e em Balneário Camboriú, torreVidro (com heliponto) nas torres da Avenida Brasil
+// Central de Balneário e do Itaim. A casa de autoconstrução ('vila', 'casa' e 'sobradoGeminado') só existe na Vila de
+// Santa Cida (modelos com area 'vila').
 const TIPOLOGIAS = {
-  resBaixa: ['casa', 'casa', 'sobradoGeminado', 'sobradoGeminado', 'casaAltoPadrao'],
-  resMedia: ['pilotis', 'pilotis', 'varandas', 'varandas', 'varandaGourmet'],
-  resAlta: ['torrePodio', 'torrePodio', 'torreVarandas', 'torreVarandas', 'torreVidro'],
+  resBaixa: ['casaAltoPadrao', 'casaAltoPadrao', 'casaPedraVidro', 'mansao', 'mansao'],
+  vila: ['vila', 'vila', 'sobradoGeminado', 'sobradoGeminado', 'casa'],
+  resMedia: ['edificioPedraVidro', 'edificioPedraVidro', 'varandaGourmet', 'varandaGourmet', 'varandaGourmet'],
+  resAlta: ['torreVarandas', 'torreVarandas', 'torreLuxo', 'torreLuxo', 'torreVidro'],
   comBaixa: ['lojaToldo', 'lojaToldo', 'galeriaVitrine', 'galeriaVitrine', 'centroPelePerfurada'],
   comAlta: ['galeriaVitrine', 'galeriaVitrine', 'usoMisto', 'usoMisto', 'centroPelePerfurada'],
   escritorio: ['laminaBrises', 'laminaBrises', 'peleVidro', 'peleVidro', 'torreControleSolar'],
@@ -40,10 +48,10 @@ function repartir(total, fr) {
 }
 
 /**
- * Monta os 5 níveis de um modelo. pessoas: [nível 1, nível 5] de moradores (residencial) ou empregos; lares idem.
+ * Monta os 5 níveis de um modelo. area: 'vila' para as casas de autoconstrução da Vila de Santa Cida (D95). pessoas: [nível 1, nível 5] de moradores (residencial) ou empregos; lares idem.
  * andares: 5 faixas [min, max]; materiais do nível 1, crescendo 50% por nível.
  */
-function niveis(zona, { lares = null, pessoas, andares, materiais }) {
+function niveis(zona, { lares = null, pessoas, andares, materiais, area = null, tipologias = null }) {
   const fam = FAMILIA[zona];
   const out = [];
   for (let k = 0; k < 5; k++) {
@@ -61,13 +69,13 @@ function niveis(zona, { lares = null, pessoas, andares, materiais }) {
       energia: Math.round(n * kwP * 10) / 10,
       materiais: mats,
       andares: andares[k],
-      tipologia: TIPOLOGIAS[zona][k],
+      tipologia: (tipologias ?? (area === 'vila' ? TIPOLOGIAS.vila : TIPOLOGIAS[zona]))[k],
     });
   }
   return out;
 }
 
-const modelo = (nome, zona, planta, spec) => ({ nome, zona, planta, niveis: niveis(zona, spec) });
+const modelo = (nome, zona, planta, spec) => ({ nome, zona, planta, area: spec.area ?? null, niveis: niveis(zona, spec) });
 
 // Faixas de andares da cidade vertical (D76): a residencial média sobe de 3 a 6 andares no nível 1 até 12 a 25 no
 // nível 5; a comercial baixa acompanha em escala menor; a residencial alta (M1b) fica pronta com 30 a 60.
@@ -79,19 +87,19 @@ const A_COM_BAIXA = [[1, 2], [1, 3], [2, 4], [2, 5], [3, 6]];
 
 export const PREDIOS = congelar({
   casaEsquina: modelo('Casa de esquina', 'resBaixa', [1, 2], {
-    lares: [1, 1], pessoas: [3, 4], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], materiais: { tijolo: 1, cimento: 1 },
+    lares: [1, 1], pessoas: [3, 4], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], area: 'vila', materiais: { tijolo: 1, cimento: 1 },
   }),
   casaGeminada: modelo('Casa geminada', 'resBaixa', [1, 3], {
-    lares: [1, 1], pessoas: [3, 4], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 1, serrada: 1, cimento: 1 },
+    lares: [1, 1], pessoas: [3, 4], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], area: 'vila', materiais: { tijolo: 1, serrada: 1, cimento: 1 },
   }),
   casa: modelo('Casa', 'resBaixa', [2, 2], {
-    lares: [1, 1], pessoas: [4, 5], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], materiais: { tijolo: 2, serrada: 1, cimento: 1 },
+    lares: [1, 1], pessoas: [4, 5], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], area: 'vila', materiais: { tijolo: 2, serrada: 1, cimento: 1 },
   }),
   casaFundo: modelo('Casa com quintal', 'resBaixa', [2, 3], {
-    lares: [1, 1], pessoas: [4, 5], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], materiais: { tijolo: 2, serrada: 1, cimento: 1 },
+    lares: [1, 1], pessoas: [4, 5], andares: [[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], area: 'vila', materiais: { tijolo: 2, serrada: 1, cimento: 1 },
   }),
   sobrado: modelo('Sobrado geminado', 'resBaixa', [3, 4], {
-    lares: [2, 3], pessoas: [8, 12], andares: [[2, 2], [2, 2], [2, 3], [2, 3], [3, 3]], materiais: { tijolo: 4, serrada: 2, cimento: 2 },
+    lares: [2, 3], pessoas: [8, 12], andares: [[2, 2], [2, 2], [2, 3], [2, 3], [3, 3]], area: 'vila', materiais: { tijolo: 4, serrada: 2, cimento: 2 },
   }),
   // residencial média (D76): uns 13 a 15 moradores por andar no lote de 32 x 40 m, metade dele construída
   predioEstreito: modelo('Prédio estreito', 'resMedia', [2, 4], {
@@ -149,6 +157,25 @@ export const PREDIOS = congelar({
   fabrica: modelo('Fábrica', 'industria', [6, 6], {
     pessoas: [60, 160], andares: [[1, 2], [1, 2], [2, 2], [2, 3], [2, 3]], materiais: { concreto: 16, aco: 10, vidro: 2 },
   }),
+  // moradia de alto padrão em lote grande (D95, R4c): entra no fim para não mexer nos índices. Família com a equipe da
+  // casa (caseiro, motorista, babá) nos moradores; o nível sobe do sobrado contemporâneo à mansão.
+  casaJardim: modelo('Casa de alto padrão', 'resBaixa', [3, 3], {
+    lares: [1, 1], pessoas: [4, 7], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+  }),
+  // sobrado de alto padrão em lote de 16 x 24 m (Jardim Paulista, Vila Madalena alta): nunca vira a mansão de pórtico
+  sobradoAlto: modelo('Sobrado de alto padrão', 'resBaixa', [2, 3], {
+    lares: [1, 1], pessoas: [4, 6], andares: [[2, 2], [2, 2], [2, 3], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+    tipologias: ['casaAltoPadrao', 'casaAltoPadrao', 'casaPedraVidro', 'casaPedraVidro', 'casaPedraVidro'],
+  }),
+  casaPatio: modelo('Casa com pátio e piscina', 'resBaixa', [3, 4], {
+    lares: [1, 1], pessoas: [5, 8], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+  }),
+  casaTerreno: modelo('Residência em terreno amplo', 'resBaixa', [4, 4], {
+    lares: [1, 2], pessoas: [5, 9], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 4, cimento: 2, vidro: 2, serrada: 1 },
+  }),
+  mansaoLote: modelo('Mansão', 'resBaixa', [5, 5], {
+    lares: [1, 2], pessoas: [6, 12], andares: [[1, 2], [2, 2], [2, 3], [2, 3], [2, 3]], materiais: { tijolo: 5, cimento: 3, vidro: 2, serrada: 2 },
+  }),
 });
 
 /** Índice numérico de cada modelo (predios.modelo para tipo 0). Só se acrescenta no fim. */
@@ -157,8 +184,25 @@ export const PREDIOS_ORDEM = Object.freeze(Object.keys(PREDIOS));
 export const indicePredio = (id) => PREDIOS_ORDEM.indexOf(id);
 export const modeloPredio = (m) => PREDIOS[typeof m === 'number' ? PREDIOS_ORDEM[m] : m];
 
-/** Modelos de uma zona (ids), na ordem do catálogo. */
-export const modelosDaZona = (z) => PREDIOS_ORDEM.filter((id) => PREDIOS[id].zona === z);
+/**
+ * Modelos de uma zona (ids), na ordem do catálogo, que o jogador pode ver crescer. A casa de autoconstrução da Vila de
+ * Santa Cida (area 'vila', D95) não cresce nas zonas do jogador: ela só nasce pelo mapa (sim/mundo/vila.js).
+ */
+export const modelosDaZona = (z) => PREDIOS_ORDEM.filter((id) => PREDIOS[id].zona === z && PREDIOS[id].area !== 'vila');
+
+/** O modelo (id ou índice) é da Vila de Santa Cida? */
+export const ehDaVila = (m) => modeloPredio(m)?.area === 'vila';
+
+/** Modelos da Vila (ids), na ordem do catálogo. */
+export const modelosDaVila = () => PREDIOS_ORDEM.filter((id) => PREDIOS[id].area === 'vila');
+
+/**
+ * Gancho da S3b (requalificação da Vila pela Holding, objetivo de Legado do Ato 1): o modelo de alto padrão que
+ * substitui cada modelo da Vila (a S3b troca `predios.modelo` e ajusta o lote; moradia social no mesmo padrão, D72).
+ */
+export const REQUALIFICACAO_VILA = Object.freeze({
+  casaEsquina: 'casaJardim', casaGeminada: 'casaJardim', casa: 'casaJardim', casaFundo: 'casaPatio', sobrado: 'casaPatio',
+});
 
 /** Pé-direito de referência por família, em metros (render). */
 export const PE_DIREITO = congelar({ res: 3, com: 4.2, esc: 3.8, ind: 8 });

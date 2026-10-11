@@ -25,8 +25,8 @@ import { PREDIOS, modelosDaZona } from '../fonte/data/predios.js';
 import { ZONAS_ORDEM } from '../fonte/data/zonas.js';
 import { VIAS } from '../fonte/data/vias.js';
 
-// predios: a cidade cheia dá cerca de 12 mil (o gerador enche os bairros de ruas; o número exato sai no resumo)
-export const SINTETICA = Object.freeze({ lado: 4096, predios: 12000, semente: 'sintetica-1' });
+// predios: a cidade cheia dá cerca de 9 mil (o gerador enche os bairros de ruas; o número exato sai no resumo; eram 12 mil antes do lote grande da D95)
+export const SINTETICA = Object.freeze({ lado: 4096, predios: 9000, semente: 'sintetica-1' });
 
 const MEIO = SINTETICA.lado / 2; // a cidade ocupa [-2048, 2048] nos dois eixos
 
