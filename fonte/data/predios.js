@@ -160,21 +160,21 @@ export const PREDIOS = congelar({
   // moradia de alto padrão em lote grande (D95, R4c): entra no fim para não mexer nos índices. Família com a equipe da
   // casa (caseiro, motorista, babá) nos moradores; o nível sobe do sobrado contemporâneo à mansão.
   casaJardim: modelo('Casa de alto padrão', 'resBaixa', [3, 3], {
-    lares: [1, 1], pessoas: [4, 7], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+    lares: [1, 1], pessoas: [5, 8], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
   }),
   // sobrado de alto padrão em lote de 16 x 24 m (Jardim Paulista, Vila Madalena alta): nunca vira a mansão de pórtico
   sobradoAlto: modelo('Sobrado de alto padrão', 'resBaixa', [2, 3], {
-    lares: [1, 1], pessoas: [4, 6], andares: [[2, 2], [2, 2], [2, 3], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+    lares: [1, 1], pessoas: [5, 8], andares: [[2, 2], [2, 2], [2, 3], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
     tipologias: ['casaAltoPadrao', 'casaAltoPadrao', 'casaPedraVidro', 'casaPedraVidro', 'casaPedraVidro'],
   }),
   casaPatio: modelo('Casa com pátio e piscina', 'resBaixa', [3, 4], {
-    lares: [1, 1], pessoas: [5, 8], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+    lares: [1, 1], pessoas: [6, 10], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
   }),
   casaTerreno: modelo('Residência em terreno amplo', 'resBaixa', [4, 4], {
-    lares: [1, 2], pessoas: [5, 9], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 4, cimento: 2, vidro: 2, serrada: 1 },
+    lares: [1, 2], pessoas: [8, 12], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 4, cimento: 2, vidro: 2, serrada: 1 },
   }),
   mansaoLote: modelo('Mansão', 'resBaixa', [5, 5], {
-    lares: [1, 2], pessoas: [6, 12], andares: [[1, 2], [2, 2], [2, 3], [2, 3], [2, 3]], materiais: { tijolo: 5, cimento: 3, vidro: 2, serrada: 2 },
+    lares: [1, 2], pessoas: [8, 12], andares: [[1, 2], [2, 2], [2, 3], [2, 3], [2, 3]], materiais: { tijolo: 5, cimento: 3, vidro: 2, serrada: 2 },
   }),
 });
 

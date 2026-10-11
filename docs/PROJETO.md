@@ -1944,6 +1944,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   tipologia.
 - **Entrega:** as regras do dono intactas (renda de 5/8/11 por morador); se a capacidade mudar, o A2 do robô segue
   verde; triângulos e chamadas da cidade grande dentro da D66 na bancada; capturas da rua e da vista aberta.
+- **Entregue em 11/10/2026** (R4c, retomada). Zonas do jogador só de alto padrão (casas de lote grande até a mansão, prédios de pedra e vidro, torres de luxo com heliponto); casa de autoconstrução só nos modelos `area: 'vila'`, com o gancho `REQUALIFICACAO_VILA` para a S3b. Capacidade dos lares maior (8 a 12 na mansão), A2 verde sem mexer nos pisos; cidade sintética de 12 mil para 9 mil prédios, triângulos de 1,35 M para 0,99 M. Capturas e bancada pendentes (sem navegador). Nota em `docs/entregas/onda4/R4c.md`.
 
 ### 4.6 Ondas, caminho crítico, prévias e portões
 
