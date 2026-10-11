@@ -22,7 +22,7 @@ import { PAR, BACIA, AVENIDAS, HORIZON, MERIDIAN, PONTE, QUEDAS_ANGULOS, PASSEIO
 
 import { noArco, difGraus, aoMundo, elipse, faixaEntre, paredeArco, faixaArco, testaArco } from './arcos.js';
 import { PECAS_DE_AGUA } from './lagos.js';
-import { ponte } from './pontes.js';
+import { ponte, ipeEmFlor } from './pontes.js';
 export { noArco, difGraus, aoMundo, elipse, faixaEntre };
 
 const RAD = Math.PI / 180;
@@ -69,6 +69,7 @@ const K = {
   // os Hanging Gardens (D97): o passeio do terraço, o canteiro de folhagem e a planta pendente da marquise, em verdes
   // fundos (nada de verde-lima)
   terraco: acab('#9a9285', { rugo: 0.8, padrao: PADRAO.piso }),
+  basaltoQueda: acab('#2a2d30', { rugo: 0.3, padrao: PADRAO.pedra }),
   folhagemTerraco: acab('#2c4326', { rugo: 0.95, padrao: PADRAO.folha }),
   pendente: acab('#23381d', { rugo: 0.95, padrao: PADRAO.folha }),
   pendente2: acab('#304a27', { rugo: 0.95, padrao: PADRAO.folha }),
@@ -209,6 +210,9 @@ function sebeDoPe(m, cx, cz, yb, r, sinal, a0, a1) {
   testaArco(m, cx, cz, em(P.sebe0), a0, a1, yb + P.alturaCanteiro, yb + P.alturaSebe, K.sebe, -sinal);
 }
 
+/** As árvores de flor dos terraços dos Hanging Gardens (as cores de FLORADAS, em pontes.js). */
+const FLORES_TERRACO = ['amarelo', 'roxo', 'quaresmeira', 'manaca', 'amarelo', 'roxo'];
+
 /**
  * Trecho de anel (Apple Park, McLaren): vidro curvo do chão ao teto por fora e por dentro (o vidro do eixo a fundo/2),
  * a marquise branca em cada laje (2,4 m de balanço), a faixa de LED de um terço dos andares no terço do meio da altura
@@ -343,7 +347,10 @@ function anel(g, p) {
       const mid = (a0 + a1) / 2;
       const portal = noPortal(mid, portais, mp);
       const naJanela = janela(mid);
-      if (naJanela || !linhas.length) paredeArco(g.vidro, cx, cz, yb, rD, a0, a1, portal ? pePortal : 0, yTeto, kvIn(mid), -1);
+      // nas janelas das quedas a face é um paredão de basalto molhado (o fundo escuro da água branca, como a pedra atrás do Rain
+      // Vortex): de longe, de dia e de noite, a cortina lê como uma coluna clara contra ele, e não contra o vidro aceso
+      if (naJanela) paredeArco(g.opaco, cx, cz, yb, rD, a0, a1, portal ? pePortal : 0, yTeto, K.basaltoQueda, -1);
+      else if (!linhas.length) paredeArco(g.vidro, cx, cz, yb, rD, a0, a1, portal ? pePortal : 0, yTeto, kvIn(mid), -1);
       else {
         for (const gr of grupos) {
           const y0 = Math.max(gr.y0 > 0 ? gr.y0 + 0.25 : 0, portal ? pePortal : 0);
@@ -375,7 +382,10 @@ function anel(g, p) {
         faixaArco(g.opaco, cx, cz, rTip + 0.5, rTip + 2.3, a0, a1, yl + 0.95, K.folhagemTerraco, true);
         testaArco(g.opaco, cx, cz, rTip + 0.2, a0, a1, yl - 2.6, yl + 0.8, hashF(k, i, 3) < 0.5 ? K.pendente : K.pendente2, -1);
       }
-      if (!g.arvores) return;
+      // as árvores do terraço, a cada 9 m (a vegetação desenha as dela; as de flor entram em volume só de perto, no LOD0 do setor,
+      // onde a folhagem se lê: ipê-amarelo, ipê-roxo, quaresmeira e manacá-da-serra). Espécies da vegetação: o oiti, a embaúba,
+      // a juçara (palmeira), a figueira jovem (mata2) e a estreita (mata3); nenhuma de verde claro
+      if (!g.arvores && !g.setor) return;
       const rA = rTip + 1.4;
       const nA = Math.max(1, Math.floor(((ate - de) * RAD * rA) / 9));
       for (let k = 0; k < nA; k++) {
@@ -384,7 +394,17 @@ function anel(g, p) {
         if (AVENIDAS.some((q) => Math.abs(difGraus(a, q)) * RAD * rA < 19)) continue;
         const [x, z] = noArco(cx, cz, rA, a);
         const h = hashF(k, i + 7, Math.round(de));
-        g.arvores.push({ x, y: yl + 0.96, z, especie: h < 0.62 ? 'oiti' : h < 0.82 ? 'mata3' : 'palmeira', altura: 3.5 + 2.5 * hashF(k, i, 5), giro: hashF(k, i, 9) * 6.28 });
+        const alt = 3.5 + 2.5 * hashF(k, i, 5);
+        if (h >= 0.72) {
+          if (g.setor) {
+            const cor = FLORES_TERRACO[Math.floor(hashF(k, i, 21) * FLORES_TERRACO.length) % FLORES_TERRACO.length];
+            ipeEmFlor(g.setor(setorDoAnel(p, a)).opaco, x, yl + 0.96, z, alt + 1.5, cor, k * 7 + i);
+          }
+          continue;
+        }
+        if (!g.arvores) continue;
+        const especie = h < 0.28 ? 'oiti' : h < 0.42 ? 'embauba' : h < 0.54 ? 'mata3' : h < 0.64 ? 'palmeira' : 'mata2';
+        g.arvores.push({ x, y: yl + 0.96, z, especie, altura: alt, giro: hashF(k, i, 9) * 6.28 });
       }
     });
   }

@@ -82,7 +82,7 @@ export function materialAgua(ganchos) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uTempoAgua;\nuniform float uNoite;')
       // à noite o céu refletido quase some (a água escura, com o brilho das luzes em volta), como um lago de verdade
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= mix( 1.0, 0.35, uNoite );')
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= mix( 1.9, 0.35, uNoite );')
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
@@ -96,7 +96,7 @@ export function materialAgua(ganchos) {
 }`,
       );
   };
-  mat.customProgramCacheKey = () => 'arcologia-agua-3';
+  mat.customProgramCacheKey = () => 'arcologia-agua-4';
   mat.name = 'arcologia:agua';
   return ganchos.aplicar(mat, ['sombra', 'neblina']);
 }

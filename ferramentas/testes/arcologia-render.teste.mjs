@@ -40,6 +40,7 @@ import {
   PARTES_NOMES, GLEBA_ENVELOPE, cavaDoPlano, POUSO, TORRE_POSICAO, HELIPONTO_LOCAL, torreParaMundo, CAMERA_ARCOLOGIA,
   HORIZON, MERIDIAN, PODIO, LAGO, FLORESTA, AVENIDAS, ILHAS, MIRROR, QUEDAS_ANGULOS, HALO, PONTES, PONTE, raioDaMargem, CORREDOR_AVENIDA, raioDaFaceDeDentro, ANEL_VIARIO, TRECHOS_HORIZON, mataDaSede, SEDE_CENTRO,
 } from '../../fonte/data/arcologia-plano.js';
+import { copaBaixa } from '../../fonte/render/arcologia/pontes.js';
 import { MAPA_HELDOPOLIS } from '../../fonte/data/mapa-heldopolis.js';
 import { gerarTerreno, aguaEm, costaEm } from '../../fonte/sim/mundo/terreno.js';
 import { pontoNoPoligono } from '../../fonte/comum/vetor.js';
@@ -1671,4 +1672,67 @@ test('plano no jogo (X1b): na obra o pódio sai à parte, o lago em obra sem o e
   // os portões e a praça com o lago pronto (8 portões: 3 caixas cada)
   assert.ok(obra.comum.opaco.triangulos > malhasDoPlano('A', { chao, prontas: new Set(['lago']), paisagem: false }).comum.opaco.triangulos);
   conferirMalha(obra.comum.opaco, 'portões');
+});
+
+// ------------------------------------------------------------------------------------------------ SEDE4b: leitura de longe
+
+test('SEDE4b: a faixa de LED das Canopy Bridges é uma classe de luz própria, por baixo e na borda do deck, e a copa baixa custa 12 triângulos', () => {
+  assert.equal(LUZ.ponte, 13);
+  const classes = new Set(Object.values(LUZ));
+  assert.equal(classes.size, Object.keys(LUZ).length, 'cada classe de luz é única');
+  assert.ok(Math.max(...classes) <= 15, 'a classe cabe em 4 bits');
+  const d = montarPeca(pecasDe('ponte')[0]);
+  // os vértices com a luz da ponte: pelo pacote do acabamento (rugo, metal, luz, padrão em 4 bits cada)
+  const luzDe = (pk) => Math.floor(pk / 16) % 16;
+  let nLed = 0;
+  for (let i = 3; i < d.opaco.c.length; i += 4) if (luzDe(Math.round(d.opaco.c[i])) === LUZ.ponte) nLed++;
+  assert.equal(nLed, 2 * 3 * 4, 'os vértices de LED: 2 lados x 3 faixas (a testa, o forro e a borda do deck) de 4 vértices');
+  // a copa baixa
+  const m = new Malha('opaco');
+  copaBaixa(m, 0, 0, 0, 3, 2, [0.1, 0.2, 0.1, 0], 1);
+  assert.equal(m.triangulos, 12);
+  conferirMalha(m, 'copa baixa');
+});
+
+test('SEDE4b: as árvores das pontes e dos terraços são só as da Mata Atlântica, sem verde-lima, e as de flor entram em volume', () => {
+  const permitidas = new Set(['palmeira', 'embauba', 'oiti', 'mata1', 'mata2', 'mata3']);
+  const vistas = new Set();
+  for (const q of pecasDe('ponte')) for (const a of montarPeca(q).arvores) { assert.ok(permitidas.has(a.especie), a.especie); vistas.add(a.especie); }
+  for (const e of ['palmeira', 'embauba', 'oiti', 'mata3', 'mata2']) assert.ok(vistas.has(e), `a ponte não tem ${e}`);
+  // as quatro de flor por ponte (os tufos da cor da flor: cada cor tem de aparecer na malha)
+  const cores = new Map();
+  for (const q of pecasDe('ponte')) {
+    const o = montarPeca(q).opaco;
+    for (let i = 0; i < o.c.length; i += 4) {
+      const pk = Math.round(o.c[i + 3]);
+      if (pk % 16 !== PADRAO.folha) continue;
+      const k = [o.c[i], o.c[i + 1], o.c[i + 2]].map((v) => v.toFixed(2)).join(',');
+      cores.set(k, (cores.get(k) ?? 0) + 1);
+    }
+  }
+  assert.ok(cores.size >= 8, `${cores.size} cores de folhagem e flor nas pontes`);
+  // nos terraços: as espécies da vegetação variam e as de flor só aparecem no LOD0 do setor
+  const p = pecasDe('anel').find((q) => q.id === 'horizon.6');
+  const longe = montarPeca(p);
+  const especies = new Set(longe.arvores.filter((a) => a.y - COTA > 10).map((a) => a.especie));
+  assert.ok(especies.size >= 4, `${[...especies].join(',')} nos terraços`);
+  for (const e of especies) assert.ok(permitidas.has(e), e);
+  const setores = new Map();
+  const perto = { chao: chaoPlano, ...malhasNovas(), lod: 0, nivelAgua: COTA + LAGO.nivel, mata: mataDaSede, setor: (s) => { if (!setores.has(s)) setores.set(s, new Malha('opaco')); return { opaco: setores.get(s) }; } };
+  perto.arvores = null;
+  montarParte({ id: 'x', pecas: [p] }, perto);
+  const dentro = [...setores.values()].reduce((a, m) => a + m.triangulos, 0);
+  assert.ok(dentro > 0);
+});
+
+test('SEDE4b: as Dream Falls levam a altura da queda no vértice (o pé de espuma e a luz do pé) e têm 60 m de largura', () => {
+  for (const q of pecasDe('queda')) {
+    assert.equal(q.largura, 60);
+    const d = montarPeca(q, { lod: 1 });
+    let altas = 0;
+    for (let i = 0; i < d.efeitos.c.length; i += 4) if (d.efeitos.c[i] === 0 && d.efeitos.c[i + 2] >= 1) { altas++; assert.ok(Math.abs(d.efeitos.c[i + 3] - (120.2 + COTA - (COTA + MIRROR.nivel))) < 0.5 || d.efeitos.c[i + 3] > 100, 'altura total no vértice'); }
+    assert.ok(altas > 100, 'a lâmina tem os vértices da cortina');
+  }
+  const meridian = pecasDe('anel').find((q) => q.id === 'meridian');
+  for (const j of meridian.quedas) assert.ok(j.meia >= 30 + 5, 'a janela do anel abre mais que a cortina');
 });

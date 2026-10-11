@@ -528,7 +528,7 @@ const PLANO_A = {
         { tipo: 'cachoeira', nome: 'Dream Falls', cx: CX, cz: CZ, raio: PODIO.raio, altura: PODIO.altura, angulos: [60, 240], abertura: 60 },
         // Dream Falls grandes: 4 cortinas de 120 m do teto do Meridian Ring para as enseadas do lago
         ...QUEDAS_ANGULOS.map((angulo, k) => ({
-          tipo: 'queda', id: `queda.${k + 1}`, nome: 'Dream Falls', cx: CX, cz: CZ, angulo, largura: 50, altura: MERIDIAN.altura,
+          tipo: 'queda', id: `queda.${k + 1}`, nome: 'Dream Falls', cx: CX, cz: CZ, angulo, largura: 60, altura: MERIDIAN.altura,
           rTopo: MERIDIAN.raio - MERIDIAN.fundo / 2 - 4.2,
         })),
         // fontes dançantes no anel d'água, fora das cachoeiras e das escadas rolantes
@@ -539,7 +539,7 @@ const PLANO_A = {
       id: 'meridian', nome: 'Meridian Ring',
       pecas: [{
         tipo: 'anel', id: 'meridian', cx: CX, cz: CZ, ...MERIDIAN, de: 0, ate: 360, portais: [...AVENIDAS], ...PORTICO,
-        teto: 'jardim', quedas: QUEDAS_ANGULOS.map((angulo) => ({ angulo, meia: 33 })),
+        teto: 'jardim', quedas: QUEDAS_ANGULOS.map((angulo) => ({ angulo, meia: 38 })),
       }],
     },
     {

@@ -45,7 +45,7 @@ export const PADRAO = Object.freeze({
 /** Classes de luz do material opaco: led (as linhas das quinas das torres e da ponte), livros (o átrio aceso). */
 export const LUZ = Object.freeze({
   nenhuma: 0, aro: 1, obstaculo: 2, forro: 3, piscina: 4, coroa: 5, janela: 6, esfera: 7, arvoreLuz: 8, reflexo: 9, led: 10, livros: 11,
-  marquise: 12,
+  marquise: 12, ponte: 13,
 });
 
 /**
@@ -2132,6 +2132,9 @@ void gOpaco() {
   else if ( cls > 8.5 && cls < 9.5 ) oEmi = vec3( 1.0, 0.72, 0.42 ) * uNoite * 0.014;
   // a linha de LED das quinas e da ponte: champanhe, que respira devagar subindo a torre (de dia, um traço claro)
   else if ( cls > 9.5 && cls < 10.5 ) oEmi = vec3( 1.0, 0.87, 0.68 ) * mix( 0.03, G_LUZ_LED * 2.6, uNoite ) * ( 0.8 + 0.2 * sin( vUvM.y / 38.0 - uTempo * 0.6 ) );
+  // a faixa de LED das Canopy Bridges (SEDE4b): de dia um traço branco-quente aceso, que lê de longe contra o verde; à noite
+  // uma onda de luz corre o vão de uma face à outra (u em metros ao longo da ponte)
+  else if ( cls > 12.5 && cls < 13.5 ) oEmi = vec3( 1.0, 0.88, 0.66 ) * mix( 0.34, G_LUZ_LED * 2.4, uNoite ) * ( 0.78 + 0.22 * sin( vUvM.x / 26.0 - uTempo * 0.9 ) );
   // o átrio de livros aceso por dentro
   else if ( cls > 10.5 ) oEmi = vec3( 1.0, 0.8, 0.56 ) * mix( 0.004, 0.06, uNoite ) * oCor * 6.0;
 }
@@ -2150,7 +2153,7 @@ function ligarComum(shader, extras) {
  * que muda entre as variantes são uniformes (uLinhas, uCorte, uNoite): um programa só por material, compilado na carga.
  */
 export const CHAVES = Object.freeze({
-  vidro: 'arcologia-vidro-6', opaco: 'arcologia-opaco-5', cascata: 'arcologia-cascata-3', jato: 'arcologia-jato-2',
+  vidro: 'arcologia-vidro-6', opaco: 'arcologia-opaco-6', cascata: 'arcologia-cascata-4', jato: 'arcologia-jato-2',
 });
 
 /**
@@ -2228,34 +2231,50 @@ void gCascata() {
   wEmi = vec3( 0.0 );
   if ( modo < 0.5 ) {
     // lâmina das Dream Falls (v: metros caídos desde a borda): verde-clara na borda, branca de ar embaixo, em cortinas
-    // de fios que se juntam e se abrem na queda
+    // de fios que se juntam e se abrem na queda. Nas de 120 m (vC.z > 0, vC.w = a altura total) o branco chega cedo e o pé
+    // vira jato de espuma quase opaco: de longe a cortina lê como uma coluna clara contra o vidro escuro do anel
+    float alta = step( 0.5, vC.z );
     float fio = wQueda( p.x, p.y, t + fase * 3.0 );
     float cordas = gRuidoF( vec2( p.x * 1.5 + 0.35 * sin( p.y * 0.21 ), 3.1 + fase * 7.0 ) );
-    float ar = smoothstep( 2.0, 30.0, p.y );
+    float ar = smoothstep( 2.0, mix( 30.0, 20.0, alta ), p.y );
+    float pe = alta * smoothstep( vC.w - 30.0, vC.w - 3.0, p.y ) * step( 1.0, vC.w );
     float esp = smoothstep( 0.46 - 0.2 * ar, 0.78, fio );
     wAlb = mix( vec3( 0.3, 0.42, 0.42 ), vec3( 0.88, 0.9, 0.9 ), max( esp, 0.2 + ar * 0.65 ) );
+    wAlb = mix( wAlb, vec3( 0.95, 0.97, 0.97 ), max( pe * 0.9, alta * ar * 0.3 ) );
     wAlfa = clamp( ( 0.42 + 0.55 * fio + 0.25 * ar ) * mix( 0.5, 1.0, smoothstep( 0.25, 0.6, cordas ) ), 0.0, 0.96 );
     // a borda macia da cortina (vC.z = 1 + a posição de 0 a 1 na largura; 0 nas quedas do pódio, que não a têm)
     float lat = vC.z - 1.0;
-    wAlfa = vC.z > 0.5 ? clamp( wAlfa * 1.3, 0.0, 0.97 ) * smoothstep( 0.0, 0.1, lat ) * ( 1.0 - smoothstep( 0.9, 1.0, lat ) ) : wAlfa;
+    wAlfa = vC.z > 0.5 ? clamp( wAlfa * 1.3 + 0.1 * ar + 0.35 * pe, 0.0, 0.98 ) * smoothstep( 0.0, 0.1, lat ) * ( 1.0 - smoothstep( 0.9, 1.0, lat ) ) : wAlfa;
+    // o sol na água: uma lâmina de 120 m espalha a luz do céu (translúcida, a cortina não vira cinza na sombra do anel)
+    wEmi = vec3( 0.8, 0.86, 0.88 ) * ( 1.0 - uNoite ) * alta * ( 0.16 + 0.12 * esp + 0.2 * pe );
     // à noite, acesa por baixo (os refletores no espelho d'água): a espuma brilha, a água clara quase apaga; nas quedas de
-    // 120 m a luz sobe e some com a altura (a cortina acende do pé até uns 70 m)
-    float luzPe = 1.0 - 0.8 * smoothstep( 8.0, 110.0, p.y ) * step( 0.5, vC.z );
-    wEmi = mix( vec3( 0.6, 0.78, 1.0 ), vec3( 1.0, 0.96, 0.9 ), esp ) * uNoite * ( 0.02 + 0.16 * esp ) * ( 0.4 + 0.6 * ar ) * luzPe * mix( 1.0, 2.6, step( 0.5, vC.z ) );
+    // 120 m a luz sobe e some com a altura (a cortina acende do pé até uns 70 m). O show (o Rain Vortex): ondas de cor que
+    // descem a cortina, cada queda na sua fase, e os fios mais claros acendem mais que o vão entre eles
+    float luzPe = 1.0 - 0.8 * smoothstep( 8.0, 110.0, max( vC.w - p.y, 0.0 ) ) * alta;
+    // à noite a cortina é um véu de fios de luz sobre o basalto: o branco difuso escurece (senão o ambiente a lava de lilás) e o
+    // vão entre os fios fica translúcido
+    wAlb *= mix( 1.0, 0.4, uNoite * alta );
+    wAlfa *= mix( 1.0, 0.5 + 0.7 * fio, uNoite * alta * ( 1.0 - pe ) );
+    float onda = 0.5 + 0.5 * sin( p.y * 0.21 - uTempo * 1.3 + fase * 9.0 + p.x * 0.05 );
+    float matiz = 0.5 + 0.5 * sin( uTempo * 0.17 + fase * 7.0 + p.y * 0.012 );
+    vec3 corShow = mix( vec3( 0.42, 0.7, 1.0 ), vec3( 1.0, 0.62, 0.86 ), matiz );
+    vec3 corLuz = mix( mix( vec3( 0.6, 0.78, 1.0 ), vec3( 1.0, 0.96, 0.9 ), esp ), corShow, 0.7 * alta * ( 1.0 - pe ) );
+    float fluxo = mix( 1.0, 0.3 + 1.4 * onda, alta ) * mix( 1.0, 0.35 + 1.3 * fio, alta );
+    wEmi += corLuz * uNoite * ( 0.02 + 0.16 * esp ) * ( 0.4 + 0.6 * ar ) * luzPe * mix( 1.0, 2.6, alta ) * fluxo * ( 1.0 + 0.8 * pe );
   } else if ( modo < 1.5 ) {
     // névoa onde a água bate: sobe, espalha e some com a altura
     float n = gRuidoF( vec2( p.x * 0.3 + t * 0.25, p.y * 0.22 - t * 0.55 + fase * 9.0 ) ) * 0.6 + gRuidoF( vec2( p.x * 0.8 - t * 0.4, p.y * 0.5 - t * 1.0 ) ) * 0.4;
-    float alt = 1.0 - smoothstep( 1.0, 16.0, p.y );
-    wAlb = vec3( 0.86, 0.88, 0.89 );
-    wAlfa = smoothstep( 0.3, 0.8, n ) * alt * 0.7;
+    float alt = 1.0 - smoothstep( 2.0, 26.0, p.y );
+    wAlb = vec3( 0.93, 0.95, 0.96 );
+    wAlfa = smoothstep( 0.22, 0.7, n ) * alt * 0.86;
     wRug = 1.0;
     wEmi = vec3( 0.75, 0.88, 1.0 ) * uNoite * 0.11 * wAlfa;
   } else if ( modo < 2.5 ) {
     // espuma no lago, em volta de onde a lâmina bate (uv: ao longo da queda, distância a ela)
     float n = gRuidoF( p * 0.8 + vec2( t * 0.35, -t * 0.6 ) ) * 0.6 + gRuidoF( p * 2.2 - vec2( t * 0.8, t * 0.25 ) ) * 0.4;
-    float perto = 1.0 - smoothstep( 0.5, 9.0, abs( p.y ) );
-    wAlb = vec3( 0.84, 0.86, 0.86 );
-    wAlfa = smoothstep( 0.3, 0.7, n ) * perto * 0.92;
+    float perto = 1.0 - smoothstep( 0.5, 13.0, abs( p.y ) );
+    wAlb = vec3( 0.92, 0.94, 0.94 );
+    wAlfa = smoothstep( 0.24, 0.62, n ) * perto * 0.97;
     wRug = 0.5;
     wEmi = vec3( 0.7, 0.86, 1.0 ) * uNoite * 0.1 * wAlfa;
   } else {

@@ -180,7 +180,7 @@ function bacia(g, p) {
       const a0 = ang(r, i);
       const a1 = ang(r, i + 1);
       paredeArco(g.opaco, cx, cz, yc, r, a0, a1, 0, p.coroamento, K.granito, sinal);
-      faixaArco(g.opaco, cx, cz, sinal > 0 ? r : r - 0.6, sinal > 0 ? r + 0.6 : r, a0, a1, topo, K.pedraClara, true);
+      faixaArco(g.opaco, cx, cz, sinal > 0 ? r : r - 1.8, sinal > 0 ? r + 1.8 : r, a0, a1, topo, K.pedraClara, true);
     }
   }
   // as pontas junto das avenidas: o muro e o topo ao longo da linha do corredor (o muro olha para a avenida)
@@ -254,7 +254,7 @@ function queda(g, p) {
       const a = a0 + ((a1 - a0) * i) / nA;
       const c = Math.cos(a * RAD);
       const s = Math.sin(a * RAD);
-      g.efeitos.v(cx + r * c, yy, cz + r * s, -c, 0, -s, rTopo * a * RAD, yTopo - yy, [CASCATA.lamina, fase, 1 + i / nA, 0]);
+      g.efeitos.v(cx + r * c, yy, cz + r * s, -c, 0, -s, rTopo * a * RAD, yTopo - yy, [CASCATA.lamina, fase, 1 + i / nA, yTopo - nivel]);
     }
   }
   const Lv = nA + 1;
@@ -274,13 +274,13 @@ function queda(g, p) {
     const b1 = a0 + ((a1 - a0) * (i + 1)) / nS;
     const P = [[rTopo + 11, b0], [rTopo + 11, b1], [rTopo, b1], [rTopo, b0]].map(([r, a]) => noArco(cx, cz, r, a));
     g.efeitos.quad(...P.map(([x, z]) => [x, yTopo + 0.2, z]), [0, 1, 0], [0, 0], [rTopo * (b1 - b0) * RAD, 0], [rTopo * (b1 - b0) * RAD, 11], [0, 11], w);
-    const Q = [[rPouso + 3, b0], [rPouso + 3, b1], [rPouso - 13, b1], [rPouso - 13, b0]].map(([r, a]) => noArco(cx, cz, r, a));
-    g.efeitos.quad(...Q.map(([x, z]) => [x, nivel + 0.06, z]), [0, 1, 0], [rPouso * b0 * RAD, -3], [rPouso * b1 * RAD, -3], [rPouso * b1 * RAD, 13], [rPouso * b0 * RAD, 13], e);
+    const Q = [[rPouso + 4, b0], [rPouso + 4, b1], [rPouso - 18, b1], [rPouso - 18, b0]].map(([r, a]) => noArco(cx, cz, r, a));
+    g.efeitos.quad(...Q.map(([x, z]) => [x, nivel + 0.06, z]), [0, 1, 0], [rPouso * b0 * RAD, -4], [rPouso * b1 * RAD, -4], [rPouso * b1 * RAD, 18], [rPouso * b0 * RAD, 18], e);
   }
   // a névoa: duas cascas que se abrem para o lago
   const am0 = (a0 - 1.2) * RAD;
   const am1 = (a1 + 1.2) * RAD;
-  cascaEfeito(g.efeitos, cx, cz, nivel, nivel + 38, rPouso + 3, rPouso - 14, 18, CASCATA.nevoa, 3, fase, am0, am1);
+  cascaEfeito(g.efeitos, cx, cz, nivel, nivel + 44, rPouso + 3, rPouso - 18, 18, CASCATA.nevoa, 3, fase, am0, am1);
   cascaEfeito(g.efeitos, cx, cz, nivel, nivel + 18, rPouso + 4, rPouso - 9, 14, CASCATA.nevoa, 2, fase + 0.5, am0, am1);
   // o bico de bronze em balanço no teto, com o forro por baixo (a cobertura do anel acaba 2,4 m antes)
   const rBico = rTopo - 0.3;
