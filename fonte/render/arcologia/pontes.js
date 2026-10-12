@@ -183,7 +183,7 @@ export function ponte(g, p) {
   // de flor por ponte (ipê-amarelo, ipê-roxo, quaresmeira e manacá-da-serra, a flor em volume porque a vegetação não a tem),
   // cada uma num canteiro e numa posição do vão que muda de uma ponte para a outra
   const rot = Math.round(angulo / 45) % 4;
-  const flores = [[0.2, 1, 'amarelo'], [0.38, -1, 'manaca'], [0.62, 1, 'roxo'], [0.8, -1, 'quaresmeira']].map(([f, sd, cor]) => [Math.round(r0 + (r1 - r0) * ((f + 0.07 * rot) % 1)), sd, cor]);
+  const flores = [[0.2, 1, 'amarelo'], [0.38, -1, 'manaca'], [0.62, 1, 'roxo'], [0.8, -1, 'quaresmeira']].map(([f, sd, cor]) => [Math.round(r0 + (r1 - r0) * (0.12 + ((f - 0.12 + 0.07 * rot) % 0.76))), sd, cor]);
   const florEm = (s, sd) => flores.find(([sq, sl]) => sl === sd && Math.abs(sq - s) < 5);
   let k = 0;
   for (let s = r0 + 7; s < r1 - 5; s += 9) {

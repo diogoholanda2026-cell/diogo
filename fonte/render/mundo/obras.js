@@ -767,11 +767,14 @@ function criarObras(ctx) {
       const em = i < P.n && P.viva[i] && P.flags[i] & PREDIO.OBRA;
       if (!em) {
         // a obra que acabou (o prédio segue vivo no mesmo lugar) mostra o fecho; demolida ou movida, some
+        // (um aviso posterior do mesmo prédio, sem obra em andamento, não interrompe o fecho que já corre)
         const ob = obras.get(i);
-        if (ob && i < P.n && P.viva[i] && ob.px === P.x[i] && ob.pz === P.z[i]) {
+        const f = fechos.get(i);
+        const noLugar = (o) => i < P.n && P.viva[i] && o.px === P.x[i] && o.pz === P.z[i];
+        if (ob && noLugar(ob)) {
           const tp = esp.tempo ?? {};
           fechos.set(i, { ob, t0: (tp.tique ?? 0) + (tp.frac ?? 0), blocos: null });
-        } else fechos.delete(i);
+        } else if (ob || !(f && noLugar(f.ob))) fechos.delete(i);
         if (obras.delete(i)) sujo = true;
         continue;
       }

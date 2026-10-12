@@ -494,7 +494,6 @@ export function criarObra(ctx, material) {
           gr.esq.rotation.set(0, t.rot, 0);
           gr.esq.scale.set(1, e / ALTURA_FRENTE, Math.max(0.2, (zMax + 25) / 50));
         }
-        // o fecho de uma etapa (também o da última, com as gruas já recolhidas)
         // o fecho de uma etapa: a bandeirola sobe (18 m em 3 s) no topo, ondula, e o brilho pisca até o fim
         const fe = fechoT0 === null ? -1 : (tMs - fechoT0) / 1000;
         const vFe = fe >= 0 && fe < FECHO.segundos;
@@ -530,6 +529,7 @@ export function criarObra(ctx, material) {
         gr.carga.position.y = 1.6 - ci.cabo;
         gr.carga.visible = ci.carga;
         // os operários andam na laje de cima da frente de obra (a trilha na planta local, a cota no topo da laje)
+        if (frente) gr.esq.updateMatrixWorld(true); // a matriz do quadro (esq acabou de ser posto)
         for (let q = 0; q < gr.ops.length; q++) {
           const o = gr.ops[q];
           o.visible = frente;
