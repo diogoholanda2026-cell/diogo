@@ -28,7 +28,7 @@ import {
   viaComRede,
 } from '../predios.js';
 import { encher, educar, ocupacaoDe } from '../cidadaos.js';
-import { atualizarBemEstar, calcularBemEstar, BEM } from '../bemestar.js';
+import { atualizarBemEstar, calcularBemEstar, BEM, penalidadeEsgoto } from '../bemestar.js';
 import { coberturaPredio, distanciaTipo, atualizarServico } from '../servicos.js';
 import { temOferta, naRede, recursosAtivos } from '../redes.js';
 import { avisoDeAmbiente } from '../ambiente.js';
@@ -499,7 +499,7 @@ function problemas(sim, i, fam, oc) {
     let b = P.bemEstar[i];
     if (f & PREDIO.SEM_AGUA && !(contaAgua && ligado)) b -= BEM.semAgua;
     if (f & PREDIO.SEM_ENERGIA && !(contaEnergia && ligado)) b -= BEM.semEnergia;
-    if (f & PREDIO.SEM_ESGOTO && !(contaEsgoto && ligado)) b -= BEM.semEsgoto;
+    if (f & PREDIO.SEM_ESGOTO && !(contaEsgoto && ligado)) b -= penalidadeEsgoto(sim);
     if (P.moradores[i] && b < CRESCIMENTO.bemMinimo) m |= AV.BEM_ESTAR;
   } else if (oc && oc.vagas) {
     if (oc.frac < CRESCIMENTO.ocupacaoMinima) m |= AV.SEM_TRABALHADORES;

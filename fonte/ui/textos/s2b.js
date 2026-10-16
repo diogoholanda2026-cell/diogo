@@ -4,7 +4,7 @@
 export function registrar(registrarTextos) {
   registrarTextos('s2b', {
     // alertas da cidade
-    'aviso.faltaEsgoto': 'Falta esgoto: {n} prédios sem tratamento',
+    'aviso.faltaEsgoto': 'Falta esgoto: {n} prédios sem tratamento. Construa uma ETE na margem do rio',
     'aviso.poluicaoAr': 'Ar pesado: {pct}% dos moradores respiram a fumaça da indústria',
     'aviso.poluicaoRuido': 'Ruído alto: {pct}% dos moradores vivem perto de fábricas e avenidas',
     'aviso.mercadoriaImportada': 'O comércio importa {pct}% da mercadoria: falta indústria zoneada',

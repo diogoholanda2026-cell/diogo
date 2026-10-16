@@ -449,7 +449,7 @@ moradores.
 | saúde, educação, segurança, bombeiros na via do prédio | até +8, +6, +6, +4 (pela cobertura x eficiência) |
 | praça ou parque perto | até +10 |
 | comércio a até 500 m | até +4 |
-| sem água, sem esgoto, sem energia | −25, −15, −25 |
+| sem água, sem esgoto, sem energia | −25, −15, −25 (o esgoto entra aos poucos: 0 com 300 moradores, inteiro com 1.500) |
 | poluição do ar, ruído | até −15, até −10 |
 | desemprego do prédio | fração desempregada x −15 |
 | tempo de viagem da zona (trânsito) | até −8 |
@@ -485,7 +485,7 @@ dele. A barra mostra o bem-estar médio ponderado pelos moradores. Se o dono pre
 |---|---|---|---|---|---|---|---|
 | `captacao` | Captação de água (margem de rio ou lagoa) | 25.000 | 800 | 5.000 m³/dia | rede | 10 | 0 |
 | `poco` | Poço artesiano (lençol) | 8.000 | 300 | 800 m³/dia | rede | 3 | 0 |
-| `ete` | Estação de tratamento de esgoto (margem) | 30.000 | 1.000 | 5.000 m³/dia | rede | 12 | 0 |
+| `ete` | Estação de tratamento de esgoto (margem) | 15.000 (calibrada com o robô do M1b, como a captação) | 800 | 5.000 m³/dia | rede | 12 | 0 |
 | `solar` | Usina solar (6 x 6 células) | 30.000 | 600 | 8 MW | rede | 6 | 0 |
 | `termica` | Termelétrica a gás | 60.000 | 2.000 | 50 MW | rede | 30 | 1 |
 | `praca` | Praça | 3.000 | 60 | lazer | 300 m | 0 | 0 |

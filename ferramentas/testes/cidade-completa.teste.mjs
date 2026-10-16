@@ -9,7 +9,7 @@ import { idxDaRef } from '../../fonte/contratos/espelho.js';
 import { PREDIO, TIPO_PREDIO } from '../../fonte/contratos/flags.js';
 import { ZONAS, zonaNaParte, indiceZona } from '../../fonte/data/zonas.js';
 import { PREDIOS, PREDIOS_ORDEM } from '../../fonte/data/predios.js';
-import { SERVICOS, COBERTURAS } from '../../fonte/data/servicos.js';
+import { SERVICOS, SERVICOS_ORDEM, COBERTURAS } from '../../fonte/data/servicos.js';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
 import { zonaAtiva } from '../../fonte/sim/zonas/demanda.js';
 import { terminarObra, nascerNaFrente } from '../../fonte/sim/zonas/crescimento.js';
@@ -20,6 +20,7 @@ import { arEm } from '../../fonte/sim/ambiente.js';
 import { calcularBemEstar } from '../../fonte/sim/bemestar.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { abrirM1b, ruaComRedes, povoar, pintar, nascerVarios, rodadas } from './apoio-m1b.mjs';
+import { criarEstrategia } from '../robo/robo-sim.mjs';
 
 const NOVOS = ['ete', 'termica', 'escolaM', 'hospital', 'parque', 'parqueG'];
 
@@ -246,6 +247,35 @@ test('a cidade do M1b inteira roda sem erro, igual em duas partidas e igual depo
     // as camadas do M1b respondem na cidade inteira
     for (const id of ['esgoto', 'ar', 'ruido', 'empregos', 'valor', 'nivel']) assert.ok(a.q.camada(id), id);
     assert.ok(nascerNaFrente && nascerVarios);
+  } finally {
+    fecha();
+  }
+});
+
+test('o robô do M1b constrói a ETE logo depois da água e da energia, antes de o bem-estar cair (meia hora de jogo)', () => {
+  const fecha = abrirM1b();
+  try {
+    const sim = criarSimulacao({ semente: 'robo-1' });
+    const est = criarEstrategia(sim, { m1b: true });
+    const P = sim.tabelas.predios;
+    const etes = () => {
+      let n = 0;
+      for (let i = 0; i < P.n; i++) if (P.viva[i] && P.tipo[i] === TIPO_PREDIO.SERVICO && P.modelo[i] === SERVICOS_ORDEM.indexOf('ete')) n++;
+      return n;
+    };
+    let quando = -1;
+    let menor = 100;
+    for (let t = 0; t < 1800; t++) {
+      if (t % 20 === 0) est.passo();
+      sim.rodar(1, { sincrono: true });
+      if (quando < 0 && etes() > 0) quando = t;
+      if (t > 900 && sim.agregados.populacao > 0) menor = Math.min(menor, sim.agregados.bemEstarMedio);
+    }
+    assert.ok(quando > 0 && quando < 1200, `a ETE nasce nos primeiros 20 min (foi em ${quando})`);
+    assert.ok(sim.agregados.redes.esgoto.oferta > 0, 'a ETE trata esgoto');
+    assert.ok(menor >= 35, `o bem-estar não cai por falta de esgoto (menor ${menor})`);
+    assert.ok(sim.json.objetivos.feitos.includes('cidade.esgoto'), 'o objetivo da ETE fecha');
+    assert.deepEqual(sim.erros, []);
   } finally {
     fecha();
   }

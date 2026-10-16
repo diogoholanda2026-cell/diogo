@@ -27,7 +27,17 @@ import { termoAmbiente } from './ambiente.js';
 export const BEM = Object.freeze({
   base: 40, semAgua: -25, semEnergia: -25, semEsgoto: AMBIENTE.bemEstar.esgoto, desemprego: -15, comercio: 4, comercioAlvo: 30, holding: 10,
   suavizar: 0.5, rodadasMes: MES / RODADA, ambar: 63,
+  // o povoado trata o esgoto em fossas: a falta de ETE pesa aos poucos, de 0 com 300 moradores até o -15 inteiro com 1.500
+  // (assim o jogador tem tempo de ler o alerta, achar a ETE e pagar sem ver a cidade nova cair)
+  esgotoRampa: { de: 300, ate: 1500 },
 });
+
+/** Termo do esgoto sem tratamento (zero a BEM.semEsgoto) para a população de agora: a rampa do povoado. */
+export function penalidadeEsgoto(sim) {
+  const { de, ate } = BEM.esgotoRampa;
+  const pop = +sim.agregados?.populacao || 0;
+  return BEM.semEsgoto * clamp((pop - de) / (ate - de), 0, 1);
+}
 
 const regras = (sim) => (typeof sim.economia?.regras === 'function' ? sim.economia.regras() : REGRAS_DONO);
 
@@ -139,7 +149,7 @@ export function calcularBemEstar(sim, i, fatores = null) {
   if (f & PREDIO.SEM_AGUA) add('agua', BEM.semAgua);
   if (f & PREDIO.SEM_ENERGIA) add('energia', BEM.semEnergia);
   // M1b (S2b): esgoto, ar e ruído (zero antes do M1b)
-  if (f & PREDIO.SEM_ESGOTO) add('esgoto', BEM.semEsgoto);
+  if (f & PREDIO.SEM_ESGOTO) add('esgoto', penalidadeEsgoto(sim));
   const amb = termoAmbiente(sim, P.x[i], P.z[i]);
   add('ar', amb.ar);
   add('ruido', amb.ruido);
@@ -226,7 +236,7 @@ export function efeitoMedia(sim, celulas, zona) {
     for (const cat of COBERTURAS) b += CATEGORIAS_SERVICO[cat].bemEstar * coberturaNoPonto(sim, cat, e, 0);
     if (!temOferta(sim, e, 'agua')) b += BEM.semAgua;
     if (!temOferta(sim, e, 'energia')) b += BEM.semEnergia;
-    if (m1bAtivo() && !temOferta(sim, e, 'esgoto')) b += BEM.semEsgoto;
+    if (m1bAtivo() && !temOferta(sim, e, 'esgoto')) b += penalidadeEsgoto(sim);
     // ar, ruído e tempo de viagem do lugar da célula (os mesmos termos de calcularBemEstar; zero antes do M1b)
     const amb = termoAmbiente(sim, C.x[c], C.z[c]);
     b += amb.ar + amb.ruido;

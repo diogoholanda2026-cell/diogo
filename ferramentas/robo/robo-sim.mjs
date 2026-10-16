@@ -3,7 +3,8 @@
 // p99 e máximo), com o cenário de uma via a cada 10 tiques. O simular --robo chama.
 //
 //   node ferramentas/robo/robo-sim.mjs [--horas 12] [--semente s] [--comprarTempo] [--fazDeConta] [--m1b] [--json arquivo]
-//   (--m1b abre o M1b: decisões novas, a cadeia do cimento com a Mina e a Cimenteira, o robô joga a calibração da S3b)
+//   (--m1b abre o M1b: decisões novas, a cadeia do cimento com a Mina e a Cimenteira e a ETE na margem do rio, que o robô
+//   constrói logo depois da captação e da usina e de novo quando as casas voltam a ficar sem esgoto; calibração da S3b)
 //
 // Modos: com a cidade da S2a publicada, o robô joga a cidade de verdade (vias, zonas, serviços pelo construir); com
 // --fazDeConta (ou sem a S2a), a cidade é a de faz de conta pelos agregados (cidade-faz-de-conta.mjs), com as vias e
@@ -530,15 +531,24 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
       if (r.agua?.oferta > 0 && r.agua.demanda > 0.8 * r.agua.oferta && caixa() > 45000) return void construir('captacao', -965, 330, 400);
       if (r.energia?.oferta > 0 && r.energia.demanda > 0.8 * r.energia.oferta && caixa() > 40000) return void servicoNaCidade('solar');
       // cada malha é uma rede (água e energia por componente, S2a): casas sem energia ou sem água pedem o produtor ali
-      const falta = { energia: {}, agua: {} };
+      const falta = { energia: {}, agua: {}, esgoto: {} };
       for (let i = 0; i < P.n; i++) {
         if (!P.viva[i] || P.tipo[i] !== TIPO_PREDIO.ZONA || P.flags[i] & PREDIO.OBRA) continue;
-        const sem = P.flags[i] & (PREDIO.SEM_ENERGIA | PREDIO.SEM_AGUA);
+        const sem = P.flags[i] & (PREDIO.SEM_ENERGIA | PREDIO.SEM_AGUA | (m1b ? PREDIO.SEM_ESGOTO : 0));
         if (!sem) continue;
         const q = E.quadras.find((x) => (x.estado === 'feita' || x.pintada) && P.x[i] >= x.x0 - 8 && P.x[i] <= x.x1 + 8 && P.z[i] >= x.z0 - 8 && P.z[i] <= x.z1 + 8);
         if (!q) continue;
         if (P.flags[i] & PREDIO.SEM_ENERGIA) falta.energia[q.malha] = (falta.energia[q.malha] ?? 0) + 1;
         if (P.flags[i] & PREDIO.SEM_AGUA) falta.agua[q.malha] = (falta.agua[q.malha] ?? 0) + 1;
+        if (P.flags[i] & PREDIO.SEM_ESGOTO) falta.esgoto[q.malha] = (falta.esgoto[q.malha] ?? 0) + 1;
+      }
+      // M1b (S2b): a casa sem esgoto perde 15 de bem-estar e não sobe do nível 1, então a ETE vem logo depois da água e da
+      // energia (como o jogador faz ao ver o alerta "Falta esgoto"), na margem do rio; outra quando as casas voltam a
+      // ficar sem esgoto porque a cidade devolve mais do que as estações tratam
+      if (m1b && E.servicos.captacao && E.servicos.solar && caixa() > SERVICOS.ete.custo + 3000) {
+        const semE = Object.values(falta.esgoto).reduce((a, n) => a + n, 0);
+        const g = r.esgoto ?? { oferta: 0, demanda: 0 };
+        if ((semE >= 3 || (g.oferta > 0 && g.demanda > 0.8 * g.oferta)) && construir('ete', -965, 330, 400) !== null) return;
       }
       // a falta de rede vem antes de tudo (a casa sem energia abandona em 10 min de jogo, D42)
       for (const [m, n] of Object.entries(falta.energia)) if (n >= 3 && caixa() > SERVICOS.solar.custo + 3000 && servicoNaCidade('solar', m) !== null) return;

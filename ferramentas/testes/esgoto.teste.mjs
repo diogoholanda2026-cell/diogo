@@ -8,10 +8,18 @@ import assert from 'node:assert/strict';
 import { PREDIO } from '../../fonte/contratos/flags.js';
 import { SERVICOS } from '../../fonte/data/servicos.js';
 import { sistemaRedes, consumoDe, estadoRede } from '../../fonte/sim/redes.js';
-import { calcularBemEstar, BEM } from '../../fonte/sim/bemestar.js';
+import { calcularBemEstar, penalidadeEsgoto, BEM } from '../../fonte/sim/bemestar.js';
+import { OBJETIVOS } from '../../fonte/data/objetivos.js';
+import { registrar as registrarTextosS2b } from '../../fonte/ui/textos/s2b.js';
+import { registrar as registrarTextosS3 } from '../../fonte/ui/textos/s3.js';
 import { faltaParaNivel } from '../../fonte/sim/zonas/crescimento.js';
 import { AV } from '../../fonte/sim/predios.js';
 import { abrirM1b, ruaComRedes, povoar, servicoPronto, rodadas } from './apoio-m1b.mjs';
+import { criarSimulacao } from '../../fonte/sim/estado.js';
+import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
+import { TIPO_PREDIO } from '../../fonte/contratos/flags.js';
+import { SERVICOS_ORDEM } from '../../fonte/data/servicos.js';
+import { criarEstrategia } from '../robo/robo-sim.mjs';
 
 const sem = (sim, i, bit) => !!(sim.tabelas.predios.flags[i] & bit);
 const soma = (sim, lista, rec) => lista.reduce((s, i) => s + consumoDe(sim, i, rec), 0);
@@ -56,7 +64,8 @@ test('M1b sem ETE: todo prédio fica sem esgoto, a falta é um alerta da cidade 
     assert.equal(alerta[0].codigo, 'faltaEsgoto');
     assert.equal(alerta[0].glifo, 'esgoto');
     assert.equal(alerta[0].params.n >= casas.length, true);
-    // o bem-estar do prédio perde 15 (o fator aparece)
+    // o bem-estar do prédio perde 15 (o fator aparece) quando o povoado já passou da rampa (1.500 moradores)
+    sim.agregados.populacao = BEM.esgotoRampa.ate;
     const fatores = [];
     calcularBemEstar(sim, casas[0], fatores);
     assert.equal(fatores.find((f) => f.id === 'esgoto')?.v, BEM.semEsgoto);
@@ -149,6 +158,136 @@ test('o nível 2 pede esgoto, como a água e a energia', () => {
     servicoPronto(sim, 'ete', -300);
     sistemaRedes(sim);
     assert.deepEqual(faltaParaNivel(sim, casas[0], 2), []);
+  } finally {
+    fecha();
+  }
+});
+
+test('a falta de ETE pesa aos poucos: nada num povoado pequeno, o -15 inteiro a partir de 1.500 moradores', () => {
+  const fecha = abrirM1b();
+  try {
+    const { sim } = ruaComRedes('esgoto-rampa');
+    const casas = povoar(sim, 'resBaixa', -520, -460, 60, 12);
+    assert.ok(casas.length >= 4);
+    sistemaRedes(sim);
+    assert.ok(sem(sim, casas[0], PREDIO.SEM_ESGOTO));
+    const { de, ate } = BEM.esgotoRampa;
+    assert.ok(de > 0 && ate > de);
+    const termo = (pop) => {
+      sim.agregados.populacao = pop;
+      const f = [];
+      calcularBemEstar(sim, casas[0], f);
+      return f.find((x) => x.id === 'esgoto')?.v ?? 0;
+    };
+    assert.equal(termo(0), 0);
+    assert.equal(termo(de), 0, 'a Vila (uns 350 moradores) mal sente');
+    const meio = termo((de + ate) / 2);
+    assert.ok(meio < 0 && meio > BEM.semEsgoto, `${meio}`);
+    assert.ok(Math.abs(meio - BEM.semEsgoto / 2) < 0.1, `metade da rampa, metade do peso: ${meio}`);
+    assert.equal(termo(ate), BEM.semEsgoto);
+    assert.equal(termo(5 * ate), BEM.semEsgoto, 'não passa de -15');
+    // cresce com a população (a função pura e o fator do prédio dizem o mesmo)
+    let antes = 0;
+    for (const pop of [0, 300, 600, 900, 1200, 1500, 2000]) {
+      sim.agregados.populacao = pop;
+      const v = penalidadeEsgoto(sim);
+      assert.ok(v <= antes + 1e-9, `${pop}: ${v}`);
+      antes = v;
+    }
+    // a ETE ligada zera o termo em qualquer população
+    servicoPronto(sim, 'ete', -300);
+    sistemaRedes(sim);
+    assert.equal(termo(5 * ate), 0);
+    assert.deepEqual(sim.erros, []);
+  } finally {
+    fecha();
+  }
+});
+
+test('o jogador acha a ETE: liberada no Canteiro, custa o mesmo que a captação, o alerta diz o que fazer e há um objetivo', () => {
+  // desbloqueio e custo (a ETE é a captação do esgoto: cada m³/h de água volta como esgoto)
+  assert.equal(SERVICOS.ete.marco, 0, 'liberada desde o Canteiro');
+  assert.ok(SERVICOS.ete.custo <= SERVICOS.captacao.custo, 'não custa mais que a captação');
+  assert.ok(SERVICOS.ete.manutencaoHora <= SERVICOS.captacao.manutencaoHora);
+  assert.equal(SERVICOS.ete.capacidade, SERVICOS.captacao.capacidade, 'uma ETE por captação');
+  assert.ok(SERVICOS.ete.custo <= 20000, 'cabe no caixa do começo (300 mil)');
+  // o alerta da cidade diz o que fazer; o objetivo leva à ferramenta Serviços
+  const textos = {};
+  registrarTextosS2b((parcela, mapa) => Object.assign(textos, mapa));
+  registrarTextosS3((parcela, mapa) => Object.assign(textos, mapa));
+  assert.match(textos['aviso.faltaEsgoto'], /\{n\}/);
+  assert.match(textos['aviso.faltaEsgoto'], /ETE/);
+  assert.match(textos['s3.objetivo.cidade.esgoto'], /ETE/);
+  assert.ok(!/—/.test(textos['aviso.faltaEsgoto'] + textos['s3.objetivo.cidade.esgoto']), 'sem travessão');
+  const obj = OBJETIVOS.find((o) => o.id === 'cidade.esgoto');
+  assert.ok(obj, 'objetivo da ETE');
+  assert.equal(obj.parte, 'M1b');
+  assert.equal(obj.medida, 'servico:ete');
+  assert.equal(obj.alvo, 'ferramenta:servicos');
+  const cidade = OBJETIVOS.filter((o) => o.dominio === 'cidade').map((o) => o.id);
+  assert.ok(cidade.indexOf('cidade.esgoto') > cidade.indexOf('cidade.zonas'), 'depois de zonear a primeira quadra');
+  assert.ok(cidade.indexOf('cidade.esgoto') < cidade.indexOf('cidade.mil'), 'antes de a cidade passar de mil moradores');
+  // no M1a o objetivo não abre; no M1b abre quando os de antes estão feitos e fecha com a ETE em pé
+  const abertoCidade = (sim) => sim.q.objetivos().find((o) => o.dominio === 'cidade')?.id;
+  const antesDoEsgoto = cidade.slice(0, cidade.indexOf('cidade.esgoto'));
+  const preparar = (semente) => {
+    const { sim } = ruaComRedes(semente);
+    sim.json.objetivos.feitos.push(...antesDoEsgoto);
+    return sim;
+  };
+  const m1a = preparar('esgoto-obj-m1a');
+  assert.notEqual(abertoCidade(m1a), 'cidade.esgoto', 'no M1a não há esgoto');
+  const fecha = abrirM1b();
+  try {
+    const sim = preparar('esgoto-obj-m1b');
+    assert.equal(abertoCidade(sim), 'cidade.esgoto');
+    const o = sim.q.objetivos().find((x) => x.id === 'cidade.esgoto');
+    assert.equal(o.feito, 0);
+    assert.equal(o.total, 1);
+    assert.equal(o.texto, 's3.objetivo.cidade.esgoto');
+    servicoPronto(sim, 'ete', -300);
+    assert.equal(sim.q.objetivos().find((x) => x.id === 'cidade.esgoto')?.feito, 1);
+    assert.deepEqual(sim.erros, []);
+  } finally {
+    fecha();
+  }
+});
+
+test('no meio da rampa (cidade do robô sem ETE, uns 900 moradores) salvar e carregar dá a mesma cidade', () => {
+  const fecha = abrirM1b();
+  try {
+    const a = criarSimulacao({ semente: 'robo-1' });
+    const est = criarEstrategia(a, { m1b: true });
+    for (let t = 0; t < 2400; t++) {
+      if (t % 20 === 0) est.passo();
+      a.rodar(1, { sincrono: true });
+    }
+    const P = a.tabelas.predios;
+    const etes = [];
+    for (let i = 0; i < P.n; i++) if (P.viva[i] && P.tipo[i] === TIPO_PREDIO.SERVICO && P.modelo[i] === SERVICOS_ORDEM.indexOf('ete')) etes.push(P.ref(i));
+    assert.ok(etes.length > 0, 'o robô fez a ETE');
+    assert.ok(a.cmd('demolir', { refs: etes }).ok);
+    a.rodar(200, { sincrono: true });
+    const pop = a.agregados.populacao;
+    assert.ok(pop > BEM.esgotoRampa.de && pop < BEM.esgotoRampa.ate, `população ${pop} dentro da rampa`);
+    let visto = 0;
+    for (let i = 0; i < P.n; i++) {
+      if (!P.viva[i] || P.tipo[i] !== TIPO_PREDIO.ZONA || !P.moradores[i] || !(P.flags[i] & PREDIO.SEM_ESGOTO)) continue;
+      const f = [];
+      calcularBemEstar(a, i, f);
+      const v = f.find((x) => x.id === 'esgoto')?.v;
+      assert.ok(v < 0 && v > BEM.semEsgoto, `casa ${i}: ${v}`);
+      visto++;
+    }
+    assert.ok(visto > 10, `${visto} casas sentem o esgoto pela metade`);
+    const C = criarSimulacao({ semente: 'robo-1' });
+    aplicarSave(C, migrar(lerSave(montarSave(a))));
+    assert.equal(C.q.hash(), a.q.hash());
+    a.rodar(300, { sincrono: true });
+    C.rodar(300, { sincrono: true });
+    assert.equal(C.q.hash(), a.q.hash());
+    assert.deepEqual(a.erros, []);
+    assert.deepEqual(C.erros, []);
   } finally {
     fecha();
   }

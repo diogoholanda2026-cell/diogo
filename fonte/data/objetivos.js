@@ -19,6 +19,8 @@ export const OBJETIVOS = /* @__PURE__ */ congelar([
   { id: 'cidade.vila', dominio: 'cidade', quem: 'cida', medida: 'vilaNaRede', recompensa: { xp: 40, creditos: 0 }, total: 1, alvo: 'sugestao:vila' },
   { id: 'cidade.ligacao', dominio: 'cidade', quem: 'iris', medida: 'redeAte:quadra1', total: 1, recompensa: { xp: 20, creditos: 0 }, alvo: 'sugestao:ligacao' },
   { id: 'cidade.zonas', dominio: 'cidade', quem: 'iris', medida: 'celulasZoneadas', total: 300, recompensa: { xp: 20, creditos: 0 }, alvo: 'sugestao:quadra1' },
+  // S2b (M1b): a casa sem esgoto perde bem-estar e não sobe do nível 1; o objetivo leva à ETE (marco 0, 15 mil) antes de o povoado sofrer
+  { id: 'cidade.esgoto', dominio: 'cidade', quem: 'cida', medida: 'servico:ete', total: 1, parte: 'M1b', recompensa: { xp: 30, creditos: 0 }, alvo: 'ferramenta:servicos' },
   { id: 'cidade.mil', dominio: 'cidade', quem: 'cida', medida: 'moradores', total: 1000, recompensa: { xp: 50, creditos: 5000 } },
   { id: 'cidade.saudeEducacao', dominio: 'cidade', quem: 'cida', medida: 'servicos:clinica,escolaF', total: 2, marco: 1, recompensa: { xp: 60, creditos: 5000 }, alvo: 'ferramenta:servicos' },
   { id: 'cidade.media', dominio: 'cidade', quem: 'iris', medida: 'celulasZona:resMedia', total: 200, marco: 2, recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:zonas' },

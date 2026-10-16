@@ -80,6 +80,7 @@ export function registrar(registrarTextos) {
     's3.objetivo.cidade.vila': 'Troque as ruas de terra da Vila por ruas com água e luz ({n} casas)',
     's3.objetivo.cidade.ligacao': 'Leve a rua da Vila até a primeira quadra do bairro novo',
     's3.objetivo.cidade.zonas': 'Zoneie as primeiras quadras ({n} células)',
+    's3.objetivo.cidade.esgoto': 'Trate o esgoto: construa a Estação de tratamento (ETE) na margem do rio',
     's3.objetivo.cidade.energia': 'Ponha a usina solar e leve energia às casas',
     's3.objetivo.cidade.mil': 'Chegue a {n} moradores',
     's3.objetivo.cidade.saudeEducacao': 'Abra uma clínica e uma escola',

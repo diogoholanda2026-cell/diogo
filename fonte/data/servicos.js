@@ -78,10 +78,12 @@ export const SERVICOS = congelar({
     capacidade: 12000, raio: 1800, carga: 'moradores', empregos: [8, 14, 6, 2], planta: [32, 40], marco: 2, parte: 'M1a',
     xp: 60, obraTiques: 90, consumo: { agua: 0.3, energia: 40 }, faz: 'protege até 12 mil moradores a 1,8 km pela rua',
   },
-  // M1b (S2b liga): prontos nos dados para a R5 desenhar
+  // M1b (S2b liga): prontos nos dados para a R5 desenhar. A ETE custava 30 mil e a captação 15 mil (calibrada na C1a); como
+  // cada m³/h de água volta como esgoto, a cidade precisa de uma ETE por captação, e o robô do M1b (12 h, 8 sementes)
+  // ficava com 2,8 mil moradores no fim contra 7,6 mil no M1a: a ETE passou a custar e a manter o mesmo que a captação
   ete: {
     zona: 'utilidades',
-    nome: 'Estação de tratamento de esgoto', categoria: 'esgoto', barra: 'servicos', custo: 30000, manutencaoHora: 1000,
+    nome: 'Estação de tratamento de esgoto', categoria: 'esgoto', barra: 'servicos', custo: 15000, manutencaoHora: 800,
     capacidade: 30, raio: null, empregos: [5, 4, 2, 1], planta: [48, 56], marco: 0, parte: 'M1b', xp: 50, obraTiques: 120,
     consumo: { agua: 0, energia: 120 }, margem: 40, faz: 'trata o esgoto antes de devolver ao rio',
   },
