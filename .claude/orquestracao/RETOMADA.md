@@ -1,3 +1,14 @@
+# Estado do jogo novo (retomada em 16/10/2026)
+
+## ONDE PAROU (16/10/2026, Prévia 2w)
+- **Publicado:** Prévia 2w em `previa/` (jogo só para PC, D111). M1b liga por `?m1b=1`; o padrão segue M1a (`PARTE_ATUAL` em `fonte/data/zonas.js`; a C2 torna o M1b padrão e reescreve os testes que pressupõem M1a). Save na versão 3 (migrações em `fonte/sim/salvar/formato.js`).
+- **Entregue na onda 4:** UX1, TOQ1, MOV1, MOV2, OBR2, R4c, SEDE4 e SEDE4b, PONT2 (X4), S1c, S2b, S3b, ligação das vias com a Rodovia, compra da Várzea por área, envio manual da Arcologia, lotes e importação de 1 a 1000 (D110), fundo de teste de US$ 25 bi (D104, temporário).
+- **Decisões novas do dono (16/10/2026) ainda NÃO implementadas:** D112 (Distrito Industrial e Zona de Utilidades afastada do perímetro urbano), D113 (crescimento da zona automático ou manual por lote, quantidade digitada), D114 (3 modelos à escolha antes de construir; só o complexo da Holding e a sede inalterados), D115 (cidade de topo: de classe média alta a Tier 0,1%). Parcelas a lançar nesta ordem: **TOP1**, **ZON2**, **MOD1**. Textos das decisões em `docs/PROJETO.md` (linhas D111 a D115). As parcelas ainda não têm arquivo de texto: escreva a partir das decisões.
+- **Faltam do M1:** R6, X3b (camadas: já há as 5 do M1b no popover), U2b, C2 (publica o M1, recalibra a Arcologia e os pisos do A2).
+- **Medida do dono no PC (08/10/2026):** 45 qps, GPU 21 ms (terreno 8,6 ms). Falta medir de novo depois da OBR2, R4c e SEDE4b. O Poco X7 deixou de ser alvo.
+- **Pendências de equilíbrio:** M1b na média de 8 sementes chega a 3,9 mil moradores contra 7,6 mil do M1a (ar e ruído pesam); decidir com o dono depois de ele jogar `?m1b=1`.
+- **Regras do dono:** responder em português, resultado primeiro, sem travessão; dois commits por prévia (fonte, depois "Montagem ..."); a vitrine grava capturas na pasta testada: use uma pasta de saída fora de `previa/`.
+
 # Estado do jogo novo (28/09/2026)
 
 ## ONDE PAROU (03/10/2026)
