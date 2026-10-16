@@ -1,0 +1,1 @@
+import{a as t}from"./parte.20261016115246.PNXTXCHA.js";import{a as r}from"./parte.20261016115246.FRBJPDE7.js";import"./parte.20261016115246.RXEFSQ5A.js";function a(e){e("noite",{sim:"sintetica",hora:21,camera:t,async montar(o){return{resultado:()=>r(o,{noite:!0})}}})}export{a as registrar};
