@@ -42,8 +42,14 @@ const FONTE_ZONA = ZONAS_ORDEM.map((id, z) => {
 });
 const FONTE_VIA = VIAS_ORDEM.map((id) => FONTES_VIA[id] ?? null);
 
-// lista de fontes da faixa (x, z em metros): reaproveitada entre as chamadas, nunca guardada entre os tiques
-const S = { n: 0, cap: 0, x: null, z: null, ar: null, ru: null, raio: null };
+// fontes de ar da faixa (x, z em metros): reaproveitada entre as chamadas, nunca guardada entre os tiques
+const S = { n: 0, cap: 0, x: null, z: null, ar: null };
+
+// ruído: as fontes da mesma célula e do mesmo alcance somam num balde antes de espalhar (a cidade densa tem vários
+// prédios por célula de 64 m); um balde por alcance, zerado ao fim de cada faixa
+const ALCANCES = [...new Set([...Object.values(FONTES), ...Object.values(FONTES_VIA)].map((f) => f.raio))].sort((a, b) => a - b);
+const BALDES = ALCANCES.map(() => ({ soma: new Float32Array(N * N), usadas: [] }));
+const CLASSE_DO_ALCANCE = new Map(ALCANCES.map((r, k) => [r, k]));
 
 function reservar(cap) {
   const nova = (T, velho) => {
@@ -54,8 +60,6 @@ function reservar(cap) {
   S.x = nova(Float64Array, S.x);
   S.z = nova(Float64Array, S.z);
   S.ar = nova(Float32Array, S.ar);
-  S.ru = nova(Float32Array, S.ru);
-  S.raio = nova(Float32Array, S.raio);
   S.cap = cap;
 }
 
@@ -63,13 +67,22 @@ function reservar(cap) {
 function empurrar(x, z, ar, ru, raio, zLo, zHi) {
   const alcance = Math.max(raio, 2 * PASSO);
   if (z + alcance < zLo || z - alcance > zHi) return;
+  if (ru > 0) {
+    const ci = Math.floor((x - OX) / PASSO);
+    const cj = Math.floor((z - OZ) / PASSO);
+    if (ci >= 0 && cj >= 0 && ci < N && cj < N) {
+      const b = BALDES[CLASSE_DO_ALCANCE.get(raio)];
+      const c = cj * N + ci;
+      if (b.soma[c] === 0) b.usadas.push(c);
+      b.soma[c] += ru;
+    }
+  }
+  if (!(ar > 0)) return;
   if (S.n >= S.cap) reservar(Math.max(256, S.cap * 2));
   const k = S.n++;
   S.x[k] = x;
   S.z[k] = z;
   S.ar[k] = ar;
-  S.ru[k] = ru;
-  S.raio[k] = raio;
 }
 
 /** Prédios que emitem: indústria e comércio das zonas, Pedreira, Mina e Cimenteira da Holding, termelétrica. */
@@ -133,32 +146,56 @@ function coletar(sim, j0, j1) {
 
 const RU = new Float32Array(N * Math.ceil(N / AMBIENTE.fatias));
 
-/** Ruído das linhas [j0, j1): soma do alcance de cada fonte, com queda suave ((1 - d / raio) ao quadrado). */
+const NUCLEOS = new Map();
+
+/** Pesos (1 - d / raio) ao quadrado por deslocamento de célula, para um alcance (m): tabela (2 Rc + 1) ao quadrado, em cache. */
+function nucleoDoRaio(R) {
+  let t = NUCLEOS.get(R);
+  if (t) return t;
+  const Rc = Math.ceil(R / PASSO);
+  const lado = 2 * Rc + 1;
+  const w = new Float32Array(lado * lado);
+  for (let b = -Rc; b <= Rc; b++) {
+    for (let a = -Rc; a <= Rc; a++) {
+      const d = Math.sqrt(a * a + b * b) * PASSO;
+      if (d < R) {
+        const q = 1 - d / R;
+        w[(b + Rc) * lado + a + Rc] = q * q;
+      }
+    }
+  }
+  t = { Rc, lado, w };
+  NUCLEOS.set(R, t);
+  return t;
+}
+
+/**
+ * Ruído das linhas [j0, j1): soma do alcance de cada fonte, com queda suave ((1 - d / raio) ao quadrado) contada a partir
+ * do centro da célula da fonte (tabela por alcance: sem raiz quadrada no laço).
+ */
 function ruidoDaFaixa(g, j0, j1) {
   const linhas = j1 - j0;
   RU.fill(0, 0, linhas * N);
-  for (let k = 0; k < S.n; k++) {
-    const ru = S.ru[k];
-    if (!(ru > 0)) continue;
-    const R = S.raio[k];
-    const Rc = Math.ceil(R / PASSO);
-    const ci = Math.floor((S.x[k] - OX) / PASSO);
-    const cj = Math.floor((S.z[k] - OZ) / PASSO);
-    const a0 = Math.max(0, ci - Rc);
-    const a1 = Math.min(N - 1, ci + Rc);
-    const b0 = Math.max(j0, cj - Rc);
-    const b1 = Math.min(j1 - 1, cj + Rc);
-    const R2 = R * R;
-    for (let jj = b0; jj <= b1; jj++) {
-      const dz = OZ + (jj + 0.5) * PASSO - S.z[k];
-      for (let ii = a0; ii <= a1; ii++) {
-        const dx = OX + (ii + 0.5) * PASSO - S.x[k];
-        const d2 = dx * dx + dz * dz;
-        if (d2 >= R2) continue;
-        const q = 1 - Math.sqrt(d2) / R;
-        RU[(jj - j0) * N + ii] += ru * q * q;
+  for (let q = 0; q < ALCANCES.length; q++) {
+    const bal = BALDES[q];
+    if (!bal.usadas.length) continue;
+    const { Rc, lado, w } = nucleoDoRaio(ALCANCES[q]);
+    for (const c of bal.usadas) {
+      const ru = bal.soma[c];
+      bal.soma[c] = 0;
+      const ci = c % N;
+      const cj = (c - ci) / N;
+      const a0 = Math.max(0, ci - Rc);
+      const a1 = Math.min(N - 1, ci + Rc);
+      const b0 = Math.max(j0, cj - Rc);
+      const b1 = Math.min(j1 - 1, cj + Rc);
+      for (let jj = b0; jj <= b1; jj++) {
+        const lin = (jj - j0) * N;
+        const tab = (jj - cj + Rc) * lado + Rc - ci;
+        for (let ii = a0; ii <= a1; ii++) RU[lin + ii] += ru * w[tab + ii];
       }
     }
+    bal.usadas.length = 0;
   }
   const d = g.dados;
   for (let jj = j0; jj < j1; jj++) {

@@ -8,11 +8,14 @@
 //   ?hora=17.5 &sol=anda       hora do céu fixa e, com sol=anda, andando a partir dela
 //   ?semClip=1  ?depuracao=1   duas faixas de profundidade; mantém a vista de depuração da F0
 //   ?semente=<texto>           semente da partida
+//   ?m1b=1                     abre o M1b (esgoto, ar, ruído, mercadoria, Ato 1 completo, Fazenda e Agroindústria) até a C2 torná-lo o padrão
 // Para os testes: window.__held = { sim, R, ui, app }, window.__resultado (cena) e window.__pronto.
 import { criarControle } from './controle.js';
 import { t } from '../ui/textos.js';
+import { definirParteAtual } from '../data/zonas.js';
 
 const qs = new URLSearchParams(location.search);
+if (qs.get('m1b') === '1') definirParteAtual('M1b');
 const $ = (id) => document.getElementById(id);
 
 const carga = {

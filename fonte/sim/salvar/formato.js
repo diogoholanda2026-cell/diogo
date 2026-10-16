@@ -7,7 +7,8 @@ import { FNV_BASE, fnv1aTexto, fnv1aTipado, fnv1aU32 } from '../../comum/hash.js
 import { jsonCanonico, trocarConteudo, ehTipado } from '../../comum/util.js';
 
 /** Migrações de dados: MIGRACOES[v](cabecalho, secoes) leva um save da versão v para v + 1. */
-export const MIGRACOES = {};
+// v1 -> v2 (16/10/2026): seções novas (transito, ar, ruido, esgoto, Ato 1 completo) nascem vazias ao carregar; nada a converter
+export const MIGRACOES = { 1: () => {} };
 
 const TIPO_DE = {
   Float64Array: 'f64', Float32Array: 'f32', Int32Array: 'i32', Uint32Array: 'u32',

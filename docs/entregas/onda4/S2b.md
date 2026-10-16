@@ -20,10 +20,11 @@ Dados dos 6 serviços e das 3 zonas, modelos de residencial alta, comercial alta
 Pico de uma fábrica de 60 empregos: ar 150; Cimenteira 195; Pedreira 125 (ruído 175). A 200 m o ar cai a menos de um terço; o ruído chega a 288 a 352 m. Preço da mercadoria 3 (importada 4,8 por unidade/h).
 
 ## Pendências para o integrador
+- Resultado: `simular --testes` verde (inclusive `mundo`, desta vez), `--determinismo` ok, A2 (`arcologia.teste`) 12 de 12 sem mexer em piso nenhum, `montar --saida` numa pasta temporária sem avisos.
 - Abrir o M1b (`PARTE_ATUAL`). A partir daí a cidade sem ETE leva −15 de bem-estar e o robô A2 precisa de uma ETE na estratégia (`ferramentas/robo/robo-sim.mjs`); não rodei o A2 com o M1b ligado.
 - Save: as grades `ar` e `ruido` novas mudam o hash; save antigo abre mas o hash gravado não bate. Se importar, subir `versaoSave` com `MIGRACOES[1]` vazia.
 - ZON2 e D112: o vento é sorteado por mês; o Distrito Industrial "a sotavento" pede um vento predominante (hoje `ventoDoMes(semente, tique)`).
 - X3b: glifos das camadas Ar, Ruído e Empregos (só `esgoto` existe).
 
 ## Medidas e o que não verifiquei
-Medidas do tique no fim desta nota. Não verifiquei na tela: camadas, painel de mercadoria e os 6 prédios; sem Chromium aqui.
+Medidas (Node, cidade sintética de 8.861 prédios e 126 mil moradores, máquina dividida com outros agentes, tique de 600): M1a média 1,69 · p95 3,65 ms; M1b média 2,10 · p95 4,34 ms. Por chamada no M1b: ambiente 0,4 a 0,9 ms por faixa (4 por rodada, média de uns 0,1 ms por tique; a faixa do centro é a pior), mercadoria 0,65 ms uma vez por rodada. A bancada A5 já passava do p95 de 1 ms nessa cidade antes da S2b (a sintética tem 4 vezes os 30 mil da meta); o acréscimo do M1b é de uns 0,7 ms no p95. Nenhuma medida no celular (D111: o jogo é só para PC). Não verifiquei na tela: camadas, painel de mercadoria e os 6 prédios; sem Chromium aqui.
