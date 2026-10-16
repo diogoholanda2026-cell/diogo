@@ -424,8 +424,8 @@ export function registrar(registrarCenaVitrine) {
       await esperar(60);
     },
     conferir: () => [
-      ...conferirTexto('.eco-regras', /US\$ 30 mi por ano/, 'regras do empréstimo')(),
-      ...conferirTexto('.eco-regras', /US\$ 300 mi/, 'regras do empréstimo')(),
+      ...conferirTexto('.eco-regras', /US\$ 100 mi por ano/, 'regras do empréstimo')(),
+      ...conferirTexto('.eco-regras', /US\$ 1 bi/, 'regras do empréstimo')(),
       ...conferirTexto('.eco-medidores', /US\$ 6 mi de US\$ 30 mi/, 'disponível no ano')(),
     ],
   });
