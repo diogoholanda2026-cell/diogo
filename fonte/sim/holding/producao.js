@@ -173,6 +173,11 @@ export function recalcular(sim) {
   const arm = armazens(sim);
   p.cap = arm.reduce((a, x) => a + x.cap, 0);
   p.ocupacao = frac;
+  const bonusDe = new Map(); // o bônus depende só do tipo: uma conta por tipo na rodada
+  const bonusDoTipo = (tipo) => {
+    if (!bonusDe.has(tipo)) bonusDe.set(tipo, bonus(sim, tipo));
+    return bonusDe.get(tipo);
+  };
   let sal = 0;
   for (const e of p.predios) {
     const def = PREDIOS_HOLDING[e.tipo];
@@ -186,7 +191,7 @@ export function recalcular(sim) {
     e.ocupacao = frac;
     // o trajeto de quem chega ao prédio tira até 30% (D37, S1c)
     const trajeto = i >= 0 ? sim.transito?.fatorTrabalho(i) ?? 1 : 1;
-    e.produtividade = frac < PRODUCAO.ocupacaoMinima ? 0 : Math.max(0, frac * (1 - penal) * (1 + bonus(sim, e.tipo)) * trajeto);
+    e.produtividade = frac < PRODUCAO.ocupacaoMinima ? 0 : Math.max(0, frac * (1 - penal) * (1 + bonusDoTipo(e.tipo)) * trajeto);
     const vg = vagasDoNivel(e.tipo, e.nivel);
     for (let k = 0; k < 4; k++) sal += Math.round(vg[k] * frac) * ECONOMIA.salarioHora[k];
   }

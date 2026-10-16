@@ -20,7 +20,7 @@ import { maisPerto, arcoDoT, tangente } from '../comum/bezier.js';
 import { refDe, CELULA_M, progressoObra, faseObra, FASES_OBRA } from '../contratos/espelho.js';
 import { PREDIO, TIPO_PREDIO, CELULA, AGUA, GRAVIDADES, LADRILHO } from '../contratos/flags.js';
 import { PREDIOS, PREDIOS_ORDEM, NIVEIS, nivelDoModelo } from '../data/predios.js';
-import { ZONAS, ZONAS_ORDEM, zonaNaParte, PARTE_ATUAL } from '../data/zonas.js';
+import { ZONAS, ZONAS_ORDEM, zonaNaParte, parteNoJogo } from '../data/zonas.js';
 import { SERVICOS, SERVICOS_ORDEM, CATEGORIAS_SERVICO } from '../data/servicos.js';
 import * as dadosHolding from '../data/holding.js';
 import { VIAS, VIAS_ORDEM } from '../data/vias.js';
@@ -304,11 +304,10 @@ export function colocavelLiberado(sim, tipo, def = sim.colocaveis.obter(tipo)) {
   return marcoAtual(sim) >= (def.marco ?? 0);
 }
 
-const PARTES = ['M1a', 'M1b', 'M2', 'M3', 'M4'];
 /** true se a parte (do colocável) já chegou no jogo. */
-export const parteOk = (parte) => PARTES.indexOf(parte ?? 'M1a') <= PARTES.indexOf(PARTE_ATUAL);
-/** true se o M1b já chegou no jogo: esgoto, ar, ruído e mercadoria (S2b) só valem daí em diante. */
-export const m1bAtivo = () => PARTE_ATUAL !== 'M1a'; // as partes seguintes (M2 em diante) trazem o M1b junto
+export const parteOk = parteNoJogo;
+/** true se o M1b já chegou no jogo: esgoto, ar, ruído e mercadoria (S2b) só valem daí em diante (M2 em diante o trazem junto). */
+export const m1bAtivo = () => parteNoJogo('M1b');
 
 /** Planta [frente, fundo] em metros de um colocável. */
 export function plantaDe(def) {

@@ -3,14 +3,12 @@
 // Nada aqui lê relógio nem sorteia; o estado fica nas seções JSON registradas (save e hash).
 import { REGRAS_DONO, ECONOMIA, DESPESAS_CORRENTES } from '../../data/economia.js';
 import { MINUTO } from '../../comum/relogio.js';
-import { PARTE_ATUAL } from '../../data/zonas.js';
+import { parteNoJogo } from '../../data/zonas.js';
 
 const REGRAS = new WeakMap();
 
-const ORDEM_PARTES = ['M1a', 'M1b', 'M2', 'M3', 'M4'];
-
 /** true se a parte (do conteúdo) já chegou no jogo: o integrador abre o M1b trocando PARTE_ATUAL em data/zonas.js. */
-export const parteNoJogo = (parte) => ORDEM_PARTES.indexOf(parte ?? 'M1a') <= ORDEM_PARTES.indexOf(PARTE_ATUAL);
+export { parteNoJogo };
 
 /** true se o M1b está no jogo (conteúdo da S3b: decisões, cimento, Modo livre completo, alimentos, Vila nova). */
 export const m1bAtivo = () => parteNoJogo('M1b');

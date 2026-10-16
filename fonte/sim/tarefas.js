@@ -186,32 +186,23 @@ export class Tarefas {
 
   /** Anda `fatias` passos em cada tarefa sendo refeita (chamado pelo laço quando o tique está parado). */
   bombear(fatias = 4) {
-    for (const p of this.pendentes) {
-      if (p.estado !== 'refazendo') continue;
-      for (let k = 0; k < fatias; k++) {
-        const r = p.iter.next();
-        if (r.done) {
-          p.saida = r.value;
-          p.estado = 'pronta';
-          p.iter = null;
-          break;
-        }
-      }
-    }
+    for (const p of this.pendentes) if (p.estado === 'refazendo') this._passos(p, fatias);
   }
 
   /** Anda `passos` fatias da tarefa `nome` que está sendo feita aqui (sistema da tarefa fatiada, a cada tique). */
   andar(nome, passos = 3) {
-    for (const p of this.pendentes) {
-      if (p.nome !== nome || p.estado !== 'refazendo') continue;
-      for (let k = 0; k < passos; k++) {
-        const r = p.iter.next();
-        if (r.done) {
-          p.saida = r.value;
-          p.estado = 'pronta';
-          p.iter = null;
-          break;
-        }
+    for (const p of this.pendentes) if (p.nome === nome && p.estado === 'refazendo') this._passos(p, passos);
+  }
+
+  /** Anda até `passos` fatias de uma tarefa 'refazendo'; ao terminar guarda a saída. */
+  _passos(p, passos) {
+    for (let k = 0; k < passos; k++) {
+      const r = p.iter.next();
+      if (r.done) {
+        p.saida = r.value;
+        p.estado = 'pronta';
+        p.iter = null;
+        return;
       }
     }
   }

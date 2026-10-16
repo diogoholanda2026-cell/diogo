@@ -30,6 +30,9 @@ export function definirParteAtual(parte) {
   return antes;
 }
 
+/** true se a parte (de uma zona, colocável, decisão ou item) já chegou no jogo; sem parte vale 'M1a'. Uma fonte só. */
+export const parteNoJogo = (parte) => PARTES.indexOf(parte ?? 'M1a') <= PARTES.indexOf(PARTE_ATUAL);
+
 // split: peso de cada nível de estudo (básico, fundamental, médio, superior) na divisão da demanda da família;
 // valor: peso do valor do terreno (0 a 1000, normalizado) e o mínimo para a zona nascer; taxa: prédios por tique com
 // demanda 100 (o acumulador da seção 6.5); rodovia: prefere frentes ligadas à rodovia (indústria, D52)
