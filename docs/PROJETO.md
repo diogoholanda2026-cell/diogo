@@ -1807,6 +1807,23 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   (produtividade pelo trajeto, clientes do comércio pelo tempo de viagem, cobertura pelo tempo congestionado,
   bem-estar); a meta do gargalo no robô.
 - **Testa sem as outras:** Node com worker simulado. **Depende de:** M1a.
+- **Entregue em 16/10/2026** (S1c). `tarefas/transito.js`: `atribuir` (gerador) com gravidade `exp(-0,08 c)`, 3 passadas de
+  50, 30 e 20% com BPR `t0 x (1 + 0,15 (v/c)^4)` (v extrapolado da carga já atribuída; a 1a passada parte do fluxo da
+  atribuição anterior), um Dijkstra de várias fontes por zona e a carga subindo pela árvore; a árvore da passada anterior
+  só é reaproveitada se nenhuma ligação a melhora (otimalidade exata). `transito.js`: zonas de 256 m (512 m acima de 150
+  ativas); produção `(trabalhadores empregados + 0,3 moradores) x 0,25` por hora de pico, atração `vagas ocupadas + 0,3 x
+  vagas do comércio`; varredura dos prédios em 6 fatias do período de 60 tiques (as somas ficam na seção salva) e pedido
+  na última; aplicação 60 tiques depois. Publica `espelho.fluxos { versao, ida, volta, vel }`, `S.agregados.trajeto
+  { porZona, destino, medio, comercio }`, a seção `transito` (fluxo por aresta e sentido, fator de clientes), o serviço
+  `sim.transito` (custoAresta, versaoCusto, fatorTrabalho, fatorClientes, bemEstar, gargalos, sugestao), a camada
+  Trânsito (v/c por aresta), o alerta `transito` com os códigos `transitoParado` (melhorar), `transitoParadoMao` e
+  `transitoParadoParalela`, partes de `q.predio` e `q.cidade`. Efeitos da D37: produtividade do local de trabalho e da
+  linha da Holding até -30% (de 12 a 40 min de quem chega), clientes do comércio até -25% (de 10 a 35 min), busca de saúde
+  e bombeiros pelo custo congestionado da aresta (degraus de 25%), bem-estar até -8 (de 10 a 45 min), tudo (calibrar).
+  Sem worker (Node) a tarefa anda em fatias a cada tique (`tarefas.js`: opção `fatiado` e `andar`) e termina antes do T +
+  K. Robô A4: `resolverGargalos` e a meta `gargalo` (só mede com 25 mil moradores; o robô de hoje para em uns 10 mil, v/c
+  máximo 0,67, e a meta fica "sem medida"). Economia do robô A2 igual com e sem o trânsito (12 h: 9.195 moradores, caixa
+  25.165 nos dois). Nota em `docs/entregas/onda4/S1c.md`.
 
 #### S2b. Cidade completa (onda 4; 3 sessões)
 - **Arquivos:** `sim/{ambiente,mercadoria}.js`, `ferramentas/testes/{ambiente,mercadoria}.teste.mjs`; herda os de S2a.
@@ -1816,6 +1833,10 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   indústria, na Pedreira, na Mina de calcário, na Cimenteira, na termelétrica e nas vias grandes, com efeito no
   bem-estar e no valor do terreno; dados das camadas Esgoto, Ar, Ruído e Empregos.
 - **Depende de:** M1a.
+- **Entregue em 16/10/2026.** Esgoto com a ETE, mercadoria agregada, ar e ruído (grades no save) e as camadas Esgoto, Ar, Ruído
+  e Empregos; os 6 serviços e as 3 zonas já tinham dados, modelos e geradores e ganharam as regras. Tudo condicionado a
+  `m1bAtivo()`: o integrador abre o M1b trocando `PARTE_ATUAL` em `data/zonas.js`. Campo `zona: 'utilidades'` nos serviços de
+  rede e `'industrial'` na indústria (D112, sem restrição ainda). Nota em `docs/entregas/onda4/S2b.md`.
 
 #### S3b. Ato 1 completo, cimento e Modo livre (onda 4; 2 sessões)
 - **Arquivos:** herda os de S3a.
@@ -1823,6 +1844,14 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
   ladrilho vizinho; Modo livre (D56); se couber, a cadeia de alimentos (Fazenda e Agroindústria para o comércio) e a
   Vidraria, o Manejo florestal e a Serraria.
 - **Depende de:** M1a.
+- **Entregue em 16/10/2026** (S3b). 6 decisões do Ato 1 (3 novas do M1b: Crise da Energia, licença da Mina e futuro da Vila,
+  com efeitos `custoLigacao` e `produtividade` por prédio), Mina e Cimenteira com a cadeia do cimento na D48, Modo livre (caixa
+  fixo em 1 bilhão de créditos), objetivo de Legado `cidade.vilaNova` que requalifica a Vila pelo gancho `REQUALIFICACAO_VILA`
+  (D95), cadeia de alimentos (Fazenda e Agroindústria, venda ao comércio e abate da importação de mercadoria), níveis e marcos
+  de Vidraria, Serraria e Manejo, `zona: 'industrial'` nos industriais (D112, só marca). Tudo atrás de `PARTE_ATUAL`; o M1a
+  não muda. O calcário saiu da encosta da Serra (nenhuma Mina cabia) para a planície do ladrilho (5, 5). Robô `--m1b`: a cadeia
+  comprada com folga de 150 mil não atrasa marco nenhum; as decisões atrasam o marco 5 em 25 min. Capturas das duas fábricas
+  novas, bancada e RX 550 por medir. Nota em `docs/entregas/onda4/S3b.md`.
 
 #### X4. Ponte simples (onda 4; 1 sessão) [ENTREGUE pela PONT2, D106: ponte automática e viaduto; ver docs/entregas/onda4/PONT2.md]
 - **Arquivos:** `sim/vias/ponte.js`, `render/geracao/ponte.js`, `ferramentas/testes/ponte.teste.mjs`.

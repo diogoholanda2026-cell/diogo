@@ -137,8 +137,20 @@ function grafoEstatico(sim) {
       grafo.cap[k] = c;
     }
   }
-  t.est = { chave: h, grafo };
+  const capE = new Float32Array(2 * A.n);
+  for (let e = 0; e < A.n; e++) {
+    if (!A.viva[e]) continue;
+    capE[2 * e] = capacidade(A, e, 0);
+    capE[2 * e + 1] = capacidade(A, e, 1);
+  }
+  t.est = { chave: h, grafo, capE };
   return grafo;
+}
+
+/** Capacidade por aresta e sentido (2 x aresta + sentido), no cache do grafo (refeito se o tipo ou a mão mudou). */
+function capacidades(sim) {
+  grafoEstatico(sim);
+  return dev(sim).est.capE;
 }
 
 // ---------------------------------------------------------------------------------------------------- entrada
@@ -352,17 +364,23 @@ function derivar(sim) {
   const A = sim.tabelas.arestas;
   const n = A.n;
   const f = j.fluxo;
-  let cong = null;
   t.pior = null;
   t.gargalos = 0;
   t.vcMax = 0;
   t.vc = null;
+  let algum = false;
+  let nova = null;
   if (f) {
-    const ida = new Float32Array(n);
-    const volta = new Float32Array(n);
-    const vel = new Float32Array(n).fill(1);
-    const vc = new Float32Array(n);
-    cong = new Uint8Array(n);
+    // os arrays do espelho e da conta são reaproveitados enquanto o tamanho for o mesmo (sem lixo a cada aplicação)
+    const reusa = t.buf && t.buf.n === n;
+    const b = reusa ? t.buf : { n, ida: new Float32Array(n), volta: new Float32Array(n), vel: new Float32Array(n), vc: new Float32Array(n), congA: new Uint8Array(n), congB: new Uint8Array(n) };
+    b.ida.fill(0);
+    b.volta.fill(0);
+    b.vel.fill(1);
+    b.vc.fill(0);
+    nova = b.congA === t.cong ? b.congB : b.congA;
+    nova.fill(0);
+    const cap = capacidades(sim);
     const lim = Math.min(n, j.nArestas, f.length >> 1);
     let soma = 0;
     let cont = 0;
@@ -370,18 +388,24 @@ function derivar(sim) {
       if (!A.viva[e]) continue;
       const qa = f[2 * e];
       const qb = f[2 * e + 1];
-      const ca = capacidade(A, e, 0);
-      const cb = capacidade(A, e, 1);
-      ida[e] = qa;
-      volta[e] = qb;
-      const v = Math.max(ca > 0 ? qa / ca : 0, cb > 0 ? qb / cb : 0);
-      vc[e] = v;
+      const ca = cap[2 * e];
+      const cb = cap[2 * e + 1];
+      b.ida[e] = qa;
+      b.volta[e] = qb;
+      const va = ca > 0 ? qa / ca : 0;
+      const vb = cb > 0 ? qb / cb : 0;
+      const v = va > vb ? va : vb;
+      b.vc[e] = v;
       const x2 = v * v;
       const fator = Math.min(10, 1 + 0.15 * (x2 * x2));
-      vel[e] = 1 / fator;
-      cong[e] = Math.min(TRANSITO.custoMax, Math.round((fator - 1) / TRANSITO.custoPasso));
+      b.vel[e] = 1 / fator;
+      const c = Math.min(TRANSITO.custoMax, Math.round((fator - 1) / TRANSITO.custoPasso));
+      if (c > 0) {
+        nova[e] = c;
+        algum = true;
+      }
       if (qa > 0 || qb > 0) {
-        soma += vel[e];
+        soma += b.vel[e];
         cont++;
       }
       if (v > TRANSITO.gargalo) t.gargalos++;
@@ -390,17 +414,19 @@ function derivar(sim) {
         t.pior = e;
       }
     }
-    t.vc = vc;
+    t.buf = b;
+    t.vc = b.vc;
     t.velMedia = cont ? soma / cont : 1;
-    sim.espelho.fluxos = { versao: j.versao, ida, volta, vel };
+    const F = sim.espelho.fluxos;
+    if (F && F.ida === b.ida) F.versao = j.versao;
+    else sim.espelho.fluxos = { versao: j.versao, ida: b.ida, volta: b.volta, vel: b.vel };
   } else {
     sim.espelho.fluxos = null;
     t.velMedia = 1;
   }
-  // custo congestionado: só conta se algum degrau saiu de 0
+  // custo congestionado: só conta se algum degrau saiu de 0; a versão sobe quando algum degrau muda
   const velho = t.cong;
-  const algum = cong ? cong.some((x) => x > 0) : false;
-  const novo = algum ? cong : null;
+  const novo = algum ? nova : null;
   let mudou = (velho === null) !== (novo === null);
   if (!mudou && velho && novo) {
     if (velho.length !== novo.length) mudou = true;

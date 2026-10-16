@@ -5,7 +5,7 @@
 // cidade gastava o caixa da primeira hora em poucos prédios e não cobria os bairros; em US$, a clínica de 10 mil dá
 // US$ 6 milhões, a usina de 8 MW, US$ 9,6 milhões).
 //
-// Serviço: { nome, categoria, barra: 'servicos' | 'lazer' (a categoria da barra de construção, D24), custo,
+// Serviço: { zona ('utilidades' para captação, poço, usina, ETE e termelétrica, D112; só marca, a restrição é da ZON2), nome, categoria, barra: 'servicos' | 'lazer' (a categoria da barra de construção, D24), custo,
 //   manutencaoHora (unidades por hora de jogo), capacidade (água em m³/h, energia em kW, cobertura em moradores ou
 //   vagas, null no lazer), raio (m pela via; null nas redes), carga: 'moradores' | 'estudantes', empregos: [básico,
 //   fundamental, médio, superior], planta: [frente, fundo] em metros, marco, parte, xp (XP ativo ao construir),
@@ -35,16 +35,19 @@ export const FRACAO_ESTUDANTES = 0.12;
 
 export const SERVICOS = congelar({
   captacao: {
+    zona: 'utilidades',
     nome: 'Captação de água', categoria: 'agua', barra: 'servicos', custo: 15000, manutencaoHora: 800, capacidade: 30,
     raio: null, empregos: [4, 4, 2, 0], planta: [24, 32], marco: 0, parte: 'M1a', xp: 40, obraTiques: 60,
     consumo: { agua: 0, energia: 60 }, margem: 40, faz: 'tira água do rio e põe na rede, para uns 5 mil moradores',
   },
   poco: {
+    zona: 'utilidades',
     nome: 'Poço artesiano', categoria: 'agua', barra: 'servicos', custo: 5000, manutencaoHora: 300, capacidade: 4.8,
     raio: null, empregos: [2, 1, 0, 0], planta: [16, 16], marco: 0, parte: 'M1a', xp: 20, obraTiques: 40,
     consumo: { agua: 0, energia: 15 }, recurso: 'subterranea', faz: 'bombeia o lençol para a rede, uns 800 moradores',
   },
   solar: {
+    zona: 'utilidades',
     nome: 'Usina solar', categoria: 'energia', barra: 'servicos', custo: 16000, manutencaoHora: 600, capacidade: 8000,
     raio: null, empregos: [2, 2, 2, 0], planta: [48, 48], marco: 0, parte: 'M1a', xp: 40, obraTiques: 90,
     consumo: { agua: 0.01, energia: 0 }, faz: 'gera 8 MW, com bateria para a noite',
@@ -77,11 +80,13 @@ export const SERVICOS = congelar({
   },
   // M1b (S2b liga): prontos nos dados para a R5 desenhar
   ete: {
+    zona: 'utilidades',
     nome: 'Estação de tratamento de esgoto', categoria: 'esgoto', barra: 'servicos', custo: 30000, manutencaoHora: 1000,
     capacidade: 30, raio: null, empregos: [5, 4, 2, 1], planta: [48, 56], marco: 0, parte: 'M1b', xp: 50, obraTiques: 120,
     consumo: { agua: 0, energia: 120 }, margem: 40, faz: 'trata o esgoto antes de devolver ao rio',
   },
   termica: {
+    zona: 'utilidades',
     nome: 'Termelétrica a gás', categoria: 'energia', barra: 'servicos', custo: 60000, manutencaoHora: 2000,
     capacidade: 50000, raio: null, empregos: [10, 12, 6, 2], planta: [56, 64], marco: 1, parte: 'M1b', xp: 80,
     obraTiques: 150, consumo: { agua: 1, energia: 0 }, faz: 'gera 50 MW a gás',

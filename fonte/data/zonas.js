@@ -65,6 +65,7 @@ export const ZONAS = congelar({
     faz: 'emprega quem estudou mais',
   },
   industria: {
+    zona: 'industrial', // D112: só no Distrito Industrial (a restrição é da ZON2)
     nome: 'Indústria', familia: 'ind', densidade: 1, cor: '#c98500', marco: 0, parte: 'M1a', andares: [1, 3],
     taxa: 0.15, split: [1, 1, 1, 1], valor: { peso: -0.2, min: 0 }, rodovia: true,
     faz: 'fabrica mercadoria para o comércio',

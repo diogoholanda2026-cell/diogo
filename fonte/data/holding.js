@@ -77,25 +77,27 @@ export const PREDIOS_HOLDING = /* @__PURE__ */ congelar({
     distanciaArmazem: { livre: 500, porCem: 0.01, max: 0.3 }, parte: 'M1a',
     niveis: [null, { custo: 20000, materiais: { concreto: 20, aco: 5 }, marco: 4 }, { custo: 40000, materiais: { concreto: 40, aco: 10 }, marco: 5 }],
   },
+  // `zona: 'industrial'` (D112): a Mina, a Cimenteira, a Vidraria, a Serraria e a Agroindústria ficarão restritas ao Distrito
+  // Industrial (parcela ZON2); por ora o campo só marca, nada o aplica.
   // M1b (S3b): ligados quando o integrador abre o M1b (PARTE_ATUAL); o marco de cada um segue a tabela do desenho
   mina: {
     nome: 'Mina de calcário', faz: 'tira calcário para o cimento', produz: ['calcario'], custo: 15000, marco: 2, planta: [64, 56],
-    vagas: [8, 3, 1, 0], obraTiques: 90, xp: 30, recurso: 'calcario', parte: 'M1b',
+    vagas: [8, 3, 1, 0], obraTiques: 90, xp: 30, recurso: 'calcario', zona: 'industrial', parte: 'M1b',
     niveis: [null, { custo: 10000, materiais: { brita: 20 }, marco: 3 }, { custo: 20000, materiais: { concreto: 15 }, marco: 5 }],
   },
   cimenteira: {
     nome: 'Cimenteira', faz: 'faz cimento com calcário e argila', produz: ['cimento'], custo: 40000, marco: 2, planta: [72, 56],
-    vagas: [6, 6, 3, 1], obraTiques: 150, xp: 40, parte: 'M1b',
+    vagas: [6, 6, 3, 1], obraTiques: 150, xp: 40, zona: 'industrial', parte: 'M1b',
     niveis: [null, { custo: 25000, materiais: { concreto: 20, aco: 5 }, marco: 4 }, { custo: 50000, materiais: { concreto: 40, aco: 10 }, marco: 6 }],
   },
   vidraria: {
     nome: 'Vidraria', faz: 'faz vidro com areia e calcário', produz: ['vidro'], custo: 35000, marco: 4, planta: [80, 40],
-    vagas: [5, 6, 3, 1], obraTiques: 150, xp: 40, parte: 'M1b',
+    vagas: [5, 6, 3, 1], obraTiques: 150, xp: 40, zona: 'industrial', parte: 'M1b',
     niveis: [null, { custo: 22000, materiais: { concreto: 20, aco: 5 }, marco: 5 }, { custo: 44000, materiais: { concreto: 40, aco: 10 }, marco: 6 }],
   },
   serraria: {
     nome: 'Serraria', faz: 'serra madeira para obras', produz: ['serrada'], custo: 14000, marco: 1, planta: [56, 40],
-    vagas: [6, 3, 1, 0], obraTiques: 90, xp: 30, parte: 'M1b',
+    vagas: [6, 3, 1, 0], obraTiques: 90, xp: 30, zona: 'industrial', parte: 'M1b',
     niveis: [null, { custo: 9000, materiais: { brita: 15, tijolo: 10 }, marco: 2 }, { custo: 18000, materiais: { concreto: 10 }, marco: 4 }],
   },
   manejo: {
@@ -111,7 +113,7 @@ export const PREDIOS_HOLDING = /* @__PURE__ */ congelar({
   },
   agroindustria: {
     nome: 'Agroindústria', faz: 'beneficia grãos em alimentos para o comércio', produz: ['alimentos'], custo: 30000, marco: 3, planta: [72, 56],
-    vagas: [6, 6, 3, 1], obraTiques: 120, xp: 40, parte: 'M1b',
+    vagas: [6, 6, 3, 1], obraTiques: 120, xp: 40, zona: 'industrial', parte: 'M1b',
     niveis: [null, { custo: 20000, materiais: { concreto: 15, aco: 5 }, marco: 5 }, { custo: 40000, materiais: { concreto: 30, aco: 10 }, marco: 6 }],
   },
 });

@@ -685,8 +685,8 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
    */
   function cadeiaDoCimento() {
     if (marco() < 2 || E.holding.cimenteira) return;
-    // só gasta com folga de caixa (a cidade cresce primeiro); desiste depois de muitas tentativas com a folga e sem lugar
-    const folga = (custo) => caixa() > custo + 40000 && !desistir('cadeiaCimento', 300);
+    // só gasta com folga de caixa (150 mil acima do custo: a cidade cresce primeiro; com 40 mil o marco 6 atrasava 70 min); desiste depois de muitas tentativas com a folga e sem lugar
+    const folga = (custo) => caixa() > custo + 150000 && !desistir('cadeiaCimento', 300);
     if (!E.holding.mina) {
       if (!E.feito.has('ladrilhoCalcario')) {
         if (!folga(PREDIOS_HOLDING.mina.custo + sim.q.ladrilhos().proximo)) return;

@@ -1009,8 +1009,8 @@ S = {
 | `bemestar.js` | bem-estar e tarifa | `bemEstarPredio(sim, i) → 0..100`; `tarifa(b) → 5 \| 8 \| 11` |
 | `servicos.js` | cobertura e capacidade | `coberturaTipo(sim, tipo)` (Dijkstra normalizado); `cargas(sim)`; espelho: `cobertura[tipo]: Uint8Array(por aresta)` |
 | `redes.js` | água, esgoto, energia | `balanco(sim) → { agua: {oferta, demanda}, esgoto, energia }`; `racionar(sim, recurso)` |
-| `transito.js` | montar entrada e aplicar saída | `entradaTransito(sim) → Entrada (arrays)`; `aplicarTransito(sim, saida)` |
-| `tarefas/transito.js` | função pura (worker e Node) | `atribuir({ grafo, zonas, P, A, passadas }) → { fluxo: Float32Array(2 x arestas), tempoZona: Float32Array }` |
+| `transito.js` | montar entrada e aplicar saída | `entradaTransito(sim) → Entrada (arrays)`; `aplicarTransito(sim, saida, pedido)`; serviço `sim.transito` |
+| `tarefas/transito.js` | função pura (worker e Node) | `atribuir({ grafo, nArestas, Z, noZona, prod, atr, atrCom, anterior }) → { fluxo: Float32Array(2 x arestas), tSaida, tDestino, viagens, tempoMedio, tempoCom, semRota }` (gerador) |
 | `tarefas.js` | fila de tarefas | `criarTarefas({ worker })`; `pedir(nome, entrada, tiqueAplicar) → id`; `resultado(id, tiqueAtual)` (calcula na hora se venceu) |
 | `ambiente.js` | ar, ruído, valor do terreno | `sistemaAmbiente(sim, fatia)`; espelho: `grades.{valor, ar, ruido}` |
 | `economia.js` | receitas, despesas, empréstimo, série | `sistemaEconomia(sim)`; `emprestimo.{tomar, pagarJuros, pagarParcela, quitar}`; `orcamento(sim)` |
