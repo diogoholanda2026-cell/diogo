@@ -16,7 +16,8 @@ export const ITENS = /* @__PURE__ */ congelar({
   tijolo: { base: 50, t: 40, req: { argila: 2 }, predio: 'olaria', marco: 1, parte: 'M1a' },
   madeira: { base: 30, t: 45, req: {}, predio: 'manejo', marco: 1, parte: 'M1b' },
   serrada: { base: 80, t: 50, req: { madeira: 2 }, predio: 'serraria', marco: 1, parte: 'M1b' },
-  calcario: { base: 22, t: 35, req: {}, predio: 'mina', marco: 2, recurso: { tipo: 'calcario', porUnidade: 1 }, parte: 'M1b' },
+  // o calcário rende 2 por unidade da grade: a lavra em bancadas tira mais de cada célula de 32 m (a faixa da Mina é pequena)
+  calcario: { base: 22, t: 35, req: {}, predio: 'mina', marco: 2, recurso: { tipo: 'calcario', porUnidade: 0.5 }, parte: 'M1b' },
   // M1a: cimento importado (item liberado no marco 3, com a Concreteira); M1b: a Cimenteira (marco 2) o faz com calcário
   // da Mina e argila da Olaria e abre a cadeia que alimenta o concreto e as obras da cidade
   cimento: { base: 90, t: 60, req: { calcario: 2, argila: 1 }, predio: 'cimenteira', marco: 2, parte: 'M1b' },

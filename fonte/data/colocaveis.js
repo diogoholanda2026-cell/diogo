@@ -42,6 +42,9 @@ const TABELA = {
   vidraria: linha('holding', 'galpão longo com forno float', 'fábricas de vidro float', 30, [3000, 8000, 250]),
   serraria: linha('holding', 'galpão e pátio de toras', 'serrarias reais com pátio de toras', 14, [3000, 8000, 250]),
   manejo: linha('holding', 'posto de manejo na mata', 'postos de manejo florestal na mata', 10, [3000, 8000, 250]),
+  // cadeia de alimentos (S3b)
+  fazenda: linha('holding', 'pivô central de irrigação, armazém graneleiro com silos corrugados, secador e colheitadeira', 'fazendas de grãos do Cerrado brasileiro, com pivô central e armazém graneleiro', 24, [5000, 12000, 350]),
+  agroindustria: linha('holding', 'bloco de silos de concreto, galpão de processamento com lanternim, tanques e chaminé', 'complexos agroindustriais de cooperativas de grãos, com bloco de silos de concreto', 42, [6000, 15000, 450]),
 };
 
 /** Planta e parte de cada tipo: as da simulação (uma fonte só). */

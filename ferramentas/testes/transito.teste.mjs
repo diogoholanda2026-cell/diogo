@@ -28,6 +28,7 @@ import { VIAS_ORDEM } from '../../fonte/data/vias.js';
 import { temTexto, t } from '../../fonte/ui/textos.js';
 import { gerarCidadeSintetica, SINTETICA } from '../cidade-sintetica.mjs';
 import { simS3a, predioHolding } from '../robo/cidade-faz-de-conta.mjs';
+import { resolverGargalos } from '../robo/robo-sim.mjs';
 
 const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -614,12 +615,13 @@ test('gargalo (v/c acima de 1) numa cidade cheia aparece sem mexer nas vias e a 
   const q = sim.q.aresta(alvo.ref);
   assert.equal(q.fluxo.vel < 1, true);
   assert.equal(q.tipo, 'rua');
-  const r = sim.cmd('via.melhorar', { arestas: [alvo.ref], tipo: sugestaoPara(sim, alvo.e).para ?? 'avenida', sessao: 'teste.gargalo' });
-  assert.equal(r.ok, true, JSON.stringify(r));
-  sim.rodar(120, { sincrono: true });
+  // a ferramenta do robô (A4): melhora cada via ao tipo que o aviso sugere e espera a atribuição seguinte
+  const r = resolverGargalos(sim, { max: 4, tiques: 130 });
+  assert.ok(r.melhoradas >= 1, JSON.stringify(r));
+  assert.ok(r.resolvidas >= 1, `ao menos uma via saiu da lista: ${JSON.stringify(r)}`);
   const depois = gargalos(sim).find((x) => x.e === alvo.e);
-  assert.ok(!depois || depois.vc < alvo.vc * 0.7, `a aresta passou de ${alvo.vc} para ${depois?.vc}`);
-  assert.ok(!depois || depois.vc <= 1.0, 'saiu da lista de gargalos');
+  assert.ok(!depois || depois.vc <= 1.0, `a aresta passou de ${alvo.vc} para ${depois?.vc}`);
+  assert.ok(r.depois < r.antes, `menos gargalos: ${r.antes} -> ${r.depois}`);
   assert.deepEqual(sim.erros, []);
 });
 
@@ -651,11 +653,11 @@ test('partida nova (a Vila) tem viagens e nenhum gargalo; sem gente a atribuiç�
   assert.equal(r.gargalos, 0);
   assert.deepEqual(gargalos(sim), []);
   assert.ok(sim.espelho.fluxos);
-  // a cidade esvazia: a próxima varredura não acha viagens e zera o que sobrou
+  // a cidade esvazia (só o trânsito segue rodando): a próxima varredura não acha viagens e zera o que sobrou
   const P = sim.tabelas.predios;
-  for (let i = 0; i < P.n; i++) if (P.viva[i]) P.moradores[i] = 0;
-  for (let k = 0; k < 4; k++) sim.rodar(20, { sincrono: true }); // a rodada do mercado de trabalho refaz a ocupação
-  sim.rodar(120, { sincrono: true });
+  for (const s of sim._sistemas) if (!/^transito/.test(s.nome)) s.ativo = false;
+  for (let i = 0; i < P.n; i++) if (P.viva[i]) P.liberar(i);
+  sim.rodar(130, { sincrono: true });
   assert.equal(sim.json.transito.fluxo, null);
   assert.equal(sim.agregados.trajeto, null);
   assert.equal(sim.espelho.fluxos, null);

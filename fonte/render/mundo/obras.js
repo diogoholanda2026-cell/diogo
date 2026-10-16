@@ -245,7 +245,7 @@ export function volumesDoPlano(plano) {
 }
 
 /** Tipos de colocável sem esqueleto de concreto (campos, cavas, praças e parques): só o canteiro e as máquinas. */
-const SEM_ESQUELETO = new Set(['praca', 'parque', 'parqueG', 'solar', 'pedreira', 'areal', 'mina', 'manejo', 'serraria', 'ete', 'captacao']);
+const SEM_ESQUELETO = new Set(['praca', 'parque', 'parqueG', 'solar', 'pedreira', 'areal', 'mina', 'manejo', 'serraria', 'fazenda', 'ete', 'captacao']);
 
 /** Classe da obra pela altura do plano: casa (até 6 m), prédio baixo (até ALTO), torre, ou simples (sem esqueleto). */
 export function classeDaObra(H, temEsqueleto) {

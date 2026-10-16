@@ -308,7 +308,7 @@ const PARTES = ['M1a', 'M1b', 'M2', 'M3', 'M4'];
 /** true se a parte (do colocável) já chegou no jogo. */
 export const parteOk = (parte) => PARTES.indexOf(parte ?? 'M1a') <= PARTES.indexOf(PARTE_ATUAL);
 /** true se o M1b já chegou no jogo: esgoto, ar, ruído e mercadoria (S2b) só valem daí em diante. */
-export const m1bAtivo = () => parteOk('M1b');
+export const m1bAtivo = () => PARTE_ATUAL !== 'M1a'; // as partes seguintes (M2 em diante) trazem o M1b junto
 
 /** Planta [frente, fundo] em metros de um colocável. */
 export function plantaDe(def) {

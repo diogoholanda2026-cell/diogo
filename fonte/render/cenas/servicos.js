@@ -23,7 +23,7 @@ import { CAMERA_ABERTA } from './aberta.js';
 /** Os dois bairros da cena (centro e raio de busca) e o que vai em cada um, com o nível dos prédios da Holding. */
 export const BAIRROS = Object.freeze({
   servicos: { x: -1130, z: -330, raio: 900, tipos: ['captacao', 'poco', 'solar', 'praca', 'clinica', 'escolaF', 'delegacia', 'bombeiros', 'ete', 'termica', 'escolaM', 'parque', 'hospital', 'parqueG'] },
-  holding: { x: 1250, z: -720, raio: 900, tipos: ['escritorioObra', 'pedreira', 'areal', 'olaria', 'concreteira', 'mina', 'cimenteira', 'vidraria', 'serraria', 'manejo'], niveis: { concreteira: 3, pedreira: 2, escritorioObra: 2, olaria: 2 } },
+  holding: { x: 1250, z: -720, raio: 900, tipos: ['escritorioObra', 'pedreira', 'areal', 'olaria', 'concreteira', 'mina', 'cimenteira', 'vidraria', 'serraria', 'manejo', 'fazenda', 'agroindustria'], niveis: { concreteira: 3, pedreira: 2, escritorioObra: 2, olaria: 2 } },
 });
 
 /** Passo das amostras das vias (m) e o lado dos baldes da busca. */

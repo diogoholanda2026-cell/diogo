@@ -11,12 +11,12 @@
 //    ({ espera: true }) e entra no aviso "obras paradas por falta de <item>". Os outros itens a obra importa sozinha,
 //    como nos níveis 1 e 2 (a entrada da D48 item a item, C1c).
 // A demanda da cidade por item e por hora vai para a tela Holding (q.producao().itens[].cidadeHora).
-import { ITENS, ITENS_ORDEM, CADEIA_M1A, precoBase } from '../../data/holding.js';
+import { ITENS, ITENS_ORDEM, CADEIA_M1A, ALIMENTOS, precoBase } from '../../data/holding.js';
 import { ECONOMIA } from '../../data/economia.js';
 import { ORDEM } from '../../contratos/interno.js';
 import { PREDIO } from '../../contratos/flags.js';
-import { RODADA, HORA } from '../../comum/relogio.js';
-import { regrasDe, efeitosAtivos } from './base.js';
+import { RODADA, HORA, MINUTO } from '../../comum/relogio.js';
+import { regrasDe, efeitosAtivos, m1bAtivo, finito } from './base.js';
 import { disponivelVenda, tirarEstoque, porEstoque, itensProducao, prediosProducao, armazemPerto, ehItem } from './producao.js';
 import { novaEntregaVisual, frotaVista } from './logistica.js';
 
@@ -35,6 +35,9 @@ export function mercadoVazio() {
     esperandoRodada: {}, // unidades que fizeram obra esperar na rodada corrente
     esperando: {}, // as da rodada anterior (aviso e camada Recursos)
     totais: { vendidasCidade: 0, importadasCidade: 0, perdaImportacao: 0, deposito: 0, importadas: 0 },
+    // S3b: alimentos para o comércio (pendente: fração de unidade ainda devida; fornecidoHora: mercadoria por hora de jogo,
+    // média de 10 min; vendidos e receita desde o começo)
+    alimentos: { pendente: 0, fornecidoHora: 0, vendidos: 0, receita: 0 },
   };
 }
 
@@ -262,6 +265,67 @@ function sistemaMercado(sim, k, fatias, T) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ alimentos (S3b)
+
+/**
+ * Alimentos para o comércio (S3b), só com o M1b no jogo e a mercadoria da cidade publicada (S2b): o comércio pede uma
+ * fração do consumo dele (ALIMENTOS.fracaoDoConsumo) em alimentos; uma vez por rodada a Holding vende o que o estoque cobre
+ * (acima da reserva), a 100% do preço base, pelo mesmo canal "Venda à cidade" (o jogador pode tirar o item). O que sai vira
+ * oferta: a mercadoria que a cidade produz sobe e a que ela importa a 160% desce na mesma medida. A S2b reescreve
+ * sim.agregados.mercadoria a cada rodada; a oferta da Holding é aplicada de novo a cada objeto novo (mer.alimentos guarda
+ * quanto já entrou na conta dele), então a ordem das fases não importa.
+ */
+function venderAlimentos(sim) {
+  const m = M(sim);
+  const a = (m.alimentos ??= { pendente: 0, fornecidoHora: 0, vendidos: 0, receita: 0 });
+  const mer = sim.agregados?.mercadoria;
+  const ativo = m1bAtivo() && mer && finito(mer.consumo) > 0 && vendeCidade(sim, ALIMENTOS.item);
+  let n = 0;
+  if (ativo) {
+    a.pendente += (finito(mer.consumo) * ALIMENTOS.fracaoDoConsumo * (RODADA / HORA)) / ALIMENTOS.mercadoriaPorUnidade;
+    n = Math.min(Math.floor(a.pendente), disponivelVenda(sim, ALIMENTOS.item));
+    // o que o estoque não cobriu não fica devendo: só a fração de unidade passa para a próxima rodada
+    a.pendente -= Math.floor(a.pendente);
+    if (n > 0) {
+      tirarEstoque(sim, ALIMENTOS.item, n);
+      const valor = n * precoBase(ALIMENTOS.item);
+      sim.holding.receber(valor, 'cidade');
+      a.vendidos += n;
+      a.receita += valor;
+      sim.emitir('financas', { tipo: 'alimentos' });
+    }
+  } else {
+    // sem pedido (M1b fechado, sem comércio ou item tirado da venda à cidade) a oferta para na hora
+    a.pendente = 0;
+    a.fornecidoHora = 0;
+  }
+  // oferta em mercadoria por hora de jogo, média de 10 min (a venda é em unidades inteiras, a média alisa os saltos)
+  const instante = (n * ALIMENTOS.mercadoriaPorUnidade * HORA) / RODADA;
+  a.fornecidoHora += (instante - a.fornecidoHora) * (RODADA / (10 * MINUTO));
+  if (a.fornecidoHora < 1e-6) a.fornecidoHora = 0;
+  sim.mudancas.marcar('holding');
+}
+
+/** Põe a oferta de alimentos na mercadoria da cidade deste objeto (idempotente: só o que ainda não entrou). */
+function ajustarMercadoria(sim) {
+  const mer = sim.agregados?.mercadoria;
+  const a = M(sim)?.alimentos;
+  if (!mer || !a) return;
+  const f = m1bAtivo() && finito(mer.consumo) > 0 ? a.fornecidoHora : 0;
+  const ja = finito(mer.alimentos);
+  if (Math.abs(f - ja) < 1e-9) return;
+  const r1 = (v) => Math.round(v * 10) / 10;
+  mer.producao = r1(Math.max(0, finito(mer.producao) + f - ja));
+  mer.importada = r1(Math.max(0, finito(mer.consumo) - mer.producao));
+  mer.excedente = r1(Math.max(0, mer.producao - finito(mer.consumo)));
+  mer.alimentos = f;
+}
+
+function sistemaAlimentos(sim, k, fatias, T) {
+  if (T % RODADA === 13) venderAlimentos(sim);
+  ajustarMercadoria(sim);
+}
+
 // ------------------------------------------------------------------------------------------------ consultas
 
 /** q.deposito() (seção 2.6). */
@@ -299,6 +363,8 @@ function consultaProducao(sim) {
     armazem: { usado: Object.values(p.estoque).reduce((a, v) => a + v, 0), capacidade: p.cap },
     importarAuto: m.importarAuto,
     esperando: { ...m.esperando },
+    // S3b: o que a Holding vende de alimentos ao comércio (fornecidoHora em mercadoria por hora de jogo)
+    alimentos: { ...(m.alimentos ?? { pendente: 0, fornecidoHora: 0, vendidos: 0, receita: 0 }) },
   };
 }
 
@@ -325,6 +391,7 @@ export function registrar(sim) {
   sim.registrarConsulta('deposito', consultaDeposito);
   sim.registrarConsulta('producao', consultaProducao);
   sim.registrarSistema(1, 0, sistemaMercado, 1, { nome: 'holding.mercado', ordem: ORDEM.holding + 1 });
+  sim.registrarSistema(1, 0, sistemaAlimentos, 1, { nome: 'holding.alimentos', ordem: ORDEM.holding + 2 });
   sim.registrarParteBarra('s3a.mercado', parteBarra);
 }
 

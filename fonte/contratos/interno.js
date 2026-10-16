@@ -33,7 +33,7 @@ export function criarAgregados() {
       energia: { oferta: 0, demanda: 0 },
       importado: { energia: 0 },
     },
-    trajeto: null, // S1c (M1b): { porZona: Float32Array }
+    trajeto: null, // S1c (M1b): { porZona: Float32Array(1024) (min de viagem de quem mora na célula de 256 m), destino: Float32Array(1024) (min de quem chega), medio, comercio (min) }
     mercadoria: null, // S2b (M1b): { producao, consumo, importada }
   };
 }
@@ -81,6 +81,11 @@ export const SERVICOS_INTERNOS = congelar({
  *   sim.arcologia = { vagas() → [4], moradoresLuxo(), contribuicaoHora() (Contribuição dos moradores de luxo, que a
  *     economia soma na renda dos moradores), valor() (créditos pagos e materiais entregues: entra no valuation, D49),
  *     estado(id) }                                                                                             X1b
+ *   sim.transito = { custoAresta(e) → fator ≥ 1 do tempo livre (degraus de 0,25), versaoCusto() (sobe quando algum degrau
+ *     muda: a cobertura de saúde e bombeiros refaz a busca), fatorTrabalho(i) → 0,7 a 1 (produtividade pelo trajeto),
+ *     fatorClientes() → 0,75 a 1, bemEstar(i) → -8 a 0, gargalos(limiar = 1) → [{ e, ref, vc, ida, volta, nome, rodovia }],
+ *     resumo(), sugestao(e) → { sugestao: 'melhorar' | 'maoUnica' | 'paralela', para }; quem consulta usa `sim.transito?.`
+ *     e cai em 1 e 0 sem ela (D37)                                                                           S1c
  *   linha de produção (sim.json.producao): nLote, o n do lote em andamento (os insumos que ele consumiu na partida;
  *     a ordem `n` vale para o próximo)                                                                         S3a
  */

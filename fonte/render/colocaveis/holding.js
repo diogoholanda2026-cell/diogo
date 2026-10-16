@@ -1,5 +1,5 @@
 // Modelos dos prédios da Holding (R5, D34, D60): canteiro de megaprojeto, pedreira, areal, olaria, concreteira e os do
-// M1b e da linha de corte (mina, cimenteira, vidraria, serraria, manejo). A cor da Holding entra pelo bit HOLDING da
+// M1b e da linha de corte (mina, cimenteira, vidraria, serraria, manejo, e a fazenda e a agroindústria da S3b). A cor da Holding entra pelo bit HOLDING da
 // tabela de prédios: o shader da fachada pinta inteiros os toldos e letreiros (tapumes, contêineres, faixas dos silos,
 // cabines e tambores das betoneiras) e puxa os caixilhos para ela. O nível do prédio (1 a 3, as linhas de produção)
 // acrescenta equipamento. Puro: sem three.
@@ -683,7 +683,124 @@ function manejo(b) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ fazenda (S3b)
+
+/**
+ * Fazenda de grãos (fazendas do Cerrado brasileiro): o pivô central de irrigação com o braço e as torres de roda no
+ * talhão da frente, a colheitadeira no talhão ao lado, o armazém graneleiro de chapa com os silos metálicos
+ * corrugados, o elevador de canecas e o secador, o galpão de máquinas, a casa da sede e o caminhão graneleiro.
+ */
+function fazenda(b) {
+  const hw = b.w / 2;
+  const hd = b.d / 2;
+  const terra = mat(F.PISO, '#8d7a5b');
+  const corrugado = mat(F.METAL, '#c9cac5');
+  const aco = mat(F.METAL, '#8e9396');
+  const cultura = mat(F.VERDE, '#5d7340', { v: 1 });
+  const colhido = mat(F.PISO, '#9a8355');
+  lote(b, terra);
+  // pivô central: o disco da cultura, o miolo mais escuro e o braço de treliça sobre as torres de roda
+  const pcx = -hw + 27;
+  const pcz = hd - 27;
+  const R = 25;
+  b.torno(pcx, pcz, [[R, 0.06], [R * 0.2, 0.06]], cultura, { liso: true, ladosBase: b.ultra ? 32 : 20, lados1: 8, l1: true });
+  b.torno(pcx, pcz, [[R * 0.2, 0.08], [0, 0.08]], mat(F.VERDE, '#46592f', { v: 1 }), { liso: true, ladosBase: 8, lados1: 4 });
+  if (b.lod === 0) {
+    b.viga([pcx, 3.4, pcz], [pcx + R * 0.9, 3.0, pcz - R * 0.42], 0.5, 0.4, aco, {});
+    for (const t of [0.34, 0.68, 1]) {
+      const x = pcx + R * 0.9 * t;
+      const z = pcz - R * 0.42 * t;
+      b.tubo([x, 3.0, z], [x, 0.3, z], 0.12, aco, { lados: 4 });
+      b.caixa(x, 0, z, 0.5, 0.7, 1.4, mat(F.CONCRETO, '#26272a'), {});
+    }
+    b.caixa(pcx, 0, pcz, 1.4, 3.6, 1.4, aco, {});
+  }
+  // talhão ao lado: faixas de cultura e de palha, e a colheitadeira trabalhando nelas
+  const fx0 = pcx + R + 3;
+  const fx1 = hw - 3;
+  const fz0 = hd - 38;
+  const fz1 = hd - 3;
+  for (let k = 0; k < 5; k++) {
+    const z0 = fz0 + ((fz1 - fz0) / 5) * k;
+    b.plano(fx0, z0, fx1, z0 + (fz1 - fz0) / 5 - 0.5, 0.06, k < 3 ? cultura : colhido, {});
+  }
+  if (b.lod === 0) {
+    const vermelho = mat(F.METAL, '#a1392e');
+    b.em(fx0 + 8, 0, fz0 + (fz1 - fz0) * 0.62, 0.1, () => {
+      b.caixa(0, 1.0, 0, 3.4, 3.2, 8.6, vermelho, {});
+      b.caixa(0, 3.6, 3.2, 2.6, 2.4, 2.8, mat(F.VIDRO, '#2b3a45'), { topo: aco });
+      b.caixa(0, 0.4, 6.6, 9.2, 1.4, 1.8, vermelho, {});
+      b.caixa(0, 1.9, 6.9, 9.2, 0.7, 1.2, mat(F.METAL, '#d9d6cf'), {});
+      for (const sx of [-1, 1]) b.caixa(sx * 1.9, 0, 1.4, 0.9, 1.7, 1.9, mat(F.CONCRETO, '#26272a'), {});
+    });
+  }
+  // armazém graneleiro: galpão de chapa comprido com a moega de recebimento e o secador ao lado
+  galpao(b, -hw + 30, -hd + 12, 34, 16, 8.5, { cor: '#c9cac5', portao: 7, portaoX: 8 });
+  b.caixa(-hw + 30 + 22, -ENTERRA, -hd + 12, 7, ENTERRA + 20, 6, mat(F.GALPAO, '#a9aeaf', { a: 5, v: 3, uso: 3, c2: '#5d6468' }), { topo: aco, l1: true });
+  // silos metálicos corrugados em fila, com o elevador de canecas
+  for (let i = 0; i < 3; i++) {
+    const x = -hw + 8 + i * 9.6;
+    b.torno(x, -hd + 31, [[4.4, -ENTERRA], [4.4, 14.5], [0.6, 18.4]], corrugado, { l1: true, ladosBase: 16, lados1: 8 });
+    if (b.lod === 0) b.torno(x, -hd + 31, [[4.55, 7.2], [4.55, 7.5]], aco, { topo: false, ladosBase: 16 });
+  }
+  b.caixa(-hw + 8 + 3 * 9.6 - 1, -ENTERRA, -hd + 31, 1.7, ENTERRA + 24, 1.7, aco, { l1: true });
+  if (b.lod === 0) b.tubo([-hw + 8 + 3 * 9.6 - 1, 23, -hd + 31], [-hw + 8 + 9.6, 18.2, -hd + 31], 0.3, aco, { lados: 4 });
+  // galpão de máquinas aberto, com os implementos, e a casa da sede
+  b.caixa(hw - 22, -ENTERRA, -hd + 13, 18, ENTERRA + 6, 12, mat(F.GALPAO, '#b9bcbb', { a: 6, v: 4, uso: 3, c2: '#5d6468' }), { topo: false, faces: { pz: mat(F.LISO, '#3a3632') }, l1: true });
+  telhado(b, hw - 22, 6, -hd + 13, 19, 13, 1.6, mat(F.TELHA_METAL, '#9aa1a4'), mat(F.GALPAO, '#b9bcbb', { a: 6, v: 4 }), { l1: true });
+  b.caixa(hw - 11, -ENTERRA, -hd + 32, 11, ENTERRA + 3.2, 6.5, mat(F.CASA, '#d3cbb9', { a: 3.2, v: 2.4, c2: '#6b5a48', uso: 0 }), { topo: false, l1: true });
+  telhado(b, hw - 11, 3.2, -hd + 32, 12.4, 7.8, 2, mat(F.TELHA, '#94604c'), mat(F.CASA, '#d3cbb9', { a: 3.2, v: 2.4 }), { l1: true });
+  // caminhão graneleiro na cor da Holding, árvores no fundo e o letreiro
+  b.veiculo(-hw + 30 + 8, 0.08, -hd + 24, Math.PI / 2, { comp: 14, larg: 2.6, alt: 2.4, mat: corHolding(), corCabine: '#d6d6d0' });
+  letreiro(b, -2, 0.05, hd - 0.8, 8, 1.5);
+  for (let k = 0; k < 5; k++) {
+    const R2 = b.entre(900 + k, 2.2, 3);
+    b.arvore(-hw + 6 + k * 19 + b.entre(910 + k, -3, 3), 0.05, -hd + R2 + 0.5, { alt: b.entre(920 + k, 7, 9.5), raio: R2, especie: k % 2 ? 'oiti' : 'mata2' });
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ agroindústria (S3b)
+
+/**
+ * Agroindústria (complexos de cooperativas de grãos): o bloco de silos de concreto (2 x 3) com a casa de máquinas e a
+ * torre do elevador, a galeria de correia até o galpão de processamento com o lanternim, os tanques verticais de óleo, a
+ * chaminé da caldeira e as docas de expedição com os caminhões-baú.
+ */
+function agroindustria(b) {
+  const hw = b.w / 2;
+  const hd = b.d / 2;
+  const chao = mat(F.PISO, '#a09a8d');
+  const conc = mat(F.CONCRETO, '#bdb8ae');
+  const aco = mat(F.METAL, '#8e9396');
+  const claro = mat(F.METAL, '#c9cac5');
+  lote(b, chao);
+  // bloco de silos de concreto: duas fileiras de três, com a casa de máquinas no topo e a torre do elevador
+  const sx0 = -hw + 9;
+  const sz0 = -hd + 9;
+  for (let j = 0; j < 2; j++) {
+    for (let i = 0; i < 3; i++) b.cilindro(sx0 + i * 7.2, -ENTERRA, sz0 + j * 7.2, 3.5, ENTERRA + 32, conc, { topo: false, l1: true, lados: b.lod ? 8 : 16 });
+  }
+  b.caixa(sx0 + 7.2, 32, sz0 + 3.6, 22, 6, 11, conc, { topo: mat(F.LAJE, '#8f8b84'), l1: true });
+  if (b.lod === 0) b.caixa(sx0 + 7.2, 38, sz0 + 3.6, 22.4, 0.5, 11.4, mat(F.LAJE, '#6f7275'), {});
+  b.caixa(sx0 + 14.4 + 4.4, -ENTERRA, sz0 + 3.6, 4, ENTERRA + 42, 4, conc, { topo: aco, l1: true });
+  // galeria de correia do topo dos silos ao galpão de processamento
+  correia(b, [sx0 + 7.2, 35, sz0 + 3.6], [hw - 14, 14.5, -hd + 20], { larg: 1.5, cor: '#a7adb0', l1: true });
+  // galpão de processamento no fundo à direita, com o lanternim e as docas de expedição na frente
+  galpao(b, hw - 22, -hd + 20, 40, 20, 11, { cor: '#c4c6c3', lanternim: true });
+  for (let k = 0; k < 3; k++) b.caixa(hw - 34 + k * 12, 0, -hd + 30.9, 6, 1.1, 2.2, mat(F.CONCRETO, '#a9a399'), {});
+  // tanques verticais de óleo e a tubulação até o galpão
+  for (let k = 0; k < 3; k++) b.cilindro(-hw + 8 + k * 6.4, -ENTERRA, -hd + 28, 2.6, ENTERRA + 9, claro, { topo: aco, l1: true, lados: b.lod ? 8 : 12 });
+  if (b.lod === 0) b.tubo([-hw + 8, 9.4, -hd + 28], [hw - 40, 6, -hd + 28], 0.2, aco, { lados: 4 });
+  // chaminé da caldeira, ao lado do galpão
+  b.cilindro(hw - 3, -ENTERRA, -hd + 4, 1.1, ENTERRA + 30, conc, { topo: mat(F.CONCRETO, '#4a4542'), l1: true });
+  // caminhões-baú na doca e o pátio de manobra
+  b.veiculo(hw - 34, 0.08, -hd + 38, Math.PI, { comp: 11, larg: 2.5, alt: 2.8, mat: corHolding(), corCabine: '#d6d6d0' });
+  b.veiculo(hw - 22, 0.08, -hd + 38, Math.PI, { comp: 11, larg: 2.5, alt: 2.8, mat: mat(F.METAL, '#cfd0cc'), corCabine: '#d6d6d0' });
+  if (b.lod === 0) for (let k = 0; k < 4; k++) b.caixa(-hw + 6 + k * 2.2, 0.08, hd - 9, 1.8, 1.2, 1.2, mat(F.METAL, '#b8ab8a'), {});
+  letreiro(b, -hw + 12, 0.05, hd - 0.8, 8, 1.6);
+}
+
 /** Geradores dos prédios da Holding (o id é o de data/holding.js). */
 export const MODELOS_HOLDING = Object.freeze({
-  escritorioObra, pedreira: (b) => pedreira(b), areal, olaria, concreteira, mina, cimenteira, vidraria, serraria, manejo,
+  escritorioObra, pedreira: (b) => pedreira(b), areal, olaria, concreteira, mina, cimenteira, vidraria, serraria, manejo, fazenda, agroindustria,
 });

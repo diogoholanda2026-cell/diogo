@@ -37,7 +37,6 @@ export const MODELO = Object.freeze({
   intra: 0.5, // minutos da viagem dentro da própria zona (somados ao terminal)
   limite: 90, // a busca para aos 90 minutos (f já vale 0,07%)
   fatorMax: 10, // o tempo de uma ligação nunca passa de 10 vezes o livre
-  reuso: 0.02, // trocas de tempo abaixo de 2% mantêm a árvore da passada anterior
 });
 
 // f(c) em passos de 0,1 minuto; entre dois passos, interpolação linear (só multiplicação e soma)
@@ -172,7 +171,6 @@ export function* atribuir(e) {
 
   // tempo de cada ligação com o fluxo `fl` (por 2 x aresta + sentido) dividido por `esc`
   const tm = new Float64Array(m);
-  const tmVelho = new Float64Array(m);
   const tempos = (fl, esc) => {
     const a = MODELO.bprA;
     const maximo = MODELO.fatorMax;
@@ -186,7 +184,7 @@ export function* atribuir(e) {
     }
   };
 
-  // árvores guardadas (ordem de saída e ligação de chegada) para reaproveitar quando o tempo quase não muda
+  // árvores guardadas (ordem de saída e ligação de chegada) para reaproveitar quando continuam as mais curtas
   const guardaOrd = new Array(Z).fill(null);
   const guardaPred = new Array(Z).fill(null);
   const guardaN = new Int32Array(Z);
@@ -207,30 +205,16 @@ export function* atribuir(e) {
     const parte = passadas[p];
     if (p === 0) tempos(ant, 1);
     else tempos(acum, feito);
-    // se o tempo mal mudou desde a passada que gerou as árvores guardadas, elas continuam valendo
-    let reusar = p > 0;
-    if (reusar) {
-      for (let k = 0; k < m; k++) {
-        const v = tmVelho[k];
-        const d = tm[k] - v;
-        if ((d < 0 ? -d : d) > MODELO.reuso * v) {
-          reusar = false;
-          break;
-        }
-      }
-    }
-    if (!reusar) tmVelho.set(tm);
     const ultima = p === passadas.length - 1;
     for (let i = 0; i < Z; i++) {
       if (P[i] <= 0) continue;
-      let o;
-      let pr;
-      let no;
-      if (reusar && guardaOrd[i]) {
-        o = guardaOrd[i];
-        pr = guardaPred[i];
-        no = guardaN[i];
-        // refaz as distâncias pela árvore guardada, com os tempos novos (a ordem de saída serve: pai antes de filho)
+      // a árvore da passada anterior continua valendo se, com os tempos novos, nenhuma ligação melhora o tempo de
+      // ninguém (condição de otimalidade): o resultado é o do Dijkstra, sem rodá-lo
+      let reutil = false;
+      if (p > 0 && guardaOrd[i]) {
+        const o = guardaOrd[i];
+        const pr = guardaPred[i];
+        const no = guardaN[i];
         dist.fill(Infinity);
         for (let k = zIni[i]; k < zIni[i + 1]; k++) dist[zNo[k]] = 0;
         for (let q = 0; q < no; q++) {
@@ -238,10 +222,23 @@ export function* atribuir(e) {
           const k = pr[v];
           if (k >= 0) dist[v] = dist[G.de[k]] + tm[k];
         }
-        nOrd = no;
-        for (let q = 0; q < no; q++) ord[q] = o[q];
-        pred.set(pr);
-      } else {
+        reutil = true;
+        for (let k = 0; k < m; k++) {
+          const du = dist[G.de[k]];
+          if (du === Infinity) continue;
+          const nd = du + tm[k];
+          if (nd <= MODELO.limite && nd < dist[dest[k]] - 1e-9) {
+            reutil = false;
+            break;
+          }
+        }
+        if (reutil) {
+          nOrd = no;
+          ord.set(o);
+          pred.set(pr);
+        }
+      }
+      if (!reutil) {
         arvore(i, tm);
         if (p < passadas.length - 1) {
           guardaOrd[i] = ord.slice(0, nOrd);
@@ -256,7 +253,7 @@ export function* atribuir(e) {
         for (let k = zIni[j]; k < zIni[j + 1]; k++) {
           const v = zNo[k];
           const d = dist[v];
-          if (d === Infinity) continue;
+          if (d > MODELO.limite) continue; // além do limite (ou sem caminho): fora
           const a = atr[v];
           w += a;
           s += a * d;
@@ -293,7 +290,7 @@ export function* atribuir(e) {
         const q = (parte * t) / wvec[j];
         for (let k = zIni[j]; k < zIni[j + 1]; k++) {
           const v = zNo[k];
-          if (dist[v] !== Infinity) dem[v] += q * atr[v];
+          if (dist[v] <= MODELO.limite) dem[v] += q * atr[v];
         }
         carrega = true;
       }

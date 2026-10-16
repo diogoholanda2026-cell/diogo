@@ -6,6 +6,9 @@
 // Roda sozinho: node ferramentas/testes/mercadoria.teste.mjs (o simular --testes descobre e roda).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { PREDIO, TIPO_PREDIO } from '../../fonte/contratos/flags.js';
+import { FAMILIA_ZONA } from '../../fonte/sim/predios.js';
+import { ocupacaoDe } from '../../fonte/sim/cidadaos.js';
 import { MERCADORIA } from '../../fonte/data/mercadoria.js';
 import { ECONOMIA, REGRAS_DONO } from '../../fonte/data/economia.js';
 import { balancoMercadoria, sistemaMercadoria, custoImportacao } from '../../fonte/sim/mercadoria.js';
@@ -20,9 +23,16 @@ function ocupacaoCheia(sim, frac = 1) {
   sim.json.cidade.ocupacao = [frac, frac, frac, frac];
 }
 
-/** Uma cidade com `ind` fábricas e `com` lojas prontas (as vagas vêm do catálogo no nível 1). */
+/**
+ * Uma cidade com `ind` fábricas e `com` lojas prontas (as vagas vêm do catálogo no nível 1). O comércio e a indústria que
+ * o mapa já traz (a Vila de Santa Cida tem lojas) saem da conta: só os de agora consomem e produzem.
+ */
 function cidade(semente, ind, com) {
   const { sim } = ruaComRedes(semente);
+  const P = sim.tabelas.predios;
+  for (let i = 0; i < P.n; i++) {
+    if (P.viva[i] && P.tipo[i] === TIPO_PREDIO.ZONA && ['com', 'ind'].includes(FAMILIA_ZONA[P.zona[i]])) P.flags[i] |= PREDIO.ABANDONADO;
+  }
   ocupacaoCheia(sim);
   const f = ind ? povoar(sim, 'industria', -330, -460, 50, ind) : [];
   const l = com ? povoar(sim, 'comBaixa', -560, -460, 80, com) : [];
@@ -70,12 +80,11 @@ test('produção e consumo pelos empregos ocupados, com a falta importada e a so
     ocupacaoCheia(sim, 0.5);
     const b = balancoMercadoria(sim);
     assert.ok(Math.abs(b.producao - m.producao / 2) < 0.6 && Math.abs(b.consumo - m.consumo / 2) < 0.6);
-    // o nível sobe a produção em 8% por nível
+    // o nível sobe a produção em 8% por nível (e traz as vagas do nível no catálogo)
     ocupacaoCheia(sim, 1);
-    const antes = balancoMercadoria(sim).producao;
     for (const i of f) P.nivel[i] = 3;
-    const depois = balancoMercadoria(sim).producao;
-    assert.ok(Math.abs(depois / antes - (1 + 2 * MERCADORIA.nivelProducao)) < 0.02, `${depois / antes}`);
+    const esperado = f.reduce((t, i) => t + ocupacaoDe(sim, i).ocupadas * (1 + 2 * MERCADORIA.nivelProducao), 0);
+    assert.ok(Math.abs(balancoMercadoria(sim).producao - esperado) < 0.06, `${balancoMercadoria(sim).producao} contra ${esperado}`);
     // fábrica em obra ou abandonada não produz
     for (const i of f) P.flags[i] |= 1;
     assert.equal(balancoMercadoria(sim).producao, 0);
@@ -88,7 +97,7 @@ test('produção e consumo pelos empregos ocupados, com a falta importada e a so
 test('a falta é importada a 160% do preço base: despesa corrente da ligação externa; a sobra não rende nada', () => {
   const fecha = abrirM1b();
   try {
-    const { sim } = cidade('merc-custo', 1, 5);
+    const { sim } = cidade('merc-custo', 0, 5);
     sistemaMercadoria(sim);
     const m = sim.agregados.mercadoria;
     assert.ok(m.importada > 0, `importada ${m.importada}`);
@@ -98,6 +107,7 @@ test('a falta é importada a 160% do preço base: despesa corrente da ligação 
     const c = sim.custos.lista().find((x) => x.nome === 'ligacao.mercadoria');
     assert.ok(c && Math.abs(c.valor - esperado) < 1e-9);
     // o orçamento da economia põe a despesa em "ligação" (a regex da economia pega 'ligacao')
+    rodadas(sim, 2);
     const hora = sim.q.orcamento ? sim.q.orcamento() : null;
     if (hora?.despesas) assert.ok(hora.despesas.ligacao >= esperado - 1e-6, JSON.stringify(hora.despesas));
     // a regra do dono não mudou: o Depósito, o lote e as faixas da Contribuição

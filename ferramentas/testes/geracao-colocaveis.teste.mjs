@@ -312,7 +312,7 @@ test('seleção: o raio acerta o colocável pela caixa girada e pela planta ante
   assert.equal(raioNaCaixaDoLote([P.x[1] + 60, 300, P.z[1]], [0, -1, 0], P.x[1], P.y[1], P.z[1], P.rot[1], [-10, -10, 10, 10, 0, 4]), null);
 });
 
-test('cena servicos: os 24 tipos ganham lugar na cidade sintética, de frente para a via, sem água nem sobreposição', async () => {
+test('cena servicos: os 26 tipos ganham lugar na cidade sintética, de frente para a via, sem água nem sobreposição', async () => {
   const { gerarCidadeSintetica } = await import('../cidade-sintetica.mjs');
   const { escolherLugares, construirNaCena, BAIRROS } = await import('../../fonte/render/cenas/servicos.js');
   const { sim } = gerarCidadeSintetica({});

@@ -274,8 +274,9 @@ function iniciar(sim, e, l) {
         return false;
       }
     } else {
-      const tirou = area ? extrair(sim, item.recurso.tipo, area, l.n * item.recurso.porUnidade) : 0;
-      lote = Math.floor(tirou / item.recurso.porUnidade);
+      // a grade guarda inteiros: tira o teto do que o lote pede (porUnidade 0,5 do calcário: lote ímpar gasta 1 a mais)
+      const tirou = area ? extrair(sim, item.recurso.tipo, area, Math.ceil(l.n * item.recurso.porUnidade)) : 0;
+      lote = Math.min(l.n, Math.floor(tirou / item.recurso.porUnidade));
       if (lote <= 0) {
         l.parada = 'recurso';
         return false;

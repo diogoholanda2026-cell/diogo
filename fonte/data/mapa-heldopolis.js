@@ -333,8 +333,12 @@ const MORROTES = { altura: 55, raio: [1500, 2900] };
  */
 const DETALHE_RELEVO = { x0: -1104, z0: -1616, lado: 3216, passo: 16 };
 
-/** Calcário: faixa a noroeste, na encosta sul da Serra do Held, fora da área inicial (D3, D90). Polígono. */
-const CALCARIO = [[-980, -1880], [-420, -1930], [-60, -1820], [-120, -1600], [-560, -1570], [-940, -1650]];
+/**
+ * Calcário: a planície alta a noroeste, no ladrilho (5, 5), colado à área inicial pelo lado oeste e fora dela (D3, D90):
+ * a primeira licença de ladrilho (marco 2) abre a Mina e a cadeia do cimento. Era uma faixa na encosta da Serra do Held,
+ * mas ali o chão passa de 30% e nenhuma planta de Mina (64 x 56 m, aplainar até 12,8 m) cabia (S3b). Polígono.
+ */
+const CALCARIO = [[-1500, -1530], [-1130, -1530], [-1100, -1420], [-1150, -1290], [-1260, -1250], [-1400, -1290], [-1490, -1400]];
 
 // ------------------------------------------------------------------------------------------------ rodovia e Vila
 

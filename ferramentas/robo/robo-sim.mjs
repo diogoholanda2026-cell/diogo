@@ -2,7 +2,8 @@
 // e o relatório de marcos, moradores, bem-estar, renda, caixa, dívida, fila da frota, objetivos e ms por tique (p95,
 // p99 e máximo), com o cenário de uma via a cada 10 tiques. O simular --robo chama.
 //
-//   node ferramentas/robo/robo-sim.mjs [--horas 12] [--semente s] [--comprarTempo] [--fazDeConta] [--json arquivo]
+//   node ferramentas/robo/robo-sim.mjs [--horas 12] [--semente s] [--comprarTempo] [--fazDeConta] [--m1b] [--json arquivo]
+//   (--m1b abre o M1b: decisões novas, a cadeia do cimento com a Mina e a Cimenteira, o robô joga a calibração da S3b)
 //
 // Modos: com a cidade da S2a publicada, o robô joga a cidade de verdade (vias, zonas, serviços pelo construir); com
 // --fazDeConta (ou sem a S2a), a cidade é a de faz de conta pelos agregados (cidade-faz-de-conta.mjs), com as vias e
@@ -11,9 +12,9 @@
 import { writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
-import { ZONAS_ORDEM } from '../../fonte/data/zonas.js';
+import { ZONAS_ORDEM, definirParteAtual } from '../../fonte/data/zonas.js';
 import { XP } from '../../fonte/data/marcos.js';
-import { precoBase } from '../../fonte/data/holding.js';
+import { precoBase, PREDIOS_HOLDING } from '../../fonte/data/holding.js';
 import { SERVICOS } from '../../fonte/data/servicos.js';
 import { dataDoTique, ANO_INICIAL } from '../../fonte/data/historia.js';
 import { SEDE_CENTRO, GLEBA_ENVELOPE } from '../../fonte/data/arcologia-plano.js';
@@ -110,10 +111,11 @@ function ladosDe(q) {
 }
 
 /**
- * A estratégia do robô. op: { comprarTempo, cidadeFalsa (de ligarCidadeFalsa ou null), anotar, ritmo }.
+ * A estratégia do robô. op: { comprarTempo, cidadeFalsa (de ligarCidadeFalsa ou null), anotar, ritmo, m1b (S3b: com o M1b
+ * aberto, faz a cadeia do cimento: o ladrilho do calcário, a Mina e a Cimenteira) }.
  * passo() decide uma rodada: decisões, Holding, serviços, vias e quadras, Arcologia, empréstimo e Depósito.
  */
-export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null, anotar = () => {}, ritmo = 60 } = {}) {
+export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null, anotar = () => {}, ritmo = 60, m1b = false } = {}) {
   const E = {
     sessao: 0,
     feito: new Set(),
@@ -220,7 +222,8 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
   function decidir() {
     if (!sim.q.decisoes) return;
     for (const d of sim.q.decisoes()) {
-      const escolha = { 'vila.agua': 'captacao', 'febre.aurora': caixa() > 150000 ? 'comprar' : 'proteger', 'canal.seshat': 'local' }[d.id] ?? d.padrao;
+      // as do M1b (S3b): a energia segue o contrato, a Mina acelera (mais cimento) e a Vila é reformada com as famílias dentro
+      const escolha = { 'vila.agua': 'captacao', 'febre.aurora': caixa() > 150000 ? 'comprar' : 'proteger', 'canal.seshat': 'local', 'energia.2022': 'contrato', 'mina.licenca': 'acelerar', 'vila.futuro': 'reformar' }[d.id] ?? d.padrao;
       // sem caixa para a opção, espera (no fim do prazo vale a padrão)
       const op = d.opcoes?.find((o) => o.id === escolha);
       if (op?.creditos > caixa() - 20000) continue;
@@ -661,8 +664,9 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
       const quer = E.importarCidade === false ? caixa() > liga : caixa() > desliga;
       if (quer !== (E.importarCidade ?? true) && cmd('cidade.importarAuto', { sim: quer }).ok) E.importarCidade = quer;
     }
-    // cimento importado para a Concreteira
-    if (prod && marco() >= 3 && E.holding.concreteira) {
+    if (m1b) cadeiaDoCimento();
+    // cimento importado para a Concreteira (com a Cimenteira em pé, ela faz o cimento)
+    if (prod && marco() >= 3 && E.holding.concreteira && !E.holding.cimenteira) {
       const cim = prod.itens.find((i) => i.item === 'cimento');
       if (cim && cim.estoque + importando('cimento') < 20 && caixa() > 25000) cmd('importar', { item: 'cimento', n: 30 });
     }
@@ -672,6 +676,43 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
         f?.linhas.forEach((l, k) => l.rodando && cmd('acelerar', { alvo: { predio: ref, linha: k }, minutos: 5 }));
       }
     }
+  }
+
+  /**
+   * M1b (S3b): a cadeia do cimento. No marco 2 a licença compra o ladrilho do calcário (5, 5, colado à área inicial pelo
+   * oeste); com o caixa folgado, uma rua curta na planície, a Mina de frente para ela e a Cimenteira perto do armazém.
+   * Depois disso a Concreteira usa o cimento da Cimenteira em vez de importar.
+   */
+  function cadeiaDoCimento() {
+    if (marco() < 2 || E.holding.cimenteira) return;
+    // só gasta com folga de caixa (a cidade cresce primeiro); desiste depois de muitas tentativas com a folga e sem lugar
+    const folga = (custo) => caixa() > custo + 40000 && !desistir('cadeiaCimento', 300);
+    if (!E.holding.mina) {
+      if (!E.feito.has('ladrilhoCalcario')) {
+        if (!folga(PREDIOS_HOLDING.mina.custo + sim.q.ladrilhos().proximo)) return;
+        if (cmd('ladrilho.comprar', { i: 5, j: 5 }).ok) E.feito.add('ladrilhoCalcario');
+        return;
+      }
+      if (!folga(PREDIOS_HOLDING.mina.custo)) return;
+      // a rua curta e a Mina: tenta algumas posições na planície sobre o calcário até a prévia aceitar
+      for (const z of [-1460, -1400, -1340, -1300]) {
+        if (!E.feito.has(`ruaCalcario${z}`)) {
+          if (!podeObra()) return;
+          if (via('reta', 'rua', [[-1420, z], [-1180, z]], 20000)) E.feito.add(`ruaCalcario${z}`);
+          else continue;
+        }
+        const id = construir('mina', -1300, z - 40, 120);
+        if (id !== null) {
+          E.holding.mina = id;
+          return;
+        }
+      }
+      return;
+    }
+    if (!folga(PREDIOS_HOLDING.cimenteira.custo)) return;
+    const perto = E.holding.escritorioObra ? posicaoDe(E.holding.escritorioObra) : { x: -886, z: -420 };
+    const id = construir('cimenteira', perto.x, perto.z, 400);
+    if (id !== null) E.holding.cimenteira = id;
   }
 
   // ---------------------------------------------------------------------------------------------- Arcologia
@@ -685,7 +726,7 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
 
   /** Itens que a Holding não produz agora (importados a 160%, D25): aço e vidro no M1a, e o resto sem o prédio dono. */
   function produz(item) {
-    const p = { brita: 'pedreira', areia: 'areal', argila: 'olaria', tijolo: 'olaria', concreto: 'concreteira' }[item];
+    const p = { brita: 'pedreira', areia: 'areal', argila: 'olaria', tijolo: 'olaria', concreto: 'concreteira', cimento: 'cimenteira', calcario: 'mina' }[item];
     return !!(p && E.holding[p]);
   }
 
@@ -790,7 +831,18 @@ const pct = (v, p) => (v.length ? v[Math.min(v.length - 1, Math.floor(p * v.leng
 /**
  * Joga e devolve o relatório. op: { horas, semente, comprarTempo, fazDeConta, aoProgresso(horas) }.
  */
-export function rodarRobo({ horas = 12, semente = 'robo-1', comprarTempo = false, fazDeConta = null, aoProgresso = null } = {}) {
+export function rodarRobo(op = {}) {
+  // M1b (S3b): abre a parte para o jogo do robô e devolve como estava
+  if (!op.m1b) return rodarRoboNaParte(op);
+  const antes = definirParteAtual('M1b');
+  try {
+    return rodarRoboNaParte(op);
+  } finally {
+    definirParteAtual(antes);
+  }
+}
+
+function rodarRoboNaParte({ horas = 12, semente = 'robo-1', comprarTempo = false, fazDeConta = null, aoProgresso = null, m1b = false } = {}) {
   const agora = () => performance.now();
   const sim = criarSimulacao({ semente, cronometro: agora });
   const real = !sim.substitutoAtivo('agregados') && !!sim._comandos?.get('construir') && !sim._comandos.get('construir').substituto;
@@ -800,13 +852,13 @@ export function rodarRobo({ horas = 12, semente = 'robo-1', comprarTempo = false
   const anotar = (t, nome, args) => {
     if (nome === 'emprestimo.tomar') tomado[dataDoTique(t).ano] = (tomado[dataDoTique(t).ano] ?? 0) + args.valor;
   };
-  const est = criarEstrategia(sim, { comprarTempo, cidadeFalsa, anotar });
+  const est = criarEstrategia(sim, { comprarTempo, cidadeFalsa, anotar, m1b });
   const T = Math.round(horas * HORA);
   const tiques = new Float64Array(T);
   const R = {
     modo: usarFalsa ? 'cidade de faz de conta (agregados)' : 'cidade da S2a',
     arcologia: temComando(sim, 'arcologia.iniciar') ? 'X1b' : 'sem a X1b (marco 7 indisponível)',
-    semente, horas, comprarTempo,
+    semente, horas, comprarTempo, m1b,
     marcos: [],
     caixaMin: Infinity, caixaMinTique: 0, caixa1h: null, zeradoTiques: 0, zeradoNaPrimeiraHora: false,
     emprestimosPrimeiraHora: 0, dividaMax: 0, tomadoPorAno: {}, dividaFimAno: null,
@@ -886,6 +938,9 @@ export function rodarRobo({ horas = 12, semente = 'robo-1', comprarTempo = false
   R.metas = metasA4(R);
   // cenário do A5: uma obra de via a cada 10 tiques, com o tique medido à parte (depois do relatório do jogo)
   R.via = cenarioVia(sim, agora);
+  // M1b (S1c, A4): o gargalo do trânsito agregado e as ferramentas do M1 que o resolvem
+  R.gargalo = cenarioGargalo(sim);
+  R.metas.gargalo = metaGargalo(R.gargalo);
   return { R, sim };
 }
 
@@ -930,6 +985,51 @@ function cenarioVia(sim, agora) {
   return { vias: feitas, tique: { p95: pct(tt, 0.95), p99: pct(tt, 0.99), max: tt[tt.length - 1] }, comando: { p50: pct(tc, 0.5), p95: pct(tc, 0.95), max: tc[tc.length - 1] } };
 }
 
+/**
+ * Resolve os gargalos (v/c acima de 1) com as ferramentas do M1: melhora a via para o tipo que o aviso sugere (avenida,
+ * avenida grande ou mão única), até `max` arestas, e roda `tiques` para a atribuição seguinte. Devolve o que mudou.
+ * @returns {{ tentadas: number, melhoradas: number, resolvidas: number, restantes: number, antes: number, depois: number }}
+ */
+export function resolverGargalos(sim, { max = 6, tiques = 130 } = {}) {
+  const T = sim.transito;
+  const antes = T.gargalos();
+  const alvos = [];
+  let melhoradas = 0;
+  for (const g of antes) {
+    if (alvos.length >= max) break;
+    const s = T.sugestao(g.e);
+    if (!s.para) continue; // só resta uma via paralela: não é obra de melhorar
+    sim.holding.receber(1e6, 'teste'); // o caixa do cenário (fora do relatório do jogo)
+    const r = sim.cmd('via.melhorar', { arestas: [g.ref], tipo: s.para, sessao: `gargalo.${g.e}` });
+    alvos.push({ e: g.e, vc: g.vc, ok: !!r.ok });
+    if (r.ok) melhoradas++;
+  }
+  if (melhoradas) sim.rodar(tiques, { sincrono: true });
+  const depois = T.gargalos();
+  const resolvidas = alvos.filter((a) => a.ok && !depois.some((g) => g.e === a.e)).length;
+  return { tentadas: alvos.length, melhoradas, resolvidas, restantes: depois.length, antes: antes.length, depois: depois.length };
+}
+
+/** Cenário do A4 (M1b): a medida do gargalo no fim da partida e, se há, a ferramenta de melhorar aplicada. */
+function cenarioGargalo(sim) {
+  if (!sim.transito) return null;
+  const r0 = sim.transito.resumo();
+  const R = { moradores: sim.agregados.populacao, gargalos: r0.gargalos, vcMax: r0.vcMax, tempoMedio: r0.tempoMedio, velocidadeMedia: r0.velocidadeMedia, resolucao: null };
+  const g = sim.transito.gargalos();
+  R.naRodovia = g.some((x) => x.rodovia);
+  R.pior = g[0] ? { nome: g[0].nome, vc: Math.round(g[0].vc * 100) / 100 } : null;
+  if (g.length) R.resolucao = resolverGargalos(sim);
+  return R;
+}
+
+/** Meta do A4 no M1b: com 25 mil moradores, sem mexer nas vias, ao menos um gargalo; a ferramenta de melhorar o resolve. */
+function metaGargalo(G) {
+  const meta = 'com 25 mil moradores, ao menos um gargalo (v/c acima de 1) sem mexer nas vias, e melhorar a via o resolve';
+  if (!G || G.moradores < 25000) return { ok: null, meta };
+  const res = G.resolucao;
+  return { ok: G.gargalos >= 1 && !!res && res.melhoradas > 0 && res.resolvidas > 0, meta };
+}
+
 /** Metas parciais do A4 antes da calibração (marco 1 e marco 3) e as que já dá para medir. */
 function metasA4(R) {
   const tq = (n) => R.marcos.find((m) => m.n === n)?.tique ?? null;
@@ -955,7 +1055,7 @@ function metasA4(R) {
 export function textoRelatorio(R) {
   const f = (v, c = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: c, minimumFractionDigits: c }) : String(v));
   const linhas = [];
-  linhas.push(`robô da simulação: ${R.horas} h de jogo, semente ${R.semente}, ${R.modo}, Arcologia ${R.arcologia}${R.comprarTempo ? ', comprando tempo' : ''}`);
+  linhas.push(`robô da simulação: ${R.horas} h de jogo, semente ${R.semente}, ${R.modo}, Arcologia ${R.arcologia}${R.comprarTempo ? ', comprando tempo' : ''}${R.m1b ? ', com o M1b aberto' : ''}`);
   linhas.push(`  marcos: ${R.marcos.map((m) => `${m.n} ${m.nome} em ${m.hora}`).join(' · ') || 'nenhum'}`);
   linhas.push(`  fim: ${f(R.moradores)} moradores, bem-estar ${f(R.bemEstar, 1)} (tarifa ${R.tarifa}), contribuição ${f(R.rendaHora)}/h, saldo ${f(R.saldoHora)}/h, marco ${R.marcoFim.n} (${f(R.marcoFim.xp)} XP)`);
   linhas.push(`  caixa: mínimo ${f(R.caixaMin)} em ${hm(R.caixaMinTique)}, com 1 h ${f(R.caixa1h)}, no fim ${f(R.caixaFim)}; zerado por ${f(R.zeradoTiques / 60, 1)} min de jogo`);
@@ -968,6 +1068,10 @@ export function textoRelatorio(R) {
   if (R.via?.nota) linhas.push(`  cenário de vias: ${R.via.nota}`);
   if (R.via?.tique) linhas.push(`  cenário uma obra de via a cada 10 tiques (${R.via.vias} feitas): tique p95 ${f(R.via.tique.p95, 3)} · p99 ${f(R.via.tique.p99, 3)} · máximo ${f(R.via.tique.max, 3)} ms; via.construir p50 ${f(R.via.comando.p50, 2)} · p95 ${f(R.via.comando.p95, 2)} · máximo ${f(R.via.comando.max, 2)} ms`);
   linhas.push(`  metas A4 parciais: ${Object.entries(R.metas).map(([k, m]) => `${k} ${m.ok === null ? 'sem medida' : m.ok ? 'dentro' : 'FORA'}`).join(' · ')}`);
+  if (R.gargalo) {
+    const G = R.gargalo;
+    linhas.push(`  trânsito: viagem média ${f(G.tempoMedio, 1)} min, vias a ${f(G.velocidadeMedia * 100)}% da velocidade livre, ${G.gargalos} gargalos (v/c máximo ${f(G.vcMax, 2)})${G.pior ? `, o pior em ${G.pior.nome}` : ''}${G.resolucao ? `; melhorar resolveu ${G.resolucao.resolvidas} de ${G.resolucao.melhoradas}` : ''}`);
+  }
   const falhas = Object.entries(R.falhas).sort((a, b) => b[1] - a[1]).slice(0, 10);
   if (falhas.length) linhas.push(`  recusas mais comuns: ${falhas.map(([k, n]) => `${k} x${n}`).join(', ')}`);
   linhas.push(`  erros: ${R.erros.length ? R.erros.slice(0, 5).join(' | ') : '[]'}`);
@@ -975,7 +1079,7 @@ export function textoRelatorio(R) {
 }
 
 function lerArgs(argv) {
-  const o = { horas: 12, semente: 'robo-1', comprarTempo: false, fazDeConta: null, json: null };
+  const o = { horas: 12, semente: 'robo-1', comprarTempo: false, fazDeConta: null, json: null, m1b: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--horas') o.horas = +argv[++i];
@@ -983,6 +1087,7 @@ function lerArgs(argv) {
     else if (k === '--comprarTempo') o.comprarTempo = true;
     else if (k === '--fazDeConta') o.fazDeConta = true;
     else if (k === '--cidadeReal') o.fazDeConta = false;
+    else if (k === '--m1b') o.m1b = true;
     else if (k === '--json') o.json = argv[++i];
   }
   return o;
