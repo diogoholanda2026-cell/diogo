@@ -191,7 +191,9 @@ function medir(sim, obj) {
       if (sim.json.historia?.vilaNova) return { feito: 3, total: 3, params: { n: sim.json.historia.vilaNova.casas } };
       const v = estadoVila(sim);
       const feito = (v.criterios.rede ? 1 : 0) + (v.criterios.bemEstar ? 1 : 0) + (v.criterios.caixa ? 1 : 0);
-      return { feito: v.restantes > 0 ? feito : 3, total: 3, params: { n: v.restantes, bem: Math.round(VILA_NOVA.bemEstarMin) } };
+      // sem casa de autoconstrução (demolidas ou ausentes) e sem a requalificação feita, não há o que reformar: o objetivo
+      // não fecha de graça (e `pode` o tira da lista, para não travar o domínio)
+      return { feito: v.restantes > 0 ? feito : Math.min(feito, 2), total: 3, params: { n: v.restantes, bem: Math.round(VILA_NOVA.bemEstarMin) } };
     }
     case 'linhasAuto': {
       const tipos = arg.split(',');
@@ -257,7 +259,11 @@ function alvoDe(sim, obj) {
 const temRequer = (sim, requer) => !requer || [].concat(requer).some((m) => temMarca(sim, m));
 
 const pode = (sim, obj) =>
-  (obj.marco === undefined || sim.progresso.marco().n >= obj.marco) && temRequer(sim, obj.requer) && (!obj.parte || parteNoJogo(obj.parte));
+  (obj.marco === undefined || sim.progresso.marco().n >= obj.marco) && temRequer(sim, obj.requer) && (!obj.parte || parteNoJogo(obj.parte))
+  && (obj.medida !== 'vilaNova' || vilaPossivel(sim));
+
+/** A Vila ainda pode ser requalificada (há casa de autoconstrução) ou já foi: sem uma coisa nem outra o objetivo não abre. */
+const vilaPossivel = (sim) => !!sim.json.historia?.vilaNova || estadoVila(sim).restantes > 0;
 
 /** O objetivo aberto de um domínio: os que uma decisão pôs na frente, depois a lista, no primeiro não feito. */
 function abertoDe(sim, dominio) {
@@ -300,10 +306,8 @@ export function consultaObjetivos(sim) {
 /** O que alguns objetivos fazem na hora em que se cumprem (`aoCumprir` em data/objetivos.js); true se fez. */
 const AO_CUMPRIR = Object.freeze({
   // a Holding reforma as casas da Vila (S3b, D95); o Legado dela vem da recompensa do objetivo
-  vilaNova: (sim) => {
-    if (sim.json.historia?.vilaNova || estadoVila(sim).restantes === 0) return true;
-    return requalificarVila(sim);
-  },
+  // só vale com a obra feita: sem casa a reformar (restantes 0) e sem a requalificação, não cumpre (false)
+  vilaNova: (sim) => !!sim.json.historia?.vilaNova || requalificarVila(sim),
 });
 
 /** Contínuos: refeitos pelo estado, nunca acabam (sempre há um aberto). */

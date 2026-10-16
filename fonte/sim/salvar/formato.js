@@ -8,7 +8,17 @@ import { jsonCanonico, trocarConteudo, ehTipado } from '../../comum/util.js';
 
 /** Migrações de dados: MIGRACOES[v](cabecalho, secoes) leva um save da versão v para v + 1. */
 // v1 -> v2 (16/10/2026): seções novas (transito, ar, ruido, esgoto, Ato 1 completo) nascem vazias ao carregar; nada a converter
-export const MIGRACOES = { 1: () => {} };
+// v2 -> v3 (16/10/2026): a grade 'arAnt' (a nuvem do começo da rodada do ambiente) entra no save; um save da v2 ganha uma cópia
+// da 'ar' (no meio da rodada é a melhor leitura que resta); as fontes da rodada ('ambienteFontes') são coletadas de novo
+export const MIGRACOES = {
+  1: () => {},
+  2: (cab, secoes) => {
+    const ar = secoes.get('grade.ar');
+    if (!cab.grades?.ar || !ar) return;
+    cab.grades.arAnt = { ...cab.grades.ar };
+    secoes.set('grade.arAnt', ar.slice());
+  },
+};
 
 const TIPO_DE = {
   Float64Array: 'f64', Float32Array: 'f32', Int32Array: 'i32', Uint32Array: 'u32',

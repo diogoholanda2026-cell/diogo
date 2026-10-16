@@ -16,6 +16,7 @@ import { indiceZona } from '../../fonte/data/zonas.js';
 import { AV } from '../../fonte/sim/predios.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { MES } from '../../fonte/comum/relogio.js';
+import { SAVE } from '../../fonte/contratos/save.js';
 import { abrirM1b, ruaComRedes, povoar, pintar, servicoPronto, holdingPronto, rodadas } from './apoio-m1b.mjs';
 
 const N = GRADE_AMBIENTE.n;
@@ -396,6 +397,111 @@ test('duas partidas iguais dão a mesma grade de ar e de ruído, tique a tique',
       b.rodar(37, { sincrono: true });
       assert.equal(a.q.hash(), b.q.hash(), `tique ${a.tique}`);
     }
+  } finally {
+    fecha();
+  }
+});
+
+test('a emenda entre faixas: toda faixa lê a nuvem do começo da rodada (decaimento e emissão não entram duas vezes)', () => {
+  const fecha = abrirM1b();
+  try {
+    const { sim } = ruaComRedes('amb-emenda');
+    // nuvem uniforme e nenhuma fonte: o vento só a empurra e a difusão a mantém; resta o decaimento de 10%
+    sim.grades.ar.dados.fill(100);
+    sistemaAmbiente(sim, 0, 4);
+    const F = sim.json.ambienteFontes;
+    for (const k of ['arCel', 'arVal', 'ruCel', 'ruCls', 'ruVal']) F[k] = F[k].slice(0, 0);
+    for (let k = 1; k < 4; k++) sistemaAmbiente(sim, k, 4);
+    const d = sim.grades.ar.dados;
+    for (let j = 8; j < N - 8; j++) {
+      for (let i = 8; i < N - 8; i++) assert.equal(d[j * N + i], 90, `linha ${j} coluna ${i}: ${d[j * N + i]}`);
+    }
+    // a cópia do começo da rodada ficou como estava e entra no save e no hash
+    assert.equal(sim.grades.arAnt.dados[40 * N + 40], 100);
+    const h = sim.q.hash();
+    sim.grades.arAnt.dados[0] = 7;
+    assert.notEqual(sim.q.hash(), h);
+  } finally {
+    fecha();
+  }
+});
+
+test('a emissão de uma fonte na fronteira das faixas entra uma vez só (a soma é a mesma em qualquer corte)', () => {
+  const fecha = abrirM1b();
+  try {
+    const { sim } = ruaComRedes('amb-fronteira');
+    ocupacaoCheia(sim);
+    // a Cimenteira na linha 64: a primeira da faixa 2, colada na emenda com a faixa 1
+    const i = holdingPronto(sim, 'cimenteira', -520);
+    sim.tabelas.predios.z[i] = -4096 + 64 * 64 + 8;
+    sim.tabelas.predios.x[i] = -520;
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) sistemaAmbiente(sim, k, 4);
+    const d = sim.grades.ar.dados;
+    // simétrico em torno da fonte no sentido vertical: as linhas 63 e 65 (vizinhas da emenda) não saltam uma sobre a outra
+    const col = Math.floor((-520 + 4096) / 64);
+    const v = (j) => d[j * N + col];
+    assert.ok(v(64) > 0);
+    assert.ok(v(63) <= v(64) && v(65) <= v(64), `${v(63)} ${v(64)} ${v(65)}`);
+    assert.ok(Math.abs(v(63) - v(65)) <= 0.35 * v(64), `a emenda não pesa: ${v(63)} contra ${v(65)}`);
+  } finally {
+    fecha();
+  }
+});
+
+test('as fontes são coletadas uma vez por rodada: o que muda depois da faixa 0 só vale na rodada seguinte', () => {
+  const fecha = abrirM1b();
+  try {
+    const { sim } = ruaComRedes('amb-coleta');
+    ocupacaoCheia(sim);
+    holdingPronto(sim, 'cimenteira', -520);
+    sistemaAmbiente(sim, 0, 4);
+    const F = sim.json.ambienteFontes;
+    assert.equal(F.rodada, 0);
+    assert.ok(F.arCel.length > 0 && F.ruCel.length > 0 && F.ruCls.length === F.ruCel.length && F.ruVal.length === F.ruCel.length);
+    const tinha = [...F.arCel];
+    // a fábrica some no meio da rodada: as faixas 1 a 3 ainda usam a coleta da faixa 0
+    const P = sim.tabelas.predios;
+    for (let i = 0; i < P.n; i++) if (P.viva[i] && P.tipo[i] !== 0) P.viva[i] = 0;
+    for (let k = 1; k < 4; k++) sistemaAmbiente(sim, k, 4);
+    assert.deepEqual([...sim.json.ambienteFontes.arCel], tinha);
+    assert.ok(maior(sim.grades.ar.dados) > 0);
+    // na rodada seguinte a coleta é refeita
+    sim.rodar(20, { sincrono: true });
+    assert.equal(sim.tique, 20);
+    sistemaAmbiente(sim, 0, 4);
+    assert.equal(sim.json.ambienteFontes.rodada, 1);
+    assert.ok(sim.json.ambienteFontes.arCel.length < tinha.length, 'sem a Cimenteira, sobram só as vias do mapa');
+  } finally {
+    fecha();
+  }
+});
+
+test('um save da versão 2 (sem a grade arAnt) migra para a 3 com a cópia da nuvem', () => {
+  const fecha = abrirM1b();
+  try {
+    const { sim } = ruaComRedes('amb-migra');
+    ocupacaoCheia(sim);
+    holdingPronto(sim, 'cimenteira', -440);
+    sim.rodar(5 * 20 + 8, { sincrono: true });
+    const lido = lerSave(montarSave(sim));
+    assert.equal(lido.cab.versaoSave, SAVE.versaoSave);
+    assert.equal(SAVE.versaoSave, 3);
+    // desfaz o que a v3 acrescentou
+    lido.cab.versaoSave = 2;
+    delete lido.cab.grades.arAnt;
+    lido.secoes.delete('grade.arAnt');
+    delete lido.cab.json.ambienteFontes;
+    migrar(lido);
+    assert.equal(lido.cab.versaoSave, 3);
+    const C = criarSimulacao({ semente: 'amb-migra', modo: 'livre' });
+    aplicarSave(C, lido);
+    assert.deepEqual([...C.grades.ar.dados], [...sim.grades.ar.dados]);
+    assert.deepEqual([...C.grades.arAnt.dados], [...sim.grades.ar.dados]);
+    // a partida segue sem erro (as fontes da rodada são coletadas na hora)
+    C._sistemas.find((s) => s.nome === 'cidadaos').ativo = false;
+    C.rodar(100, { sincrono: true });
+    assert.ok(maior(C.grades.ar.dados) > 0);
+    assert.deepEqual(C.erros, []);
   } finally {
     fecha();
   }

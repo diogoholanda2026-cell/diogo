@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import { Botao } from '../../comp/Botao.jsx';
 import { Segmentado } from '../../comp/Segmentado.jsx';
 import { Glifo } from '../../glifos/Glifo.jsx';
-import { CAMADAS_UI, paraRender, modeloLegenda, criarVigiaDiario } from '../../mundo/camadas.js';
+import { CAMADAS_UI, camadasDoPopover, paraRender, modeloLegenda, criarVigiaDiario } from '../../mundo/camadas.js';
 import { FILTROS_AVISOS, filtroAtual, mudarFiltro } from '../../mundo/marcadores.js';
 import { PREDIO } from '../../../contratos/flags.js';
 import { RODADA } from '../../../comum/relogio.js';
@@ -219,7 +219,7 @@ export function PopoverCamadas({ ui, aberto }) {
   const ligada = loja.camada.value;
   const ids = ui.obterSim()?.camadas?.ids?.() ?? null;
   const filtro = filtroAtual(loja.prefs.value);
-  const lista = CAMADAS_UI.filter((c) => !ids || ids.includes(c.id) || c.id !== 'valor');
+  const lista = camadasDoPopover(ids);
   return (
     <div ref={ref} class="x3-pop" role="dialog" aria-label={t('x3.camadas.titulo')} data-popover="camadas">
       <h2>{t('x3.camadas.titulo')}</h2>

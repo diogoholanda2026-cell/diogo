@@ -214,7 +214,8 @@ export function efeitoMedia(sim, celulas, zona) {
   for (const m of ms) dens += PREDIOS[m].niveis[0].moradores / (PREDIOS[m].planta[0] * PREDIOS[m].planta[1]);
   dens /= ms.length || 1;
   const novos = celulas.length * dens;
-  // bem-estar das células novas: base, cobertura das vias delas e as redes (sem rede ligada a quem produz, -25 cada)
+  // bem-estar das células novas: base, cobertura das vias delas, as redes (sem rede ligada a quem produz, -25 cada), o ar, o
+  // ruído e o tempo de viagem do lugar (como em calcularBemEstar)
   const passo = Math.max(1, Math.floor(celulas.length / 8));
   let soma = 0;
   let n = 0;
@@ -226,6 +227,10 @@ export function efeitoMedia(sim, celulas, zona) {
     if (!temOferta(sim, e, 'agua')) b += BEM.semAgua;
     if (!temOferta(sim, e, 'energia')) b += BEM.semEnergia;
     if (m1bAtivo() && !temOferta(sim, e, 'esgoto')) b += BEM.semEsgoto;
+    // ar, ruído e tempo de viagem do lugar da célula (os mesmos termos de calcularBemEstar; zero antes do M1b)
+    const amb = termoAmbiente(sim, C.x[c], C.z[c]);
+    b += amb.ar + amb.ruido;
+    b += sim.transito?.bemEstarNoPonto?.(C.x[c], C.z[c]) ?? 0;
     soma += clamp(b, 0, 100);
     n++;
   }

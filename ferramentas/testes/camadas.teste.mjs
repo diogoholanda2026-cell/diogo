@@ -12,11 +12,11 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
 
-import { CAMADAS_UI, PALETA, paleta, paraRender, valorNaTabela, modeloLegenda, rampaDivergente, luminancia, contraste, escalaDe, criarVigiaDiario, diarioMarcou, faixasDoBemEstar } from '../../fonte/ui/mundo/camadas.js';
+import { CAMADAS_UI, CAMADA_DO_ALERTA, camadasDoPopover, PALETA, paleta, paraRender, valorNaTabela, modeloLegenda, rampaDivergente, luminancia, contraste, escalaDe, criarVigiaDiario, diarioMarcou, faixasDoBemEstar } from '../../fonte/ui/mundo/camadas.js';
 import { escolherAvisos, AVISOS_DA_CAMADA, GLIFOS_PADRAO, FILTROS_AVISOS, filtroAtual } from '../../fonte/ui/mundo/marcadores.js';
 import * as uiMarcadores from '../../fonte/ui/mundo/marcadores.js';
 import { dinheiro, dinheiroPorHora } from '../../fonte/ui/formato.js';
-import { indiceZona } from '../../fonte/data/zonas.js';
+import { indiceZona, definirParteAtual } from '../../fonte/data/zonas.js';
 import { REGRAS_DONO } from '../../fonte/data/economia.js';
 import { mapaAtlas, GLIFOS_ATLAS, PRIMEIRO_DIGITO, ATLAS } from '../../fonte/ui/glifos/atlas.js';
 import { glifo } from '../../fonte/ui/glifos/glifos.js';
@@ -111,6 +111,38 @@ test('camadas do M1a no popover: as 6 da D29 no contrato, com glifo e nome', () 
     assert.ok(c, `${id} no popover`);
     assert.ok(glifo(c.glifo), `glifo ${c.glifo}`);
     assert.ok(temTexto(`camada.${id}`), `nome da camada ${id}`);
+  }
+});
+
+test('o popover traz as camadas do M1b (esgoto, trânsito, ar, ruído, empregos) só com o M1b no jogo, com glifo e nome', () => {
+  const M1B = ['esgoto', 'transito', 'ar', 'ruido', 'empregos'];
+  const antes = definirParteAtual('M1a');
+  try {
+    const m1a = camadasDoPopover(null).map((c) => c.id);
+    for (const id of M1B) assert.ok(!m1a.includes(id), `${id} fora do M1a`);
+    assert.ok(['zonas', 'bemEstar', 'agua', 'energia', 'servicos', 'recursos'].every((id) => m1a.includes(id)));
+    definirParteAtual('M1b');
+    const m1b = camadasDoPopover(null).map((c) => c.id);
+    for (const id of M1B) {
+      assert.ok(m1b.includes(id), `${id} no M1b`);
+      assert.equal(CAMADAS[id]?.parte, 'M1b', id);
+      const c = CAMADAS_UI.find((x) => x.id === id);
+      assert.ok(glifo(c.glifo), `glifo ${c.glifo}`);
+      assert.ok(temTexto(`camada.${id}`), `nome da camada ${id}`);
+    }
+    // com a lista da simulação: só as que ela registrou
+    const sim = criarSimulacao({ semente: 'x3-popover-m1b', modo: 'livre' });
+    const doSim = camadasDoPopover(sim.camadas.ids()).map((c) => c.id);
+    for (const id of M1B) assert.ok(doSim.includes(id), `a simulação registra ${id}`);
+    assert.ok(!camadasDoPopover(['zonas']).some((c) => c.id === 'ar'));
+    // o alerta da cidade leva à camada do problema
+    const alertas = { faltaEsgoto: 'esgoto', transitoParado: 'transito', transitoParadoMao: 'transito', transitoParadoParalela: 'transito', poluicaoAr: 'ar', poluicaoRuido: 'ruido' };
+    for (const [codigo, camada] of Object.entries(alertas)) {
+      assert.equal(CAMADA_DO_ALERTA[codigo], camada, codigo);
+      assert.ok(CAMADAS[camada] && sim.camadas.ids().includes(camada));
+    }
+  } finally {
+    definirParteAtual(antes);
   }
 });
 

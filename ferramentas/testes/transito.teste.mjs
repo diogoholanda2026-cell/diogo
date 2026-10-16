@@ -569,6 +569,19 @@ test('aviso "trânsito parado": a aresta mais cheia, o nome, o ponto e a sugest�
   const mx = (A.p[8 * e] + A.p[8 * e + 6]) / 2;
   const mz = (A.p[8 * e + 1] + A.p[8 * e + 7]) / 2;
   assert.ok(Math.hypot(a.alvo.x - mx, a.alvo.z - mz) < A.comp[e] / 2);
+  // a mão única só serve se o sentido maior cabe nas duas faixas dela (2 x 700 = 1.400 veículos/h): acima disso, melhorar
+  const sentido = (q) => injetar(sim, (f) => {
+    f[2 * e] = q;
+    f[2 * e + 1] = 0.1 * q;
+  });
+  sentido(1400);
+  assert.deepEqual(sugestaoPara(sim, e), { sugestao: 'maoUnica', para: 'ruaMao' }, 'cabe justo na mão única');
+  sentido(1500);
+  assert.deepEqual(sugestaoPara(sim, e), { sugestao: 'melhorar', para: 'avenida' }, 'já passa da mão única: avenida');
+  sentido(2000);
+  assert.deepEqual(sugestaoPara(sim, e), { sugestao: 'melhorar', para: 'avenidaG' }, 'passa até da avenida: avenida grande');
+  assert.equal(aviso().codigo, 'transitoParado');
+  assert.equal(aviso().params.sugestao, 'melhorar');
   // dos dois lados cheios: melhorar, para uma avenida; v/c de 2: grave
   injetar(sim, (f, aa) => {
     f[2 * e] = 2 * capacidade(aa, e, 0);

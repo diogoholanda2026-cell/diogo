@@ -14,13 +14,9 @@ import { FormaGravidade } from '../comp/Aviso.jsx';
 import { Ancora, Popover } from '../comp/Popover.jsx';
 import { abrirTelaNaAba, irParaAlvo } from './Menu.jsx';
 import { itensTrilho } from './Trilho.jsx';
+import { CAMADA_DO_ALERTA } from '../mundo/camadas.js';
 
 const PESO = { grave: 3, atencao: 2, info: 1 };
-// a camada que mostra o problema (X3a desenha pela loja.camada)
-const CAMADA_DO_ALERTA = {
-  faltaAgua: 'agua', faltaEnergia: 'energia', bemEstarPerto: 'bemEstar', abandonoPerto: 'bemEstar', obrasParadas: 'recursos',
-  desempregoAlto: 'empregos', faltamTrabalhadores: 'empregos',
-};
 
 /** Alertas em ordem de gravidade (a mais grave primeiro; empate, a ordem da simulação). */
 export const ordenarAlertas = (l) =>

@@ -5,9 +5,13 @@
 // S1c quando existe, senão pelo tipo da via).
 //
 // Cada rodada (20 tiques) a grade é refeita em 4 faixas de linhas, uma por fatia: o tique fica leve com a cidade cheia.
-// Uma faixa só depende do que está salvo (as grades, as tabelas e o tique), então salvar e carregar no meio da rodada dá
-// a mesma partida. Ar: o vento do mês (sorteado pela semente, fração de célula por rodada) desloca a nuvem, uma passada
-// de difusão, decaimento de 10% e a emissão das fontes. Ruído: soma do alcance de cada fonte, com queda suave.
+// As fontes são coletadas uma vez por rodada, na faixa 0 (prédios e vias varridos uma vez só), somadas por célula e
+// guardadas na seção 'ambienteFontes'; a nuvem da rodada anterior fica na grade 'arAnt' (cópia da 'ar' no começo da
+// rodada), e toda faixa lê dela e escreve na 'ar': a emenda entre faixas não conta o decaimento e a emissão duas vezes.
+// Uma faixa só depende do que está salvo (as grades, as fontes da rodada, as tabelas e o tique), então salvar e carregar
+// no meio da rodada dá a mesma partida. Ar: o vento do mês (sorteado pela semente, fração de célula por rodada) desloca a
+// nuvem, uma passada de difusão, decaimento de 10% e a emissão das fontes. Ruído: soma do alcance de cada fonte, com
+// queda suave.
 //
 // Efeitos: bem-estar do prédio residencial (ar até -15 e ruído até -10, seção 7.4), valor do terreno (ar x 1,0 e ruído
 // x 0,6, seção 10.2), aviso de poluição alta no prédio e alerta da cidade. Tudo isso só vale com o M1b no jogo
@@ -42,51 +46,33 @@ const FONTE_ZONA = ZONAS_ORDEM.map((id, z) => {
 });
 const FONTE_VIA = VIAS_ORDEM.map((id) => FONTES_VIA[id] ?? null);
 
-// fontes de ar da faixa (x, z em metros): reaproveitada entre as chamadas, nunca guardada entre os tiques
-const S = { n: 0, cap: 0, x: null, z: null, ar: null };
-
 // ruído: as fontes da mesma célula e do mesmo alcance somam num balde antes de espalhar (a cidade densa tem vários
-// prédios por célula de 64 m); um balde por alcance, zerado ao fim de cada faixa
+// prédios por célula de 64 m); um balde por alcance, zerado ao fim da coleta. O ar soma por célula do mesmo jeito.
 const ALCANCES = [...new Set([...Object.values(FONTES), ...Object.values(FONTES_VIA)].map((f) => f.raio))].sort((a, b) => a - b);
 const BALDES = ALCANCES.map(() => ({ soma: new Float32Array(N * N), usadas: [] }));
 const CLASSE_DO_ALCANCE = new Map(ALCANCES.map((r, k) => [r, k]));
+const AR_SOMA = new Float64Array(N * N);
+const AR_USADAS = [];
 
-function reservar(cap) {
-  const nova = (T, velho) => {
-    const a = new T(cap);
-    if (velho) a.set(velho.subarray(0, S.n));
-    return a;
-  };
-  S.x = nova(Float64Array, S.x);
-  S.z = nova(Float64Array, S.z);
-  S.ar = nova(Float32Array, S.ar);
-  S.cap = cap;
-}
-
-/** Junta uma fonte à lista se o alcance dela toca a faixa [zLo, zHi] (metros). */
-function empurrar(x, z, ar, ru, raio, zLo, zHi) {
-  const alcance = Math.max(raio, 2 * PASSO);
-  if (z + alcance < zLo || z - alcance > zHi) return;
+/** Junta uma fonte (x, z em metros) aos baldes da coleta; fora da grade não conta. */
+function empurrar(x, z, ar, ru, raio) {
+  const ci = Math.floor((x - OX) / PASSO);
+  const cj = Math.floor((z - OZ) / PASSO);
+  if (ci < 0 || cj < 0 || ci >= N || cj >= N) return;
+  const c = cj * N + ci;
   if (ru > 0) {
-    const ci = Math.floor((x - OX) / PASSO);
-    const cj = Math.floor((z - OZ) / PASSO);
-    if (ci >= 0 && cj >= 0 && ci < N && cj < N) {
-      const b = BALDES[CLASSE_DO_ALCANCE.get(raio)];
-      const c = cj * N + ci;
-      if (b.soma[c] === 0) b.usadas.push(c);
-      b.soma[c] += ru;
-    }
+    const b = BALDES[CLASSE_DO_ALCANCE.get(raio)];
+    if (b.soma[c] === 0) b.usadas.push(c);
+    b.soma[c] += ru;
   }
-  if (!(ar > 0)) return;
-  if (S.n >= S.cap) reservar(Math.max(256, S.cap * 2));
-  const k = S.n++;
-  S.x[k] = x;
-  S.z[k] = z;
-  S.ar[k] = ar;
+  if (ar > 0) {
+    if (AR_SOMA[c] === 0) AR_USADAS.push(c);
+    AR_SOMA[c] += ar;
+  }
 }
 
 /** Prédios que emitem: indústria e comércio das zonas, Pedreira, Mina e Cimenteira da Holding, termelétrica. */
-function coletarPredios(sim, zLo, zHi) {
+function coletarPredios(sim) {
   const P = sim.tabelas.predios;
   for (let i = 0; i < P.n; i++) {
     if (!P.viva[i]) continue;
@@ -96,7 +82,7 @@ function coletarPredios(sim, zLo, zHi) {
     let k = 1;
     if (f.porte) k = clamp(P.empregos[i] / f.porte, 0.25, 1.5);
     if (f.nivel && P.nivel[i] > 1) k *= Math.max(0.3, 1 - f.nivel * (P.nivel[i] - 1));
-    empurrar(P.x[i], P.z[i], f.ar * k, f.ruido * k, f.raio, zLo, zHi);
+    empurrar(P.x[i], P.z[i], f.ar * k, f.ruido * k, f.raio);
   }
 }
 
@@ -111,7 +97,7 @@ function fatorFluxo(sim, e) {
 const Q = [0, 0];
 
 /** Amostras de 64 m ao longo das vias grandes (avenida, avenida grande e rodovia). */
-function coletarVias(sim, zLo, zHi) {
+function coletarVias(sim) {
   const A = sim.tabelas.arestas;
   for (let e = 0; e < A.n; e++) {
     if (!A.viva[e]) continue;
@@ -119,27 +105,56 @@ function coletarVias(sim, zLo, zHi) {
     if (!f) continue;
     const comp = A.arco[17 * e + 16];
     if (!(comp > 0)) continue;
-    // a caixa dos pontos de controle (a curva fica dentro dela) tira as vias de fora da faixa sem amostrar
     const o = 8 * e;
-    const zMin = Math.min(A.p[o + 1], A.p[o + 3], A.p[o + 5], A.p[o + 7]) - f.raio;
-    const zMax = Math.max(A.p[o + 1], A.p[o + 3], A.p[o + 5], A.p[o + 7]) + f.raio;
-    if (zMax < zLo || zMin > zHi) continue;
     const fator = fatorFluxo(sim, e);
     const tab = A.arco.subarray(17 * e, 17 * e + 17);
     const passos = Math.max(1, Math.round(comp / PASSO));
     for (let s = 0; s < passos; s++) {
       ponto(A.p, tDoArco(tab, ((s + 0.5) * comp) / passos), Q, o);
-      empurrar(Q[0], Q[1], f.ar * fator, f.ruido * fator, f.raio, zLo, zHi);
+      empurrar(Q[0], Q[1], f.ar * fator, f.ruido * fator, f.raio);
     }
   }
 }
 
-function coletar(sim, j0, j1) {
-  S.n = 0;
-  const zLo = OZ + j0 * PASSO;
-  const zHi = OZ + j1 * PASSO;
-  coletarPredios(sim, zLo, zHi);
-  coletarVias(sim, zLo, zHi);
+/** A rodada do tique (as fontes guardadas valem para ela). */
+const rodadaDe = (tique) => Math.floor(tique / RODADA);
+
+/**
+ * Varre os prédios e as vias uma vez e guarda as fontes da rodada somadas por célula (ar) e por célula e alcance (ruído)
+ * em sim.json.ambienteFontes. Estado salvo: carregar no meio da rodada usa as mesmas fontes da faixa 0.
+ */
+function coletar(sim) {
+  coletarPredios(sim);
+  coletarVias(sim);
+  const F = sim.json.ambienteFontes;
+  const nAr = AR_USADAS.length;
+  F.arCel = new Uint16Array(nAr);
+  F.arVal = new Float32Array(nAr);
+  for (let k = 0; k < nAr; k++) {
+    const c = AR_USADAS[k];
+    F.arCel[k] = c;
+    F.arVal[k] = AR_SOMA[c];
+    AR_SOMA[c] = 0;
+  }
+  AR_USADAS.length = 0;
+  let nRu = 0;
+  for (const b of BALDES) nRu += b.usadas.length;
+  F.ruCel = new Uint16Array(nRu);
+  F.ruCls = new Uint8Array(nRu);
+  F.ruVal = new Float32Array(nRu);
+  let k = 0;
+  for (let q = 0; q < BALDES.length; q++) {
+    const b = BALDES[q];
+    for (const c of b.usadas) {
+      F.ruCel[k] = c;
+      F.ruCls[k] = q;
+      F.ruVal[k] = b.soma[c];
+      b.soma[c] = 0;
+      k++;
+    }
+    b.usadas.length = 0;
+  }
+  F.rodada = rodadaDe(sim.tique);
 }
 
 // ------------------------------------------------------------------------------------------------ ruído
@@ -173,29 +188,25 @@ function nucleoDoRaio(R) {
  * Ruído das linhas [j0, j1): soma do alcance de cada fonte, com queda suave ((1 - d / raio) ao quadrado) contada a partir
  * do centro da célula da fonte (tabela por alcance: sem raiz quadrada no laço).
  */
-function ruidoDaFaixa(g, j0, j1) {
+function ruidoDaFaixa(g, j0, j1, F) {
   const linhas = j1 - j0;
   RU.fill(0, 0, linhas * N);
-  for (let q = 0; q < ALCANCES.length; q++) {
-    const bal = BALDES[q];
-    if (!bal.usadas.length) continue;
-    const { Rc, lado, w } = nucleoDoRaio(ALCANCES[q]);
-    for (const c of bal.usadas) {
-      const ru = bal.soma[c];
-      bal.soma[c] = 0;
-      const ci = c % N;
-      const cj = (c - ci) / N;
-      const a0 = Math.max(0, ci - Rc);
-      const a1 = Math.min(N - 1, ci + Rc);
-      const b0 = Math.max(j0, cj - Rc);
-      const b1 = Math.min(j1 - 1, cj + Rc);
-      for (let jj = b0; jj <= b1; jj++) {
-        const lin = (jj - j0) * N;
-        const tab = (jj - cj + Rc) * lado + Rc - ci;
-        for (let ii = a0; ii <= a1; ii++) RU[lin + ii] += ru * w[tab + ii];
-      }
+  for (let k = 0; k < F.ruCel.length; k++) {
+    const c = F.ruCel[k];
+    const ru = F.ruVal[k];
+    const { Rc, lado, w } = nucleoDoRaio(ALCANCES[F.ruCls[k]]);
+    const ci = c % N;
+    const cj = (c - ci) / N;
+    const b0 = Math.max(j0, cj - Rc);
+    const b1 = Math.min(j1 - 1, cj + Rc);
+    if (b0 > b1) continue;
+    const a0 = Math.max(0, ci - Rc);
+    const a1 = Math.min(N - 1, ci + Rc);
+    for (let jj = b0; jj <= b1; jj++) {
+      const lin = (jj - j0) * N;
+      const tab = (jj - cj + Rc) * lado + Rc - ci;
+      for (let ii = a0; ii <= a1; ii++) RU[lin + ii] += ru * w[tab + ii];
     }
-    bal.usadas.length = 0;
   }
   const d = g.dados;
   for (let jj = j0; jj < j1; jj++) {
@@ -234,23 +245,27 @@ function amostra(d, x, z) {
   return (at(i0, j0) * (1 - fx) + at(i0 + 1, j0) * fx) * (1 - fz) + (at(i0, j0 + 1) * (1 - fx) + at(i0 + 1, j0 + 1) * fx) * fz;
 }
 
-/** Ar das linhas [j0, j1): o vento desloca, a difusão espalha, 10% some e as fontes soltam fumaça. */
-function arDaFaixa(g, j0, j1, vx, vz) {
+/**
+ * Ar das linhas [j0, j1): o vento desloca, a difusão espalha, 10% some e as fontes soltam fumaça. Lê a nuvem do começo
+ * da rodada (a grade `ant`) e escreve na `g`: as linhas que a faixa vizinha já refez não entram na conta.
+ */
+function arDaFaixa(g, ant, j0, j1, vx, vz, F) {
   const d = g.dados;
+  const lido = ant.dados;
   const linhas = j1 - j0;
   // 1. a nuvem deslocada, nas linhas j0 - 1 a j1 (a vizinhança da difusão)
   for (let jj = j0 - 1; jj <= j1; jj++) {
     const base = (jj - j0 + 1) * N;
-    for (let ii = 0; ii < N; ii++) ADV[base + ii] = jj < 0 || jj >= N ? 0 : amostra(d, ii - vx, jj - vz);
+    for (let ii = 0; ii < N; ii++) ADV[base + ii] = jj < 0 || jj >= N ? 0 : amostra(lido, ii - vx, jj - vz);
   }
   // 2. a emissão das fontes (núcleo 3 x 3 de pesos 1 2 1 / 2 4 2 / 1 2 1, soma 16)
   EMI.fill(0, 0, linhas * N);
-  for (let k = 0; k < S.n; k++) {
-    const ar = S.ar[k];
-    if (!(ar > 0)) continue;
-    const ci = Math.floor((S.x[k] - OX) / PASSO);
-    const cj = Math.floor((S.z[k] - OZ) / PASSO);
-    const massa = (ar * AMBIENTE.ar.emissao) / 16;
+  for (let k = 0; k < F.arCel.length; k++) {
+    const c = F.arCel[k];
+    const ci = c % N;
+    const cj = (c - ci) / N;
+    if (cj + 1 < j0 || cj - 1 >= j1) continue;
+    const massa = (F.arVal[k] * AMBIENTE.ar.emissao) / 16;
     for (let b = 0; b < 3; b++) {
       const jj = cj + b - 1;
       if (jj < j0 || jj >= j1) continue;
@@ -316,10 +331,13 @@ export function sistemaAmbiente(sim, fatia, fatias) {
   if (!m1bAtivo()) return;
   const j0 = Math.floor((fatia * N) / fatias);
   const j1 = Math.floor(((fatia + 1) * N) / fatias);
-  coletar(sim, j0, j1);
+  const F = sim.json.ambienteFontes;
+  // a faixa 0 abre a rodada: guarda a nuvem de antes e coleta as fontes (uma carga antiga no meio da rodada coleta aqui)
+  if (fatia === 0) sim.grades.arAnt.dados.set(sim.grades.ar.dados);
+  if (fatia === 0 || F.rodada !== rodadaDe(sim.tique)) coletar(sim);
   const [vx, vz] = ventoDoMes(sim.semente, sim.tique);
-  arDaFaixa(sim.grades.ar, j0, j1, vx, vz);
-  ruidoDaFaixa(sim.grades.ruido, j0, j1);
+  arDaFaixa(sim.grades.ar, sim.grades.arAnt, j0, j1, vx, vz, F);
+  ruidoDaFaixa(sim.grades.ruido, j0, j1, F);
   if (fatia === fatias - 1) {
     resumir(sim);
     sim.mudancas.marcar('ar');
@@ -466,6 +484,11 @@ export function registrar(sim) {
     sim.registrarGrade(id, grade);
     sim.espelho.grades[id] = grade;
   }
+  // a nuvem do começo da rodada (a leitura das faixas) e as fontes da rodada: estado salvo, não derivado
+  sim.registrarGrade('arAnt', { n: N, passo: PASSO, origem: [...GRADE_AMBIENTE.origem], dados: new Uint8Array(N * N) });
+  sim.registrarJson('ambienteFontes', {
+    rodada: -1, arCel: new Uint16Array(0), arVal: new Float32Array(0), ruCel: new Uint16Array(0), ruCls: new Uint8Array(0), ruVal: new Float32Array(0),
+  });
   sim.registrarJson('ambiente', { picoAr: 0, picoRuido: 0, moradores: 0, moradoresAr: 0, moradoresRuido: 0, alvo: null });
   sim.registrarSistema(RODADA, 3, sistemaAmbiente, AMBIENTE.fatias, { nome: 'ambiente', ordem: ORDEM.servicos + 70 });
   sim.camadas.registrar('ar', camadaGrade('ar'));

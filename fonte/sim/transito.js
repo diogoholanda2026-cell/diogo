@@ -502,7 +502,12 @@ function fatorTrabalho(sim, i) {
 /** Termo do trânsito no bem-estar do prédio residencial i: de -8 a 0 pelo tempo médio das viagens de quem mora na zona. */
 function bemEstarTransito(sim, i) {
   const P = sim.tabelas.predios;
-  const t = tempoNoPonto(sim, sim.agregados.trajeto?.porZona, P.x[i], P.z[i]);
+  return bemEstarNoPonto(sim, P.x[i], P.z[i]);
+}
+
+/** O mesmo termo para um ponto (x, z) em metros: a prévia da pintura de zona usa para as células que ainda não têm prédio. */
+function bemEstarNoPonto(sim, x, z) {
+  const t = tempoNoPonto(sim, sim.agregados.trajeto?.porZona, x, z);
   if (t === null) return 0;
   return -TRANSITO.bemEstar.perda * rampa(t, TRANSITO.bemEstar.de, TRANSITO.bemEstar.ate);
 }
@@ -521,8 +526,9 @@ export function sugestaoPara(sim, e) {
   const menor = Math.min(qa, qb);
   const total = (tipo) => VIAS[tipo].faixas[0] * VIAS[tipo].capFaixa;
   const acima = (v.melhoraPara ?? []).filter((tipo) => tipo !== 'ruaMao' && total(tipo) > total(id));
-  // fluxo de um sentido só: a mão única dá as duas faixas a ele
-  if (id === 'rua' && maior > 0 && menor < 0.4 * maior) return { sugestao: 'maoUnica', para: 'ruaMao' };
+  // fluxo de um sentido só: a mão única dá as duas faixas a ele, mas só serve se o sentido maior cabe nelas (2 x 700 = 1.400
+  // veículos/h); acima disso a mão única já nasce cheia e a sugestão é a avenida (ou a paralela, se não houver via acima)
+  if (id === 'rua' && maior > 0 && menor < 0.4 * maior && maior <= total('ruaMao')) return { sugestao: 'maoUnica', para: 'ruaMao' };
   if (acima.length) {
     const preciso = maior;
     const serve = acima.find((tipo) => total(tipo) >= preciso) ?? acima[acima.length - 1];
@@ -625,6 +631,7 @@ export function registrar(sim) {
     versaoCusto: () => dev(sim).versaoCusto,
     fatorTrabalho: (i) => fatorTrabalho(sim, i),
     bemEstar: (i) => bemEstarTransito(sim, i),
+    bemEstarNoPonto: (x, z) => bemEstarNoPonto(sim, x, z),
     fatorClientes: () => J(sim).clientes,
     gargalos: (limiar) => gargalos(sim, limiar),
     resumo: () => resumoTransito(sim),

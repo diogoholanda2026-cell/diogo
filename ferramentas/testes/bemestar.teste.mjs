@@ -17,6 +17,8 @@ import { calcularBemEstar, sistemaBemEstar, BEM } from '../../fonte/sim/bemestar
 import { sistemaCargas } from '../../fonte/sim/servicos.js';
 import { sistemaRedes } from '../../fonte/sim/redes.js';
 import { familiaDe } from '../../fonte/sim/predios.js';
+import { abrirM1b } from './apoio-m1b.mjs';
+import { AMBIENTE } from '../../fonte/data/ambiente.js';
 import { gerarCidadeSintetica, SINTETICA } from '../cidade-sintetica.mjs';
 
 // ------------------------------------------------------------------------------------------------ apoio
@@ -167,6 +169,45 @@ test('coluna predios.bemEstar (a tarifa por prédio da S3a lê) e o efeito previ
   const h = sim.hash();
   sim.q.zona.previa({ pincel: { modo: 'circulo', x: -520, z: -450, raio: 30 }, zona: indiceZona('resBaixa') });
   assert.equal(sim.hash(), h, 'a prévia não muda o estado');
+});
+
+test('a prévia da pintura de zona conta o ar, o ruído e o trânsito como calcularBemEstar (M1b)', () => {
+  const fecha = abrirM1b();
+  try {
+    const { sim } = ruaComRedes('bem-previa-m1b');
+    const pincel = { modo: 'circulo', x: -520, z: -460, raio: 200 };
+    const previa = () => sim.q.zona.previa({ pincel, zona: indiceZona('resBaixa') }).efeitoMedia;
+    const limpo = previa();
+    assert.ok(limpo > 0);
+    const N = sim.grades.ar.n;
+    const encher = (g) => {
+      for (let j = Math.floor((-460 - 300 + 4096) / 64); j <= Math.floor((-460 + 300 + 4096) / 64); j++) {
+        for (let i = Math.floor((-520 - 300 + 4096) / 64); i <= Math.floor((-520 + 300 + 4096) / 64); i++) g.dados[j * N + i] = 255;
+      }
+    };
+    // o efeito é o termo das células novas diluído na média da cidade (a Vila e os prédios de antes): a fração f é a mesma
+    // para os três termos, então cada queda dividida pelo termo dá a mesma fração (um termo por vez, sem chegar ao piso 0)
+    encher(sim.grades.ar);
+    const comAr = previa();
+    const f = (comAr - limpo) / AMBIENTE.bemEstar.ar.max;
+    assert.ok(f > 0.2 && f <= 1.001, `fração das células novas na média: ${f}`);
+    sim.grades.ar.dados.fill(0);
+    encher(sim.grades.ruido);
+    const comRuido = previa();
+    assert.ok(Math.abs((comRuido - limpo) / AMBIENTE.bemEstar.ruido.max - f) < 0.05, `ruído: ${limpo} -> ${comRuido}, f ${f}`);
+    sim.grades.ruido.dados.fill(0);
+    assert.equal(previa(), limpo, 'zerando as grades volta ao valor limpo');
+    // trânsito: o tempo médio da cidade (45 min) tira 8 das células que não têm viagem própria
+    sim.agregados.trajeto = { porZona: new Float32Array(0), destino: new Float32Array(0), medio: 45, comercio: 0 };
+    const comTransito = previa();
+    assert.ok(Math.abs((comTransito - limpo) / -8 - f) < 0.05, `trânsito: ${limpo} -> ${comTransito}, f ${f}`);
+    assert.ok(comAr < limpo && comRuido < limpo && comTransito < limpo);
+    const h = sim.hash();
+    previa();
+    assert.equal(sim.hash(), h, 'a prévia não muda o estado');
+  } finally {
+    fecha();
+  }
 });
 
 // ------------------------------------------------------------------------------------------------ D51

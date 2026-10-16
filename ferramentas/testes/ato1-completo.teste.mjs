@@ -349,6 +349,45 @@ test('Vila nova: o padrão da decisão (reformar) vale se o prazo passa; o objet
   });
 });
 
+test('Vila nova: sem casa de autoconstrução (demolida ou ausente) e sem a requalificação, o objetivo não cumpre de graça', () => {
+  comM1b(() => {
+    // Vila sem casas de autoconstrução (só a loja): a decisão põe o objetivo na frente, mas não há o que reformar
+    const { sim } = simComVila('vila-sem-casas', { casas: [] });
+    fixarCidade(sim, { populacao: 2500, bemEstar: 62, agua: 5000, energia: 4000 });
+    ateMarco(sim, 3);
+    ok(sim.cmd('decisao.escolher', { id: 'vila.futuro', opcao: 'reformar' }));
+    const xp0 = sim.json.progresso.xp;
+    const legado0 = sim.q.holding().legado;
+    const caixa0 = sim.holding.caixa();
+    assert.equal(estadoVila(sim).restantes, 0);
+    sim.rodar(120, { sincrono: true });
+    assert.ok(!sim.json.objetivos.feitos.includes('cidade.vilaNova'), 'não fecha sem obra');
+    assert.equal(sim.json.historia.vilaNova, null);
+    assert.equal(sim.q.holding().legado, legado0, 'sem Legado');
+    assert.ok(sim.json.progresso.xp - xp0 < 120, 'sem os 120 de XP');
+    assert.ok(sim.holding.caixa() >= caixa0 - 1, 'nada foi pago');
+    // a medida nunca passa de 2 de 3 e o objetivo sai da lista (não trava o domínio da cidade)
+    assert.ok(!sim.q.objetivos().some((o) => o.id === 'cidade.vilaNova'));
+    assert.equal(requalificarVila(sim), false);
+    assert.deepEqual(sim.erros, []);
+  });
+  comM1b(() => {
+    // as casas demolidas depois da decisão: o objetivo (já aberto) para de valer sem dar nada
+    const { sim, refs } = simComVila('vila-demolida');
+    fixarCidade(sim, { populacao: 2500, bemEstar: 62, agua: 0, energia: 4000 });
+    ateMarco(sim, 3);
+    ok(sim.cmd('decisao.escolher', { id: 'vila.futuro', opcao: 'reformar' }));
+    assert.equal(sim.q.objetivos().find((o) => o.dominio === 'cidade').id, 'cidade.vilaNova');
+    const P = sim.tabelas.predios;
+    for (const r of refs) if (P.vivaRef(r) && PREDIOS_ORDEM[P.modelo[r % 1048576]] !== 'loja') P.viva[r % 1048576] = 0;
+    fixarCidade(sim, { populacao: 2500, bemEstar: 62, agua: 5000, energia: 4000 });
+    sim.rodar(120, { sincrono: true });
+    assert.equal(estadoVila(sim).restantes, 0);
+    assert.ok(!sim.json.objetivos.feitos.includes('cidade.vilaNova'));
+    assert.equal(sim.json.historia.vilaNova, null);
+  });
+});
+
 // ------------------------------------------------------------------------------------------------ a cadeia do cimento
 
 test('cadeia do cimento: Mina, Olaria e Cimenteira alimentam a Concreteira; o concreto sai do calcário', () => {

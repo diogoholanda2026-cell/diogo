@@ -10,17 +10,48 @@
 //   grade (R2a): a contínua vai de 0 a 255; os recursos vão como categoria (o recurso que domina, 1 a 6)
 // Na categórica, cores[k] é a cor do valor k (a cor 0 não aparece).
 import { REGRAS_DONO } from '../../data/economia.js';
+import { parteNoJogo } from '../../data/zonas.js';
 
-/** Camadas que o popover mostra, na ordem (D29: as 6 do M1a; o Valor do terreno entra quando a simulação tiver). */
+/**
+ * Camadas que o popover mostra, na ordem (D29: as 6 do M1a; o Valor do terreno entra quando a simulação tiver). As do M1b
+ * (esgoto, trânsito, ar, ruído, empregos) levam `parte: 'M1b'` e só aparecem com o M1b no jogo (parteNoJogo); os glifos são
+ * os que já existem (nuvem para o ar, som para o ruído, trabalho para os empregos).
+ */
 export const CAMADAS_UI = Object.freeze([
   { id: 'zonas', glifo: 'zonas' },
   { id: 'bemEstar', glifo: 'bemEstarBom' },
   { id: 'agua', glifo: 'agua' },
   { id: 'energia', glifo: 'energia' },
+  { id: 'esgoto', glifo: 'esgoto', parte: 'M1b' },
   { id: 'servicos', glifo: 'servicos' },
   { id: 'recursos', glifo: 'recursos' },
+  { id: 'transito', glifo: 'transito', parte: 'M1b' },
+  { id: 'ar', glifo: 'nuvem', parte: 'M1b' },
+  { id: 'ruido', glifo: 'som', parte: 'M1b' },
+  { id: 'empregos', glifo: 'trabalho', parte: 'M1b' },
   { id: 'valor', glifo: 'valuation' },
 ]);
+
+/**
+ * As camadas do popover agora: as da parte em curso e, se a simulação diz quais camadas tem (ids), só as que ela registrou
+ * (o Valor do terreno e as do M1b dependem disso; as do M1a ficam sempre).
+ */
+export function camadasDoPopover(ids = null) {
+  return CAMADAS_UI.filter((c) => {
+    if (c.parte && !parteNoJogo(c.parte)) return false;
+    if (!ids) return true;
+    return ids.includes(c.id) || (c.id !== 'valor' && !c.parte);
+  });
+}
+
+/** A camada que mostra o problema de cada alerta da cidade (código do alerta -> id da camada; X3a desenha pela loja.camada). */
+export const CAMADA_DO_ALERTA = Object.freeze({
+  faltaAgua: 'agua', faltaEnergia: 'energia', bemEstarPerto: 'bemEstar', abandonoPerto: 'bemEstar', obrasParadas: 'recursos',
+  desempregoAlto: 'empregos', faltamTrabalhadores: 'empregos',
+  // M1b: o alerta leva à camada do problema (esgoto, trânsito das três sugestões, ar e ruído)
+  faltaEsgoto: 'esgoto', transitoParado: 'transito', transitoParadoMao: 'transito', transitoParadoParalela: 'transito',
+  poluicaoAr: 'ar', poluicaoRuido: 'ruido',
+});
 
 /** Paleta das camadas (tokens da UI 4; a rampa sequencial é a --seq do desenho). */
 export const PALETA = Object.freeze({

@@ -15,7 +15,7 @@ import { congelar } from '../comum/util.js';
 export const SAVE = congelar({
   magica: 'HELD',
   formato: 1, // leiaute binário
-  versaoSave: 2, // versão dos dados; MIGRACOES[v] leva de v para v + 1
+  versaoSave: 3, // versão dos dados; MIGRACOES[v] leva de v para v + 1
   bandeiras: { comprimido: 1 },
   jogo: 'arcologia-de-held',
   alinhamento: 8,
