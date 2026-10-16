@@ -8,12 +8,12 @@
 // chama xp) e objetivos (objetivos.js). Cada marco dá 10 mil x n, uma licença de
 // ladrilho a partir do 2, os desbloqueios e os eventos `marco` e `desbloqueio`. O marco 7 pede a Torre pronta
 // (requisito registrado pela X1b; sem ele, a etapa torre.e4 pronta no espelho da Arcologia).
-import { MARCOS, XP, marcoQueLibera } from '../data/marcos.js';
+import { MARCOS, XP } from '../data/marcos.js';
 import { ORDEM } from '../contratos/interno.js';
 import { ARESTA, ETAPA } from '../contratos/flags.js';
 import { VIAS, VIAS_ORDEM } from '../data/vias.js';
 import { MES, RODADA } from '../comum/relogio.js';
-import { finito, livre, postarMural } from './holding/base.js';
+import { finito, livre, postarMural, m1bAtivo } from './holding/base.js';
 import { concederLicencas } from './mundo/ladrilhos.js';
 
 const REQUISITOS = new WeakMap(); // sim → Map(marco → fn)
@@ -56,11 +56,29 @@ export function marcoAtual(sim) {
   return { n: m.n, nome: m.nome, xp: p.xp, xpIni: m.xp, xpProx: prox ? prox.xp : null, requisito: prox?.requisito ?? null };
 }
 
-/** liberado(id): o que um marco ainda não alcançado lista fica trancado; os ids do M1b ficam trancados no M1a. */
+/**
+ * Marco que libera o id: a lista `libera` e, com o M1b no jogo (PARTE_ATUAL), também a `m1b`; vale o menor. -1 se nenhum
+ * marco lista o id (livre); Infinity se só a lista `m1b` o tem e o M1b ainda não chegou (trancado).
+ */
+export function marcoDoId(id, comM1b = m1bAtivo()) {
+  let melhor = Infinity;
+  let listado = false;
+  for (const m of MARCOS) {
+    if (m.libera.includes(id)) {
+      listado = true;
+      melhor = Math.min(melhor, m.n);
+    } else if (m.m1b?.includes(id)) {
+      listado = true;
+      if (comM1b) melhor = Math.min(melhor, m.n);
+    }
+  }
+  return listado ? melhor : -1;
+}
+
+/** liberado(id): o que um marco ainda não alcançado lista fica trancado; os ids do M1b ficam trancados até o M1b chegar. */
 export function liberado(sim, id) {
   if (livre(sim)) return true;
-  for (const m of MARCOS) if (m.m1b?.includes(id)) return false;
-  const n = marcoQueLibera(id);
+  const n = marcoDoId(id);
   return n < 0 || prog(sim).marco >= n;
 }
 
@@ -107,8 +125,9 @@ function alcancar(sim, n) {
   if (creditos > 0) sim.holding.receber(creditos, 'marcos');
   if (m.licencas > 0 && sim.json.ladrilhos) concederLicencas(sim, m.licencas);
   p.historico.push({ n, tique: sim.tique, xp: p.xp });
-  sim.emitir('marco', { n, nome: m.nome, premios: { creditos, licencas: m.licencas }, libera: [...m.libera] });
-  if (m.libera.length) sim.emitir('desbloqueio', { ids: [...m.libera] });
+  const libera = [...m.libera, ...(m1bAtivo() ? (m.m1b ?? []).filter((id) => !m.libera.includes(id)) : [])];
+  sim.emitir('marco', { n, nome: m.nome, premios: { creditos, licencas: m.licencas }, libera });
+  if (libera.length) sim.emitir('desbloqueio', { ids: [...libera] });
   postarMural(sim, 'iris', 's3.mural.marco', { n, nome: m.nome });
   sim.mudancas.marcar('holding');
 }

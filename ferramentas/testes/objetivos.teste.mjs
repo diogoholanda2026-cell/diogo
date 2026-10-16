@@ -8,6 +8,7 @@ import { OBJETIVOS } from '../../fonte/data/objetivos.js';
 import { CONSELHEIROS, EXECUTIVOS, JOGADOR } from '../../fonte/data/nomes.js';
 import { condicoesImportacao } from '../../fonte/sim/holding/mercado.js';
 import { registrar as registrarTextosS3 } from '../../fonte/ui/textos/s3.js';
+import { registrar as registrarTextosS3b } from '../../fonte/ui/textos/s3b.js';
 import { simS3a, predioHolding, fixarCidade } from '../robo/cidade-faz-de-conta.mjs';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
 
@@ -124,10 +125,11 @@ test('Bloqueio do Canal de Seshat (mar. 2021): importação a 200% e lenta por 6
   assert.equal(condicoesImportacao(b).fator, 1.6, 'o choque acaba em 6 meses');
 });
 
-test('dados da história: 3 decisões com data, opções e padrão; textos de toda chave; nenhum nome real', () => {
-  assert.equal(DECISOES.length, 3);
+test('dados da história: 6 decisões com data, opções e padrão; textos de toda chave; nenhum nome real', () => {
+  assert.equal(DECISOES.length, 6, '3 do M1a e 3 do M1b');
   const textos = {};
   registrarTextosS3((parcela, mapa) => Object.assign(textos, mapa));
+  registrarTextosS3b((parcela, mapa) => Object.assign(textos, mapa));
   const chaves = [];
   for (const d of DECISOES) {
     assert.ok(d.opcoes.some((o) => o.id === d.padrao), d.id);

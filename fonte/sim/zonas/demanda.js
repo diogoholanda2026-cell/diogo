@@ -18,11 +18,12 @@ import { componentes } from '../vias/grafo.js';
 import { prediosNaCaixa } from '../vias/validar.js';
 import { aguaEm } from '../mundo/terreno.js';
 import { noDeEntrada } from '../mundo/vila.js';
-import { prepararCidade, trans, funciona, familiaDe, marcoAtual, acessoDe } from '../predios.js';
+import { prepararCidade, trans, funciona, familiaDe, marcoAtual, acessoDe, m1bAtivo } from '../predios.js';
 import { amostraDeFrentes } from './crescimento.js';
 import { capacidadeMoradores, ocupacaoDe, ESTUDO_BASE, estudoDe } from '../cidadaos.js';
-import { coberturaArestas } from '../servicos.js';
+import { coberturaArestas, atratividadeDosServicos } from '../servicos.js';
 import { comercioPerto } from '../bemestar.js';
+import { penalidadeValor } from '../ambiente.js';
 
 /** Pesos e tetos dos fatores (seção 6.4). (calibrar) */
 export const DEMANDA = Object.freeze({
@@ -115,6 +116,7 @@ function atratividade(sim) {
   }
   const ef = sim.json.cidade.efeitos;
   for (const id of Object.keys(ef).sort()) v += +ef[id].atratividade || 0;
+  v += atratividadeDosServicos(sim); // o parque da orla (M1b)
   return v;
 }
 
@@ -195,8 +197,12 @@ export function calcularDemanda(sim) {
   // indústria
   let I = soma('ind', 'base', D.ind.base);
   I += soma('ind', 'maoDeObra', D.ind.maoDeObra * Math.min(1, basicaOciosa / 0.15));
+  // bens que o comércio pede e a cidade não produz: no M1b é a mercadoria agregada (a parte do consumo que se importa,
+  // mercadoria.js); antes dele, as vagas da indústria contra as do comércio
+  const merc = m1bAtivo() ? ag.mercadoria : null;
   const precisa = r.com.vagas * D.ind.vagasPorVagaComercio;
-  I += soma('ind', 'bens', D.ind.bens * (precisa > 0 ? Math.max(0, precisa - r.ind.vagas) / precisa : 0));
+  const faltaBens = merc ? (merc.consumo > 0 ? Math.min(1, merc.importada / merc.consumo) : 0) : precisa > 0 ? Math.max(0, precisa - r.ind.vagas) / precisa : 0;
+  I += soma('ind', 'bens', D.ind.bens * faltaBens);
   I += soma('ind', 'vazias', D.ind.vazias * Math.min(1, (r.ind.vagas ? 1 - r.ind.ocupadas / r.ind.vagas : 0) / 0.3));
   // escritórios (M1b)
   let E = soma('esc', 'base', D.esc.base);
@@ -213,7 +219,7 @@ export function calcularDemanda(sim) {
   }
   return {
     familias: { res: clamp(fams.res, 0, 100), com: clamp(fams.com, 0, 100), ind: clamp(fams.ind, 0, 100), esc: clamp(fams.esc, 0, 100) },
-    fatores: fat, estudo: r.estudo, clientes: capCom > 0 ? Math.min(1, clientes / capCom) : 1,
+    fatores: fat, estudo: r.estudo, clientes: capCom > 0 ? Math.min(1, clientes / capCom) * (sim.transito?.fatorClientes() ?? 1) : 1, // tempo de viagem (D37, S1c)
   };
 }
 
@@ -283,6 +289,8 @@ export function consultaDemanda(sim) {
   out.E = ag.demanda.E;
   out.fatores = JSON.parse(JSON.stringify(ag.demanda.fatores ?? {}));
   out.ativas = ZONAS_ORDEM.filter((id) => id && zonaAtiva(sim, id));
+  // mercadoria agregada (M1b): a indústria zoneada contra o consumo do comércio e a falta importada
+  out.mercadoria = m1bAtivo() && ag.mercadoria ? { ...ag.mercadoria } : null;
   return out;
 }
 
@@ -428,6 +436,7 @@ function valorDaFaixa(sim, j0, j1, out) {
       v += tAgua[j * n + i];
       if (acesso[k]) v += VALOR.comercio * Math.min(1, comercioPerto(sim, x, z) / VALOR.comercioAlvo);
       if (aband[k]) v += VALOR.abandono;
+      v -= penalidadeValor(sim, x, z); // ar e ruído (M1b)
       for (const e of efeitos) {
         if (!e.raio || !Number.isFinite(e.x)) v += e.valor;
         else {

@@ -14,9 +14,21 @@ export const FAMILIAS_ZONA = congelar({
   esc: { nome: 'Escritórios', cor: '#3987e5', hachura: 45 },
 });
 
-/** Parte do jogo em curso: zona de uma parte depois desta fica trancada (sem demanda e sem nascimento). */
-export const PARTE_ATUAL = 'M1a';
+/**
+ * Parte do jogo em curso: zona de uma parte depois desta fica trancada (sem demanda e sem nascimento). Binding vivo: o
+ * integrador abre o M1b trocando o 'M1a' abaixo por 'M1b' (esgoto, ar, ruído, mercadoria e as 3 zonas ligam juntos);
+ * os testes do M1b usam definirParteAtual('M1b') e devolvem o valor no fim.
+ */
+export let PARTE_ATUAL = 'M1a';
 const PARTES = ['M1a', 'M1b', 'M2', 'M3', 'M4'];
+
+/** Troca a parte em curso (só os testes; o jogo muda a constante acima). Devolve a anterior. */
+export function definirParteAtual(parte) {
+  if (!PARTES.includes(parte)) throw new Error(`parte desconhecida: ${parte}`);
+  const antes = PARTE_ATUAL;
+  PARTE_ATUAL = parte;
+  return antes;
+}
 
 // split: peso de cada nível de estudo (básico, fundamental, médio, superior) na divisão da demanda da família;
 // valor: peso do valor do terreno (0 a 1000, normalizado) e o mínimo para a zona nascer; taxa: prédios por tique com

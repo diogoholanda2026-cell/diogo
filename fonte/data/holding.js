@@ -17,12 +17,17 @@ export const ITENS = /* @__PURE__ */ congelar({
   madeira: { base: 30, t: 45, req: {}, predio: 'manejo', marco: 1, parte: 'M1b' },
   serrada: { base: 80, t: 50, req: { madeira: 2 }, predio: 'serraria', marco: 1, parte: 'M1b' },
   calcario: { base: 22, t: 35, req: {}, predio: 'mina', marco: 2, recurso: { tipo: 'calcario', porUnidade: 1 }, parte: 'M1b' },
-  // M1a: cimento importado até a Cimenteira do M1b (abre com a Concreteira, no marco 3)
-  cimento: { base: 90, t: 60, req: { calcario: 2, argila: 1 }, predio: 'cimenteira', marco: 3, parte: 'M1b' },
+  // M1a: cimento importado (item liberado no marco 3, com a Concreteira); M1b: a Cimenteira (marco 2) o faz com calcário
+  // da Mina e argila da Olaria e abre a cadeia que alimenta o concreto e as obras da cidade
+  cimento: { base: 90, t: 60, req: { calcario: 2, argila: 1 }, predio: 'cimenteira', marco: 2, parte: 'M1b' },
   concreto: { base: 170, t: 70, req: { cimento: 1, brita: 2, areia: 1 }, predio: 'concreteira', marco: 3, parte: 'M1a' },
   vidro: { base: 140, t: 90, req: { areia: 3, calcario: 1 }, predio: 'vidraria', marco: 4, parte: 'M1b' },
   // aço: só importado no M1 (siderúrgica e reciclagem no M3)
   aco: { base: 160, t: 0, req: {}, predio: null, marco: 3, parte: 'M1a' },
+  // cadeia de alimentos para o comércio (S3b, linha de corte do M1b): a Fazenda colhe na terra fértil (que renova, então
+  // a extração não gasta a grade) e a Agroindústria beneficia; o comércio da cidade compra a 100% (ALIMENTOS)
+  graos: { base: 12, t: 40, req: {}, predio: 'fazenda', marco: 2, recurso: { tipo: 'fertil', porUnidade: 1, renova: true }, parte: 'M1b' },
+  alimentos: { base: 70, t: 55, req: { graos: 2 }, predio: 'agroindustria', marco: 3, parte: 'M1b' },
 });
 
 /** Ordem fixa dos itens (telas, relatórios, laços determinísticos). Só se acrescenta no fim. */
@@ -71,12 +76,43 @@ export const PREDIOS_HOLDING = /* @__PURE__ */ congelar({
     distanciaArmazem: { livre: 500, porCem: 0.01, max: 0.3 }, parte: 'M1a',
     niveis: [null, { custo: 20000, materiais: { concreto: 20, aco: 5 }, marco: 4 }, { custo: 40000, materiais: { concreto: 40, aco: 10 }, marco: 5 }],
   },
-  // M1b (S3b) e linha de corte: ficam nos dados para a R5 desenhar e a S3b ligar
-  mina: { nome: 'Mina de calcário', faz: 'tira calcário para o cimento', produz: ['calcario'], custo: 15000, marco: 2, planta: [64, 56], vagas: [8, 3, 1, 0], obraTiques: 90, xp: 30, recurso: 'calcario', parte: 'M1b', niveis: [null, null, null] },
-  cimenteira: { nome: 'Cimenteira', faz: 'faz cimento com calcário e argila', produz: ['cimento'], custo: 40000, marco: 2, planta: [72, 56], vagas: [6, 6, 3, 1], obraTiques: 150, xp: 40, parte: 'M1b', niveis: [null, null, null] },
-  vidraria: { nome: 'Vidraria', faz: 'faz vidro com areia e calcário', produz: ['vidro'], custo: 35000, marco: 4, planta: [80, 40], vagas: [5, 6, 3, 1], obraTiques: 150, xp: 40, parte: 'M1b', niveis: [null, null, null] },
-  serraria: { nome: 'Serraria', faz: 'serra madeira para obras', produz: ['serrada'], custo: 14000, marco: 1, planta: [56, 40], vagas: [6, 3, 1, 0], obraTiques: 90, xp: 30, parte: 'M1b', niveis: [null, null, null] },
-  manejo: { nome: 'Manejo florestal', faz: 'tira madeira da mata com reposição', produz: ['madeira'], custo: 9000, marco: 1, planta: [40, 32], vagas: [6, 2, 0, 0], obraTiques: 60, xp: 30, parte: 'M1b', niveis: [null, null, null] },
+  // M1b (S3b): ligados quando o integrador abre o M1b (PARTE_ATUAL); o marco de cada um segue a tabela do desenho
+  mina: {
+    nome: 'Mina de calcário', faz: 'tira calcário para o cimento', produz: ['calcario'], custo: 15000, marco: 2, planta: [64, 56],
+    vagas: [8, 3, 1, 0], obraTiques: 90, xp: 30, recurso: 'calcario', parte: 'M1b',
+    niveis: [null, { custo: 10000, materiais: { brita: 20 }, marco: 3 }, { custo: 20000, materiais: { concreto: 15 }, marco: 5 }],
+  },
+  cimenteira: {
+    nome: 'Cimenteira', faz: 'faz cimento com calcário e argila', produz: ['cimento'], custo: 40000, marco: 2, planta: [72, 56],
+    vagas: [6, 6, 3, 1], obraTiques: 150, xp: 40, parte: 'M1b',
+    niveis: [null, { custo: 25000, materiais: { concreto: 20, aco: 5 }, marco: 4 }, { custo: 50000, materiais: { concreto: 40, aco: 10 }, marco: 6 }],
+  },
+  vidraria: {
+    nome: 'Vidraria', faz: 'faz vidro com areia e calcário', produz: ['vidro'], custo: 35000, marco: 4, planta: [80, 40],
+    vagas: [5, 6, 3, 1], obraTiques: 150, xp: 40, parte: 'M1b',
+    niveis: [null, { custo: 22000, materiais: { concreto: 20, aco: 5 }, marco: 5 }, { custo: 44000, materiais: { concreto: 40, aco: 10 }, marco: 6 }],
+  },
+  serraria: {
+    nome: 'Serraria', faz: 'serra madeira para obras', produz: ['serrada'], custo: 14000, marco: 1, planta: [56, 40],
+    vagas: [6, 3, 1, 0], obraTiques: 90, xp: 30, parte: 'M1b',
+    niveis: [null, { custo: 9000, materiais: { brita: 15, tijolo: 10 }, marco: 2 }, { custo: 18000, materiais: { concreto: 10 }, marco: 4 }],
+  },
+  manejo: {
+    nome: 'Manejo florestal', faz: 'tira madeira da mata com reposição', produz: ['madeira'], custo: 9000, marco: 1, planta: [40, 32],
+    vagas: [6, 2, 0, 0], obraTiques: 60, xp: 30, parte: 'M1b',
+    niveis: [null, { custo: 6000, materiais: { brita: 10 }, marco: 2 }, { custo: 12000, materiais: { tijolo: 20 }, marco: 4 }],
+  },
+  // cadeia de alimentos (S3b): a Fazenda na terra fértil da planície, a Agroindústria perto do armazém e do comércio
+  fazenda: {
+    nome: 'Fazenda', faz: 'colhe grãos na terra fértil da planície', produz: ['graos'], custo: 12000, marco: 2, planta: [88, 72],
+    vagas: [10, 3, 1, 0], obraTiques: 90, xp: 30, recurso: 'fertil', parte: 'M1b',
+    niveis: [null, { custo: 8000, materiais: { brita: 15, serrada: 10 }, marco: 3 }, { custo: 16000, materiais: { concreto: 10 }, marco: 5 }],
+  },
+  agroindustria: {
+    nome: 'Agroindústria', faz: 'beneficia grãos em alimentos para o comércio', produz: ['alimentos'], custo: 30000, marco: 3, planta: [72, 56],
+    vagas: [6, 6, 3, 1], obraTiques: 120, xp: 40, parte: 'M1b',
+    niveis: [null, { custo: 20000, materiais: { concreto: 15, aco: 5 }, marco: 5 }, { custo: 40000, materiais: { concreto: 30, aco: 10 }, marco: 6 }],
+  },
 });
 
 /** Índice numérico (predios.modelo quando predios.tipo é HOLDING). Só se acrescenta no fim. */
@@ -84,6 +120,9 @@ export const HOLDING_ORDEM = Object.freeze(Object.keys(PREDIOS_HOLDING));
 
 /** Tipos da Holding que o M1a constrói. */
 export const HOLDING_M1A = Object.freeze(HOLDING_ORDEM.filter((id) => PREDIOS_HOLDING[id].parte === 'M1a'));
+
+/** Tipos da Holding do M1b (S3b): Mina, Cimenteira, Vidraria, Serraria, Manejo, Fazenda e Agroindústria. */
+export const HOLDING_M1B = Object.freeze(HOLDING_ORDEM.filter((id) => PREDIOS_HOLDING[id].parte === 'M1b'));
 
 /** Linhas por nível do prédio (1, 2 e 3). */
 export const LINHAS_POR_NIVEL = Object.freeze([1, 2, 3]);
@@ -113,3 +152,22 @@ export const PRODUCAO = /* @__PURE__ */ congelar({
 
 /** Preço base de um item (D25), ou 0 se não existe. */
 export const precoBase = (item) => ITENS[item]?.base ?? 0;
+
+/**
+ * Cadeia de alimentos para o comércio (S3b, linha de corte do M1b): o comércio zoneado da cidade pede mercadoria (S2b,
+ * sim.agregados.mercadoria.consumo, em unidades por hora de jogo); uma fração dela é comida. A Holding fornece o que o
+ * estoque de alimentos cobre, a 100% do preço base, e o fornecido abate o que a cidade importaria. Uma unidade de
+ * alimentos (um lote de caminhão) cobre `mercadoriaPorUnidade` unidades de mercadoria. (calibrar)
+ */
+export const ALIMENTOS = /* @__PURE__ */ congelar({
+  item: 'alimentos',
+  fracaoDoConsumo: 0.35,
+  mercadoriaPorUnidade: 20,
+});
+
+/**
+ * Os itens da cadeia da Holding no M1a (D92): a obra da cidade de nível 3 a 5 compra só da Holding o que vem daqui. No
+ * M1b o item de um prédio da Holding que já existe na partida entra também (cimento com a Cimenteira, serrada com a
+ * Serraria...), pelo estado: ver itensDaCadeia em sim/holding/mercado.js.
+ */
+export const CADEIA_M1A = Object.freeze(['brita', 'areia', 'argila', 'tijolo', 'concreto']);

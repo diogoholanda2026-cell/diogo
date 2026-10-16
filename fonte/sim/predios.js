@@ -38,7 +38,7 @@ import { registrarMover } from './mover.js';
 /** Avisos de prédio (bits da coluna predios.avisos). */
 export const AV = Object.freeze({
   SEM_AGUA: 1, SEM_ENERGIA: 2, SEM_ACESSO: 4, SEM_TRABALHADORES: 8, SEM_CLIENTES: 16, ABANDONO: 32, ABANDONADO: 64,
-  SEM_MATERIAL: 128, RACIONADO: 256, DESEMPREGO: 512, BEM_ESTAR: 1024, SEM_REDE: 2048,
+  SEM_MATERIAL: 128, RACIONADO: 256, DESEMPREGO: 512, BEM_ESTAR: 1024, SEM_REDE: 2048, SEM_ESGOTO: 4096, POLUICAO: 8192,
 });
 
 /** Código, glifo e gravidade de cada aviso, na ordem de prioridade (o primeiro presente é o glifo do marcador). */
@@ -56,6 +56,9 @@ export const AVISOS_PREDIO = Object.freeze([
   { bit: AV.SEM_CLIENTES, codigo: 'semClientes', glifo: 'poucosClientes', gravidade: 'atencao' },
   { bit: AV.DESEMPREGO, codigo: 'desemprego', glifo: 'trabalho', gravidade: 'info' },
   { bit: AV.BEM_ESTAR, codigo: 'bemEstarBaixo', glifo: 'bemEstarRuim', gravidade: 'info' },
+  // M1b (S2b): no fim para não mexer nos índices dos glifos
+  { bit: AV.SEM_ESGOTO, codigo: 'semEsgoto', glifo: 'esgoto', gravidade: 'grave' },
+  { bit: AV.POLUICAO, codigo: 'poluicao', glifo: 'alerta', gravidade: 'info' },
 ]);
 
 /** Nomes dos glifos de q.avisosPredios().glifo (índice 0 = nenhum). */
@@ -304,6 +307,8 @@ export function colocavelLiberado(sim, tipo, def = sim.colocaveis.obter(tipo)) {
 const PARTES = ['M1a', 'M1b', 'M2', 'M3', 'M4'];
 /** true se a parte (do colocável) já chegou no jogo. */
 export const parteOk = (parte) => PARTES.indexOf(parte ?? 'M1a') <= PARTES.indexOf(PARTE_ATUAL);
+/** true se o M1b já chegou no jogo: esgoto, ar, ruído e mercadoria (S2b) só valem daí em diante. */
+export const m1bAtivo = () => parteOk('M1b');
 
 /** Planta [frente, fundo] em metros de um colocável. */
 export function plantaDe(def) {
@@ -1164,6 +1169,7 @@ export function consultaPredio(sim, ref) {
 const ACOES = {
   semAgua: 'verCamadaAgua', semEnergia: 'verCamadaEnergia', racionado: 'verCamadaEnergia', semAcesso: 'construirVia', semRede: 'construirVia',
   semTrabalhadores: 'verCamadaEmpregos', abandonado: 'demolir', abandono: 'verCamadaBemEstar', bemEstarBaixo: 'verCamadaBemEstar',
+  semEsgoto: 'verCamadaEsgoto', poluicao: 'verCamadaAr',
 };
 const acaoDoAviso = (codigo) => ACOES[codigo] ?? null;
 

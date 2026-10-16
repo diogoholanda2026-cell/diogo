@@ -4,8 +4,11 @@
 import * as f0 from './textos/f0.js';
 import * as r1 from './textos/r1.js';
 import * as s1 from './textos/s1.js';
+import * as s1c from './textos/s1c.js';
 import * as s2 from './textos/s2.js';
+import * as s2b from './textos/s2b.js';
 import * as s3 from './textos/s3.js';
+import * as s3b from './textos/s3b.js';
 import * as u1 from './textos/u1.js';
 import * as u2 from './textos/u2.js';
 import * as ux1 from './textos/ux1.js';
@@ -19,7 +22,7 @@ import * as mov2 from './textos/mov2.js';
 import * as area1 from './textos/area1.js';
 import * as arc2 from './textos/arc2.js';
 
-const MODULOS = [f0, r1, s1, s2, s3, u1, u2, ux1, toq1, x1, x2, x3, pont2, mov1, mov2, area1, arc2];
+const MODULOS = [f0, r1, s1, s1c, s2, s2b, s3, s3b, u1, u2, ux1, toq1, x1, x2, x3, pont2, mov1, mov2, area1, arc2];
 
 const textos = new Map();
 const donos = new Map();

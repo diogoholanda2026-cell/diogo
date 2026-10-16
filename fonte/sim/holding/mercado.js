@@ -11,7 +11,7 @@
 //    ({ espera: true }) e entra no aviso "obras paradas por falta de <item>". Os outros itens a obra importa sozinha,
 //    como nos níveis 1 e 2 (a entrada da D48 item a item, C1c).
 // A demanda da cidade por item e por hora vai para a tela Holding (q.producao().itens[].cidadeHora).
-import { ITENS, ITENS_ORDEM, HOLDING_M1A, precoBase } from '../../data/holding.js';
+import { ITENS, ITENS_ORDEM, CADEIA_M1A, precoBase } from '../../data/holding.js';
 import { ECONOMIA } from '../../data/economia.js';
 import { ORDEM } from '../../contratos/interno.js';
 import { PREDIO } from '../../contratos/flags.js';
@@ -41,13 +41,22 @@ export function mercadoVazio() {
 const M = (sim) => sim.json.mercado;
 
 /**
- * Itens em que a obra de nível 3 a 5 depende da Holding do marco 3 em diante (a entrada da D48, C1c): os que a Holding
- * faz na parte que se joga, com o prédio dono em HOLDING_M1A (brita, areia, argila, tijolo e concreto no M1a). Cimento,
- * vidro, aço e serrada a Holding do M1a só importaria a 160% para vender a 100%, sem produção que a cidade precise
- * esperar; a obra importa esses sozinha, como nos níveis 1 e 2, até a fábrica deles entrar (Cimenteira, Vidraria e
- * Serraria no M1b, aço no M3).
+ * Itens em que a obra de nível 3 a 5 depende da Holding do marco 3 em diante (a entrada da D48, C1c e D92): no M1a os da
+ * CADEIA_M1A (brita, areia, argila, tijolo e concreto). Cimento, vidro, aço e serrada a Holding só importaria a 160% para
+ * vender a 100%, sem produção que a cidade precise esperar; a obra importa esses sozinha, como nos níveis 1 e 2, até a
+ * fábrica deles existir. No M1b (S3b) o item entra na cadeia assim que a partida tem o prédio que o faz (cimento com a
+ * Cimenteira, vidro com a Vidraria, serrada com a Serraria): a Holding passa a suprir a cidade com o que produz.
  */
-export const ITENS_DA_CADEIA = Object.freeze(ITENS_ORDEM.filter((k) => HOLDING_M1A.includes(ITENS[k].predio)));
+export const ITENS_DA_CADEIA = CADEIA_M1A;
+
+/** Itens da cadeia nesta partida: os do M1a e os dos prédios da Holding que já existem (M1b). Puro. */
+export function itensDaCadeia(sim) {
+  const tipos = new Set((sim.json.producao?.predios ?? []).map((e) => e.tipo));
+  return ITENS_ORDEM.filter((k) => CADEIA_M1A.includes(k) || (ITENS[k].predio && tipos.has(ITENS[k].predio) && !SO_DA_HOLDING.includes(k)));
+}
+
+/** Itens que as obras da cidade nunca pedem (insumos e comida): não entram na dependência. */
+const SO_DA_HOLDING = Object.freeze(['calcario', 'madeira', 'graos', 'alimentos']);
 
 /** Fator e prazo da importação agora (os choques do calendário, como o Bloqueio do Canal de Seshat). */
 export function condicoesImportacao(sim) {
@@ -87,10 +96,11 @@ export function comprarParaObra(sim, ref, nivel, materiais) {
   if (!retomada) for (const k of lista) m.demandaRodada[k] = (m.demandaRodada[k] ?? 0) + materiais[k];
   const dependente = nivel >= 3 && sim.progresso.liberado('regra.dependencia') && sim.progresso.marco().n >= 3;
   // fora da cadeia da Holding a falta não é dela: a obra importa sozinha (falta 0 aqui)
+  const cadeia = itensDaCadeia(sim);
   const plano = lista.map((k) => {
     const pede = Math.ceil(materiais[k]);
     const doEstoque = vendeCidade(sim, k) ? Math.min(pede, disponivelVenda(sim, k)) : 0;
-    return { k, pede, doEstoque, falta: ITENS_DA_CADEIA.includes(k) ? pede - doEstoque : 0 };
+    return { k, pede, doEstoque, falta: cadeia.includes(k) ? pede - doEstoque : 0 };
   });
   if (!dependente) {
     for (const p of plano) vender(sim, p.k, p.doEstoque);

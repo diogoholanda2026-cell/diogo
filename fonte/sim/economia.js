@@ -14,14 +14,15 @@
 // receber, comprarParaObra, entregar, efeito) e sim.progresso (de progresso.js), logo no começo, para as parcelas que
 // registram depois (X1b) já falarem com os de verdade.
 import { ECONOMIA, FUNDO_TESTE, CAIXA_INICIAL, tarifaPelasRegras } from '../data/economia.js';
-import { dataDoTique, anoDeJogo, anoDoCalendario } from '../data/historia.js';
+import { dataDoTique, anoDeJogo, anoDoCalendario, MODO_LIVRE } from '../data/historia.js';
 import { HORA, ANO, MES, RODADA } from '../comum/relogio.js';
 import { ORDEM } from '../contratos/interno.js';
 import { definirIdentidade } from './substitutos.js';
-import { regrasDe, lancar, naoPago, atualizarLivro, somaHora, caixaVazio, finito } from './holding/base.js';
+import { regrasDe, lancar, naoPago, atualizarLivro, somaHora, caixaVazio, finito, livre, fatorDosEfeitos } from './holding/base.js';
 import { instalarProgresso } from './progresso.js';
 import { comprarParaObra } from './holding/mercado.js';
 import { entregar, registrarChegada } from './holding/logistica.js';
+import { consultaVilaNova } from './holding/vila.js';
 import { salariosHora, valorHolding, folhaHolding, ocupadosHolding } from './holding/producao.js';
 import { efeitosAtivos, somarMedidor, medidores } from './historia.js';
 import { JOGADOR, MUNDO, CONSELHEIROS, CONSELHEIROS_ORDEM } from '../data/nomes.js';
@@ -264,13 +265,19 @@ export function jurosHora(sim) {
 
 // ------------------------------------------------------------------------------------------------ orçamento
 
-/** Custos registrados (sim.custos) por categoria do orçamento: vias, ligação externa e o resto como serviços. */
+/**
+ * Custos registrados (sim.custos) por categoria do orçamento: vias, ligação externa e o resto como serviços. A energia que
+ * vem da rodovia (a conta 'ligacao' da S2a) segue o fator dos efeitos `custoLigacao` das decisões e dos eventos (a Crise da
+ * Energia de 2022 a encarece, a usina solar da Holding a barateia; S3b).
+ */
 function custosPorCategoria(sim) {
   const out = { servicos: 0, vias: 0, ligacao: 0 };
+  const energia = fatorDosEfeitos(sim, 'custoLigacao');
   for (const { nome, valor } of sim.custos.lista()) {
     const v = finito(valor);
     if (!(v > 0)) continue;
     if (nome === 'vias' || nome.startsWith('vias.')) out.vias += v;
+    else if (nome === 'ligacao') out.ligacao += v * energia;
     else if (/ligacao|externa/i.test(nome)) out.ligacao += v;
     else out.servicos += v;
   }
@@ -348,6 +355,8 @@ export function consultaHolding(sim) {
     jogador: JOGADOR.nome,
     ato: sim.json.historia?.ato ?? 1,
     conselheiros: CONSELHEIROS_ORDEM.map((k) => ({ id: k, ...CONSELHEIROS[k] })),
+    // S3b: a requalificação da Vila de Santa Cida (D95): { restantes, total, rede, bemEstar, custo, metodo, criterios, pronta, feita }
+    vilaNova: sim.json.historia && sim.tabelas.predios ? consultaVilaNova(sim) : null,
   };
 }
 
@@ -365,6 +374,8 @@ function tique(sim, k, fatias, T) {
   const E = sim.json.economia;
   const regras = regrasDe(sim);
   atualizarLivro(sim);
+  // Modo livre (D56): o caixa nunca baixa de MODO_LIVRE.caixa, então nenhuma obra, linha ou decisão pede crédito
+  if (livre(sim) && sim.json.holding.caixa < MODO_LIVRE.caixa) sim.json.holding.caixa = MODO_LIVRE.caixa;
   // custos registrados: uma vez por rodada (as funções das outras parcelas podem varrer tabelas)
   if (T % RODADA === 0) {
     const c = custosPorCategoria(sim);

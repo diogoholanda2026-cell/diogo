@@ -11,7 +11,7 @@
 // Quem constrói é o comando `construir` da S2a (um só para serviços e Holding, por sim.colocaveis). A lista da S3a
 // acompanha a tabela a cada rodada, então serve qualquer `construir` que aloque a linha da tabela. Para testar sem a
 // S2a há um substituto em holding/substituto.js (fora do índice e do pacote do jogo).
-import { ITENS, ITENS_ORDEM, PREDIOS_HOLDING, HOLDING_ORDEM, HOLDING_M1A, LINHAS_POR_NIVEL, PRODUCAO, vagasDoNivel, precoBase } from '../../data/holding.js';
+import { ITENS, ITENS_ORDEM, PREDIOS_HOLDING, HOLDING_ORDEM, LINHAS_POR_NIVEL, PRODUCAO, vagasDoNivel, precoBase } from '../../data/holding.js';
 import { ECONOMIA, COMPRA_TEMPO, tempoPelasRegras, lotePelasRegras } from '../../data/economia.js';
 import { TIPO_PREDIO, PREDIO } from '../../contratos/flags.js';
 import { ORDEM } from '../../contratos/interno.js';
@@ -19,8 +19,8 @@ import { idxDaRef, gerDaRef, refDe } from '../../contratos/espelho.js';
 import { RODADA, HORA } from '../../comum/relogio.js';
 import { cantosRetangulo } from '../../comum/vetor.js';
 import { hipot } from '../../comum/util.js';
-import { regrasDe, finito, totalItens, efeitosAtivos } from './base.js';
-import { extrair } from '../mundo/recursos.js';
+import { regrasDe, finito, totalItens, efeitosAtivos, parteNoJogo } from './base.js';
+import { extrair, recursoNoPoligono } from '../mundo/recursos.js';
 
 // ------------------------------------------------------------------------------------------------ estado
 
@@ -121,12 +121,18 @@ export function sincronizar(sim) {
 
 // ------------------------------------------------------------------------------------------------ produtividade
 
-/** Bônus de produtividade das etapas (sim.holding.efeito, X1b) e das decisões (historia). */
-function bonus(sim) {
+/**
+ * Bônus de produtividade das etapas (sim.holding.efeito, X1b) e das decisões (historia). Um efeito de decisão com `predio`
+ * (um tipo ou uma lista: a licença da Mina vale só para a Mina e a Cimenteira) vale só para esses prédios.
+ */
+function bonus(sim, tipo) {
   let b = 0;
   const ef = sim.json.holding?.efeitos ?? {};
   for (const k of Object.keys(ef).sort()) b += finito(ef[k]?.produtividade);
-  for (const e of efeitosAtivos(sim, 'produtividade')) b += finito(e.v);
+  for (const e of efeitosAtivos(sim, 'produtividade')) {
+    if (e.predio !== undefined && ![].concat(e.predio).includes(tipo)) continue;
+    b += finito(e.v);
+  }
   return b;
 }
 
@@ -164,7 +170,6 @@ export function recalcular(sim) {
   const V = vagas.reduce((a, b) => a + b, 0);
   const ativos = finito(ag.populacao) * ECONOMIA.fracaoAtiva;
   const frac = V > 0 ? Math.min(1, ativos / V) : 0;
-  const b = bonus(sim);
   const arm = armazens(sim);
   p.cap = arm.reduce((a, x) => a + x.cap, 0);
   p.ocupacao = frac;
@@ -179,7 +184,9 @@ export function recalcular(sim) {
     const da = def.distanciaArmazem;
     if (da && Number.isFinite(dist)) penal = Math.min(da.max, Math.max(0, ((dist - da.livre) / 100) * da.porCem));
     e.ocupacao = frac;
-    e.produtividade = frac < PRODUCAO.ocupacaoMinima ? 0 : Math.max(0, frac * (1 - penal) * (1 + b));
+    // o trajeto de quem chega ao prédio tira até 30% (D37, S1c)
+    const trajeto = i >= 0 ? sim.transito?.fatorTrabalho(i) ?? 1 : 1;
+    e.produtividade = frac < PRODUCAO.ocupacaoMinima ? 0 : Math.max(0, frac * (1 - penal) * (1 + bonus(sim, e.tipo)) * trajeto);
     const vg = vagasDoNivel(e.tipo, e.nivel);
     for (let k = 0; k < 4; k++) sal += Math.round(vg[k] * frac) * ECONOMIA.salarioHora[k];
   }
@@ -259,11 +266,20 @@ function iniciar(sim, e, l) {
   let lote = l.n;
   if (item.recurso && sim.espelho.recursos?.[item.recurso.tipo]) {
     const area = areaDeExtracao(sim, e);
-    const tirou = area ? extrair(sim, item.recurso.tipo, area, l.n * item.recurso.porUnidade) : 0;
-    lote = Math.floor(tirou / item.recurso.porUnidade);
-    if (lote <= 0) {
-      l.parada = 'recurso';
-      return false;
+    if (item.recurso.renova) {
+      // a terra fértil renova (a Fazenda colhe sem gastar a grade): o lote inteiro sai enquanto a planta tem terra boa
+      const r = area ? recursoNoPoligono(sim.espelho.recursos, item.recurso.tipo, area) : { media: 0 };
+      if (!(r.media >= 20)) {
+        l.parada = 'recurso';
+        return false;
+      }
+    } else {
+      const tirou = area ? extrair(sim, item.recurso.tipo, area, l.n * item.recurso.porUnidade) : 0;
+      lote = Math.floor(tirou / item.recurso.porUnidade);
+      if (lote <= 0) {
+        l.parada = 'recurso';
+        return false;
+      }
     }
   }
   for (const [k, q] of Object.entries(item.req)) {
@@ -530,11 +546,11 @@ function taxas(sim) {
   return { produz, consome };
 }
 
-/** Itens que o M1a não usa (só do M1b); aparecem nas telas só se houver estoque. */
-const SO_M1B = Object.freeze(['madeira', 'calcario']);
+/** Itens que o M1a não usa (só do M1b); aparecem nas telas só com o M1b no jogo ou se houver estoque. */
+const SO_M1B = Object.freeze(['madeira', 'calcario', 'graos', 'alimentos']);
 
 /** Itens que aparecem nas telas. */
-const itensVisiveis = (sim) => ITENS_ORDEM.filter((k) => !SO_M1B.includes(k) || (J(sim).estoque[k] ?? 0) > 0);
+const itensVisiveis = (sim) => ITENS_ORDEM.filter((k) => !SO_M1B.includes(k) || parteNoJogo('M1b') || (J(sim).estoque[k] ?? 0) > 0);
 
 /** Valor da Holding para a valuation: prédios pelo custo e estoque a preço base. */
 export function valorHolding(sim) {
@@ -604,7 +620,8 @@ export function defColocavel(tipo) {
 
 export function registrar(sim) {
   sim.registrarJson('producao', producaoVazia());
-  for (const tipo of HOLDING_M1A) sim.colocaveis.registrar(tipo, defColocavel(tipo));
+  // todos os tipos: o de uma parte que ainda não chegou fica fora do catálogo e do construir pela PARTE_ATUAL (parteOk)
+  for (const tipo of HOLDING_ORDEM) sim.colocaveis.registrar(tipo, defColocavel(tipo));
   sim.registrarComando('linha.ordem', ordem);
   sim.registrarComando('linha.parar', parar);
   sim.registrarComando('predio.nivel', subirNivel);

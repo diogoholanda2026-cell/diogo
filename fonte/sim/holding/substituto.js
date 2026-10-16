@@ -1,7 +1,7 @@
 // Substituto do comando construir para os prédios da Holding (dona: S3a), só para testar sem a S2a: q.construir.previa,
 // construir, q.catalogo e q.predio dos prédios da Holding. Não entra no índice (fonte/sim/estado.js) nem no pacote do
 // jogo; os testes e o robô instalam com instalarConstruirHolding(sim) quando a S2a não está na simulação.
-import { PREDIOS_HOLDING, HOLDING_ORDEM, HOLDING_M1A } from '../../data/holding.js';
+import { PREDIOS_HOLDING, HOLDING_ORDEM } from '../../data/holding.js';
 import { TIPO_PREDIO, PREDIO } from '../../contratos/flags.js';
 import { refDe } from '../../contratos/espelho.js';
 import { pontoNoRetangulo } from '../../comum/vetor.js';
@@ -10,6 +10,7 @@ import { daHolding } from '../mundo/ladrilhos.js';
 import { areaDe } from '../mundo/areas.js';
 import { arestaPerto } from '../vias/grafo.js';
 import { sincronizar, recalcular, entradaDe, idxHolding, folhaHolding } from './producao.js';
+import { parteNoJogo } from './base.js';
 
 /** Recurso médio (0..255) do tipo nas células perto de (x, z). */
 function recursoPerto(sim, tipo, x, z, raio) {
@@ -35,7 +36,7 @@ function recursoPerto(sim, tipo, x, z, raio) {
 export function previaHolding(sim, { tipo, x, z, rot } = {}) {
   const def = PREDIOS_HOLDING[tipo];
   const base = { ok: false, codigo: 'valor', x, z, rot, custo: def?.custo ?? 0, manutencaoHora: 0, alcance: 0, efeitos: [] };
-  if (!def || !HOLDING_M1A.includes(tipo) || !Number.isFinite(x) || !Number.isFinite(z)) return base;
+  if (!def || !parteNoJogo(def.parte) || !Number.isFinite(x) || !Number.isFinite(z)) return base;
   const [w, d] = def.planta;
   const res = { ...base, codigo: undefined };
   if (!sim.progresso.liberado(`holding.${tipo}`)) return { ...res, codigo: 'marco' };
@@ -109,7 +110,7 @@ function construirHolding(sim, args = {}) {
 /** Catálogo substituto (categoria 'empresas'): os prédios da Holding do M1a. */
 function catalogoHolding(sim, categoria) {
   if (categoria && categoria !== 'empresas' && categoria !== 'holding') return [];
-  return HOLDING_M1A.map((tipo) => {
+  return HOLDING_ORDEM.filter((tipo) => parteNoJogo(PREDIOS_HOLDING[tipo].parte)).map((tipo) => {
     const def = PREDIOS_HOLDING[tipo];
     return { tipo, nome: def.nome, chave: `s3.holding.${tipo}`, custo: def.custo, manutencaoHora: 0, marco: def.marco, liberado: sim.progresso.liberado(`holding.${tipo}`), categoria: 'empresas' };
   });

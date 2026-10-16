@@ -5,6 +5,7 @@
 // paramsChave (params que são chaves de texto: a interface traduz antes de montar a frase), quem, dominio, feito,
 // total, alvo: { x, z } | { tela } | { ui } | null, recompensa: { xp, creditos } }.
 import { OBJETIVOS, DOMINIOS_OBJETIVO, ETAPAS_M1A } from '../data/objetivos.js';
+import { VILA_NOVA } from '../data/historia.js';
 import { MARCOS } from '../data/marcos.js';
 import { ZONAS_ORDEM } from '../data/zonas.js';
 import { SERVICOS_ORDEM } from '../data/servicos.js';
@@ -15,8 +16,9 @@ import { componentes, noPerto } from './vias/grafo.js';
 import { noDeEntrada } from './mundo/vila.js';
 import { VIAS, VIAS_ORDEM } from '../data/vias.js';
 import { portaoNorte } from './mundo/areas.js';
-import { finito } from './holding/base.js';
-import { temMarca } from './historia.js';
+import { finito, parteNoJogo } from './holding/base.js';
+import { temMarca, somarMedidor } from './historia.js';
+import { estadoVila, requalificarVila } from './holding/vila.js';
 
 const CARREGADO = new WeakMap(); // sim → tique em que a partida foi carregada (q.retomar().desde)
 
@@ -183,6 +185,14 @@ function medir(sim, obj) {
       const n = sim.json.producao.predios.filter((e) => e.tipo === arg).length;
       return { feito: Math.min(1, n), total: 1 };
     }
+    case 'vilaNova': {
+      // Legado do Ato 1 (D95): rede nas casas da Vila, bem-estar médio e caixa para a reforma; ao cumprir, a Holding
+      // requalifica as casas (aoCumprir). Já feita (save carregado): completo.
+      if (sim.json.historia?.vilaNova) return { feito: 3, total: 3, params: { n: sim.json.historia.vilaNova.casas } };
+      const v = estadoVila(sim);
+      const feito = (v.criterios.rede ? 1 : 0) + (v.criterios.bemEstar ? 1 : 0) + (v.criterios.caixa ? 1 : 0);
+      return { feito: v.restantes > 0 ? feito : 3, total: 3, params: { n: v.restantes, bem: Math.round(VILA_NOVA.bemEstarMin) } };
+    }
     case 'linhasAuto': {
       const tipos = arg.split(',');
       const ok = tipos.filter((t) => sim.json.producao.predios.some((e) => e.tipo === t && e.linhas.some((l) => l.ativa && l.auto && l.n === 10)));
@@ -243,7 +253,11 @@ function alvoDe(sim, obj) {
 
 // ------------------------------------------------------------------------------------------------ escolha
 
-const pode = (sim, obj) => (obj.marco === undefined || sim.progresso.marco().n >= obj.marco) && (!obj.requer || temMarca(sim, obj.requer));
+/** A marca (ou uma das marcas, se for lista) que o objetivo pede foi gravada por uma decisão? */
+const temRequer = (sim, requer) => !requer || [].concat(requer).some((m) => temMarca(sim, m));
+
+const pode = (sim, obj) =>
+  (obj.marco === undefined || sim.progresso.marco().n >= obj.marco) && temRequer(sim, obj.requer) && (!obj.parte || parteNoJogo(obj.parte));
 
 /** O objetivo aberto de um domínio: os que uma decisão pôs na frente, depois a lista, no primeiro não feito. */
 function abertoDe(sim, dominio) {
@@ -251,7 +265,6 @@ function abertoDe(sim, dominio) {
   const extras = (sim.json.historia?.objetivosExtras ?? []).filter((x) => x.dominio === dominio).map((x) => OBJETIVOS.find((y) => y.id === x.id)).filter(Boolean);
   for (const obj of [...extras, ...OBJETIVOS.filter((x) => x.dominio === dominio)]) {
     if (o.feitos.includes(obj.id)) continue;
-    if (obj.requer && !temMarca(sim, obj.requer)) continue;
     if (!pode(sim, obj)) continue;
     return obj;
   }
@@ -284,6 +297,15 @@ export function consultaObjetivos(sim) {
   return out;
 }
 
+/** O que alguns objetivos fazem na hora em que se cumprem (`aoCumprir` em data/objetivos.js); true se fez. */
+const AO_CUMPRIR = Object.freeze({
+  // a Holding reforma as casas da Vila (S3b, D95); o Legado dela vem da recompensa do objetivo
+  vilaNova: (sim) => {
+    if (sim.json.historia?.vilaNova || estadoVila(sim).restantes === 0) return true;
+    return requalificarVila(sim);
+  },
+});
+
 /** Contínuos: refeitos pelo estado, nunca acabam (sempre há um aberto). */
 const continuo = (obj) => obj.total === undefined;
 
@@ -300,9 +322,12 @@ function sistemaObjetivos(sim) {
       if (!obj || continuo(obj)) break;
       const m = medir(sim, obj);
       if (!(m.feito >= m.total)) break;
+      // o que o objetivo faz ao se cumprir (a Vila nova): se não conseguir agora (caixa), o objetivo segue aberto
+      if (obj.aoCumprir && !AO_CUMPRIR[obj.aoCumprir]?.(sim)) break;
       o.feitos.push(obj.id);
       if (obj.recompensa.xp) sim.progresso.xp(obj.recompensa.xp, 'objetivos');
       if (obj.recompensa.creditos) sim.holding.receber(obj.recompensa.creditos, 'marcos');
+      if (obj.recompensa.legado) somarMedidor(sim, 'legado', obj.recompensa.legado, `objetivo:${obj.id}`);
       sim.emitir('objetivo', { id: obj.id, estado: 'feito' });
     }
   }

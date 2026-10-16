@@ -3,8 +3,9 @@
 // cada lista é contínuo (refeito pelo estado, nunca acaba), então sempre há um aberto. A conta de cada `medida` fica em
 // fonte/sim/objetivos.js; o texto é 's3.objetivo.<id>' com os parâmetros da medida.
 //
-// Formato: { id, dominio, quem, medida, total?, marco?, requer? (marca de decisão), recompensa: { xp, creditos },
-//            alvo?: 'sugestao:<id>' | 'tela:<id>' | 'ferramenta:<id>' }
+// Formato: { id, dominio, quem, medida, total?, marco?, requer? (marca de decisão, ou lista: vale uma delas), parte?
+//            ('M1b': só com o M1b no jogo), aoCumprir? (o que acontece ao cumprir, em sim/objetivos.js), recompensa: { xp,
+//            creditos, legado? }, alvo?: 'sugestao:<id>' | 'tela:<id>' | 'ferramenta:<id>' }
 import { congelar } from '../comum/util.js';
 
 export const OBJETIVOS = /* @__PURE__ */ congelar([
@@ -22,6 +23,13 @@ export const OBJETIVOS = /* @__PURE__ */ congelar([
   { id: 'cidade.saudeEducacao', dominio: 'cidade', quem: 'cida', medida: 'servicos:clinica,escolaF', total: 2, marco: 1, recompensa: { xp: 60, creditos: 5000 }, alvo: 'ferramenta:servicos' },
   { id: 'cidade.media', dominio: 'cidade', quem: 'iris', medida: 'celulasZona:resMedia', total: 200, marco: 2, recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:zonas' },
   { id: 'cidade.bemEstar', dominio: 'cidade', quem: 'cida', medida: 'bemEstar', total: 61, marco: 2, recompensa: { xp: 80, creditos: 10000 }, alvo: 'tela:cidade' },
+  // S3b (M1b): o objetivo de Legado do Ato 1. A decisão vila.futuro o põe na frente; ao cumprir, a Holding requalifica a
+  // Vila (as casas de autoconstrução passam ao padrão alto da D95)
+  {
+    id: 'cidade.vilaNova', dominio: 'cidade', quem: 'cida', medida: 'vilaNova', total: 3, marco: 3, parte: 'M1b',
+    requer: ['vila.futuro:reformar', 'vila.futuro:substituir'], aoCumprir: 'vilaNova',
+    recompensa: { xp: 120, creditos: 0, legado: 8 }, alvo: 'tela:cidade',
+  },
   { id: 'cidade.marco', dominio: 'cidade', quem: 'iris', medida: 'xpMarco', recompensa: { xp: 0, creditos: 0 }, alvo: 'tela:progresso' },
 
   // Holding
@@ -30,6 +38,11 @@ export const OBJETIVOS = /* @__PURE__ */ congelar([
   { id: 'holding.olaria', dominio: 'holding', quem: 'tome', medida: 'holding:olaria', total: 1, marco: 1, recompensa: { xp: 30, creditos: 0 }, alvo: 'sugestao:olaria' },
   { id: 'holding.deposito', dominio: 'holding', quem: 'livia', medida: 'vendasDeposito', total: 1, recompensa: { xp: 20, creditos: 0 }, alvo: 'tela:holding.mercado' },
   { id: 'holding.concreteira', dominio: 'holding', quem: 'tome', medida: 'holding:concreteira', total: 1, marco: 3, recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:empresas' },
+  // S3b (M1b): a cadeia do cimento, os vidros e os alimentos
+  { id: 'holding.mina', dominio: 'holding', quem: 'tome', medida: 'holding:mina', total: 1, marco: 2, parte: 'M1b', recompensa: { xp: 30, creditos: 0 }, alvo: 'ferramenta:empresas' },
+  { id: 'holding.cimenteira', dominio: 'holding', quem: 'tome', medida: 'holding:cimenteira', total: 1, marco: 2, parte: 'M1b', recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:empresas' },
+  { id: 'holding.alimentos', dominio: 'holding', quem: 'cida', medida: 'holding:agroindustria', total: 1, marco: 3, parte: 'M1b', recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:empresas' },
+  { id: 'holding.vidraria', dominio: 'holding', quem: 'tome', medida: 'holding:vidraria', total: 1, marco: 4, parte: 'M1b', recompensa: { xp: 40, creditos: 0 }, alvo: 'ferramenta:empresas' },
   { id: 'holding.estoque', dominio: 'holding', quem: 'tome', medida: 'estoqueEtapa', recompensa: { xp: 0, creditos: 0 }, alvo: 'tela:holding' },
 
   // Arcologia

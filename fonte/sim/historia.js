@@ -1,15 +1,16 @@
-// História do Ato 1 "A Concessão" no M1a (dona: S3a): calendário com data real (D67), eventos do período com nome
-// fictício (D77), as 3 decisões do M1a com a marca gravada (memória), Influência e Legado (D55) e o Mural.
+// História do Ato 1 "A Concessão" (dona: S3a e S3b): calendário com data real (D67), eventos do período com nome
+// fictício (D77), as 6 decisões com a marca gravada (memória), Influência e Legado (D55) e o Mural.
 //
 // Decisões: `vila.agua` no marco 0 (minuto 3, D52), a Febre Aurora (mar. 2020) e o Bloqueio do Canal de Seshat
-// (mar. 2021). Uma decisão abre (evento `decisao`), espera a escolha até o prazo (um adiamento por decisão) e, se o
+// (mar. 2021) no M1a; no M1b (S3b, só com a PARTE_ATUAL aberta) a Crise da Energia (fev. 2022), a licença da Mina
+// (marco 2) e o futuro da Vila (marco 3). Uma decisão abre (evento `decisao`), espera a escolha até o prazo (um adiamento por decisão) e, se o
 // prazo passa, vale a opção padrão. A escolha aplica os efeitos (data/historia.js), soma Influência ou Legado, grava a
 // marca '<decisão>:<opção>' e põe a fala no Mural. Os efeitos que são da cidade (bem-estar numa área, demanda) ficam
 // na lista para a S2a ler por sim.economia.efeitos(tipo).
 import { DECISOES, EVENTOS, MEDIDORES, MURAL_MAX, tiqueDaData, dataDoTique, MES_TIQUES } from '../data/historia.js';
 import { ORDEM } from '../contratos/interno.js';
 import { RODADA } from '../comum/relogio.js';
-import { postarMural, efeitosAtivos as ativos, finito } from './holding/base.js';
+import { postarMural, efeitosAtivos as ativos, finito, parteNoJogo, m1bAtivo } from './holding/base.js';
 import { concederLicencas } from './mundo/ladrilhos.js';
 
 export function historiaVazia() {
@@ -24,6 +25,8 @@ export function historiaVazia() {
     eventos: [], // ids dos eventos do calendário que já chegaram
     abertas: [], // ids das decisões que já abriram (sem evento)
     objetivosExtras: [], // { dominio, id } que uma decisão pôs na frente
+    eventosM1b: [], // ids dos eventos cuja parte do M1b (choque e decisão) já foi aplicada
+    vilaNova: null, // { tique, casas, metodo, custo } quando a Vila foi requalificada (S3b)
     medidores: [], // { nome, v, motivo, tique }
     mural: [],
     seqMural: 0,
@@ -146,6 +149,8 @@ export const temMarca = (sim, marca) => !!H(sim)?.marcas.includes(marca);
 
 function sistemaHistoria(sim, k, fatias, T) {
   const h = H(sim);
+  // save de antes da S3b: os campos novos nascem vazios (o hash do save antigo não muda por causa deles)
+  h.eventosM1b ??= [];
   // eventos do calendário
   for (const ev of EVENTOS) {
     if (h.eventos.includes(ev.id) || T < tiqueDaData(ev.ano, ev.mes)) continue;
@@ -154,13 +159,23 @@ function sistemaHistoria(sim, k, fatias, T) {
     if (ev.mural) postarMural(sim, ev.mural.autor, ev.mural.chave, { ...dataDoTique(T) }, null, MURAL_MAX);
     if (ev.decisao) {
       const d = DECISOES.find((x) => x.id === ev.decisao);
+      if (d && parteNoJogo(d.parte)) abrir(sim, d);
+    }
+  }
+  // a parte do M1b de um evento (S3b): o choque e a decisão. Vale assim que o M1b está no jogo e o evento já chegou
+  if (m1bAtivo()) {
+    for (const ev of EVENTOS) {
+      if (!ev.m1b || !h.eventos.includes(ev.id) || h.eventosM1b.includes(ev.id)) continue;
+      h.eventosM1b.push(ev.id);
+      for (const c of ev.m1b.choque ?? []) novoEfeito(sim, c, `evento:${ev.id}`);
+      const d = ev.m1b.decisao ? DECISOES.find((x) => x.id === ev.m1b.decisao) : null;
       if (d) abrir(sim, d);
     }
   }
-  // decisões sem evento (vila.agua: marco 0, minuto 3)
+  // decisões sem evento (vila.agua: marco 0, minuto 3; mina.licenca e vila.futuro: marcos 2 e 3, no M1b)
   const marco = sim.progresso.marco().n;
   for (const d of DECISOES) {
-    if (d.evento || h.abertas.includes(d.id)) continue;
+    if (d.evento || h.abertas.includes(d.id) || !parteNoJogo(d.parte)) continue;
     if (T >= tiqueDe(d) && marco >= (d.quando.marco ?? 0)) abrir(sim, d);
   }
   // prazos vencidos: vale a opção padrão

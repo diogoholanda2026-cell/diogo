@@ -5,7 +5,8 @@
 // libera: ids do que o marco desbloqueia, no formato '<domínio>.<id>' ('via.ruaMao', 'zona.resMedia', 'servico.clinica',
 // 'holding.olaria', 'item.aco', 'etapa.torre.e1', 'acao.deposito'); progresso.liberado(id) responde por eles. O que
 // está na lista de um marco ainda não alcançado fica trancado; o que não está em lista nenhuma fica livre. Os ids M1b
-// ficam na lista com a parte para a S3b ligar.
+// (`m1b`) ficam trancados até o integrador abrir o M1b (PARTE_ATUAL em data/zonas.js); então valem como `libera`, e a
+// S3b os ligou: Manejo, Serraria, Mina, Cimenteira (e o cimento), Vidraria, Fazenda e Agroindústria.
 import { congelar } from '../comum/util.js';
 
 /** XP de bem-estar por mês (D51): moradores x (bem-estar − 50) / 2.000, só acima de 50. */
@@ -36,13 +37,13 @@ export const MARCOS = /* @__PURE__ */ congelar([
   {
     n: 2, nome: 'Vila', xp: 1500, licencas: 1,
     libera: ['servico.bombeiros', 'zona.resMedia', 'via.ruaMao'],
-    m1b: ['holding.mina', 'holding.cimenteira', 'item.calcario'],
+    m1b: ['holding.mina', 'holding.cimenteira', 'item.calcario', 'item.cimento', 'holding.fazenda', 'item.graos'],
   },
   {
     n: 3, nome: 'Vila Próspera', xp: 3500, licencas: 1,
     // D48: daqui em diante as obras de nível 3 a 5 da cidade compram só da Holding
     libera: ['holding.concreteira', 'item.concreto', 'item.cimento', 'item.aco', 'etapa.torre.e1', 'regra.dependencia'],
-    m1b: ['zona.escritorio', 'zona.comAlta', 'servico.escolaM', 'servico.parque'],
+    m1b: ['zona.escritorio', 'zona.comAlta', 'servico.escolaM', 'servico.parque', 'holding.agroindustria', 'item.alimentos'],
   },
   {
     n: 4, nome: 'Cidade Nova', xp: 8000, licencas: 1,

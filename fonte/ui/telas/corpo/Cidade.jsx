@@ -83,6 +83,15 @@ function Demanda({ d, b }) {
           ))}
           <p class="eco-nota">{t('barra.demanda.nota')}</p>
         </Secao>
+        {d?.mercadoria ? (
+          <Secao titulo={t('cid.mercadoria')}>
+            <Par k="merc-producao" rotulo={t('cid.mercadoria.producao')} valor={t('cid.mercadoria.unidade', { n: fmt.numero(d.mercadoria.producao) })} />
+            <Par k="merc-consumo" rotulo={t('cid.mercadoria.consumo')} valor={t('cid.mercadoria.unidade', { n: fmt.numero(d.mercadoria.consumo) })} />
+            <Par k="merc-importada" rotulo={t('cid.mercadoria.importada')} valor={t('cid.mercadoria.unidade', { n: fmt.numero(d.mercadoria.importada) })} estado={d.mercadoria.importada > 0 ? 'al' : null} />
+            {d.mercadoria.excedente > 0 ? <Par k="merc-excedente" rotulo={t('cid.mercadoria.excedente')} valor={t('cid.mercadoria.unidade', { n: fmt.numero(d.mercadoria.excedente) })} /> : null}
+            <p class="eco-nota">{t('cid.mercadoria.nota')}</p>
+          </Secao>
+        ) : null}
       </div>
       <div class="gest-col">
         {zonas.map((z) => (Array.isArray(fatores[z]) && fatores[z].length ? <Fatores titulo={t('cid.fatoresDe', { zona: ZONAS[z]?.nome ?? z })} fatores={fatores[z].filter((f) => f.id !== 'parte')} /> : null))}
@@ -137,8 +146,8 @@ function Servicos({ c, fechar }) {
     <div class="gest-colunas">
       <div class="gest-col">
         <Secao titulo={t('cid.redes')}>
-          {['agua', 'energia'].map((r) =>
-            redes[r] ? (
+          {['agua', 'energia', 'esgoto'].map((r) =>
+            redes[r] && (r !== 'esgoto' || redes[r].oferta > 0 || redes[r].demanda > 0) ? (
               <div class="fl-par fl-par-barra" data-k={r}>
                 <span class="fl-par-rot">{t(`folha.rede.${r}`)}</span>
                 <Barra valor={redes[r].oferta > 0 ? redes[r].demanda / redes[r].oferta : redes[r].demanda > 0 ? 1 : 0} estado={redes[r].demanda > redes[r].oferta ? 'al' : 'ok'} rotulo={t(`folha.rede.${r}`)} texto={t('cid.redeUso', { d: fmt.numero(redes[r].demanda ?? 0), o: fmt.numero(redes[r].oferta ?? 0) })} />

@@ -96,7 +96,7 @@ export class Tarefas {
   /**
    * Registra (ou completa) uma tarefa: os campos se juntam por nome.
    * @param {string} nome
-   * @param {{ K?: number, fn?: Function, aplicar?: (sim: object, saida: any, pedido: object) => void }} def
+   * @param {{ K?: number, fn?: Function, fatiado?: boolean, aplicar?: (sim: object, saida: any, pedido: object) => void }} def
    */
   registrar(nome, def = {}) {
     const d = this.defs.get(nome) ?? { K: 1, fn: null, aplicar: null };
@@ -106,6 +106,9 @@ export class Tarefas {
     }
     if (def.fn) d.fn = def.fn;
     if (def.aplicar) d.aplicar = def.aplicar;
+    // fatiado: sem worker (Node), a função geradora não roda inteira dentro do pedido; anda em fatias (andar) e o que
+    // faltar termina em T + K. O resultado é o mesmo: a função é pura e a entrada é a cópia.
+    if (def.fatiado !== undefined) d.fatiado = !!def.fatiado;
     this.defs.set(nome, d);
   }
 
@@ -128,7 +131,7 @@ export class Tarefas {
     return p.id;
   }
 
-  _despachar(p) {
+  _despachar(p, imediato = false) {
     const d = this.defs.get(p.nome);
     if (this.trabalhador && !this.morto) {
       const copia = copiaProfunda(p.entrada);
@@ -139,6 +142,8 @@ export class Tarefas {
         this.falhou();
       }
     } else if (this.trabalhador && this.morto) {
+      this._refazer(p);
+    } else if (d.fatiado && !imediato) {
       this._refazer(p);
     } else {
       p.saida = executarAteOFim(d.fn, copiaProfunda(p.entrada));
@@ -184,6 +189,22 @@ export class Tarefas {
     for (const p of this.pendentes) {
       if (p.estado !== 'refazendo') continue;
       for (let k = 0; k < fatias; k++) {
+        const r = p.iter.next();
+        if (r.done) {
+          p.saida = r.value;
+          p.estado = 'pronta';
+          p.iter = null;
+          break;
+        }
+      }
+    }
+  }
+
+  /** Anda `passos` fatias da tarefa `nome` que está sendo feita aqui (sistema da tarefa fatiada, a cada tique). */
+  andar(nome, passos = 3) {
+    for (const p of this.pendentes) {
+      if (p.nome !== nome || p.estado !== 'refazendo') continue;
+      for (let k = 0; k < passos; k++) {
         const r = p.iter.next();
         if (r.done) {
           p.saida = r.value;
@@ -254,7 +275,7 @@ export class Tarefas {
       if (!this.defs.get(q.nome)?.fn) throw new Error(`save: tarefa pendente desconhecida (${q.nome})`);
       const p = { ...q, saida: null, estado: 'nova', iter: null };
       this.pendentes.push(p);
-      this._despachar(p);
+      this._despachar(p, true);
     }
   }
 }

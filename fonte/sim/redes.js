@@ -6,7 +6,12 @@
 // aparece nas pontas, não sorteado. Prédio sem via com redes fica sem ligação. Balanço uma vez por rodada.
 //
 // Componentes e distâncias são função pura do grafo e dos produtores (refeitos quando um dos dois muda); os bits de
-// cada prédio (SEM_AGUA, SEM_ENERGIA, RACIONADO) e os totais vão no save.
+// cada prédio (SEM_AGUA, SEM_ESGOTO, SEM_ENERGIA, RACIONADO) e os totais vão no save.
+//
+// Esgoto (M1b, S2b): a terceira rede, separada da água (D50, seção 8.2). Cada prédio que gasta água devolve o mesmo
+// tanto em esgoto; quem trata é a ETE (categoria 'esgoto', na margem do rio), com a mesma conta de componente,
+// racionamento dos mais distantes e quadro de pessoal. Não há ligação externa de esgoto. Só vale com o M1b no jogo
+// (m1bAtivo): no M1a a rede não existe, nenhum prédio fica sem esgoto e o bem-estar não muda.
 import { RODADA } from '../comum/relogio.js';
 import { montarCSR } from '../comum/caminhos.js';
 import { idxDaRef } from '../contratos/espelho.js';
@@ -17,13 +22,17 @@ import { SERVICOS, SERVICOS_ORDEM, LIGACAO_EXTERNA } from '../data/servicos.js';
 import { noDeEntrada } from './mundo/vila.js';
 import {
   prepararCidade, trans, acessoDe, garantirAcessos, funciona, tipoDoPredio, nivelZona, FAMILIA_ZONA, registrarPartePredio,
-  registrarAlertas,
+  registrarAlertas, m1bAtivo,
 } from './predios.js';
 import { ocupacaoDe, registrarParteCidade } from './cidadaos.js';
 import { buscar, pessoalEPagamento } from './servicos.js';
 
 export const RECURSOS_REDE = Object.freeze(['agua', 'energia']);
-const BIT_SEM = { agua: PREDIO.SEM_AGUA, energia: PREDIO.SEM_ENERGIA };
+/** As três redes; o esgoto entra com o M1b. */
+const TODOS_REDE = Object.freeze(['agua', 'energia', 'esgoto']);
+/** Redes que valem agora: água e energia; com o M1b, também o esgoto. */
+export const recursosAtivos = () => (m1bAtivo() ? TODOS_REDE : RECURSOS_REDE);
+const BIT_SEM = { agua: PREDIO.SEM_AGUA, energia: PREDIO.SEM_ENERGIA, esgoto: PREDIO.SEM_ESGOTO };
 /** Consumo de um prédio da Holding por vaga, quando o catálogo dele não diz. (calibrar) */
 const CONSUMO_HOLDING = { agua: 0.004, energia: 3 };
 
@@ -130,7 +139,7 @@ export function garantirRedes(sim) {
   const csr = montarCSR(N.n, de, para, peso);
   const prod = {};
   const dist = {};
-  for (const rec of RECURSOS_REDE) {
+  for (const rec of TODOS_REDE) {
     prod[rec] = produtoresDe(sim, rec);
     const d = new Float64Array(N.n);
     const r = new Int32Array(N.n);
@@ -147,10 +156,11 @@ export function garantirRedes(sim) {
 
 // ------------------------------------------------------------------------------------------------ consumo e balanço
 
-/** Consumo do prédio i (m³/h de água ou kW de energia) no estado de agora. */
+/** Consumo do prédio i (m³/h de água ou de esgoto, kW de energia) no estado de agora. O esgoto é a água devolvida. */
 export function consumoDe(sim, i, rec) {
   const P = sim.tabelas.predios;
   if (!funciona(P, i)) return 0;
+  if (rec === 'esgoto') rec = 'agua';
   if (P.tipo[i] === TIPO_PREDIO.ZONA) {
     const nv = nivelZona(P, i);
     if (!nv) return 0;
@@ -205,14 +215,18 @@ export function sistemaRedes(sim) {
   const n = P.n;
   const novos = new Uint32Array(n);
   const consumo = { agua: new Float32Array(n), energia: new Float32Array(n) };
+  consumo.esgoto = consumo.agua; // o esgoto é a água devolvida (só leitura)
   const compDe = new Int32Array(n).fill(-1);
-  const distDe = { agua: new Float64Array(n), energia: new Float64Array(n) };
+  const distDe = { agua: new Float64Array(n), energia: new Float64Array(n), esgoto: new Float64Array(n) };
   const cA = consumo.agua;
   const cE = consumo.energia;
   const dA = distDe.agua;
   const dE = distDe.energia;
+  const dS = distDe.esgoto;
   const rA = R.dist.agua;
   const rE = R.dist.energia;
+  const rS = R.dist.esgoto;
+  const ativos = recursosAtivos();
   garantirAcessos(sim);
   const t = trans(sim);
   for (let i = 0; i < n; i++) {
@@ -231,13 +245,14 @@ export function sistemaRedes(sim) {
       const resto = Math.max(0, A.arco[17 * e + 16] - s);
       dA[i] = Math.min(rA[a] + s, rA[b] + resto);
       dE[i] = Math.min(rE[a] + s, rE[b] + resto);
+      dS[i] = Math.min(rS[a] + s, rS[b] + resto);
     }
     consumos(sim, P, i, CO);
     cA[i] = CO[0];
     cE[i] = CO[1];
   }
   let importado = 0;
-  for (const rec of RECURSOS_REDE) {
+  for (const rec of ativos) {
     const cons = consumo[rec];
     const bit = BIT_SEM[rec];
     const oferta = new Float64Array(R.nComp);
@@ -317,8 +332,13 @@ export function sistemaRedes(sim) {
     ag.redes[rec].demanda = Math.round(deT * 100) / 100;
   }
   ag.redes.importado.energia = Math.round(importado * 10) / 10;
+  // antes do M1b o esgoto não existe: zerado (um save do M1b aberto sem ele não deixa a conta velha)
+  if (!ativos.includes('esgoto')) {
+    ag.redes.esgoto.oferta = 0;
+    ag.redes.esgoto.demanda = 0;
+  }
   // bits dos prédios: marca só quem mudou
-  const mascara = PREDIO.SEM_AGUA | PREDIO.SEM_ENERGIA | PREDIO.RACIONADO;
+  const mascara = PREDIO.SEM_AGUA | PREDIO.SEM_ESGOTO | PREDIO.SEM_ENERGIA | PREDIO.RACIONADO;
   for (let i = 0; i < P.n; i++) {
     if (!P.viva[i]) continue;
     const f = P.flags[i];
@@ -365,8 +385,9 @@ function camadaRede(rec) {
   return (sim) => {
     const P = sim.tabelas.predios;
     const dados = new Float32Array(P.n);
+    const ativa = recursosAtivos().includes(rec);
     for (let i = 0; i < P.n; i++) {
-      if (!P.viva[i]) continue;
+      if (!P.viva[i] || !ativa) continue;
       if (P.tipo[i] === TIPO_PREDIO.SERVICO && SERVICOS[SERVICOS_ORDEM[P.modelo[i]]]?.categoria === rec) {
         dados[i] = 4;
         continue;
@@ -380,7 +401,7 @@ function camadaRede(rec) {
       { v: 4, chave: `camada.${rec}.produtor` },
     ];
     return {
-      id: rec, fonte: 'predios', dados, grade: null, tipo: 'cat', escala: { min: 0, max: 4, unidade: rec === 'agua' ? 'm³/h' : 'kW' },
+      id: rec, fonte: 'predios', dados, grade: null, tipo: 'cat', escala: { min: 0, max: 4, unidade: rec === 'energia' ? 'kW' : 'm³/h' },
       categorias: cats, legenda: cats,
       resumo: { chave: `camada.${rec}.resumo`, params: { oferta: ag[rec].oferta, demanda: ag[rec].demanda, importado: rec === 'energia' ? ag.importado.energia : 0 } },
       versao: sim.json.cidade.rodada,
@@ -389,7 +410,10 @@ function camadaRede(rec) {
 }
 
 function partePredio(sim, i, out) {
-  out.servicos = { ...(out.servicos ?? {}), agua: estadoRede(sim, i, 'agua'), energia: estadoRede(sim, i, 'energia'), esgoto: null };
+  out.servicos = {
+    ...(out.servicos ?? {}), agua: estadoRede(sim, i, 'agua'), energia: estadoRede(sim, i, 'energia'),
+    esgoto: m1bAtivo() ? estadoRede(sim, i, 'esgoto') : null,
+  };
 }
 
 function parteCidade(sim, out) {
@@ -397,10 +421,16 @@ function parteCidade(sim, out) {
   out.ligacaoExterna = { energia: { teto: LIGACAO_EXTERNA.energia, usado: sim.agregados.redes.importado.energia, ligada: R.entrada >= 0 } };
 }
 
+const ALERTA_REDE = {
+  agua: { glifo: 'semAgua', codigo: 'faltaAgua' },
+  energia: { glifo: 'semEnergia', codigo: 'faltaEnergia' },
+  esgoto: { glifo: 'esgoto', codigo: 'faltaEsgoto' },
+};
+
 function alertasRedes(sim) {
   const P = sim.tabelas.predios;
   const out = [];
-  for (const rec of RECURSOS_REDE) {
+  for (const rec of recursosAtivos()) {
     let n = 0;
     let rac = 0;
     let total = 0;
@@ -416,8 +446,8 @@ function alertasRedes(sim) {
     if (!n) continue;
     const ag = sim.agregados.redes[rec];
     out.push({
-      id: rec, gravidade: n > 0.1 * total ? 'grave' : 'atencao', glifo: rec === 'agua' ? 'semAgua' : 'semEnergia',
-      codigo: rec === 'agua' ? 'faltaAgua' : 'faltaEnergia', params: { n, racionados: rac, oferta: ag.oferta, demanda: ag.demanda }, alvo,
+      id: rec, gravidade: n > 0.1 * total ? 'grave' : 'atencao', glifo: ALERTA_REDE[rec].glifo,
+      codigo: ALERTA_REDE[rec].codigo, params: { n, racionados: rac, oferta: ag.oferta, demanda: ag.demanda }, alvo,
     });
   }
   return out;
@@ -446,6 +476,7 @@ export function registrar(sim) {
   sim.custos.registrar('ligacao', (s) => s.agregados.redes.importado.energia * LIGACAO_EXTERNA.precoKwHora);
   sim.camadas.registrar('agua', camadaRede('agua'));
   sim.camadas.registrar('energia', camadaRede('energia'));
+  sim.camadas.registrar('esgoto', camadaRede('esgoto'));
   registrarPartePredio(partePredio);
   registrarParteCidade(parteCidade);
   registrarAlertas(alertasRedes);

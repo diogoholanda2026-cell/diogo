@@ -3,8 +3,17 @@
 // Nada aqui lê relógio nem sorteia; o estado fica nas seções JSON registradas (save e hash).
 import { REGRAS_DONO, ECONOMIA, DESPESAS_CORRENTES } from '../../data/economia.js';
 import { MINUTO } from '../../comum/relogio.js';
+import { PARTE_ATUAL } from '../../data/zonas.js';
 
 const REGRAS = new WeakMap();
+
+const ORDEM_PARTES = ['M1a', 'M1b', 'M2', 'M3', 'M4'];
+
+/** true se a parte (do conteúdo) já chegou no jogo: o integrador abre o M1b trocando PARTE_ATUAL em data/zonas.js. */
+export const parteNoJogo = (parte) => ORDEM_PARTES.indexOf(parte ?? 'M1a') <= ORDEM_PARTES.indexOf(PARTE_ATUAL);
+
+/** true se o M1b está no jogo (conteúdo da S3b: decisões, cimento, Modo livre completo, alimentos, Vila nova). */
+export const m1bAtivo = () => parteNoJogo('M1b');
 
 /** Regras do dono desta simulação (sempre REGRAS_DONO no jogo; os testes trocam por usarRegras). */
 export const regrasDe = (sim) => REGRAS.get(sim) ?? REGRAS_DONO;
@@ -17,7 +26,7 @@ export function usarRegras(sim, regras) {
   REGRAS.set(sim, regras);
 }
 
-/** true no Modo livre (D56; o M1a não tem, mas a bandeira já existe). */
+/** true no Modo livre (D56): sem licença de ladrilho, sem custo, tudo liberado (a economia mantém o caixa cheio). */
 export const livre = (sim) => sim.json.partida?.modo === 'livre';
 
 export const finito = (v, padrao = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : padrao);
@@ -147,6 +156,13 @@ export function efeitosAtivos(sim, tipo) {
   const H = sim.json.historia;
   if (!H) return [];
   return H.efeitos.filter((e) => e.tipo === tipo && (e.ate === null || sim.tique < e.ate) && !e.anulado);
+}
+
+/** Produto dos `fator` dos efeitos ativos de um tipo (1 sem nenhum): custoLigacao, por exemplo. */
+export function fatorDosEfeitos(sim, tipo) {
+  let f = 1;
+  for (const e of efeitosAtivos(sim, tipo)) f *= finito(e.fator, 1);
+  return f;
 }
 
 /**

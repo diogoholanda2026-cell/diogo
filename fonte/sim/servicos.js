@@ -23,6 +23,9 @@ import { ocupacaoDe, registrarParteCidade } from './cidadaos.js';
 /** Tipos de serviço com cobertura pela via (os que têm raio), na ordem do índice. */
 export const TIPOS_COBERTURA = Object.freeze(SERVICOS_ORDEM.filter((id) => SERVICOS[id].raio));
 
+/** Categorias cuja cobertura usa o tempo congestionado da aresta (D37): o socorro anda na fila do trânsito. */
+const CONGESTIONADAS = new Set(['saude', 'bombeiros']);
+
 // ------------------------------------------------------------------------------------------------ busca
 
 /**
@@ -84,27 +87,36 @@ export function garantirCobertura(sim) {
   const t = trans(sim);
   const N = sim.tabelas.nos;
   const A = sim.tabelas.arestas;
-  if (t.cob && !t.grafoSujo && !t.servSujo && t.cob.nNos === N.n) return t.cob;
+  // custo congestionado da aresta (S1c, D37): a busca de saúde e bombeiros anda pelo comprimento vezes o tempo de agora
+  const cv = typeof sim.transito?.versaoCusto === 'function' ? sim.transito.versaoCusto() : 0;
+  if (t.cob && !t.grafoSujo && !t.servSujo && t.cob.nNos === N.n && t.cob.cv === cv) return t.cob;
   const novoGrafo = !t.cob || t.grafoSujo || t.cob.nNos !== N.n;
   const cob = novoGrafo ? { csr: adjacencia(sim.grafo, { respeitarMao: false }), nNos: N.n, tipos: {}, versao: (t.cob?.versao ?? 0) + 1 } : t.cob;
+  const custoMudou = novoGrafo || cob.cv !== cv;
+  if (custoMudou) {
+    cob.csrC = cv ? adjacencia(sim.grafo, { respeitarMao: false, custo: (e) => A.comp[e] * sim.transito.custoAresta(e) }) : null;
+    cob.cv = cv;
+  }
   t.grafoSujo = false;
   t.servSujo = false;
   for (const tipo of TIPOS_COBERTURA) {
     const lista = fontesDoTipo(sim, tipo);
     const assin = lista.map((f) => `${f.i}:${f.e}:${f.s}`).join('|');
     const ant = cob.tipos[tipo];
-    if (!novoGrafo && ant && ant.assin === assin) continue;
+    const congestionada = CONGESTIONADAS.has(SERVICOS[tipo].categoria);
+    const refazer = novoGrafo || (congestionada && custoMudou);
+    if (!refazer && ant && ant.assin === assin) continue;
     const raio = SERVICOS[tipo].raio;
     const fontes = [];
-    // incremental: as fontes antigas continuam todas (só entrou serviço novo) e o grafo é o mesmo
-    const velhas = ant && !novoGrafo ? new Set(ant.assin ? ant.assin.split('|') : []) : null;
+    // incremental: as fontes antigas continuam todas (só entrou serviço novo) e o grafo e o custo são os mesmos
+    const velhas = ant && !refazer ? new Set(ant.assin ? ant.assin.split('|') : []) : null;
     const incremental = !!velhas && lista.length >= velhas.size && [...velhas].every((k) => assin.split('|').includes(k));
     for (const f of lista) {
       if (incremental && velhas.has(`${f.i}:${f.e}:${f.s}`)) continue;
       fontes.push([A.a[f.e], f.s, f.i], [A.b[f.e], Math.max(0, A.arco[17 * f.e + 16] - f.s), f.i]);
     }
     const tc = incremental ? ant : { dist: new Float64Array(N.n), rot: new Int32Array(N.n), raio };
-    buscar(cob.csr, fontes, raio, tc.dist, tc.rot, incremental);
+    buscar(congestionada && cob.csrC ? cob.csrC : cob.csr, fontes, raio, tc.dist, tc.rot, incremental);
     tc.assin = assin;
     tc.porAresta = new Map();
     for (const f of lista) {
@@ -357,6 +369,17 @@ export function custoServicos(sim) {
   let v = 0;
   for (let i = 0; i < P.n; i++) if (P.tipo[i] === TIPO_PREDIO.SERVICO && funciona(P, i)) v += manutencaoDe(SERVICOS[SERVICOS_ORDEM[P.modelo[i]]]);
   CUSTO.set(sim, { tique: sim.tique, n: P.vivos, versao, v });
+  return v;
+}
+
+/** Atratividade que os serviços prontos dão à cidade (o parque da orla, M1b): soma do `atratividade` do catálogo. */
+export function atratividadeDosServicos(sim) {
+  const P = sim.tabelas.predios;
+  let v = 0;
+  for (let i = 0; i < P.n; i++) {
+    if (P.tipo[i] !== TIPO_PREDIO.SERVICO || !funciona(P, i)) continue;
+    v += SERVICOS[SERVICOS_ORDEM[P.modelo[i]]]?.atratividade ?? 0;
+  }
   return v;
 }
 

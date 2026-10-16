@@ -30,7 +30,8 @@ import {
 import { encher, educar, ocupacaoDe } from '../cidadaos.js';
 import { atualizarBemEstar, calcularBemEstar, BEM } from '../bemestar.js';
 import { coberturaPredio, distanciaTipo, atualizarServico } from '../servicos.js';
-import { temOferta, naRede, RECURSOS_REDE } from '../redes.js';
+import { temOferta, naRede, recursosAtivos } from '../redes.js';
+import { avisoDeAmbiente } from '../ambiente.js';
 import { valorEm, zonaAtiva } from './demanda.js';
 
 /** Ritmo do crescimento (seção 6.5; durações em tiques). (calibrar) */
@@ -420,6 +421,7 @@ export function faltaParaNivel(sim, i, n) {
   if (req.redes) {
     if (P.flags[i] & PREDIO.SEM_AGUA) falta.push('agua');
     if (P.flags[i] & PREDIO.SEM_ENERGIA) falta.push('energia');
+    if (P.flags[i] & PREDIO.SEM_ESGOTO) falta.push('esgoto');
   }
   for (const cat of req.servicos ?? []) if (coberturaPredio(sim, i, cat) <= 0) falta.push(cat);
   if (req.valor && valorEm(sim, P.x[i], P.z[i]) < req.valor) falta.push('valor');
@@ -473,10 +475,12 @@ function problemas(sim, i, fam, oc) {
   let m = 0;
   let conta = 0;
   const redes = sim.agregados.redes;
-  const ligado = f & (PREDIO.SEM_AGUA | PREDIO.SEM_ENERGIA) ? naRede(sim, i) : true;
+  const ligado = f & (PREDIO.SEM_AGUA | PREDIO.SEM_ENERGIA | PREDIO.SEM_ESGOTO) ? naRede(sim, i) : true;
   const rac = f & PREDIO.RACIONADO ? AV.RACIONADO : 0;
   const contaAgua = !!(f & PREDIO.SEM_AGUA) && redes.agua.oferta > 0;
   const contaEnergia = !!(f & PREDIO.SEM_ENERGIA) && redes.energia.oferta > 0;
+  // esgoto (M1b): como a água, só conta quando a cidade trata esgoto em algum lugar (a ETE); antes é alerta da cidade
+  const contaEsgoto = !!(f & PREDIO.SEM_ESGOTO) && redes.esgoto.oferta > 0;
   if (contaAgua) {
     m |= AV.SEM_AGUA | rac;
     if (ligado) conta |= AV.SEM_AGUA;
@@ -485,12 +489,17 @@ function problemas(sim, i, fam, oc) {
     m |= AV.SEM_ENERGIA | rac;
     if (ligado) conta |= AV.SEM_ENERGIA;
   }
+  if (contaEsgoto) {
+    m |= AV.SEM_ESGOTO | rac;
+    if (ligado) conta |= AV.SEM_ESGOTO;
+  }
   if (f & PREDIO.SEM_ACESSO) m |= AV.SEM_ACESSO;
   if (fam === 'res') {
     // a falta que não conta (da cidade inteira ou da rua sem canos) também não pesa no bem-estar do abandono
     let b = P.bemEstar[i];
     if (f & PREDIO.SEM_AGUA && !(contaAgua && ligado)) b -= BEM.semAgua;
     if (f & PREDIO.SEM_ENERGIA && !(contaEnergia && ligado)) b -= BEM.semEnergia;
+    if (f & PREDIO.SEM_ESGOTO && !(contaEsgoto && ligado)) b -= BEM.semEsgoto;
     if (P.moradores[i] && b < CRESCIMENTO.bemMinimo) m |= AV.BEM_ESTAR;
   } else if (oc && oc.vagas) {
     if (oc.frac < CRESCIMENTO.ocupacaoMinima) m |= AV.SEM_TRABALHADORES;
@@ -517,6 +526,7 @@ export function sistemaPredios(sim, fatia, fatias) {
       else {
         if (f & PREDIO.SEM_AGUA) av |= AV.SEM_AGUA;
         if (f & PREDIO.SEM_ENERGIA) av |= AV.SEM_ENERGIA;
+        if (f & PREDIO.SEM_ESGOTO) av |= AV.SEM_ESGOTO;
         if (f & PREDIO.RACIONADO) av |= AV.RACIONADO;
         acessoDe(sim, i, RAC);
         if (RAC.e < 0) av |= AV.SEM_ACESSO;
@@ -564,7 +574,7 @@ export function sistemaPredios(sim, fatia, fatias) {
       } else {
         oc = ocupacaoDe(sim, i);
         P.empregos[i] = Math.round(oc.ocupadas);
-        P.efic[i] = oc.frac * (fam === 'com' ? Math.min(1, j.clientes) : 1);
+        P.efic[i] = oc.frac * (fam === 'com' ? Math.min(1, j.clientes) : 1) * (sim.transito?.fatorTrabalho(i) ?? 1); // trajeto (D37, S1c)
       }
       av = problemas(sim, i, fam, oc);
       // contador do abandono (D42): âmbar aos 3 min de jogo, vermelho aos 6, abandono aos 10
@@ -580,6 +590,7 @@ export function sistemaPredios(sim, fatia, fatias) {
       }
       if (P.problema[i] >= ABANDONO.ambar) av |= AV.ABANDONO;
       if (fam === 'res' && desempregoAlto(sim)) av |= AV.DESEMPREGO;
+      if (fam === 'res') av |= avisoDeAmbiente(sim, i);
       // a obra de nível parada por material também mostra o aviso no prédio (D48)
       if (f & PREDIO.SEM_MATERIAL) av |= AV.SEM_MATERIAL;
       // pontos de nível e a obra de subir
@@ -618,7 +629,7 @@ function problemaSumiu(sim, i) {
   if (RAC.e < 0) return false;
   const redes = sim.agregados.redes;
   const ligado = naRede(sim, i);
-  for (const rec of RECURSOS_REDE) if (ligado && redes[rec].oferta > 0 && !temOferta(sim, RAC.e, rec)) return false;
+  for (const rec of recursosAtivos()) if (ligado && redes[rec].oferta > 0 && !temOferta(sim, RAC.e, rec)) return false;
   const fam = familiaDe(sim, i);
   if (fam === 'res') return Math.round(calcularBemEstar(sim, i)) >= CRESCIMENTO.bemVolta;
   if (fam === 'com') return sim.json.cidade.clientes >= 0.5;

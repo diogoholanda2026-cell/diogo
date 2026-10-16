@@ -355,6 +355,8 @@ const verCamada = (id) => () => {
 export function registrar(ui) {
   registrarAcaoAviso('verCamadaAgua', verCamada('agua'));
   registrarAcaoAviso('verCamadaEnergia', verCamada('energia'));
+  registrarAcaoAviso('verCamadaEsgoto', verCamada('esgoto'));
+  registrarAcaoAviso('verCamadaAr', verCamada('ar'));
   registrarAcaoAviso('verCamadaBemEstar', verCamada('bemEstar'));
   registrarAcaoAviso('verCamadaEmpregos', verCamada('empregos'));
   registrarAcaoAviso('construirVia', () => {

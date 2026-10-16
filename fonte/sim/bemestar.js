@@ -11,19 +11,21 @@ import { ORDEM } from '../contratos/interno.js';
 import { CATEGORIAS_SERVICO, COBERTURAS } from '../data/servicos.js';
 import { ZONAS, ZONAS_ORDEM, PARTE_ATUAL } from '../data/zonas.js';
 import { PREDIOS, modelosDaZona } from '../data/predios.js';
+import { AMBIENTE } from '../data/ambiente.js';
 import { REGRAS_DONO, tarifaDoBemEstar, bemEstarArredondado } from '../data/economia.js';
 import { registrarEfeitoMedia } from './zonas/pincel.js';
 import { areaDe } from './mundo/areas.js';
 import {
-  prepararCidade, trans, funciona, familiaDe, nivelZona, registrarPartePredio, registrarAlertas, alertas, AV,
+  prepararCidade, trans, funciona, familiaDe, nivelZona, registrarPartePredio, registrarAlertas, alertas, AV, m1bAtivo,
 } from './predios.js';
 import { desempregoDe, moradiaDe, estudoDe, registrarParteCidade } from './cidadaos.js';
 import { coberturaPredio, coberturaNoPonto } from './servicos.js';
 import { temOferta } from './redes.js';
+import { termoAmbiente } from './ambiente.js';
 
 /** Pesos do bem-estar (D50). (calibrar) */
 export const BEM = Object.freeze({
-  base: 40, semAgua: -25, semEnergia: -25, desemprego: -15, comercio: 4, comercioAlvo: 30, holding: 10,
+  base: 40, semAgua: -25, semEnergia: -25, semEsgoto: AMBIENTE.bemEstar.esgoto, desemprego: -15, comercio: 4, comercioAlvo: 30, holding: 10,
   suavizar: 0.5, rodadasMes: MES / RODADA, ambar: 63,
 });
 
@@ -136,7 +138,13 @@ export function calcularBemEstar(sim, i, fatores = null) {
   const f = P.flags[i];
   if (f & PREDIO.SEM_AGUA) add('agua', BEM.semAgua);
   if (f & PREDIO.SEM_ENERGIA) add('energia', BEM.semEnergia);
+  // M1b (S2b): esgoto, ar e ruído (zero antes do M1b)
+  if (f & PREDIO.SEM_ESGOTO) add('esgoto', BEM.semEsgoto);
+  const amb = termoAmbiente(sim, P.x[i], P.z[i]);
+  add('ar', amb.ar);
+  add('ruido', amb.ruido);
   add('desemprego', BEM.desemprego * desempregoDe(sim, i));
+  add('transito', sim.transito?.bemEstar(i) ?? 0); // até -8 pelo tempo de viagem (D37, S1c)
   add('holding', termoHolding(sim, P.x[i], P.z[i]));
   return clamp(b, 0, 100);
 }
@@ -217,6 +225,7 @@ export function efeitoMedia(sim, celulas, zona) {
     for (const cat of COBERTURAS) b += CATEGORIAS_SERVICO[cat].bemEstar * coberturaNoPonto(sim, cat, e, 0);
     if (!temOferta(sim, e, 'agua')) b += BEM.semAgua;
     if (!temOferta(sim, e, 'energia')) b += BEM.semEnergia;
+    if (m1bAtivo() && !temOferta(sim, e, 'esgoto')) b += BEM.semEsgoto;
     soma += clamp(b, 0, 100);
     n++;
   }
