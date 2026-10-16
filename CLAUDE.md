@@ -5,7 +5,7 @@ acrescenta: você é a Holding Held, concessionária que planeja Heldópolis (vi
 redes, trânsito), produz os materiais da cidade em cadeias com lotes (digita-se de 1 a 1000, D110) e ergue a Arcologia de Held, o
 megaprojeto de assinatura (a Blade Tower, a Torre Lâmina retangular de alto luxo, primeiro; a sede v3 é o Park of
 Future Dreams, D88 e D89). three.js r186 em WebGL2, Preact na
-interface, PWA para PC e para o Poco X7 do dono.
+interface, PWA para o PC do dono (D111: o jogo é só para PC; o Poco X7 deixou de ser alvo).
 
 **O documento que manda é `docs/PROJETO.md`** (decisões, contratos, estrutura, parcelas do M1 e regras de trabalho).
 Anexos: `docs/desenho/{sim,render,ui}.md` (detalhe de cada parte) e `docs/pesquisa/*.md` (fontes). `docs/VISAO.md` é a
@@ -49,6 +49,6 @@ propriedades do dono; D100) e `docs/desenho/grupo.md` o governo do grupo (negoci
   capturas só do que mudou. Commits só de fonte, mensagens em português; quem commita é o integrador.
 - Orçamento (D66, PC primeiro): o PC do dono (i3 de 9ª geração, RX 550, 16 GB) em 1920 x 1080, 60 qps e piso de 30,
   até 800 chamadas e 2,5 milhões de triângulos na vista aberta com a cidade grande (provisório até a bancada no PC dele).
-  O Poco X7 em Média (300 chamadas, 900 mil triângulos, 30 qps) volta depois. Medir com a bancada, não estimar.
+  O Poco X7 deixou de ser alvo (D111). Medir com a bancada, não estimar.
 - Publicação: branch da sessão, `git push -u origin <branch>`; dois commits (fonte, depois "Montagem ..." com a pasta
   montada). O GitHub Pages publica o branch.
