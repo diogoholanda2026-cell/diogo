@@ -18,6 +18,12 @@ import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar
 import { MES } from '../../fonte/comum/relogio.js';
 import { SAVE } from '../../fonte/contratos/save.js';
 import { abrirM1b, ruaComRedes, povoar, pintar, servicoPronto, holdingPronto, rodadas } from './apoio-m1b.mjs';
+import { definirRegrasDeLugar, definirVentoAleatorio } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste põe indústria e fontes de poluição em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
+// e o vento do mês sorteia a direção inteira, como antes (o vento predominante tem teste próprio em zon2.teste.mjs)
+definirVentoAleatorio(true);
 
 const N = GRADE_AMBIENTE.n;
 const maior = (d) => d.reduce((m, v) => (v > m ? v : m), 0);
@@ -476,7 +482,7 @@ test('as fontes são coletadas uma vez por rodada: o que muda depois da faixa 0 
   }
 });
 
-test('um save da versão 2 (sem a grade arAnt) migra para a 3 com a cópia da nuvem', () => {
+test('um save da versão 2 (sem a grade arAnt) migra até a versão atual com a cópia da nuvem', () => {
   const fecha = abrirM1b();
   try {
     const { sim } = ruaComRedes('amb-migra');
@@ -485,14 +491,13 @@ test('um save da versão 2 (sem a grade arAnt) migra para a 3 com a cópia da nu
     sim.rodar(5 * 20 + 8, { sincrono: true });
     const lido = lerSave(montarSave(sim));
     assert.equal(lido.cab.versaoSave, SAVE.versaoSave);
-    assert.equal(SAVE.versaoSave, 3);
     // desfaz o que a v3 acrescentou
     lido.cab.versaoSave = 2;
     delete lido.cab.grades.arAnt;
     lido.secoes.delete('grade.arAnt');
     delete lido.cab.json.ambienteFontes;
     migrar(lido);
-    assert.equal(lido.cab.versaoSave, 3);
+    assert.equal(lido.cab.versaoSave, SAVE.versaoSave);
     const C = criarSimulacao({ semente: 'amb-migra', modo: 'livre' });
     aplicarSave(C, lido);
     assert.deepEqual([...C.grades.ar.dados], [...sim.grades.ar.dados]);

@@ -64,8 +64,26 @@ const LADO = 112;
 const COMPRIDO = 336;
 /** Margem (m) da caixa da quadra até a gleba (a calçada e o raio do nó). */
 const MARGEM_GLEBA = 28;
-/** A espinha industrial (D112): a rua paralela à rodovia, no corredor plano do Distrito Industrial. */
-const ESPINHA = Object.freeze({ z: -1130, xs: [-985, -835, -685, -535, -385, -235] });
+/**
+ * As faixas industriais (D112), no corredor plano do Distrito Industrial: ruas paralelas à rodovia, de 150 em 150 m, com a
+ * faixa a pintar de cada trecho. Ao sul da rodovia (z = -1128) e ao norte dela (z = -1245, ligada ao nó da Vila, onde a estrada
+ * de terra chega à rodovia).
+ */
+const FAIXAS = (() => {
+  const trechos = (z, xs) => xs.slice(0, -1).map((x, k) => [[x, z], [xs[k + 1], z]]);
+  const sulXs = [-985, -835, -685, -535, -385, -235, -130];
+  const norteXs = [-1010, -860, -710, -560, -410, -260];
+  return Object.freeze([
+    {
+      vias: trechos(-1128, sulXs),
+      retangulos: sulXs.slice(0, -1).map((x, k) => [k === 0 ? x - 25 : x, -1198, sulXs[k + 1], -1068]),
+    },
+    {
+      vias: [[[-1010, -1190], [-1010, -1245]], ...trechos(-1245, norteXs)],
+      retangulos: norteXs.slice(0, -1).map((x, k) => [k === 0 ? x - 30 : x, -1385, norteXs[k + 1], -1205]),
+    },
+  ]);
+})();
 /** Malha leste: a via que liga a primeira avenida à planície do leste e o canto da primeira quadra de lá. */
 const LESTE = Object.freeze({ via: [[200, -680], [480, -690], [820, -700]], canto: [820, -812] });
 /**
@@ -411,7 +429,8 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     const feitas = quadrasFeitas().length;
     if (feitas < 3) return true;
     if (cidadeFalsa) return cidadeFalsa.estado.pop > cidadeFalsa.estado.capacidade * 0.75;
-    return zonasPedidas().length > 0;
+    // a indústria pedindo espaço não abre quadra de casas (só a faixa dela, em industrial()): casas sem emprego não seguram a demanda
+    return zonasPedidas().some((p) => p.z !== 'industria');
   }
 
   /** As arestas de terra da estrada da Vila que ainda existem (divididas ou não): as de meio a até 15 m do traçado dela. */
@@ -452,35 +471,68 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     const pv = refs.length ? sim.q.via.previa({ modo: 'melhorar', tipo: 'rua', arestas: refs, pontos: [] }) : null;
     if (!pv?.ok) return void (desistir('indEstrada', 40) && (E.estradaMelhorada = false, E.semDistrito = true));
     if (pv.custo > caixa() - 25000) return void (E.querEmprestimo = true);
-    if (cmd('via.melhorar', { arestas: refs, tipo: 'rua', sessao: `robo.${++E.sessao}` }).ok) E.estradaMelhorada = true;
+    // sem gastar a vez da obra: é um gesto de abertura, antes de a cidade começar (o ritmo de gente vale para o resto)
+    let r;
+    try {
+      r = sim.cmd('via.melhorar', { arestas: refs, tipo: 'rua', sessao: `robo.${++E.sessao}` });
+    } catch (e) {
+      r = { ok: false };
+    }
+    if (r.ok) {
+      anotar(sim.tique, 'via.melhorar', refs);
+      E.estradaMelhorada = true;
+    }
   }
 
   /**
-   * A indústria (D112): só se pinta no Distrito Industrial, o corredor plano da rodovia ao norte. Quando a indústria pede
-   * espaço o robô melhora a estrada de terra da Vila até a rodovia (a rede da cidade chega até lá), traça a espinha industrial
-   * (uma rua paralela à rodovia, de 150 em 150 m) e pinta de cada trecho a faixa dos dois lados. Um trecho por vez, no mesmo
-   * ritmo das quadras.
+   * A indústria (D112): só se pinta no Distrito Industrial, o corredor plano da rodovia ao norte. A estrada de terra da Vila,
+   * já em rua (estradaIndustrial), leva a rede até lá. O robô traça uma faixa de cada vez, uma rua paralela à rodovia de 150
+   * em 150 m (primeiro ao sul da rodovia, depois ao norte dela, por uma ligação a partir do nó da Vila), e pinta a faixa dos
+   * dois lados trecho a trecho, quando a indústria pede espaço (ou sobram poucas frentes). A rua da faixa sai inteira de uma
+   * vez (uma vez só a vez da obra); no mais, o mesmo ritmo das quadras.
    */
   function industrial() {
-    if (!real || !podeObra() || E.semDistrito) return;
-    const I = (E.ind ??= { estrada: false, seg: 0, pintados: 0 });
+    if (!real || !podeObra() || E.semDistrito || !E.estradaMelhorada) return;
+    const I = (E.ind ??= { faixa: 0, seg: 0, pintados: 0 });
     const pede = zonasPedidas().some((p) => p.z === 'industria');
     // a primeira vez vem logo depois da avenida e da ligação (a cidade precisa de emprego perto da Vila, como a quadra
     // industrial sugerida de antes da D112 dava); as outras, quando a indústria pede
-    if (!pede && !(I.seg === 0 && E.feito.has('avenida') && E.feito.has('ligacao'))) return;
-    // o trecho anterior ainda tem lugar: espera
+    if (!pede && !(I.pintados === 0 && E.feito.has('avenida') && E.feito.has('ligacao'))) return;
+    if (I.faixa >= FAIXAS.length) return;
+    // os trechos pintados ainda têm lugar: espera
     if (I.pintados > 0 && !pede && (frentesLivres(sim).industria ?? 0) > 12) return;
-    if (!E.estradaMelhorada) return; // sem a estrada em rua a rede não chega ao distrito
-    const xs = ESPINHA.xs;
-    if (I.seg + 1 >= xs.length) return;
-    const a = [xs[I.seg], ESPINHA.z];
-    const b = [xs[I.seg + 1], ESPINHA.z];
-    if (!E.feito.has(`espinha.${I.seg}`)) {
-      if (!via('reta', 'rua', [a, b], 20000)) return void (desistir(`espinha${I.seg}`, 60) && I.seg++);
-      E.feito.add(`espinha.${I.seg}`);
+    const F = FAIXAS[I.faixa];
+    if (!E.feito.has(`faixa${I.faixa}`)) {
+      let tudo = true;
+      for (let k = 0; k < F.vias.length; k++) {
+        const chave = `faixa${I.faixa}.${k}`;
+        if (E.feito.has(chave)) continue;
+        const pts = F.vias[k];
+        const pv = sim.q.via.previa({ modo: 'reta', tipo: 'rua', pontos: pts });
+        if (!pv?.ok || pv.custo > caixa() - 20000) {
+          if (pv?.ok) E.querEmprestimo = true;
+          else if (desistir(chave, 60)) E.feito.add(chave);
+          tudo = false;
+          break;
+        }
+        if (!sim.cmd('via.construir', plano('reta', 'rua', pts)).ok) {
+          tudo = false;
+          break;
+        }
+        anotar(sim.tique, 'via.construir', pts);
+        E.feito.add(chave);
+      }
+      proximaObra = sim.tique + ritmo;
+      if (tudo) E.feito.add(`faixa${I.faixa}`);
       return;
     }
-    const args = { pincel: { modo: 'retangulo', x: a[0] === xs[0] ? a[0] - 25 : a[0], z: ESPINHA.z - 70, x2: b[0], z2: ESPINHA.z + 60 }, zona: ZONAS_ORDEM.indexOf('industria') };
+    if (I.seg >= F.retangulos.length) {
+      I.faixa++;
+      I.seg = 0;
+      return;
+    }
+    const [x0, z0, x1, z1] = F.retangulos[I.seg];
+    const args = { pincel: { modo: 'retangulo', x: x0, z: z0, x2: x1, z2: z1 }, zona: ZONAS_ORDEM.indexOf('industria') };
     if (modo === 'manual') args.modo = 'manual';
     const r = cmd('zona.pintar', args);
     if (r.ok || r.codigo === 'nada' || r.codigo === 'distrito') {

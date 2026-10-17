@@ -16,6 +16,10 @@ import { calcularDemanda, sistemaDemanda, DEMANDA } from '../../fonte/sim/zonas/
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { criarSimulacao } from '../../fonte/sim/estado.js';
 import { abrirM1b, ruaComRedes, povoar, pintar, rodadas } from './apoio-m1b.mjs';
+import { definirRegrasDeLugar } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste pinta indústria em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
 
 /** Mercado de trabalho fixo (ocupação cheia): a mercadoria sai das vagas dos prédios, sem a cidade de moradores. */
 function ocupacaoCheia(sim, frac = 1) {

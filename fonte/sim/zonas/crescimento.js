@@ -683,5 +683,5 @@ export function registrar(sim) {
   sim.registrarSistema(RODADA, 0, sistemaPredios, RODADA, { nome: 'predios', ordem: ORDEM.cidade });
   registrarPartePredio(partePredio);
   sim.aoCarregar(() => garantirFrentes(sim));
-  registrarZon2(sim);
+  registrarZon2(sim, { frentesLivres });
 }

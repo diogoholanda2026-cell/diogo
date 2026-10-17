@@ -75,3 +75,14 @@ export function definirRegrasDeLugar(ligadas) {
   REGRAS_DE_LUGAR = !!ligadas;
   return antes;
 }
+
+/**
+ * O vento do mês segue o predominante (padrão) ou sorteia a direção inteira, como antes da ZON2? Binding vivo: só os testes do
+ * ambiente, que montam fontes e casas em qualquer lado, ligam o vento aleatório. Devolve o valor anterior.
+ */
+export let VENTO_ALEATORIO = false;
+export function definirVentoAleatorio(ligado) {
+  const antes = VENTO_ALEATORIO;
+  VENTO_ALEATORIO = !!ligado;
+  return antes;
+}

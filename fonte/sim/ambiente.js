@@ -26,7 +26,7 @@ import { VIAS_ORDEM } from '../data/vias.js';
 import { SERVICOS_ORDEM } from '../data/servicos.js';
 import { HOLDING_ORDEM } from '../data/holding.js';
 import { ZONAS_ORDEM } from '../data/zonas.js';
-import { VENTO_PREDOMINANTE } from '../data/zon2.js';
+import { VENTO_PREDOMINANTE, VENTO_ALEATORIO } from '../data/zon2.js';
 import { AMBIENTE, GRADE_AMBIENTE, FONTES, FONTES_VIA, FLUXO_REFERENCIA } from '../data/ambiente.js';
 import {
   prepararCidade, funciona, FAMILIA_ZONA, AV, m1bAtivo, registrarPartePredio, registrarAlertas,
@@ -227,7 +227,8 @@ export function ventoDoMes(semente, tique) {
   const mes = Math.floor(tique / MES);
   const s = fnv1aTexto(String(semente));
   // D112: o vento do mês foge do predominante (data/zon2.js) por até `dispersao`, para o distrito ficar a sotavento
-  const ang = VENTO_PREDOMINANTE.angulo + (hashCoordF(mes, 3, s) - 0.5) * 2 * VENTO_PREDOMINANTE.dispersao;
+  const h = hashCoordF(mes, 3, s);
+  const ang = VENTO_ALEATORIO ? TAU * h : VENTO_PREDOMINANTE.angulo + (h - 0.5) * 2 * VENTO_PREDOMINANTE.dispersao;
   const v = AMBIENTE.ar.vento;
   const vel = v.min + (v.max - v.min) * hashCoordF(mes, 5, s);
   return [cos(ang) * vel, sen(ang) * vel];

@@ -147,15 +147,20 @@ test('indústria só se pinta dentro do Distrito Industrial; pincel misto pula a
   const pv0 = sim.q.zona.previa({ pincel: pincel(-880, 100, -768, 230), zona: ind });
   assert.equal(pv0.celulas.length, 0);
   assert.ok(pv0.foraDoDistrito > 0);
-  // dentro: pinta
-  const dentro = sim.cmd('zona.pintar', { pincel: pincel(-985, -1190, -835, -1070), zona: ind });
-  assert.ok(dentro.ok, JSON.stringify(dentro));
-  assert.ok(dentro.dados.n > 50);
-  const C = sim.tabelas.celulas;
-  for (let c = 0; c < C.n; c++) if (C.viva[c] && C.zona[c] === ind) assert.ok(noDistrito(C.x[c], C.z[c]), `célula industrial fora do distrito em (${C.x[c]}, ${C.z[c]})`);
   // pincel que passa da borda sul do distrito (z = -1080): pinta o que está dentro e conta o que ficou de fora
-  const misto = sim.cmd('zona.pintar', { pincel: pincel(-985, -1130, -835, -1030), zona: ind });
-  assert.ok(misto.ok === true || misto.codigo === 'nada', JSON.stringify(misto));
+  const misto = sim.cmd('zona.pintar', { pincel: pincel(-985, -1190, -835, -1030), zona: ind });
+  assert.ok(misto.ok, JSON.stringify(misto));
+  assert.ok(misto.dados.n > 50 && misto.dados.foraDoDistrito > 0, JSON.stringify(misto.dados));
+  const C = sim.tabelas.celulas;
+  let industriais = 0;
+  for (let c = 0; c < C.n; c++) {
+    if (!C.viva[c] || C.zona[c] !== ind) continue;
+    industriais++;
+    assert.ok(noDistrito(C.x[c], C.z[c]), `célula industrial fora do distrito em (${C.x[c]}, ${C.z[c]})`);
+  }
+  assert.equal(industriais, misto.dados.n);
+  // repetir o mesmo pincel: só sobraram células de fora, então recusa com 'distrito'
+  assert.equal(sim.cmd('zona.pintar', { pincel: pincel(-985, -1190, -835, -1030), zona: ind }).codigo, 'distrito');
   const pv = sim.q.zona.previa({ pincel: pincel(-985, -1190, -835, -1030), zona: indiceZona('resBaixa') });
   assert.equal(pv.foraDoDistrito, 0, 'a residencial não tem restrição de lugar');
   // outras zonas pintam em qualquer lugar (inclusive fora do distrito)
@@ -337,9 +342,9 @@ test('Manual por lote: a demanda só acumula; o lote pedido começa, ao ritmo de
 test('Automático como sempre: a demanda faz nascer sozinha; trocar para Manual para o nascimento e voltar para Automático cancela o lote', () => {
   const sim = bairro('zon2-troca');
   const z = indiceZona('resBaixa');
-  sim.rodar(300, { sincrono: true });
+  sim.rodar(40, { sincrono: true });
   const n1 = contar(sim, 'resBaixa').total;
-  assert.ok(n1 > 15, `nasceram ${n1} no Automático`);
+  assert.ok(n1 > 10 && n1 < 40, `nasceram ${n1} no Automático`);
   assert.ok(sim.cmd('zona.modo', { zona: z, modo: 'manual' }).ok);
   sim.rodar(300, { sincrono: true });
   assert.equal(contar(sim, 'resBaixa').total, n1, 'em Manual nada nasce sem lote');
@@ -350,7 +355,6 @@ test('Automático como sempre: a demanda faz nascer sozinha; trocar para Manual 
   assert.equal(volta.dados.cancelados, 400, 'o lote que faltava foi cancelado');
   assert.equal(sim.q.zona.crescimento({ zona: z }).pedido, 0);
   sim.rodar(300, { sincrono: true });
-  console.log('DBG', n1, contar(sim, 'resBaixa').total, JSON.stringify(sim.q.zona.crescimento({ zona: z })), sim.json.cidade.acum.resBaixa);
   assert.ok(contar(sim, 'resBaixa').total > n1, 'de volta ao Automático a demanda faz nascer');
   assert.deepEqual(sim.erros, []);
 });

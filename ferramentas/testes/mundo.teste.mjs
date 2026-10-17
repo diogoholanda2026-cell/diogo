@@ -606,7 +606,7 @@ test('recursos: grades 256², extração baixa o valor e a camada Recursos segue
 test('áreas (D55) e sugestões (D36, D90): formato, dentro da área inicial, avenida do nó de entrada ao portão norte', () => {
   const sim = simDoMapa('sugestoes');
   const ids = sim.espelho.areas.map((a) => a.id).sort();
-  assert.deepEqual(ids, ['gleba', 'morros', 'orla', 'varzea', 'vila']);
+  assert.deepEqual(ids, ['distritoIndustrial', 'gleba', 'morros', 'orla', 'varzea', 'vila', 'zonaUtilidades']);
   for (const a of sim.espelho.areas) assert.ok(a.contorno instanceof Float64Array && a.contorno.length >= 6 && a.nome);
   const S = sim.q.sugestoes();
   const h0 = sim.hash();

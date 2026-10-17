@@ -21,6 +21,10 @@ import { calcularBemEstar } from '../../fonte/sim/bemestar.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
 import { abrirM1b, ruaComRedes, povoar, pintar, nascerVarios, rodadas } from './apoio-m1b.mjs';
 import { criarEstrategia } from '../robo/robo-sim.mjs';
+import { definirRegrasDeLugar } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste monta utilidades e indústria em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
 
 const NOVOS = ['ete', 'termica', 'escolaM', 'hospital', 'parque', 'parqueG'];
 

@@ -16,6 +16,10 @@ import { indiceZona } from '../../fonte/data/zonas.js';
 import { celulasDaAresta, MOTIVO } from '../../fonte/sim/zonas/blocos.js';
 import { crescerNaFrente } from '../../fonte/sim/substitutos.js';
 import { aguaEm } from '../../fonte/sim/mundo/terreno.js';
+import { definirRegrasDeLugar } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste monta utilidades e indústria em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
 
 // ------------------------------------------------------------------------------------------------ apoio
 

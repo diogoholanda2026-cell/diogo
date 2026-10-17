@@ -23,6 +23,10 @@ import { removerPredio, celulasParaPredio } from '../../fonte/sim/zonas/blocos.j
 import { glebaDe } from '../../fonte/sim/vias/validar.js';
 import { MOVER, custoDeMover, tiquesDaObra, alongarObra } from '../../fonte/sim/mover.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
+import { definirRegrasDeLugar } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste monta utilidades e indústria em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
 
 const plano = (pontos, tipo = 'rua') => ({ plano: { modo: 'reta', tipo, pontos, sessao: 1, encaixe: false } });
 const rua = (sim, pontos, tipo = 'rua') => {

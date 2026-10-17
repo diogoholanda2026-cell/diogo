@@ -258,13 +258,22 @@ test('no meio da rampa (cidade do robô sem ETE, uns 900 moradores) salvar e car
   try {
     const a = criarSimulacao({ semente: 'robo-1' });
     const est = criarEstrategia(a, { m1b: true });
-    for (let t = 0; t < 2400; t++) {
-      if (t % 20 === 0) est.passo();
-      a.rodar(1, { sincrono: true });
-    }
     const P = a.tabelas.predios;
     const etes = [];
-    for (let i = 0; i < P.n; i++) if (P.viva[i] && P.tipo[i] === TIPO_PREDIO.SERVICO && P.modelo[i] === SERVICOS_ORDEM.indexOf('ete')) etes.push(P.ref(i));
+    const achar = () => {
+      etes.length = 0;
+      for (let i = 0; i < P.n; i++) if (P.viva[i] && P.tipo[i] === TIPO_PREDIO.SERVICO && P.modelo[i] === SERVICOS_ORDEM.indexOf('ete')) etes.push(P.ref(i));
+    };
+    // roda até a cidade do robô ter a ETE e uns 900 moradores (o ritmo do robô muda com a ZON2: não vale um tique fixo)
+    for (let t = 0; t < 4800; t++) {
+      if (t % 20 === 0) est.passo();
+      a.rodar(1, { sincrono: true });
+      if (t % 20 === 0 && a.agregados.populacao >= 900) {
+        achar();
+        if (etes.length) break;
+      }
+    }
+    achar();
     assert.ok(etes.length > 0, 'o robô fez a ETE');
     assert.ok(a.cmd('demolir', { refs: etes }).ok);
     a.rodar(200, { sincrono: true });

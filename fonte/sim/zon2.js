@@ -14,7 +14,6 @@
 // Sem chave vale o padrão (automático, nada pedido, nada esperando). Comandos: zona.modo, zona.lote. Consultas:
 // zona.crescimento, zona.regras, zona.lugar.
 import { pontoNoPoligono } from '../comum/vetor.js';
-import { frentesLivres } from './zonas/crescimento.js';
 import { CATEGORIAS_SERVICO, SERVICOS } from '../data/servicos.js';
 import { PREDIOS_HOLDING } from '../data/holding.js';
 import { VIAS, VIAS_ORDEM } from '../data/vias.js';
@@ -215,7 +214,7 @@ function contarPredios(sim) {
  * { zona (índice), id, nome, familia, modo, pedido (construções que faltam do lote), espera (o que a demanda acumulou,
  * em construções), demanda (0 a 100), frentes (frentes livres pintadas), construidos, emObra }.
  */
-function consultaCrescimento(sim, args) {
+function consultaCrescimento(sim, args, frentesLivres) {
   const contagem = contarPredios(sim);
   const frentes = frentesLivres(sim);
   const item = (id) => ({
@@ -252,11 +251,12 @@ function consultaLugar(sim, args) {
   return { distrito: noDistrito(x, z), utilidades: naUtilidades(x, z) };
 }
 
-export function registrar(sim) {
+/** `frentesLivres(sim)` vem de zonas/crescimento.js (que chama este registro): importar de lá aqui fecharia um ciclo de módulos. */
+export function registrar(sim, { frentesLivres }) {
   estadoZon2(sim);
   sim.registrarComando('zona.modo', cmdModo);
   sim.registrarComando('zona.lote', cmdLote);
-  sim.registrarConsulta('zona.crescimento', consultaCrescimento);
+  sim.registrarConsulta('zona.crescimento', (s, args) => consultaCrescimento(s, args, frentesLivres));
   sim.registrarConsulta('zona.regras', () => consultaRegras());
   sim.registrarConsulta('zona.lugar', consultaLugar);
 }
