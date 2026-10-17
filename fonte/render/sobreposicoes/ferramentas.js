@@ -23,7 +23,7 @@ import { CELULA } from '../../contratos/flags.js';
 import { idxDaRef } from '../../contratos/espelho.js';
 import { alturaDaCaixa } from '../depuracao.js';
 import * as malhaVia from '../geracao/malhaVia.js';
-
+import { contornoDoLote } from '../../comum/lote.js';
 /** Números das sobreposições. */
 export const SOBRE = Object.freeze({
   raioCelulas: 400, // m em volta da mira
@@ -509,8 +509,9 @@ function criarFerramentas(ctx) {
     // contorno da planta no chão
     const c = Math.cos(f.rot ?? 0);
     const s = Math.sin(f.rot ?? 0);
-    const cantos = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([a, b]) => [f.x + a * c + b * s, f.z - a * s + b * c]);
-    for (let i = 0; i < 4; i++) pts.push(...linhaNoChao(cantos[i], cantos[(i + 1) % 4], cota, { passo: 6, acima: 0.5 }));
+    // o lote tem cantos arredondados (LOTE1), como o pátio que o aplainar molda
+    const cantos = contornoDoLote(w, d).map(([a, b]) => [f.x + a * c + b * s, f.z - a * s + b * c]);
+    for (let i = 0; i < cantos.length; i++) pts.push(...linhaNoChao(cantos[i], cantos[(i + 1) % cantos.length], cota, { passo: 6, acima: 0.5 }));
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     anel.geometry.dispose();

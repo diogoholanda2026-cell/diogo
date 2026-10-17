@@ -448,7 +448,7 @@ export function removerPredio(sim, i) {
   }
   const formas = [];
   for (const f of sim.formas.porId.values()) {
-    if (f.tipo === 'plataforma' && f.ref === ref) formas.push({ tipo: f.tipo, contorno: Array.from(f.contorno), cota: f.cota });
+    if (f.tipo === 'plataforma' && f.ref === ref) formas.push({ tipo: f.tipo, contorno: Array.from(f.contorno), cota: f.cota, plano: f.plano ? [...f.plano] : undefined });
   }
   for (const c of celulasDoPredio(sim, i)) {
     C.predio[c] = -1;

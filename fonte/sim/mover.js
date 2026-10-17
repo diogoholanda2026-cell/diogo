@@ -504,7 +504,7 @@ export function mover(sim, args = {}) {
   const prontoAntes = zona && !(de.flags & PREDIO.OBRA);
   if (desfazer) {
     J(sim).pend[String(ref)] = {
-      de, forma: velha ? { contorno: Array.from(velha.contorno), cota: velha.cota } : null, custo, ate: T + MOVER.mobilizacao,
+      de, forma: velha ? { contorno: Array.from(velha.contorno), cota: velha.cota, plano: velha.plano ? [...velha.plano] : undefined } : null, custo, ate: T + MOVER.mobilizacao,
       ...(zona ? { zona: true, pronto: prontoAntes, marcada: marcadaAntes, celulas: celulasAntes } : {}),
     };
   } else delete J(sim).pend[String(ref)];
@@ -572,7 +572,7 @@ export function desfazerMover(sim, args = {}) {
   }
   P.marcar(i);
   sim.formas.removerRef('plataforma', ref);
-  if (rec.forma) sim.formas.registrar({ tipo: 'plataforma', ref, contorno: rec.forma.contorno, cota: rec.forma.cota });
+  if (rec.forma) sim.formas.registrar({ tipo: 'plataforma', ref, contorno: rec.forma.contorno, cota: rec.forma.cota, plano: rec.forma.plano });
   const pad = Math.max(de.w, de.d) / 2 + 8;
   revalidarRetangulo(sim, nx - npad, nz - npad, nx + npad, nz + npad);
   revalidarRetangulo(sim, de.x - pad, de.z - pad, de.x + pad, de.z + pad);

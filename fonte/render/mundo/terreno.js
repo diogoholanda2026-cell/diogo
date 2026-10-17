@@ -26,6 +26,9 @@ import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
 import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { pedeTudo } from '../ponte.js';
 import { CELULA_M } from '../../contratos/espelho.js';
+import { distLote, raioDoCanto } from '../../comum/lote.js';
+import { alturaEm as alturaDoChao } from '../../comum/altura.js';
+import { smoothstep } from '../../comum/util.js';
 import { porPerfil } from '../motor/perfis.js';
 
 // ------------------------------------------------------------------------------------------------ parâmetros
@@ -585,6 +588,23 @@ function carimbar(buf, lado, t, ox, oz, x0, z0, x1, z1, cobre, canais) {
 
 const cobertura = (d, t) => Math.min(1, Math.max(0, 0.5 - d / t));
 
+/** Canais do talude do lote: terra batida (o corte e o aterro à mostra). */
+const TALUDE_CANAIS = Object.freeze([0, 0, 0.62, 0]);
+
+/**
+ * Direção unitária do declive no centro do lote e a força do talude (0 a 1) pelo declive: [gx, gz, forca], ou null no plano
+ * (menos de 6%). Uma leitura por lote, não por texel.
+ */
+function taludeDoLote(T, x, z) {
+  if (!T?.altura) return null;
+  const h = T.passo;
+  const gx = (alturaDoChao(T, x + h, z) - alturaDoChao(T, x - h, z)) / (2 * h);
+  const gz = (alturaDoChao(T, x, z + h) - alturaDoChao(T, x, z - h)) / (2 * h);
+  const g = Math.sqrt(gx * gx + gz * gz);
+  if (g < 0.06) return null;
+  return [gx / g, gz / g, Math.min(1, (g - 0.06) / 0.14)];
+}
+
 /** Canais de um lote (piso, terra, gramado) pela família da zona, o tipo e o estado do prédio. */
 function canaisDoLote(P, i) {
   const f = P.flags[i];
@@ -655,7 +675,7 @@ export function caixaAresta(A, e, out = [0, 0, 0, 0]) {
 /** Caixa de um prédio (planta girada), ou null. */
 export function caixaPredio(P, i, out = [0, 0, 0, 0]) {
   if (!P.viva[i]) return null;
-  const r = Math.hypot(P.w[i], P.d[i]) / 2 + 4;
+  const r = Math.hypot(P.w[i], P.d[i]) / 2 + 8; // 4 m de folga do giro e 4 m do talude pintado (LOTE1)
   out[0] = P.x[i] - r;
   out[1] = P.z[i] - r;
   out[2] = P.x[i] + r;
@@ -989,18 +1009,34 @@ export function rasterizarUso(esp, buf, lado, mapa, ret = null) {
       const hd = P.d[i] / 2;
       const x = P.x[i];
       const z = P.z[i];
-      const cobre = (px, pz) => {
+      // o lote tem cantos arredondados (comum/lote.js), como o pátio que o aplainar molda
+      const rc4 = raioDoCanto(P.w[i], P.d[i]);
+      const local = (px, pz) => {
         const dx = px - x;
         const dz = pz - z;
-        const lx = dx * cs - dz * sn;
-        const lz = dx * sn + dz * cs;
-        return cobertura(Math.max(Math.abs(lx) - hw, Math.abs(lz) - hd), t);
+        return distLote(dx * cs - dz * sn, dx * sn + dz * cs, hw, hd, rc4);
       };
+      const cobre = (px, pz) => cobertura(local(px, pz), t);
       const canais = canaisDoLote(P, i);
+      const talude = taludeDoLote(esp.terreno, x, z);
       for (const rc of recortes) {
         if (!cruza(cx, rc)) continue;
         const b = lim(cx, rc);
         carimbar(buf, lado, t, ox, oz, b[0], b[1], b[2], b[3], cobre, canais);
+        // o talude do terreno movido: terra nua na faixa de fora, mais forte onde o lote encara a subida ou a descida
+        // (a direção do declive no centro) e some nas laterais, ao longo da curva de nível
+        if (talude) {
+          const [gx, gz, forca] = talude;
+          carimbar(buf, lado, t, ox, oz, b[0], b[1], b[2], b[3], (px, pz) => {
+            const d = local(px, pz);
+            if (d <= 0 || d >= 7) return 0;
+            const nx = px - x;
+            const nz = pz - z;
+            const n = Math.sqrt(nx * nx + nz * nz) || 1;
+            const alinhado = Math.abs((nx * gx + nz * gz) / n);
+            return forca * (1 - smoothstep(1, 7, d)) * smoothstep(0.15, 0.75, alinhado);
+          }, TALUDE_CANAIS);
+        }
       }
     }
   }

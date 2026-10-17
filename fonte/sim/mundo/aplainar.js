@@ -10,9 +10,9 @@
 // encadeia nessa função e refaz o retângulo na hora (a UI e a S1b leem alturaEm logo depois do comando, mesmo
 // pausado). Ao carregar, refaz a grade inteira a partir da base e das formas do save.
 import { FORMA } from '../../contratos/interno.js';
-import { amostrasNoRetangulo } from '../../comum/altura.js';
-import { distSegmento, distPoligono } from '../../comum/vetor.js';
-import { smoothstep } from '../../comum/util.js';
+import { amostrasNoRetangulo, alturaEm } from '../../comum/altura.js';
+import { distSegmento, distPoligono, caixaDePontos } from '../../comum/vetor.js';
+import { smoothstep, hipot } from '../../comum/util.js';
 import { ponto, direcao, tabelaArco, tDoArco } from '../../comum/bezier.js';
 import { VIAS, VIAS_ORDEM } from '../../data/vias.js';
 import { refDe } from '../../contratos/espelho.js';
@@ -26,6 +26,132 @@ export const ALCANCE = FORMA.faixaPlana + FORMA.transicao;
 export const CHAO_ABAIXO_DA_PISTA = 0.15;
 
 const SEG = { d: 0, t: 0 };
+
+// ------------------------------------------------------------------------------------------------ pátio do lote (LOTE1)
+
+/**
+ * Terraplenagem natural do lote. A pegada do prédio fica plana na cota dele (o prédio é rígido e o espelho jura que a
+ * cota é o chão no centro). Em volta, o pátio sobe aos poucos (`subida`) para um plano inclinado ajustado ao terreno
+ * (mínimos quadrados, preso ao centro) com o corte/aterro limitado a `corte` m, e dali o talude mistura o pátio com o
+ * terreno natural por smoothstep numa largura proporcional ao desnível (`razao` m por metro, entre `taludeMin` e o que
+ * sobra do alcance). Sem degrau: cada pedaço junta com o seguinte com derivada zero nas pontas.
+ */
+export const LOTE = Object.freeze({
+  margem: 1.5, // o pátio colado na pegada (calçada e fundação) antes de o talude começar
+  subida: 10, // distância em que o pátio chega ao plano inclinado
+  corte: 2, // corte/aterro máximo do pátio em relação à cota do prédio (saturação suave)
+  razao: 8, // largura do talude por metro de desnível
+  taludeMin: 4,
+  inclinacaoMax: 0.5, // declive máximo do plano ajustado
+  anel: 8, // o ajuste olha a pegada e este tanto em volta
+  passoAjuste: 4,
+});
+
+/** Saturação suave (C1): v quando pequeno, sobe até c em |v| = 2c e daí em diante fica em c (só aritmética, sem exp). */
+function saturar(v, c) {
+  const u = (v < 0 ? -v : v) / c;
+  const g = u >= 2 ? 1 : u - (u * u) / 4;
+  return v < 0 ? -c * g : c * g;
+}
+
+/**
+ * Cota de uma plataforma com plano (do lote) em (x, z), a distância d do contorno, sobre o terreno natural hb.
+ * @param {{ cota: number, plano: number[] }} f
+ */
+export function alturaDaPlataforma(f, x, z, d, hb) {
+  const pl = f.plano;
+  const t = saturar(pl[0] * (x - pl[2]) + pl[1] * (z - pl[3]), LOTE.corte);
+  const patio = f.cota + t * smoothstep(0, LOTE.subida, d);
+  if (d <= LOTE.margem) return patio;
+  const dev = hb > patio ? hb - patio : patio - hb;
+  const largura = Math.min(ALCANCE - LOTE.margem, Math.max(LOTE.taludeMin, LOTE.razao * dev));
+  return patio + (hb - patio) * smoothstep(LOTE.margem, LOTE.margem + largura, d);
+}
+
+/**
+ * Plano do pátio de uma plataforma: declives [gx, gz] por mínimos quadrados dos desníveis do terreno natural em relação
+ * à cota, na pegada e no anel de 8 m em volta, passando pelo centro. Devolve [gx, gz, cx, cz].
+ */
+export function ajustarPlano(base, contorno, cota) {
+  const n = contorno.length / 2;
+  let cx = 0;
+  let cz = 0;
+  let x0 = Infinity;
+  let z0 = Infinity;
+  let x1 = -Infinity;
+  let z1 = -Infinity;
+  for (let k = 0; k < n; k++) {
+    const x = contorno[2 * k];
+    const z = contorno[2 * k + 1];
+    cx += x;
+    cz += z;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (z < z0) z0 = z;
+    if (z > z1) z1 = z;
+  }
+  cx /= n;
+  cz /= n;
+  const p = LOTE.passoAjuste;
+  let sxx = 0;
+  let sxz = 0;
+  let szz = 0;
+  let sxh = 0;
+  let szh = 0;
+  for (let z = z0 - LOTE.anel; z <= z1 + LOTE.anel; z += p) {
+    for (let x = x0 - LOTE.anel; x <= x1 + LOTE.anel; x += p) {
+      if (distPoligono(x, z, contorno) > LOTE.anel) continue;
+      const dx = x - cx;
+      const dz = z - cz;
+      const dh = alturaEm(base, x, z) - cota;
+      sxx += dx * dx;
+      sxz += dx * dz;
+      szz += dz * dz;
+      sxh += dx * dh;
+      szh += dz * dh;
+    }
+  }
+  const det = sxx * szz - sxz * sxz;
+  let gx = 0;
+  let gz = 0;
+  if (det > 1e-6 * (sxx * szz + 1)) {
+    gx = (sxh * szz - szh * sxz) / det;
+    gz = (szh * sxx - sxh * sxz) / det;
+  }
+  const g = hipot(gx, gz);
+  if (g > LOTE.inclinacaoMax) {
+    gx *= LOTE.inclinacaoMax / g;
+    gz *= LOTE.inclinacaoMax / g;
+  }
+  const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  return [r4(gx), r4(gz), r4(cx), r4(cz)];
+}
+
+/** A plataforma com o plano do pátio ajustado ao terreno natural (sem mexer na que já tem plano). */
+export function moldarPlataforma(base, forma) {
+  if (!base || forma.plano != null || !(forma.contorno?.length >= 6)) return forma;
+  return { ...forma, plano: ajustarPlano(base, forma.contorno, forma.cota) };
+}
+
+/**
+ * Volume movido (m³) do pátio e do talude de uma plataforma com plano: corte e aterro entre o terreno natural e o perfil,
+ * fora da pegada (a pegada tem a conta própria de conferirLugar), em amostras de 4 m.
+ */
+export function volumeDoPatio(base, forma) {
+  const f = moldarPlataforma(base, forma);
+  const c = caixaDePontos(f.contorno, 2);
+  const p = LOTE.passoAjuste;
+  let v = 0;
+  for (let z = c[1] - ALCANCE; z <= c[3] + ALCANCE; z += p) {
+    for (let x = c[0] - ALCANCE; x <= c[2] + ALCANCE; x += p) {
+      const d = distPoligono(x, z, f.contorno);
+      if (d <= 0 || d >= ALCANCE) continue;
+      const hb = alturaEm(base, x, z);
+      v += Math.abs(alturaDaPlataforma(f, x, z, d, hb) - hb) * p * p;
+    }
+  }
+  return v;
+}
 
 /**
  * Distância de (x, z) ao núcleo de uma forma normalizada (d), a distância ao eixo da via (r; nas outras formas, igual a
@@ -59,6 +185,42 @@ const tocaRet = (f, x0, z0, x1, z1) => {
   return c[0] - ALCANCE <= x1 && c[2] + ALCANCE >= x0 && c[1] - ALCANCE <= z1 && c[3] + ALCANCE >= z0;
 };
 
+const porOrdemCanonica = (a, b) =>
+  a.ref - b.ref || FORMA.ordemTipo[a.tipo] - FORMA.ordemTipo[b.tipo] || a.cota - b.cota || a.caixa[0] - b.caixa[0] || a.caixa[1] - b.caixa[1] || 0;
+
+const PESO_FIM = 1 / (ALCANCE * ALCANCE);
+
+/**
+ * Mistura do chão onde pátios de lote (np valores vp a distâncias dp, em ordem canônica) encontram o resultado das outras
+ * formas (vl a distância md, tipo mt; md infinito = nenhuma). Dentro do núcleo de uma forma vale só ela (a disputa de
+ * sempre: via antes de plataforma, depois a de menor ref); fora dos núcleos a média de Shepard com peso 1/d² que cai a
+ * zero no alcance, então cada forma dita o chão colada nela e nenhuma troca de vez com a vizinha (sem degrau).
+ */
+function misturar(md, vl, mt, dp, vp, np) {
+  if (md === 0 && mt <= FORMA.ordemTipo.plataforma) return vl;
+  for (let q = 0; q < np; q++) if (dp[q] === 0) return vp[q];
+  if (md === 0) return vl;
+  if (md === Infinity && np === 1) return vp[0];
+  let sw = 0;
+  let sv = 0;
+  if (md !== Infinity) {
+    const w = 1 / (md * md) - PESO_FIM;
+    sw += w;
+    sv += w * vl;
+  }
+  for (let q = 0; q < np; q++) {
+    const w = 1 / (dp[q] * dp[q]) - PESO_FIM;
+    sw += w;
+    sv += w * vp[q];
+  }
+  if (!(sw > 0)) return vl;
+  const m = sv / sw;
+  // junto de uma via o pátio só abaixa o chão (a rua manda: nunca terra do lote acima do chão dela, até 8 m, e volta
+  // a poder subir aos poucos nos 8 m seguintes)
+  if (md !== Infinity && mt === 0 && m > vl && md < 2 * FORMA.faixaPlana) return vl + (m - vl) * smoothstep(FORMA.faixaPlana, 2 * FORMA.faixaPlana, md);
+  return m;
+}
+
 /**
  * Aplainar puro: escreve em `saida` as amostras do retângulo [x0, z0, x1, z1] a partir de `base` e das `formas`
  * (normalizadas, em qualquer ordem). Fora do retângulo nada muda.
@@ -79,8 +241,12 @@ export function aplainar(base, formas, ret, saida) {
   const rz1 = oz + j1 * passo;
   const cand = [];
   for (const f of formas) if (tocaRet(f, rx0, rz0, rx1, rz1)) cand.push(f);
+  // ordem canônica (a soma dos pátios dos lotes não pode depender da ordem de registro, nem na última casa)
+  cand.sort(porOrdemCanonica);
   const o = { d: 0, r: 0, cota: 0 };
   const alt = base.altura;
+  const dp = [];
+  const vp = [];
   for (let j = j0; j <= j1; j++) {
     const z = oz + j * passo;
     // só as formas desta linha
@@ -88,16 +254,24 @@ export function aplainar(base, formas, ret, saida) {
     for (let i = i0; i <= i1; i++) {
       const x = ox + i * passo;
       const k = j * n + i;
+      const hb = alt[k];
       let md = Infinity;
       let mt = 0;
       let me = 0;
       let mr = 0;
       let mc = 0;
+      let np = 0;
       for (const f of linha) {
         const c = f.caixa;
         if (x < c[0] - ALCANCE || x > c[2] + ALCANCE || z < c[1] - ALCANCE || z > c[3] + ALCANCE) continue;
         distanciaForma(f, x, z, o);
         if (o.d >= ALCANCE) continue;
+        // pátio de lote (com plano): entra na mistura, não na disputa (LOTE1)
+        if (f.plano) {
+          dp[np] = o.d;
+          vp[np++] = alturaDaPlataforma(f, x, z, o.d, hb);
+          continue;
+        }
         const t = FORMA.ordemTipo[f.tipo];
         if (
           o.d < md ||
@@ -110,10 +284,10 @@ export function aplainar(base, formas, ret, saida) {
           mc = o.cota;
         }
       }
-      const hb = alt[k];
-      if (md === Infinity) saida[k] = hb;
-      else if (md <= FORMA.faixaPlana) saida[k] = mc;
-      else saida[k] = mc + (hb - mc) * smoothstep(FORMA.faixaPlana, ALCANCE, md);
+      let vl = hb;
+      if (md !== Infinity) vl = md <= FORMA.faixaPlana ? mc : mc + (hb - mc) * smoothstep(FORMA.faixaPlana, ALCANCE, md);
+      if (np === 0) saida[k] = vl;
+      else saida[k] = misturar(md, vl, mt, dp, vp, np);
     }
   }
   return saida;
@@ -387,6 +561,7 @@ export function registrar(sim) {
     refazerRetangulo(sim, [x0, z0, x1, z1]);
     if (marcar) marcar(x0, z0, x1, z1);
   };
+  sim.formas.moldar = (forma) => moldarPlataforma(terrenoBase(sim)?.base, forma);
   sim.aoCarregar(() => refazerTudo(sim));
   // se já houver formas (montagem fora da ordem), o chão sai em dia desde já
   if (sim.formas.tamanho) refazerTudo(sim);

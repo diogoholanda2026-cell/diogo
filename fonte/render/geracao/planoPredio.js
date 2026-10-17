@@ -26,6 +26,7 @@
 //   soLod1   só no LOD1 (o envelope de um galpão com shed, que no LOD0 são as paredes e os dentes)
 import { Rng } from '../../comum/rng.js';
 import { clamp } from '../../comum/util.js';
+import { distLote, raioDoCanto } from '../../comum/lote.js';
 import { PREDIOS, PREDIOS_ORDEM } from '../../data/predios.js';
 import { ZONAS } from '../../data/zonas.js';
 import { PALETAS, ESTILOS_BAIRRO, TIPOLOGIAS, CORES_PREDIO } from '../../data/estilos.js';
@@ -1583,8 +1584,13 @@ export const CARROS_LOTE = Object.freeze([0, 1, 2, 3]);
 /** Frota parada: branco, prata, preto e cinza passam de 80% (sRGB). */
 const CORES_CARRO = ['#e8e8e6', '#e8e8e6', '#b9bcbf', '#b9bcbf', '#1c1d1f', '#1c1d1f', '#6d7073', '#8a2a24', '#2f4664', '#a8a08c'];
 
-/** O retângulo (x, z, meia largura, meio fundo) cruza alguma peça alta do plano (prédio, piscina, coluna, divisa)? */
+/** O retângulo (x, z, meia largura, meio fundo) cruza alguma peça alta do plano (prédio, piscina, coluna, divisa) ou sai do lote arredondado? */
 function bate(c, x, z, hw, hd) {
+  // o lote tem cantos arredondados (LOTE1): árvore e carro não ficam no canto cortado
+  const hl = c.W / 2;
+  const dl = c.D / 2;
+  const rc = raioDoCanto(c.W, c.D);
+  if (distLote(x - hw, z - hd, hl, dl, rc) > 0.3 || distLote(x + hw, z - hd, hl, dl, rc) > 0.3 || distLote(x - hw, z + hd, hl, dl, rc) > 0.3 || distLote(x + hw, z + hd, hl, dl, rc) > 0.3) return true;
   for (const P of c.pecas) {
     if ((P.y0 ?? 0) > 2.2) continue; // acima do carro e da copa baixa (corpo sobre pilotis, andar de cima)
     const alta = (P.h ?? 0) > 0.35 && P.forma !== 'inclinado' && P.forma !== 'placa';

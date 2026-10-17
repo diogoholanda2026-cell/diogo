@@ -29,7 +29,8 @@ import { prediosNaCaixa, pontoNoPredio, naGleba, eixoDa, distEixo, MEIA_MAX } fr
 import { removerPredio, celulasNaCaixa, revalidarRetangulo } from './zonas/blocos.js';
 import { custoDemolirPredio } from './vias/demolir.js';
 import { daHolding, ladrilhoDe } from './mundo/ladrilhos.js';
-import { aguaEm } from './mundo/terreno.js';
+import { aguaEm, terrenoBase } from './mundo/terreno.js';
+import { volumeDoPatio } from './mundo/aplainar.js';
 import { recursoNoPoligono } from './mundo/recursos.js';
 import { registrarMover } from './mover.js';
 import { conferirLugar as conferirLugarZon2, linhaLonga, guardarLinha, tirarLinha } from './zon2.js';
@@ -739,10 +740,13 @@ export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = fa
   const cota = Math.floor(sim.alturaEm(L.x, L.z) * 100) / 100;
   let aplainar = null;
   if (desnivel > lim.livre) {
-    // volume movido (corte mais aterro) até a cota da plataforma, pela regra do trapézio sobre as amostras
+    // volume movido (corte mais aterro) até a cota da plataforma, pela regra do trapézio sobre as amostras da pegada
     let soma = 0;
     for (let k = 0; k < alturas.length; k++) soma += Math.abs(alturas[k] - cota) * pesos[k];
-    const volume = Math.round(soma);
+    // mais o pátio e o talude em volta da pegada (LOTE1): o chão que o perfil da plataforma move fora da planta
+    const tb = terrenoBase(sim);
+    const patio = tb ? volumeDoPatio(tb.base, { tipo: 'plataforma', ref: 0, contorno: L.contorno, cota }) : 0;
+    const volume = Math.round(soma + patio);
     const r = COLOCAR.aplainar;
     aplainar = {
       desnivel, livre: lim.livre, max: lim.aplainar, volume, custo: Math.round(volume * r.custoM3),

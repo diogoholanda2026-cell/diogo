@@ -10,7 +10,8 @@ export const ALCANCE_FORMA = FORMA.faixaPlana + FORMA.transicao;
 const TIPOS = Object.keys(FORMA.ordemTipo);
 
 /**
- * Normaliza e confere uma forma. Via: eixo (triplas x, z, y) e meiaLargura; plataforma e cava: contorno (pares) e cota.
+ * Normaliza e confere uma forma. Via: eixo (triplas x, z, y) e meiaLargura; plataforma e cava: contorno (pares) e cota; a plataforma
+ * ainda leva o plano do pátio (LOTE1).
  * @returns {object} a forma com Float64Array e a caixa do núcleo
  */
 export function normalizarForma(f) {
@@ -32,6 +33,12 @@ export function normalizarForma(f) {
     out.contorno = contorno;
     out.cota = f.cota;
     out.caixa = caixaDePontos(contorno, 2);
+    // plataforma de lote (LOTE1): plano do pátio [gx, gz, cx, cz] (declives e centro); sem ele vale o perfil antigo, reto
+    if (f.tipo === 'plataforma' && f.plano != null) {
+      const pl = Array.from(f.plano);
+      if (pl.length !== 4 || !pl.every(Number.isFinite)) throw new Error('forma plataforma: plano [gx, gz, cx, cz]');
+      out.plano = pl;
+    }
   }
   return out;
 }
@@ -40,6 +47,8 @@ export class Formas {
   /** @param {{ marcarRet?: (x0: number, z0: number, x1: number, z1: number) => void }} op */
   constructor({ marcarRet = null } = {}) {
     this.marcarRet = marcarRet;
+    /** Gancho do mundo (aplainar.js): dá o plano do pátio à plataforma que chega sem ele (LOTE1). */
+    this.moldar = null;
     /** @type {Map<number, object>} */
     this.porId = new Map();
     this.seq = 0;
@@ -56,6 +65,7 @@ export class Formas {
    * @example sim.formas.registrar({ tipo: 'plataforma', ref: 5, contorno: [0, 0, 16, 0, 16, 24, 0, 24], cota: 12.4 })
    */
   registrar(forma) {
+    if (this.moldar && forma?.tipo === 'plataforma' && forma.plano == null && !forma.reto) forma = this.moldar(forma);
     const f = normalizarForma(forma);
     f.id = ++this.seq;
     this.porId.set(f.id, f);
