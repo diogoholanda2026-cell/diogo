@@ -275,6 +275,7 @@ function Jogo({ ui }) {
     <div class="cfg-corpo">
       <Liga ui={ui} k="autoSalvar" padrao rotulo={t('u2.cfg.autoSalvar')} exp={t('u2.cfg.autoSalvarExp')} />
       <Liga ui={ui} k="dicas" padrao rotulo={t('u2.cfg.dicas')} exp={t('u2.cfg.dicasExp')} />
+      <Liga ui={ui} k="abertura" padrao rotulo={t('u2b.cfg.abertura')} exp={t('u2b.cfg.aberturaExp')} />
       <Linha rotulo={t('u2.cfg.dicasDeNovo')} exp={t('u2.cfg.dicasDeNovoExp')} k="dicasVistas">
         <Botao a="cfg.dicasDeNovo" rotulo={t('u2.cfg.dicasDeNovo')} class="bt-sec" onClick={() => (mudarPrefs(ui, { dicasVistas: [], dicas: true }), avisar({ texto: t('u2.cfg.dicasVoltam'), gravidade: 'info' }))}>
           {t('u2.cfg.dicasDeNovoBt')}

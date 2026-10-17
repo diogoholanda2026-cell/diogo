@@ -7,8 +7,11 @@
 //         plástico, placa Mercosul na frente e atrás, faróis, grade, lanternas que dobram a quina, retrovisores, caixas
 //         de roda e rodas de 7 lados com o aro
 //   LOD1  12 a 24 triângulos: a carroceria e a cabine em caixas, com as pontas que acendem à noite (o mesmo de antes)
+// O esportivo (R6, veiculos-luxo.js) usa o mesmo gerador, com o aerofólio e as tomadas de ar a mais.
 // A cor vem da instância (a frota: branco, prata, preto e cinza passam de 80%); aParte diz o que é cada vértice
 // (pintura, vidro, pneu, farol, lanterna, cromado, aro, placa, plástico) para o shader (mundo/trafego.js).
+
+import { ESPORTIVO, pecasEsportivo } from './veiculos-luxo.js';
 
 /**
  * Partes (aParte no shader). FRENTE e TRASEIRA são as faces de ponta do LOD1: pintura de dia e, à noite, os dois
@@ -29,6 +32,7 @@ export const MODELOS = Object.freeze([
   { id: 'picape', nome: 'picape', c: 5.3, l: 1.86, h: 1.8, cintura: 1.12, vao: 0.25, roda: 0.37, eixos: 3.08, cabine: [0.66, 0.55, 0.4, 0.37], capo: 0.98, traseira: 1.1, cacamba: 0.37, plastico: true },
   { id: 'onibus', nome: 'ônibus', c: 12.4, l: 2.5, h: 3.1, cintura: 1.2, vao: 0.3, roda: 0.5, eixos: 6.2, janela: [1.2, 2.55], onibus: true },
   { id: 'caminhao', nome: 'caminhão', c: 7.1, l: 2.3, h: 3.05, cintura: 1.35, vao: 0.3, roda: 0.45, eixos: 3.9, cab: 1.85, caminhao: true },
+  ESPORTIVO,
 ]);
 
 export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -479,6 +483,7 @@ function carroLOD0(m) {
   assentar(M, -0.2, 0.2, y0 + 0.25, 0.13, 1, zF, 1, 1, PARTE.PLACA, 0.007, false);
   assentar(M, 0.2, -0.2, m.cacamba ? y0 + 0.28 : ymT + 0.06, 0.13, -1, zT, 1, 1, PARTE.PLACA, 0.007, false);
   assentar(M, w - 0.36, -(w - 0.36), y0 + 0.13, 0.1, -1, zT, 2, 1, PARTE.PLASTICO, 0.004, false);
+  if (m.esporte) for (const q of pecasEsportivo(m, PARTE)) M.poli(q.pts, q.parte);
   return M.fechar();
 }
 

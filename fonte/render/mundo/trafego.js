@@ -26,6 +26,7 @@
 // perfil (Média 120 andando); 6 modelos em 2 LODs, uma chamada por modelo e LOD (família 'vida').
 import * as THREE from 'three';
 import { malhaVeiculo, MODELOS } from '../geracao/veiculos.js';
+import { ESPORTIVOS_CORES } from '../geracao/veiculos-luxo.js';
 import { faixasDeTransito, estacao, hashF } from '../geracao/malhaVia.js';
 import { perfilVia, ALTURA, alturaNaSecao } from '../geracao/perfilVia.js';
 import { FROTA_CORES, porPeso, grupoSemaforo, defasagemSemaforo } from '../geracao/cruzamento.js';
@@ -312,13 +313,16 @@ export function curvaEntre(ar, u, sentido, ar2, u2, sentido2, retorno = false) {
 function modeloDe(tipoId, h, ind) {
   if ((tipoId === 'avenida' || tipoId === 'avenidaG') && h < 0.06) return 4;
   if (h < 0.06 + (tipoId === 'rodovia' ? 0.1 : 0) + 0.12 * ind) return 5;
-  return porPeso([[0, 0.34], [1, 0.26], [2, 0.24], [3, 0.16]], hashF(Math.floor(h * 1e6), 7));
+  // o esportivo (6, R6): 6% dos passeios, menos nas ruas simples
+  return porPeso([[0, 0.32], [1, 0.25], [2, 0.23], [3, 0.14], [6, tipoId === 'rua' ? 0.03 : 0.06]], hashF(Math.floor(h * 1e6), 7));
 }
 
-const CORES = FROTA_CORES.map(([hex]) => {
+const rgb = ([hex]) => {
   const c = parseInt(hex.slice(1), 16);
   return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
-});
+};
+const CORES = FROTA_CORES.map(rgb);
+const CORES_ESPORTIVO = ESPORTIVOS_CORES.map(rgb);
 
 // ------------------------------------------------------------------------------------------------ material
 
@@ -607,7 +611,9 @@ function criarTrafego(ctx) {
     const vm = vMax ?? (P.velocidade / 3.6) * (0.72 + 0.25 * hashF(id, 5));
     const car = {
       id, e: ar.e, u: f.u, sentido: f.sentido, s, v: 0, vMax: vm, mi, c, l,
-      cor: cor ?? CORES[porPeso(FROTA_CORES.map(([, w], k) => [k, w]), hashF(id, 6))],
+      cor: cor ?? (mi === 6
+        ? CORES_ESPORTIVO[porPeso(ESPORTIVOS_CORES.map(([, w], k) => [k, w]), hashF(id, 6))]
+        : CORES[porPeso(FROTA_CORES.map(([, w], k) => [k, w]), hashF(id, 6))]),
       curva: null, prox: null, reserva: null, tPedido: null, quer: false, espera: 0, parado: 0, freio: false,
       x: 0, y: 0, z: 0, hx: 1, hz: 0, idade: 0, externo,
     };

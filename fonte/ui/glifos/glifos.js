@@ -287,5 +287,15 @@ registrarGlifos({
   sair: ['M9.5 20.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5h3.5', 'M15.5 16.5 20 12l-4.5-4.5', 'M20 12H9.5'],
 });
 
+// Camadas do M1b (X3b): glifos próprios do ar, do ruído e dos empregos (o Nível usa o `nivel`)
+registrarGlifos({
+  // chaminé com duas colunas de fumaça
+  fumaca: ['M4 20.5h16', ret(5.5, 12, 4, 8.5, 1), ret(13, 15.5, 5.5, 5, 1), 'M7.5 9.25c-1.3-.95-1.3-2.1 0-3.05s1.3-2.1 0-3', 'M12.5 8.75c-1.3-.95-1.3-2.1 0-3.05'],
+  // barras de uma onda sonora (a `som` é o alto-falante do volume)
+  ruido: ['M4.5 10.5v3', 'M8.25 7.5v9', 'M12 4v16', 'M15.75 7.5v9', 'M19.5 10.5v3'],
+  // uma pessoa e uma vaga a mais
+  vagas: [circulo(9, 8, 3.25), 'M3.5 20c.6-3.4 3.1-5.25 6.5-5.25 1.9 0 3.5.7 4.5 2', 'M17.5 12.5v6', 'M14.5 15.5h6'],
+});
+
 /** Glifo do rosto do bem-estar pela faixa da tarifa (as faixas do dono: até 30, 31 a 60, 61 a 100). */
 export const glifoBemEstar = (tarifa) => (tarifa >= 11 ? 'bemEstarBom' : tarifa >= 8 ? 'bemEstarMedio' : 'bemEstarRuim');

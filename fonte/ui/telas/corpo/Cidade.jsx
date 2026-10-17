@@ -4,6 +4,7 @@
 //   Demanda: as barras de cada zona (cor da família) e os fatores com o número de cada um, + e −.
 //   Bem-estar: a média da tarifa com a margem até o degrau ("+3 acima de 61"), as três faixas da regra do dono com a
 //     Contribuição em dólar e os fatores médios da cidade (D50).
+//   Problemas (X3b): alertas e avisos de prédio por gravidade, com "Ver na camada" e "Próximo" (corpo/Problemas.jsx).
 //   Serviços: as redes (oferta e demanda; a energia da rodovia, D52) e cada serviço com capacidade, uso e eficiência,
 //     com "Ver camada".
 import { useState } from 'preact/hooks';
@@ -26,6 +27,7 @@ import { Escolaridade } from '../../selecao/secoes/residencial.jsx';
 import { camadaDoServico } from '../../selecao/secoes/servico.jsx';
 import { ZONAS, ZONAS_ORDEM } from '../../../data/zonas.js';
 import { SERVICOS } from '../../../data/servicos.js';
+import Problemas from './Problemas.jsx';
 
 const soma = (l) => (Array.isArray(l) ? l.reduce((a, x) => a + (Number.isFinite(x) ? x : 0), 0) : 0);
 const ESTADO_FAMILIA = { res: 'zR', com: 'zC', esc: 'zE', ind: 'zI' };
@@ -188,10 +190,12 @@ export default function Cidade({ ui, fechar }) {
   const b = barra.value;
   const c = consultar('cidade');
   const d = aba === 'demanda' ? consultar('demanda') ?? b.demanda : null;
-  const abas = ['geral', 'demanda', 'bemEstar', 'servicos'].map((id) => ({ id, rotulo: t(`cid.aba.${id}`) }));
+  const abas = ['geral', 'demanda', 'bemEstar', 'servicos', 'problemas'].map((id) => ({ id, rotulo: t(`cid.aba.${id}`) }));
   return (
     <Tela id="cidade" glifo="populacao" titulo={t('cid.titulo')} abas={abas} aba={aba} aoTrocarAba={setAba} aoFechar={fechar}>
-      {!c && aba !== 'bemEstar' && aba !== 'demanda' ? (
+      {aba === 'problemas' ? (
+        <Problemas ui={ui} fechar={fechar} />
+      ) : !c && aba !== 'bemEstar' && aba !== 'demanda' ? (
         <Vazio glifo="populacao" texto={t('cid.semDados')} />
       ) : aba === 'geral' ? (
         <Geral c={c} b={b} />

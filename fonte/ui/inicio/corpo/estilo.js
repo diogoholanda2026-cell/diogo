@@ -31,6 +31,7 @@ export const CSS_CORPO = `
 .ini-cor[aria-checked=true]{box-shadow:0 0 0 2px var(--s1),0 0 0 4px var(--t1)}
 .ini-largo{grid-column:1/-1}
 .ini-nota{margin:0;font-size:var(--t13);font-weight:500;color:var(--t2)}
+.ini-livre{display:flex;flex-direction:column;gap:var(--e2)}
 .ini-acoes{display:flex;flex-wrap:wrap;gap:var(--e2);margin-top:var(--e2)}
 .ini-acoes .bt-pri,.ini-acoes .bt-sec{min-height:var(--alvo);padding:0 var(--e4)}
 .sv-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--e3)}

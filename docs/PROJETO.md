@@ -1873,6 +1873,7 @@ seção 2; **Testa sem as outras** diz qual substituto usa. Os textos de cada pa
 - **Entrega:** Valor do terreno, Esgoto, Trânsito, Poluição do ar, Ruído, Nível e Empregos; aba Problemas da tela
   Cidade com "Ver na camada" e "Próximo".
 - **Depende de:** S1c e S2b (substitutos até lá).
+- **Entregue em 17/10/2026** (X3b). As 7 camadas do M1b no popover (13 com as do M1a; faltava o Nível), cores pela semântica (trânsito, ar e ruído do cinza ao âmbar e ao vermelho; empregos em dois lados), legenda com palavras e unidade por extenso, glifos próprios `fumaca`, `ruido` e `vagas`, marcadores por camada e a aba Problemas da tela Cidade (alertas e avisos de prédio agregados por gravidade, "Ver na camada" e "Próximo"). Testes em `ui-problemas.teste.mjs`, cenas `x3b-*`. Nota em `docs/entregas/onda4/X3b.md`.
 
 #### U2b. Abertura, modo foto, som e Mural (onda 4; 2 sessões)
 - **Arquivos:** `ui/telas/{Foto,Mural}.jsx`, `ui/inicio/Abertura.jsx`, `fonte/som/{mundo,musica}.js`; herda os de U2a.

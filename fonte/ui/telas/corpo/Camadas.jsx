@@ -308,6 +308,7 @@ export function LegendaCamada({ ui }) {
           ) : null}
         </div>
       )}
+      {m.unidade ? <div class="x3-resumo x3-unidade">{m.unidade}</div> : null}
       {m.resumo ? <div class="x3-resumo">{m.resumo}</div> : null}
       {m.extra ? (
         <div class="x3-extra">

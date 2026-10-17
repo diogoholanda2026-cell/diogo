@@ -607,8 +607,8 @@ function luzesEscondidas(v) {
   return escondidas;
 }
 
-test('carros: 6 modelos da frota brasileira em medidas reais, LOD0 de 150 a 400 triângulos e LOD1 de 12 a 24', () => {
-  assert.deepEqual(MODELOS.map((m) => m.id), ['hatch', 'seda', 'suv', 'picape', 'onibus', 'caminhao']);
+test('carros: 7 modelos da frota (6 brasileiros e o esportivo da R6) em medidas reais, LOD0 de 150 a 400 triângulos e LOD1 de 12 a 24', () => {
+  assert.deepEqual(MODELOS.map((m) => m.id), ['hatch', 'seda', 'suv', 'picape', 'onibus', 'caminhao', 'esportivo']);
   for (let i = 0; i < MODELOS.length; i++) {
     const m = MODELOS[i];
     assert.equal(malhaVeiculo(i, 0), malhaVeiculo(m.id, 0), `${m.id}: guardado`);

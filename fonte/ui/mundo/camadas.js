@@ -13,9 +13,9 @@ import { REGRAS_DONO } from '../../data/economia.js';
 import { parteNoJogo } from '../../data/zonas.js';
 
 /**
- * Camadas que o popover mostra, na ordem (D29: as 6 do M1a; o Valor do terreno entra quando a simulação tiver). As do M1b
- * (esgoto, trânsito, ar, ruído, empregos) levam `parte: 'M1b'` e só aparecem com o M1b no jogo (parteNoJogo); os glifos são
- * os que já existem (nuvem para o ar, som para o ruído, trabalho para os empregos).
+ * Camadas que o popover mostra, na ordem (D29: as 6 do M1a). As 7 do M1b (esgoto, trânsito, ar, ruído, empregos, valor do
+ * terreno e nível dos prédios) levam `parte: 'M1b'` e só aparecem com o M1b no jogo (parteNoJogo); o ar, o ruído e os
+ * empregos têm glifo próprio (fumaca, ruido, vagas; X3b).
  */
 export const CAMADAS_UI = Object.freeze([
   { id: 'zonas', glifo: 'zonas' },
@@ -26,10 +26,11 @@ export const CAMADAS_UI = Object.freeze([
   { id: 'servicos', glifo: 'servicos' },
   { id: 'recursos', glifo: 'recursos' },
   { id: 'transito', glifo: 'transito', parte: 'M1b' },
-  { id: 'ar', glifo: 'nuvem', parte: 'M1b' },
-  { id: 'ruido', glifo: 'som', parte: 'M1b' },
-  { id: 'empregos', glifo: 'trabalho', parte: 'M1b' },
-  { id: 'valor', glifo: 'valuation' },
+  { id: 'ar', glifo: 'fumaca', parte: 'M1b' },
+  { id: 'ruido', glifo: 'ruido', parte: 'M1b' },
+  { id: 'empregos', glifo: 'vagas', parte: 'M1b' },
+  { id: 'valor', glifo: 'valuation', parte: 'M1b' },
+  { id: 'nivel', glifo: 'nivel', parte: 'M1b' },
 ]);
 
 /**
@@ -40,7 +41,7 @@ export function camadasDoPopover(ids = null) {
   return CAMADAS_UI.filter((c) => {
     if (c.parte && !parteNoJogo(c.parte)) return false;
     if (!ids) return true;
-    return ids.includes(c.id) || (c.id !== 'valor' && !c.parte);
+    return !c.parte || ids.includes(c.id);
   });
 }
 
@@ -69,8 +70,17 @@ export const PALETA = Object.freeze({
   recursos: Object.freeze({
     rocha: '#9aa3ad', areia: '#e0c48a', argila: '#c46a3c', calcario: '#ece6d6', fertil: '#7f8f3a', subterranea: '#4f9fd8',
   }),
+  // trânsito, ar e ruído (X3b): do cinza claro do que está bem, passando pelo âmbar no limite, ao vermelho fundo do que pesa
+  // (a luminância cai ao longo da rampa, então ela se lê também sem cor); em deuteranopia o fim vira um tijolo mais escuro
+  alerta: Object.freeze({ livre: '#cdd3da', limite: '#f2b14c', pesado: '#b8322a' }),
+  alertaDaltonico: Object.freeze({ livre: '#cdd3da', limite: '#f2b14c', pesado: '#6b1a0f' }),
+  // empregos (X3b): dois lados do desequilíbrio, sem bom nem ruim: morador sem emprego (âmbar) e vaga sem trabalhador (azul)
+  empregos: Object.freeze({ ruim: '#f2b14c', meio: '#7d8188', bom: '#3987e5' }),
   semDado: '#9a9ea4',
 });
+
+/** Camadas que pintam do neutro ao vermelho passando pelo limite (o valor do meio, ou da marca ".aviso" da legenda). */
+const CAMADAS_ALERTA = Object.freeze(['transito', 'ar', 'ruido']);
 
 /** Ordem das zonas (data/zonas.js) e dos recursos (sim/mundo/recursos.js), pelo valor de cada categoria. */
 export const ZONAS_POR_VALOR = ['', 'resBaixa', 'resMedia', 'resAlta', 'comBaixa', 'comAlta', 'escritorio', 'industria'];
@@ -109,6 +119,24 @@ export function rampaDivergente(min, max, meio, { ruim, meio: cinza, bom }, n = 
   });
 }
 
+/** O valor do limite de uma camada de alerta: o `meio` da escala ou a marca ".aviso" da legenda (senão, o meio da escala). */
+export function limiteDe(d) {
+  if (Number.isFinite(d?.escala?.meio)) return d.escala.meio;
+  const m = (d?.legenda ?? []).find((c) => typeof c.chave === 'string' && c.chave.endsWith('.aviso'));
+  const { min, max } = escalaDe(d);
+  return Number.isFinite(m?.v) ? m.v : (min + max) / 2;
+}
+
+/** Rampa de n cores do neutro ao limite (âmbar) e do limite ao pesado (vermelho), cada trecho na posição do valor. */
+export function rampaAlerta(min, max, limite, { livre, limite: cLimite, pesado }, n = 8) {
+  const m = Math.min(max, Math.max(min, limite));
+  return Array.from({ length: n }, (_, k) => {
+    const v = min + ((max - min) * k) / (n - 1);
+    if (v <= m) return misturar(livre, cLimite, m > min ? (v - min) / (m - min) : 1);
+    return misturar(cLimite, pesado, max > m ? (v - m) / (max - m) : 1);
+  });
+}
+
 /** Luminância relativa (WCAG) de uma cor hex. */
 export function luminancia(h) {
   const [r, g, b] = hexRgb(h).map((v) => {
@@ -128,6 +156,7 @@ export function contraste(a, b) {
 export function tipoDaRampa(d) {
   if (!d) return null;
   if (d.tipo === 'cat' || (d.id === 'recursos' && d.categoria)) return 'cat';
+  if (CAMADAS_ALERTA.includes(d.id)) return 'ale';
   if (d.tipo === 'div' || d.id === 'bemEstar' || d.id === 'servicos' || Number.isFinite(d.escala?.meio)) return 'div';
   return 'seq';
 }
@@ -151,7 +180,8 @@ export function paleta(d, { daltonico = false } = {}) {
     return { cores: [PALETA.semDado, ...rampa(PALETA.seq.slice(1), n)], categorico: true, tipo };
   }
   const { min, max } = escalaDe(d);
-  if (tipo === 'div') return { cores: rampaDivergente(min, max, d.escala?.meio, daltonico ? PALETA.divDaltonico : PALETA.div), categorico: false, tipo };
+  if (tipo === 'ale') return { cores: rampaAlerta(min, max, limiteDe(d), daltonico ? PALETA.alertaDaltonico : PALETA.alerta), categorico: false, tipo };
+  if (tipo === 'div') return { cores: rampaDivergente(min, max, d.escala?.meio, d.id === 'empregos' ? PALETA.empregos : daltonico ? PALETA.divDaltonico : PALETA.div), categorico: false, tipo };
   return { cores: rampa(PALETA.seq, 8), categorico: false, tipo };
 }
 
@@ -319,7 +349,7 @@ export function faixasDoBemEstar(d, { t, porHora, regras = REGRAS_DONO } = {}) {
 /**
  * Modelo da legenda (puro): { id, titulo, tipo: 'cat' | 'seq' | 'div', itens: [{ cor, texto }] (categórica),
  * gradiente (CSS), pontas: [texto do mínimo, texto do máximo], marcas: [{ pos (0 a 1), texto, dica }], faixas (só no
- * Bem-estar, com porHora: faixasDoBemEstar), resumo, extra }. t: a função de textos; num: o formatador de números
+ * Bem-estar, com porHora: faixasDoBemEstar), unidade (o que a escala mede, por extenso), resumo, extra }. t: a função de textos; num: o formatador de números
  * (fmt.numero); dinheiro: o de dinheiro (fmt.dinheiro, para os PARAMS_DINHEIRO); porHora: o de dinheiro por hora
  * (fmt.dinheiroPorHora, para as faixas); extra: linha a mais (obras paradas na Recursos).
  */
@@ -327,10 +357,14 @@ export function modeloLegenda(d, { t, num = (n) => String(n), dinheiro = null, p
   if (!d) return null;
   const p = paleta(d, { daltonico });
   const titulo = t(`camada.${d.id}`);
+  // a unidade da escala por extenso (`camada.<id>.unidade`, X3b): o que o número mede, quando a escala não leva unidade
+  const chaveUn = `camada.${d.id}.unidade`;
+  const unidadeTxt = t(chaveUn, { passo: d.grade?.passo ?? '' });
+  const unidade = unidadeTxt.startsWith('??') ? '' : unidadeTxt;
   const resumo = d.resumo?.chave ? t(d.resumo.chave, formatarParams(d.resumo.params, num, dinheiro)) : '';
   if (p.categorico) {
     const lista = (d.legenda?.length ? d.legenda : d.categorias ?? []).filter((c) => c.v > 0 && c.v < p.cores.length);
-    return { id: d.id, titulo, tipo: 'cat', itens: lista.map((c) => ({ cor: p.cores[c.v], texto: t(c.chave) })), resumo, extra };
+    return { id: d.id, titulo, tipo: 'cat', itens: lista.map((c) => ({ cor: p.cores[c.v], texto: t(c.chave) })), unidade, resumo, extra };
   }
   const { min, max } = escalaDe(d);
   const un = d.escala?.unidade ?? '';
@@ -341,14 +375,20 @@ export function modeloLegenda(d, { t, num = (n) => String(n), dinheiro = null, p
   for (const m of d.legenda ?? []) {
     const pos = (m.v - min) / (max - min);
     const texto = t(m.chave);
+    // a marca do meio mostra a palavra (a frase se for curta, ou a `<chave>.curto` da camada) e o número vai na dica; sem
+    // palavra, mostra o número
+    const extenso = t(`${m.chave}.curto`);
+    const palavra = extenso.startsWith('??') ? (curto(texto) ? texto : null) : extenso;
+    const rotuloMarca = palavra ?? valor(m.v);
+    const ponta = extenso.startsWith('??') ? texto : extenso;
     // um texto curto na ponta troca o número dela; os do meio viram marcas com o número e a frase na dica
-    if (pos <= 0.001 && curto(texto)) pontas[0] = texto;
-    else if (pos >= 0.999 && curto(texto)) pontas[1] = texto;
-    else if (pos > 0.001 && pos < 0.999) marcas.push({ pos, texto: valor(m.v), dica: texto });
+    if (pos <= 0.001 && curto(ponta)) pontas[0] = ponta;
+    else if (pos >= 0.999 && curto(ponta)) pontas[1] = ponta;
+    else if (pos > 0.001 && pos < 0.999) marcas.push({ pos, texto: rotuloMarca, dica: palavra ? `${valor(m.v)}: ${texto}` : texto });
   }
   const paradas = p.cores.map((c, k) => `${c} ${Math.round((100 * k) / (p.cores.length - 1))}%`);
   const faixas = d.id === 'bemEstar' ? faixasDoBemEstar(d, { t, porHora }) : null;
-  return { id: d.id, titulo, tipo: p.tipo, gradiente: `linear-gradient(90deg, ${paradas.join(', ')})`, pontas, marcas, faixas, resumo, extra };
+  return { id: d.id, titulo, tipo: p.tipo, gradiente: `linear-gradient(90deg, ${paradas.join(', ')})`, pontas, marcas, faixas, unidade, resumo, extra };
 }
 
 /** Números dos parâmetros do resumo formatados em pt-BR (inteiros; o dinheiro em dólar; o resto como veio). */

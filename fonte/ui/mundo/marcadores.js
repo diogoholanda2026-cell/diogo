@@ -18,6 +18,13 @@ export const AVISOS_DA_CAMADA = Object.freeze({
   servicos: Object.freeze([]),
   recursos: Object.freeze(['semMaterial']),
   valor: Object.freeze([]),
+  // M1b (X3b): o glifo do esgoto é só do aviso de esgoto; o 'alerta' leva o ar e o ruído pesados (e o quase abandono)
+  esgoto: Object.freeze(['esgoto']),
+  transito: Object.freeze([]),
+  ar: Object.freeze(['alerta']),
+  ruido: Object.freeze(['alerta']),
+  empregos: Object.freeze(['trabalho', 'semTrabalhadores']),
+  nivel: Object.freeze([]),
 });
 
 /** Filtros dos avisos (prefs.avisos), na ordem do controle. */

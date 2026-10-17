@@ -4,7 +4,7 @@
 // editáveis, a cor da marca, o calendário que começa em jan. 2020), os saves, as configurações e os créditos. No
 // mouse os atalhos ficam à vista (Enter, N, C, O, R; Esc volta); setas sobem e descem entre os botões.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { t } from '../../textos.js';
+import { t, registrarTextos } from '../../textos.js';
 import * as fmt from '../../formato.js';
 import { Botao } from '../../comp/Botao.jsx';
 import { Tela, Secao } from '../../comp/Tela.jsx';
@@ -20,6 +20,8 @@ import { haQuanto, dataDoSave, mudarPrefs } from './comum.js';
 import { ListaSaves, fraseFalha } from './Carregar.jsx';
 import Configuracoes from './Configuracoes.jsx';
 import { tocar } from '../../../som/interface.js';
+import { registrar as registrarTextosU2b } from '../../textos/u2b.js';
+import { MODO_LIVRE } from '../../../data/historia.js';
 import { vibrar } from '../../../som/som.js';
 
 /** Liga as teclas de uma etapa enquanto ela está à vista (já no quadro em que ela aparece). */
@@ -118,6 +120,7 @@ function Nova({ ui, estado }) {
   const [nome, setNome] = useState(PARTIDA_PADRAO.nome);
   const [criador, setCriador] = useState(PARTIDA_PADRAO.criador);
   const [cor, setCor] = useState(PARTIDA_PADRAO.cor);
+  const [livre, setLivre] = useState(PARTIDA_PADRAO.modo === 'livre');
   const [invalido, setInvalido] = useState(null);
   const dicas = ui.loja.prefs.value?.dicas !== false;
   const ocupado = estado.ocupado;
@@ -131,7 +134,7 @@ function Nova({ ui, estado }) {
       return;
     }
     vibrar(15);
-    const r = await entrarNaPartida(ui, 'nova', { nome: c.nome, criador: c.criador, cor, modo: 'normal' });
+    const r = await entrarNaPartida(ui, 'nova', { nome: c.nome, criador: c.criador, cor, modo: livre ? 'livre' : 'normal' });
     if (r?.ok) atualizarSaves(ui.jogo);
   };
   useTeclas((ev) => {
@@ -145,7 +148,7 @@ function Nova({ ui, estado }) {
       return true;
     }
     return false;
-  }, [nome, criador, cor, ocupado]);
+  }, [nome, criador, cor, livre, ocupado]);
   useEffect(() => primeiro.current?.focus({ preventScroll: true }), []);
   return (
     <Tela id="nova" glifo="holding" titulo={t('u2.nova.titulo')} aoFechar={() => irPara('menu')} class="tela-inicio">
@@ -168,6 +171,10 @@ function Nova({ ui, estado }) {
         </div>
         <p class="ini-nota ini-largo">{t('u2.nova.mapa')}</p>
         <p class="ini-nota ini-largo">{t('u2.nova.calendario', { data: fmt.dataCalendario({ mes: 1, ano: 1 }) })}</p>
+        <div class="ini-largo ini-livre">
+          <Interruptor a="nova.livre" rotulo={t('u2b.nova.livre')} ligado={livre} aoTrocar={setLivre} />
+          <p class="ini-nota">{t('u2b.nova.livreExp', { caixa: fmt.dinheiro(MODO_LIVRE.caixa) })}</p>
+        </div>
         <div class="ini-largo">
           <Interruptor a="nova.dicas" rotulo={t('u2.nova.dicas')} ligado={dicas} aoTrocar={(v) => mudarPrefs(ui, { dicas: v })} />
         </div>
@@ -224,6 +231,8 @@ function Creditos() {
     </Tela>
   );
 }
+
+registrarTextosU2b(registrarTextos);
 
 /** O corpo do início pela etapa. */
 export default function CorpoInicio({ ui, etapa, estado }) {
