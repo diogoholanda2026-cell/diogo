@@ -170,6 +170,10 @@ export function dicaDoBloqueio(p) {
       return mk('ux1.dica.declive', { desnivel: d.desnivel ?? 0, max: d.max ?? 0 });
     case 'recurso':
       return mk('ux1.dica.recurso', { recurso: d.recurso ?? '' });
+    case 'distrito':
+      return mk('zon2.dica.distrito');
+    case 'utilidades':
+      return mk('zon2.dica.utilidades');
     case 'creditos':
       return mk('ux1.dica.creditos', { faltam: d.faltam ?? p.faltam ?? 0 });
     default:

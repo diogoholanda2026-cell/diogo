@@ -21,6 +21,8 @@ import { MODOS_ZONA, TAMANHOS_PINCEL, zonasDaParte } from '../ferramentas/zona.j
 import { pedeDoisToques } from '../ferramentas/demolir.js';
 import { faltaDaArea, linhasArea, rotuloArea } from '../ferramentas/areas.js';
 import { Bandeja, COR_FAMILIA } from './Bandeja.jsx';
+import { ChipCrescimento, PainelCrescimento, registrar as registrarZon2 } from './Zon2.jsx';
+import { textoLongoAlcance, regrasAtuais } from '../ferramentas/zon2.js';
 
 const demanda = computed(() => barra.value?.demanda ?? { R: 0, C: 0, I: 0, E: 0 });
 const GLIFO_MODO = Object.freeze({ reta: 'reta', curva: 'curva', grade: 'grade', melhorar: 'melhorar' });
@@ -155,6 +157,7 @@ function OpcoesZona({ s }) {
           <span class="chip-texto">{t(`x2.zona.${m.tamanho}`)}</span>
         </Botao>
       ) : null}
+      <ChipCrescimento s={s} />
       <span class="bf-demanda" aria-label={t('x2.zona.demanda')}>
         {['R', 'C', 'I'].concat(d.E > 0 ? ['E'] : []).map((k) => (
           <span class={`bf-dem bf-dem-${k}`} title={`${t('x2.zona.demanda')} ${k}`}>
@@ -174,8 +177,10 @@ function linhaZona(s) {
     const partes = [t(p.celulas.length === 1 ? 'x2.zona.celula1' : 'x2.zona.celulas', { n: fmt.numero(p.celulas.length) })];
     if (p.comPredio) partes.push(t('x2.zona.comPredio', { n: p.comPredio }));
     if (p.efeitoMedia) partes.push(t('x2.zona.efeito', { v: fmt.comSinal(p.efeitoMedia, 1) }));
+    if (p.foraDoDistrito > 0) partes.push(t('zon2.distrito.fora', { n: fmt.numero(p.foraDoDistrito) }));
     return partes.join(' · ');
   }
+  if (p?.foraDoDistrito > 0) return t('zon2.distrito.semCelulas');
   return t(m.apagar ? 'x2.zona.dica.apagar' : `x2.zona.dica.${m.modo}`);
 }
 
@@ -201,6 +206,8 @@ function linhaColocar(s) {
   const partes = [t('x2.colocar.custo', { custo: fmt.dinheiro(p.custo ?? s.item?.custo ?? 0) })];
   if (p.manutencaoHora || s.item?.manutencaoHora) partes.push(t('x2.manutencao', { v: porHora(p.manutencaoHora ?? s.item?.manutencaoHora) }));
   if (p.alcance) partes.push(t('x2.colocar.alcance', { m: fmt.numero(p.alcance) }));
+  const rede = textoLongoAlcance(p.longoAlcance, regrasAtuais());
+  if (rede) partes.push(rede);
   if (s.substituto) partes.push(t('x2.estimado'));
   return { texto: partes.join(' · '), estado: null };
 }
@@ -301,6 +308,7 @@ function BarraFerramenta({ ui }) {
   return (
     <div class="barra-ferr-pilha">
       {bandejaVias ? <Bandeja ui={ui} cat="vias" lado="esquerda" /> : null}
+      {s.tipo === 'zona' ? <PainelCrescimento ui={ui} /> : null}
       <div class="barra-ferr vidro" data-hud="ferramenta" role="toolbar" aria-label={t(`x2.ferramenta.${s.tipo}`)}>
         <div class="bf-esq">
           <Botao a="ferr.cancelar" rotulo={s.maquina?.fase === 'ocioso' || s.tipo !== 'via' ? t('x2.sair') : t('x2.cancelar')} class="bt-glifo bf-bt" onClick={() => ferramentas.cancelar()}>
@@ -327,6 +335,7 @@ function BarraFerramenta({ ui }) {
 }
 
 export function registrar(ui) {
+  registrarZon2(ui);
   ui.registrarHud('baixo', BarraFerramenta, { ordem: 95, nome: 'barra-ferramenta' });
   // glifo do Melhorar (a via sobe de tipo), no traço do registro
   ui.registrarGlifos({ melhorar: ['M4 19.5h16', 'M4 15.5h16', 'M12 12V3.5', 'M8.5 7 12 3.5 15.5 7'] });

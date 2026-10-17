@@ -11,6 +11,7 @@ import { alturaEm } from '../../comum/altura.js';
 import { ponto as pontoBz } from '../../comum/bezier.js';
 import { sessao, vivo } from '../ferramentas/sessao.js';
 import { alcas } from '../ferramentas/via.js';
+import { textoLongoAlcance } from '../ferramentas/zon2.js';
 import { centroLadrilho, rotulosSemSobrepor, fugirDoHud } from '../ferramentas/areas.js';
 
 const ESTALO_MS = 120;
@@ -78,6 +79,9 @@ export function montarMarcas(s) {
   } else if (s.tipo === 'colocar') {
     const p = s.previa;
     if (p && !p.ok && Number.isFinite(p.x)) l.push({ chave: 'motivo', classe: 'cota cota-er', p: [p.x, p.z], texto: s.motivo, dy: -40 });
+    // rede de longo alcance (ZON2): a medida e o custo da linha até a rede da cidade, junto do fantasma
+    const rede = p?.ok && Number.isFinite(p.x) ? textoLongoAlcance(p.longoAlcance, null, { curto: true }) : null;
+    if (rede && p.longoAlcance.alcanca !== false) l.push({ chave: 'rede', classe: 'cota cota-rede', p: [p.x, p.z], texto: rede, dy: -40 });
   } else if (s.tipo === 'areas') {
     const sel = s.info;
     for (const c of s.resumo?.compraveis ?? []) {

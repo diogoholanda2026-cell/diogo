@@ -697,12 +697,24 @@ export function registrar(ui) {
       const z = zonaIdx();
       const pv = previaZona(x.pincel);
       const cel = pv.celulas ?? [];
-      if (!cel.length && x.pincel.modo !== 'quadra') return;
+      if (!cel.length && x.pincel.modo !== 'quadra') {
+        // pincel só fora do Distrito Industrial (ZON2): nada a pintar, e a frase da recusa aparece uma vez por traço
+        if (pv.foraDoDistrito > 0 && (!traco || traco.n !== x.traco || !traco.avisou)) {
+          traco = { n: x.traco, grupos: traco?.n === x.traco ? traco.grupos : new Map(), avisou: true };
+          vibrar(VIBRA.erro);
+          avisar(t('codigo.distrito'));
+        }
+        return;
+      }
       const antigas = zona.zonasAntigas(esp(), cel);
       if (!traco || traco.n !== x.traco) traco = { n: x.traco, grupos: new Map(), avisou: false };
       const tr = traco;
       comando('zona.pintar', { pincel: x.pincel, zona: z }, { silencioso: true }).then((r) => {
         if (r.ok) {
+          if (r.dados?.foraDoDistrito > 0 && !tr.avisou) {
+            tr.avisou = true;
+            avisar(t('zon2.distrito.fora', { n: ui.fmt.numero(r.dados.foraDoDistrito) }));
+          }
           for (const [zAnt, lista] of antigas) {
             if (zAnt === z) continue;
             if (!tr.grupos.has(zAnt)) tr.grupos.set(zAnt, new Set());

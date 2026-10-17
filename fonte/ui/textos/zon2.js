@@ -45,5 +45,25 @@ export function registrar(registrarTextos) {
     'zon2.lote.pedidoOk': 'Lote de {n} construções pedido em {zona}.',
     'zon2.lote.canceladoOk': 'Lote de {zona} cancelado: {n} construções a menos.',
     'zon2.crescimento.resumo': '{construidos} prontas, {emObra} em obra, {frentes} frentes livres',
+    // painel de crescimento na barra da ferramenta de zonas (interface)
+    'zon2.painel.abrir': 'Crescimento',
+    'zon2.painel.fechar': 'Fechar o painel de crescimento',
+    'zon2.modo.qual': 'Modo de crescimento',
+    'zon2.lote.campo': 'Quantidade do lote',
+    'zon2.lote.usarEspera': 'Usar a demanda',
+    'zon2.lote.invalido': 'Digite um número inteiro de 1 a 1000.',
+    'zon2.lote.demanda': 'Demanda acumulada',
+    'zon2.lote.demandaValor': '{n} construções',
+    'zon2.lote.cancelado': 'Lote cancelado.',
+    // contornos no mundo e motivos de recusa da colocação
+    'zon2.contorno.distrito': 'Distrito Industrial',
+    'zon2.contorno.utilidades': 'Zona de Utilidades',
+    'zon2.contorno.vento': 'Vento do {de} para o {para}',
+    'zon2.dica.distrito': 'Esta construção só pode ficar dentro do Distrito Industrial, a área destacada no mapa. Leve o fantasma para dentro dela.',
+    'zon2.curto.distrito': 'Fora do Distrito Industrial',
+    'zon2.dica.utilidades': 'Esta obra só pode ficar dentro da Zona de Utilidades, a área destacada no mapa. Leve o fantasma para dentro dela.',
+    'zon2.curto.utilidades': 'Fora da Zona de Utilidades',
+    'zon2.rede.marca': '{rede}: {metros} m, {custo}',
+    'zon2.rede.na': 'já está na rede da cidade',
   });
 }
