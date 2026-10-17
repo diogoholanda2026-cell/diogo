@@ -8,7 +8,6 @@ import { signal, effect } from '@preact/signals';
 import { t } from '../textos.js';
 import { Botao } from '../comp/Botao.jsx';
 import { Glifo } from '../glifos/Glifo.jsx';
-import { registrar as registrarTextosU2b } from '../textos/u2b.js';
 import { usarEstilo } from './estilo.js';
 import { inicio } from './estado.js';
 import { temInicio } from './carga.js';
@@ -141,7 +140,6 @@ let soltar = null;
 
 /** Os textos, o estilo e a peça do HUD da abertura (a vitrine liga só isto para mostrar a legenda). */
 export function ligarAbertura(ui) {
-  registrarTextosU2b(ui.registrarTextos);
   usarEstilo('abertura', CSS_ABERTURA);
   ui.registrarHud('sobre', Abertura, { ordem: 92, nome: 'abertura' });
 }
@@ -169,7 +167,8 @@ export function registrar(ui) {
     pendente = true;
   });
   const sem = effect(() => {
-    if (pendente && inicio.value === null) {
+    const fechado = inicio.value === null; // lê o sinal sempre: é ele que reativa o efeito
+    if (pendente && fechado) {
       pendente = false;
       iniciarAbertura(ui);
     }

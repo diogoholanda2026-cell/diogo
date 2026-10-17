@@ -41,10 +41,10 @@ export function pecasEsportivo(m, PARTE) {
   caixa(-w + 0.1, yA, zA - 0.2, w - 0.1, yA + 0.045, zA + 0.2, PARTE.PINTURA);
   for (const s of [-1, 1]) caixa(s * (w - 0.42) - 0.03, m.traseira - 0.05, zA - 0.05, s * (w - 0.42) + 0.03, yA, zA + 0.05, PARTE.PRETO, true);
   // tomadas de ar: painéis escuros rentes às laterais, atrás das portas (a esquerda e a direita)
-  const zI = zT + m.c * 0.3;
+  const zI = zT + m.c * 0.41;
   for (const s of [-1, 1]) {
     const x = s * (w + 0.006);
-    const q = [[x, m.cintura - 0.28, zI - 0.38], [x, m.cintura - 0.28, zI + 0.38], [x, m.cintura - 0.02, zI + 0.26], [x, m.cintura - 0.02, zI - 0.26]];
+    const q = [[x, m.cintura - 0.26, zI - 0.3], [x, m.cintura - 0.26, zI + 0.3], [x, m.cintura - 0.04, zI + 0.22], [x, m.cintura - 0.04, zI - 0.22]];
     P.push({ pts: s > 0 ? q.slice().reverse() : q, parte: PARTE.PRETO });
   }
   // spoiler dianteiro: lábio escuro sob o bico

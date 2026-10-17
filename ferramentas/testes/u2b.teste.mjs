@@ -202,7 +202,6 @@ async function ui() {
     logLevel: 'silent', jsx: 'automatic', jsxImportSource: 'preact', nodePaths: [join(RAIZ, 'node_modules')],
   });
   pacote = await import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'));
-  pacote.u2b.registrar(pacote.textos.registrarTextos);
   return pacote;
 }
 

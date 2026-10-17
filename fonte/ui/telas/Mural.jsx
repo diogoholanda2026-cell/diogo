@@ -3,9 +3,7 @@
 // Arcologia da X1b). Registro no principal (o botão do trilho aparece quando a tela existe) e corpo sob demanda
 // (corpo/Mural.jsx).
 import { sobDemanda } from './corpo/sobDemanda.jsx';
-import { registrar as registrarTextosU2b } from '../textos/u2b.js';
 
 export function registrar(ui) {
-  registrarTextosU2b(ui.registrarTextos);
   ui.registrarTela('mural', sobDemanda(() => import('./corpo/Mural.jsx'), { id: 'mural', glifo: 'mural', titulo: 'u2b.mural.titulo' }));
 }

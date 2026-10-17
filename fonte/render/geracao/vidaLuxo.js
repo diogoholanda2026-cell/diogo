@@ -291,7 +291,7 @@ export function malhaCruzeiro(lod = 0) {
   const cores = { topo: '#15233c', janela: '#15233c', fundo: '#6b2722', convés: '#b8b3a6' };
   const c = { parede: linear('#f1f1ee'), vidro: linear('#27323f'), teto: linear('#dcddda') };
   const w = [[-1, 0.9], [-0.9, 0.97], [-0.5, 1], [0.4, 1], [0.7, 0.9], [0.85, 0.7], [0.95, 0.38], [0.99, 0.12], [1, 0.03]];
-  const h = [[-1, 11.6], [-0.8, 11], [0.6, 11], [0.8, 12], [1, 15]];
+  const h = [[-1, 11.6], [-0.8, 11], [0.6, 11], [0.8, 12.5], [1, 17]];
   const d = [[-1, 5.5], [-0.8, 8.2], [0.7, 8.4], [0.92, 6], [1, 2]];
   const est = [-1, -0.9, -0.7, -0.4, 0, 0.4, 0.6, 0.75, 0.88, 0.95, 0.99, 1];
   if (lod) {
@@ -312,7 +312,7 @@ export function malhaCruzeiro(lod = 0) {
     const poly = [
       [-hw, zA], [hw, zA], [hw, zF - bico * 1.4], [hw - bico * 0.35, zF - bico * 0.5], [hw - bico, zF], [-hw + bico, zF], [-hw + bico * 0.35, zF - bico * 0.5], [-hw, zF - bico * 1.4],
     ];
-    conves(M, poly, y0, y0 + 3.1, y0 + 1.0, y0 + 2.4, c, n === 8 ? 2 : 0);
+    conves(M, poly, y0, y0 + 3.1, y0 + 1.0, y0 + 2.4, c, 2.5 + 0.7 * n);
   }
   // ponte de comando: corpo largo no topo do conves 3 com as asas até a boca (passarelas)
   M.caixa(-19.5, 20.5, 88, 19.5, 23.2, 93, c.vidro);

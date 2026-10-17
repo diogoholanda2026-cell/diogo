@@ -10,7 +10,6 @@ import { Botao } from '../comp/Botao.jsx';
 import { Segmentado } from '../comp/Segmentado.jsx';
 import { Glifo } from '../glifos/Glifo.jsx';
 import { t } from '../textos.js';
-import { registrar as registrarTextosU2b } from '../textos/u2b.js';
 import { usarEstilo } from '../inicio/estilo.js';
 
 /** As luzes do céu em botões: null é a do jogo; as outras são as fases do sol (render/depuracao.js, HORA_DA_FASE). */
@@ -149,7 +148,6 @@ export function FotoPainel({ ui }) {
 // -------------------------------------------------------------------------------------------------- registro
 
 export function registrar(ui) {
-  registrarTextosU2b(ui.registrarTextos);
   usarEstilo('foto', CSS_FOTO);
   registrarItemTrilho({ id: 'foto', glifo: 'foto', rotulo: 'trilho.foto', ordem: 30, aoTocar: () => (foto.peek() ? sairFoto(ui) : entrarFoto(ui)), ligado: () => !!foto.value });
   ui.registrarHud('sobre', FotoPainel, { ordem: 80, nome: 'foto' });

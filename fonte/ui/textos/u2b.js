@@ -1,6 +1,5 @@
 // Textos da U2b (Modo livre, Mural, Modo foto e abertura). Português do Brasil, frases curtas, sem travessão, unidades da
-// D42. Cada tela registra os seus pelo registrar(ui) dela (ui.registrarTextos), sem mexer no índice de ui/textos.js; a
-// mesma parcela pode registrar mais de uma vez.
+// D42. Entra pelo índice fixo de ui/textos.js (uma linha, do integrador).
 export function registrar(registrarTextos) {
   registrarTextos('u2b', {
     // nova partida: Modo livre (D56)

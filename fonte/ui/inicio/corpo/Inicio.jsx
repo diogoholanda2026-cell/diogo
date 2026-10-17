@@ -4,7 +4,7 @@
 // editáveis, a cor da marca, o calendário que começa em jan. 2020), os saves, as configurações e os créditos. No
 // mouse os atalhos ficam à vista (Enter, N, C, O, R; Esc volta); setas sobem e descem entre os botões.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { t, registrarTextos } from '../../textos.js';
+import { t } from '../../textos.js';
 import * as fmt from '../../formato.js';
 import { Botao } from '../../comp/Botao.jsx';
 import { Tela, Secao } from '../../comp/Tela.jsx';
@@ -20,7 +20,6 @@ import { haQuanto, dataDoSave, mudarPrefs } from './comum.js';
 import { ListaSaves, fraseFalha } from './Carregar.jsx';
 import Configuracoes from './Configuracoes.jsx';
 import { tocar } from '../../../som/interface.js';
-import { registrar as registrarTextosU2b } from '../../textos/u2b.js';
 import { MODO_LIVRE } from '../../../data/historia.js';
 import { vibrar } from '../../../som/som.js';
 
@@ -231,8 +230,6 @@ function Creditos() {
     </Tela>
   );
 }
-
-registrarTextosU2b(registrarTextos);
 
 /** O corpo do início pela etapa. */
 export default function CorpoInicio({ ui, etapa, estado }) {
