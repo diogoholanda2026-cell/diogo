@@ -1,5 +1,8 @@
 # Estado do jogo novo (retomada em 16/10/2026)
 
+## DIVISÃO DE TRABALHO ENTRE AS DUAS SESSÕES (17/10/2026)
+O dono rodou uma sessão LOCAL no PC dele (clone deste branch) que pode ter começado **TOP1, ZON2 e MOD1** e a medida de desempenho na RX 550. A sessão da NUVEM NÃO mexe nessas três. A nuvem faz **R6, X3b e U2b**. Antes de começar qualquer parcela, faça `git fetch` e `git log origin/claude/simcity-buildit-mechanics-8on6jq` e leia as notas em `docs/entregas/onda4/` para não repetir. Quem terminar primeiro dá `git pull --rebase` antes do push; as montagens de `previa/` conflitam: refaça a montagem depois do pull em vez de resolver à mão.
+
 ## ONDE PAROU (16/10/2026, Prévia 2w)
 - **Publicado:** Prévia 2w em `previa/` (jogo só para PC, D111). M1b liga por `?m1b=1`; o padrão segue M1a (`PARTE_ATUAL` em `fonte/data/zonas.js`; a C2 torna o M1b padrão e reescreve os testes que pressupõem M1a). Save na versão 3 (migrações em `fonte/sim/salvar/formato.js`).
 - **Entregue na onda 4:** UX1, TOQ1, MOV1, MOV2, OBR2, R4c, SEDE4 e SEDE4b, PONT2 (X4), S1c, S2b, S3b, ligação das vias com a Rodovia, compra da Várzea por área, envio manual da Arcologia, lotes e importação de 1 a 1000 (D110), fundo de teste de US$ 25 bi (D104, temporário).
