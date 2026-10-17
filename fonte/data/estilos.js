@@ -76,6 +76,10 @@ export const TIPOLOGIAS = congelar({
   casaAltoPadrao: { pe: 3.2, recuo: [4, 7], telha: 0.05 },
   casaPedraVidro: { pe: 3.3, recuo: [6, 10] },
   mansao: { pe: 3.5, recuo: [9, 14], telha: 0.9 },
+  // TOP1 (D115): degraus de topo da escada de níveis; entradas novas, nada existente muda
+  mansaoHeliponto: { pe: 3.5, recuo: [9, 14], telha: 0.9 },
+  varandaCobertura: { pe: 3.0, terreo: [4, 5], recuo: [4, 6] },
+  superTorre: { pe: 3.8, terreo: [6, 8], recuo: [6, 9] },
   edificioPedraVidro: { pe: 3.2, terreo: [4.2, 5], recuo: [5, 8] },
   pilotis: { pe: 2.9, terreo: [3.6, 4.4], recuo: [3, 6] },
   varandas: { pe: 2.9, terreo: [3.2, 4], recuo: [3, 5] },

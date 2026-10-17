@@ -22,8 +22,10 @@ import * as mov2 from './textos/mov2.js';
 import * as area1 from './textos/area1.js';
 import * as arc2 from './textos/arc2.js';
 import * as u2b from './textos/u2b.js';
+import * as top1 from './textos/top1.js';
+import * as zon2 from './textos/zon2.js';
 
-const MODULOS = [f0, r1, s1, s1c, s2, s2b, s3, s3b, u1, u2, ux1, toq1, x1, x2, x3, pont2, mov1, mov2, area1, arc2, u2b];
+const MODULOS = [f0, r1, s1, s1c, s2, s2b, s3, s3b, u1, u2, ux1, toq1, x1, x2, x3, pont2, mov1, mov2, area1, arc2, u2b, zon2, top1];
 
 const textos = new Map();
 const donos = new Map();

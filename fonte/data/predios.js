@@ -26,16 +26,27 @@ const CONSUMO = { res: [0.006, 1.2], com: [0.004, 2], esc: [0.004, 2.5], ind: [0
 // e torreLuxo na Barra da Tijuca e em Balneário Camboriú, torreVidro (com heliponto) nas torres da Avenida Brasil
 // Central de Balneário e do Itaim. A casa de autoconstrução ('vila', 'casa' e 'sobradoGeminado') só existe na Vila de
 // Santa Cida (modelos com area 'vila').
+//
+// D115 (TOP1): a escada dos níveis 1 a 5 é classe média alta, alta, super-rica, ultra-rica e Tier 0,1%. Na residencial
+// baixa: casa de alto padrão (1 e 2), casa de pedra e vidro (3), mansão (4) e mansão com heliponto no gramado (5; só nos
+// lotes de 32 x 32 m ou mais, Palm Jumeirah, Mônaco e Cidade Jardim). Na média: prédio de pedra e vidro (1 e 2), varanda
+// gourmet (3) e varanda com cobertura envidraçada, piscina e, no 5, heliponto (4 e 5; Hudson Yards, Marina Bay). Na alta:
+// torre de varandas (1 e 2), torre de luxo (3 e 4, com cobertura nos dois e heliponto em parte no 4; Billionaires' Row,
+// Dubai Marina) e a super torre do nível 5: fuste esbelto de 50 a 60 andares, de pé-direito alto, lâmina de pedra, recuo único e cobertura
+// duplex com terraço e heliponto (Central Park Tower, 432 Park Avenue, Marina Bay Sands).
 const TIPOLOGIAS = {
-  resBaixa: ['casaAltoPadrao', 'casaAltoPadrao', 'casaPedraVidro', 'mansao', 'mansao'],
+  resBaixa: ['casaAltoPadrao', 'casaAltoPadrao', 'casaPedraVidro', 'mansao', 'mansaoHeliponto'],
   vila: ['vila', 'vila', 'sobradoGeminado', 'sobradoGeminado', 'casa'],
-  resMedia: ['edificioPedraVidro', 'edificioPedraVidro', 'varandaGourmet', 'varandaGourmet', 'varandaGourmet'],
-  resAlta: ['torreVarandas', 'torreVarandas', 'torreLuxo', 'torreLuxo', 'torreVidro'],
+  resMedia: ['edificioPedraVidro', 'edificioPedraVidro', 'varandaGourmet', 'varandaCobertura', 'varandaCobertura'],
+  resAlta: ['torreVarandas', 'torreVarandas', 'torreLuxo', 'torreLuxo', 'superTorre'],
   comBaixa: ['lojaToldo', 'lojaToldo', 'galeriaVitrine', 'galeriaVitrine', 'centroPelePerfurada'],
   comAlta: ['galeriaVitrine', 'galeriaVitrine', 'usoMisto', 'usoMisto', 'centroPelePerfurada'],
   escritorio: ['laminaBrises', 'laminaBrises', 'peleVidro', 'peleVidro', 'torreControleSolar'],
   industria: ['galpaoShed', 'galpaoShed', 'galpaoSilos', 'galpaoSilos', 'fabricaLimpa'],
 };
+
+// lotes de 24 m ou menos de lado não comportam o heliponto no gramado: o nível 5 fica na mansão
+const SEM_HELI = ['casaAltoPadrao', 'casaAltoPadrao', 'casaPedraVidro', 'mansao', 'mansao'];
 
 const FAMILIA = { resBaixa: 'res', resMedia: 'res', resAlta: 'res', comBaixa: 'com', comAlta: 'com', escritorio: 'esc', industria: 'ind' };
 
@@ -82,7 +93,7 @@ const modelo = (nome, zona, planta, spec) => ({ nome, zona, planta, area: spec.a
 const A_RES_MEDIA = [[3, 6], [4, 8], [6, 12], [9, 18], [12, 25]];
 // (as tipologias com varanda por andar, níveis 1 a 4, passam do teto de triângulos do LOD0 acima de uns 37 andares;
 // a torre de vidro do nível 5 vai a 60)
-const A_RES_ALTA = [[30, 34], [30, 36], [32, 37], [34, 37], [45, 60]];
+const A_RES_ALTA = [[30, 34], [30, 36], [32, 37], [34, 37], [50, 60]];
 const A_COM_BAIXA = [[1, 2], [1, 3], [2, 4], [2, 5], [3, 6]];
 
 export const PREDIOS = congelar({
@@ -161,6 +172,7 @@ export const PREDIOS = congelar({
   // casa (caseiro, motorista, babá) nos moradores; o nível sobe do sobrado contemporâneo à mansão.
   casaJardim: modelo('Casa de alto padrão', 'resBaixa', [3, 3], {
     lares: [1, 1], pessoas: [5, 8], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+    tipologias: SEM_HELI,
   }),
   // sobrado de alto padrão em lote de 16 x 24 m (Jardim Paulista, Vila Madalena alta): nunca vira a mansão de pórtico
   sobradoAlto: modelo('Sobrado de alto padrão', 'resBaixa', [2, 3], {
@@ -169,6 +181,7 @@ export const PREDIOS = congelar({
   }),
   casaPatio: modelo('Casa com pátio e piscina', 'resBaixa', [3, 4], {
     lares: [1, 1], pessoas: [6, 10], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 3, cimento: 2, vidro: 1, serrada: 1 },
+    tipologias: SEM_HELI,
   }),
   casaTerreno: modelo('Residência em terreno amplo', 'resBaixa', [4, 4], {
     lares: [1, 2], pessoas: [8, 12], andares: [[1, 2], [2, 2], [2, 2], [2, 3], [2, 3]], materiais: { tijolo: 4, cimento: 2, vidro: 2, serrada: 1 },

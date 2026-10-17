@@ -13,6 +13,9 @@
 // platibanda, mercado, galeria, uso misto, centro com pele perfurada; lâmina com brise (Capanema), pele de vidro
 // escalonada, torre de controle solar em chanfro ou cilindro; galpão de duas águas com lanternim, shed ou arco,
 // silos, fábrica limpa com painel solar.
+// D115 (TOP1): o topo da escada de padrão (nível 5, Tier 0,1%): a super torre (fuste esbelto, lâmina de pedra, recuo
+// único, cobertura duplex e heliponto), a cobertura envidraçada nas torres de luxo e nos prédios de varandas (níveis 4 e
+// 5) e a mansão com heliponto no gramado.
 //
 // Espaço do lote: origem no centro, frente em +z (z = d/2 é o alinhamento da via), y = 0 na cota da plataforma.
 // Peça: { forma, x, z, w, d, y0, h, giro, mat, topo, lod1, principal, chao, lote, sobra, soLod1, ... } (malhaPredio.js).
@@ -490,9 +493,9 @@ function casaAltoPadrao(c) {
 // ------------------------------------------------------------------------------------------------ alto padrão (R4c, D95)
 
 /** Tipologias de casa (carro na garagem da frente, vagas de casa). */
-const ehCasaTip = (t) => t.startsWith('casa') || t === 'mansao' || t === 'vila';
+const ehCasaTip = (t) => t.startsWith('casa') || t.startsWith('mansao') || t === 'vila';
 /** Tipologias de alto padrão: palmeiras no jardim da frente e a frota de SUV e sedã (Jardim Europa, Barra, Balneário). */
-const LUXO_TIP = new Set(['casaAltoPadrao', 'casaPedraVidro', 'mansao', 'edificioPedraVidro', 'varandaGourmet', 'torreVarandas', 'torreLuxo', 'torreVidro']);
+const LUXO_TIP = new Set(['casaAltoPadrao', 'casaPedraVidro', 'mansao', 'edificioPedraVidro', 'varandaGourmet', 'varandaCobertura', 'mansaoHeliponto', 'torreVarandas', 'torreLuxo', 'torreVidro', 'superTorre']);
 
 /**
  * Jardim do alto padrão: gramado (verde seco) no lote inteiro, caminho de pedra clara e sebe baixa junto ao muro, de
@@ -543,17 +546,60 @@ function heliponto(c, x, z, yBase, dh) {
 }
 
 /**
+ * Heliponto no gramado da mansão (D115, nível 5; Palm Jumeirah, Mônaco e Cidade Jardim): disco de asfalto com o aro e o H
+ * pintados, no quintal dos fundos, e só se o quintal comporta o disco com 80 cm de folga. Peças do lote (não entram na
+ * caixa); `heli` faz as árvores e os carros do lote se desviarem dele.
+ */
+function helipontoDoFundo(c, dh) {
+  const { W, D, r } = c;
+  const b = caixaDasPecas(c.pecas, (p) => !p.lote && !p.sobra);
+  const z0 = -D / 2 + 0.4;
+  const livre = b[2] - z0;
+  if (livre < dh + 1.6 || W < dh + 4) return false;
+  const z = z0 + livre / 2;
+  const x = r.entre(-0.18, 0.18) * (W - dh - 3);
+  const asfalto = c.m(F.CONCRETO, '#5d6062');
+  const tinta = c.m(F.LETREIRO, '#d9d4c6');
+  const H = (Dd, y, h, mat) => c.add({ forma: 'cilindro', lados: 12, x, z, w: Dd, d: Dd, y0: y, h, mat, topo: mat, lote: true, heli: true });
+  H(dh, 0.05, 0.12, asfalto);
+  H(dh * 0.9, 0.17, 0.02, tinta);
+  H(dh * 0.8, 0.19, 0.02, asfalto);
+  const hb = dh * 0.26;
+  for (const sx of [-1, 1]) c.add({ forma: 'caixa', x: x + sx * hb * 0.5, z, w: 0.3, d: hb * 2, y0: 0.21, h: 0.02, mat: tinta, topo: tinta, lote: true, heli: true });
+  c.add({ forma: 'caixa', x, z, w: hb, d: 0.3, y0: 0.21, h: 0.02, mat: tinta, topo: tinta, lote: true, heli: true });
+  return true;
+}
+
+/**
+ * Cobertura (penthouse, D115): pavilhão envidraçado de pé-direito duplo sobre o terraço, com duas empenas de pedra clara
+ * nas pontas e a laje fina que avança (sobra). Referência: as coberturas de Billionaires' Row (Nova York), de Marina Bay
+ * (Singapura) e de Dubai Marina. Devolve o y do topo da laje (onde o heliponto pode pousar).
+ */
+function cobertura(c, { x, z, w, d, y, andares = 1 }) {
+  const { r } = c;
+  const pe = c.par.pe;
+  const h = andares * pe + 1.2;
+  const vidro = c.m(F.CORTINA, c.cor('travertino'), c.cor('caixilho'), { v: r.entre(3.6, 4.8), a: pe + 0.6, vd: r.f() });
+  c.add({ forma: 'caixa', x, z, w, d, y0: y, h, mat: vidro, topo: laje(c), lod1: true });
+  const pedra = c.m(F.PEDRA, c.cor('travertino'));
+  for (const s of [-1, 1]) c.add({ forma: 'caixa', x: x + s * (w / 2 - 0.45), z, w: 0.9 + 0.1, d: d + 0.3, y0: y, h, mat: pedra, topo: laje(c), sobra: true });
+  c.add({ forma: 'caixa', x, z, w: w + 2.2, d: d + 2.2, y0: y + h, h: 0.4, mat: c.m(F.LISO, '#dedbd3'), topo: laje(c), base: c.m(F.LISO, '#e0ddd6'), sobra: true });
+  return y + h + 0.4;
+}
+
+/**
  * Casa de alto padrão contemporânea em lote grande (nível 3; no nível 4 e 5 a mansão contemporânea, grande): pavilhão
  * térreo envidraçado com o volume de cima em ripado de ipê em balanço, um volume de pedra clara que prende a casa ao
  * chão, laje fina que avança, piscina com deck, gramado e sebe, muro de pedra. Referência: casas modernistas e
  * contemporâneas do Jardim Europa e do Jardim Paulistano (São Paulo; Isay Weinfeld, Marcio Kogan, Königsberger Vannucchi).
  */
-function casaPedraVidro(c, { grande = false } = {}) {
+function casaPedraVidro(c, { grande = false, heli = 0 } = {}) {
   const { W, D, r } = c;
   const pe = c.par.pe;
-  const recuo = clamp(r.entre(...c.par.recuo), 5, D * 0.36);
+  const recuo = clamp(r.entre(...c.par.recuo), 5, heli ? Math.min(D * 0.36, D - 8 - heli - 3.2) : D * 0.36);
   const aw = Math.min(W - 4, grande ? r.entre(17, 24) : r.entre(13, 18));
-  const ad = clamp(D - recuo - r.entre(5, 8), 8, grande ? 14 : 12);
+  const fundoR = r.entre(5, 8);
+  const ad = clamp(D - recuo - (heli ? Math.max(fundoR, heli + 3.2) : fundoR), 8, grande ? 14 : 12);
   const az = D / 2 - recuo - ad / 2;
   const h1 = pe + 0.3;
   const trav = c.parede(['travertino', 'rebocoClaro']);
@@ -596,6 +642,7 @@ function casaPedraVidro(c, { grande = false } = {}) {
     c.add({ forma: 'piso', x: px, z: zf + 0.6 + (D / 2 - 1.6 - zf - 0.6) / 2, w: pw, d: Math.min(recuo - 4, 4.5), y0: 0.06, h: 0, mat: c.m(F.AGUA, '#2a5a5e'), lote: true });
   }
   muro(c, { h: 2.0, portoes: [[kx, 1.2], [gx, 3.4]], mureta: r.chance(0.5), grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, trav) });
+  if (heli) helipontoDoFundo(c, heli);
   return baixo;
 }
 
@@ -606,12 +653,15 @@ function casaPedraVidro(c, { grande = false } = {}) {
  */
 function mansao(c) {
   const { W, D, r } = c;
+  // nível 5 (Tier 0,1%): heliponto no quintal dos fundos; o fundo da casa cresce para comportar o disco
+  const heli = c.tip === 'mansaoHeliponto' ? clamp(Math.min(W, D) * 0.28, 9, 12) : 0;
   const classica = c.est.id === 'modernista' || c.est.id === 'contemporaneo' ? r.chance(0.25) : r.chance(0.8);
-  if (!classica) return casaPedraVidro(c, { grande: true });
+  if (!classica) return casaPedraVidro(c, { grande: true, heli });
   const pe = c.par.pe;
-  const recuo = clamp(r.entre(...c.par.recuo), 8, D * 0.36);
+  const recuo = clamp(r.entre(...c.par.recuo), 8, heli ? Math.min(D * 0.36, D - 9 - heli - 3.2) : D * 0.36);
   const bw = Math.min(W - 6, r.entre(15, 21));
-  const bd = clamp(D - recuo - r.entre(6, 10), 9, 14);
+  const fundoR = r.entre(6, 10);
+  const bd = clamp(D - recuo - (heli ? Math.max(fundoR, heli + 3.2) : fundoR), 9, 14);
   const bz = D / 2 - recuo - bd / 2;
   const hP = 2 * pe + 0.4;
   const corP = c.parede(['rebocoClaro', 'travertino']);
@@ -664,6 +714,7 @@ function mansao(c) {
   guarita(c, xg - 2.4);
   muro(c, { h: 2.4, portoes: [[0, 5], [xg, 1.2]], mureta: r.chance(0.6), grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor(r.chance(0.5) ? 'travertino' : 'granito')) });
   pisoLote(c, pz + pd, D / 2 - 0.2, c.m(F.PISO, c.cor('travertino')), -2.2, 2.2);
+  if (heli) helipontoDoFundo(c, heli);
   return alturaTopo;
 }
 
@@ -737,7 +788,7 @@ function pilotis(c) {
  * com a empena sempre presente. Referência: os edifícios da Vila Nova Conceição, do Itaim e do Jardim Paulista (São
  * Paulo; Rocco, Aflalo e Gasperini, Perkins&Will).
  */
-function varandas(c, { gourmet = false, pedra = false } = {}) {
+function varandas(c, { gourmet = false, pedra = false, penthouse = false } = {}) {
   const { W, D, r } = c;
   const luxo = gourmet; // D95: a varanda gourmet é o padrão da residencial média (pedra clara, vidro, jardim, portaria)
   const recuo = r.entre(...c.par.recuo);
@@ -757,7 +808,7 @@ function varandas(c, { gourmet = false, pedra = false } = {}) {
   const nCima = Math.max(3, c.andares - (luxo ? 1 : G));
   const prof = gourmet ? r.entre(2.2, 2.7) : r.entre(1.3, 1.8);
   const par = r.entre(1.0, 1.4);
-  const cob = nCima >= 8 && r.chance(0.6);
+  const cob = penthouse ? nCima >= 6 : nCima >= 8 && r.chance(0.6);
   const nCorpo = cob ? nCima - 1 : nCima;
   const hCorpo = nCorpo * pe;
   const corP = luxo ? trav : c.parede(gourmet ? ['rebocoClaro', 'pastilha'] : null);
@@ -796,8 +847,18 @@ function varandas(c, { gourmet = false, pedra = false } = {}) {
     const cd = env.d - prof - r.entre(2, 4);
     c.add({ forma: 'caixa', x: r.entre(-0.15, 0.15) * env.w, z: env.z - prof / 2 - (env.d - prof - cd) / 2, w: cw, d: cd, y0: y0 + hCorpo, h: pe + par, mat: c.m(F.CORTINA, corP, c.cor('caixilho'), { v: 2.6, a: pe }), lado: matLado, topo: laje(c), parapeito: par, lod1: true });
     topo = y0 + hCorpo + pe + par;
+    if (penthouse) {
+      // D115 (níveis 4 e 5): cobertura envidraçada sobre o terraço, e no nível 5 o heliponto na laje dela (Hudson Yards, Marina Bay)
+      const pw = cw * 0.8;
+      const pd = cd * 0.8;
+      const px = r.entre(-0.15, 0.15) * env.w;
+      const pz = env.z - prof / 2 - (env.d - prof - cd) / 2 - cd * 0.04;
+      const yL = cobertura(c, { x: px, z: pz, w: pw, d: pd, y: topo });
+      topo = yL;
+      if (c.nivel >= 5 && r.chance(0.7)) heliponto(c, px, pz, yL, Math.min(pw, pd, 10));
+    }
   }
-  casaDeMaquinas(c, r.entre(-0.1, 0.1) * env.w, env.z - env.d * 0.25, r.entre(5, 7), r.entre(3.5, 5), topo - par);
+  if (!penthouse) casaDeMaquinas(c, r.entre(-0.1, 0.1) * env.w, env.z - env.d * 0.25, r.entre(5, 7), r.entre(3.5, 5), topo - par);
   equipar(c, -env.w / 2 + 0.8, env.z - env.d / 2 + 0.8, env.w / 2 - 0.8, env.z + env.d / 2 - prof - 0.5, y0 + hCorpo, { max: 3 });
   // lazer na laje do pódio (atrás da torre): deck e verde
   const livreFundo = env.z - env.d / 2 - (podZ - podD / 2);
@@ -952,7 +1013,14 @@ function torreVarandas(c, { luxo = false } = {}) {
     // piscina na laje da cobertura, na faixa livre à frente do coroamento; heliponto sobre o coroamento em parte das torres
     const faixa = (td - cd) / 2 - prof;
     if (faixa > 2.2) c.add({ forma: 'piso', x: 0, z: tz + cd / 2 + (faixa + prof) / 2 - 0.2, w: tw * 0.6, d: faixa - 0.8, y0: yC + 0.06, h: 0, mat: c.m(F.AGUA, '#2a5a5e') });
-    if (c.nivel >= 4 && r.chance(0.6)) heliponto(c, 0, tz, yC + coroa * pe + par + 2.5, Math.min(cw, cd, 14));
+    if (c.nivel >= 4) {
+      // ultra-rica (D115): cobertura envidraçada sobre o coroamento; o heliponto pousa na laje dela, em parte das torres
+      const yT = yC + coroa * pe + par + 2.5;
+      const pw = cw * 0.82;
+      const pd = cd * 0.82;
+      const yL = cobertura(c, { x: 0, z: tz, w: pw, d: pd, y: yT });
+      if (r.chance(0.6)) heliponto(c, 0, tz, yL, Math.min(pw, pd, 12));
+    }
   }
   lazerNoPodio(c, pod, tz, td);
   equipar(c, -tw / 2 + 1, tz - td / 2 + prof, tw / 2 - 1, tz + td / 2 - prof, yC, { max: 3 });
@@ -990,6 +1058,83 @@ function torreVidro(c) {
   jardim(c, pod.z + pod.d / 2 + 0.1, D / 2 - 0.3, { caminho: 0 });
   guarita(c, W / 2 - 2.6);
   muro(c, { h: 2.0, portoes: [[0, 2.6], [-W / 2 + 3.4, 4.2]], mureta: true, grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor('granito')) });
+}
+
+/**
+ * Super torre (D115, nível 5 da residencial alta, Tier 0,1%): fuste esbelto de 50 a 60 andares sobre uma base de pedra com
+ * o saguão de pé-direito duplo, uma lâmina de pedra que sobe além do topo num dos cantos de trás (a espinha vertical), um
+ * único recuo assimétrico perto do alto (nunca em degraus simétricos: a Torre em bolo é proibida) e a cobertura duplex
+ * envidraçada com terraço, piscina e heliponto. A pele muda pela semente: cortina de vidro champanhe com montantes, aletas
+ * verticais de pedra ou a grelha de concreto claro com vãos fundos. Referências: Central Park Tower e 432 Park Avenue
+ * (Billionaires' Row, Nova York), Hudson Yards (30 Hudson Yards e as torres do Vessel), Marina Bay Sands e as torres do
+ * Marina Bay (Singapura) e a Princess Tower da Dubai Marina.
+ */
+function superTorre(c) {
+  const { W, D, r } = c;
+  const pe = c.par.pe;
+  const recuo = r.entre(...c.par.recuo);
+  const tr = TERREO.PORTARIA_ALTA;
+  const corP = c.parede(['travertino', 'rebocoClaro']);
+  const hBase = TERREO_ALTURA[tr] + pe + 1.2;
+  const tw = clamp(W - r.entre(15, 19), 17, 25);
+  const td = clamp(D - recuo - r.entre(20, 24), 16, 23);
+  const bw = Math.min(W - 2 * FOLGA, tw + 4);
+  const bd = td + 3;
+  const tz = D / 2 - recuo - bd / 2;
+  const pedraBase = c.m(F.PAINEL, corP, c.cor('caixilho'), { tr, v: 4.4, a: 3.4 });
+  c.add({ forma: 'caixa', x: 0, z: tz, w: bw, d: bd, y0: 0, h: hBase + 1.0, chao: true, mat: pedraBase, lado: c.m(F.PEDRA, corP), topo: c.m(F.LAJE, '#8d8a82'), parapeito: 1.0, lod1: true });
+  const nCima = Math.max(46, c.andares - 2);
+  const hAlto = Math.round(nCima * 0.2) * pe;
+  const hFuste = nCima * pe - hAlto;
+  const lado = r.chance(0.5) ? 1 : -1;
+  const forma = r.chance(0.3) ? 'chanfro' : 'caixa';
+  const q = r.f();
+  const montante = r.item(MONTANTE);
+  const pele = q < 0.4
+    ? c.m(F.CORTINA, montante, c.cor('caixilho'), { v: r.entre(3.0, 3.8), vr: r.int(0, 3), a: pe, vd: r.f() })
+    : q < 0.75
+      ? c.m(F.BRISE_V, corP, '#b3ab9d', { v: r.entre(2.0, 2.6), vr: r.int(0, 3), a: pe, vd: r.f() })
+      : c.m(F.JANELA, corP, c.cor('caixilho'), { v: r.entre(4.2, 5.0), vr: r.int(0, 3), a: pe });
+  const y1 = hBase;
+  const ch = (w, d) => Math.min(w, d) * 0.12;
+  // fuste de baixo (a planta inteira) e fuste de cima, recuado só de um lado e rente ao outro
+  c.add({ forma, x: 0, z: tz, w: tw, d: td, y0: y1, h: hFuste, mat: pele, topo: laje(c), lod1: true, principal: true, chanfro: ch(tw, td) });
+  const uw = tw * r.entre(0.74, 0.82);
+  const ux = (lado * (tw - uw)) / 2;
+  const y2 = y1 + hFuste;
+  const yTop = y2 + hAlto + 0.6;
+  c.add({ forma, x: ux, z: tz, w: uw, d: td, y0: y2, h: hAlto + 0.6, mat: pele, topo: laje(c), lod1: true, chanfro: ch(uw, td) });
+  // cobertura duplex no alto, afastada da lâmina de pedra (que sobe no canto de trás do lado rente), heliponto na laje
+  const lw = r.entre(2.4, 3.2);
+  const ld = td * r.entre(0.3, 0.45);
+  const cxL = (lado * ux) - (uw - uw * 0.66) * 0.35; // x da cobertura medido para o lado da lâmina
+  const cw = Math.min(uw * 0.66, 2 * (tw / 2 - lw - cxL - 1.3));
+  const cd = td * 0.62;
+  const cx = lado * cxL;
+  const cz = tz + td * 0.08;
+  const yL = cobertura(c, { x: cx, z: cz, w: cw, d: cd, y: yTop, andares: 2 });
+  const dh = Math.min(cw, cd, 13);
+  if (dh >= 7) heliponto(c, cx, cz, yL, dh);
+  const yBl = yL + r.entre(5, 9);
+  c.add({ forma: 'caixa', x: lado * (tw / 2 - lw / 2 + 0.12), z: tz - td / 2 + ld / 2 - 0.12, w: lw, d: ld + 0.12, y0: y1, h: yBl - y1, mat: c.m(F.PEDRA, corP), topo: laje(c), lod1: true });
+  // o recuo único: o degrau fica no lado oposto à lâmina; verde no terraço da laje do fuste de baixo
+  const faixaW = tw - uw;
+  if (faixaW > 2.6) c.add({ forma: 'piso', x: -lado * (uw / 2), z: tz, w: faixaW - 0.6, d: td * 0.7, y0: y2 + 0.06, h: 0, mat: c.m(F.VERDE, c.cor('verde')) });
+  equipar(c, ux - uw / 2 + 1, tz - td / 2 + 1.5, ux + uw / 2 - 1, tz + td / 2 - 1, yTop, { max: 2 });
+  // saguão: marquise de concreto sobre dois pilares na entrada, espelho d'água e jardim
+  const zP = tz + bd / 2;
+  const xE = 0;
+  const yM = TERREO_ALTURA[tr] - 0.9;
+  c.add({ forma: 'caixa', x: xE, z: zP + 1.3, w: 8, d: 2.6, y0: yM, h: 0.3, mat: c.m(F.CONCRETO, '#cfc9bd'), topo: laje(c), base: c.m(F.LISO, '#d6d0c4'), sobra: true });
+  for (const sx of [-1, 1]) c.add({ forma: 'coluna', redonda: true, x: xE + sx * 3.6, z: zP + 2.1, w: 0.5, d: 0.5, y0: 0, h: yM, mat: c.m(F.LISO, '#ddd8cc'), sobra: true });
+  const zEsp = zP + 3.6;
+  if (D / 2 - 0.4 - zEsp > 3) {
+    pisoLote(c, zP + 0.1, D / 2 - 0.2, c.m(F.PISO, c.cor('travertino')), -5, 5);
+    c.add({ forma: 'piso', x: 0, z: zEsp + (D / 2 - 0.4 - zEsp) / 2 - 0.4, w: 6.4, d: Math.min(D / 2 - 0.4 - zEsp - 0.8, 2.6), y0: 0.07, h: 0, mat: c.m(F.AGUA, '#2a5a5e'), lote: true });
+  }
+  jardim(c, zP + 0.1, D / 2 - 0.3, { caminho: xE });
+  guarita(c, W / 2 - 2.6);
+  muro(c, { h: 2.1, portoes: [[xE, 3], [-W / 2 + 3.6, 4.2]], mureta: true, grade: '#6a6258', base: 0.9, mat: c.m(F.PEDRA, c.cor('granito')) });
 }
 
 // ------------------------------------------------------------------------------------------------ comércio
@@ -1366,6 +1511,7 @@ function galpao(c, { silos = false, limpa = false } = {}) {
 const GERADORES = {
   casa: (c) => casa(c), vila: (c) => casa(c, { vila: true }), sobradoGeminado, casaAltoPadrao, casaPedraVidro: (c) => casaPedraVidro(c), mansao,
   pilotis, varandas: (c) => varandas(c), varandaGourmet: (c) => varandas(c, { gourmet: true }), edificioPedraVidro: (c) => varandas(c, { gourmet: true, pedra: true }),
+  varandaCobertura: (c) => varandas(c, { gourmet: true, penthouse: true }), mansaoHeliponto: mansao, superTorre,
   torrePodio, torreVarandas: (c) => torreVarandas(c), torreLuxo: (c) => torreVarandas(c, { luxo: true }), torreVidro,
   lojaToldo, galeriaVitrine, usoMisto, centroPelePerfurada,
   laminaBrises, peleVidro, torreControleSolar,
@@ -1443,7 +1589,7 @@ function bate(c, x, z, hw, hd) {
     if ((P.y0 ?? 0) > 2.2) continue; // acima do carro e da copa baixa (corpo sobre pilotis, andar de cima)
     const alta = (P.h ?? 0) > 0.35 && P.forma !== 'inclinado' && P.forma !== 'placa';
     const agua = P.forma === 'piso' && (P.mat?.t === F.AGUA || P.mat?.t === F.MADEIRA);
-    if (!alta && !agua) continue;
+    if (!alta && !agua && !P.heli) continue;
     const g = Math.abs(Math.sin(P.giro ?? 0)) > 0.5;
     const pw = (g ? P.d : P.w) / 2;
     const pd = (g ? P.w : P.d) / 2;
@@ -1498,7 +1644,7 @@ function vestirLote(c, caixa) {
     // vagas de frente (o carro de frente para o prédio, 2,6 m por vaga) no recuo de 5,2 m ou mais
     if (luxo && c.fam === 'res') {
       // jardim da frente: no máximo um carro na entrada de veículos da mansão
-      if (c.tip === 'mansao' && frente >= 5.2 && r.chance(0.6)) {
+      if (c.tip.startsWith('mansao') && frente >= 5.2 && r.chance(0.6)) {
         const z = z1 + Math.min(frente * 0.5, 5);
         if (!bate(c, 0, z, 1.0, 2.3)) carros.push([0, z, Math.PI + r.entre(-0.05, 0.05), modelo(), cor()]);
       }

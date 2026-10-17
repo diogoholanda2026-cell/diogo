@@ -41,10 +41,11 @@ test('catálogo: as zonas do jogador só têm tipologia de alto padrão; a Vila 
 test('lote grande: a casa ocupa ao menos 16 x 24 m e a mansão chega a 40 x 40 m', () => {
   for (const id of modelosDaZona('resBaixa')) assert.ok(PREDIOS[id].planta[0] * PREDIOS[id].planta[1] >= 6, `${id} em lote pequeno`);
   assert.deepEqual(PREDIOS.mansaoLote.planta, [5, 5]);
-  assert.equal(nivelDoModelo('mansaoLote', 5).tipologia, 'mansao');
+  assert.equal(nivelDoModelo('mansaoLote', 5).tipologia, 'mansaoHeliponto'); // TOP1 (D115): era mansao
+  assert.equal(nivelDoModelo('mansaoLote', 4).tipologia, 'mansao');
   assert.equal(nivelDoModelo('casaJardim', 1).tipologia, 'casaAltoPadrao');
   assert.equal(nivelDoModelo('predioMedio', 1).tipologia, 'edificioPedraVidro');
-  assert.equal(nivelDoModelo('torreRes', 5).tipologia, 'torreVidro');
+  assert.equal(nivelDoModelo('torreRes', 5).tipologia, 'superTorre'); // TOP1 (D115): era torreVidro
 });
 
 test('nenhum prédio do jogador tem fibrocimento, caixa d\'água azul, esperas nem chapisco; o da Vila sim', () => {
