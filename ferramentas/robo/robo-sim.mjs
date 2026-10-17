@@ -2,7 +2,10 @@
 // e o relatório de marcos, moradores, bem-estar, renda, caixa, dívida, fila da frota, objetivos e ms por tique (p95,
 // p99 e máximo), com o cenário de uma via a cada 10 tiques. O simular --robo chama.
 //
-//   node ferramentas/robo/robo-sim.mjs [--horas 12] [--semente s] [--comprarTempo] [--fazDeConta] [--m1b] [--json arquivo]
+//   node ferramentas/robo/robo-sim.mjs [--horas 12] [--semente s] [--comprarTempo] [--fazDeConta] [--m1b] [--modo automatico|manual] [--json arquivo]
+//   (--modo manual: a ZON2, D113; cada zona pintada vai para o modo Manual por lote e o robô pede o lote do tamanho do que a
+//   demanda acumulou, em vez de deixar a demanda construir sozinha. A indústria só se pinta no Distrito Industrial e as
+//   utilidades ficam na Zona de Utilidades, D112: o robô leva a malha até o distrito quando a indústria pede espaço.)
 //   (--m1b abre o M1b: decisões novas, a cadeia do cimento com a Mina e a Cimenteira e a ETE na margem do rio, que o robô
 //   constrói logo depois da captação e da usina e de novo quando as casas voltam a ficar sem esgoto; calibração da S3b)
 //
@@ -19,7 +22,9 @@ import { precoBase, PREDIOS_HOLDING } from '../../fonte/data/holding.js';
 import { SERVICOS } from '../../fonte/data/servicos.js';
 import { dataDoTique, ANO_INICIAL } from '../../fonte/data/historia.js';
 import { SEDE_CENTRO, GLEBA_ENVELOPE } from '../../fonte/data/arcologia-plano.js';
-import { idxDaRef } from '../../fonte/contratos/espelho.js';
+import { idxDaRef, refDe } from '../../fonte/contratos/espelho.js';
+import { MAPA_HELDOPOLIS } from '../../fonte/data/mapa-heldopolis.js';
+import { VIAS_ORDEM } from '../../fonte/data/vias.js';
 import { AGUA, ETAPA, PREDIO, TIPO_PREDIO } from '../../fonte/contratos/flags.js';
 import { ANO, MES } from '../../fonte/comum/relogio.js';
 import { frentesLivres } from '../../fonte/sim/zonas/crescimento.js';
@@ -59,6 +64,8 @@ const LADO = 112;
 const COMPRIDO = 336;
 /** Margem (m) da caixa da quadra até a gleba (a calçada e o raio do nó). */
 const MARGEM_GLEBA = 28;
+/** A espinha industrial (D112): a rua paralela à rodovia, no corredor plano do Distrito Industrial. */
+const ESPINHA = Object.freeze({ z: -1130, xs: [-985, -835, -685, -535, -385, -235] });
 /** Malha leste: a via que liga a primeira avenida à planície do leste e o canto da primeira quadra de lá. */
 const LESTE = Object.freeze({ via: [[200, -680], [480, -690], [820, -700]], canto: [820, -812] });
 /**
@@ -113,10 +120,11 @@ function ladosDe(q) {
 
 /**
  * A estratégia do robô. op: { comprarTempo, cidadeFalsa (de ligarCidadeFalsa ou null), anotar, ritmo, m1b (S3b: com o M1b
- * aberto, faz a cadeia do cimento: o ladrilho do calcário, a Mina e a Cimenteira) }.
+ * aberto, faz a cadeia do cimento: o ladrilho do calcário, a Mina e a Cimenteira), modo ('automatico' | 'manual': o modo de
+ * crescimento das zonas pintadas, D113) }.
  * passo() decide uma rodada: decisões, Holding, serviços, vias e quadras, Arcologia, empréstimo e Depósito.
  */
-export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null, anotar = () => {}, ritmo = 60, m1b = false } = {}) {
+export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null, anotar = () => {}, ritmo = 60, m1b = false, modo = 'automatico' } = {}) {
   const E = {
     sessao: 0,
     feito: new Set(),
@@ -377,14 +385,17 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     if (cidadeFalsa) {
       const lista = ['resBaixa', 'resBaixa', 'comBaixa', 'resBaixa', 'industria', 'resBaixa', 'resMedia', 'resMedia', 'comBaixa', 'resMedia'];
       const z = lista[(E.pintadas ?? 0) % lista.length];
+      if (z === 'industria') return 'comBaixa'; // D112: a indústria só no Distrito Industrial (a espinha industrial, abaixo)
       return z === 'resMedia' && marco() < 2 ? 'resBaixa' : z;
     }
-    return zonasPedidas()[0]?.z ?? (marco() >= 2 ? 'resMedia' : 'resBaixa');
+    return zonasPedidas().find((p) => p.z !== 'industria')?.z ?? (marco() >= 2 ? 'resMedia' : 'resBaixa');
   }
 
   function pintar(q) {
     const z = zonaDe(q);
-    const r = cmd('zona.pintar', { pincel: { modo: 'retangulo', x: q.x0, z: q.z0, x2: q.x1, z2: q.z1 }, zona: ZONAS_ORDEM.indexOf(z) });
+    const args = { pincel: { modo: 'retangulo', x: q.x0, z: q.z0, x2: q.x1, z2: q.z1 }, zona: ZONAS_ORDEM.indexOf(z) };
+    if (modo === 'manual') args.modo = 'manual'; // D113: a zona pintada espera o lote do robô
+    const r = cmd('zona.pintar', args);
     if (r.ok || r.codigo === 'nada') {
       q.pintada = true;
       q.zona = z;
@@ -401,6 +412,94 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     if (feitas < 3) return true;
     if (cidadeFalsa) return cidadeFalsa.estado.pop > cidadeFalsa.estado.capacidade * 0.75;
     return zonasPedidas().length > 0;
+  }
+
+  /** As arestas de terra da estrada da Vila que ainda existem (divididas ou não): as de meio a até 15 m do traçado dela. */
+  function arestasDaEstrada() {
+    const pts = MAPA_HELDOPOLIS.vila.ruas.find((r) => r.id === 'estrada').pontos;
+    const A = sim.tabelas.arestas;
+    const N = sim.tabelas.nos;
+    const dist = (x, z) => {
+      let m = Infinity;
+      for (let k = 0; k + 1 < pts.length; k++) {
+        const [ax, az] = pts[k];
+        const [bx, bz] = pts[k + 1];
+        const dx = bx - ax;
+        const dz = bz - az;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+        m = Math.min(m, Math.hypot(x - (ax + t * dx), z - (az + t * dz)));
+      }
+      return m;
+    };
+    const out = [];
+    for (let e = 0; e < A.n; e++) {
+      if (!A.viva[e] || VIAS_ORDEM[A.tipo[e]] !== 'terra') continue;
+      const a = A.a[e];
+      const b = A.b[e];
+      if (dist((N.x[a] + N.x[b]) / 2, (N.z[a] + N.z[b]) / 2) <= 15 && dist(N.x[a], N.z[a]) <= 15 && dist(N.x[b], N.z[b]) <= 15) out.push(refDe(e, A.ger[e]));
+    }
+    return out;
+  }
+
+  /**
+   * Primeiro gesto do robô (D112): a estrada de terra da Vila vira rua com redes até a rodovia, antes dos primeiros prédios
+   * da Holding (que se alinham à rua, mais larga). É por ela que a água e a energia da Vila chegam ao Distrito Industrial,
+   * onde a indústria passa a nascer. Se a prévia recusar, o robô tenta de novo e, depois de muitas, segue sem indústria.
+   */
+  function estradaIndustrial() {
+    if (!real || E.estradaMelhorada || !podeObra()) return;
+    const refs = arestasDaEstrada();
+    const pv = refs.length ? sim.q.via.previa({ modo: 'melhorar', tipo: 'rua', arestas: refs, pontos: [] }) : null;
+    if (!pv?.ok) return void (desistir('indEstrada', 40) && (E.estradaMelhorada = false, E.semDistrito = true));
+    if (pv.custo > caixa() - 25000) return void (E.querEmprestimo = true);
+    if (cmd('via.melhorar', { arestas: refs, tipo: 'rua', sessao: `robo.${++E.sessao}` }).ok) E.estradaMelhorada = true;
+  }
+
+  /**
+   * A indústria (D112): só se pinta no Distrito Industrial, o corredor plano da rodovia ao norte. Quando a indústria pede
+   * espaço o robô melhora a estrada de terra da Vila até a rodovia (a rede da cidade chega até lá), traça a espinha industrial
+   * (uma rua paralela à rodovia, de 150 em 150 m) e pinta de cada trecho a faixa dos dois lados. Um trecho por vez, no mesmo
+   * ritmo das quadras.
+   */
+  function industrial() {
+    if (!real || !podeObra() || E.semDistrito) return;
+    const I = (E.ind ??= { estrada: false, seg: 0, pintados: 0 });
+    const pede = zonasPedidas().some((p) => p.z === 'industria');
+    // a primeira vez vem logo depois da avenida e da ligação (a cidade precisa de emprego perto da Vila, como a quadra
+    // industrial sugerida de antes da D112 dava); as outras, quando a indústria pede
+    if (!pede && !(I.seg === 0 && E.feito.has('avenida') && E.feito.has('ligacao'))) return;
+    // o trecho anterior ainda tem lugar: espera
+    if (I.pintados > 0 && !pede && (frentesLivres(sim).industria ?? 0) > 12) return;
+    if (!E.estradaMelhorada) return; // sem a estrada em rua a rede não chega ao distrito
+    const xs = ESPINHA.xs;
+    if (I.seg + 1 >= xs.length) return;
+    const a = [xs[I.seg], ESPINHA.z];
+    const b = [xs[I.seg + 1], ESPINHA.z];
+    if (!E.feito.has(`espinha.${I.seg}`)) {
+      if (!via('reta', 'rua', [a, b], 20000)) return void (desistir(`espinha${I.seg}`, 60) && I.seg++);
+      E.feito.add(`espinha.${I.seg}`);
+      return;
+    }
+    const args = { pincel: { modo: 'retangulo', x: a[0] === xs[0] ? a[0] - 25 : a[0], z: ESPINHA.z - 70, x2: b[0], z2: ESPINHA.z + 60 }, zona: ZONAS_ORDEM.indexOf('industria') };
+    if (modo === 'manual') args.modo = 'manual';
+    const r = cmd('zona.pintar', args);
+    if (r.ok || r.codigo === 'nada' || r.codigo === 'distrito') {
+      I.pintados++;
+      I.seg++;
+    }
+  }
+
+  /**
+   * D113: no modo Manual nada nasce sozinho. A cada rodada, a zona sem lote em andamento e com frente livre ganha um lote do
+   * tamanho do que a demanda acumulou (a espera), até as frentes livres e 1000: o mesmo ritmo do Automático, só que pedido.
+   */
+  function lotes() {
+    if (modo !== 'manual' || !real || !sim.q.zona?.crescimento) return;
+    for (const c of sim.q.zona.crescimento()) {
+      if (c.modo !== 'manual' || c.pedido > 0 || c.frentes < 1 || c.espera < 1) continue;
+      const n = Math.max(1, Math.min(Math.floor(c.espera), c.frentes, 1000));
+      cmd('zona.lote', { zona: c.zona, n });
+    }
   }
 
   /** Anota, por zona, o último tique em que nasceu um prédio dela (a zona parada com demanda pede quadra) e as obras paradas por material. */
@@ -529,7 +628,7 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     for (let i = 0; i < P.n && !emObra; i++) if (P.viva[i] && P.tipo[i] === TIPO_PREDIO.SERVICO && P.flags[i] & PREDIO.OBRA) emObra = true;
     if (!emObra) {
       if (r.agua?.oferta > 0 && r.agua.demanda > 0.8 * r.agua.oferta && caixa() > 45000) return void construir('captacao', -965, 330, 400);
-      if (r.energia?.oferta > 0 && r.energia.demanda > 0.8 * r.energia.oferta && caixa() > 40000) return void servicoNaCidade('solar');
+      if (r.energia?.oferta > 0 && r.energia.demanda > 0.8 * r.energia.oferta && caixa() > 40000) return void servicoNasUtilidades('solar');
       // cada malha é uma rede (água e energia por componente, S2a): casas sem energia ou sem água pedem o produtor ali
       const falta = { energia: {}, agua: {}, esgoto: {} };
       for (let i = 0; i < P.n; i++) {
@@ -551,11 +650,11 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
         if ((semE >= 3 || (g.oferta > 0 && g.demanda > 0.8 * g.oferta)) && construir('ete', -965, 330, 400) !== null) return;
       }
       // a falta de rede vem antes de tudo (a casa sem energia abandona em 10 min de jogo, D42)
-      for (const [m, n] of Object.entries(falta.energia)) if (n >= 3 && caixa() > SERVICOS.solar.custo + 3000 && servicoNaCidade('solar', m) !== null) return;
+      for (const [m, n] of Object.entries(falta.energia)) if (n >= 3 && caixa() > SERVICOS.solar.custo + 3000 && servicoNasUtilidades('solar') !== null) return;
       for (const [m, n] of Object.entries(falta.agua)) {
         if (n < 3 || caixa() < SERVICOS.captacao.custo + 3000) continue;
         if (m === 'oeste' && construir('captacao', -965, 330, 400) !== null) return;
-        if (m !== 'oeste' && servicoNaCidade('poco', m) !== null) return;
+        if (m !== 'oeste' && servicoNasUtilidades('poco') !== null) return;
       }
     }
     // serviço onde falta (desenho 8.1 e D50): a cada 2 min, uma amostra das casas diz a cobertura de cada categoria; o
@@ -587,6 +686,22 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     const p = pior[alvo.c];
     const q = E.quadras.filter((x) => x.estado === 'feita').sort((x, y) => Math.hypot((x.x0 + x.x1) / 2 - p.x, (x.z0 + x.z1) / 2 - p.z) - Math.hypot((y.x0 + y.x1) / 2 - p.x, (y.z0 + y.z1) / 2 - p.z))[0];
     if (q) servicoNaCidade(alvo.tipo, q.malha, [(q.x0 + q.x1) / 2, (q.z0 + q.z1) / 2]);
+  }
+
+  /**
+   * Utilidade (usina solar, poço) na Zona de Utilidades (D112), na margem da estrada de terra da Vila, a oeste da cidade:
+   * a linha de longo alcance paga na obra liga o produtor à rede. Tenta alguns pontos ao longo da estrada.
+   */
+  function servicoNasUtilidades(tipo) {
+    const pontos = [[-955, 100], [-955, -150], [-950, -350], [-955, 250], [-960, -520], [-975, 330]];
+    for (const k of [0, 1, 2, 3, 4, 5].map((n) => (n + (E.utilTentativa ?? 0)) % pontos.length)) {
+      const [x, z] = pontos[k];
+      const id = construir(tipo, x, z, 110);
+      if (id !== null) return id;
+      if (!podeObra()) return null;
+    }
+    E.utilTentativa = ((E.utilTentativa ?? 0) + 1) % pontos.length;
+    return null;
   }
 
   /**
@@ -714,14 +829,15 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
         const id = construir('mina', -1300, z - 40, 120);
         if (id !== null) {
           E.holding.mina = id;
+          E.ruaCalcarioZ = z;
           return;
         }
       }
       return;
     }
     if (!folga(PREDIOS_HOLDING.cimenteira.custo)) return;
-    const perto = E.holding.escritorioObra ? posicaoDe(E.holding.escritorioObra) : { x: -886, z: -420 };
-    const id = construir('cimenteira', perto.x, perto.z, 400);
+    // D112: a Cimenteira também é do Distrito Industrial, ao lado da Mina e da rua do calcário
+    const id = construir('cimenteira', -1300, (E.ruaCalcarioZ ?? -1340) + 60, 400);
     if (id !== null) E.holding.cimenteira = id;
   }
 
@@ -826,10 +942,13 @@ export function criarEstrategia(sim, { comprarTempo = false, cidadeFalsa = null,
     passo() {
       if (real) contarNascimentos();
       financas();
+      estradaIndustrial();
       decidir();
       holding();
       servicos();
       vias();
+      industrial();
+      lotes();
       arcologia();
     },
   };
@@ -852,7 +971,7 @@ export function rodarRobo(op = {}) {
   }
 }
 
-function rodarRoboNaParte({ horas = 12, semente = 'robo-1', comprarTempo = false, fazDeConta = null, aoProgresso = null, m1b = false } = {}) {
+function rodarRoboNaParte({ horas = 12, semente = 'robo-1', comprarTempo = false, fazDeConta = null, aoProgresso = null, m1b = false, modo = 'automatico' } = {}) {
   const agora = () => performance.now();
   const sim = criarSimulacao({ semente, cronometro: agora });
   const real = !sim.substitutoAtivo('agregados') && !!sim._comandos?.get('construir') && !sim._comandos.get('construir').substituto;
@@ -862,13 +981,13 @@ function rodarRoboNaParte({ horas = 12, semente = 'robo-1', comprarTempo = false
   const anotar = (t, nome, args) => {
     if (nome === 'emprestimo.tomar') tomado[dataDoTique(t).ano] = (tomado[dataDoTique(t).ano] ?? 0) + args.valor;
   };
-  const est = criarEstrategia(sim, { comprarTempo, cidadeFalsa, anotar, m1b });
+  const est = criarEstrategia(sim, { comprarTempo, cidadeFalsa, anotar, m1b, modo });
   const T = Math.round(horas * HORA);
   const tiques = new Float64Array(T);
   const R = {
     modo: usarFalsa ? 'cidade de faz de conta (agregados)' : 'cidade da S2a',
     arcologia: temComando(sim, 'arcologia.iniciar') ? 'X1b' : 'sem a X1b (marco 7 indisponível)',
-    semente, horas, comprarTempo, m1b,
+    semente, horas, comprarTempo, m1b, modoZona: modo,
     marcos: [],
     caixaMin: Infinity, caixaMinTique: 0, caixa1h: null, zeradoTiques: 0, zeradoNaPrimeiraHora: false,
     emprestimosPrimeiraHora: 0, dividaMax: 0, tomadoPorAno: {}, dividaFimAno: null,
@@ -1065,7 +1184,7 @@ function metasA4(R) {
 export function textoRelatorio(R) {
   const f = (v, c = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: c, minimumFractionDigits: c }) : String(v));
   const linhas = [];
-  linhas.push(`robô da simulação: ${R.horas} h de jogo, semente ${R.semente}, ${R.modo}, Arcologia ${R.arcologia}${R.comprarTempo ? ', comprando tempo' : ''}${R.m1b ? ', com o M1b aberto' : ''}`);
+  linhas.push(`robô da simulação: ${R.horas} h de jogo, semente ${R.semente}, ${R.modo}, Arcologia ${R.arcologia}${R.comprarTempo ? ', comprando tempo' : ''}${R.m1b ? ', com o M1b aberto' : ''}${R.modoZona === 'manual' ? ', zonas em modo Manual por lote' : ''}`);
   linhas.push(`  marcos: ${R.marcos.map((m) => `${m.n} ${m.nome} em ${m.hora}`).join(' · ') || 'nenhum'}`);
   linhas.push(`  fim: ${f(R.moradores)} moradores, bem-estar ${f(R.bemEstar, 1)} (tarifa ${R.tarifa}), contribuição ${f(R.rendaHora)}/h, saldo ${f(R.saldoHora)}/h, marco ${R.marcoFim.n} (${f(R.marcoFim.xp)} XP)`);
   linhas.push(`  caixa: mínimo ${f(R.caixaMin)} em ${hm(R.caixaMinTique)}, com 1 h ${f(R.caixa1h)}, no fim ${f(R.caixaFim)}; zerado por ${f(R.zeradoTiques / 60, 1)} min de jogo`);
@@ -1089,7 +1208,7 @@ export function textoRelatorio(R) {
 }
 
 function lerArgs(argv) {
-  const o = { horas: 12, semente: 'robo-1', comprarTempo: false, fazDeConta: null, json: null, m1b: false };
+  const o = { horas: 12, semente: 'robo-1', comprarTempo: false, fazDeConta: null, json: null, m1b: false, modo: 'automatico' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--horas') o.horas = +argv[++i];
@@ -1098,6 +1217,7 @@ function lerArgs(argv) {
     else if (k === '--fazDeConta') o.fazDeConta = true;
     else if (k === '--cidadeReal') o.fazDeConta = false;
     else if (k === '--m1b') o.m1b = true;
+    else if (k === '--modo') o.modo = argv[++i] === 'manual' ? 'manual' : 'automatico';
     else if (k === '--json') o.json = argv[++i];
   }
   return o;

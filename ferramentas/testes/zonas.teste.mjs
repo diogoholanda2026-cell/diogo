@@ -16,6 +16,10 @@ import { ZONAS, ZONAS_ORDEM, FAMILIAS_ZONA, PARTE_ATUAL, zonaNaParte, zonasDaFam
 import { PREDIOS, modelosDaZona, nivelDoModelo } from '../../fonte/data/predios.js';
 import { zonaAtiva, valorEm, VALOR } from '../../fonte/sim/zonas/demanda.js';
 import { terminarObra } from '../../fonte/sim/zonas/crescimento.js';
+import { definirRegrasDeLugar } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste monta ruas, utilidades e indústria em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 

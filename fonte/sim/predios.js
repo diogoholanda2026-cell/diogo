@@ -32,6 +32,7 @@ import { daHolding, ladrilhoDe } from './mundo/ladrilhos.js';
 import { aguaEm } from './mundo/terreno.js';
 import { recursoNoPoligono } from './mundo/recursos.js';
 import { registrarMover } from './mover.js';
+import { conferirLugar as conferirLugarZon2, linhaLonga, guardarLinha, tirarLinha } from './zon2.js';
 
 // ------------------------------------------------------------------------------------------------ estado comum
 
@@ -703,6 +704,9 @@ export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = fa
   const A = sim.tabelas.arestas;
   const T = sim.espelho.terreno;
   if (!semMarco && !colocavelLiberado(sim, tipo, def)) return { codigo: 'marco', dados: { marco: marcoDoColocavel(tipo, def) } };
+  // D112 (ZON2): utilidades só na Zona de Utilidades; a indústria da Holding só no Distrito Industrial
+  const lugarZon2 = conferirLugarZon2(tipo, L);
+  if (lugarZon2) return lugarZon2;
   const { pts, pesos } = amostrasDaPlanta(L);
   const alturas = new Float64Array(pts.length / 2);
   let hmin = Infinity;
@@ -802,7 +806,7 @@ export function conferirLugar(sim, tipo, def, L, { aplainar: aceitaAplainar = fa
     const c = def.validar(sim, L);
     if (c) return { codigo: c, e };
   }
-  return { codigo: null, demolir, cota, aplainar, e };
+  return { codigo: null, demolir, cota, aplainar, e, linha: linhaLonga(sim, tipo, L.x, L.z, e) };
 }
 
 function sobrepoe(P, i, L) {
@@ -837,14 +841,17 @@ export function previaConstruir(sim, args = {}) {
   const A = sim.tabelas.arestas;
   const dem = custoDosDemolidos(sim, c.demolir);
   const apl = c.aplainar?.custo ?? 0;
+  const linha = c.linha ?? null;
+  const custoLinha = linha?.custo ?? 0;
   const out = {
-    ...base, custo: base.custo + dem + apl, custoDemolir: dem, custoAplainar: apl, aplainar: c.aplainar ?? null,
+    ...base, custo: base.custo + dem + apl + custoLinha, custoDemolir: dem, custoAplainar: apl, aplainar: c.aplainar ?? null,
+    longoAlcance: linha ? { rec: linha.rec, metros: linha.metros, custo: linha.custo, alcanca: linha.alcanca } : null,
     x: L.x, z: L.z, rot: L.rot, alinhado: L.alinhado, rotVia: L.rotVia ?? null, giro: L.giro ?? null,
     via: L.e >= 0 && A.viva[L.e] ? refDe(L.e, A.ger[L.e]) : null,
     efeitos: efeitosDaPrevia(sim, tipo, def, L),
     demolir: (c.demolir ?? []).map((i) => P.ref(i)),
     // produtor de rede de frente para uma rua sem canos nem cabos (terra): pode construir, mas não liga até melhorar
-    semRede: produtorDeRede(tipo, def) && !viaComRede(sim, L.e),
+    semRede: produtorDeRede(tipo, def) && !viaComRede(sim, L.e) && !linha?.alcanca,
   };
   if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null, ...out };
   const caixa = sim.holding.caixa();
@@ -891,7 +898,7 @@ export function construir(sim, args = {}) {
   if (L.codigo) return { ok: false, codigo: L.codigo };
   const c = conferirLugar(sim, tipo, def, L, { aplainar: args.aplainar === true });
   if (c.codigo) return { ok: false, codigo: c.codigo, dados: c.dados ?? null };
-  const custo = (def.custo ?? 0) + custoDosDemolidos(sim, c.demolir) + (c.aplainar?.custo ?? 0);
+  const custo = (def.custo ?? 0) + custoDosDemolidos(sim, c.demolir) + (c.aplainar?.custo ?? 0) + (c.linha?.custo ?? 0);
   if (sim.holding.caixa() < custo) return { ok: false, codigo: 'creditos', dados: { faltam: custo - sim.holding.caixa() } };
   if (custo > 0 && !sim.holding.pagar(custo, 'construcao')) return { ok: false, codigo: 'creditos' };
   const P = sim.tabelas.predios;
@@ -931,11 +938,12 @@ export function construir(sim, args = {}) {
   const t = trans(sim);
   t.servSujo = true;
   t.redesSujas = true;
+  if (c.linha?.alcanca && c.linha.metros > 0) guardarLinha(sim, ref, c.linha);
   if (typeof def.aoConstruir === 'function') def.aoConstruir(sim, i, ref);
   if (def.xp) sim.progresso.xp(def.xp, servico ? 'servico' : 'holding');
   if (demolidos.length) sim.emitir('demolido', { tipo: 'predio', refs: demolidos });
   sim.emitir('construido', { tipo, refs: [ref] });
-  return { ok: true, id: ref, dados: { ref, demolidos, aplainar: c.aplainar ?? null } };
+  return { ok: true, id: ref, dados: { ref, demolidos, aplainar: c.aplainar ?? null, longoAlcance: c.linha?.alcanca ? { rec: c.linha.rec, metros: c.linha.metros, custo: c.linha.custo } : null } };
 }
 
 // ------------------------------------------------------------------------------------------------ demolir
@@ -957,6 +965,7 @@ export function tirarPredio(sim, i) {
   const r = Math.max(P.w[i], P.d[i]) + 8;
   const caixa = [P.x[i] - r, P.z[i] - r, P.x[i] + r, P.z[i] + r];
   delete sim.json.cidade.nomes[ref];
+  tirarLinha(sim, ref);
   const colocado = P.tipo[i] !== TIPO_PREDIO.ZONA;
   removerPredio(sim, i);
   if (colocado) {

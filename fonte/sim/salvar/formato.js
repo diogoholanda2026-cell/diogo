@@ -10,6 +10,9 @@ import { jsonCanonico, trocarConteudo, ehTipado } from '../../comum/util.js';
 // v1 -> v2 (16/10/2026): seções novas (transito, ar, ruido, esgoto, Ato 1 completo) nascem vazias ao carregar; nada a converter
 // v2 -> v3 (16/10/2026): a grade 'arAnt' (a nuvem do começo da rodada do ambiente) entra no save; um save da v2 ganha uma cópia
 // da 'ar' (no meio da rodada é a melhor leitura que resta); as fontes da rodada ('ambienteFontes') são coletadas de novo
+// v3 -> v4 (17/10/2026, ZON2): a seção JSON 'zon2' (modo de crescimento de cada zona, lote pedido, demanda em espera e linhas de
+// longo alcance) nasce vazia ao carregar (tudo em Automático, como era); a indústria e as utilidades que um save antigo já tem
+// fora do Distrito e da Zona de Utilidades ficam onde estão (a regra vale para o que se pinta e se constrói depois)
 export const MIGRACOES = {
   1: () => {},
   2: (cab, secoes) => {
@@ -18,6 +21,7 @@ export const MIGRACOES = {
     cab.grades.arAnt = { ...cab.grades.ar };
     secoes.set('grade.arAnt', ar.slice());
   },
+  3: () => {},
 };
 
 const TIPO_DE = {

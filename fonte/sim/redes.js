@@ -26,6 +26,7 @@ import {
 } from './predios.js';
 import { ocupacaoDe, registrarParteCidade } from './cidadaos.js';
 import { buscar, pessoalEPagamento } from './servicos.js';
+import { linhaLonga } from './zon2.js';
 
 export const RECURSOS_REDE = Object.freeze(['agua', 'energia']);
 /** As três redes; o esgoto entra com o M1b. */
@@ -79,7 +80,13 @@ function produtoresDe(sim, rec) {
     const def = SERVICOS[SERVICOS_ORDEM[P.modelo[i]]];
     if (def?.categoria !== rec) continue;
     acessoDe(sim, i, AC);
-    if (!temRedes(A, AC.e)) continue;
+    if (!temRedes(A, AC.e)) {
+      // D112: o produtor da Zona de Utilidades numa via sem canos e cabos liga por uma linha de longo alcance ao nó mais perto
+      // de uma via com redes (a linha foi paga na obra)
+      const linha = AC.e >= 0 ? linhaLonga(sim, SERVICOS_ORDEM[P.modelo[i]], P.x[i], P.z[i], AC.e) : null;
+      if (linha?.alcanca) out.push({ i, id: null, no: linha.no, cap: def.capacidade });
+      continue;
+    }
     const comp = A.arco[17 * AC.e + 16];
     out.push({ i, id: null, no: AC.s <= comp / 2 ? A.a[AC.e] : A.b[AC.e], cap: def.capacidade });
   }

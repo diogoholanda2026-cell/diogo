@@ -18,6 +18,7 @@
 // A gleba vem de arcologia-plano.js: o disco da sede v3 (D88 a D90).
 import { congelar, cos, sen } from '../comum/util.js';
 import { GLEBA_ENVELOPE } from './arcologia-plano.js';
+import { DISTRITO_INDUSTRIAL, ZONA_UTILIDADES } from './zon2.js';
 
 // ------------------------------------------------------------------------------------------------ costa
 
@@ -425,6 +426,10 @@ const AREAS = [
     // os morros da Pedreira e do Mirante e a sela entre eles, até o pé, fora do disco da sede
     contorno: [[-1000, -1040], [1000, -1040], [1010, -640], [640, -620], [260, -680], [-180, -640], [-600, -560], [-880, -560]],
   },
+  // D112 (ZON2): o Distrito Industrial e a Zona de Utilidades; os contornos e as razões estão em data/zon2.js. Ficam no fim
+  // da lista: onde duas áreas se cruzam (a várzea, os morros) a primeira vence em areaDe, e a regra usa o contorno próprio
+  { id: DISTRITO_INDUSTRIAL.id, nome: DISTRITO_INDUSTRIAL.nome, contorno: DISTRITO_INDUSTRIAL.contorno },
+  { id: ZONA_UTILIDADES.id, nome: ZONA_UTILIDADES.nome, contorno: ZONA_UTILIDADES.contorno },
 ];
 
 /**
@@ -448,14 +453,16 @@ const SUGESTOES = {
   // ruas de terra da Vila (data VILA.ruas) que a melhoria troca por rua com calçada e redes (D52)
   vila: { via: 'rua', ruas: ['praia', 'deCima', 'travessaNorte', 'travessaSul'] },
   // retângulos: a grade de ruas da caixa de cada quadra (o robô e a mão da dica traçam assim) fica fora do disco da
-  // sede, com a calçada; a indústria perto da Vila dá emprego a quem mora nela (87% sem trabalho no começo, S2a)
+  // sede, com a calçada; o comércio perto da Vila dá emprego a quem mora nela (87% sem trabalho no começo, S2a). A indústria
+  // saiu daqui com a D112 (ZON2): só se pinta no Distrito Industrial, ao norte, e o comércio de baixa altura toma o lugar dela
   quadras: [
-    { zona: 'industria', contorno: [[-880, 164], [-768, 164], [-768, 276], [-880, 276]] },
+    { zona: 'comBaixa', contorno: [[-880, 164], [-768, 164], [-768, 276], [-880, 276]] },
     { zona: 'resBaixa', contorno: [[-768, 52], [-656, 52], [-656, 164], [-768, 164]] },
     { zona: 'comBaixa', contorno: [[-880, -60], [-768, -60], [-768, 52], [-880, 52]] },
   ],
   captacao: { construir: 'captacao', x: -965, z: 350, rot: 0 },
-  usina: { construir: 'solar', x: -905, z: 350, rot: 0 },
+  // a captação e a usina ficam na Zona de Utilidades (D112), na margem da rua principal, acima da Vila
+  usina: { construir: 'solar', x: -985, z: 300, rot: 0 },
   // na estrada de terra da Vila (D52: a terra dá acesso, sem redes), entre o rio e o córrego da Pedreira; o areal na
   // margem arenosa e a olaria na argila da beira do rio, no caminho do barreiro
   escritorio: { construir: 'escritorioObra', x: -886, z: -420, rot: 0 },

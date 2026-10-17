@@ -33,6 +33,8 @@ import { coberturaPredio, distanciaTipo, atualizarServico } from '../servicos.js
 import { temOferta, naRede, recursosAtivos } from '../redes.js';
 import { avisoDeAmbiente } from '../ambiente.js';
 import { valorEm, zonaAtiva } from './demanda.js';
+import { estadoZon2, modoDe, registrar as registrarZon2 } from '../zon2.js';
+import { LOTE_MAX } from '../../data/zon2.js';
 
 /** Ritmo do crescimento (seção 6.5; durações em tiques). (calibrar) */
 export const CRESCIMENTO = Object.freeze({
@@ -298,9 +300,24 @@ export function sistemaCrescimento(sim) {
     const id = ZONAS_ORDEM[z];
     if (!zonaAtiva(sim, id)) {
       j.acum[id] = 0;
+      if (sim.json.zon2?.espera?.[id]) sim.json.zon2.espera[id] = 0;
       continue;
     }
     const dem = j.demanda[id] ?? 0;
+    if (modoDe(sim, id) === 'manual') {
+      // D113: em Manual a demanda só acumula (espera); as construções começam só com o lote que o jogador pediu, ao ritmo
+      // de sempre (até 3 por tique e 60 obras abertas), uma tentativa que falha (sem frente ou espaço) espera o próximo tique
+      const E = estadoZon2(sim);
+      E.espera[id] = Math.min(LOTE_MAX, (E.espera[id] ?? 0) + (dem / 100) * ZONAS[id].taxa);
+      while ((E.pedido[id] ?? 0) > 0 && feitos < CRESCIMENTO.maxPorTique && abertas < CRESCIMENTO.maxObras && f.total[z] > 0) {
+        if (tentar(sim, f, z, rng) < 0) break;
+        feitos++;
+        abertas++;
+        if (--E.pedido[id] <= 0) delete E.pedido[id];
+        E.espera[id] = Math.max(0, E.espera[id] - 1);
+      }
+      continue;
+    }
     let a = (j.acum[id] ?? 0) + (dem / 100) * ZONAS[id].taxa;
     if (!f.total[z]) a = Math.min(a, 1);
     while (a >= 1 && feitos < CRESCIMENTO.maxPorTique && abertas < CRESCIMENTO.maxObras) {
@@ -666,4 +683,5 @@ export function registrar(sim) {
   sim.registrarSistema(RODADA, 0, sistemaPredios, RODADA, { nome: 'predios', ordem: ORDEM.cidade });
   registrarPartePredio(partePredio);
   sim.aoCarregar(() => garantirFrentes(sim));
+  registrarZon2(sim);
 }

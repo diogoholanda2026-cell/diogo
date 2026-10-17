@@ -39,7 +39,18 @@ export const CONSULTAS = congelar({
     formato:
       "({ modo: 'reta' | 'curva' | 'continua' | 'grade' | 'melhorar' | 'demolir', tipo, pontos: [[x, z]], tangente? (continua), espacamento? (grade), arestas? (melhorar e demolir), tolerancia, encaixe, sessao }) → { ok, segmentos: [{ p: [8], tipo, cotas: [y0, y1], ponte, erros: [codigo], declive }], nosNovos, divisoes, novos: [[x, z]], dividir: [{ aresta, t, ponto }], pontos: [[x, z]] (os encaixados), encaixes: [{ indice, ponto, tipo, valor, portao?, passo? }], guias: [{ tipo, a, b }], demolir: { predios: [ref], custo }, comprimento, custo, manutencaoHora, declive, erros: [{ codigo, trecho, dados? }] (trecho -1: o plano inteiro; dados.faltam em 'creditos') }; melhorar e demolir trazem também arestas (um item por aresta pedida) e demolir traz devolve (custo = -devolve); até 1 ms",
   },
-  'zona.previa': { dono: 'S1b', formato: '({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia }' },
+  'zona.previa': { dono: 'S1b', formato: '({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia, liberada, foraDoDistrito } (indústria: só as células do Distrito Industrial entram em celulas; foraDoDistrito conta as puladas, D112)' },
+  'zona.crescimento': {
+    dono: 'ZON2',
+    formato:
+      '({ zona? }) → [{ zona (índice), id, nome, familia, modo: automatico | manual, pedido (do lote, o que falta), espera (o que a demanda acumulou, em construções), demanda, frentes, construidos, emObra }]; com zona, só o item dela (ou null)',
+  },
+  'zona.regras': {
+    dono: 'ZON2',
+    formato:
+      '() → { ligadas, distrito: { id, nome, contorno: [[x, z]], zonas, tipos }, utilidades: { id, nome, contorno, tipos }, vento: { de, para, angulo }, longoAlcance: { custoPorMetro: { agua, energia, esgoto }, alcanceMax }, modos, lote: { min, max } }',
+  },
+  'zona.lugar': { dono: 'ZON2', formato: '({ x, z }) → { distrito: boolean, utilidades: boolean }' },
   'mover.previa': {
     dono: 'MOV1',
     formato:
@@ -48,7 +59,7 @@ export const CONSULTAS = congelar({
   'construir.previa': {
     dono: 'S2a e S3a',
     formato:
-      '({ tipo, x, z, rot }) → { ok, codigo?, dados? (faltam em creditos), x, z, rot, custo (já soma custoDemolir), custoDemolir (prédios de zona sob a planta, D54), manutencaoHora, alcance, pegada, demolir: [ref], semRede (produtor de rede de frente para via sem canos nem cabos: constrói, mas só liga depois de melhorar), efeitos: [{ camada, delta }] }',
+      '({ tipo, x, z, rot }) → { ok, codigo?, dados? (faltam em creditos), x, z, rot, custo (já soma custoDemolir), custoDemolir (prédios de zona sob a planta, D54), manutencaoHora, alcance, pegada, demolir: [ref], semRede (produtor de rede de frente para via sem canos nem cabos: constrói, mas só liga depois de melhorar; na Zona de Utilidades a linha de longo alcance liga), longoAlcance: { rec, metros, custo, alcanca } | null (D112; o custo já está em custo), efeitos: [{ camada, delta }] }',
   },
   predio: {
     dono: 'S2a (S3a a parte holding)',

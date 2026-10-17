@@ -13,6 +13,8 @@ import { ZONAS, ZONAS_ORDEM } from '../../data/zonas.js';
 import { arestaPerto, arestasDoNo } from '../vias/grafo.js';
 import { eixoDa, saidaDoNo, derivados } from '../vias/validar.js';
 import { celulasNaCaixa, celulasDaAresta, temBlocos } from './blocos.js';
+import { celulasNoDistrito, idDaZona, definirModo } from '../zon2.js';
+import { MODOS_CRESCIMENTO, REGRAS_DE_LUGAR } from '../../data/zon2.js';
 
 const TAU = 2 * Math.PI;
 const MAX_PASSOS = 600;
@@ -179,6 +181,13 @@ function celulasQueMudam(sim, pincel, zona) {
   return lista.filter((c) => C.zona[c] !== zona);
 }
 
+/** D112: a zona industrial só vale dentro do Distrito Industrial; devolve as células que podem e quantas ficaram de fora. */
+function soNoDistrito(sim, lista, zona) {
+  if (!REGRAS_DE_LUGAR || ZONAS[ZONAS_ORDEM[zona]]?.zona !== 'industrial') return { lista, fora: 0 };
+  const dentro = celulasNoDistrito(sim, lista);
+  return { lista: dentro, fora: lista.length - dentro.length };
+}
+
 const zonaValida = (z) => Number.isInteger(z) && z >= 0 && z < ZONAS_ORDEM.length;
 
 /** q.zona.previa({ pincel, zona }) → { celulas: Int32Array, comPredio, efeitoMedia }. */
@@ -186,7 +195,8 @@ export function previa(sim, args) {
   const { pincel, zona } = args ?? {};
   const C = sim.tabelas.celulas;
   const z = zonaValida(zona) ? zona : 0;
-  const lista = celulasQueMudam(sim, pincel, z) ?? [];
+  const todas = celulasQueMudam(sim, pincel, z) ?? [];
+  const { lista, fora } = soNoDistrito(sim, todas, z);
   const celulas = Int32Array.from(lista);
   let comPredio = 0;
   for (const c of lista) if (C.predio[c] >= 0) comPredio++;
@@ -196,7 +206,7 @@ export function previa(sim, args) {
     const v = fn(sim, celulas, z);
     efeitoMedia = typeof v === 'number' && Number.isFinite(v) ? v : 0;
   }
-  return { celulas, comPredio, efeitoMedia, liberada: zonaLiberada(sim, z) };
+  return { celulas, comPredio, efeitoMedia, liberada: zonaLiberada(sim, z), foraDoDistrito: fora };
 }
 
 /** zona.pintar: aplica o pincel. */
@@ -206,9 +216,13 @@ export function pintar(sim, args) {
   const P = sim.tabelas.predios;
   if (!zonaValida(zona)) return { ok: false, codigo: 'valor' };
   if (!zonaLiberada(sim, zona)) return { ok: false, codigo: 'marco' };
-  const lista = celulasQueMudam(sim, pincel, zona);
-  if (!lista) return { ok: false, codigo: 'valor' };
-  if (!lista.length) return { ok: false, codigo: 'nada' };
+  if (args.modo !== undefined && !MODOS_CRESCIMENTO.includes(args.modo)) return { ok: false, codigo: 'valor' };
+  const todas = celulasQueMudam(sim, pincel, zona);
+  if (!todas) return { ok: false, codigo: 'valor' };
+  if (!todas.length) return { ok: false, codigo: 'nada' };
+  const { lista, fora } = soNoDistrito(sim, todas, zona);
+  if (!lista.length) return { ok: false, codigo: 'distrito', dados: { fora } };
+  if (args.modo !== undefined && zona > 0) definirModo(sim, idDaZona(zona), args.modo);
   const tocados = new Set();
   for (const c of lista) {
     C.zona[c] = zona;
@@ -224,7 +238,7 @@ export function pintar(sim, args) {
       P.marcar(i);
     }
   }
-  return { ok: true, dados: { n: lista.length, comPredio: tocados.size } };
+  return { ok: true, dados: { n: lista.length, comPredio: tocados.size, foraDoDistrito: fora } };
 }
 
 export function registrar(sim) {

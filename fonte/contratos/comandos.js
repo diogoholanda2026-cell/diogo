@@ -38,18 +38,26 @@ export const COMANDOS = congelar({
   },
   'zona.pintar': {
     dono: 'S1b',
-    args: "{ pincel: { modo: 'quadra' | 'circulo' | 'retangulo' | 'celulas', x, z, raio?, x2?, z2?, celulas? }, zona } (zona 0 apaga; índice em ZONAS_ORDEM)",
-    codigos: ['marco', 'nada'],
+    args: "{ pincel: { modo: 'quadra' | 'circulo' | 'retangulo' | 'celulas', x, z, raio?, x2?, z2?, celulas? }, zona, modo?: 'automatico' | 'manual' } (zona 0 apaga; índice em ZONAS_ORDEM; indústria só pinta dentro do Distrito Industrial, D112, e as células de fora são puladas; modo troca o modo de crescimento da zona, D113)",
+    codigos: ['marco', 'nada', 'distrito', 'valor'],
     exemplo: { pincel: { modo: 'circulo', x: 120, z: -40, raio: 24 }, zona: 1 },
   },
+  'zona.modo': {
+    dono: 'ZON2', args: "{ zona (índice ou id), modo: 'automatico' | 'manual' } (D113; do manual para o automático o lote que faltava é cancelado)",
+    codigos: ['valor', 'nada'], exemplo: { zona: 1, modo: 'manual' },
+  },
+  'zona.lote': {
+    dono: 'ZON2', args: '{ zona (índice ou id), n } (D113; n de 1 a 1000 construções, somadas ao que faltava até 1000; n = 0 cancela o que falta; só no modo manual)',
+    codigos: ['valor', 'modo', 'lote', 'nada'], exemplo: { zona: 1, n: 10 },
+  },
   construir: {
-    dono: 'S2a (serviços) e S3a (Holding)', args: '{ tipo, x, z, rot }',
-    codigos: ['creditos', 'marco', 'acesso', 'colisao', 'declive', 'agua', 'recurso', 'ladrilho', 'gleba'],
+    dono: 'S2a (serviços) e S3a (Holding)', args: '{ tipo, x, z, rot } (D112: utilidades só na Zona de Utilidades, indústria da Holding só no Distrito; o custo soma a linha de longo alcance)',
+    codigos: ['creditos', 'marco', 'acesso', 'colisao', 'declive', 'agua', 'recurso', 'ladrilho', 'gleba', 'utilidades', 'distrito'],
     exemplo: { tipo: 'clinica', x: 300, z: 120, rot: 0 },
   },
   mover: {
     dono: 'MOV1', args: '{ ref, x, z, rot, giro?, alinhar?, aplainar? }',
-    codigos: ['inexistente', 'valor', 'nada', 'arcologia', 'ocupado', 'creditos', 'marco', 'acesso', 'colisao', 'declive', 'agua', 'recurso', 'ladrilho', 'gleba'],
+    codigos: ['inexistente', 'valor', 'nada', 'arcologia', 'ocupado', 'creditos', 'marco', 'acesso', 'colisao', 'declive', 'agua', 'recurso', 'ladrilho', 'gleba', 'utilidades', 'distrito'],
     exemplo: { ref: 5, x: 320, z: 140, rot: 0 },
   },
   'mover.desfazer': { dono: 'MOV1', args: '{ ref }', codigos: ['inexistente', 'ocupado'], exemplo: { ref: 5 } },

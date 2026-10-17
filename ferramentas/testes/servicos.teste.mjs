@@ -15,6 +15,10 @@ import { garantirCobertura, coberturaNoPonto, sistemaCargas, buscar, atualizarSe
 import { trans, acessoDe, limitesDeclive, COLOCAR, dispensaAcesso } from '../../fonte/sim/predios.js';
 import { terminarObra, nascerNaFrente } from '../../fonte/sim/zonas/crescimento.js';
 import { montarSave, lerSave, migrar, aplicarSave } from '../../fonte/sim/salvar/formato.js';
+import { definirRegrasDeLugar } from '../../fonte/data/zon2.js';
+
+// D112 (ZON2): este teste monta ruas, utilidades e indústria em qualquer ponto do mapa; as regras de lugar têm teste próprio (zon2.teste.mjs)
+definirRegrasDeLugar(false);
 
 const rua = (sim, pontos, tipo = 'rua') => {
   const r = sim.cmd('via.construir', { plano: { modo: 'reta', tipo, pontos, sessao: 1, encaixe: false } });
