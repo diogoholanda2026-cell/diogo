@@ -12,7 +12,7 @@ Material de trabalho do e-book sobre bolhas históricas e a Revolução da IA. N
 
 ## Onde paramos (27/10/2026)
 1. A rede foi liberada para os sites das fontes; a sessão anterior não enxergava a mudança.
-2. Feito: os 15 textos prioritários foram baixados e lidos; citações e números com página em `pesquisa/citacoes_conferidas.md`. Ficaram pendentes Perez, Garber (download bloqueado, baixar à mão), Gustavo Franco (PDF só com imagem) e Eichengreen e Temin (OCR ilegível).
+2. Feito: os 15 textos prioritários foram baixados e lidos; citações e números com página em `pesquisa/citacoes_conferidas.md`. Garber, Perez, Franco, Eichengreen e Temin, o CAPE até out. 2026 e o preço real das casas entraram depois (baixados à mão pelo dono; Franco e Eichengreen e Temin lidos como imagem). Nenhum texto pendente.
 3. Depois: o dono aprova título, subtítulo, família-guia e os quatro cenários; escrever o capítulo-piloto (Cap. 6, Pontocom).
 4. Antes dos Cap. 10 e 11: nova busca sobre a IA de julho a outubro de 2026.
 

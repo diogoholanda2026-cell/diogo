@@ -13,19 +13,19 @@ Leitura de 27/10/2026. Todos os textos foram baixados dos sites oficiais listado
 | # | Texto | Situação |
 |---|-------|----------|
 | 1 | Minsky, WP 74 | Lido inteiro |
-| 2 | Perez, "Double bubble" (SSRN) | **Pendente.** SSRN e site da autora bloqueiam download automático (403/404). Baixar à mão pelo navegador |
+| 2 | Perez, "Double bubble" (CFAP/CERF WP 31) | Lido (versão de trabalho de 10/5/2009, baixada à mão pelo dono) |
 | 3 | Reinhart e Rogoff, NBER 13882 | Lido (resumo, intro, tabelas) |
 | 4 | BIS AER 2026 cap. I e Bulletin 120 | Lidos (link correto do cap. I: https://www.bis.org/publications/progress-peril.pdf) |
 | 5 | Marks, 2000 e 2025 | Lidos inteiros |
 | 6 | FCIC (2011) | Conclusões lidas; algarismos recuperados (a fonte do PDF esconde os dígitos, ver nota) |
 | 7 | Odlyzko, "Collective hallucinations" | Resumo e introdução lidos (322 p., versão preliminar de 15/1/2010) |
-| 8 | Gustavo Franco, BNDES 1983 | **Pendente.** PDF de 190 p. só com imagem (sem OCR); precisa de OCR ou leitura à mão |
+| 8 | Gustavo Franco, BNDES 1983 | Lido nas partes do Encilhamento (páginas lidas como imagem; o PDF não tem texto) |
 | 9 | Macarini, TD 122 Unicamp | Lido (parte da bolha) |
 | 10 | Okina, Shirakawa e Shiratsuka (BoJ 2001) | Resumo e números lidos |
-| 11 | Mackay (Gutenberg) e Garber (JEP 1990) | Mackay lido; **Garber pendente** (o site da AEA abre uma checagem anti-robô; baixar à mão) |
-| 12 | Shiller, NBER 23075 e planilha CAPE | Lidos; a planilha de Yale para em set. 2023 (ver nota) |
+| 11 | Mackay (Gutenberg) e Garber (JEP 1990) | Lidos (Garber baixado à mão pelo dono em 27/10/2026) |
+| 12 | Shiller, NBER 23075 e planilha CAPE | Lidos; CAPE atualizado até out. 2026 e preço real das casas (baixados à mão pelo dono) |
 | 13 | Acemoglu (MIT, 5/4/2024) e Sequoia (20/6/2024) | Lidos |
-| 14 | Bernanke, NBER 1054, e Eichengreen e Temin, NBER 6060 | Bernanke lido; **Eichengreen e Temin pendente** (a camada de texto do PDF é OCR espelhado e ilegível) |
+| 14 | Bernanke, NBER 1054, e Eichengreen e Temin, NBER 6060 | Lidos (Eichengreen e Temin lido como imagem: resumo, introdução e conclusão) |
 | 15 | Bagehot, *Lombard Street* (Gutenberg) | Lido nos trechos do remédio |
 
 ---
@@ -41,8 +41,22 @@ Fonte: https://www.levyinstitute.org/pubs/wp74.pdf (10 p.). Preparado para o *Ha
 - **Banqueiro e empresário** (p. 5): diante dos mesmos números, o empresário lê como entusiasta e o banqueiro como cético.
 - Curiosidade a conferir antes de citar: na p. 8 o texto diz que governos com dívida flutuante, empresas com papel comercial e bancos são "typically hedge units", logo depois de descrever o regime especulativo. Parece erro de digitação do original (o sentido pede "speculative"). Não citar essa frase.
 
-## 2. Perez, "The double bubble at the turn of the century" (CJE 2009, 33(4), p. 779 a 805)
-**Pendente.** Referência confirmada no repositório da TalTech (https://ws.lib.ttu.ee/digibase/en/Publ/Item/38e76712-058c-4bc1-8ce3-ecca8fd97b5d), que só aponta para o SSRN 1433947.
+## 2. Perez, "The double bubble at the turn of the Century: Technological roots and structural implications" (CFAP/CERF WP 31, Cambridge, 10/5/2009; publicado no CJE 2009, 33(4), p. 779 a 805)
+Fonte: versão de trabalho em PDF (34 p.), baixada à mão pelo dono. A página do PDF é a impressa. Citar como versão de trabalho; a paginação do CJE é outra.
+
+- **A tese** (resumo, p. 1): a mania da internet dos anos 1990 e o boom de liquidez dos anos 2000 são "two distinct components of a single structural phenomenon", o equivalente a 1929 em dois tempos: um de inovação tecnológica, outro de inovação financeira.
+- **Bolha tecnológica maior** (p. 5): não é acidente; ocorre "midway along the process of assimilation of each technological revolution", como "paroxystic culmination of twenty or thirty years of market experimentation".
+- **A sequência** (p. 5): irrupção, duas ou três décadas de Instalação turbulenta que acabam no estouro, recomposição das instituições que regulam as finanças e depois a Implantação, de crescimento mais orgânico. Cada grande surto leva mais de meio século.
+- **Opportunity pull x easy credit push** (p. 4 e 22): as bolhas tecnológicas vêm da atração da oportunidade, não do empurrão do crédito fácil; são "moments of Galbraithian irrationality", mas com um elemento de racionalidade.
+- **Tabela 1, os cinco surtos** (p. 6): 1771, mania dos canais, estouro em 1793; 1829, mania das ferrovias, 1847; 1875, bolhas da infraestrutura mundial, 1890-93 (Argentina, quebra de um grande banco de Londres); 1908, anos 1920, 1929; 1971, bolha dupla, 2000 e 2007-08.
+- **A ilusão** (p. 7): "high profits to be had with very low risk"; a incerteza tecnológica já caiu, mas a de mercado aumenta.
+- **Concentração** (p. 8): em 1847, o investimento em ferrovias no Reino Unido chegou a 7% da renda nacional e quase 55% da formação bruta de capital fixo; de 1870 a 1890, 30% a 50% do investimento britânico foi para fora. O capital de risco dos EUA chegou a 1% do PIB, com 85% a 90% em TIC; as ações de tecnologia chegaram a 35% do valor de mercado, e a internet sozinha a quase 10%.
+- **Inflação diferencial** (p. 9): de 1997 a 2000 a bolsa toda subiu mais de 60% e as de tecnologia 300%; valor de mercado total perto de US$ 15 trilhões, tecnologia acima de US$ 5 trilhões (35%, contra 12% antes).
+- **Anos 1920** (p. 10): a bolsa subiu 75%, e as de alta tecnologia mais de 200% até 1929 (Eichengreen e Mitchener).
+- **Giro** (p. 15): as TIC passam de 8% das ações listadas em 1987 para 16% em 2000, com 35% do valor de mercado e mais de 60% do giro.
+- **O cassino cresce** (p. 26): derivativos de US$ 382 trilhões nocionais em 2007, sete vezes o PIB mundial de US$ 54 trilhões, sem contar os CDS; alta de 457% de 1994 a 2000 e de 452% de 2001 a 2007.
+- **Fecho** (p. 32): não é só uma crise financeira, mas "the end of a period"; a legitimidade do capitalismo depende de transformar o lucro individual em benefício coletivo.
+- **Cuidado (CVM)**: a p. 25 cita empresas pelo nome; não reproduzir.
 
 ## 3. Reinhart e Rogoff, "This Time is Different: A Panoramic View of Eight Centuries of Financial Crises" (NBER WP 13882, 2008)
 Fonte: https://www.nber.org/system/files/working_papers/w13882/w13882.pdf (125 p.).
@@ -81,7 +95,7 @@ Fonte: https://www.bis.org/publications/bulletin-120-financing-ai-boom-cash-flow
 Fonte: https://www.oaktreecapital.com/docs/default-source/memos/2000-01-02-bubble.pdf (14 p.; data na p. 12).
 
 - **Newton** (p. 1): a ação da Mar do Sul foi de £ 128 em janeiro de 1720 para £ 1.050 em junho; Newton vendeu suas £ 7.000, voltou a comprar no topo e perdeu £ 20.000. Em setembro a ação estava abaixo de £ 200, queda de 80%. A frase atribuída a Newton ("I can calculate the motions of the heavenly bodies, but not the madness of the people") vem como "is reported to have replied": tratar como atribuída.
-- **Rádio** (p. 3): a RCA subiu de US$ 8 em meados de 1927 para US$ 114 em meados de 1929 e caiu a US$ 2,50 em três anos; 25 anos depois ainda não tinha voltado a um terço da máxima. Bom par com o rádio no memo de 2025.
+- **Rádio** (p. 3): a principal empresa de rádio dos EUA subiu de US$ 8 em meados de 1927 para US$ 114 em meados de 1929 e caiu a US$ 2,50 em três anos; 25 anos depois ainda não tinha voltado a um terço da máxima. Bom par com o rádio no memo de 2025.
 - **Aviação** (p. 3): segundo Buffett na Fortune, o lucro acumulado das aéreas, da fundação até 1992, foi zero.
 - **IPO** (p. 6 e 7): o IPO médio de 1999 estava cerca de 160% acima do preço de emissão. Mantém o caso concreto de um IPO de US$ 26 que fechou o dia a US$ 145 (descrever sem nome no livro).
 - **Capital de risco** (p. 6): em 1994 investidores aplicaram US$ 7,8 bilhões em fundos de capital de risco; em 1998, com os 200% dos melhores fundos nas manchetes, aplicaram US$ 26,1 bilhões.
@@ -134,8 +148,17 @@ Fonte: https://www-users.cse.umn.edu/~odlyzko/doc/hallucinations.pdf (322 p., "P
 - **O Economist em 1855** (p. 5): ferrovias, mecanicamente, "an honour to our age and country"; comercialmente, um fracasso (conferir o fim da frase no PDF antes de citar).
 - **Leitura de apoio** (p. 5): a sátira "The Glenmutchkin Railway" (Aytoun, 1845) está no Apêndice 1; boa abertura de capítulo.
 
-## 8. Gustavo Franco, *Reforma monetária e instabilidade durante a transição republicana* (BNDES 1983)
-**Pendente.** Baixado de https://web.bndes.gov.br/bib/jspui/bitstream/1408/7986/1/ (190 p., 9,5 MB), mas é só imagem. Precisa de OCR (Tesseract não está instalado) ou leitura à mão. Enquanto isso, o texto curto de Franco e Lago (PUC-Rio TD 588, item 23c) cobre o Encilhamento.
+## 8. Gustavo Franco, *Reforma monetária e instabilidade durante a transição republicana* (BNDES, 1983; 7o Prêmio BNDES de Economia; dissertação de mestrado na PUC-Rio)
+Fonte: https://web.bndes.gov.br/bib/jspui/handle/1408/7986 (190 p., só imagem; lido a olho nas páginas abaixo). Página impressa = página do PDF + 4. Valores em contos de réis.
+
+- **A brecha legal** (p. 120): a Lei das Sociedades Anônimas de 17/1/1890 exigia o depósito de só 10% do capital para constituir uma companhia e ter ações cotadas; muitas foram "empresas fantasmas", existentes apenas juridicamente.
+- **Bolsa do Rio, Tabela 26** (p. 121; fonte B. Levy): negócios com ações de 131.025 em set. 1889, 23.553 em dez. 1889, 36.919 em mar. 1890, 90.084 em jun., 120.782 em set. e 149.192 em dez. 1890. Os bancos foram de 14.131 para 96.229 de dez. 1889 a dez. 1890. A nota avisa que os números estão subestimados, porque a "zangonagem" (negócios na rua) valia várias vezes o pregão oficial.
+- **Companhias registradas em 1890, Tabela 27** (p. 121): 4 em janeiro, 47 em julho e 77 em outubro, o pico, com capital de 378.650; no ano, 293 companhias.
+- **O freio** (p. 125): diante dos 378.650 contos de outubro, o Decreto 850, de 13/10/1890, subiu o depósito mínimo de 10% para 30%; a formação de companhias caiu a menos da metade. Frase do autor: "é pequena a distância que separa a euforia de uma *mania* especulativa, de uma violenta *débâcle*".
+- **Rui Barbosa** (p. 126): "as loucuras de uma crise de especulação não se cortam cirurgicamente, com a violência e o terror"; o ministro temia que medidas firmes trouxessem um pânico que arrastaria as empresas "legítimas" junto com as "fantasmas".
+- **Moeda, Tabela 28** (p. 125): oferta de 289.691,5 em 30/9/1890, dos quais 170.781,4 em notas do Tesouro.
+- **Risco moral** (p. 129): a confiança de que o ministro faria tudo para evitar a crise tornou os bancos menos avessos ao risco; aumentar as emissões só adiaria a crise e a tornaria mais devastadora.
+- **Fecho** (p. 135): a expansão do crédito de 1888 a 1890 não foi só especulação; financiou a realocação depois do fim da escravidão (a "transformação no regime de trabalho") e uma grande acumulação de capital industrial.
 
 ## 9. Macarini, "Um aspecto da política econômica do 'milagre brasileiro': a política de mercado de capitais e a bolha especulativa 1969-1971" (IE/Unicamp, TD 122, set. 2006)
 Fonte: https://www.eco.unicamp.br/images/arquivos/artigos/1752/texto122.pdf (24 p.). Texto em português: cita-se direto.
@@ -163,10 +186,20 @@ Fonte: https://www.gutenberg.org/ebooks/24518. Domínio público.
 - **A frase do prefácio** (linha 367 do .txt): "Men, it has been well said, think in herds; it will be seen that they go mad in herds, while they only recover their senses slowly, and one by one." Note o "it has been well said": nem Mackay reivindica a frase.
 - **Preços das tulipas** (cap. "The Tulipomania", linhas 3688 a 3692): Admiral Liefken de 400 perits, 4.400 florins; Viceroy de 400 perits, 3.000 florins; Semper Augustus de 200 perits, "thought to be very cheap" a 5.500 florins.
 - **A troca famosa** (linhas 3699 a 3712): um Semper Augustus de Amsterdã por 4.600 florins mais carruagem, dois cavalos e arreios; a lista do Viceroy trocado por trigo, centeio, bois, porcos, ovelhas, vinho e outros bens.
-- **Cuidado**: Mackay é a lenda. Garber (pendente) e Goldgar contestam a escala da ruína. Usar Mackay como "o que se contou", nunca como dado.
+- **Cuidado**: Mackay é a lenda. Garber (11b) e Goldgar contestam a escala da ruína. Usar Mackay como "o que se contou", nunca como dado.
 
 ## 11b. Garber, "Famous First Bubbles" (JEP 1990, 4(2), p. 35 a 54)
-**Pendente.** O site da AEA (https://www.aeaweb.org/articles?id=10.1257/jep.4.2.35) é de acesso aberto, mas abre uma checagem anti-robô que não pode ser contornada aqui. Baixar à mão. Não usar a cópia da McMaster (regra de fontes).
+Fonte: https://www.aeaweb.org/articles?id=10.1257/jep.4.2.35 (acesso aberto; PDF baixado à mão pelo dono, 20 p.). Página impressa = página do PDF + 34.
+
+- **A tese** (p. 3, impressa 37): "none of these episodes should actually qualify as bubbles". Antes de chamar algo de bolha, esgotar as explicações de fundamento (p. 1, impressa 35).
+- **Mackay copiou** (nota 3, p. 3): Mackay plagiou a descrição de Beckmann (1846), e tudo vem de três panfletos anônimos de 1637 escritos por adversários da especulação.
+- **Tulipas, a lenda** (p. 3 e 4): um Semper Augustus valia 2.000 florins em 1625, ouro de cerca de US$ 16 mil a US$ 400 a onça; em fevereiro de 1637 os bulbos não se vendiam a 10% do pico; em 1739 os mais caros valiam 0,1 florim, "1/200 of 1 percent" do pico do Semper Augustus.
+- **Tulipas, a conta de Garber** (p. 4): bulbos raros caem rápido por natureza (28,5% ao ano no século XVIII; 32% ao ano de fevereiro de 1637 a 1642); a quebra explicaria no máximo 16% de queda, "hardly the stuff that legends are made of".
+- **Bulbos comuns** (p. 5): a especulação real foi nos bulbos baratos; em janeiro de 1637 alguns subiram até 25 vezes (Switser: pico de 0,17 florim/aas em 5/2/1637).
+- **Mississippi** (p. 8 a 12): ações de 500 livres a 10.000 livres em outubro de 1719; cerca de 540 mil ações valiam 5,4 bilhões de livres, contra uma riqueza nacional de 30 bilhões estimada pelo próprio Law (nota 6, p. 9); preço fixado em 9.000 em 5/3/1720; inflação média de 4% ao mês, com pico de 23% em janeiro de 1720 (p. 11); queda a 2.000 em setembro de 1720, 1.000 em dezembro e 500 em setembro de 1721 (p. 12).
+- **Mar do Sul** (p. 13 a 17): dívida britânica de cerca de £ 50 milhões em 1720; ação de cerca de £ 120 em janeiro de 1720, pico de 950 (seguindo Neal; nota da p. 16) e queda de 775 em 31/8 para cerca de 290 em 1/10/1720 (p. 17); a Bubble Act de junho de 1720.
+- **Faixa decidida pelo dono (27/10/2026)**: no livro, a ação da companhia do Mar do Sul vai de £ 120 a £ 1.050. O início vem de Garber (p. 15) e o pico de Marks (5a, p. 1); citar as duas fontes. Garber usa pico de 950 porque desconta o dividendo em ações de 10% (nota da p. 16).
+- **Fecho** (p. 19, impressa 53): Mississippi e Mar do Sul foram "a vast macroeconomic and financial experiment" que falhou; é curioso que economistas tomem o fracasso como prova de que os investidores foram irracionais.
 
 ## 12a. Shiller, "Narrative Economics" (NBER WP 23075, jan. 2017; discurso presidencial da AEA)
 Fonte: https://www.nber.org/system/files/working_papers/w23075/w23075.pdf (57 p.).
@@ -176,7 +209,7 @@ Fonte: https://www.nber.org/system/files/working_papers/w23075/w23075.pdf (57 p.
 - **Verdade parcial** (p. 4): narrativas têm graus variados de verdade, e o pensamento desejoso pode aumentar o contágio.
 
 ## 12b. Planilha CAPE de Shiller (ie_data.xls)
-Fonte: http://www.econ.yale.edu/~shiller/data/ie_data.xls. **A cópia de Yale termina em setembro de 2023** (última linha com CAPE). Para dados atuais, ver a página que Shiller mantém hoje (shillerdata.com, conferir antes de usar).
+Fonte: planilha atual de Shiller (shillerdata.com, ie_data.xls baixada à mão pelo dono em 27/10/2026). A cópia antiga de Yale parava em set. 2023. Na nova, o lucro está preenchido até jun. 2026; de jul. a out. 2026 o CAPE usa só o preço novo, e o de outubro é o fechamento de 2/10.
 
 | Data | CAPE |
 |------|------|
@@ -188,8 +221,26 @@ Fonte: http://www.econ.yale.edu/~shiller/data/ie_data.xls. **A cópia de Yale te
 | Mai. 2007 | 27,5 |
 | Mar. 2009 | 13,3 |
 | Nov. 2021 | 38,6 |
-| Set. 2023 (fim da cópia) | 30,8 |
-| Média 1881 a 2023 (1.713 meses) | 17,4 |
+| Set. 2023 | 30,8 |
+| Dez. 2024 | 37,7 |
+| Dez. 2025 | 39,6 |
+| Jun. 2026 (último mês com lucro) | 40,2 |
+| Out. 2026 (último dado) | 40,7 |
+| Média 1881 a out. 2026 (1.750 meses) | 17,8 |
+
+- **Leitura**: o CAPE de 2026 só fica abaixo do pico de dez. 1999 (44,2) e está acima de set. 1929 (32,6) e nov. 2021 (38,6). Não usar como data de estouro (regra da CVM).
+
+## 12c. Preço real das casas nos EUA (Shiller, *Irrational Exuberance*, 3a ed., fig. 3.1, planilha atualizada pelo autor)
+Fonte: Fig3-1.xls de shillerdata.com (baixada à mão pelo dono). Índice real, 1890 = 100; mensal desde 1953.
+
+| Data | Índice |
+|------|------|
+| 1890 (base) | 100 |
+| Ago. 1989 (pico antes da bolha) | 131,0 |
+| Dez. 2005 (pico da bolha) | 195,8 |
+| Fev. 2012 (vale) | 125,9 (queda real de 36% desde o pico) |
+| Mai. 2022 (máximo da série) | 224,4 |
+| Jul. 2026 (último dado) | 216,1 |
 
 ## 13a. Acemoglu, "The Simple Macroeconomics of AI" (MIT, versão de 5/4/2024)
 Fonte: https://economics.mit.edu/sites/default/files/2024-04/The%20Simple%20Macroeconomics%20of%20AI.pdf (50 p.). Os números mudam entre versões (a tabela de fontes falava em 0,53% a 0,71%); **nesta versão**:
@@ -213,8 +264,17 @@ Fonte: https://www.nber.org/system/files/working_papers/w1054/w1054.pdf (56 p.).
 - **Tese** (resumo, p. 2): complementa Friedman e Schwartz; em vez do efeito monetário das quebras de bancos, olha o crédito: a crise de 1930 a 1933 reduziu a eficiência da alocação de crédito, e o crédito mais caro e escasso deprimiu a demanda, o que ajuda a explicar "the unusual length and depth" da Depressão.
 - Os números (quebras de bancos, spreads) estão nas tabelas; conferir à mão se o capítulo precisar.
 
-## 14b. Eichengreen e Temin, "The Gold Standard and the Great Depression" (NBER WP 6060, 1997)
-**Pendente.** Baixado (45 p.), mas a camada de texto é um OCR espelhado e ilegível; sem renderização de páginas nesta máquina. Ler à mão ou reprocessar com OCR.
+## 14b. Eichengreen e Temin, "The Gold Standard and the Great Depression" (NBER WP 6060, jun. 1997)
+Fonte: https://www.nber.org/papers/w6060 (45 p., só imagem; lido a olho). Página impressa = página do PDF − 2.
+
+- **A pergunta** (resumo): por que líderes e bancos centrais seguiram presos ao padrão-ouro enquanto a Depressão piorava; a "mentality of the gold standard was pervasive and compelling", e só a política de massas a derrotou, tarde demais.
+- **O consenso** (p. 1): a literatura moderna "can be regarded as having substantially solved the riddle of the Great Depression"; o padrão-ouro foi o mecanismo que transformou uma recessão comum na Grande Depressão.
+- **A frase** (p. 2): "Central bankers continued to kick the world economy while it was down until it lost consciousness."
+- **Mecanismo** (p. 2): com déficit e perda de ouro, só restava deflacionar, cortar crédito e salários.
+- **Roosevelt** (p. 35): saiu do ouro logo depois da posse, em março de 1933, e recusou a volta na Conferência Econômica Mundial de julho.
+- **França** (p. 36 e 37): quem defendia desvalorizar era chamado de "herege"; só a Frente Popular, em 1936, mudou a política.
+- **A âncora** (p. 37): a âncora do padrão-ouro "proved a millstone around their necks. Rather than keeping the economies afloat, it helped to sink them."
+- **Blackett, 1932** (p. 38): "The gold standard has become a religion for some of the Boards of Central Banks". Só líderes novos, sem compromisso com a retórica antiga, retomaram a prosperidade (a analogia de Kuhn).
 
 ## 15. Bagehot, *Lombard Street: A Description of the Money Market* (1873, Gutenberg #4359)
 Fonte: https://www.gutenberg.org/ebooks/4359. Domínio público.
@@ -223,12 +283,10 @@ Fonte: https://www.gutenberg.org/ebooks/4359. Domínio público.
 - **As duas regras** (cap. VII, linhas 4155 a 4164): primeiro, emprestar "at a very high rate of interest", que funciona como multa para o medo sem motivo e afasta quem não precisa; segundo, emprestar contra todo bom título, "as largely as the public ask for them".
 - **Por que não recusar** (cap. VII, linhas 4165 a 4171): recusar quem tem boa garantia é o que espalha o alarme; a notícia corre o mercado inteiro em meia hora.
 - **"John Bull"** (cap. VI, linha 2905): "John Bull can stand many things, but he cannot stand two per cent". Bom para o capítulo sobre juro baixo e busca de rendimento.
-- **Overend, Gurney** (linhas 419, 3472 e 3519): o colapso de 1866 aparece como exemplo; útil no capítulo do pânico de 1866.
+- **A quebra de 1866** (linhas 419, 3472 e 3519): o colapso da maior casa de desconto de Londres em 1866 aparece como exemplo; útil no capítulo do pânico de 1866.
 
 ---
 
 ## Pendências para o dono
-1. Baixar à mão, pelo navegador: Perez (SSRN 1433947), Garber (AEA, JEP 1990) e, se quiser os números, conferir Eichengreen e Temin (NBER 6060, pelo leitor de PDF).
-2. Gustavo Franco (BNDES 1983): OCR ou leitura à mão das partes do Encilhamento; Franco e Lago (TD 588) serve de atalho.
-3. CAPE atual: a planilha de Yale parou em 2023; pegar a série atualizada antes do Cap. 10.
-4. Trocar nomes de empresas por descrições ao escrever (regra da CVM).
+1. CAPE conferido em 27/10/2026: a planilha em shillerdata.com é idêntica à usada em 12b (último dado: out. 2026, 40,7). Conferir de novo só se o Cap. 10 for fechado depois de uma nova atualização do Shiller.
+2. Feito neste arquivo: os nomes de empresas viraram descrições (regra da CVM). Os episódios históricos seguem com o nome consagrado (Mar do Sul, Mississippi), porque as companhias deixaram de existir há séculos.
