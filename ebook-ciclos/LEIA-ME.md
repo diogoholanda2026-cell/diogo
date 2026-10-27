@@ -8,13 +8,15 @@ Material de trabalho do e-book sobre bolhas históricas e a Revolução da IA. N
 - `pesquisa/pesquisa_livros_ciclos.md`: 30 livros e 20 relatórios sobre ciclos e bolhas, com síntese.
 - `pesquisa/pesquisa_estilo.md`: linguagem, tom, arquitetura de capítulo, regras da CVM, guia de estilo.
 - `pesquisa/fontes_gratuitas_legais.md`: fontes gratuitas e legais com links e os 15 textos prioritários.
+- `pesquisa/citacoes_conferidas.md`: citações e números conferidos, com página.
+- `pesquisa/pesquisa_ia.md`: a IA de 1950 a out. 2026, a Covid, o que esta bolha tem de diferente e o noticiário de jul. a out. 2026.
 - `patrimonio-resiliente/`: projeto anterior (Patrimônio Resiliente v2 e checagem de fatos), substituído por este.
 
 ## Onde paramos (27/10/2026)
 1. A rede foi liberada para os sites das fontes; a sessão anterior não enxergava a mudança.
 2. Feito: os 15 textos prioritários foram baixados e lidos; citações e números com página em `pesquisa/citacoes_conferidas.md`. Garber, Perez, Franco, Eichengreen e Temin, o CAPE até out. 2026 e o preço real das casas entraram depois (baixados à mão pelo dono; Franco e Eichengreen e Temin lidos como imagem). Nenhum texto pendente.
 3. Depois: o dono aprova título, subtítulo, família-guia e os quatro cenários; escrever o capítulo-piloto (Cap. 6, Pontocom).
-4. Antes dos Cap. 10 e 11: nova busca sobre a IA de julho a outubro de 2026.
+4. Feito em 27/10/2026: pesquisa da IA em `pesquisa/pesquisa_ia.md`, com o noticiário até 26/10. Antes de fechar os Cap. 10 e 11, refazer a tabela da seção 6 e conferir as lacunas da seção 8.
 
 ## Regras
 - Só fontes gratuitas legais (nada de Z-Library, LibGen, Anna's Archive, Sci-Hub).
