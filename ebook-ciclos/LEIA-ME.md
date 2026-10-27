@@ -12,7 +12,7 @@ Material de trabalho do e-book sobre bolhas históricas e a Revolução da IA. N
 
 ## Onde paramos (27/10/2026)
 1. A rede foi liberada para os sites das fontes; a sessão anterior não enxergava a mudança.
-2. **Próximo passo:** baixar os 15 textos prioritários de `pesquisa/fontes_gratuitas_legais.md` (seção "Prioridade de leitura") para uma pasta temporária fora do repositório, ler e extrair citações e números conferidos, marcando a página.
+2. Feito: os 15 textos prioritários foram baixados e lidos; citações e números com página em `pesquisa/citacoes_conferidas.md`. Ficaram pendentes Perez, Garber (download bloqueado, baixar à mão), Gustavo Franco (PDF só com imagem) e Eichengreen e Temin (OCR ilegível).
 3. Depois: o dono aprova título, subtítulo, família-guia e os quatro cenários; escrever o capítulo-piloto (Cap. 6, Pontocom).
 4. Antes dos Cap. 10 e 11: nova busca sobre a IA de julho a outubro de 2026.
 
