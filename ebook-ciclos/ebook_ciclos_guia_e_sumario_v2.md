@@ -83,7 +83,7 @@ Um amigo culto, calmo e honesto, que leu muita história e não tem nada a vende
 Quadros recorrentes (no máximo dois por capítulo): **Primeiro nível / Segundo nível** (Marks), **Mito e fato** (Goldgar), **E no Brasil?**
 
 ## 2.5 Personagens recorrentes
-- **A família-guia:** uma empresária de Campinas, 54 anos, que viveu 2000 e 2008, e o filho, engenheiro de dados que trabalha com IA. Ela é a memória; ele, o entusiasmo. Reagem a cada bolha e discordam, o que dá ao leitor os dois lados.
+- **A família-guia (decidida em 27/10/2026, ver `decisao_titulo_familia_cenarios.md`):** Cláudia (1972, 54 anos), dona de uma distribuidora de material elétrico em Campinas que vive o melhor ano vendendo para obras de data centers, e o filho Lucas (1998, 28 anos), engenheiro de dados numa startup de IA, com parte do salário em participação. Ela é a memória (perdeu em 2000, ficou sem crédito em 2008, demitiu em 2015); ele, o entusiasmo e o medo de ficar para trás. Os dois estão expostos ao ciclo. Discordam, o que dá ao leitor os dois lados. Nunca citam ativo, fundo ou percentual.
 - **Os arquétipos que reaparecem em todas as eras:** o Inventor, o Financista, o Vendedor da Narrativa, o Comprador Tardio, o Cético Precoce, o Sobrevivente.
 
 ## 2.6 Números e gráficos
@@ -103,7 +103,7 @@ Nota de método no início; declaração de conflitos; glossário (40 a 60 termo
 # PARTE 3. SUMÁRIO v2
 
 **Título:** Os Ciclos da Euforia
-**Subtítulo (opções):** (a) O que quatro séculos de bolhas ensinam sobre a Revolução da IA; (b) Tulipas, 1929, Japão, internet, 2008 e a IA: como pensar quando todos perderam o juízo; (c) Como atravessar a maior revolução tecnológica da sua vida sem perder a cabeça nem o futuro.
+**Subtítulo (decidido em 27/10/2026):** Quatro séculos de bolhas e o que elas ensinam sobre a inteligência artificial
 **Tamanho:** 55 a 70 mil palavras.
 
 ### Abertura
@@ -119,14 +119,14 @@ Nota de método no início; declaração de conflitos; glossário (40 a 60 termo
 - **Cap. 4: 1929. A revolução elétrica e o crédito que virou depressão.** Margem, investment trusts em pirâmide, os banqueiros centrais e o padrão-ouro. O crash não fez a Depressão sozinho; a resposta errada fez. Recuperação nominal só em 1954.
 - **Interlúdio: Ferrovias britânicas, 1845.** O espelho mais fiel do capex de IA: tecnologia real, investidores arruinados, rede que serviu um século.
 - **Cap. 5: Japão, 1989. A bolha curta e o castigo longo.** Plaza, zaitech, terra que "nunca cai", bancos zumbis, recessão de balanço (Koo). 34 anos até o Nikkei voltar ao pico.
-- **Cap. 6: Pontocom, 2000. A revolução que venceu e quebrou quem pagou caro.** Greenspan em 1996 e mais três anos de alta. Cisco, Amazon, Pets.com. A bolha das telecomunicações e da fibra, o vendor financing. A fibra que virou o YouTube.
+- **Cap. 6: Pontocom, 2000. A revolução que venceu e quebrou quem pagou caro.** Greenspan em 1996 e mais três anos de alta. A maior fabricante de roteadores da época, a livraria on-line que virou gigante, a loja de ração on-line que virou símbolo do estouro (sem nomes, regra da CVM). A bolha das telecomunicações e da fibra, o vendor financing. A fibra que virou o YouTube.
 - **Cap. 7: Subprime, 2008. Quando a inovação era financeira.** Securitização, ratings, alavancagem de 30 vezes, Lehman. A bolha que vive no balanço. Consequências políticas de uma década (Tooze).
 - **Cap. 8: E no Brasil?** Encilhamento (1889 a 1891, Rui Barbosa, Taunay) e a Bolsa de 1971 (fundos 157, milagre, filas no centro de São Paulo, nascimento da CVM). O leitor brasileiro já viveu isso.
 
 ### Parte III: A IA no espelho
 - **Cap. 9: A quinta revolução ou o fim da quarta?** Perez, Hobart e Huber, Acemoglu, o paradoxo de Solow e a curva J. O que a IA já entrega de verdade, com dados.
 - **Cap. 10: Doze espelhos.** Os 12 aspectos (realidade, escala do capex, receita x gasto, concentração, circularidade, crédito e fora do balanço, avaliação, obsolescência dos chips, varejo, geopolítica, trabalho, energia), cada um com a bolha que mais rima e onde não rima. Quadro de quem alertou (Sequoia, Goldman, MIT, BoE, FMI, Burry) e de quem contestou.
-- **Cap. 11: O termômetro em outubro de 2026.** Pontuação aplicada com dados da data de fechamento, comparada a 1998, 1999, 2000 e 2001. Os quatro cenários nomeados: **Ferrovia** (tecnologia vence, investidores perdem), **Internet** (quebra e depois domínio), **Japão** (estagnação longa), **Eletricidade** (ganhos lentos e difusos). Para cada um: sinais que confirmariam e que refutariam. Nenhuma data.
+- **Cap. 11: O termômetro em outubro de 2026.** Pontuação aplicada com dados da data de fechamento, comparada a 1998, 1999, 2000 e 2001. Os quatro cenários, numa matriz de dois eixos (produtividade rápida ou lenta x dinheiro que se ajusta em ordem ou quebra): **Celular** (rápida e em ordem: adoção rápida, sem estouro), **Ferrovia** (rápida e quebra: a tecnologia vence, quem pagou caro perde; a pontocom é a variante em que os sobreviventes viram gigantes), **Eletricidade** (lenta e em ordem: o ganho leva uma geração e os preços murcham) e **Japão** (lenta e quebra: a dívida fica e a estagnação é longa). Para cada um: sinais que confirmariam e que refutariam. Nenhuma data.
 
 ### Parte IV: Preparação
 - **Cap. 12: A mentalidade do ciclo.** Pensamento de segundo nível, decisão x resultado (Duke), raposas x porcos-espinhos (Tetlock), os instintos de linha reta e de urgência (Rosling). Pré-compromisso e pré-mortem. Os dois erros simétricos: o fanático e o apocalíptico.
@@ -135,13 +135,13 @@ Nota de método no início; declaração de conflitos; glossário (40 a 60 termo
 - **Cap. 15: O que as bolhas deixam.** Infraestrutura barata para a geração seguinte. Onde estarão as oportunidades de carreira, de empreendimento e de aprendizado depois da depuração.
 
 ### Fechamento
-- **Conclusão: viver bem dentro do ciclo.** A família-guia em 2030, em cada cenário. A frase final.
+- **Conclusão: viver bem dentro do ciclo.** Cláudia e Lucas em 2030, uma cena por cenário; em todos atravessa quem tinha margem e não foi forçado a vender. A frase final.
 - **Anexos:** linha do tempo 1630 a 2026; o kit de diagnóstico destacável; o termômetro em planilha; checklist das seis resiliências; glossário; bibliografia comentada; notas e fontes; índice remissivo.
 
 ---
 
 # PARTE 4. PRÓXIMOS PASSOS
-1. Aprovar título, subtítulo, família-guia e cenários.
+1. Feito em 27/10/2026: título, subtítulo, família-guia e cenários decididos (`decisao_titulo_familia_cenarios.md`).
 2. Escrever um capítulo-piloto (sugestão: Cap. 6, Pontocom, o mais próximo da IA) para calibrar voz e tamanho.
 3. Rodar nova busca de julho a outubro de 2026 antes do Cap. 10 e do Cap. 11.
 4. Checar em fonte primária todo número e citação marcados [V] nas pesquisas.
